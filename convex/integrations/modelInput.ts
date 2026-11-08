@@ -3,11 +3,11 @@ import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationResultKey } from "@convex/execution/operationResults";
 import { type TranscriptContext, Type } from "@earendil-works/pi-ai";
+import { estimateContextTokens } from "@earendil-works/pi-ai/utils/estimate";
 import { asSchema, type JSONSchema7, jsonSchema, type ToolSet, tool } from "ai";
 import { convexToZod } from "convex-helpers/server/zod4";
 import { z } from "zod";
 import {
-    MODEL_MAX_OUTPUT_TOKENS,
     type ModelRoute,
     modelCallSettings,
     SIMULATION_MODEL_ROUTE,
@@ -104,6 +104,49 @@ export function requiredAnalystInput(prompt: string): string {
     );
 }
 
+/** Pi's documented default section wrapper is part of the versioned native preparation contract. */
+export function piInstructionSection(instructions: string) {
+    return `<instructions>\n${instructions}\n</instructions>`;
+}
+
+export const PI_STATE_SECTION = "workbench_current_state";
+
+/** Uses Pi's estimator for the non-lossy section, actual declarations and an optional initial analyst lot. */
+export function piRequiredContextTokens(
+    instructions: string,
+    state: string,
+    tools: NonNullable<
+        Extract<
+            TranscriptContext["messages"][number],
+            { role: "system" }
+        >["toolsAdded"]
+    >,
+    initialInput?: string,
+) {
+    return estimateContextTokens([
+        {
+            role: "system",
+            content: piInstructionSection(instructions),
+            toolsAdded: tools,
+            timestamp: 0,
+        },
+        { role: "system", content: state, timestamp: 0 },
+        ...(initialInput
+            ? [{ role: "user" as const, content: initialInput, timestamp: 0 }]
+            : []),
+    ]).tokens;
+}
+
+/** Shared native section rendering for runtime and offline wire calibration. */
+export function piMissionStateText(
+    instructions: string,
+    prompt: string,
+    nativeConversation = false,
+    contextRendering?: "separated_v1",
+) {
+    return `${nativeConversation || contextRendering === "separated_v1" ? "" : `${instructions}\n\n`}Required current mission state:\n${prompt}`;
+}
+
 /** Keeps required state outside Pi's lossy summary; profile generation uses this exact rendering. */
 export function piMissionMessages(
     instructions: string,
@@ -116,7 +159,12 @@ export function piMissionMessages(
     return [
         {
             role: "system",
-            content: `${nativeConversation || contextRendering === "separated_v1" ? "" : `${instructions}\n\n`}Required current mission state:\n${prompt}`,
+            content: piMissionStateText(
+                instructions,
+                prompt,
+                nativeConversation,
+                contextRendering,
+            ),
             timestamp,
         },
         ...history,
@@ -134,6 +182,7 @@ export function preparePiSimulationRequest(
     }));
     return {
         messages: normalized,
+        effectiveMaxOutputTokens: generation.maxOutputTokens,
         json: JSON.stringify({
             version: 1,
             backend: "pi-durable",
@@ -151,19 +200,40 @@ export function preparePiSimulationRequest(
 /** Routing and the serialized journal envelope are shared with native preflight calibration. */
 export function preparePiModelPayload(payload: object, route: ModelRoute) {
     const { request, generation } = modelCallSettings(route);
+    const outputLimit = route.descriptor?.maxTokens;
+    const native = payload as {
+        max_tokens?: number;
+        max_completion_tokens?: number;
+    };
     const prepared = {
         ...payload,
+        ...(outputLimit === undefined
+            ? {}
+            : {
+                  ...(native.max_tokens === undefined
+                      ? {}
+                      : {
+                            max_tokens: Math.min(
+                                native.max_tokens,
+                                outputLimit,
+                            ),
+                        }),
+                  ...(native.max_completion_tokens === undefined
+                      ? {}
+                      : {
+                            max_completion_tokens: Math.min(
+                                native.max_completion_tokens,
+                                outputLimit,
+                            ),
+                        }),
+              }),
         temperature: generation.temperature,
         ...request,
-        ...("max_completion_tokens" in payload
-            ? { max_completion_tokens: generation.maxOutputTokens }
-            : {}),
-        ...("max_tokens" in payload
-            ? { max_tokens: generation.maxOutputTokens }
-            : {}),
     };
     return {
         payload: prepared,
+        effectiveMaxOutputTokens:
+            prepared.max_completion_tokens ?? prepared.max_tokens,
         json: JSON.stringify({
             version: 1,
             backend: "pi-durable",
@@ -348,9 +418,8 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
             settings: args.nativeRoute
                 ? modelCallSettings(args.nativeRoute).request
                 : null,
-            maxTokens: args.nativeRoute
-                ? modelCallSettings(args.nativeRoute).generation.maxOutputTokens
-                : MODEL_MAX_OUTPUT_TOKENS,
+            nativeOutputPolicy: "model_context_v1",
+            maxTokens: args.nativeRoute?.descriptor?.maxTokens ?? null,
             simulationEnvelope:
                 args.nativeRoute?.model === SIMULATION_MODEL_ROUTE.model &&
                 args.nativeRoute.provider === SIMULATION_MODEL_ROUTE.provider

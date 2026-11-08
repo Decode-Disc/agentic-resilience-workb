@@ -220,7 +220,7 @@ test("unexpected history read failures remain visible as errors", async () => {
         expectedGeneration: args.executionGeneration,
     });
     await expect(
-        t.action((ctx) => {
+        t.run((ctx) => {
             const runQuery: import("@convex/_generated/server").QueryCtx["runQuery"] =
                 async () => {
                     throw new Error("History read channel failed");

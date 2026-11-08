@@ -1,0 +1,83 @@
+{
+    "schemaVersion": 1,
+    "id": "20261108T124316383Z-native-context-requalification-closeout-20261108",
+    "createdAt": "2026-11-08T12:43:16.383Z",
+    "git": {
+        "head": "df7b943caaa123aabf8b7e6d710dadadcbb0fb5a",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-context-requalification-20261108T121710Z/closeout",
+            "archivePath": "external/closeout"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/closeout/analysis/integrity-checks.json",
+            "bytes": 5473,
+            "sha256": "28bbea1b7a55fba2bcdb38dc4fe68622ccf0f96103106ac270470f46959a1776"
+        },
+        {
+            "path": "external/closeout/analysis/settlement-probe.config.ts",
+            "bytes": 5567,
+            "sha256": "dd032befad75bbf00bc20250819163c2d97703c345e1b16aa46836ca9b7ca5c2"
+        },
+        {
+            "path": "external/closeout/analysis/settlement-probe.json",
+            "bytes": 613,
+            "sha256": "f17a8ec73af6b0066874f1a0e8b5cd20ccd3a105954e431f7da5420d259e924b"
+        },
+        {
+            "path": "external/closeout/analysis/settlement-probe.log",
+            "bytes": 293,
+            "sha256": "e3096fbf75b2599292fd24d10e77ebba3bd033404bd681baf64e5bbee98c4584"
+        },
+        {
+            "path": "external/closeout/campaign-cleanup.json",
+            "bytes": 45,
+            "sha256": "5dfa4c8ffc66a7bd9b6aa8bedf71185cec59b805ad698b4c0b3e6b266a8f5d3f"
+        },
+        {
+            "path": "external/closeout/campaign-status.json",
+            "bytes": 7920,
+            "sha256": "b81ad66f429c21d68ef0bc363ad1aee1c184a660180267e92706a52b6e01f12c"
+        },
+        {
+            "path": "external/closeout/catalog-readiness.json",
+            "bytes": 1808,
+            "sha256": "61e24922ccde0cb64e31e77339d036475f5a4e87ebf5b87487ed1abb3265c790"
+        },
+        {
+            "path": "external/closeout/mandate.json",
+            "bytes": 5316,
+            "sha256": "f2648697faa20b18da6c4394908a256c0fb05cdd4df82bfcc24eb86e6d4b0e67"
+        },
+        {
+            "path": "external/closeout/model-metadata-at-preparation.json",
+            "bytes": 7997,
+            "sha256": "f1020f1f5c474ebe58a50060f18f5eb3952eaba94a7a8a6857172dfe2058d246"
+        },
+        {
+            "path": "external/closeout/provider-cleanup.json",
+            "bytes": 516,
+            "sha256": "6ad839509d0a4d3a2b77d2346cd855a9c854a50296486e8d9e0e78db239596ae"
+        },
+        {
+            "path": "external/closeout/report.md",
+            "bytes": 7098,
+            "sha256": "81cb3ad89eb780240bc7057975ea71829ed25a246c02e1950ff9efc4fa788177"
+        },
+        {
+            "path": "external/closeout/review.json",
+            "bytes": 3346,
+            "sha256": "26668b4bd2a95923980b95d36ae32a03fb14fac1eb1310a8657a4162c668a85e"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261108T124316383Z-native-context-requalification-closeout-20261108.tar.gz",
+        "bytes": 13119,
+        "sha256": "38bdc2319617c5fe2444e48ac6bd82a42b676f5830866064391392cf96a4db1b"
+    },
+    "verification": "restored_and_verified"
+}

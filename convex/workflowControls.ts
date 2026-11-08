@@ -1,3 +1,5 @@
+import { recordContextObservation } from "@convex/execution/journal";
+import { recordResearchObservation } from "@convex/execution/researchControl";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -144,6 +146,17 @@ export const approveCheckpoint = mutation({
             targetId: run._id,
             occurredAt: now,
         });
+        await recordContextObservation(ctx, run._id, {
+            key: `checkpoint-decision:${decisionId}`,
+            topic: "analyst_decision",
+            actor: { type: "visitor", visitorId: visitor._id },
+            value: {
+                event: "checkpoint_approved",
+                decisionId,
+                checkpoint: args.checkpoint,
+                decision: "approved",
+            },
+        });
         return { accepted: true };
     },
 });
@@ -193,7 +206,7 @@ export const retry = mutation({
     args: { runId: v.id("researchRuns") },
     returns: v.object({ retryCount: v.number() }),
     handler: async (ctx, args) => {
-        const { run } = await requireWorkspaceRun(ctx, args.runId);
+        const { run, visitor } = await requireWorkspaceRun(ctx, args.runId);
         if (run.withdrawnAt) {
             throw new Error("A withdrawn dossier cannot be resumed");
         }
@@ -232,6 +245,10 @@ export const retry = mutation({
             lifecycleState: run.lifecycleState,
             executionStatus: "paused",
             occurredAt: now,
+        });
+        await recordResearchObservation(ctx, run._id, "research_retried", {
+            type: "visitor",
+            visitorId: visitor._id,
         });
         return { retryCount: retryCount + 1 };
     },

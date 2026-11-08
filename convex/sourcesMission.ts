@@ -52,6 +52,7 @@ import {
     requireRunAuthority,
 } from "@convex/execution/authority";
 import { executionError } from "@convex/execution/errors";
+import { recordContextObservation } from "@convex/execution/journal";
 import { registerOperationWaitEvent } from "@convex/execution/operations";
 import {
     simulatedDocumentaryControl,
@@ -655,6 +656,18 @@ export const retainControl = internalMutation({
                         ],
                     },
                 });
+            await recordContextObservation(ctx, run._id, {
+                key: `documentary-restrictions:${controlTaskId}`,
+                topic: "documentary",
+                actor: { type: "system" },
+                value: {
+                    event: "contributions_restricted",
+                    preparationId: preparation._id,
+                    controlTaskId,
+                    restrictions,
+                    control: args.control,
+                },
+            });
             return controlTaskId;
         }
         if (input.kind !== "submit_documentary_qualification")
@@ -740,6 +753,21 @@ export const retainControl = internalMutation({
                     ),
                     taskId,
                 ],
+            },
+        });
+        await recordContextObservation(ctx, run._id, {
+            key: `documentary-qualification:${taskId}`,
+            topic: "documentary",
+            actor: { type: "system" },
+            value: {
+                event: "contributions_qualified",
+                preparationId: preparation._id,
+                taskId,
+                captureId: capture._id,
+                contentHash: capture.contentHash,
+                contributions: reconstructed,
+                controlTaskId,
+                control: args.control,
             },
         });
         return taskId;
@@ -930,6 +958,17 @@ export const finish = internalMutation({
             lifecycleState: "sources_prepared",
             executionStatus: "idle",
             stepKey: "sources_prepared",
+        });
+        await recordContextObservation(ctx, run._id, {
+            key: `sources-handoff:${preparation._id}:${material.needsRevision}`,
+            topic: "documentary",
+            actor: { type: "system" },
+            value: {
+                event: "sources_prepared",
+                preparationId: preparation._id,
+                outcome: material.outcome,
+                material,
+            },
         });
         return null;
     },

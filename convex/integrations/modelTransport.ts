@@ -4,13 +4,18 @@ import type { Doc } from "@convex/_generated/dataModel";
 import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
 import { executionFailureCode } from "@convex/execution/errors";
 import type {
+    AgentGenerationLifecycle,
     AgentGenerationObservation,
     AgentGenerationResult,
     AgentModelRoute,
     AgentOperationDefinition,
     ModelAttemptReceipt,
 } from "@convex/execution/executionProtocol";
-import { MAX_PREPARATION_DIAGNOSTIC_BYTES } from "@convex/resourceLimits";
+import {
+    MAX_PREPARATION_DIAGNOSTIC_BYTES,
+    SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION,
+} from "@convex/resourceLimits";
+import { estimateTextTokens } from "@earendil-works/pi-ai/utils/estimate";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ToolSet } from "ai";
 import {
@@ -25,11 +30,12 @@ import {
 } from "ai";
 import type { ZodType } from "zod";
 import { createAgentTools } from "./modelInput";
+import type { SourceQualificationRoute } from "./sourceQualificationConfig";
 
 export { agentInputByteLength, agentOperationInputSchema } from "./modelInput";
 
 import type { ModelRoute } from "./modelRouting";
-import { modelCallSettings } from "./modelRouting";
+import { modelCallSettings, preparationModelOutputLimit } from "./modelRouting";
 
 export type AttemptReceipt = ModelAttemptReceipt;
 
@@ -45,7 +51,7 @@ export type AttemptDependencies = {
     fetch?: typeof fetch;
     signal?: AbortSignal;
     onResponse?: (response: ProviderResponse) => void;
-    beforeDispatch?: (requestJson: string) => Promise<void>;
+    beforeDispatch?: AgentGenerationLifecycle["beforeDispatch"];
     onObservation?: (observation: AgentGenerationObservation) => Promise<void>;
 };
 
@@ -143,6 +149,7 @@ type AttemptFailure = AttemptReceipt & {
 };
 
 type BoundedTransportState = {
+    structuredCapacity?: { contextWindow: number; maxTokens: number };
     requestBlockCode?: string;
     observableReplyJson?: string;
     responseTooLarge: boolean;
@@ -313,6 +320,24 @@ function createRoutedModel(
             extraBody: { reasoning: settings.reasoning },
         }),
         middleware: {
+            transformParams: async ({ params }) => {
+                if (!state.structuredCapacity) return params;
+                const estimatedInput = estimateTextTokens(
+                    JSON.stringify({
+                        prompt: params.prompt,
+                        responseFormat: params.responseFormat,
+                    }),
+                );
+                const limit = Math.min(
+                    state.structuredCapacity.maxTokens,
+                    state.structuredCapacity.contextWindow - estimatedInput,
+                );
+                if (limit < 1) {
+                    state.requestBlockCode = "context_capacity";
+                    throw new Error("Structured input exceeds model capacity");
+                }
+                return { ...params, maxOutputTokens: limit };
+            },
             wrapGenerate: async ({ params, doGenerate }) => {
                 if (state.turn && state.dispatched)
                     throw new Error("A controlled turn cannot generate twice");
@@ -325,6 +350,7 @@ function createRoutedModel(
                 try {
                     await dependencies.beforeDispatch?.(
                         JSON.stringify({ version: 1, route, input, settings }),
+                        { effectiveMaxOutputTokens: params.maxOutputTokens },
                     );
                 } catch (error) {
                     state.requestBlockCode =
@@ -623,7 +649,7 @@ function toolHasExecuteCallback(candidate: unknown): boolean {
 
 /** Performs one bounded structured-output attempt; orchestration owns fallback and persistence. */
 export async function invokeOneShot<T>(args: {
-    route: ModelRoute;
+    route: SourceQualificationRoute;
     dependencies: AttemptDependencies;
     instructions: string;
     prompt: string;
@@ -636,6 +662,19 @@ export async function invokeOneShot<T>(args: {
     const startedAt = Date.now();
     const state: BoundedTransportState = { responseTooLarge: false };
     try {
+        const maxOutputTokens = preparationModelOutputLimit(
+            route,
+            route.executionPlanVersion,
+        );
+        if (
+            route.executionPlanVersion ===
+                SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION &&
+            route.descriptor
+        )
+            state.structuredCapacity = {
+                contextWindow: route.descriptor.contextWindow,
+                maxTokens: maxOutputTokens,
+            };
         const provider = createBoundedProvider(dependencies, state);
         const result = await generateText({
             model: createRoutedModel(provider, route, dependencies, state),
@@ -646,6 +685,7 @@ export async function invokeOneShot<T>(args: {
                 name: args.schemaName,
             }),
             ...modelCallSettings(route).generation,
+            maxOutputTokens,
             abortSignal: dependencies.signal,
         });
         const receipt = createAttemptReceipt(route, state, startedAt, result);
@@ -668,6 +708,8 @@ export async function invokeOneShot<T>(args: {
             assistantOutput: result.text,
         };
     } catch (error) {
+        if (!state.dispatched)
+            state.requestBlockCode ??= executionFailureCode(error);
         return failedAttemptFromError({
             error,
             route,

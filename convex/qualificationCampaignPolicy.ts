@@ -238,6 +238,9 @@ const v2 = z
     .object({
         ...legacyCampaignManifestSchema.shape,
         version: z.literal(2),
+        costAccountingPolicy: z
+            .enum(["conservative_v1", "known_final_v1"])
+            .optional(),
         executionSurface: z.enum(["browser", "backend"]).optional(),
         contextDurationMs: z
             .number()

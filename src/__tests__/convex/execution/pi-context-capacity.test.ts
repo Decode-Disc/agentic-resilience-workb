@@ -71,7 +71,7 @@ test("Pi required context references its journal without duplicating the prior r
     });
 });
 
-test("an assembled-byte overflow compacts working history while keeping the exact active instructions", async () => {
+test("native context pressure compacts working history while keeping the exact active instructions", async () => {
     vi.useFakeTimers();
     const f = await seedConversation(true);
     const text = `AUTHORITATIVE QUESTION: ${"a".repeat(60000)}`;
@@ -91,7 +91,7 @@ test("an assembled-byte overflow compacts working history while keeping the exac
         },
     );
     if (!started) throw new Error("Expected turn");
-    await seedPiHistory(f.t, started.missionId, 1, 5, 14500);
+    await seedPiHistory(f.t, started.missionId, 1, 8, 16250);
     await f.t.mutation(internal.execution.missions.resume, {
         missionId: started.missionId,
         expectedGeneration: 1,

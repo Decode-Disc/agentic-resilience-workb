@@ -244,14 +244,19 @@ test.each([
         const texts: string[] = request.messages.flatMap(
             (message: {
                 content: string | { type: string; text?: string }[];
-            }) =>
-                typeof message.content === "string"
+                sections?: Record<string, string | null>;
+            }) => [
+                ...(typeof message.content === "string"
                     ? [message.content]
                     : message.content.flatMap((part) =>
                           part.type === "text" && typeof part.text === "string"
                               ? [part.text]
                               : [],
-                      ),
+                      )),
+                ...Object.values(message.sections ?? {}).filter(
+                    (value): value is string => value !== null,
+                ),
+            ],
         );
         for (const part of reply.content) {
             if (part.type === "text") expect(texts).toContain(part.text);

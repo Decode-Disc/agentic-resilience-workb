@@ -942,7 +942,17 @@ for (const workerCompletes of [false, true])
             reads = 0;
         const client = {
             mutation: async () => null,
-            query: async () => {
+            query: async (reference) => {
+                if (
+                    getFunctionName(reference) ===
+                    "execution/fixtures:inspectSourcesInvocations"
+                )
+                    return {
+                        page: [],
+                        payloads: [],
+                        isDone: true,
+                        continueCursor: "",
+                    };
                 reads++;
                 const done = workerCompletes && reads >= 6;
                 return {

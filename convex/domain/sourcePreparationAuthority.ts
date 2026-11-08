@@ -20,8 +20,17 @@ export const preparationDispatchOutcomeValidator = v.union(
 export const sourcePreparationExecutionPlanValidator = v.union(
     v.literal("collect_then_compare_v1"),
     v.literal("inline_controls_v2"),
+    v.literal("source_actions_v3"),
     v.literal(SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION),
 );
+
+/** Both versions retain the same source-action workflow; v4 changes structured model contracts. */
+export function usesSourceActions(version: string | undefined): boolean {
+    return (
+        version === "source_actions_v3" ||
+        version === SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION
+    );
+}
 
 export const sourcePreparationPhaseValidator = v.union(
     v.literal("reading"),

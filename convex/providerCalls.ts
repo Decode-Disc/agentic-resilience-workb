@@ -43,10 +43,12 @@ import {
 } from "./domain/sourcePreparationAuthority";
 import { requireMissionAuthority } from "./execution/authority";
 import { MAX_CONTEXT_BYTES } from "./execution/executionProtocol";
+import { admittedInputHash } from "./execution/journal";
 import {
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_TOKENS,
+    preparationModelOutputLimit,
 } from "./integrations/modelRouting";
 import { rateLimiter } from "./rateLimiter";
 import {
@@ -57,6 +59,7 @@ import {
     MAX_SOURCE_EMBEDDING_INPUT_BYTES,
     MAX_SOURCE_EMBEDDING_TEXT_BYTES,
     MAX_SOURCES_QUALIFICATION_RECEIPTS,
+    SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION,
 } from "./resourceLimits";
 import { readWorkbenchQualification } from "./runWorkspace";
 import schema from "./schema";
@@ -207,7 +210,7 @@ async function invocationCall(
         request?.state !== "complete" ||
         call.service !== "model" ||
         call.invocationId !== invocation._id ||
-        call.inputHash !== sha256Hex(invocation.inputJson) ||
+        call.inputHash !== admittedInputHash(invocation) ||
         call.executionGeneration !== invocation.generation ||
         call.missionId !== invocation.missionId ||
         call.runId !== invocation.runId
@@ -224,6 +227,10 @@ const BILLING_LEASE_MS = 30_000;
 function reportedCostSettlement(
     call: Doc<"providerCalls">,
     cost: number | undefined,
+    observation?: Pick<
+        Infer<typeof providerAttemptValidator>,
+        "status" | "dispatchOutcome"
+    >,
 ) {
     if (cost !== undefined && (!Number.isFinite(cost) || cost < 0))
         throw new Error("Invalid provider cost");
@@ -242,7 +249,16 @@ function reportedCostSettlement(
             },
         };
     }
-    return { reportedCost: call.reportedCost ?? cost };
+    return {
+        reportedCost: call.reportedCost ?? cost,
+        reportedCostFinal:
+            call.reportedCostFinal === true ||
+            (cost !== undefined &&
+                observation !== undefined &&
+                observation.status !== "partial" &&
+                (observation.dispatchOutcome === "response_received" ||
+                    observation.status === "succeeded")),
+    };
 }
 
 /** Only the original admitted call can request accounting; this grants no execution authority. */
@@ -459,6 +475,13 @@ const recordAttemptResultValidator = v.object({
     retryable: v.optional(v.boolean()),
 });
 
+const preparationAttemptPlanValidator = v.object({
+    attempt: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+    retryAt: v.optional(v.number()),
+    diagnosticReason: v.optional(v.string()),
+});
+
 /** Advises actions before dispatch; recordAttempt revalidates atomically before granting work. */
 export const nextPreparationAttemptForInput = internalQuery({
     args: {
@@ -468,12 +491,11 @@ export const nextPreparationAttemptForInput = internalQuery({
         inputHash: v.string(),
         now: v.number(),
     },
-    returns: v.object({
-        attempt: v.optional(v.number()),
-        errorCode: v.optional(v.string()),
-        retryAt: v.optional(v.number()),
-    }),
-    handler: async (ctx, args) => {
+    returns: preparationAttemptPlanValidator,
+    handler: async (
+        ctx,
+        args,
+    ): Promise<Infer<typeof preparationAttemptPlanValidator>> => {
         const { preparation } = await assertPreparationExecutionFence(ctx.db, {
             preparationId: args.preparationId,
             now: args.now,
@@ -522,7 +544,12 @@ export const nextPreparationAttemptForInput = internalQuery({
                 "source_documentary_control",
             ].includes(args.operation)
         )
-            return plan;
+            return {
+                ...plan,
+                ...(plan.attempt
+                    ? {}
+                    : { diagnosticReason: calls[0]?.diagnostic?.reason }),
+            };
         const run = await ctx.db.get(preparation.runId);
         if (!run) throw sourcePreparationError("stale_execution");
         const blocked = preparationBudgetBlock(
@@ -704,7 +731,7 @@ export const recordAttempt = internalMutation({
                               : "agent_reasoning") ||
                       args.stepKey !== args.operation ||
                       args.attempt !== 1 ||
-                      args.inputHash !== sha256Hex(invocation.inputJson) ||
+                      args.inputHash !== admittedInputHash(invocation) ||
                       args.operationKey !==
                           `mission:${mission._id}:invocation:${invocation._id}:attempt:1`)
             )
@@ -1152,12 +1179,119 @@ export const recordAttempt = internalMutation({
                 });
             }
             let qualificationReservationUsd: number | undefined;
+            let structuredCapacity:
+                | { contextWindow: number; maxTokens: number }
+                | undefined;
+            if (
+                args.service === "model" &&
+                args.preparationId &&
+                args.operation !== "source_embedding"
+            ) {
+                const preparation = await ctx.db.get(args.preparationId);
+                if (
+                    preparation?.executionPlanVersion ===
+                    SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION
+                ) {
+                    if (preparation.preparationStudy)
+                        throw sourcePreparationError(
+                            "qualification_structured_capacity_not_authorized",
+                        );
+                    const model = preparation.modelRevisionId
+                        ? await ctx.db.get(preparation.modelRevisionId)
+                        : null;
+                    if (!model)
+                        throw sourcePreparationError("missing_configuration");
+                    structuredCapacity = {
+                        contextWindow: model.descriptor.contextWindow,
+                        maxTokens: preparationModelOutputLimit(
+                            {
+                                model: model.model,
+                                descriptor: model.descriptor,
+                            },
+                            preparation.executionPlanVersion,
+                        ),
+                    };
+                }
+            }
             if (qualification) {
+                let inputBound = MAX_CONTEXT_BYTES + 4096;
+                let outputBound = MODEL_MAX_OUTPUT_TOKENS;
+                if (structuredCapacity) {
+                    if (
+                        qualification.costAccountingPolicy !==
+                            "known_final_v1" &&
+                        structuredCapacity.maxTokens > MODEL_MAX_OUTPUT_TOKENS
+                    )
+                        throw sourcePreparationError(
+                            "qualification_structured_capacity_not_authorized",
+                        );
+                    if (
+                        qualification.costAccountingPolicy === "known_final_v1"
+                    ) {
+                        inputBound = Math.min(
+                            inputBound,
+                            structuredCapacity.contextWindow,
+                        );
+                        outputBound = structuredCapacity.maxTokens;
+                    }
+                }
+                if (
+                    args.invocationId &&
+                    ["agent_reasoning", "agent_compaction"].includes(
+                        args.operation,
+                    )
+                ) {
+                    const invocation = await ctx.db.get(args.invocationId);
+                    if (invocation?.generationBackend?.id === "pi-durable") {
+                        const mission = invocation.missionId
+                            ? await ctx.db.get(invocation.missionId)
+                            : null;
+                        const model = mission?.modelRevisionId
+                            ? await ctx.db.get(mission.modelRevisionId)
+                            : null;
+                        const request = await ctx.db
+                            .query("agentInvocationPayloads")
+                            .withIndex("by_invocation_and_part", (q) =>
+                                q
+                                    .eq("invocationId", invocation._id)
+                                    .eq("part", "request"),
+                            )
+                            .unique();
+                        if (
+                            !model ||
+                            request?.state !== "complete" ||
+                            !Number.isSafeInteger(
+                                request.effectiveMaxOutputTokens,
+                            ) ||
+                            (request.effectiveMaxOutputTokens ?? 0) < 1 ||
+                            (request.effectiveMaxOutputTokens ?? Infinity) >
+                                model.descriptor.maxTokens
+                        )
+                            throw sourcePreparationError(
+                                "invalid_model_output_limit",
+                            );
+                        if (
+                            qualification.costAccountingPolicy ===
+                            "known_final_v1"
+                        ) {
+                            inputBound = model.descriptor.contextWindow;
+                            outputBound =
+                                request.effectiveMaxOutputTokens ??
+                                model.descriptor.maxTokens;
+                        } else if (
+                            request.sizeBytes > MAX_CONTEXT_BYTES ||
+                            (request.effectiveMaxOutputTokens ?? Infinity) >
+                                MODEL_MAX_OUTPUT_TOKENS
+                        ) {
+                            throw sourcePreparationError(
+                                "qualification_native_capacity_not_authorized",
+                            );
+                        }
+                    }
+                }
                 const modelReservationUsd =
-                    ((MAX_CONTEXT_BYTES + 4096) *
-                        MODEL_MAX_INPUT_PRICE_PER_MILLION +
-                        MODEL_MAX_OUTPUT_TOKENS *
-                            MODEL_MAX_OUTPUT_PRICE_PER_MILLION) /
+                    (inputBound * MODEL_MAX_INPUT_PRICE_PER_MILLION +
+                        outputBound * MODEL_MAX_OUTPUT_PRICE_PER_MILLION) /
                     1_000_000;
                 qualificationReservationUsd =
                     args.service === "model"
@@ -1275,8 +1409,10 @@ export const recordAttempt = internalMutation({
                     ? (await ctx.db.get(args.runId))?.browserTestContextId
                     : undefined;
             const providerCallId = await ctx.db.insert("providerCalls", {
+                reservedMaxOutputTokens: structuredCapacity?.maxTokens,
                 qualificationReservationUsd,
                 qualificationContextId,
+                costAccountingPolicy: qualification?.costAccountingPolicy,
                 operationRequestId: args.operationRequestId,
                 missionId: args.missionId,
                 invocationId: args.invocationId,
@@ -1368,6 +1504,7 @@ export const recordAttempt = internalMutation({
                 const settlement = reportedCostSettlement(
                     existing,
                     args.reportedCost,
+                    args,
                 );
                 await updateQualificationUsage(ctx, existing, {
                     ...existing,
@@ -1421,7 +1558,7 @@ export const recordAttempt = internalMutation({
             status: args.status,
             latencyMs: args.latencyMs,
             usage: args.usage,
-            ...reportedCostSettlement(existing, args.reportedCost),
+            ...reportedCostSettlement(existing, args.reportedCost, args),
             errorCode: args.errorCode,
             ...(args.diagnostic ? { diagnostic: args.diagnostic } : {}),
             retryable: args.retryable,

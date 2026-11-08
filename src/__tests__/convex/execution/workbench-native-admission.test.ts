@@ -37,6 +37,46 @@ async function savedProgram() {
     return fixture;
 }
 
+test("native conversation instructions can exceed the old 128 KiB transport ceiling without omission", async () => {
+    const { t, client, runId } = await savedProgram();
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    const expected = Array.from(
+        { length: 6 },
+        (_, index) => `Instruction ${index}: ${"界".repeat(7400)}`,
+    );
+    for (let index = 0; index < 6; index++)
+        await client.mutation(api.execution.conversations.submit, {
+            runId,
+            requestKey: `large-steer-${index}`,
+            text: expected[index] ?? "",
+            delivery: "steer",
+            turnId: active.turnId,
+        });
+    const context = await t.query(internal.execution.context.build, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+    });
+    assert(context.kind === "ready");
+    expect(Buffer.byteLength(context.inputJson)).toBeGreaterThan(128 * 1024);
+    expect(
+        JSON.parse(context.inputJson)
+            .conversationInstructions.messages.filter(
+                (message: { text: string }) =>
+                    message.text.startsWith("Instruction "),
+            )
+            .map((message: { text: string }) => message.text),
+    ).toEqual(expected);
+});
+
 test("a steer between Pi preparation and invocation admission is retained as a native user input before publication", async () => {
     const { t, client, runId } = await savedProgram();
     const active = await t.mutation(
@@ -83,7 +123,11 @@ test("a steer between Pi preparation and invocation admission is retained as a n
     });
     const commits = await t.run((ctx) => ctx.db.query("piCommits").collect());
     const admittedIds = commits
-        .flatMap((commit) => JSON.parse(commit.payload))
+        .flatMap((commit) => {
+            if (commit.payload === undefined)
+                throw new Error("Expected inline fixture commit");
+            return JSON.parse(commit.payload);
+        })
         .filter(
             (write) =>
                 write.type === "entry" &&

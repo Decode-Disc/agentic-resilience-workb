@@ -419,7 +419,22 @@ export const execute = internalAction({
                           }),
                   });
             if ("reasonCode" in outcome)
-                return { kind: "unavailable", code: outcome.reasonCode };
+                return {
+                    kind: "unavailable",
+                    code:
+                        outcome.reasonCode === "invalid_output"
+                            ? "documentary_control_unfinished"
+                            : outcome.reasonCode,
+                    ...(outcome.reasonCode === "invalid_output" ||
+                    outcome.diagnosticReason
+                        ? {
+                              validation: {
+                                  path: "documentaryControl",
+                                  expected: `A complete documentary examination matching the submitted contribution identities (${outcome.diagnosticReason ?? "invalid_output"}).`,
+                              },
+                          }
+                        : {}),
+                };
             if (outcome.result.status !== "succeeded")
                 return {
                     kind: "unavailable",

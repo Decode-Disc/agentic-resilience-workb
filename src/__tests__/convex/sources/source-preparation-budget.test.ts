@@ -6,7 +6,7 @@ import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 afterEach(() => vi.unstubAllEnvs());
 
 async function activePreparation() {
-    const fixture = await seedSourcePreparation();
+    const fixture = await seedSourcePreparation({ models: true });
     const { t, runId, corpusRevisionId, sourceId } = fixture;
     const preparationId = await t.mutation(
         internal.sourcePreparation.claimForDiscovery,
@@ -16,6 +16,10 @@ async function activePreparation() {
             expectedExecutionGeneration: 3,
         },
     );
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     const preparation = await t.run((ctx) => ctx.db.get(preparationId));
     if (!preparation) throw new Error("Missing preparation");
     const attempt = (label: string, number = 1) => {
@@ -329,7 +333,7 @@ test("a clipped legacy history cannot create fresh allowance without a counter",
 
 test("historical technical failures leave the productive allowance available", async () => {
     const { t, runId, sourceId, corpusRevisionId } =
-        await seedSourcePreparation();
+        await seedSourcePreparation({ models: true });
     await t.run(async (ctx) => {
         for (let index = 0; index < 120; index++) {
             await ctx.db.insert("providerCalls", {
@@ -360,6 +364,10 @@ test("historical technical failures leave the productive allowance available", a
         },
     );
     const preparation = await t.run((ctx) => ctx.db.get(preparationId));
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     const inputHash = sha256Hex("unfinished-input");
     const result = await t.mutation(internal.providerCalls.recordAttempt, {
         runId,

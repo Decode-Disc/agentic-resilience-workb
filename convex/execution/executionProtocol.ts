@@ -205,7 +205,10 @@ export type AgentGenerationResult =
       };
 
 export type AgentGenerationLifecycle = {
-    beforeDispatch(requestJson: string): Promise<void>;
+    beforeDispatch(
+        requestJson: string,
+        metadata?: { effectiveMaxOutputTokens?: number },
+    ): Promise<void>;
     observeProvider?(observation: {
         generationId: string;
         httpStatus?: number;

@@ -4,7 +4,7 @@ import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import {
     env,
@@ -893,13 +893,20 @@ export const inspectJournalEvent = query({
     },
 });
 
+import {
+    completeRetainedText,
+    retainedTextPage,
+} from "@convex/execution/retainedText";
+
+const invocationPayloadArgs = v.object({
+    runId: v.id("researchRuns"),
+    invocationId: v.id("agentInvocations"),
+    part: v.union(v.literal("request"), v.literal("reply")),
+});
+
 /** Reads one bounded snapshot; legacy context is never invented into a provider request. */
 export const readInvocationJournalPayload = query({
-    args: {
-        runId: v.id("researchRuns"),
-        invocationId: v.id("agentInvocations"),
-        part: v.union(v.literal("request"), v.literal("reply")),
-    },
+    args: invocationPayloadArgs.fields,
     returns: v.union(
         v.object({
             kind: v.literal("recorded"),
@@ -907,28 +914,61 @@ export const readInvocationJournalPayload = query({
         }),
         v.object({ kind: v.literal("unavailable"), code: v.string() }),
     ),
+    handler: readJournalPayload,
+});
+
+async function readJournalPayload(
+    ctx: QueryCtx,
+    args: Infer<typeof invocationPayloadArgs>,
+) {
+    await requireAdmin(ctx);
+    const invocation = await ctx.db.get(args.invocationId);
+    if (!invocation || invocation.runId !== args.runId)
+        throw new Error("Journal entry not found");
+    const payload = await ctx.db
+        .query("agentInvocationPayloads")
+        .withIndex("by_invocation_and_part", (q) =>
+            q.eq("invocationId", invocation._id).eq("part", args.part),
+        )
+        .unique();
+    if (!payload)
+        return {
+            kind: "unavailable" as const,
+            code: hasKnownNonDispatch(invocation)
+                ? "not_dispatched"
+                : invocation.journalVersion
+                  ? `${args.part}_not_recorded`
+                  : "historical_trace",
+        };
+    if (payload.runId !== args.runId)
+        throw new Error("Journal correlation mismatch");
+    return { kind: "recorded" as const, payload };
+}
+
+/** Complete publication and administrator correlation are checked before any fragment becomes observable. */
+export const listInvocationPayloadFragmentsPage = query({
+    args: {
+        ...invocationPayloadArgs.fields,
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: paginationResultValidator(
+        v.object({ index: v.number(), content: v.string() }),
+    ),
     handler: async (ctx, args) => {
-        await requireAdmin(ctx);
-        const invocation = await ctx.db.get(args.invocationId);
-        if (!invocation || invocation.runId !== args.runId)
-            throw new Error("Journal entry not found");
-        const payload = await ctx.db
-            .query("agentInvocationPayloads")
-            .withIndex("by_invocation_and_part", (q) =>
-                q.eq("invocationId", invocation._id).eq("part", args.part),
-            )
-            .unique();
-        if (!payload)
-            return {
-                kind: "unavailable" as const,
-                code: hasKnownNonDispatch(invocation)
-                    ? "not_dispatched"
-                    : invocation.journalVersion
-                      ? `${args.part}_not_recorded`
-                      : "historical_trace",
-            };
-        if (payload.runId !== args.runId)
+        const result = await readJournalPayload(ctx, args);
+        if (
+            result.kind !== "recorded" ||
+            result.payload.state !== "complete" ||
+            !result.payload.textId
+        )
+            throw new Error("Complete fragmented snapshot not found");
+        const text = await completeRetainedText(ctx, result.payload.textId);
+        if (
+            text.key !== `${args.invocationId}:${args.part}` ||
+            text.contentHash !== result.payload.contentHash ||
+            text.sizeBytes !== result.payload.sizeBytes
+        )
             throw new Error("Journal correlation mismatch");
-        return { kind: "recorded" as const, payload };
+        return retainedTextPage(ctx, text, args.paginationOpts);
     },
 });

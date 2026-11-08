@@ -5,17 +5,26 @@ import {
     type QueryCtx,
 } from "@convex/_generated/server";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
-import { type Infer, v } from "convex/values";
+import { getDocumentSize, type Infer, v } from "convex/values";
 import { recordInvocationEvent, requireMissionAuthority } from "./authority";
 import { executionError } from "./errors";
 import {
     HISTORY_PAGE_SIZE,
     MAX_OBSERVABLE_OUTPUT_BYTES,
+    MAX_OPERATION_RESULT_BYTES,
 } from "./executionProtocol";
 import {
     isCommonConsultation,
     type retainedPayloadValidator,
 } from "./operationContracts";
+
+import {
+    completeRetainedText,
+    readRetainedText,
+    retainedTextParts,
+    retainedTextRange,
+    stageRetainedText,
+} from "./retainedText";
 
 type RetainedPayload = Infer<typeof retainedPayloadValidator>;
 
@@ -95,8 +104,7 @@ function observablePayload(payload: RetainedPayload) {
     if (
         payload.json === undefined ||
         payload.contentHash !== sha256Hex(payload.json) ||
-        payload.sizeBytes !== new TextEncoder().encode(payload.json).length ||
-        payload.sizeBytes > MAX_OBSERVABLE_OUTPUT_BYTES
+        payload.sizeBytes !== new TextEncoder().encode(payload.json).length
     )
         throw executionError("journal_payload_invalid");
     const value: unknown = JSON.parse(payload.json);
@@ -182,11 +190,10 @@ export async function invocationHistoryReference(
     return null;
 }
 
-/** Historical fragments never join the current mutable execution documents. */
-export async function projectMissionHistoryEvent(
+async function historyEventParts(
     ctx: QueryCtx,
     event: Doc<"agentExecutionEvents">,
-): Promise<{ json: string; contentHash: string }> {
+) {
     const metadata = { ...event };
     delete metadata.payload;
     delete metadata.historySourceSequence;
@@ -216,30 +223,54 @@ export async function projectMissionHistoryEvent(
             invocationPayload.invocationId !== event.invocationId)
     )
         throw executionError("journal_payload_invalid");
+    const observation = event.contextObservation
+        ? {
+              state: "complete" as const,
+              value: JSON.parse(
+                  await readRetainedText(ctx, event.contextObservation.textId),
+              ) as unknown,
+          }
+        : event.payload
+          ? observablePayload(event.payload)
+          : event.kind === "invocation_refused"
+            ? {
+                  state: "incomplete",
+                  code: "invocation_observation_unavailable",
+              }
+            : event.requestId && OPERATION_OBSERVATIONS.has(event.kind)
+              ? {
+                    state: "incomplete",
+                    code: "operation_observation_unavailable",
+                }
+              : undefined;
+    return { metadata, part, invocationPayload, observation };
+}
+
+/** Historical fragments never join the current mutable execution documents. */
+export async function projectMissionHistoryEvent(
+    ctx: QueryCtx,
+    event: Doc<"agentExecutionEvents">,
+): Promise<{ json: string; contentHash: string }> {
+    const { metadata, part, invocationPayload, observation } =
+        await historyEventParts(ctx, event);
     const json = stableStringify({
         version: 1,
         event: metadata,
-        ...(event.payload
-            ? { observation: observablePayload(event.payload) }
-            : event.kind === "invocation_refused"
-              ? {
-                    observation: {
-                        state: "incomplete",
-                        code: "invocation_observation_unavailable",
-                    },
-                }
-              : event.requestId && OPERATION_OBSERVATIONS.has(event.kind)
-                ? {
-                      observation: {
-                          state: "incomplete",
-                          code: "operation_observation_unavailable",
-                      },
-                  }
-                : {}),
+        ...(observation ? { observation } : {}),
         ...(part || event.invocationPayloadId
             ? {
                   invocation: invocationPayload
-                      ? observablePayload(invocationPayload)
+                      ? observablePayload(
+                            invocationPayload.textId
+                                ? {
+                                      ...invocationPayload,
+                                      json: await readRetainedText(
+                                          ctx,
+                                          invocationPayload.textId,
+                                      ),
+                                  }
+                                : invocationPayload,
+                        )
                       : {
                             state: "incomplete",
                             code: "invocation_observation_unavailable",
@@ -248,6 +279,191 @@ export async function projectMissionHistoryEvent(
             : {}),
     });
     return { json, contentHash: sha256Hex(json) };
+}
+
+/** The caller's private history receipt owns continuation offsets; only intersecting immutable chunks are loaded. */
+export async function readMissionHistoryEventFragment(
+    ctx: QueryCtx,
+    event: Doc<"agentExecutionEvents">,
+    offset: number,
+    limit: number,
+) {
+    const { metadata, invocationPayload, observation } =
+        await historyEventParts(ctx, event);
+    if (!invocationPayload?.textId) {
+        const source = await projectMissionHistoryEvent(ctx, event);
+        return {
+            ...historyTextFragment(source.json, offset, limit),
+            contentHash: source.contentHash,
+        };
+    }
+    const text = await completeRetainedText(ctx, invocationPayload.textId);
+    if (
+        text.contentHash !== invocationPayload.contentHash ||
+        text.sizeBytes !== invocationPayload.sizeBytes
+    )
+        throw executionError("journal_payload_invalid");
+    const envelope = {
+        version: 2,
+        event: metadata,
+        ...(observation ? { observation } : {}),
+    };
+    const prefix = `${stableStringify(envelope).slice(0, -1)},"invocation":{"state":"complete","value":`;
+    const suffix = "}}";
+    const totalCharacters = prefix.length + text.characters + suffix.length;
+    if (
+        !Number.isSafeInteger(offset) ||
+        offset < 0 ||
+        offset >= totalCharacters
+    )
+        throw executionError("history_receipt_invalid");
+    let end = Math.min(totalCharacters, offset + limit);
+    const parts = [prefix.slice(offset, end)];
+    if (end > prefix.length && offset < prefix.length + text.characters)
+        parts.push(
+            await retainedTextRange(
+                ctx,
+                text,
+                Math.max(0, offset - prefix.length),
+                Math.min(end - prefix.length, text.characters) -
+                    Math.max(0, offset - prefix.length),
+            ),
+        );
+    if (end > prefix.length + text.characters)
+        parts.push(
+            suffix.slice(
+                Math.max(0, offset - prefix.length - text.characters),
+                end - prefix.length - text.characters,
+            ),
+        );
+    let content = parts.join("");
+    if (end < totalCharacters && /[\uD800-\uDBFF]/.test(content.at(-1) ?? "")) {
+        content = content.slice(0, -1);
+        end--;
+    }
+    return {
+        offset,
+        totalCharacters,
+        content,
+        end,
+        contentHash: sha256Hex(
+            stableStringify({
+                ...envelope,
+                contentHash: text.contentHash,
+            }),
+        ),
+    };
+}
+
+/** Canonical boundaries make overlapping offsets unrepresentable without an issued server position. */
+export function historyTextFragment(
+    text: string,
+    offset: number,
+    limit: number,
+) {
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset >= text.length)
+        throw executionError("history_receipt_invalid");
+    let start = 0;
+    const endAt = (at: number) => {
+        let end = Math.min(text.length, at + limit);
+        if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1] ?? ""))
+            end--;
+        return end;
+    };
+    while (start < offset) start = endAt(start);
+    if (start !== offset) throw executionError("history_receipt_invalid");
+    const end = endAt(offset);
+    return {
+        offset,
+        totalCharacters: text.length,
+        content: text.slice(offset, end),
+        end,
+    };
+}
+
+/** The immutable admitted snapshot may span documents; historical inline invocations retain their exact input. */
+export async function admittedInputJson(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+) {
+    if (!invocation.inputTextId) {
+        if (
+            invocation.inputContentHash &&
+            sha256Hex(invocation.inputJson) !== invocation.inputContentHash
+        )
+            throw executionError("invocation_input_invalid");
+        return invocation.inputJson;
+    }
+    const text = await completeRetainedText(ctx, invocation.inputTextId);
+    if (
+        text.key !== `${invocation._id}:input` ||
+        text.contentHash !== invocation.inputContentHash
+    )
+        throw executionError("invocation_input_invalid");
+    return readRetainedText(ctx, text._id);
+}
+
+export function admittedInputHash(invocation: Doc<"agentInvocations">) {
+    return invocation.inputContentHash ?? sha256Hex(invocation.inputJson);
+}
+
+/** Recovery bytes share immutable retention; their size must not roll back an already observed provider result. */
+export async function retainInvocationRawOutput(
+    ctx: MutationCtx,
+    invocation: Doc<"agentInvocations">,
+    rawOutputJson?: string,
+) {
+    if (rawOutputJson === undefined) return {};
+    if (invocation.rawOutputTextId) {
+        const text = await completeRetainedText(
+            ctx,
+            invocation.rawOutputTextId,
+        );
+        if (
+            text.key !== `${invocation._id}:raw_output` ||
+            text.contentHash !== sha256Hex(rawOutputJson)
+        )
+            throw executionError("invocation_result_conflict");
+        return { rawOutputTextId: text._id };
+    }
+    if (
+        invocation.rawOutputJson !== undefined &&
+        invocation.rawOutputJson !== rawOutputJson
+    )
+        throw executionError("invocation_result_conflict");
+    // Leave room for receivedOutputJson, outputJson and correction at their existing bounds.
+    const large =
+        new TextEncoder().encode(rawOutputJson).length >
+            MAX_OBSERVABLE_OUTPUT_BYTES ||
+        getDocumentSize({ ...invocation, rawOutputJson }) +
+            3 * MAX_OPERATION_RESULT_BYTES >=
+            1_048_576;
+    if (!large) return { rawOutputJson };
+    if (invocation.generationBackend?.id !== "pi-durable")
+        throw executionError("response_capacity");
+    const { manifest, parts } = retainedTextParts(rawOutputJson);
+    let textId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        textId = await stageRetainedText(ctx, `${invocation._id}:raw_output`, {
+            ...manifest,
+            index,
+            content,
+        });
+    if (!textId) throw executionError("invocation_result_invalid");
+    await completeRetainedText(ctx, textId);
+    return { rawOutputJson: undefined, rawOutputTextId: textId };
+}
+
+/** Native replay receives the exact original; ordinary metadata readers keep a bounded invocation document. */
+export async function invocationRawOutputJson(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+) {
+    if (!invocation.rawOutputTextId) return invocation.rawOutputJson;
+    const text = await completeRetainedText(ctx, invocation.rawOutputTextId);
+    if (text.key !== `${invocation._id}:raw_output`)
+        throw executionError("invocation_result_invalid");
+    return readRetainedText(ctx, text._id);
 }
 
 /** Without provider admission, a retained live response is a known local refusal. */
@@ -267,12 +483,54 @@ export async function retainInvocationPayload(
     part: "request" | "reply",
     contentJson?: string,
     missingCode = "observable_reply_unavailable",
+    retention?: {
+        textId?: Id<"retainedTexts">;
+        effectiveMaxOutputTokens?: number;
+    },
 ) {
-    const payload = retainablePayload(
-        contentJson,
-        `journal_${part}_capacity`,
-        missingCode,
-    );
+    const textId = retention?.textId;
+    const text = textId ? await completeRetainedText(ctx, textId) : undefined;
+    if (text && text.key !== `${invocation._id}:${part}`)
+        throw executionError("journal_payload_conflict");
+    let payload: RetainedPayload = text
+        ? {
+              version: 1,
+              state: "complete",
+              textId,
+              contentHash: text.contentHash,
+              sizeBytes: text.sizeBytes,
+          }
+        : retainablePayload(
+              contentJson,
+              `journal_${part}_capacity`,
+              missingCode,
+          );
+    if (
+        !text &&
+        contentJson !== undefined &&
+        payload.state === "incomplete" &&
+        invocation.generationBackend?.id === "pi-durable"
+    ) {
+        const { manifest, parts } = retainedTextParts(
+            stableStringify(JSON.parse(contentJson)),
+        );
+        let retainedId: Id<"retainedTexts"> | undefined;
+        for (const [index, content] of parts.entries())
+            retainedId = await stageRetainedText(
+                ctx,
+                `${invocation._id}:${part}`,
+                { ...manifest, index, content },
+            );
+        if (!retainedId) throw executionError("journal_payload_invalid");
+        await completeRetainedText(ctx, retainedId);
+        payload = {
+            version: 1,
+            state: "complete",
+            textId: retainedId,
+            contentHash: manifest.contentHash,
+            sizeBytes: manifest.sizeBytes,
+        };
+    }
     const { contentHash, code } = payload;
     const existing = await ctx.db
         .query("agentInvocationPayloads")
@@ -292,6 +550,9 @@ export async function retainInvocationPayload(
         invocationId: invocation._id,
         runId: invocation.runId,
         part,
+        ...(retention?.effectiveMaxOutputTokens !== undefined
+            ? { effectiveMaxOutputTokens: retention.effectiveMaxOutputTokens }
+            : {}),
         ...payload,
         createdAt: Date.now(),
     });
@@ -403,4 +664,128 @@ export async function invocationEventObservation(
                 : {}),
         },
     };
+}
+
+/** Allocates dossier order at admission/effect commit, independently of message publication. */
+export async function nextNativeInputSequence(
+    ctx: MutationCtx,
+    runId: Id<"researchRuns">,
+) {
+    const run = await ctx.db.get(runId);
+    if (!run) throw executionError("run_unavailable");
+    const conversation = await ctx.db
+        .query("agentConversations")
+        .withIndex("by_run", (q) => q.eq("runId", runId))
+        .unique();
+    const sequence =
+        Math.max(
+            conversation?.nativeInputSequence ?? 0,
+            await contextObservationSequence(ctx, runId),
+        ) + 1;
+    if (!Number.isSafeInteger(sequence))
+        throw executionError("native_input_capacity");
+    if (conversation)
+        await ctx.db.patch(conversation._id, { nativeInputSequence: sequence });
+    return sequence;
+}
+
+/** Records an immutable observation with the business effect; replay never allocates another order. */
+export async function recordContextObservation(
+    ctx: MutationCtx,
+    runId: Id<"researchRuns">,
+    args: {
+        key: string;
+        topic: NonNullable<
+            Doc<"agentExecutionEvents">["contextObservation"]
+        >["topic"];
+        actor: NonNullable<Doc<"agentExecutionEvents">["actor"]>;
+        value: unknown;
+    },
+) {
+    const json = stableStringify(args.value);
+    const previous = await ctx.db
+        .query("agentExecutionEvents")
+        .withIndex("by_run_and_context_key", (q) =>
+            q.eq("runId", runId).eq("contextObservation.key", args.key),
+        )
+        .unique();
+    if (previous) {
+        if (
+            !previous.contextObservation ||
+            (await readRetainedText(
+                ctx,
+                previous.contextObservation.textId,
+            )) !== json
+        )
+            throw executionError("journal_payload_conflict");
+        return previous._id;
+    }
+    const sequence = await nextNativeInputSequence(ctx, runId);
+    const { parts, manifest } = retainedTextParts(json);
+    let textId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        textId = await stageRetainedText(ctx, `context:${runId}:${sequence}`, {
+            ...manifest,
+            index,
+            content,
+        });
+    if (!textId) throw executionError("journal_payload_invalid");
+    await completeRetainedText(ctx, textId);
+    return ctx.db.insert("agentExecutionEvents", {
+        runId,
+        actor: args.actor,
+        kind: "context_observed",
+        cause: args.key,
+        nativeInputSequence: sequence,
+        sequence,
+        contextObservation: {
+            version: 1,
+            key: args.key,
+            topic: args.topic,
+            textId,
+        },
+        occurredAt: Date.now(),
+    });
+}
+
+/** Current observation frontier is independent of invocation/lease bookkeeping. */
+export async function contextObservationSequence(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+) {
+    const last = await ctx.db
+        .query("agentExecutionEvents")
+        .withIndex("by_run_and_native_input_sequence", (q) =>
+            q.eq("runId", runId).gt("nativeInputSequence", 0),
+        )
+        .order("desc")
+        .first();
+    return last?.nativeInputSequence ?? 0;
+}
+
+/** Run observations have their own dossier ordering and are never mistaken for mission events. */
+export function isContextObservation(event: Doc<"agentExecutionEvents">) {
+    return (
+        event.kind === "context_observed" &&
+        event.contextObservation?.version === 1 &&
+        Number.isSafeInteger(event.nativeInputSequence) &&
+        event.nativeInputSequence === event.sequence
+    );
+}
+
+/** The latest command frontier is separate from business-state changes and queued user messages. */
+export async function latestNativeControl(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+) {
+    return ctx.db
+        .query("agentMessageDeliveries")
+        .withIndex("by_run_and_delivery_and_native_input_sequence", (q) =>
+            q
+                .eq("runId", runId)
+                .eq("delivery", "control")
+                .gt("nativeInputSequence", 0),
+        )
+        .order("desc")
+        .first();
 }

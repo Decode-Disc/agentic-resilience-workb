@@ -3,17 +3,14 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
+import { sha256Hex } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import {
     agentToolSchemas,
     modelOperationOutcome,
 } from "@convex/execution/agentDefinition";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
-import {
-    type AgentGenerationBackend,
-    MAX_CONTEXT_BYTES,
-    MAX_OBSERVABLE_OUTPUT_BYTES,
-} from "@convex/execution/executionProtocol";
+import type { AgentGenerationBackend } from "@convex/execution/executionProtocol";
 import { invokeControlledGeneration } from "@convex/execution/invokeAgentModel";
 import { revisionRoute } from "@convex/modelConfiguration";
 import { PI_LEASE_RENEW_INTERVAL_MS } from "@convex/resourceLimits";
@@ -35,6 +32,11 @@ import {
     type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
+import { isContextOverflow } from "@earendil-works/pi-ai/utils/overflow";
+import {
+    getCurrentTools,
+    toToolDeclaration,
+} from "@earendil-works/pi-ai/utils/transcript";
 import {
     AssistantEntry,
     type Conversation,
@@ -48,14 +50,23 @@ import {
     type Wake,
 } from "@earendil-works/pi-durable";
 import {
+    modelToolSetKey,
     PI_MISSION_EXTENSION,
     PI_MISSION_INPUT,
+    PI_STATE_SECTION,
     piMissionMessages,
+    piMissionStateText,
+    piRequiredContextTokens,
     piToolMetadata,
     preparePiModelPayload,
     preparePiSimulationRequest,
 } from "./modelInput";
-import { modelCallSettings, SIMULATION_MODEL_ROUTE } from "./modelRouting";
+import {
+    modelCallSettings,
+    NATIVE_MODEL_SERIALIZER,
+    SIMULATION_CONTEXT_WINDOW,
+    SIMULATION_MODEL_ROUTE,
+} from "./modelRouting";
 import {
     createBoundedModelFetch,
     generationObservation,
@@ -67,6 +78,44 @@ import { openMissionPiStorage } from "./piStorage";
 import { createPiToolArgumentsCapture } from "./piToolArguments";
 
 export { piToolMetadata } from "./modelInput";
+
+/** Read proof from Pi's immutable request checkpoint, including after the worker's memory is lost. */
+function nativePreparation(
+    transcript: TranscriptContext,
+    instructions: string,
+    nativeConversation: boolean | undefined,
+    contextRendering: "separated_v1" | undefined,
+) {
+    const sections = new Map<string, string>();
+    for (const message of transcript.messages) {
+        if (message.role !== "system") continue;
+        for (const [key, value] of Object.entries(message.sections ?? {})) {
+            if (value === null) sections.delete(key);
+            else sections.set(key, value);
+        }
+    }
+    const retainedInstructions = sections.get("instructions") ?? "";
+    const section = sections.get(PI_STATE_SECTION);
+    const prefix = piMissionStateText(
+        instructions,
+        "",
+        nativeConversation,
+        contextRendering,
+    );
+    const inputJson = section?.startsWith(prefix)
+        ? section.slice(prefix.length)
+        : undefined;
+    return {
+        inputJson,
+        inputHash:
+            inputJson === undefined
+                ? "native_state_unavailable"
+                : sha256Hex(inputJson),
+        toolSetKey: modelToolSetKey(getCurrentTools(transcript.messages)),
+        instructionsHash: sha256Hex(retainedInstructions),
+        serializer: NATIVE_MODEL_SERIALIZER,
+    };
+}
 
 /** Pi owns generation/tool scheduling. Application callbacks retain admission, effects and adoption. */
 export async function runPiMission(
@@ -113,7 +162,7 @@ export async function runPiMission(
         models: [
             {
                 id: "controlled",
-                contextWindow: 32000,
+                contextWindow: SIMULATION_CONTEXT_WINDOW,
                 maxTokens: generation.maxOutputTokens,
             },
         ],
@@ -139,6 +188,7 @@ export async function runPiMission(
         : (base.getModels().find((m) => m.id === route?.model) ??
           (terminal ? base.getModels()[0] : undefined));
     if (!model) throw executionError("missing_authorized_route");
+    const nativeContextWindow = model.contextWindow;
     const startedAt = Date.now();
     const responseState: {
         responseTooLarge: boolean;
@@ -172,10 +222,21 @@ export async function runPiMission(
     let root: Conversation;
     let nativeSettled = false;
     let preparationChanges = 0;
+    const lastPreparedDelivery = { messages: 0, observations: 0, controls: 0 };
+    function changedPreparation() {
+        if (++preparationChanges >= 3)
+            throw executionError("native_preparation_stalled");
+        return fauxAssistantMessage(
+            fauxText(
+                "The request preparation changed before dispatch. Continue with freshly prepared state, active instructions and tools.",
+            ),
+        );
+    }
     const nativeDelivery = createNativeInputDelivery(ctx, args, storage);
     async function syncInputs() {
         if (definition.nativeConversation)
             await nativeDelivery.synchronize(root, context);
+        else await nativeDelivery.synchronizeObservations(root, context);
     }
     let failure: unknown;
     let wake: Wake = { active: true };
@@ -328,28 +389,74 @@ export async function runPiMission(
             defineExtension({
                 name: PI_MISSION_EXTENSION,
                 tools,
+                sections: [
+                    {
+                        key: PI_STATE_SECTION,
+                        tag: false,
+                        async render(input) {
+                            try {
+                                const current = await ctx.runQuery(
+                                    internal.execution.context.build,
+                                    args,
+                                );
+                                if (current.kind !== "ready")
+                                    throw executionError(current.code);
+                                const messages = piMissionMessages(
+                                    definition.instructions,
+                                    current.inputJson,
+                                    [],
+                                    0,
+                                    definition.nativeConversation,
+                                    definition.contextRendering,
+                                );
+                                const section = messages[0];
+                                if (
+                                    section?.role !== "system" ||
+                                    typeof section.content !== "string"
+                                )
+                                    throw executionError(
+                                        "native_state_unavailable",
+                                    );
+                                if (
+                                    piRequiredContextTokens(
+                                        input.agent.instructions ?? "",
+                                        section.content,
+                                        input.agent.tools.map(
+                                            toToolDeclaration,
+                                        ),
+                                    ) >= nativeContextWindow
+                                )
+                                    throw executionError("context_capacity");
+                                return section.content;
+                            } catch (error) {
+                                stop(error);
+                                throw error;
+                            }
+                        },
+                    },
+                ],
                 tasks: [waitOperation],
                 hooks: [
                     hook(GenerationTask, {
                         async afterTools() {
-                            if (definition.nativeConversation) {
-                                await syncInputs();
-                                await refreshTools();
-                            }
+                            await settleRetainedOperations();
+                            await syncInputs();
+                            await refreshTools();
                         },
                         async onYield() {
+                            if (terminal) return undefined;
+                            await syncInputs();
                             const state = await ctx.runQuery(
                                 internal.execution.piControl.publicationState,
                                 args,
                             );
                             if (
                                 state.staleInstructions ||
-                                preparationChanges > 0
+                                preparationChanges > 0 ||
+                                (await nativeDelivery.hasPendingObservations())
                             ) {
-                                if (definition.nativeConversation) {
-                                    await syncInputs();
-                                    await refreshTools();
-                                }
+                                await syncInputs();
+                                await refreshTools();
                                 return {
                                     continue:
                                         "Required mission context changed. Continue with the current state and active instructions before completing.",
@@ -400,6 +507,37 @@ export async function runPiMission(
             throw executionError("pi_slice_complete");
     }
 
+    async function settleRetainedOperations() {
+        await drainRetainedOperations();
+        const current = await ctx.runQuery(
+            internal.execution.piControl.state,
+            args,
+        );
+        if (!current.lastInvocationId) return;
+        const previous = await ctx.runQuery(
+            internal.execution.piControl.invocation,
+            {
+                invocationId: current.lastInvocationId,
+                expectedGeneration: args.expectedGeneration,
+            },
+        );
+        if (
+            previous.status === "returned" &&
+            previous.outputJson &&
+            JSON.parse(previous.outputJson).kind === "operations"
+        ) {
+            const settled = await ctx.runMutation(
+                internal.execution.invocations.settle,
+                {
+                    invocationId: previous._id,
+                    expectedGeneration: args.expectedGeneration,
+                },
+            );
+            if (settled.kind !== "ready")
+                throw executionError(settled.code ?? "pending_operations");
+        }
+    }
+
     async function request(
         model: Model<string>,
         transcript: TranscriptContext,
@@ -444,55 +582,75 @@ export async function runPiMission(
         }
         if (["completed", "cancelled"].includes(mission.status))
             throw executionError("pi_terminal_dispatch_forbidden");
-        await drainRetainedOperations();
-        if (!auxiliary) {
-            const current = await ctx.runQuery(
-                internal.execution.piControl.state,
-                args,
+        if (auxiliary) await drainRetainedOperations();
+        else {
+            await settleRetainedOperations();
+            await syncInputs();
+        }
+        const prepared = auxiliary
+            ? undefined
+            : nativePreparation(
+                  transcript,
+                  definition.instructions,
+                  definition.nativeConversation,
+                  definition.contextRendering,
+              );
+        const preparedObservationSequence = prepared
+            ? await nativeDelivery.observationProof(root, context, checkpoint)
+            : undefined;
+        const nativeInput =
+            definition.nativeConversation && !auxiliary
+                ? await nativeDelivery.proof(
+                      root,
+                      context,
+                      transcript,
+                      checkpoint,
+                  )
+                : undefined;
+        if (prepared) {
+            const messages = nativeInput?.messageIds.length ?? 0;
+            const observations = Math.max(0, preparedObservationSequence ?? 0);
+            const controls = Math.max(0, nativeInput?.controlSequence ?? 0);
+            // Verified delivery advances preparation without granting domain progress or allowance.
+            if (
+                messages > lastPreparedDelivery.messages ||
+                observations > lastPreparedDelivery.observations ||
+                controls > lastPreparedDelivery.controls
+            )
+                preparationChanges = 0;
+            lastPreparedDelivery.messages = Math.max(
+                lastPreparedDelivery.messages,
+                messages,
             );
-            if (current.lastInvocationId) {
-                const previous = await ctx.runQuery(
-                    internal.execution.piControl.invocation,
-                    {
-                        invocationId: current.lastInvocationId,
-                        expectedGeneration: args.expectedGeneration,
-                    },
-                );
-                if (
-                    previous.status === "returned" &&
-                    previous.outputJson &&
-                    JSON.parse(previous.outputJson).kind === "operations"
-                ) {
-                    const settled = await ctx.runMutation(
-                        internal.execution.invocations.settle,
-                        {
-                            invocationId: previous._id,
-                            expectedGeneration: args.expectedGeneration,
-                        },
-                    );
-                    if (settled.kind !== "ready")
-                        throw executionError(
-                            settled.code ?? "pending_operations",
-                        );
-                }
-            }
+            lastPreparedDelivery.observations = Math.max(
+                lastPreparedDelivery.observations,
+                observations,
+            );
+            lastPreparedDelivery.controls = Math.max(
+                lastPreparedDelivery.controls,
+                controls,
+            );
         }
         const begun = await ctx.runMutation(
             internal.execution.invocations.begin,
             {
                 ...args,
                 taskKey,
+                ...(prepared
+                    ? {
+                          preparedInputHash: prepared.inputHash,
+                          preparedToolSetKey: prepared.toolSetKey,
+                          preparedInstructionsHash: prepared.instructionsHash,
+                          preparedSerializer: prepared.serializer,
+                          preparedObservationSequence,
+                      }
+                    : {}),
                 ...(definition.nativeConversation
                     ? {
                           piSessionId: storage.sessionId,
                           ...(!auxiliary
                               ? {
-                                    nativeInput: await nativeDelivery.proof(
-                                        root,
-                                        context,
-                                        transcript,
-                                        checkpoint,
-                                    ),
+                                    nativeInput,
                                 }
                               : {}),
                       }
@@ -502,15 +660,8 @@ export async function runPiMission(
             },
         );
         if (begun.kind !== "ready") {
-            if (begun.code === "native_input_changed") {
-                if (++preparationChanges >= 3)
-                    throw executionError("native_preparation_stalled");
-                return fauxAssistantMessage(
-                    fauxText(
-                        "The request preparation changed before dispatch. Synchronize the active analyst messages and tools before continuing.",
-                    ),
-                );
-            }
+            if (begun.code === "native_input_changed")
+                return changedPreparation();
             throw executionError(begun.code);
         }
         preparationChanges = 0;
@@ -522,9 +673,38 @@ export async function runPiMission(
             internal.execution.piControl.invocation,
             invocationArgs,
         );
+        if (
+            !auxiliary &&
+            !retained.receivedOutputJson &&
+            !retained.providerCallId &&
+            (!retained.nativePreparation ||
+                prepared?.inputJson !== begun.inputJson ||
+                prepared.toolSetKey !== retained.nativePreparation.toolSetKey ||
+                prepared.instructionsHash !==
+                    retained.nativePreparation.instructionsHash)
+        ) {
+            await ctx.runMutation(internal.execution.invocations.retainOutput, {
+                ...invocationArgs,
+                responseJson: JSON.stringify({
+                    kind: "blocked",
+                    code: "native_input_changed",
+                }),
+            });
+            await ctx.runMutation(
+                internal.execution.piControl.retireForRepreparation,
+                invocationArgs,
+            );
+            return changedPreparation();
+        }
         let message: AssistantMessage | undefined;
         if (retained.receivedOutputJson) {
             const response = JSON.parse(retained.receivedOutputJson);
+            if (
+                response.kind === "blocked" &&
+                response.code === "native_input_changed" &&
+                retained.blockCode === "native_input_changed"
+            )
+                return changedPreparation();
             if (
                 response.kind === "blocked" &&
                 response.code !== "context_capacity"
@@ -544,7 +724,7 @@ export async function runPiMission(
             const native: AgentGenerationBackend = {
                 id: "pi-durable",
                 version: 1,
-                async generate(input, lifecycle) {
+                async generate(_input, lifecycle) {
                     const reject = async (code: string) => {
                         message = fauxAssistantMessage([], {
                             stopReason: "error",
@@ -580,49 +760,18 @@ export async function runPiMission(
                                   ...transcript.messages,
                               ]
                             : transcript.messages
-                        : piMissionMessages(
-                              input.instructions,
-                              input.prompt,
-                              transcript.messages,
-                              Date.now(),
-                              definition.nativeConversation,
-                              definition.contextRendering,
-                          );
+                        : transcript.messages;
                     const simulationRequest = simulated
                         ? preparePiSimulationRequest(expandedMessages)
                         : undefined;
                     const messages =
                         simulationRequest?.messages ?? expandedMessages;
-                    const requestJson =
-                        simulationRequest?.json ??
-                        JSON.stringify({
-                            version: 1,
-                            backend: "pi-durable",
-                            route: route ?? {
-                                model: "simulation/controlled",
-                                provider: "simulation",
-                            },
-                            messages,
-                            settings: {
-                                maxTokens: generation.maxOutputTokens,
-                                maxRetries: generation.maxRetries,
-                                temperature: generation.temperature,
-                            },
-                        });
-                    if (
-                        new TextEncoder().encode(requestJson).length >
-                        (simulated
-                            ? MAX_CONTEXT_BYTES
-                            : MAX_OBSERVABLE_OUTPUT_BYTES)
-                    )
-                        return reject(
-                            simulated
-                                ? "context_capacity"
-                                : "journal_request_capacity",
-                        );
-                    if (simulated) {
+                    if (simulationRequest) {
                         await storage.renewLease();
-                        await lifecycle.beforeDispatch(requestJson);
+                        await lifecycle.beforeDispatch(simulationRequest.json, {
+                            effectiveMaxOutputTokens:
+                                simulationRequest.effectiveMaxOutputTokens,
+                        });
                         const response = auxiliary
                             ? undefined
                             : await ctx.runQuery(
@@ -679,7 +828,13 @@ export async function runPiMission(
                                 ? "local-fixture"
                                 : process.env.OPENROUTER_API_KEY,
                             maxRetries: generation.maxRetries,
-                            maxTokens: generation.maxOutputTokens,
+                            maxTokens:
+                                options?.maxTokens === undefined
+                                    ? undefined
+                                    : Math.min(
+                                          options.maxTokens,
+                                          model.maxTokens,
+                                      ),
                             temperature: generation.temperature,
                             timeoutMs: generation.timeout,
                             signal: AbortSignal.any([
@@ -731,15 +886,11 @@ export async function runPiMission(
                                 );
                                 try {
                                     const json = prepared.json;
-                                    if (
-                                        new TextEncoder().encode(json).length >
-                                        MAX_CONTEXT_BYTES
-                                    )
-                                        throw executionError(
-                                            "context_capacity",
-                                        );
                                     await storage.renewLease();
-                                    await lifecycle.beforeDispatch(json);
+                                    await lifecycle.beforeDispatch(json, {
+                                        effectiveMaxOutputTokens:
+                                            prepared.effectiveMaxOutputTokens,
+                                    });
                                 } catch (error) {
                                     preparationCode =
                                         executionFailureCode(error) ??
@@ -803,7 +954,11 @@ export async function runPiMission(
                             ];
                         }),
                         ...(received.stopReason === "error"
-                            ? { errorMessage: "model_request_failed" }
+                            ? {
+                                  errorMessage: isContextOverflow(received)
+                                      ? "maximum context length exceeded"
+                                      : "model_request_failed",
+                              }
                             : {}),
                     };
                     if (
@@ -825,7 +980,7 @@ export async function runPiMission(
                         [...toolArguments.values()].every(
                             (call) => call.rawArguments !== null,
                         );
-                    const observation = generationObservation(
+                    let observation = generationObservation(
                         {
                             model: message.model,
                             resolvedModel: received.responseModel,
@@ -902,6 +1057,17 @@ export async function runPiMission(
                             }),
                         },
                     );
+                    if (
+                        observation.status === "failed" &&
+                        observation.dispatchOutcome === "response_received" &&
+                        !preparationCode &&
+                        isContextOverflow(received)
+                    )
+                        observation = {
+                            ...observation,
+                            errorCode: "context_capacity",
+                            retryable: false,
+                        };
                     await lifecycle.observe(observation);
                     return observation;
                 },
@@ -931,28 +1097,34 @@ export async function runPiMission(
         );
         if (!current.receivedOutputJson || !message)
             throw executionError("retained_response_invalid");
+        const currentResponse = JSON.parse(current.receivedOutputJson);
+        const refusalCode = currentResponse.code;
         if (
-            JSON.parse(current.receivedOutputJson).code ===
-                "context_capacity" &&
+            ["context_capacity", "native_input_changed"].includes(
+                refusalCode,
+            ) &&
             message.stopReason === "error"
         ) {
             await ctx.runMutation(
-                internal.execution.piControl.retireCapacity,
+                internal.execution.piControl.retireForRepreparation,
                 invocationArgs,
             );
+            if (refusalCode === "native_input_changed") {
+                return changedPreparation();
+            }
             return message;
         }
-        if (auxiliary)
+        if (auxiliary) {
             await ctx.runMutation(
                 internal.execution.piControl.finishAuxiliary,
                 invocationArgs,
             );
-        else {
+        } else {
             const adopted = await ctx.runMutation(
                 internal.execution.invocations.finish,
                 {
                     ...invocationArgs,
-                    response: JSON.parse(current.receivedOutputJson),
+                    response: currentResponse,
                     ...(current.rawOutputJson
                         ? { rawOutputJson: current.rawOutputJson }
                         : {}),
@@ -1022,11 +1194,21 @@ export async function runPiMission(
     const provider: Provider = {
         ...base,
         streamSimple: guarded,
-        stream: (m, t, o) =>
-            guarded(m, t, {
-                signal: o?.signal,
+        stream: (m, t, o) => {
+            const toolChoice =
+                o && "toolChoice" in o ? o.toolChoice : undefined;
+            if (
+                toolChoice !== undefined &&
+                toolChoice !== "auto" &&
+                toolChoice !== "none"
+            )
+                throw executionError("unsupported_native_tool_choice");
+            return guarded(m, t, {
+                ...o,
+                toolChoice,
                 maxRetries: generation.maxRetries,
-            }),
+            });
+        },
     };
     const models = createModels();
     models.setProvider(provider);
@@ -1044,8 +1226,6 @@ export async function runPiMission(
                 },
                 compaction: {
                     enabled: true,
-                    reserveTokens: 8192,
-                    keepRecentTokens: 8192,
                     backgroundTokens: 0,
                 },
             },
@@ -1066,6 +1246,14 @@ export async function runPiMission(
         void storage.renewLease().catch(stop);
     }, PI_LEASE_RENEW_INTERVAL_MS);
     try {
+        if (!terminal) {
+            try {
+                await settleRetainedOperations();
+            } catch (error) {
+                stop(error);
+                throw error;
+            }
+        }
         root = await harness.root(context, {
             agent: {
                 model: { provider: base.id, modelId: model.id },
@@ -1087,10 +1275,8 @@ export async function runPiMission(
             nativeSettled = true;
             return;
         }
-        if (definition.nativeConversation) {
-            if (mission.status !== "completed") await refreshTools();
-            await syncInputs();
-        }
+        if (!terminal) await refreshTools();
+        await syncInputs();
         const submission = definition.nativeConversation
             ? undefined
             : await root.submit(

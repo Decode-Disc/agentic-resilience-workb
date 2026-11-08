@@ -1,4 +1,5 @@
 import { observedDestinationValidator } from "@convex/domain/sourcesContracts";
+import { recordContextObservation } from "@convex/execution/journal";
 import { getDocumentSize, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
@@ -399,6 +400,21 @@ export const finalize = internalMutation({
             status: "committed",
             mediaType: "text/plain",
             updatedAt: Date.now(),
+        });
+        await recordContextObservation(ctx, capture.runId, {
+            key: `capture:${capture._id}:${args.contentHash}`,
+            topic: "documentary",
+            actor: { type: "system" },
+            value: {
+                event: "capture_available",
+                captureId: capture._id,
+                sourceId: capture.sourceId,
+                preparationId: args.preparationId,
+                contentHash: args.contentHash,
+                resolvedUrl: args.resolvedUrl,
+                readingCompleteness: args.readingCompleteness,
+                omittedPassageCount: args.omittedPassageCount,
+            },
         });
         return capture._id;
     },

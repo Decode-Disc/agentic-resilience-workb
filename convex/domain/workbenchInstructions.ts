@@ -1,9 +1,11 @@
 import { internal } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import { requireDossierAuthority } from "@convex/execution/authority";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
+import { recordContextObservation } from "@convex/execution/journal";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
+import { sha256Hex, stableStringify } from "./sourcePassages";
 import { preparationFailureCode } from "./sourcePreparationAuthority";
 import { SourceReviewReads } from "./sourceReviewReads";
 import {
@@ -146,6 +148,32 @@ export async function hasWaitingWorkbenchInstructions(
         .first());
 }
 
+/** Treatment changes and their observed result commit together, independently of the original transmission. */
+async function updateInstructionTreatment(
+    ctx: MutationCtx,
+    request: Doc<"workbenchInstructions">,
+    patch: Pick<Doc<"workbenchInstructions">, "status" | "outcome"> &
+        Partial<Pick<Doc<"workbenchInstructions">, "preparationId" | "needId">>,
+) {
+    await ctx.db.patch(request._id, patch);
+    const value = {
+        event: "instruction_treatment_changed",
+        instructionId: request._id,
+        messageId: request.messageId,
+        interpretedNeed: request.interpretedNeed,
+        status: patch.status,
+        outcome: patch.outcome,
+        preparationId: patch.preparationId ?? request.preparationId ?? null,
+        needId: patch.needId ?? request.needId ?? null,
+    };
+    await recordContextObservation(ctx, request.runId, {
+        key: `instruction-treatment:${request._id}:${sha256Hex(stableStringify(value))}`,
+        topic: "analyst_request",
+        actor: { type: "system" },
+        value,
+    });
+}
+
 /** Delivers bounded instruction batches while preserving admitted material and individual outcomes. */
 export async function processWorkbenchInstructions(
     ctx: MutationCtx,
@@ -205,7 +233,7 @@ export async function processWorkbenchInstructions(
                 treatment.status !== "open" ||
                 request.framingRevisionId !== run.fixedFramingRevisionId
             ) {
-                await ctx.db.patch(request._id, {
+                await updateInstructionTreatment(ctx, request, {
                     status: "limited",
                     outcome:
                         treatment.status !== "open"
@@ -247,7 +275,7 @@ export async function processWorkbenchInstructions(
                     code !== "source_review_capacity"
                 )
                     throw error;
-                await ctx.db.patch(request._id, {
+                await updateInstructionTreatment(ctx, request, {
                     status: "limited",
                     outcome:
                         "Your request exceeds the remaining preparation capacity. The material already prepared remains available. Refine the request to continue.",
@@ -255,7 +283,7 @@ export async function processWorkbenchInstructions(
                 continue;
             }
             data = proposed;
-            await ctx.db.patch(request._id, {
+            await updateInstructionTreatment(ctx, request, {
                 status: "transmitted",
                 preparationId: preparation._id,
                 needId,
@@ -291,7 +319,7 @@ export async function processWorkbenchInstructions(
             request.framingRevisionId !== run.fixedFramingRevisionId ||
             !request.coverageRole
         ) {
-            await ctx.db.patch(request._id, {
+            await updateInstructionTreatment(ctx, request, {
                 status: "limited",
                 outcome:
                     "This request cannot reopen the fixed source set or begin another documentary phase.",
@@ -303,7 +331,7 @@ export async function processWorkbenchInstructions(
                 internal.workbench.deliverSourceInstruction,
                 { instructionId: request._id },
             );
-            await ctx.db.patch(request._id, {
+            await updateInstructionTreatment(ctx, request, {
                 status: result.status === "started" ? "transmitted" : "blocked",
                 preparationId: result.preparationId,
                 outcome:
@@ -315,7 +343,7 @@ export async function processWorkbenchInstructions(
         } catch (error) {
             const code = preparationFailureCode(error);
             if (!code) throw error;
-            await ctx.db.patch(request._id, {
+            await updateInstructionTreatment(ctx, request, {
                 status: "blocked",
                 outcome:
                     "This request could not be transmitted under the current preparation limits. Inspect Sources to continue.",

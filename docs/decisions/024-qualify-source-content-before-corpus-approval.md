@@ -107,3 +107,6 @@ The initial implementation is disabled unless SOURCE_QUALIFICATION_ENABLED is ex
 ## Retrieval amendment (2026-10-21)
 
 [ADR-025](025-use-versioned-scoped-evidence-retrieval.md) adds versioned structured candidates, scoped native retrieval and a bounded optional embedding provider. It distinguishes whole-capture search candidates from the unchanged 512 approved-passage materialization ceiling, and introduces a cumulative conservative input-byte allowance for embeddings rather than a money settlement ledger. Historical preparation identities and human corpus approval remain unchanged. Local activation remains conditional on the recorded evaluation and verification gates.
+
+
+Status update, 2026-11-08: the [current shared execution contract](../../context/TECH.md#shared-execution-structure) versions new structured preparations as `source_actions_v4`, replacing the fixed output ceiling with the admitted model capability and estimated remaining context. The original input, deadline and legacy preparation bounds above remain historical evidence. Documentary response identity and unfinished-examination diagnostics are owned by the [current semantic-control contract](../../context/TECH.md#semantic-controls-and-analytical-outputs). Live semantic qualification of this correction remains pending.

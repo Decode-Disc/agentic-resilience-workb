@@ -108,8 +108,16 @@ test("Workbench consultation preserves authoritative facts without duplicating t
     expect(outcome).toMatchObject({ kind: "success" });
     assert(outcome.kind === "success");
     const page = JSON.parse(outcome.valueJson);
-    expect(page.state.framing.scope).toBe("A".repeat(28000));
+    expect(page.state.requiredState.section).toBe("workbench_current_state");
     expect(page.state.mission.id).toBe(active.missionId);
-    expect(page.state.conversationInstructions.messages).not.toHaveLength(0);
-    expect(outcome.valueJson.split("A".repeat(28000))).toHaveLength(2);
+    expect(page.state).not.toHaveProperty("framing");
+    expect(outcome.valueJson).not.toContain("A".repeat(28000));
+    const current = await t.query(internal.execution.context.build, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+    });
+    assert(current.kind === "ready");
+    expect(JSON.parse(current.inputJson).domain.framing.scope).toBe(
+        "A".repeat(28000),
+    );
 });

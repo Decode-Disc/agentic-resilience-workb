@@ -17,9 +17,16 @@ const FIELD_OWNERS: Record<string, readonly string[]> = {
 const TABLE_OWNERS: Record<string, readonly string[]> = {
     agentOperationRequests: ["operations", "handoffs"],
     agentInvocationPayloads: ["journal"],
+    retainedTexts: ["retainedText"],
+    retainedTextFragments: ["retainedText"],
 };
 // These are the existing driver/transaction boundaries, not an exemption for all execution modules.
 const FUNCTION_OWNERS: Record<string, readonly string[]> = {
+    "execution.retainedText.stageRetainedText": [
+        "journal",
+        "piStore",
+        "invocationLifecycle",
+    ],
     "execution.operations.recordResult": [
         "operations",
         "handoffs",

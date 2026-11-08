@@ -137,6 +137,9 @@ test("persists valid uncertainty once without semantic escalation", async () => 
         }),
     ).toEqual(result);
     expect(request).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toMatchObject({
+        max_tokens: 8192,
+    });
     const state = await t.run(async (ctx) => ({
         tasks: await ctx.db.query("aiTaskResults").take(3),
         calls: await ctx.db.query("providerCalls").take(3),
@@ -417,6 +420,10 @@ test("commits the model receipt and qualification in one mutation", async () => 
     } = await capturedCandidate();
     const preparation = await t.run((ctx) => ctx.db.get(preparationId));
     if (!preparation) throw new Error("Missing preparation fixture");
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     const call = await t.mutation(internal.providerCalls.recordAttempt, {
         runId,
         corpusRevisionId,
@@ -520,6 +527,10 @@ test.each([
     } = await capturedCandidate();
     const preparation = await t.run((ctx) => ctx.db.get(preparationId));
     if (!preparation) throw new Error("Missing preparation fixture");
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     const call = await t.mutation(internal.providerCalls.recordAttempt, {
         runId,
         corpusRevisionId,
@@ -1328,6 +1339,10 @@ test.each([
             }),
         );
     const inputHash = prepared.inputHash;
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     const call = await t.mutation(internal.providerCalls.recordAttempt, {
         runId,
         corpusRevisionId,

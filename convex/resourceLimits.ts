@@ -171,7 +171,7 @@ export const MAX_SOURCE_SEARCH_CANDIDATES = 20_000;
 export const MAX_SOURCE_SEARCH_BLOCKS = 100_000;
 
 /** Snapshotted so existing preparation journals retain their recorded step sequence. */
-export const SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION = "source_actions_v3";
+export const SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION = "source_actions_v4";
 export const SOURCE_PREPARATION_EXECUTION_PLAN_VERSION =
     SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION;
 

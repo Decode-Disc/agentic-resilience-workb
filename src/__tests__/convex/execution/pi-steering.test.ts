@@ -408,6 +408,16 @@ test("public Resume reuses a confirmed compaction after its Pi checkpoint fails"
         blockCode: "execution_interrupted",
     });
     expect(gate.calls()).toBe(1);
+    const confirmedSummary = await f.t.run(async (ctx) =>
+        (
+            await ctx.db
+                .query("agentInvocations")
+                .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+                .collect()
+        ).find((invocation) => invocation.purpose === "compaction"),
+    );
+    expect(confirmedSummary?.status).toBe("returned");
+
     const client = f.t.withIdentity({ subject: f.userId });
     await client.mutation(api.execution.researchControl.pause, {
         runId: f.args.runId,
@@ -428,5 +438,45 @@ test("public Resume reuses a confirmed compaction after its Pi checkpoint fails"
         generation: 6,
         result: { captureIds: [f.captureId] },
     });
-    expect(gate.calls()).toBe(5);
+    const summaries = await f.t.run(async (ctx) =>
+        (
+            await ctx.db
+                .query("agentInvocations")
+                .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+                .collect()
+        ).filter((invocation) => invocation.purpose === "compaction"),
+    );
+    const retained = summaries.find((row) => row._id === confirmedSummary?._id);
+    expect(retained).toMatchObject({
+        _id: confirmedSummary?._id,
+        taskKey: confirmedSummary?.taskKey,
+        generation: 4,
+        adoptionGeneration: 6,
+        status: "returned",
+        inputJson: confirmedSummary?.inputJson,
+        rawOutputJson: confirmedSummary?.rawOutputJson,
+        receivedOutputJson: confirmedSummary?.receivedOutputJson,
+    });
+    expect(new Set(summaries.map((row) => row.taskKey)).size).toBe(
+        summaries.length,
+    );
+    const hashes = await f.t.run(async (ctx) =>
+        Promise.all(
+            summaries.map(
+                async (row) =>
+                    (
+                        await ctx.db
+                            .query("agentInvocationPayloads")
+                            .withIndex("by_invocation_and_part", (q) =>
+                                q
+                                    .eq("invocationId", row._id)
+                                    .eq("part", "request"),
+                            )
+                            .unique()
+                    )?.contentHash,
+            ),
+        ),
+    );
+    expect(hashes.every((hash) => typeof hash === "string")).toBe(true);
+    expect(new Set(hashes).size).toBe(hashes.length);
 }, 30000);

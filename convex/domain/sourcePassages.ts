@@ -128,29 +128,46 @@ function wordAt(words: Uint32Array, index: number): number {
  * Kept dependency-free so Convex V8 mutation/query bundling can inline this module
  * without a node:crypto import. Matches the node:crypto "sha256"/"hex" output exactly.
  */
-function sha256BytesToHex(message: Uint8Array): string {
-    const messageLength = message.length;
-    const bitLengthHigh = Math.floor((messageLength * 8) / 0x100000000) >>> 0;
-    const bitLengthLow = (messageLength * 8) >>> 0;
-    // Message is always padded with at least one 0x80 byte plus an 8-byte length
-    // field, so the padded block count is (messageLength + 8) rounded up to 64.
-    const paddedLength = (((messageLength + 8) >> 6) + 1) << 6;
-    const padded = new Uint8Array(paddedLength);
-    padded.set(message);
-    padded[messageLength] = 0x80;
-    const view = new DataView(padded.buffer);
-    view.setUint32(paddedLength - 8, bitLengthHigh);
-    view.setUint32(paddedLength - 4, bitLengthLow);
+export type Sha256Checkpoint = {
+    words: number[];
+    tail: number[];
+    sizeBytes: number;
+};
 
-    // Working hash registers held as scalars.
-    let h0 = wordAt(SHA256_H0, 0);
-    let h1 = wordAt(SHA256_H0, 1);
-    let h2 = wordAt(SHA256_H0, 2);
-    let h3 = wordAt(SHA256_H0, 3);
-    let h4 = wordAt(SHA256_H0, 4);
-    let h5 = wordAt(SHA256_H0, 5);
-    let h6 = wordAt(SHA256_H0, 6);
-    let h7 = wordAt(SHA256_H0, 7);
+/** Serializable SHA-256 state lets bounded transactions verify one immutable byte stream. */
+export function advanceSha256(
+    checkpoint: Sha256Checkpoint | undefined,
+    input: Uint8Array,
+    final = false,
+): Sha256Checkpoint {
+    const tail = checkpoint?.tail ?? [];
+    const message = new Uint8Array(tail.length + input.length);
+    message.set(tail);
+    message.set(input, tail.length);
+    const sizeBytes = (checkpoint?.sizeBytes ?? 0) + input.length;
+    const paddedLength = final
+        ? Math.ceil((message.length + 9) / 64) * 64
+        : Math.floor(message.length / 64) * 64;
+    const padded = new Uint8Array(final ? paddedLength : message.length);
+    padded.set(message);
+    const view = new DataView(padded.buffer);
+    if (final) {
+        padded[message.length] = 0x80;
+        view.setUint32(
+            paddedLength - 8,
+            Math.floor((sizeBytes * 8) / 0x100000000) >>> 0,
+        );
+        view.setUint32(paddedLength - 4, (sizeBytes * 8) >>> 0);
+    }
+    const initial = new Uint32Array(checkpoint?.words ?? SHA256_H0);
+    let h0 = wordAt(initial, 0),
+        h1 = wordAt(initial, 1),
+        h2 = wordAt(initial, 2),
+        h3 = wordAt(initial, 3);
+    let h4 = wordAt(initial, 4),
+        h5 = wordAt(initial, 5),
+        h6 = wordAt(initial, 6),
+        h7 = wordAt(initial, 7);
     const schedule = new Uint32Array(64);
 
     for (let block = 0; block < paddedLength; block += 64) {
@@ -222,8 +239,16 @@ function sha256BytesToHex(message: Uint8Array): string {
         h7 = (h7 + hh) >>> 0;
     }
 
-    return [h0, h1, h2, h3, h4, h5, h6, h7]
-        .map((word) => word.toString(16).padStart(8, "0"))
+    return {
+        words: [h0, h1, h2, h3, h4, h5, h6, h7],
+        tail: final ? [] : Array.from(message.subarray(paddedLength)),
+        sizeBytes,
+    };
+}
+
+export function sha256CheckpointHex(checkpoint: Sha256Checkpoint): string {
+    return advanceSha256(checkpoint, new Uint8Array(), true)
+        .words.map((word) => word.toString(16).padStart(8, "0"))
         .join("");
 }
 
@@ -236,7 +261,7 @@ export function sha256Hex(content: string | Uint8Array): string {
         typeof content === "string"
             ? new TextEncoder().encode(content)
             : content;
-    return sha256BytesToHex(bytes);
+    return sha256CheckpointHex(advanceSha256(undefined, bytes));
 }
 
 /**

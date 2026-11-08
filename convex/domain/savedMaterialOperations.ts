@@ -25,11 +25,16 @@ export const savedMaterialMissionFields = {
 export const searchAvailableMaterialInputValidator = v.object({
     sourceId: sourceMaterialReferenceValidator.fields.sourceId,
     query: v.string(),
+    continuation: v.optional(v.string()),
 });
 
 export const readInContextInputValidator = v.object({
     sourceId: sourceMaterialReferenceValidator.fields.sourceId,
     passageOrder: v.number(),
+    continuation: v.optional(v.string()),
+    range: v.optional(
+        v.object({ startOffset: v.number(), endOffset: v.number() }),
+    ),
 });
 
 export const savedMaterialOperationValidator = v.union(
@@ -97,7 +102,7 @@ export const searchAvailableMaterialResult = operationResultValidator(
         ...materialFields,
         kind: v.literal("search_available_material"),
         canonicalUrl: v.string(),
-        retrievedAt: v.number(),
+        retrievedAt: v.union(v.number(), v.null()),
         passages: v.array(
             v.object({
                 passageOrder: v.number(),
@@ -107,12 +112,17 @@ export const searchAvailableMaterialResult = operationResultValidator(
         ),
         omittedPassageCount: v.number(),
         limitReached: v.boolean(),
+        continuation: v.optional(v.union(v.string(), v.null())),
+        responseOmittedPassageCount: v.optional(v.number()),
+        captureOmittedPassageCount: v.optional(v.union(v.number(), v.null())),
     }),
 );
 export const readInContextResult = operationResultValidator(
     v.object({
         ...materialFields,
         kind: v.literal("read_in_context"),
+        continuation: v.optional(v.union(v.string(), v.null())),
+        captureOmittedPassageCount: v.optional(v.union(v.number(), v.null())),
         passage: v.object({
             passageOrder: v.number(),
             startOffset: v.number(),
@@ -121,6 +131,12 @@ export const readInContextResult = operationResultValidator(
             quotationHash: v.string(),
             headingPath: v.array(v.string()),
             surroundingText: v.string(),
+            contextStartOffset: v.optional(v.number()),
+            contextEndOffset: v.optional(v.number()),
+            contextRange: v.optional(
+                v.object({ startOffset: v.number(), endOffset: v.number() }),
+            ),
+            captureCharacters: v.optional(v.number()),
         }),
     }),
 );

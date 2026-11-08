@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import { controlledDocumentaryUse } from "@convex/domain/sourceSelectionPolicy";
 import { completeSources } from "@convex/domain/sources";
+import { readRetainedText } from "@convex/execution/retainedText";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import {
@@ -358,6 +359,34 @@ test.each([
             current?.sourcesMission?.restrictedContributions,
         ),
     ).toBe(narrowerUse);
+    const observations = await f.t.run(async (ctx) => {
+        const rows = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_run_and_native_input_sequence", (q) =>
+                q.eq("runId", f.runId).gt("nativeInputSequence", 0),
+            )
+            .collect();
+        return Promise.all(
+            rows.map(async (row) =>
+                row.contextObservation
+                    ? JSON.parse(
+                          await readRetainedText(
+                              ctx,
+                              row.contextObservation.textId,
+                          ),
+                      )
+                    : null,
+            ),
+        );
+    });
+    expect(observations).toContainEqual(
+        expect.objectContaining({
+            event: "contributions_restricted",
+            restrictions: expect.arrayContaining([
+                expect.objectContaining({ permittedUse: narrowerUse }),
+            ]),
+        }),
+    );
     expect(
         controlledDocumentaryUse(
             { ...contribution, version: contribution.version + 1 },

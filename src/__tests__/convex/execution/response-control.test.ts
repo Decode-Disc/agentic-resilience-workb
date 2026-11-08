@@ -798,10 +798,19 @@ test("the actual Pi worker delivers the reminder and publishes only the revised 
         assert(request?.json);
         const serializedRequest = JSON.parse(request.json);
         const actualMessageText = serializedRequest.messages
-            .map((message: { content: unknown }) =>
-                typeof message.content === "string"
-                    ? message.content
-                    : JSON.stringify(message.content),
+            .map(
+                (message: {
+                    content: unknown;
+                    sections?: Record<string, string | null>;
+                }) =>
+                    [
+                        typeof message.content === "string"
+                            ? message.content
+                            : JSON.stringify(message.content),
+                        ...Object.values(message.sections ?? {}),
+                    ]
+                        .filter(Boolean)
+                        .join("\n"),
             )
             .join("\n");
         expect(actualMessageText).toContain('"draft":"Research is running."');

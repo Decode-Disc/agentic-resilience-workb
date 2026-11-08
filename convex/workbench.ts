@@ -37,6 +37,7 @@ import {
 } from "@convex/execution/conversations";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { missionStatusValidator } from "@convex/execution/executionProtocol";
+import { nextNativeInputSequence } from "@convex/execution/journal";
 import { retainOperationEffect } from "@convex/execution/operations";
 import {
     pauseResearch,
@@ -279,6 +280,7 @@ export const command = mutation({
                 text,
             };
         }
+        const nativeInputSequence = await nextNativeInputSequence(ctx, run._id);
         const action = args.command === "/pause" ? "pause" : "resume";
         let outcome: Infer<typeof workbenchCommandOutcome> = "refused";
         let refusal: string | undefined;
@@ -336,6 +338,7 @@ export const command = mutation({
                           current,
                       );
         return recordControlExchange(ctx, conversation, {
+            nativeInputSequence,
             requestKey: args.requestKey,
             contentHash,
             name: args.command,

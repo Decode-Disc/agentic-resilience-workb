@@ -22,7 +22,9 @@ import {
     MAX_CONTEXT_BYTES,
 } from "./executionProtocol";
 import {
+    contextObservationSequence,
     invocationHistoryReference,
+    latestNativeControl,
     operationContextObservation,
     operationHistoryReference,
 } from "./journal";
@@ -204,7 +206,11 @@ export async function buildMissionContext(
         const useKey = stableStringify(view);
         if (includedUses.has(useKey)) return true;
         resultBytes += new TextEncoder().encode(JSON.stringify(view)).length;
-        if (resultBytes > MAX_CONTEXT_BYTES) return false;
+        if (
+            mission.executionRuntime !== "pi-durable" &&
+            resultBytes > MAX_CONTEXT_BYTES
+        )
+            return false;
         includedUses.add(useKey);
         triggeringRequestsAndResults.push(view);
         return true;
@@ -263,6 +269,16 @@ export async function buildMissionContext(
         return { kind: "blocked" as const, code };
     }
     const assembled = {
+        nativeObservations: {
+            throughSequence: await contextObservationSequence(
+                ctx,
+                mission.runId,
+            ),
+            controlSequence: definition.nativeConversation
+                ? ((await latestNativeControl(ctx, mission.runId))
+                      ?.nativeInputSequence ?? 0)
+                : 0,
+        },
         version: mission.definitionVersion,
         definition: {
             id: definition.id,
@@ -368,32 +384,34 @@ export async function buildMissionContext(
     assembled.constraints.operations = Object.keys(operations);
     const inputJson = JSON.stringify(assembled);
     const effectiveModel = await missionModel(ctx, mission);
+    const inputBytes = await agentInputByteLength(
+        {
+            instructions: definition.instructions,
+            prompt: inputJson,
+            operations,
+            nativeConversation: definition.nativeConversation,
+            contextRendering: definition.contextRendering,
+            definitionVersion: definition.version,
+            nativeRoute:
+                mission.executionRuntime === "pi-durable"
+                    ? mission.provenance === "simulation"
+                        ? SIMULATION_MODEL_ROUTE
+                        : effectiveModel
+                          ? revisionRoute(effectiveModel)
+                          : SIMULATION_MODEL_ROUTE
+                    : undefined,
+        },
+        async (key) =>
+            (
+                await ctx.db
+                    .query("nativeInputProfiles")
+                    .withIndex("by_key", (q) => q.eq("key", key))
+                    .unique()
+            )?.bytes,
+    );
     if (
-        (await agentInputByteLength(
-            {
-                instructions: definition.instructions,
-                prompt: inputJson,
-                operations,
-                nativeConversation: definition.nativeConversation,
-                contextRendering: definition.contextRendering,
-                definitionVersion: definition.version,
-                nativeRoute:
-                    mission.executionRuntime === "pi-durable"
-                        ? mission.provenance === "simulation"
-                            ? SIMULATION_MODEL_ROUTE
-                            : effectiveModel
-                              ? revisionRoute(effectiveModel)
-                              : SIMULATION_MODEL_ROUTE
-                        : undefined,
-            },
-            async (key) =>
-                (
-                    await ctx.db
-                        .query("nativeInputProfiles")
-                        .withIndex("by_key", (q) => q.eq("key", key))
-                        .unique()
-                )?.bytes,
-        )) > MAX_CONTEXT_BYTES
+        mission.executionRuntime !== "pi-durable" &&
+        inputBytes > MAX_CONTEXT_BYTES
     )
         return { kind: "blocked" as const, code: "context_capacity" };
     return { kind: "ready" as const, inputJson };

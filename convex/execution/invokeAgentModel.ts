@@ -28,6 +28,7 @@ import {
     MAX_OPERATION_RESULT_BYTES,
 } from "./executionProtocol";
 
+import { retainedTextParts } from "./retainedText";
 import { simulationFetch } from "./simulation";
 
 function decodeReceivedReply(
@@ -59,8 +60,9 @@ function decodeReceivedReply(
         };
     };
     if (
+        !pi &&
         new TextEncoder().encode(rawOutputJson).length >
-        MAX_OPERATION_RESULT_BYTES
+            MAX_OPERATION_RESULT_BYTES
     )
         return invalid("response_capacity", rawOutputJson);
     let decoded: unknown;
@@ -79,6 +81,12 @@ function decodeReceivedReply(
     }
     if (!validate(invocationResponseValidator, decoded))
         return invalid("invalid_output", result.assistantOutput);
+    if (
+        pi &&
+        new TextEncoder().encode(JSON.stringify(decoded)).length >
+            MAX_OPERATION_RESULT_BYTES
+    )
+        return invalid("response_capacity", rawOutputJson);
     const structureError = invocationStructureError(decoded, pi);
     if (structureError) return invalid(structureError, rawOutputJson);
     return { reply: { response: decoded, rawOutputJson } };
@@ -177,28 +185,27 @@ export async function invokeControlledGeneration(
         definition,
         JSON.parse(invocation.inputJson),
     );
-    if (
-        (await agentInputByteLength(
-            {
-                instructions: definition.instructions,
-                prompt: invocation.inputJson,
-                operations: tools,
-                nativeConversation: definition.nativeConversation,
-                contextRendering: definition.contextRendering,
-                definitionVersion: definition.version,
-                nativeRoute:
-                    mission.executionRuntime === "pi-durable"
-                        ? simulated
-                            ? SIMULATION_MODEL_ROUTE
-                            : route
-                        : undefined,
-            },
-            async (key) =>
-                (await ctx.runQuery(internal.modelConfiguration.profile, {
-                    key,
-                })) ?? undefined,
-        )) > MAX_CONTEXT_BYTES
-    )
+    const inputBytes = await agentInputByteLength(
+        {
+            instructions: definition.instructions,
+            prompt: invocation.inputJson,
+            operations: tools,
+            nativeConversation: definition.nativeConversation,
+            contextRendering: definition.contextRendering,
+            definitionVersion: definition.version,
+            nativeRoute:
+                mission.executionRuntime === "pi-durable"
+                    ? simulated
+                        ? SIMULATION_MODEL_ROUTE
+                        : route
+                    : undefined,
+        },
+        async (key) =>
+            (await ctx.runQuery(internal.modelConfiguration.profile, {
+                key,
+            })) ?? undefined,
+    );
+    if (backend.id !== "pi-durable" && inputBytes > MAX_CONTEXT_BYTES)
         return retainReply({
             response: { kind: "blocked", code: "context_capacity" },
         });
@@ -253,6 +260,7 @@ export async function invokeControlledGeneration(
             );
             return reply;
         }
+        if (!admitted) return retainReply(reply);
         await ctx.runMutation(
             internal.execution.invocationLifecycle.recordModelReply,
             {
@@ -263,10 +271,10 @@ export async function invokeControlledGeneration(
         );
         return reply;
     };
-    let admitted: FunctionReturnType<
-        typeof internal.providerCalls.recordAttempt
-    >;
-    if (!simulated) {
+    let admitted:
+        | FunctionReturnType<typeof internal.providerCalls.recordAttempt>
+        | undefined;
+    if (!simulated && backend.id !== "pi-durable") {
         try {
             admitted = await ctx.runMutation(
                 internal.providerCalls.recordAttempt,
@@ -340,6 +348,17 @@ export async function invokeControlledGeneration(
                       errorCode: result.errorCode,
                       diagnostic: result.outputDiagnostic,
                   };
+        if (
+            backend.id === "pi-durable" &&
+            result.status === "failed" &&
+            result.backendOutputJson
+        )
+            received.reply.rawOutputJson = JSON.stringify({
+                ...(received.reply.rawOutputJson
+                    ? { diagnostic: JSON.parse(received.reply.rawOutputJson) }
+                    : {}),
+                backendOutputJson: result.backendOutputJson,
+            });
         observedReply = await recordReply(
             received.reply,
             {
@@ -387,23 +406,70 @@ export async function invokeControlledGeneration(
                 operations: tools,
             },
             {
-                beforeDispatch: async (requestJson) => {
+                beforeDispatch: async (requestJson, metadata) => {
                     try {
+                        const effectiveMaxOutputTokens =
+                            metadata?.effectiveMaxOutputTokens;
+                        if (
+                            backend.id === "pi-durable" &&
+                            (!Number.isSafeInteger(effectiveMaxOutputTokens) ||
+                                (effectiveMaxOutputTokens ?? 0) < 1)
+                        )
+                            throw executionError("invalid_model_output_limit");
+                        const json = simulated
+                            ? JSON.stringify({
+                                  ...JSON.parse(requestJson),
+                                  provenance: "simulation",
+                              })
+                            : requestJson;
+                        let textId:
+                            | import("@convex/_generated/dataModel").Id<"retainedTexts">
+                            | undefined;
+                        if (
+                            backend.id === "pi-durable" &&
+                            new TextEncoder().encode(json).length > 512 * 1024
+                        ) {
+                            const { manifest, parts } = retainedTextParts(json);
+                            for (const [index, content] of parts.entries())
+                                textId = await ctx.runMutation(
+                                    internal.execution.invocationLifecycle
+                                        .stageRequest,
+                                    {
+                                        ...args,
+                                        fragment: {
+                                            ...manifest,
+                                            index,
+                                            content,
+                                        },
+                                    },
+                                );
+                        }
                         const retained = await ctx.runMutation(
                             internal.execution.invocationLifecycle
                                 .retainRequest,
                             {
                                 ...args,
-                                requestJson: simulated
-                                    ? JSON.stringify({
-                                          ...JSON.parse(requestJson),
-                                          provenance: "simulation",
-                                      })
-                                    : requestJson,
+                                ...(textId
+                                    ? { textId }
+                                    : { requestJson: json }),
+                                ...(effectiveMaxOutputTokens !== undefined
+                                    ? { effectiveMaxOutputTokens }
+                                    : {}),
                             },
                         );
                         if (retained.kind === "blocked")
                             throw executionError(retained.code);
+                        if (!simulated && backend.id === "pi-durable") {
+                            admitted = await ctx.runMutation(
+                                internal.providerCalls.recordAttempt,
+                                { ...attempt, status: "started" },
+                            );
+                            if (!admitted.shouldExecute)
+                                throw executionError(
+                                    admitted.errorCode ??
+                                        "attempt_already_recorded",
+                                );
+                        }
                         await ctx.runQuery(
                             internal.execution.invocationLifecycle
                                 .authorizeDispatch,

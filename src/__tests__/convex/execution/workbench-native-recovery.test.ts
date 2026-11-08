@@ -394,7 +394,7 @@ test("native compaction and a later response preserve the same journal and exact
     ).toBe(true);
     expect(
         observed.commits.some((commit) =>
-            commit.payload.includes("EXACT-ORIGINAL-0"),
+            commit.payload?.includes("EXACT-ORIGINAL-0"),
         ),
     ).toBe(true);
 }, 30000);

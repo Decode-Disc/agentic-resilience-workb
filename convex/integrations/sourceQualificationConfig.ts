@@ -1,5 +1,8 @@
+import type { Doc } from "@convex/_generated/dataModel";
 import type { ModelRoute } from "./modelRouting";
-export type SourceQualificationRoute = ModelRoute;
+export type SourceQualificationRoute = ModelRoute & {
+    executionPlanVersion?: Doc<"sourceSelectionProposalRebuilds">["executionPlanVersion"];
+};
 export {
     MODEL_ATTEMPT_TIMEOUT_MS as QUALIFICATION_ATTEMPT_TIMEOUT_MS,
     MODEL_MAX_INPUT_PRICE_PER_MILLION as QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION,

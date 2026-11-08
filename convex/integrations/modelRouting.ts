@@ -1,10 +1,12 @@
-import { reasoningEffortValues } from "@convex/modelConfigurationValues";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { executionError } from "@convex/execution/errors";
 import type {
     modelDescriptor,
     reasoningEffort,
     reasoningPreference,
 } from "@convex/modelConfigurationSchema";
+import { reasoningEffortValues } from "@convex/modelConfigurationValues";
+import { SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION } from "@convex/resourceLimits";
 import chordPackage from "@earendil-works/chord/package.json";
 import { PI_AI_VERSION } from "@earendil-works/pi-ai/utils/version";
 import durablePackage from "@earendil-works/pi-durable/package.json";
@@ -21,7 +23,7 @@ export type ModelRoute = Readonly<{
     profileKey?: string;
 }>;
 /** Installed SDK identity invalidates prepared profiles without a manually maintained version mirror. */
-export const NATIVE_MODEL_SERIALIZER = `pi-ai@${PI_AI_VERSION}/pi-durable@${durablePackage.version}/chord@${chordPackage.version}:2`;
+export const NATIVE_MODEL_SERIALIZER = `pi-ai@${PI_AI_VERSION}/pi-durable@${durablePackage.version}/chord@${chordPackage.version}:3`;
 /** Additions do not invalidate existing exact profiles; removals or changed profiles require refresh. */
 export function nativeProfileCatalogueRevision(
     previous: { profiles: Record<string, number>; profileCatalog?: string },
@@ -57,7 +59,30 @@ export const SIMULATION_MODEL_ROUTE: ModelRoute = {
     model: "simulation/controlled",
     provider: "simulation",
 };
+export const SIMULATION_CONTEXT_WINDOW = 32000;
 export const MODEL_MAX_OUTPUT_TOKENS = 6144;
+
+/** One admitted ceiling serves structured transport and its pre-call reservation. */
+export function preparationModelOutputLimit(
+    route: ModelRoute,
+    executionPlanVersion?: string,
+): number {
+    if (executionPlanVersion !== SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION)
+        return Math.min(
+            MODEL_MAX_OUTPUT_TOKENS,
+            route.descriptor?.maxTokens ?? MODEL_MAX_OUTPUT_TOKENS,
+        );
+    const descriptor = route.descriptor;
+    if (
+        !descriptor ||
+        !Number.isSafeInteger(descriptor.maxTokens) ||
+        descriptor.maxTokens < 1 ||
+        !Number.isSafeInteger(descriptor.contextWindow) ||
+        descriptor.contextWindow < 1
+    )
+        throw executionError("invalid_model_output_limit");
+    return Math.min(descriptor.maxTokens, descriptor.contextWindow);
+}
 export const MODEL_ATTEMPT_TIMEOUT_MS = 60_000;
 export const MODEL_MAX_INPUT_PRICE_PER_MILLION = 0.15;
 export const MODEL_MAX_OUTPUT_PRICE_PER_MILLION = 0.6;

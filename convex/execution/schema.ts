@@ -34,6 +34,21 @@ import {
     protectedDiagnosticValidator,
     retainedPayloadValidator,
 } from "./operationContracts";
+import { textManifestValidator } from "./retainedText";
+
+export const nativeInputsValidator = v.array(
+    v.object({
+        requestId: v.string(),
+        nativeInputSequence: v.number(),
+        instructionVersion: v.number(),
+        messages: v.array(
+            v.object({
+                messageId: v.id("agentMessageDeliveries"),
+                text: v.string(),
+            }),
+        ),
+    }),
+);
 
 const missionFields = {
     completionEventId: v.optional(vEventId()),
@@ -105,6 +120,8 @@ export const executionTables = {
         held: v.boolean(),
     }).index("by_key", ["key"]),
     piSessions: defineTable({
+        observationSequence: v.optional(v.number()),
+        observationEntry: v.optional(v.number()),
         missionId: v.id("agentMissions"),
         conversationId: v.optional(v.id("agentConversations")),
         settledSequence: v.optional(v.number()),
@@ -122,15 +139,37 @@ export const executionTables = {
         .index("by_mission", ["missionId"])
         .index("by_conversation", ["conversationId"])
         .index("by_lease_until", ["leaseUntil"]),
+    retainedTexts: defineTable({
+        key: v.string(),
+        ...textManifestValidator.fields,
+        received: v.number(),
+        receivedBytes: v.number(),
+        receivedCharacters: v.number(),
+        fragmentEnds: v.array(v.number()),
+        checkpoint: v.optional(
+            v.object({
+                words: v.array(v.number()),
+                tail: v.array(v.number()),
+                sizeBytes: v.number(),
+            }),
+        ),
+    }).index("by_key", ["key"]),
+    retainedTextFragments: defineTable({
+        textId: v.id("retainedTexts"),
+        index: v.number(),
+        content: v.string(),
+    }).index("by_text_and_index", ["textId", "index"]),
     piCommits: defineTable({
         sessionId: v.id("piSessions"),
         sequence: v.number(),
         key: v.string(),
-        payload: v.string(),
+        payload: v.optional(v.string()),
+        textId: v.optional(v.id("retainedTexts")),
     })
         .index("by_session_and_sequence", ["sessionId", "sequence"])
         .index("by_session_and_key", ["sessionId", "key"]),
     agentConversations: defineTable({
+        nativeInputSequence: v.optional(v.number()),
         publicationRevision: v.optional(v.number()),
         responseFactsRevisionHash: v.optional(v.string()),
         modelCatalogId: v.optional(v.id("modelCatalog")),
@@ -178,6 +217,7 @@ export const executionTables = {
         completedAt: v.optional(v.number()),
     }).index("by_run", ["runId"]),
     agentMessageDeliveries: defineTable({
+        nativeInputSequence: v.optional(v.number()),
         responseControl: v.optional(responseControlSummary),
         publicationRevision: v.optional(v.number()),
         runId: v.id("researchRuns"),
@@ -218,12 +258,18 @@ export const executionTables = {
         .index("by_run", ["runId"])
         .index("by_run_and_status", ["runId", "status"])
         .index("by_turn", ["turnId"])
-        .index("by_run_and_native_control", ["runId", "nativeControlStatus"]),
+        .index("by_run_and_native_control", ["runId", "nativeControlStatus"])
+        .index("by_run_and_delivery_and_native_input_sequence", [
+            "runId",
+            "delivery",
+            "nativeInputSequence",
+        ]),
     agentInvocationPayloads: defineTable({
         invocationId: v.id("agentInvocations"),
         runId: v.id("researchRuns"),
         ...retainedPayloadValidator.fields,
         part: v.union(v.literal("request"), v.literal("reply")),
+        effectiveMaxOutputTokens: v.optional(v.number()),
         createdAt: v.number(),
     }).index("by_invocation_and_part", ["invocationId", "part"]),
     agentMissions: defineTable(
@@ -269,8 +315,21 @@ export const executionTables = {
             v.literal("blocked"),
         ),
         inputJson: v.string(),
+        inputTextId: v.optional(v.id("retainedTexts")),
+        inputContentHash: v.optional(v.string()),
+        nativePreparation: v.optional(
+            v.object({
+                observationSequence: v.optional(v.number()),
+                controlSequence: v.optional(v.number()),
+                serializer: v.string(),
+                inputHash: v.string(),
+                toolSetKey: v.string(),
+                instructionsHash: v.string(),
+            }),
+        ),
         outputJson: v.optional(v.string()),
         rawOutputJson: v.optional(v.string()),
+        rawOutputTextId: v.optional(v.id("retainedTexts")),
         receivedOutputJson: v.optional(v.string()),
         correction: v.optional(completionFeedbackValidator),
         receivedWhileAuthorized: v.optional(v.boolean()),
@@ -341,6 +400,21 @@ export const executionTables = {
         .index("by_mission_and_input_kind", ["missionId", "input.kind"])
         .index("by_invocation", ["invocationId"]),
     agentExecutionEvents: defineTable({
+        nativeInputSequence: v.optional(v.number()),
+        contextObservation: v.optional(
+            v.object({
+                version: v.literal(1),
+                key: v.string(),
+                topic: v.union(
+                    v.literal("framing"),
+                    v.literal("research"),
+                    v.literal("documentary"),
+                    v.literal("analyst_request"),
+                    v.literal("analyst_decision"),
+                ),
+                textId: v.id("retainedTexts"),
+            }),
+        ),
         protectedDiagnostic: v.optional(protectedDiagnosticValidator),
         invocationPayloadId: v.optional(v.id("agentInvocationPayloads")),
         payload: v.optional(retainedPayloadValidator),
@@ -375,6 +449,11 @@ export const executionTables = {
         conversationTurnId: v.optional(v.id("agentConversationTurns")),
         messageId: v.optional(v.id("agentMessageDeliveries")),
     })
+        .index("by_run_and_native_input_sequence", [
+            "runId",
+            "nativeInputSequence",
+        ])
+        .index("by_run_and_context_key", ["runId", "contextObservation.key"])
         .index("by_mission_and_sequence", ["missionId", "sequence"])
         .index("by_mission_and_history_source", [
             "missionId",

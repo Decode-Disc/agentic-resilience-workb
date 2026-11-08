@@ -20,6 +20,7 @@ type ReadPage = (
 >;
 
 import { expect, test, vi } from "vitest";
+import { createHash } from "node:crypto";
 
 const invocation: Doc<"agentInvocations"> = {
     _id: "invocation" as Id<"agentInvocations">,
@@ -80,4 +81,79 @@ test("transcript export refuses an extra invocation instead of relaxing the lot 
     await expect(collectSourcesTranscripts(read, 1)).rejects.toThrow(
         "authorized invocation count",
     );
+});
+
+test("transcript export hydrates and verifies fragmented admitted input and requests", async () => {
+    const input = JSON.stringify({ large: "état".repeat(20000) });
+    const request = JSON.stringify({ messages: "original".repeat(20000) });
+    const hash = (text: string) =>
+        createHash("sha256").update(text).digest("hex");
+    const read = vi.fn<ReadPage>().mockResolvedValue({
+        page: [
+            {
+                ...invocation,
+                inputJson: "",
+                inputTextId: "input-text" as Id<"retainedTexts">,
+                inputContentHash: hash(input),
+            },
+        ],
+        payloads: [
+            {
+                _id: "payload" as Id<"agentInvocationPayloads">,
+                _creationTime: 1,
+                runId: invocation.runId,
+                invocationId: invocation._id,
+                part: "request",
+                version: 1,
+                state: "complete",
+                textId: "request-text" as Id<"retainedTexts">,
+                contentHash: hash(request),
+                sizeBytes: Buffer.byteLength(request),
+                createdAt: 1,
+            },
+        ],
+        isDone: true,
+        continueCursor: "",
+    });
+    const readText = vi.fn(
+        async (args: {
+            part: string;
+            paginationOpts: { cursor: string | null };
+        }) => {
+            const content = args.part === "input" ? input : request;
+            const index = args.paginationOpts.cursor === null ? 0 : 1;
+            return {
+                page: [
+                    {
+                        index,
+                        content:
+                            index === 0
+                                ? content.slice(0, 60000)
+                                : content.slice(60000),
+                    },
+                ],
+                isDone: index === 1,
+                continueCursor: "next",
+            };
+        },
+    );
+    const result = await collectSourcesTranscripts(
+        read,
+        1,
+        undefined,
+        readText,
+    );
+    expect(result.invocations[0]?.inputJson).toBe(input);
+    expect(result.payloads[0]?.json).toBe(request);
+    expect(readText).toHaveBeenCalledTimes(4);
+    await expect(collectSourcesTranscripts(read, 1)).rejects.toThrow(
+        "fragment reader",
+    );
+    await expect(
+        collectSourcesTranscripts(read, 1, undefined, async () => ({
+            page: [{ index: 0, content: "wrong" }],
+            isDone: true,
+            continueCursor: "",
+        })),
+    ).rejects.toThrow("hash");
 });

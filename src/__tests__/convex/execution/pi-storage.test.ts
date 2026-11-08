@@ -1,9 +1,16 @@
+import { internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { retainedTextParts } from "@convex/execution/retainedText";
 import {
+    openMissionPiStorage,
     type PiCommit,
     type PiCommitStore,
     PiConvexStorage,
 } from "@convex/integrations/piStorage";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import {
+    BACKGROUND_CONTEXT,
+    withAbortSignal,
+} from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai";
 import {
     createRegistry,
@@ -11,7 +18,9 @@ import {
     ROOT_CONVERSATION_ID,
 } from "@earendil-works/pi-durable";
 import { registerStorageConformance } from "@earendil-works/pi-durable/testing";
+import { getFunctionName } from "convex/server";
 import { describe, expect, it, test, vi } from "vitest";
+import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 function database() {
     const commits: PiCommit[] = [];
@@ -72,6 +81,94 @@ registerStorageConformance(
         }
     },
 );
+
+test.each([
+    false,
+    true,
+])("fragmented replay renews while reading and observes cancellation (cancel=%s)", async (cancel) => {
+    vi.useFakeTimers();
+    try {
+        const f = await seedInspectedEvidence();
+        const missionId = await f.t.mutation(
+            internal.execution.missions.start,
+            {
+                runId: f.args.runId,
+                corpusRevisionId: f.args.corpusRevisionId,
+                expectedGeneration: 4,
+                definitionId: "saved_material_inspection_v1",
+                requestKey: "fragment-replay-lease",
+            },
+        );
+        const writer = "fragment-replay";
+        const lease = await f.t.mutation(internal.execution.piStore.claim, {
+            missionId,
+            expectedGeneration: 4,
+            writer,
+        });
+        const payload = JSON.stringify([
+            { type: "conversation", value: { id: 1 } },
+            {
+                type: "entry",
+                value: {
+                    id: 2,
+                    conversationId: 1,
+                    kind: "workbench.original",
+                    data: { text: "x".repeat(31 * 1024 * 1024) },
+                },
+            },
+        ]);
+        const { parts, manifest } = retainedTextParts(payload);
+        let textId: Id<"retainedTexts"> | undefined;
+        for (const [index, content] of parts.entries())
+            textId = await f.t.mutation(
+                internal.execution.piStore.stageCommit,
+                {
+                    ...lease,
+                    key: "large-commit",
+                    fragment: { ...manifest, index, content },
+                },
+            );
+        if (!textId) throw new Error("Expected fragmented commit");
+        await f.t.mutation(internal.execution.piStore.publishCommit, {
+            ...lease,
+            key: "large-commit",
+            textId,
+            nextId: 3,
+            sequence: 1,
+        });
+        const abort = new AbortController();
+        let reads = 0;
+        const reopen = f.t.action(async (ctx) => {
+            const storage = await openMissionPiStorage(
+                {
+                    ...ctx,
+                    runQuery: async (reference, ...args) => {
+                        if (
+                            getFunctionName(reference) ===
+                            "execution/piStore:readCommitFragment"
+                        ) {
+                            vi.setSystemTime(Date.now() + 180);
+                            if (cancel && ++reads === 5)
+                                abort.abort(new Error("replay_cancelled"));
+                        }
+                        return ctx.runQuery(reference, ...args);
+                    },
+                },
+                missionId,
+                4,
+                writer,
+                withAbortSignal(abort.signal, BACKGROUND_CONTEXT),
+            );
+            await storage.close(BACKGROUND_CONTEXT);
+        });
+        if (cancel) {
+            await expect(reopen).rejects.toThrow("replay_cancelled");
+            expect(reads).toBe(5);
+        } else await reopen;
+    } finally {
+        vi.useRealTimers();
+    }
+}, 60000);
 
 test("replay renews by elapsed lease time rather than once per page", async () => {
     vi.useFakeTimers();
@@ -154,7 +251,7 @@ test("a Pi session reopens the same durable conversation after a lost append ack
             type: "write",
             entry: {
                 kind: "workbench.note",
-                data: { text: "exact retained original" },
+                data: { text: "exact retained original".repeat(32000) },
             },
             requestId: "note",
         },
@@ -179,7 +276,7 @@ test("a Pi session reopens the same durable conversation after a lost append ack
             expect.arrayContaining([
                 expect.objectContaining({
                     kind: "workbench.note",
-                    data: { text: "exact retained original" },
+                    data: { text: "exact retained original".repeat(32000) },
                 }),
             ]),
         );

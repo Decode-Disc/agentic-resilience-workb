@@ -42,6 +42,7 @@ import {
 } from "@convex/integrations/exa";
 import { createExaContentsClient } from "@convex/integrations/exaContentsClient";
 import { retrieveAndNormalizeExaFiling } from "@convex/integrations/exaEvidence";
+import type { AttemptDependencies } from "@convex/integrations/modelTransport";
 import {
     createSecCompanyResolver,
     SecRetryableError,
@@ -111,7 +112,7 @@ export async function executePreparationModel<
         execute: (
             route: SourceQualificationRoute,
             signal: AbortSignal,
-            beforeDispatch: (requestJson: string) => Promise<void>,
+            beforeDispatch: NonNullable<AttemptDependencies["beforeDispatch"]>,
         ) => Promise<Result>;
     },
 ): Promise<
@@ -122,6 +123,7 @@ export async function executePreparationModel<
       }
     | {
           reasonCode: string;
+          diagnosticReason?: string;
           providerCallId?: Id<"providerCalls">;
           receipt?: PreparationModelReceipt;
       }
@@ -144,6 +146,7 @@ export async function executePreparationModel<
         if (!plan.attempt)
             return {
                 reasonCode: plan.errorCode ?? "preparation_unavailable",
+                diagnosticReason: plan.diagnosticReason,
                 providerCallId,
                 receipt,
             };
@@ -171,7 +174,10 @@ export async function executePreparationModel<
                 };
             throw error;
         }
-        const route = revisionRoute(configured);
+        const route: SourceQualificationRoute = {
+            ...revisionRoute(configured),
+            executionPlanVersion: preparation.executionPlanVersion,
+        };
         const attempt = {
             inputHash: input.inputHash,
             runId: preparation.runId,
@@ -209,13 +215,15 @@ export async function executePreparationModel<
             AbortSignal.timeout(
                 Math.max(1, (preparation.deadlineAt ?? 0) - Date.now()),
             ),
-            async (requestJson) => {
+            async (requestJson, metadata) => {
                 const retained = await ctx.runMutation(
                     internal.execution.invocationLifecycle.retainRequest,
                     {
                         invocationId,
                         expectedGeneration: preparation.executionGeneration,
                         requestJson,
+                        effectiveMaxOutputTokens:
+                            metadata?.effectiveMaxOutputTokens,
                     },
                 );
                 if (retained.kind === "blocked")
@@ -312,7 +320,12 @@ export async function executePreparationModel<
             !result.retryable ||
             preparationBudgetOutcome(result) === "reserved"
         )
-            return { reasonCode: result.errorCode, providerCallId, receipt };
+            return {
+                reasonCode: result.errorCode,
+                diagnosticReason: result.outputDiagnostic?.reason,
+                providerCallId,
+                receipt,
+            };
     }
 }
 

@@ -14,6 +14,14 @@ import {
     saveConversationMessage,
 } from "@convex/integrations/agentStorage";
 import {
+    piMissionStateText,
+    piRequiredContextTokens,
+    piToolMetadata,
+    requiredAnalystInput,
+} from "@convex/integrations/modelInput";
+import { SIMULATION_CONTEXT_WINDOW } from "@convex/integrations/modelRouting";
+import {
+    missionModel,
     modelPrepared,
     readResponseControlPolicy,
     requireReasoningEffort,
@@ -32,6 +40,7 @@ import {
 } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { getAgentDefinition } from "./agentCatalog";
+import { agentToolSchemas } from "./agentDefinition";
 import {
     agentDefinitionIdValidator,
     agentScopeValidator,
@@ -48,6 +57,7 @@ import {
     MAX_OPERATION_RESULT_BYTES,
     missionStatusValidator,
 } from "./executionProtocol";
+import { nextNativeInputSequence } from "./journal";
 import { cancelPiWake, schedulePiMission } from "./piControl";
 import { sessionForMission } from "./piStore";
 
@@ -140,6 +150,7 @@ export async function recordControlExchange(
             Doc<"agentMessageDeliveries">["controlCommand"]
         >["outcome"];
         text: string;
+        nativeInputSequence?: number;
     },
 ) {
     const createdAt = Date.now();
@@ -191,6 +202,9 @@ export async function recordControlExchange(
             confirmationMessageId,
         },
         nativeControlStatus: "pending",
+        nativeInputSequence:
+            args.nativeInputSequence ??
+            (await nextNativeInputSequence(ctx, conversation.runId)),
     });
     await event(
         ctx,
@@ -338,6 +352,14 @@ export async function submitAuthorizedMessage(
         requestKey: args.requestKey,
         contentHash,
         role: "user",
+        ...(args.delivery === "steer"
+            ? {
+                  nativeInputSequence: await nextNativeInputSequence(
+                      ctx,
+                      args.runId,
+                  ),
+              }
+            : {}),
         delivery: args.delivery,
         status: args.delivery === "steer" ? "active" : "queued",
         turnId: args.delivery === "steer" ? turn?._id : undefined,
@@ -451,7 +473,11 @@ export const claimTurn = internalMutation({
             createdAt: Date.now(),
         });
         for (const message of messages)
-            await ctx.db.patch(message._id, { turnId, status: "active" });
+            await ctx.db.patch(message._id, {
+                turnId,
+                status: "active",
+                nativeInputSequence: await nextNativeInputSequence(ctx, runId),
+            });
         await ctx.db.patch(conversation._id, {
             activeTurnId: turnId,
             queuedCount: conversation.queuedCount - messages.length,
@@ -602,6 +628,15 @@ export async function readTurnInstructions(
             text: string;
         }>,
     };
+    const mission = turn.missionId ? await ctx.db.get(turn.missionId) : null;
+    const native = mission
+        ? mission.executionRuntime === "pi-durable"
+        : conversation.definitionId
+          ? getAgentDefinition(
+                conversation.definitionId,
+                conversation.definitionVersion ?? 1,
+            ).nativeConversation
+          : false;
     let bytes = new TextEncoder().encode(JSON.stringify(result)).length;
     const batch: Doc<"agentMessageDeliveries">[] = [];
     const appendBatch = async () => {
@@ -622,7 +657,7 @@ export async function readTurnInstructions(
             bytes +=
                 new TextEncoder().encode(JSON.stringify(entry)).length +
                 (result.messages.length ? 1 : 0);
-            if (bytes > MAX_CONTEXT_BYTES)
+            if (!native && bytes > MAX_CONTEXT_BYTES)
                 throw executionError("context_capacity");
             result.messages.push(entry);
         }
@@ -799,6 +834,46 @@ const startTurnResult = v.union(
     v.null(),
 );
 
+/** FIFO admission must leave an oversized next message queued before the native worker starts. */
+async function requireConversationCapacity(
+    ctx: QueryCtx,
+    missionId: Id<"agentMissions">,
+    inputJson: string,
+) {
+    const mission = await ctx.db.get(missionId);
+    if (mission?.executionRuntime !== "pi-durable") return;
+    const definition = getAgentDefinition(
+        mission.definitionId,
+        mission.definitionVersion,
+    );
+    const model = await missionModel(ctx, mission);
+    const simulated = mission.provenance === "simulation";
+    if (!simulated && !model) return;
+    const contextWindow = simulated
+        ? SIMULATION_CONTEXT_WINDOW
+        : (model?.descriptor.contextWindow ?? SIMULATION_CONTEXT_WINDOW);
+    const input: unknown = JSON.parse(inputJson);
+    const tools = await Promise.all(
+        Object.entries(agentToolSchemas(definition, input)).map(
+            ([name, operation]) => piToolMetadata(name, operation),
+        ),
+    );
+    const tokens = piRequiredContextTokens(
+        definition.instructions,
+        piMissionStateText(
+            definition.instructions,
+            inputJson,
+            definition.nativeConversation,
+            definition.contextRendering,
+        ),
+        tools,
+        definition.nativeConversation
+            ? requiredAnalystInput(inputJson)
+            : undefined,
+    );
+    if (tokens >= contextWindow) throw executionError("context_capacity");
+}
+
 /** Claims only instructions that fit the assembled context before admitting the mission. */
 export const startTurn = internalMutation({
     args: {
@@ -855,6 +930,11 @@ export const startTurn = internalMutation({
         );
         if (initialContext.kind === "blocked")
             throw executionError(initialContext.code);
+        await requireConversationCapacity(
+            ctx,
+            missionId,
+            initialContext.inputJson,
+        );
         for (
             let count = 1;
             !existingTurnId && count < HISTORY_PAGE_SIZE;
@@ -873,6 +953,18 @@ export const startTurn = internalMutation({
                     throw error;
                 break;
             }
+        }
+        if (!existingTurnId && definition.nativeConversation) {
+            const admitted = await ctx.db.get(turnId);
+            if (!admitted) throw executionError("active_turn_required");
+            const instructions = await readTurnInstructions(ctx, admitted);
+            await ctx.db.patch(turnId, {
+                nativeInitialMessageIds: instructions.messages.map(
+                    (message) => message.messageId,
+                ),
+                nativeInitialInstructionVersion:
+                    instructions.instructionVersion,
+            });
         }
         return { turnId, missionId };
     },
@@ -902,7 +994,14 @@ export const appendQueuedToTurn = internalMutation({
             )
             .first();
         if (!next) return false;
-        await ctx.db.patch(next._id, { status: "active", turnId: turn._id });
+        await ctx.db.patch(next._id, {
+            status: "active",
+            turnId: turn._id,
+            nativeInputSequence: await nextNativeInputSequence(
+                ctx,
+                mission.runId,
+            ),
+        });
         await ctx.db.patch(turn._id, { messageCount: turn.messageCount + 1 });
         await ctx.db.patch(conversation._id, {
             queuedCount: conversation.queuedCount - 1,
@@ -912,6 +1011,7 @@ export const appendQueuedToTurn = internalMutation({
             args,
         );
         if (context.kind === "blocked") throw executionError(context.code);
+        await requireConversationCapacity(ctx, mission._id, context.inputJson);
         return true;
     },
 });
@@ -983,6 +1083,7 @@ export const promoteQueued = mutation({
             throw executionError("active_turn_required");
         await ctx.db.patch(message._id, {
             status: "active",
+            nativeInputSequence: await nextNativeInputSequence(ctx, args.runId),
             delivery: "steer",
             turnId: turn._id,
         });

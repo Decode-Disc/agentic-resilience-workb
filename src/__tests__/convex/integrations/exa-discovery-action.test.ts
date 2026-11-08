@@ -98,6 +98,10 @@ test("does not retry Exa after cancellation invalidates an in-flight result", as
     process.env.EXA_API_KEY = "test-key";
     const t = convexTest(schema, modules);
     const { runId } = await createDiscoveryFixture(t);
+    let enterSearch!: () => void;
+    const searchStarted = new Promise<void>((resolve) => {
+        enterSearch = resolve;
+    });
     let releaseSearch:
         | ((value: {
               results: Array<{
@@ -111,11 +115,13 @@ test("does not retry Exa after cancellation invalidates an in-flight result", as
         () =>
             new Promise((resolve) => {
                 releaseSearch = resolve;
+                enterSearch();
             }),
     );
 
     const discovery = t.action(discoverForRun, { runId });
-    await vi.waitFor(() => expect(exaSearch).toHaveBeenCalledOnce());
+    await searchStarted;
+    expect(exaSearch).toHaveBeenCalledOnce();
     await t.run((ctx) =>
         ctx.db.patch(runId, {
             executionStatus: "cancelled",

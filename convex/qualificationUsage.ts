@@ -35,6 +35,13 @@ export function qualificationReceiptUsage(call: Doc<"providerCalls">) {
         call.qualificationReservationUsd ?? 0,
         call.reportedCost ?? 0,
     );
+    if (
+        call.costAccountingPolicy === "known_final_v1" &&
+        call.reportedCost !== undefined &&
+        (call.reportedCostFinal || call.billing?.state === "confirmed") &&
+        call.billing?.state !== "conflict"
+    )
+        value.usage.costUsd = call.reportedCost;
     value.pending = call.status === "started" ? 1 : 0;
     value.unknown =
         call.status !== "started" && preparationFailureClass(call) === "unknown"

@@ -21,6 +21,7 @@ import {
 } from "../../../convex/qualificationCampaignPolicy.ts";
 import { openQualificationJournal } from "./journal.ts";
 import { sha256 } from "./protocol.ts";
+import { hydrateSourcesTranscriptPage } from "./sources.ts";
 
 function ref<
     R extends FunctionReference<"query" | "mutation" | "action", "internal">,
@@ -262,7 +263,19 @@ export async function inspectCampaignScenarios(
                 ref(internal.execution.fixtures.inspectSourcesInvocations),
                 { ...args, paginationOpts: { cursor, numItems: 1 } },
             );
-            save(directory, `invocations-${++pageNumber}`, page);
+            save(
+                directory,
+                `invocations-${++pageNumber}`,
+                await hydrateSourcesTranscriptPage(page, (textArgs) =>
+                    client.query(
+                        ref(
+                            internal.execution.fixtures
+                                .inspectSourcesTextFragments,
+                        ),
+                        { ...args, ...textArgs },
+                    ),
+                ),
+            );
             if (page.isDone) break;
             assert(page.continueCursor !== cursor);
             cursor = page.continueCursor;

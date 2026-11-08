@@ -33,11 +33,24 @@ for (const viewport of [
                 exact: true,
             }),
         ).toBeVisible({ timeout: 60000 });
-        await expect(
-            page.getByText("Simulation: the research program is saved.", {
-                exact: false,
-            }),
-        ).toBeVisible();
+        try {
+            await expect(
+                page.getByText("Simulation: the research program is saved.", {
+                    exact: false,
+                }),
+            ).toBeVisible();
+        } catch (error) {
+            await test.info().attach("workbench-state-at-missing-reply", {
+                body: JSON.stringify(
+                    runConvexJson("execution/fixtures:inspectWorkbench", {
+                        runId,
+                        fixtureKey: `native-start-workbench-${viewport.name}`,
+                    }),
+                ),
+                contentType: "application/json",
+            });
+            throw error;
+        }
         const workDetails = page
             .getByRole("button", {
                 name: "Inspect work for this turn",
@@ -81,7 +94,14 @@ for (const viewport of [
             runId,
             fixtureKey: `native-start-workbench-${viewport.name}`,
         });
-        expect(originalNative.definitionVersion).toBe(2);
+        expect(originalNative.missions).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    definitionId: "workbench_v1",
+                    definitionVersion: originalNative.definitionVersion,
+                }),
+            ]),
+        );
         expect(originalNative.nativeSessionId).toBeTruthy();
         await input.fill("Retain this boundary for our discussion.");
         await page
@@ -163,7 +183,7 @@ for (const viewport of [
             allMissionsSimulated: true,
             queuedCount: 0,
             phase: "framing",
-            definitionVersion: 2,
+            definitionVersion: originalNative.definitionVersion,
             nativeSessionId: originalNative.nativeSessionId,
             nativeSettled: true,
         });

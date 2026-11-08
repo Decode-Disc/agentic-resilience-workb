@@ -467,8 +467,8 @@ async function executeCampaign(
             [
                 "node_modules/convex/bin/main.js",
                 ...args,
-                "--deployment",
-                "local",
+                "--url",
+                runtime.origins.convex,
             ],
             { encoding: "utf8", timeout: 30000 },
         );

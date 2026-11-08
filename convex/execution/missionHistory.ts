@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
+import { sha256Hex } from "@convex/domain/sourcePassages";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
 import { agentDefinitionIdValidator } from "./agentSchemas";
@@ -12,7 +13,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /** Current required state is separate from the frozen historical source. */
 export async function readMissionState(
-    ctx: Pick<QueryCtx, "runQuery">,
+    ctx: Pick<QueryCtx, "runQuery" | "db">,
     args: {
         missionId: Id<"agentMissions">;
         expectedGeneration: number;
@@ -33,6 +34,25 @@ export async function readMissionState(
         typeof input.definition.version !== "number"
     )
         throw executionError("mission_state_invalid");
+    const mission = await ctx.db.get(args.missionId);
+    if (
+        mission?.executionRuntime === "pi-durable" &&
+        maximumBytes !== undefined
+    )
+        return {
+            kind: "ready",
+            state: {
+                version: 2,
+                mission: input.mission,
+                requiredState: {
+                    section: "workbench_current_state",
+                    contentHash: sha256Hex(context.inputJson),
+                    generation: args.expectedGeneration,
+                },
+                inspection:
+                    "Complete current state is supplied automatically in the native prompt section. This page contains only the requested immutable history.",
+            },
+        };
     const required = {
         mission: input.mission,
         humanInstructions: input.humanInstructions,

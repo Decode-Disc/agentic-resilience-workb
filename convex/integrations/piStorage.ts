@@ -3,6 +3,10 @@ import type { Id as ConvexId, Doc } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import { executionError } from "@convex/execution/errors";
 import {
+    retainedTextParts,
+    verifyRetainedText,
+} from "@convex/execution/retainedText";
+import {
     PI_COMMIT_MAX_BYTES,
     PI_LEASE_RENEW_INTERVAL_MS,
     PI_SESSION_MAX_BYTES,
@@ -16,12 +20,13 @@ import {
 } from "@earendil-works/pi-durable";
 import type { FunctionReturnType } from "convex/server";
 
-export type PiCommit = Pick<Doc<"piCommits">, "sequence" | "key" | "payload">;
+export type PiCommit = { sequence: number; key: string; payload: string };
 
 /** Convex callbacks carry a fenced writer identity; the Pi projection owns all read semantics. */
 export type PiCommitStore = {
     scan(
         cursor: string | null,
+        checkpoint?: () => Promise<void>,
     ): Promise<{ commits: PiCommit[]; cursor: string | null }>;
     append(commit: PiCommit): Promise<number>;
     find(key: string): Promise<PiCommit | null>;
@@ -42,9 +47,41 @@ export async function openMissionPiStorage(
         expectedGeneration,
         writer,
     });
+    const hydrate = async (
+        commit: Doc<"piCommits">,
+        checkpoint: () => Promise<void> = async () =>
+            context.abortSignal?.throwIfAborted(),
+    ): Promise<PiCommit> => {
+        await checkpoint();
+        if (commit.payload !== undefined)
+            return { ...commit, payload: commit.payload };
+        if (!commit.textId) throw executionError("pi_commit_invalid");
+        const parts: string[] = [];
+        const first = await ctx.runQuery(
+            internal.execution.piStore.readCommitFragment,
+            { ...lease, textId: commit.textId, index: 0 },
+        );
+        parts.push(first.content);
+        for (
+            let index = 1;
+            index < first.manifest.fragmentHashes.length;
+            index++
+        ) {
+            await checkpoint();
+            const fragment = await ctx.runQuery(
+                internal.execution.piStore.readCommitFragment,
+                { ...lease, textId: commit.textId, index },
+            );
+            parts.push(fragment.content);
+        }
+        return {
+            ...commit,
+            payload: verifyRetainedText(first.manifest, parts.join("")),
+        };
+    };
     return PiConvexStorage.open(
         {
-            async scan(cursor) {
+            async scan(cursor, checkpoint) {
                 const page = await ctx.runQuery(
                     internal.execution.piStore.scan,
                     {
@@ -56,21 +93,68 @@ export async function openMissionPiStorage(
                         },
                     },
                 );
+                const commits: PiCommit[] = [];
+                for (const commit of page.page)
+                    commits.push(await hydrate(commit, checkpoint));
                 return {
-                    commits: page.page,
+                    commits,
                     cursor: page.isDone ? null : page.continueCursor,
                 };
             },
-            append: (commit) =>
-                ctx.runMutation(internal.execution.piStore.append, {
-                    ...lease,
-                    ...commit,
-                }),
-            find: (key) =>
-                ctx.runQuery(internal.execution.piStore.find, {
-                    ...lease,
-                    key,
-                }),
+            async append(commit) {
+                if (
+                    new TextEncoder().encode(commit.payload).length <=
+                    PI_COMMIT_MAX_BYTES
+                )
+                    return ctx.runMutation(internal.execution.piStore.append, {
+                        ...lease,
+                        ...commit,
+                    });
+                const { manifest, parts } = retainedTextParts(commit.payload);
+                let textId: ConvexId<"retainedTexts"> | undefined;
+                for (const [index, content] of parts.entries())
+                    textId = await ctx.runMutation(
+                        internal.execution.piStore.stageCommit,
+                        {
+                            ...lease,
+                            key: commit.key,
+                            fragment: { ...manifest, index, content },
+                        },
+                    );
+                if (!textId) throw executionError("pi_commit_invalid");
+                const writes: StorageWrite[] = JSON.parse(commit.payload);
+                const nextId = writes.reduce(
+                    (next, write) =>
+                        Math.max(
+                            next,
+                            "value" in write
+                                ? write.value.id + 1
+                                : "record" in write
+                                  ? write.record.id + 1
+                                  : "id" in write
+                                    ? write.id + 1
+                                    : 2,
+                        ),
+                    2,
+                );
+                return ctx.runMutation(
+                    internal.execution.piStore.publishCommit,
+                    {
+                        ...lease,
+                        key: commit.key,
+                        sequence: commit.sequence,
+                        textId,
+                        nextId,
+                    },
+                );
+            },
+            async find(key) {
+                const commit = await ctx.runQuery(
+                    internal.execution.piStore.find,
+                    { ...lease, key },
+                );
+                return commit ? hydrate(commit) : null;
+            },
             renewLease: () =>
                 ctx
                     .runMutation(internal.execution.piStore.renew, lease)
@@ -110,9 +194,16 @@ export class PiConvexStorage extends MemoryStorage {
         const storage = new PiConvexStorage(store, lease);
         let cursor: string | null = null;
         let renewAt = Date.now() + PI_LEASE_RENEW_INTERVAL_MS;
-        do {
+        const checkpoint = async () => {
             context.abortSignal?.throwIfAborted();
-            const page = await store.scan(cursor);
+            if (Date.now() >= renewAt) {
+                await store.renewLease?.();
+                renewAt = Date.now() + PI_LEASE_RENEW_INTERVAL_MS;
+            }
+        };
+        do {
+            await checkpoint();
+            const page = await store.scan(cursor, checkpoint);
             for (const commit of page.commits) {
                 if (commit.sequence !== storage.sequence + 1)
                     throw new Error("pi_log_sequence_conflict");
@@ -124,11 +215,7 @@ export class PiConvexStorage extends MemoryStorage {
             }
             if (page.cursor !== null && page.cursor === cursor)
                 throw new Error("pi_log_cursor_conflict");
-            if (Date.now() >= renewAt) {
-                context.abortSignal?.throwIfAborted();
-                await store.renewLease?.();
-                renewAt = Date.now() + PI_LEASE_RENEW_INTERVAL_MS;
-            }
+            await checkpoint();
             cursor = page.cursor;
         } while (cursor !== null);
         return storage;
@@ -136,8 +223,6 @@ export class PiConvexStorage extends MemoryStorage {
 
     private checkCapacity(payload: string): number {
         const bytes = new TextEncoder().encode(payload).length;
-        if (bytes > PI_COMMIT_MAX_BYTES)
-            throw executionError("pi_commit_capacity");
         if (this.retainedBytes + bytes > PI_SESSION_MAX_BYTES)
             throw executionError("pi_storage_capacity");
         return bytes;

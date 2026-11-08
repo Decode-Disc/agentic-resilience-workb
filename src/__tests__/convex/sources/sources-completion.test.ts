@@ -686,7 +686,17 @@ test("unqualified work retains storage headroom for unfinished explanations thro
         taskKey: "fresh-capacity-completion",
         provenance: "simulation",
     });
-    expect(fresh).toMatchObject({ kind: "blocked", code: "context_capacity" });
+    expect(fresh.kind).toBe("ready");
+    if (fresh.kind === "ready")
+        expect(Buffer.byteLength(fresh.inputJson)).toBeGreaterThan(128 * 1024);
+    // Native estimation is covered by the Pi capacity regression; this fixture drives its typed stop into Sources finalization.
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.missionId, {
+            status: "blocked",
+            blockCode: "context_capacity",
+        }),
+    );
+
     expect(
         await f.t.mutation(internal.sourcesMission.finish, {
             preparationId: f.preparationId,

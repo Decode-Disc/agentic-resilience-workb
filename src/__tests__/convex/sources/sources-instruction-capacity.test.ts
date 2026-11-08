@@ -339,10 +339,19 @@ test.each([
             provenance: "simulation",
         },
     );
-    expect(invocation).toMatchObject({
-        kind: "blocked",
-        code: "context_capacity",
-    });
+    expect(invocation.kind).toBe("ready");
+    if (invocation.kind === "ready")
+        expect(Buffer.byteLength(invocation.inputJson)).toBeGreaterThan(
+            128 * 1024,
+        );
+    // Native estimation is covered by the Pi capacity regression; this fixture drives its typed stop into Sources finalization.
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.missionId, {
+            status: "blocked",
+            blockCode: "context_capacity",
+        }),
+    );
+
     const [lastInstruction] = await registerInstructions(
         f,
         "during-completion",

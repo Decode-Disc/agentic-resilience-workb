@@ -199,7 +199,7 @@ test.each([
         nativeRoute: SIMULATION_MODEL_ROUTE,
         contextRendering: definition.contextRendering,
     });
-    expect(requestBytes).toBeLessThanOrEqual(128 * 1024);
+    expect(requestBytes).toBeGreaterThan(128 * 1024);
     expect(seeded.distinctPassages).toBe(count * 90);
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
@@ -220,17 +220,11 @@ test.each([
     expect(
         new TextEncoder().encode(outcome.valueJson).length,
     ).toBeLessThanOrEqual(48 * 1024);
-    expect(page.state.activeWork.qualificationReferences).toEqual(
-        snapshot.activeWork.qualificationReferences,
-    );
-    expect(page.state.activeWork.captureIds).toEqual(
-        snapshot.activeWork.captureIds,
-    );
-    expect(page.state.activeWork.work).toEqual(snapshot.activeWork.work);
-    expect(page.state.activeWork.unfinishedObligations).toEqual(
-        snapshot.activeWork.unfinishedObligations,
-    );
-    expect(page.state.activeWork.contributionObservationsComplete).toBe(false);
-    expect(page.state.activeWork.contributionObservationsTotal).toBe(count);
+    expect(page.state.requiredState).toMatchObject({
+        section: "workbench_current_state",
+        contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(page.state).not.toHaveProperty("activeWork");
+    expect(snapshot.activeWork.contributionObservations).toHaveLength(count);
     expect(page.history.entries.length).toBeGreaterThan(0);
 });

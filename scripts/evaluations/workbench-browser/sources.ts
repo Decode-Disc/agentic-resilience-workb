@@ -278,6 +278,14 @@ export async function sourcesQualificationPhase(
                     ),
                 cases.maximumModelAttempts,
                 cases.mode,
+                (textArgs) =>
+                    client.query(
+                        ref(
+                            internal.execution.fixtures
+                                .inspectSourcesTextFragments,
+                        ),
+                        { ...args, ...textArgs },
+                    ),
             );
             mkdirSync(join(root, "captures"), { recursive: true, mode: 0o700 });
             for (const download of documentary.captureDownloads) {
@@ -375,11 +383,110 @@ type TranscriptPagination = FunctionArgs<
     typeof internal.execution.fixtures.inspectSourcesInvocations
 >["paginationOpts"];
 
+type ReadTranscriptText = (
+    args: Omit<
+        FunctionArgs<
+            typeof internal.execution.fixtures.inspectSourcesTextFragments
+        >,
+        "runId" | "fixtureKey"
+    >,
+) => Promise<
+    FunctionReturnType<
+        typeof internal.execution.fixtures.inspectSourcesTextFragments
+    >
+>;
+
+/** Hydrates exported copies, verifying the admitted/request identity without changing retained records. */
+export async function hydrateSourcesTranscriptPage(
+    transcript: TranscriptPage,
+    readText?: ReadTranscriptText,
+): Promise<TranscriptPage> {
+    async function content(
+        invocationId: Id<"agentInvocations">,
+        part: "input" | "request" | "reply",
+        contentHash: string | undefined,
+        sizeBytes?: number,
+    ) {
+        assert(readText, "Fragmented transcript requires a fragment reader");
+        let cursor: string | null = null;
+        let expectedIndex = 0;
+        const parts: string[] = [];
+        do {
+            const page = await readText({
+                invocationId,
+                part,
+                paginationOpts: { cursor, numItems: 1 },
+            });
+            for (const fragment of page.page) {
+                assert.equal(
+                    fragment.index,
+                    expectedIndex++,
+                    "Transcript fragment sequence changed",
+                );
+                parts.push(fragment.content);
+            }
+            if (page.isDone) break;
+            assert(
+                page.page.length &&
+                    page.continueCursor &&
+                    page.continueCursor !== cursor,
+                "Transcript fragment cursor did not advance",
+            );
+            cursor = page.continueCursor;
+        } while (cursor);
+        const text = parts.join("");
+        assert(
+            contentHash && sha256(text) === contentHash,
+            "Transcript content hash mismatch",
+        );
+        if (sizeBytes !== undefined)
+            assert.equal(
+                Buffer.byteLength(text),
+                sizeBytes,
+                "Transcript byte length mismatch",
+            );
+        return text;
+    }
+    return {
+        ...transcript,
+        page: await Promise.all(
+            transcript.page.map(async (invocation) =>
+                invocation.inputTextId
+                    ? {
+                          ...invocation,
+                          inputJson: await content(
+                              invocation._id,
+                              "input",
+                              invocation.inputContentHash,
+                          ),
+                      }
+                    : invocation,
+            ),
+        ),
+        payloads: await Promise.all(
+            transcript.payloads.map(async (payload) =>
+                payload.state === "complete" && payload.textId
+                    ? {
+                          ...payload,
+                          json: await content(
+                              payload.invocationId,
+                              payload.part,
+                              payload.contentHash,
+                              payload.sizeBytes,
+                          ),
+                      }
+                    : payload,
+            ),
+        ),
+    };
+}
+
 /** Collect exact transcript pages while preserving the lot's finite invocation bound. */
 export async function collectSourcesTranscripts(
     readPage: (paginationOpts: TranscriptPagination) => Promise<TranscriptPage>,
     maximumProviderAttempts: number,
     mode?: "deterministic" | "live",
+    readText?: ReadTranscriptText,
 ) {
     if (mode === "deterministic")
         assert.equal(
@@ -398,7 +505,10 @@ export async function collectSourcesTranscripts(
     );
     const observed = new Set<string>();
     for (let page = 0; page <= maximumInvocations; page++) {
-        const transcript = await readPage({ numItems: 1, cursor });
+        const transcript = await hydrateSourcesTranscriptPage(
+            await readPage({ numItems: 1, cursor }),
+            readText,
+        );
         assert(
             transcript.page.length <= 1 &&
                 invocations.length + transcript.page.length <=

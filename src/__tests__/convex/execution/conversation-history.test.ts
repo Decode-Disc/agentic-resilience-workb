@@ -588,7 +588,7 @@ test("conversation restoration requests one native paginated record with explici
     ]);
 });
 
-test("an empty conversation adds no facts and oversized required state cannot consume a fragment", async () => {
+test("empty conversation adds no facts and a large native state does not block exact history", async () => {
     const f = await seedHistoryMission();
     await f.t.run(async (ctx) => {
         const messages = await ctx.db
@@ -632,13 +632,20 @@ test("an empty conversation adds no facts and oversized required state cannot co
         },
     });
     const result = await dispatchHistory(f, { kind: "consult_mission_state" });
-    expect(result.outcome).toEqual({
-        kind: "unavailable",
-        code: "history_result_capacity",
+    assert(result.outcome.kind === "success");
+    const value = JSON.parse(result.outcome.valueJson);
+    expect(value.state.requiredState).toMatchObject({
+        section: "workbench_current_state",
+        contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
+    expect(value.history.entries.length).toBeGreaterThan(0);
+    expect(Buffer.byteLength(result.outcome.valueJson)).toBeLessThan(48 * 1024);
+    const progress = (await f.t.run((ctx) => ctx.db.get(f.missionId)))
+        ?.progressKeys;
+    await dispatchHistory(f, { kind: "consult_mission_state" });
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
-    ).toEqual([]);
+    ).toEqual(progress);
     vi.useFakeTimers();
     await f.t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(0));
 });

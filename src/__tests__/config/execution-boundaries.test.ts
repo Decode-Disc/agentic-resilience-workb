@@ -32,6 +32,10 @@ test("the real architecture checker rejects aliases, protected writes and privat
             "export function x(ctx: unknown, id: unknown, key: string) { return ctx.db.patch(id, {[key]:0}); }",
         directTable:
             'export function x(ctx: unknown) { return ctx.db.insert("agentOperationRequests", {status:"completed"}); }',
+        retainedTextStage:
+            'import { stageRetainedText as save } from "@convex/execution/retainedText"; export const x = save;',
+        retainedTextWrite:
+            'export function x(ctx: unknown) { return ctx.db.insert("retainedTextFragments", {textId:"foreign",index:0,content:"forged"}); }',
         misplacedRuntime:
             'import { x } from "./allowed"; "use node"; export const value = x;',
         parenthesizedRuntime: '("use node"); export const value = 1;',

@@ -142,11 +142,46 @@ export const preparedMaterialInspectionValidator = v.object({
     restrictions: v.array(restrictedContributionValidator),
     nextCapability: v.literal("investigation_unavailable"),
 });
+export const controlledSourcesProjectionValidator = v.object({
+    sourceId: v.optional(v.id("sources")),
+    sourceDecision: v.optional(
+        v.union(
+            v.literal("pending"),
+            v.literal("accepted"),
+            v.literal("rejected"),
+        ),
+    ),
+    taskId: v.id("aiTaskResults"),
+    captureId: v.id("sourceCaptures"),
+    contentHash: v.string(),
+    version: v.number(),
+    controlTaskId: v.id("aiTaskResults"),
+    coherence: v.boolean(),
+    limitations: v.array(v.string()),
+    contributionCount: v.number(),
+    contributions: v.array(
+        v.object({
+            ...documentaryContributionValidator.fields,
+            evidence: v.array(
+                v.object({
+                    captureId: v.id("sourceCaptures"),
+                    passageOrder: v.number(),
+                }),
+            ),
+            permittedUse: documentaryFindingValidator.fields.permittedUse,
+            finding: v.union(documentaryFindingValidator, v.null()),
+            restrictions: v.array(restrictedContributionValidator),
+        }),
+    ),
+});
 export const preparedNeedInspectionValidator = v.object({
     preparationId: preparedMaterialInspectionValidator.fields.preparationId,
     needsRevision: v.number(),
     need: documentaryNeedValidator,
     outcome: preparedNeedOutcomeValidator,
+    controlledContributions: v.optional(
+        v.array(controlledSourcesProjectionValidator),
+    ),
     documents: v.array(preparedDocumentValidator),
     restrictions: v.array(restrictedContributionValidator),
     nextCapability: preparedMaterialInspectionValidator.fields.nextCapability,

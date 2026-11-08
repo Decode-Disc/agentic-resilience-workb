@@ -3,6 +3,7 @@ import { localBrowserFixturesEnabled } from "@convex/runWorkspace";
 import { type Infer, v } from "convex/values";
 import { getAgentDefinition } from "./agentCatalog";
 import { executionError, requireMissionAuthority } from "./authority";
+import { admittedInputJson } from "./journal";
 import { invocationResponseValidator } from "./executionProtocol";
 
 /** Replaces only provider I/O: both real generation libraries still prepare and execute their turn. */
@@ -87,6 +88,8 @@ export const invoke = internalQuery({
         );
         if (!definition.simulate)
             throw executionError("simulation_not_configured");
-        return definition.simulate(JSON.parse(invocation.inputJson));
+        return definition.simulate(
+            JSON.parse(await admittedInputJson(ctx, invocation)),
+        );
     },
 });

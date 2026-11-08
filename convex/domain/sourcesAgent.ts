@@ -260,6 +260,8 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
         };
     },
     operationDiagnostic(code) {
+        if (code === "documentary_control_unfinished")
+            return "The documentary examination did not complete. No contribution from this submission was adopted and no absence of support was established. Inspect the validation feedback and retained examination before choosing another action; do not treat a malformed examination as a rejected proposition.";
         if (code === "qualification_invalid")
             return "No qualification was adopted. Supply 1–15 complete contributions with known need IDs, a statement, attribution, period, modality and 1–8 exact evidence references. Use a declared kind value; modality describes how the statement is expressed, not its kind.";
         if (code === "documentary_quote_invalid")
@@ -343,11 +345,7 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
                     work: state.data.work,
                     captureIds: state.data.captureIds,
                     qualificationReferences: state.data.qualifications,
-                    ...(await sourcesTaskObservations(
-                        ctx,
-                        run._id,
-                        state.data,
-                    )),
+                    ...(await sourcesTaskObservations(ctx, state.preparation)),
                     ...(await sourcesReadingReferences(
                         ctx,
                         mission,

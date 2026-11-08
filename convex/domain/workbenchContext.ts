@@ -10,7 +10,11 @@ import {
 import { researchStartBlock } from "./framingEditAuthority";
 import { requireSavedMaterialScope } from "./savedMaterialInspection";
 import { sha256Hex, stableStringify } from "./sourcePassages";
-import { readSourcesMission, summarizeSourcesPreparation } from "./sources";
+import {
+    controlledSourcesContributions,
+    readSourcesMission,
+    summarizeSourcesPreparation,
+} from "./sources";
 import { supportsResearchControl } from "./transitions";
 import {
     projectWorkbenchInstructions,
@@ -142,10 +146,17 @@ export async function readWorkbenchFacts(
         analystRequests: await projectWorkbenchInstructions(ctx, instructions),
         ...(preparation?.sourcesMission
             ? {
-                  documentaryPreparation: summarizeSourcesPreparation(
-                      preparation,
-                      sourcesMission?.status,
-                  ),
+                  documentaryPreparation: {
+                      ...summarizeSourcesPreparation(
+                          preparation,
+                          sourcesMission?.status,
+                      ),
+                      controlledContributions:
+                          await controlledSourcesContributions(
+                              ctx,
+                              preparation,
+                          ),
+                  },
               }
             : {}),
         activeWork: {},

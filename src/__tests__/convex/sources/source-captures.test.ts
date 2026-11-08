@@ -1,4 +1,5 @@
 import { api, internal } from "@convex/_generated/api";
+import { readRetainedText } from "@convex/execution/retainedText";
 import { requestPinnedPublicSource } from "@convex/sourceActions";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
@@ -124,6 +125,35 @@ test("captures public candidate bytes once without an accepted decision or analy
     expect(state.versions).toHaveLength(0);
     expect(state.passages).toHaveLength(0);
     expect(state.revision?.status).toBe("draft");
+    const observations = await t.run(async (ctx) => {
+        const rows = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_run_and_native_input_sequence", (q) =>
+                q.eq("runId", runId).gt("nativeInputSequence", 0),
+            )
+            .collect();
+        return Promise.all(
+            rows.map(async (row) =>
+                row.contextObservation
+                    ? JSON.parse(
+                          await readRetainedText(
+                              ctx,
+                              row.contextObservation.textId,
+                          ),
+                      )
+                    : null,
+            ),
+        );
+    });
+    expect(
+        observations.filter((value) => value?.event === "capture_available"),
+    ).toEqual([
+        expect.objectContaining({
+            captureId: result.sourceCaptureId,
+            sourceId,
+            readingCompleteness: "complete",
+        }),
+    ]);
 });
 
 test.each([

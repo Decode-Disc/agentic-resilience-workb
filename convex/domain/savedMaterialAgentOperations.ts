@@ -116,7 +116,7 @@ export const savedMaterialOperations: Record<string, AgentOperationDefinition> =
             materialRead: true,
             version: 1,
             description:
-                "Search one authorized saved capture with a nonblank query. Returns exact quotations and passageOrder locators; only returned locators can be read. Empty matches do not prove documentary absence. Inspect capture completeness and response omissions before concluding coverage.",
+                "Search one authorized saved capture with a nonblank query. Returns exact quotations and passageOrder locators; only returned locators can be read. Empty matches do not prove documentary absence. Inspect capture completeness and response omissions before concluding coverage. Copy continuation unchanged with the same source and query to read the next page; it never restarts on another capture.",
             inputValidator: searchAvailableMaterialInputValidator,
             resultValidator: searchAvailableMaterialResult,
         },
@@ -125,7 +125,7 @@ export const savedMaterialOperations: Record<string, AgentOperationDefinition> =
             materialRead: true,
             version: 1,
             description:
-                "Read a passageOrder returned by saved-material search in the same capture. Returns an exact quotation with bounded context and current documentary-use permissions. Capture/index omissions differ from response truncation; an unavailable locator was not read. Search again rather than guessing an order.",
+                "Read a passageOrder returned by saved-material search in the same capture. Returns an exact quotation with paged context; optionally request a range in capture character offsets that includes the focal passage, then copy continuation unchanged to continue that same range. Capture and response omissions are separate. Returns bounded context and current documentary-use permissions. Capture/index omissions differ from response truncation; an unavailable locator was not read. Search again rather than guessing an order.",
             inputValidator: readInContextInputValidator,
             resultValidator: readInContextResult,
         },

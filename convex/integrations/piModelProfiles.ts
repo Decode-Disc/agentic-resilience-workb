@@ -27,8 +27,9 @@ import type { Infer } from "convex/values";
 import {
     PI_MISSION_EXTENSION,
     PI_MISSION_INPUT,
+    PI_STATE_SECTION,
     piInputProfileKey,
-    piMissionMessages,
+    piMissionStateText,
     piToolMetadata,
     preparePiModelPayload,
 } from "./modelInput";
@@ -96,7 +97,25 @@ async function profileTranscript(
         ),
     );
     const registry = createRegistry();
-    registry.install(defineExtension({ name: PI_MISSION_EXTENSION, tools }));
+    registry.install(
+        defineExtension({
+            name: PI_MISSION_EXTENSION,
+            tools,
+            sections: [
+                {
+                    key: PI_STATE_SECTION,
+                    tag: false,
+                    render: () =>
+                        piMissionStateText(
+                            definition.instructions,
+                            "",
+                            definition.nativeConversation,
+                            definition.contextRendering,
+                        ),
+                },
+            ],
+        }),
+    );
     const models = createModels();
     models.setProvider(faux.provider);
     const harness = await Harness.open(
@@ -183,18 +202,10 @@ export async function prepareNativeProfiles(
                 const result = provider.streamSimple(
                     model,
                     normalizeContext({
-                        messages: piMissionMessages(
-                            definition.instructions,
-                            "",
-                            history,
-                            0,
-                            definition.nativeConversation,
-                            definition.contextRendering,
-                        ),
+                        messages: history,
                     }),
                     {
                         apiKey: "offline-profile-key",
-                        maxTokens: generation.maxOutputTokens,
                         temperature: generation.temperature,
                         maxRetries: generation.maxRetries,
                         signal,

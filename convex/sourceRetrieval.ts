@@ -11,7 +11,8 @@ import {
     sourceEmbeddingScopeKey,
 } from "@convex/domain/sourceRetrievalPolicy";
 import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
-import { type Infer, v } from "convex/values";
+import type { PaginationResult } from "convex/server";
+import { ConvexError, type Infer, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
@@ -919,6 +920,7 @@ async function searchApprovedCapture(
         corpusRevisionId: Id<"corpusRevisions">;
         sourceId: Id<"sources">;
         query: string;
+        cursor?: string;
     },
     allowed: Awaited<ReturnType<typeof approvedCapture>>,
 ) {
@@ -927,17 +929,34 @@ async function searchApprovedCapture(
         throw sourcePreparationError("retrieval_query_invalid");
     if (!allowed.state) return { status: "not_indexed" as const };
     const { capture, key } = allowed;
-    const rows = args.query.trim()
-        ? await ctx.db
-              .query("sourceSearchPassages")
-              .withSearchIndex("search_text", (q) =>
-                  q
-                      .search("searchText", args.query)
-                      .eq("scopeKey", key)
-                      .eq("captureId", capture._id),
-              )
-              .take(64)
-        : [];
+    let page: PaginationResult<Doc<"sourceSearchPassages">>;
+    try {
+        page = args.query.trim()
+            ? await ctx.db
+                  .query("sourceSearchPassages")
+                  .withSearchIndex("search_text", (q) =>
+                      q
+                          .search("searchText", args.query)
+                          .eq("scopeKey", key)
+                          .eq("captureId", capture._id),
+                  )
+                  .paginate({ numItems: 64, cursor: args.cursor ?? null })
+            : { page: [], isDone: true, continueCursor: "" };
+    } catch (error) {
+        if (
+            args.cursor !== undefined &&
+            ((error instanceof Error &&
+                error.message.includes("InvalidCursor")) ||
+                (error instanceof ConvexError &&
+                    typeof error.data === "object" &&
+                    error.data !== null &&
+                    error.data.isConvexSystemError === true &&
+                    error.data.paginationError === "InvalidCursor"))
+        )
+            throw sourcePreparationError("material_continuation_invalid");
+        throw error;
+    }
+    const rows = page.page;
     if (
         rows.some(
             (row) =>
@@ -972,12 +991,18 @@ async function searchApprovedCapture(
                 headingPath,
             }),
         ),
-        limitReached: rows.length === 64,
+        limitReached: !page.isDone,
+        continueCursor: page.isDone ? null : page.continueCursor,
+        captureOmittedPassageCount: capture.omittedPassageCount ?? null,
     };
 }
 
 export const searchApprovedSourceForMission = internalQuery({
-    args: { ...missionApprovedSourceScope, query: v.string() },
+    args: {
+        ...missionApprovedSourceScope,
+        query: v.string(),
+        cursor: v.optional(v.string()),
+    },
     handler: async (ctx, args) => {
         const allowed = await validateMissionApprovedCapture(ctx, args);
         const { run, revision } = await missionMaterialOwner(ctx, args);
@@ -988,6 +1013,7 @@ export const searchApprovedSourceForMission = internalQuery({
                 corpusRevisionId: revision._id,
                 sourceId: args.sourceId,
                 query: args.query,
+                cursor: args.cursor,
             },
             allowed,
         );

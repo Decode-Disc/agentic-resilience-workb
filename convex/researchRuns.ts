@@ -20,7 +20,10 @@ import {
     researchRunLifecycleValidator,
     workflowStepKeyValidator,
 } from "./domain/validators";
-import { applyRequestedResearchPause } from "./execution/researchControl";
+import {
+    applyRequestedResearchPause,
+    recordResearchObservation,
+} from "./execution/researchControl";
 import { readWorkspace, requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
 
@@ -233,6 +236,11 @@ export const transition = internalMutation({
             stepKey: args.stepKey,
             occurredAt: now,
         });
+        if (
+            run.lifecycleState !== args.lifecycleState ||
+            run.executionStatus !== args.executionStatus
+        )
+            await recordResearchObservation(ctx, run._id, "phase_changed");
         return null;
     },
 });

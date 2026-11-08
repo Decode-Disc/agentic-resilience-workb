@@ -233,7 +233,7 @@ test.each([
     expect(JSON.stringify(prior)).not.toContain("Research is now paused.");
     const commits = await t.run((ctx) => ctx.db.query("piCommits").collect());
     expect(
-        commits.some((c) => c.payload.includes("Research is now paused.")),
+        commits.some((c) => c.payload?.includes("Research is now paused.")),
     ).toBe(true);
 }, 30000);
 

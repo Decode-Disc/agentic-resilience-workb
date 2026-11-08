@@ -2,6 +2,10 @@ import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import {
+    retainedTextParts,
+    stageRetainedText,
+} from "@convex/execution/retainedText";
 import { requireQualifiedBrowserMission } from "@convex/providerCalls";
 import { type FunctionReturnType, makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -11,6 +15,129 @@ import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+});
+
+test("new structured preparation reserves its admitted model ceiling before dispatch", async () => {
+    const f = await fixture();
+    const preparation = await f.t.run(async (ctx) => {
+        const model = await ctx.db.get(f.modelRevisionId);
+        assert(model);
+        await ctx.db.patch(model._id, {
+            descriptor: {
+                ...model.descriptor,
+                contextWindow: 64000,
+                maxTokens: 20000,
+            },
+        });
+        await ctx.db.patch(f.preparationId, {
+            executionPlanVersion: "source_actions_v4",
+            modelRevisionId: model._id,
+        });
+        const context = await ctx.db.get(f.contextId);
+        assert(context?.paidQualification);
+        await ctx.db.patch(context._id, {
+            paidQualification: {
+                ...context.paidQualification,
+                costAccountingPolicy: "known_final_v1",
+            },
+        });
+        return ctx.db.get(f.preparationId);
+    });
+    assert(preparation);
+    const inputHash = sha256Hex("structured-reservation");
+    const call = await f.t.mutation(internal.providerCalls.recordAttempt, {
+        runId: f.runId,
+        corpusRevisionId: f.corpusRevisionId,
+        preparationId: f.preparationId,
+        sourceId: f.sourceId,
+        executionGeneration: 4,
+        workflowVersion: preparation.workflowVersion,
+        stepKey: "source_preparation",
+        service: "model",
+        operation: "source_documentary_control",
+        operationKey: `${preparation.operationKey}:step:source_preparation:input:${inputHash}:attempt:1`,
+        inputHash,
+        attempt: 1,
+        status: "started",
+    });
+    const receipt = await f.t.run((ctx) => ctx.db.get(call.providerCallId));
+    expect(call.shouldExecute).toBe(true);
+    expect(receipt?.qualificationReservationUsd).toBeCloseTo(0.0216, 10);
+    expect(receipt?.reservedMaxOutputTokens).toBe(20000);
+    const invocationId = await f.t.mutation(
+        internal.execution.invocationLifecycle.beginOneShot,
+        { providerCallId: call.providerCallId, inputJson: "{}" },
+    );
+    await f.t.mutation(internal.execution.invocationLifecycle.retainRequest, {
+        invocationId,
+        expectedGeneration: 4,
+        requestJson: '{"model":"z-ai/glm-5.3-flash"}',
+        effectiveMaxOutputTokens: 20001,
+    });
+    await expect(
+        f.t.query(internal.execution.invocationLifecycle.authorizeDispatch, {
+            invocationId,
+            expectedGeneration: 4,
+        }),
+    ).rejects.toThrow("invalid_model_output_limit");
+});
+
+test.each([
+    "campaign",
+    "study",
+] as const)("an older %s envelope cannot silently authorize enlarged structured output", async (kind) => {
+    const f = await fixture();
+    const preparation = await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.preparationId, {
+            executionPlanVersion: "source_actions_v4",
+            modelRevisionId: f.modelRevisionId,
+        });
+        if (kind === "study") {
+            await ctx.db.patch(f.preparationId, {
+                preparationStudy: {
+                    manifestSha256: sha256Hex("legacy-study"),
+                    sourceRunId: f.runId,
+                    phase: "reading",
+                },
+            });
+            const context = await ctx.db.get(f.contextId);
+            assert(context?.paidQualification);
+            await ctx.db.patch(context._id, {
+                paidQualification: {
+                    ...context.paidQualification,
+                    costAccountingPolicy: "known_final_v1",
+                },
+            });
+        }
+        return ctx.db.get(f.preparationId);
+    });
+    assert(preparation);
+    const inputHash = sha256Hex("old-structured-envelope");
+    await expect(
+        f.t.mutation(internal.providerCalls.recordAttempt, {
+            runId: f.runId,
+            corpusRevisionId: f.corpusRevisionId,
+            preparationId: f.preparationId,
+            sourceId: f.sourceId,
+            executionGeneration: 4,
+            workflowVersion: preparation.workflowVersion,
+            stepKey: "source_preparation",
+            service: "model",
+            operation: "source_documentary_control",
+            operationKey: `${preparation.operationKey}:step:source_preparation:input:${inputHash}:attempt:1`,
+            inputHash,
+            attempt: 1,
+            status: "started",
+        }),
+    ).rejects.toThrow("qualification_structured_capacity_not_authorized");
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .take(1),
+        ),
+    ).toEqual([]);
 });
 async function fixture() {
     const f = await seedCapturedSources();
@@ -520,6 +647,79 @@ test("Sources inventory inspection does not hydrate invocation transcripts", asy
             paginationOpts: { numItems: 1, cursor: null },
         }),
     ).rejects.toThrow("Local simulation scope required");
+});
+
+test("scoped transcript export reads complete immutable fragments after context closure", async () => {
+    const f = await fixture();
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, { reservationKey: "browser:fragment-export" }),
+    );
+    const attempt = await f.attempt("fragmented");
+    const content = JSON.stringify({ retained: "exacté".repeat(30000) });
+    await f.t.run(async (ctx) => {
+        const { manifest, parts } = retainedTextParts(content);
+        let textId: Id<"retainedTexts"> | undefined;
+        for (const [index, part] of parts.entries())
+            textId = await stageRetainedText(
+                ctx,
+                `${attempt.invocationId}:input`,
+                { ...manifest, index, content: part },
+            );
+        await ctx.db.patch(attempt.invocationId, {
+            inputJson: "",
+            inputTextId: textId,
+            inputContentHash: manifest.contentHash,
+        });
+    });
+    await f.t.mutation(internal.runWorkspace.closeBrowserTestContext, {
+        slotKey: "analyst-4",
+        contextKey: "sources-paid",
+    });
+    const read = makeFunctionReference<
+        "query",
+        {
+            runId: Id<"researchRuns">;
+            fixtureKey: string;
+            invocationId: Id<"agentInvocations">;
+            part: "input";
+            paginationOpts: { numItems: number; cursor: string | null };
+        },
+        {
+            page: Array<{ index: number; content: string }>;
+            isDone: boolean;
+            continueCursor: string;
+        }
+    >("execution/fixtures:inspectSourcesTextFragments");
+    const args = {
+        runId: f.runId,
+        fixtureKey: "fragment-export",
+        invocationId: attempt.invocationId,
+        part: "input" as const,
+    };
+    let cursor: string | null = null;
+    let actual = "";
+    do {
+        const page: FunctionReturnType<typeof read> = await f.t.query(read, {
+            ...args,
+            paginationOpts: { numItems: 1, cursor },
+        });
+        actual += page.page.map((item) => item.content).join("");
+        cursor = page.isDone ? null : page.continueCursor;
+    } while (cursor);
+    expect(actual).toBe(content);
+    await expect(
+        f.t.query(read, {
+            ...args,
+            fixtureKey: "foreign",
+            paginationOpts: { numItems: 1, cursor: null },
+        }),
+    ).rejects.toThrow("Local simulation scope required");
+    await expect(
+        f.t.query(read, {
+            ...args,
+            paginationOpts: { numItems: 1, cursor: "foreign" },
+        }),
+    ).rejects.toThrow("cursor");
 });
 
 test("Sources inspection retains technical receipts in addition to the model allowance", async () => {

@@ -14,9 +14,14 @@ export async function installModel(
     t: TestConvex<typeof schema>,
     route: ModelRoute,
     agent: "workbench" | "sources" | "saved_material_inspection" = "workbench",
-    capabilities: Pick<
-        Infer<typeof modelDescriptor>,
-        "reasoningEfforts" | "reasoningMandatory" | "reasoningDefault"
+    capabilities: Partial<
+        Pick<
+            Infer<typeof modelDescriptor>,
+            | "reasoningEfforts"
+            | "reasoningMandatory"
+            | "reasoningDefault"
+            | "contextWindow"
+        >
     > = {},
 ) {
     const userId = await t.run(async (ctx) => {

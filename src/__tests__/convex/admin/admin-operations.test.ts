@@ -250,6 +250,11 @@ test("admin can inspect preparation configuration and dispatch evidence without 
         preparationId,
         available: false,
     });
+    await t.run((ctx) =>
+        ctx.db.patch(preparationId, {
+            executionPlanVersion: "source_actions_v3",
+        }),
+    );
     const attempt = {
         runId,
         corpusRevisionId,

@@ -632,9 +632,9 @@ async function waitForManifest(
     root: string,
     role: "web" | "preview",
     ignoredRunId?: string,
+    signal = AbortSignal.timeout(10_000),
 ) {
-    const deadline = Date.now() + 10_000;
-    while (Date.now() < deadline) {
+    while (!signal.aborted) {
         const path = join(root, ".local-runtime/manifest.json");
         if (existsSync(path)) {
             const manifest = JSON.parse(readFileSync(path, "utf8"));
@@ -1292,7 +1292,9 @@ it("serializes native starts across worktrees with their distinct fixed backend 
     expect(secondChild.exitCode).toBeNull();
 }, 20_000);
 
-it("starts concurrent web listeners on disjoint ports and verifies their worktree identities", async () => {
+it("starts concurrent web listeners on disjoint ports and verifies their worktree identities", async ({
+    signal,
+}) => {
     const { first, second } = await createWorktreePair();
     const firstBackend = await backend("runtime-first");
     const secondBackend = await backend("runtime-second");
@@ -1310,8 +1312,8 @@ it("starts concurrent web listeners on disjoint ports and verifies their worktre
     );
 
     const [firstManifest, secondManifest] = await Promise.all([
-        waitForManifest(first, "web"),
-        waitForManifest(second, "web"),
+        waitForManifest(first, "web", undefined, signal),
+        waitForManifest(second, "web", undefined, signal),
     ]);
     const [firstRuntime, secondRuntime] = await Promise.all([
         runtimeModule.resolveLocalRuntime(first, { requiredOrigins: ["web"] }),

@@ -1,5 +1,5 @@
 import { internal } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
     type MutationCtx,
@@ -25,7 +25,9 @@ import {
     submitAuthorizedMessage,
 } from "@convex/execution/conversations";
 import { executionError } from "@convex/execution/errors";
+import { recordContextObservation } from "@convex/execution/journal";
 import { retainOperationEffect } from "@convex/execution/operations";
+import { recordResearchObservation } from "@convex/execution/researchControl";
 import { initialModelSelection } from "@convex/modelConfigurationSchema";
 import { sourcePreparationEnabled } from "@convex/resourceLimits";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
@@ -201,6 +203,10 @@ export const startResearch = mutation({
             targetId: run._id,
             occurredAt: Date.now(),
         });
+        await recordResearchObservation(ctx, run._id, "started", {
+            type: "visitor",
+            visitorId: visitor._id,
+        });
         return run._id;
     },
 });
@@ -231,6 +237,7 @@ async function saveFraming(
         content: Infer<typeof framingContentValidator>;
     },
     origin: "analyst" | "workbench",
+    actor?: Doc<"agentExecutionEvents">["actor"],
 ): Promise<number> {
     const { run } = await requireDossierAuthority(ctx, args.runId);
     if (run.startMode !== "framed" || run.lifecycleState !== "framing")
@@ -281,6 +288,22 @@ async function saveFraming(
     await ctx.db.patch(run._id, {
         currentFramingRevisionId: id,
         updatedAt: Date.now(),
+    });
+    await recordContextObservation(ctx, run._id, {
+        key: `framing:${id}`,
+        topic: "framing",
+        actor:
+            actor ??
+            (origin === "analyst" && run.ownerVisitorId
+                ? { type: "visitor", visitorId: run.ownerVisitorId }
+                : { type: "system" }),
+        value: {
+            revision,
+            previousRevision: current.revision,
+            origin,
+            content,
+            fixed: false,
+        },
     });
     if (origin === "analyst") {
         const conversation = await ctx.db
@@ -344,6 +367,7 @@ export const applyFromWorkbench = internalMutation({
                 content: request.input.content,
             },
             "workbench",
+            { type: "agent", missionId: mission._id },
         );
         const current = await ctx.db.get(mission.runId);
         if (!current?.currentFramingRevisionId)

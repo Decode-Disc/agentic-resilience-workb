@@ -382,7 +382,14 @@ export async function startReviewPreparation(
             executionGeneration,
             policyVersion: qualificationVersion,
             qualificationVersion,
-            executionPlanVersion: SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
+            executionPlanVersion:
+                previous?.kind === "preparation"
+                    ? previous.executionPlanVersion
+                    : SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
+            modelRevisionId:
+                previous?.kind === "preparation"
+                    ? previous.modelRevisionId
+                    : undefined,
             comparisonVersion: SOURCE_COMPARISON_VERSION,
             ...(env.SOURCE_RETRIEVAL_MODE
                 ? {
@@ -1526,7 +1533,14 @@ export const claimForDiscovery = internalMutation({
                 executionGeneration: run.executionGeneration,
                 policyVersion: qualificationVersion,
                 qualificationVersion,
-                executionPlanVersion: SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
+                executionPlanVersion:
+                    previous?.kind === "preparation"
+                        ? previous.executionPlanVersion
+                        : SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
+                modelRevisionId:
+                    previous?.kind === "preparation"
+                        ? previous.modelRevisionId
+                        : undefined,
                 comparisonVersion: SOURCE_COMPARISON_VERSION,
                 ...(env.SOURCE_RETRIEVAL_MODE
                     ? {

@@ -113,6 +113,7 @@ export const retainedPayloadValidator = v.object({
     version: v.literal(1),
     state: v.union(v.literal("complete"), v.literal("incomplete")),
     json: v.optional(v.string()),
+    textId: v.optional(v.id("retainedTexts")),
     contentHash: v.optional(v.string()),
     sizeBytes: v.number(),
     code: v.optional(v.string()),

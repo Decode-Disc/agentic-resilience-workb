@@ -1,5 +1,8 @@
 import { api, internal } from "@convex/_generated/api";
+import { executionError } from "@convex/execution/errors";
 import type { ModelRoute } from "@convex/integrations/modelRouting";
+import { runPiMission } from "@convex/integrations/piMission";
+import { getFunctionName } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
@@ -10,6 +13,101 @@ afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
 });
+
+test("the compaction adoption owner refuses a retained blocked response", async () => {
+    const f = await fixture();
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "refused-compaction",
+        purpose: "compaction",
+        provenance: "live",
+    });
+    if (begun.kind !== "ready")
+        throw new Error("Expected compaction invocation");
+    const args = { invocationId: begun.invocationId, expectedGeneration: 4 };
+    await f.t.mutation(internal.execution.invocations.retainOutput, {
+        ...args,
+        responseJson: JSON.stringify({
+            kind: "blocked",
+            code: "invalid_output",
+        }),
+    });
+    await expect(
+        f.t.mutation(internal.execution.piControl.finishAuxiliary, args),
+    ).rejects.toMatchObject({ data: { code: "invalid_output" } });
+    expect(
+        await f.t.run((ctx) => ctx.db.get(begun.invocationId)),
+    ).not.toMatchObject({ status: "returned" });
+});
+
+test.each([
+    false,
+    true,
+])("a large incomplete native reply retains its receipt and exact recovery bytes (compaction=%s)", async (compaction) => {
+    const text = "Incomplete observed summary. ".repeat(21000);
+    const network = vi.fn(async () =>
+        reply(text, "length", {
+            prompt_tokens: 10,
+            completion_tokens: 6144,
+            total_tokens: 6154,
+            cost: 0.01,
+        }),
+    );
+    vi.stubGlobal("fetch", network);
+    const f = await fixture();
+    if (compaction) {
+        const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
+        await seedPiHistory(f.t, f.missionId, 4, 8, 56000);
+        await f.t.mutation(internal.execution.missions.resume, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            simulation: false,
+        });
+    }
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    const state = await f.t.run(async (ctx) => ({
+        receipts: await ctx.db.query("providerCalls").collect(),
+        invocations: await ctx.db.query("agentInvocations").collect(),
+        payloads: await ctx.db.query("agentInvocationPayloads").collect(),
+    }));
+    expect(network).toHaveBeenCalledOnce();
+    expect(state.receipts).toEqual([
+        expect.objectContaining({
+            status: "failed",
+            reportedCost: 0.01,
+            dispatchOutcome: "response_received",
+        }),
+    ]);
+    expect(
+        state.payloads.some(
+            (payload) =>
+                payload.part === "reply" && payload.state === "complete",
+        ),
+    ).toBe(true);
+    const invocation = state.invocations.find(
+        (item) => item.providerCallId === state.receipts[0]?._id,
+    );
+    if (!invocation) throw new Error("Expected observed invocation");
+    if (compaction) expect(invocation.status).not.toBe("returned");
+    const { invocationRawOutputJson } = await import(
+        "@convex/execution/journal"
+    );
+    const restored = await f.t.run((ctx) =>
+        invocationRawOutputJson(ctx, invocation),
+    );
+    expect(restored?.includes(text)).toBe(true);
+    expect(invocation.rawOutputJson).toBeUndefined();
+    await f.t.action(internal.execution.piWorker.run, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        token: "expired-wake",
+    });
+    expect(network).toHaveBeenCalledOnce();
+}, 30000);
 
 function reply(
     completion: object | string,
@@ -93,7 +191,7 @@ test.each([
             effort: reasoningEffort,
             exclude: true,
         },
-        max_completion_tokens: 6144,
+        max_completion_tokens: 8192,
     });
     expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
         status: "completed",
@@ -792,7 +890,7 @@ test("native compaction shares the provider ledger and leaves original history a
     const f = await fixture();
     completion = { kind: "complete", captureIds: [f.captureId] };
     const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
-    await seedPiHistory(f.t, f.missionId, 4, 8, 16250);
+    await seedPiHistory(f.t, f.missionId, 4, 8, 56000);
     await f.t.mutation(internal.execution.missions.resume, {
         missionId: f.missionId,
         expectedGeneration: 4,
@@ -831,7 +929,7 @@ test("native compaction shares the provider ledger and leaves original history a
     );
     expect(
         retained.commits.some((commit) =>
-            commit.payload.includes("EXACT-ORIGINAL-0"),
+            commit.payload?.includes("EXACT-ORIGINAL-0"),
         ),
     ).toBe(true);
     expect(network).toHaveBeenCalledTimes(2);
@@ -907,13 +1005,20 @@ test("a refused writer lease prevents native provider dispatch and retains expli
         expect(network).not.toHaveBeenCalled();
         expect(
             await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
-        ).toEqual([
-            expect.objectContaining({
-                status: "failed",
-                errorCode: "pi_writer_fenced",
-                dispatchOutcome: "not_dispatched",
-            }),
-        ]);
+        ).toEqual([]);
+        expect(
+            await f.t.run((ctx) =>
+                ctx.db.query("agentInvocationPayloads").collect(),
+            ),
+        ).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    part: "reply",
+                    state: "incomplete",
+                    code: "not_dispatched",
+                }),
+            ]),
+        );
     } finally {
         lease.mockRestore();
     }
@@ -926,7 +1031,7 @@ test("an interrupted native compaction retains an unknown attempt and cannot red
     vi.stubGlobal("fetch", network);
     const f = await fixture();
     const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
-    await seedPiHistory(f.t, f.missionId, 4, 8, 16250);
+    await seedPiHistory(f.t, f.missionId, 4, 8, 56000);
     await f.t.mutation(internal.execution.missions.resume, {
         missionId: f.missionId,
         expectedGeneration: 4,
@@ -1018,7 +1123,7 @@ test("an admitted compaction response is retained after public Pause and Resume 
         ctx.db.patch(f.args.runId, { agentExecutionVersion: 3 }),
     );
     const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
-    await seedPiHistory(f.t, f.missionId, 4, 8, 16250);
+    await seedPiHistory(f.t, f.missionId, 4, 8, 56000);
     await f.t.mutation(internal.execution.missions.resume, {
         missionId: f.missionId,
         expectedGeneration: 4,
@@ -1080,4 +1185,312 @@ test("an admitted compaction response is retained after public Pause and Resume 
         }),
     ]);
     expect(observed.mission).not.toMatchObject({ status: "completed" });
+}, 30000);
+
+test("native model capacity admits a request above 128 KiB and preserves its complete journal", async () => {
+    let completion: object = {};
+    let body = "";
+    const network = vi.fn<typeof fetch>(async (_url, init) => {
+        body = String(init?.body);
+        return reply(completion);
+    });
+    vi.stubGlobal("fetch", network);
+    const f = await fixture();
+    completion = { kind: "complete", captureIds: [f.captureId] };
+    const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
+    await seedPiHistory(f.t, f.missionId, 4, 3, 48000);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(network).toHaveBeenCalledOnce();
+    expect(new TextEncoder().encode(body).length).toBeGreaterThan(128 * 1024);
+    expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
+        status: "completed",
+    });
+    const payload = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentInvocationPayloads")
+            .filter((q) => q.eq(q.field("part"), "request"))
+            .first(),
+    );
+    expect(payload).toMatchObject({ state: "complete" });
+    expect(payload?.json).toContain("EXACT-ORIGINAL-0");
+}, 30000);
+
+test("native compaction retains its own output budget through final HTTP serialization", async () => {
+    const budgets: number[] = [];
+    let completion: object = {};
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            const body = JSON.parse(String(init?.body));
+            budgets.push(body.max_completion_tokens ?? body.max_tokens);
+            return reply(
+                budgets.length === 1
+                    ? "A complete qualitative summary with its caveats."
+                    : completion,
+            );
+        }),
+    );
+    const f = await fixture();
+    completion = { kind: "complete", captureIds: [f.captureId] };
+    const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
+    await seedPiHistory(f.t, f.missionId, 4, 8, 56000);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(budgets).toHaveLength(2);
+    expect(budgets[0]).toBe(8192);
+}, 30000);
+
+test("a context-reduced native output cap and a fragmented request are retained before provider I/O", async () => {
+    const { readRetainedText } = await import("@convex/execution/retainedText");
+    let f: Awaited<ReturnType<typeof fixture>>;
+    let count = 0;
+    const budgets: number[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            const body = JSON.parse(String(init?.body));
+            budgets.push(body.max_completion_tokens ?? body.max_tokens);
+            if (++count === 1) {
+                const request = await f.t.run((ctx) =>
+                    ctx.db
+                        .query("agentInvocationPayloads")
+                        .filter((q) => q.eq(q.field("part"), "request"))
+                        .first(),
+                );
+                expect(request).toMatchObject({
+                    state: "complete",
+                    effectiveMaxOutputTokens: 1,
+                });
+                if (!request?.textId)
+                    throw new Error(
+                        "Expected complete fragmented request before I/O",
+                    );
+                const textId = request.textId;
+                const retained = await f.t.run((ctx) =>
+                    readRetainedText(ctx, textId),
+                );
+                expect(JSON.parse(retained).input).toEqual(body);
+                return reply("Context.", "stop", {
+                    prompt_tokens: 100,
+                    completion_tokens: 1,
+                    total_tokens: 101,
+                });
+            }
+            return reply({ kind: "complete", captureIds: [f.captureId] });
+        }),
+    );
+    f = await fixture();
+    const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
+    await seedPiHistory(f.t, f.missionId, 4, 16, 48000);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(budgets).toEqual([1, 8192]);
+    expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
+        status: "completed",
+    });
+}, 30000);
+
+test("a confirmed native provider context overflow returns to native compaction with its original receipt retained", async () => {
+    let count = 0;
+    let completion: object = {};
+    const network = vi.fn(async () => {
+        if (++count === 1)
+            return new Response(
+                JSON.stringify({
+                    error: { message: "maximum context length exceeded" },
+                }),
+                {
+                    status: 400,
+                    headers: { "content-type": "application/json" },
+                },
+            );
+        return reply(
+            count === 2
+                ? "A complete qualitative summary with its limitations."
+                : completion,
+        );
+    });
+    vi.stubGlobal("fetch", network);
+    const f = await fixture();
+    completion = { kind: "complete", captureIds: [f.captureId] };
+    const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
+    await seedPiHistory(f.t, f.missionId, 4, 3, 48000);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
+        status: "completed",
+    });
+    expect(network).toHaveBeenCalledTimes(3);
+    const receipts = await f.t.run((ctx) =>
+        ctx.db.query("providerCalls").collect(),
+    );
+    expect(receipts[0]).toMatchObject({
+        status: "failed",
+        errorCode: "context_capacity",
+        dispatchOutcome: "response_received",
+    });
+    expect(receipts[1]).toMatchObject({
+        operation: "agent_compaction",
+        status: "succeeded",
+    });
+}, 30000);
+
+test("ordinary native generation uses the model context budget instead of the one-shot ceiling", async () => {
+    let f: Awaited<ReturnType<typeof fixture>>;
+    let effectiveLimit: number | undefined;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            const body = JSON.parse(String(init?.body));
+            effectiveLimit = body.max_completion_tokens ?? body.max_tokens;
+            const request = await f.t.run((ctx) =>
+                ctx.db
+                    .query("agentInvocationPayloads")
+                    .filter((q) => q.eq(q.field("part"), "request"))
+                    .first(),
+            );
+            expect(request?.effectiveMaxOutputTokens).toBe(effectiveLimit);
+            return reply({ kind: "complete", captureIds: [f.captureId] });
+        }),
+    );
+    f = await fixture("high");
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(effectiveLimit).toBeGreaterThan(6144);
+    expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
+        status: "completed",
+    });
+}, 30000);
+
+test.each([
+    false,
+    true,
+])("a complete long native compaction is successful and its exact summary reaches the following request (reopen=%s)", async (reopen) => {
+    const summary = "Validated context. ".repeat(2400);
+    const requests: Array<{ messages: unknown[] }> = [];
+    let completion: object = {};
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            requests.push(JSON.parse(String(init?.body)));
+            return reply(requests.length === 1 ? summary : completion, "stop", {
+                prompt_tokens: 10,
+                completion_tokens: requests.length === 1 ? 5000 : 5,
+                cost: 0.001,
+            });
+        }),
+    );
+    const f = await fixture();
+    completion = { kind: "complete", captureIds: [f.captureId] };
+    const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
+    await seedPiHistory(f.t, f.missionId, 4, 8, 56000);
+    if (reopen) {
+        let lostWrites = 0;
+        await expect(
+            f.t.action((ctx) =>
+                runPiMission(
+                    {
+                        ...ctx,
+                        runMutation: async (reference, ...args) => {
+                            const name = getFunctionName(reference);
+                            if (
+                                [
+                                    "execution/piStore:append",
+                                    "execution/piStore:publishCommit",
+                                ].includes(name)
+                            ) {
+                                const retained = await f.t.run(async (dbCtx) =>
+                                    (
+                                        await dbCtx.db
+                                            .query("agentInvocations")
+                                            .collect()
+                                    ).some(
+                                        (i) =>
+                                            i.purpose === "compaction" &&
+                                            i.receivedOutputJson,
+                                    ),
+                                );
+                                if (retained) {
+                                    lostWrites++;
+                                    throw executionError(
+                                        "execution_interrupted",
+                                    );
+                                }
+                            }
+                            return ctx.runMutation(reference, ...args);
+                        },
+                    },
+                    { missionId: f.missionId, expectedGeneration: 4 },
+                    "lost-compaction-commit",
+                ),
+            ),
+        ).rejects.toMatchObject({ data: { code: "execution_interrupted" } });
+        expect(lostWrites).toBeGreaterThan(0);
+        expect(requests).toHaveLength(1);
+    }
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    const state = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(f.missionId),
+        calls: await ctx.db.query("providerCalls").collect(),
+        invocations: await ctx.db.query("agentInvocations").collect(),
+    }));
+    const compaction = state.invocations.find(
+        (i) => i.purpose === "compaction",
+    );
+    expect(
+        state.calls.find((c) => c.operation === "agent_compaction"),
+    ).toMatchObject({ status: "succeeded", reportedCost: 0.001 });
+    expect(
+        state.calls.filter((c) => c.operation === "agent_compaction"),
+    ).toHaveLength(1);
+    expect(compaction).toMatchObject({ status: "returned" });
+    expect(JSON.parse(compaction?.receivedOutputJson ?? "null")).toEqual({
+        kind: "operations",
+        requests: [],
+    });
+    expect(state.mission).toMatchObject({
+        status: "completed",
+        result: { captureIds: [f.captureId] },
+    });
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify(requests[1]?.messages)).toContain(summary.trim());
 }, 30000);

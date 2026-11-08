@@ -126,3 +126,39 @@ test("retrying turn admission preserves instructions explicitly queued for the n
         }),
     ).toMatchObject({ queuedCount: 1 });
 });
+
+test("native Pi admits a multi-message lot above128KiB when its model context fits", async () => {
+    vi.useFakeTimers();
+    const f = await seedConversation(true);
+    for (let index = 0; index < 7; index++)
+        await f.client.mutation(api.execution.conversations.submit, {
+            runId: f.runId,
+            requestKey: `unicode-lot-${index}`,
+            delivery: "queue",
+            text: "界".repeat(6500),
+        });
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "conversation_validation_v1",
+            scope: { kind: "conversation_validation_v1" },
+            simulation: true,
+        },
+    );
+    if (!active) throw new Error("Expected native turn");
+    const context = await f.t.query(internal.execution.context.build, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+    });
+    if (context.kind !== "ready") throw new Error(context.code);
+    expect(Buffer.byteLength(context.inputJson)).toBeGreaterThan(128 * 1024);
+    expect(
+        JSON.parse(context.inputJson).conversationInstructions.messages,
+    ).toHaveLength(7);
+    expect(
+        await f.client.query(api.execution.conversations.get, {
+            runId: f.runId,
+        }),
+    ).toMatchObject({ queuedCount: 0 });
+});

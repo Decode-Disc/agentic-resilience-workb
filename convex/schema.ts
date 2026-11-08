@@ -249,6 +249,12 @@ export default defineSchema({
                 relayOrigin: v.optional(v.string()),
                 maximumSearchAttempts: v.optional(v.number()),
                 maximumAcquisitions: v.optional(v.number()),
+                costAccountingPolicy: v.optional(
+                    v.union(
+                        v.literal("conservative_v1"),
+                        v.literal("known_final_v1"),
+                    ),
+                ),
                 maximumRequests: v.number(),
                 maximumCostUsd: v.number(),
                 authorizedAt: v.number(),
@@ -944,8 +950,13 @@ export default defineSchema({
         ])
         .index("by_passage_key", ["passageKey"]),
     providerCalls: defineTable({
+        reservedMaxOutputTokens: v.optional(v.number()),
         operationRequestId: v.optional(v.id("agentOperationRequests")),
         qualificationReservationUsd: v.optional(v.number()),
+        costAccountingPolicy: v.optional(
+            v.union(v.literal("conservative_v1"), v.literal("known_final_v1")),
+        ),
+        reportedCostFinal: v.optional(v.boolean()),
         qualificationContextId: v.optional(v.id("browserTestContexts")),
         missionId: v.optional(v.id("agentMissions")),
         invocationId: v.optional(v.id("agentInvocations")),

@@ -4,7 +4,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { useState } from "react";
+import { type Ref, useLayoutEffect, useRef, useState } from "react";
 import { AdminDetailDisclosure } from "@/components/admin/admin-detail-disclosure";
 import { AdminLoadMore } from "@/components/admin/admin-pager";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
@@ -37,14 +37,72 @@ const eventLabels: Record<string, string> = {
     operation_reused: "Operation result reused",
 };
 
-function SnapshotText({ children }: { children: string }) {
+function SnapshotText({
+    children,
+    ref,
+}: {
+    children: string;
+    ref?: Ref<HTMLPreElement>;
+}) {
     return (
         <pre
+            ref={ref}
             // biome-ignore lint/a11y/noNoninteractiveTabindex: Bounded snapshots need keyboard scrolling and text selection.
             tabIndex={0}
             className="max-h-80 max-w-full overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 font-mono text-xs">
             {children}
         </pre>
+    );
+}
+
+function FragmentedPayload({
+    runId,
+    invocationId,
+    part,
+}: {
+    runId: Id<"researchRuns">;
+    invocationId: Id<"agentInvocations">;
+    part: "request" | "reply";
+}) {
+    const page = usePaginatedQuery(
+        api.adminOperations.listInvocationPayloadFragmentsPage,
+        { runId, invocationId, part },
+        { initialNumItems: 1 },
+    );
+    const container = useRef<HTMLDivElement>(null);
+    const snapshot = useRef<HTMLPreElement>(null);
+    const pagingHadFocus = useRef(false);
+    useLayoutEffect(() => {
+        if (page.status === "LoadingMore")
+            pagingHadFocus.current =
+                container.current?.contains(document.activeElement) ?? false;
+        if (
+            page.status === "Exhausted" &&
+            pagingHadFocus.current &&
+            document.activeElement === document.body
+        )
+            snapshot.current?.focus({ preventScroll: true });
+        if (page.status === "Exhausted") pagingHadFocus.current = false;
+    }, [page.status]);
+    if (page.status === "LoadingFirstPage")
+        return <p role="status">Loading snapshot…</p>;
+    return (
+        <div ref={container} className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+                {page.status === "Exhausted"
+                    ? "Full snapshot loaded"
+                    : "More snapshot content available"}
+            </p>
+            <SnapshotText ref={snapshot}>
+                {page.results.map((fragment) => fragment.content).join("")}
+            </SnapshotText>
+            <AdminLoadMore
+                page={page}
+                label="Load more snapshot content"
+                count={1}
+                focusableWhenDisabled
+            />
+        </div>
     );
 }
 
@@ -84,6 +142,12 @@ function Payload({
             </p>
             {payload.state === "complete" && payload.json !== undefined ? (
                 <SnapshotText>{payload.json}</SnapshotText>
+            ) : payload.state === "complete" && payload.textId ? (
+                <FragmentedPayload
+                    runId={runId}
+                    invocationId={invocationId}
+                    part={part}
+                />
             ) : (
                 <>
                     <p className="text-sm">Incomplete snapshot</p>
