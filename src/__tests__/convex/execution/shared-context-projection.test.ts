@@ -102,7 +102,14 @@ test("required Workbench state preserves a rejected statement with its effective
                 {
                     sourceId: f.sourceId,
                     sourceDecision: "rejected",
-                    contributions: [{ statement, permittedUse: "blocked" }],
+                    contributions: [
+                        {
+                            statement,
+                            permittedUse: "blocked",
+                            useStatus: "inspection_only",
+                            finding: { reportedUse: "documentary" },
+                        },
+                    ],
                 },
             ],
         },

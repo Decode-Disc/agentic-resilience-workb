@@ -92,6 +92,7 @@ export const protectedDiagnosticValidator = v.object({
         v.literal("effect_callback"),
         v.literal("validate_outcome"),
         v.literal("reduce_progress"),
+        v.literal("provider_transport"),
     ),
     name: v.string(),
     message: v.string(),

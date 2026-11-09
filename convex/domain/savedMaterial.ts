@@ -199,6 +199,7 @@ async function searchAvailableMaterial(
         sourceId: args.sourceId,
         captureId: result.captureId,
         contentHash: result.contentHash,
+        document: result.document,
         canonicalUrl: result.canonicalUrl,
         retrievedAt: result.retrievedAt,
     };
@@ -341,6 +342,7 @@ async function readInContext(
         continuation,
         captureOmittedPassageCount: result.captureOmittedPassageCount ?? null,
         kind: "read_in_context",
+        document: result.document,
         sourceId: args.sourceId,
         captureId: result.captureId,
         contentHash: result.contentHash,

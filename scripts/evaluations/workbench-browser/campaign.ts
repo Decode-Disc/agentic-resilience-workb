@@ -642,6 +642,33 @@ async function executeCampaign(
                 return [line.slice(0, i), line.slice(i + 1)];
             }),
     );
+    if (action === "run" && !recovering && manifest.mode === "live") {
+        const startsResearch =
+            manifest.version === 1
+                ? manifest.capability === "sources"
+                : manifest.scenarios.some((scenario) =>
+                      scenario.steps.some(
+                          (step) => step.action === "start_research",
+                      ),
+                  );
+        const required = [
+            "OPENROUTER_API_KEY",
+            ...(startsResearch ? ["SEC_USER_AGENT", "EXA_API_KEY"] : []),
+        ];
+        const missing = required.filter(
+            (name) => !previousFlags.get(name)?.trim(),
+        );
+        save(root, "configuration-readiness", {
+            checkedAt: Date.now(),
+            required,
+            missing,
+        });
+        assert.equal(
+            missing.length,
+            0,
+            `Live qualification configuration missing: ${missing.join(", ")}`,
+        );
+    }
     const flagNames = ["E2E_FIXTURES_ENABLED", "WORKBENCH_AGENT_ENABLED"];
     // Intent survives process death; never replace a retained flag snapshot during recovery.
     const flagsPath = join(root, "flags.json");
@@ -1124,14 +1151,32 @@ async function executeCampaign(
         cleanupCompleted = diagnostics.length === 0;
         save(root, "cleanup", { completed: cleanupCompleted, diagnostics });
         if (lot && lotRoot) {
+            const resultPath = join(lotRoot, "campaign-result.json");
+            const previous =
+                (recovering || action === "close") && existsSync(resultPath)
+                    ? (read(resultPath) as {
+                          completed: boolean;
+                          evidenceCaptureFailed?: boolean;
+                          failure: string | null;
+                          diagnostics: string[];
+                      })
+                    : undefined;
             save(lotRoot, "campaign-result", {
-                completed,
+                completed: previous?.completed ?? completed,
                 cleanupCompleted,
-                evidenceCaptureFailed,
-                failure: failure
-                    ? "Inspect preserved scenario evidence; sensitive exception text withheld"
-                    : null,
-                diagnostics,
+                evidenceCaptureFailed:
+                    previous?.evidenceCaptureFailed || evidenceCaptureFailed,
+                failure: previous
+                    ? previous.failure
+                    : failure
+                      ? "Inspect preserved scenario evidence; sensitive exception text withheld"
+                      : null,
+                diagnostics: [
+                    ...new Set([
+                        ...(previous?.diagnostics ?? []),
+                        ...diagnostics,
+                    ]),
+                ],
             });
             const result = await client.mutation(
                 ref(internal.qualificationCampaigns.reconcile),
@@ -1161,7 +1206,9 @@ async function executeCampaign(
             save(
                 lotRoot,
                 "review-template",
-                campaignReviewTemplate(lotRoot, { recovery: recovering }),
+                campaignReviewTemplate(lotRoot, {
+                    recovery: recovering || action === "close",
+                }),
             );
         }
         if (!cleanupCompleted || failure) process.exitCode = 1;

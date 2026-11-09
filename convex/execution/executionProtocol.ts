@@ -20,6 +20,7 @@ import {
     commonOperationSuccessValidator,
     historyReadReceiptValidator,
     historySourceFor,
+    type protectedDiagnosticValidator,
     validationFeedbackValidator,
 } from "./operationContracts";
 
@@ -210,8 +211,10 @@ export type AgentGenerationLifecycle = {
         metadata?: { effectiveMaxOutputTokens?: number },
     ): Promise<void>;
     observeProvider?(observation: {
-        generationId: string;
+        generationId?: string;
         httpStatus?: number;
+        requestId?: string;
+        diagnostic?: Infer<typeof protectedDiagnosticValidator>;
     }): Promise<void>;
     observe(observation: AgentGenerationObservation): Promise<void>;
     signal?: AbortSignal;

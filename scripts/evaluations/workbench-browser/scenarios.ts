@@ -373,6 +373,15 @@ export async function runCampaignScenarios(
                         assert(!interrupted(), "Campaign interrupted");
                         const s = await inspect();
                         if (
+                            state !== "conversation_settled" &&
+                            ["failed", "cancelled"].includes(
+                                s.run.executionStatus,
+                            )
+                        )
+                            throw new Error(
+                                `Research ${s.run.executionStatus} before ${state} (phase: ${s.run.lifecycleState})`,
+                            );
+                        if (
                             (state === "conversation_settled" ||
                                 state === "sources_prepared") &&
                             s.conversation?.activeTurnId &&

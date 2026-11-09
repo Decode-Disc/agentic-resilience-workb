@@ -72,6 +72,10 @@ export const documentaryControlValidator = v.object({
     coherence: v.boolean(),
     limitations: v.array(v.string()),
 });
+export const documentaryUseStatusValidator = v.union(
+    v.literal("support_with_restrictions"),
+    v.literal("inspection_only"),
+);
 export const documentaryQualificationOutput = v.object({
     kind: v.literal("documentary_qualification"),
     preparationId: v.id("sourceSelectionProposalRebuilds"),
@@ -115,6 +119,19 @@ export const preparedNeedOutcomeValidator = v.object({
     ...needOutcomeValidator.fields,
     contributions: v.array(preparedContributionReferenceValidator),
 });
+export const documentaryAssessmentAuthorValidator = v.union(
+    v.object({
+        type: v.literal("agent"),
+        missionId: v.id("agentMissions"),
+        invocationId: v.id("agentInvocations"),
+    }),
+    v.object({ type: v.literal("system") }),
+    v.object({ type: v.literal("unrecorded") }),
+);
+export const documentaryAssessmentValidator = v.object({
+    author: documentaryAssessmentAuthorValidator,
+    verification: v.literal("not_semantically_reviewed"),
+});
 export const preparedMaterialValidator = v.object({
     version: v.literal(1),
     needsRevision: v.number(),
@@ -125,6 +142,7 @@ export const preparedMaterialValidator = v.object({
     ),
     documents: v.array(preparedDocumentValidator),
     needs: v.array(preparedNeedOutcomeValidator),
+    documentaryAssessment: v.optional(documentaryAssessmentValidator),
     retentionAuthority: v.literal("system_mandate"),
     policyVersion: v.literal(SOURCES_PROTOCOL),
 });
@@ -139,6 +157,9 @@ export const preparedMaterialInspectionValidator = v.object({
     preparationId: v.id("sourceSelectionProposalRebuilds"),
     needs: v.array(documentaryNeedValidator),
     material: v.union(preparedMaterialValidator, v.null()),
+    documentaryAssessment: v.optional(
+        v.union(documentaryAssessmentValidator, v.null()),
+    ),
     restrictions: v.array(restrictedContributionValidator),
     nextCapability: v.literal("investigation_unavailable"),
 });
@@ -169,7 +190,18 @@ export const controlledSourcesProjectionValidator = v.object({
                 }),
             ),
             permittedUse: documentaryFindingValidator.fields.permittedUse,
-            finding: v.union(documentaryFindingValidator, v.null()),
+            useStatus: v.optional(documentaryUseStatusValidator),
+            finding: v.union(
+                documentaryFindingValidator,
+                v.object({
+                    contributionId: v.string(),
+                    conclusion: documentaryFindingValidator.fields.conclusion,
+                    diagnostic: v.string(),
+                    reportedUse:
+                        documentaryFindingValidator.fields.permittedUse,
+                }),
+                v.null(),
+            ),
             restrictions: v.array(restrictedContributionValidator),
         }),
     ),
@@ -179,6 +211,7 @@ export const preparedNeedInspectionValidator = v.object({
     needsRevision: v.number(),
     need: documentaryNeedValidator,
     outcome: preparedNeedOutcomeValidator,
+    documentaryAssessment: v.optional(documentaryAssessmentValidator),
     controlledContributions: v.optional(
         v.array(controlledSourcesProjectionValidator),
     ),
@@ -201,12 +234,14 @@ export const documentaryStatusValidator = v.object({
         captureOmittedPassageCount: v.optional(v.union(v.number(), v.null())),
         observedDestinationCount: v.number(),
     }),
-    observedDestinations: v.array(
-        v.object({
-            index: v.number(),
-            urlPreview: v.string(),
-            originPreview: v.string(),
-        }),
+    observedDestinations: v.optional(
+        v.array(
+            v.object({
+                index: v.number(),
+                urlPreview: v.string(),
+                originPreview: v.string(),
+            }),
+        ),
     ),
     qualification: v.union(
         v.null(),
@@ -425,9 +460,21 @@ export const discoveryResult = operationResultValidator(
         total: v.number(),
     }),
 );
+export const documentarySubmissionValue = v.object({
+    taskId: v.id("aiTaskResults"),
+    control: documentaryControlValidator,
+    effectiveContributions: v.optional(
+        v.array(
+            v.object({
+                id: v.string(),
+                version: v.number(),
+                permittedUse: documentaryFindingValidator.fields.permittedUse,
+                useStatus: documentaryUseStatusValidator,
+                diagnostic: v.string(),
+            }),
+        ),
+    ),
+});
 export const documentarySubmissionResult = operationResultValidator(
-    v.object({
-        taskId: v.id("aiTaskResults"),
-        control: documentaryControlValidator,
-    }),
+    documentarySubmissionValue,
 );

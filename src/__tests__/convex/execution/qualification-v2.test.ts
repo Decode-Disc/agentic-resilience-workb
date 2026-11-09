@@ -378,6 +378,44 @@ test("the backend grants and enforces shared three-dossier budgets above histori
     });
 });
 
+test("an expired unresolved attempt fences another dossier without claiming budget exhaustion", async () => {
+    const f = await liveFixture(2);
+    const args = await f.attempt(0);
+    const first = await f.t.mutation(
+        internal.providerCalls.recordAttempt,
+        args,
+    );
+    await f.t.run((ctx) =>
+        ctx.db.patch(first.providerCallId, { leaseExpiresAt: Date.now() - 1 }),
+    );
+    const other = f.bindings[1];
+    assert(other);
+    await expect(
+        f.t.mutation(
+            internal.providerCalls.recordAttempt,
+            await f.attempt(1, other.runId),
+        ),
+    ).rejects.toThrow("qualification_outcome_unresolved");
+    const calls = await f.t.run((ctx) =>
+        ctx.db.query("providerCalls").collect(),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+        _id: first.providerCallId,
+        status: "started",
+    });
+    const usage = await f.t.run((ctx) =>
+        ctx.db
+            .query("qualificationUsage")
+            .withIndex("by_context_and_run", (q) =>
+                q.eq("contextId", f.contextId).eq("runId", undefined),
+            )
+            .unique(),
+    );
+    expect(usage).toMatchObject({ pending: 1, usage: { model: 1 } });
+    expect(usage?.usage.costUsd).toBeLessThan(3);
+});
+
 test("late billing updates retained consumption without reopening an unknown attempt", async () => {
     const f = await liveFixture(2);
     const args = await f.attempt(0);
@@ -434,7 +472,7 @@ test("late billing updates retained consumption without reopening an unknown att
     });
     await expect(
         f.t.mutation(internal.providerCalls.recordAttempt, await f.attempt(1)),
-    ).rejects.toThrow("qualification_budget_exhausted");
+    ).rejects.toThrow("qualification_outcome_unresolved");
 });
 
 test("simulation binds every declared scenario once and inspection pages retain more than legacy limits", async () => {

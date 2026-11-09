@@ -5,6 +5,7 @@ import { internal } from "@convex/_generated/api";
 import { internalAction } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { preparationFailureCode } from "@convex/domain/sourcePreparationAuthority";
+import { SOURCES_RESOURCE_LIMIT_CODES } from "@convex/domain/sources";
 import {
     consultableSourceResult,
     discoveryResult,
@@ -298,7 +299,7 @@ export const execute = internalAction({
                 cached?.output.kind === "documentary_control" &&
                 cached.providerCallId
             ) {
-                const taskId = await ctx.runMutation(
+                const result = await ctx.runMutation(
                     internal.sourcesMission.retainControl,
                     {
                         ...args,
@@ -308,11 +309,9 @@ export const execute = internalAction({
                         providerCallId: cached.providerCallId,
                     },
                 );
-                return operationSuccess(
-                    documentarySubmissionResult,
-                    { taskId, control: cached.output.control },
-                    { progressKeys: [sha256Hex(`control:${inputHash}`)] },
-                );
+                return operationSuccess(documentarySubmissionResult, result, {
+                    progressKeys: [sha256Hex(`control:${inputHash}`)],
+                });
             }
             if (!simulation && !process.env.OPENROUTER_API_KEY?.trim())
                 return { kind: "unavailable", code: "missing_configuration" };
@@ -440,7 +439,7 @@ export const execute = internalAction({
                     kind: "unavailable",
                     code: "documentary_control_unfinished",
                 };
-            const taskId = await ctx.runMutation(
+            const result = await ctx.runMutation(
                 internal.sourcesMission.retainControl,
                 {
                     ...args,
@@ -450,16 +449,19 @@ export const execute = internalAction({
                     providerCallId: outcome.providerCallId,
                 },
             );
-            return operationSuccess(
-                documentarySubmissionResult,
-                { taskId, control: outcome.result.output },
-                { progressKeys: [sha256Hex(`control:${inputHash}`)] },
-            );
+            return operationSuccess(documentarySubmissionResult, result, {
+                progressKeys: [sha256Hex(`control:${inputHash}`)],
+            });
         } catch (error) {
             const code =
                 executionFailureCode(error) ?? preparationFailureCode(error);
             if (!code) throw error;
-            if (code === "source_candidate_limit")
+            if (
+                code === "source_candidate_limit" ||
+                Object.values(SOURCES_RESOURCE_LIMIT_CODES).some(
+                    (limitCode) => limitCode === code,
+                )
+            )
                 return { kind: "refused", code };
             const validation = executionFailureValidation(error);
             return {

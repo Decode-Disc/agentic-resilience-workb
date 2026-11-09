@@ -8,6 +8,7 @@ import {
 import {
     readCaptureIndexState,
     SOURCE_RETRIEVAL_VERSION,
+    sourceDocumentMetadata,
     sourceEmbeddingScopeKey,
 } from "@convex/domain/sourceRetrievalPolicy";
 import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
@@ -731,6 +732,10 @@ async function validateMissionApprovedCapture(
 ) {
     const { run, revision, mission, preparation } =
         owner ?? (await missionMaterialOwner(ctx, args));
+    const source = await ctx.db.get(args.sourceId);
+    if (source?.runId !== run._id)
+        throw sourcePreparationError("capture_identity_conflict");
+    const document = sourceDocumentMetadata(source);
     if (
         run.sourcesProtocol === "sources_mission_v1" &&
         (!mission ||
@@ -783,13 +788,14 @@ async function validateMissionApprovedCapture(
             .unique();
         if (state && state.contentHash !== capture.contentHash)
             throw sourcePreparationError("capture_identity_conflict");
-        return { status: "available" as const, capture, state, key };
+        return { status: "available" as const, capture, state, key, document };
     }
-    return validateApprovedCapture(ctx, {
+    const allowed = await validateApprovedCapture(ctx, {
         runId: run._id,
         corpusRevisionId: revision._id,
         sourceId: args.sourceId,
     });
+    return allowed.status === "available" ? { ...allowed, document } : allowed;
 }
 
 export type MissionApprovedCapture = Awaited<

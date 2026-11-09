@@ -74,6 +74,7 @@ import {
     workflowStepStateValidator,
 } from "./domain/validators";
 import { workbenchInstructionTransmissionStatus } from "./domain/workbenchContracts";
+import { protectedDiagnosticValidator } from "./execution/operationContracts";
 import { executionTables } from "./execution/schema";
 import {
     modelConfigurationTables,
@@ -989,11 +990,13 @@ export default defineSchema({
         reportedCost: v.optional(v.number()),
         providerObservation: v.optional(
             v.object({
-                generationId: v.string(),
+                generationId: v.optional(v.string()),
                 observedAt: v.number(),
                 httpStatus: v.optional(v.number()),
+                requestId: v.optional(v.string()),
             }),
         ),
+        transportDiagnostic: v.optional(protectedDiagnosticValidator),
         billing: v.optional(
             v.object({
                 state: v.union(

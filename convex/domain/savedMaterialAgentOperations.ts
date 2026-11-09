@@ -109,14 +109,16 @@ export const savedMaterialOperationBehavior: Pick<
     },
 };
 
+const readingProvenanceGuidance =
+    "The document field supplies recorded title, form and date metadata: dateKind distinguishes filing from publication, and null dates are unknown. Acquisition time is not a document date or reporting period. limitReached concerns the returned passage page, not a mission or reading allowance; use continuation for more passages. Saved-material reading does not consume external discovery allowance, but authority and overall execution limits still apply. Continuations are pagination data, not documentary evidence.";
+
 export const savedMaterialOperations: Record<string, AgentOperationDefinition> =
     {
         search_available_material: {
             ...savedMaterialOperationBehavior,
             materialRead: true,
             version: 1,
-            description:
-                "Search one authorized saved capture with a nonblank query. Returns exact quotations and passageOrder locators; only returned locators can be read. Empty matches do not prove documentary absence. Inspect capture completeness and response omissions before concluding coverage. Copy continuation unchanged with the same source and query to read the next page; it never restarts on another capture.",
+            description: `Search one authorized saved capture with a nonblank query. Returns exact quotations and passageOrder locators; only returned locators can be read. Empty matches do not prove documentary absence. Inspect capture completeness and response omissions before concluding coverage. Copy continuation unchanged with the same source and query to read the next page; it never restarts on another capture. ${readingProvenanceGuidance}`,
             inputValidator: searchAvailableMaterialInputValidator,
             resultValidator: searchAvailableMaterialResult,
         },
@@ -124,8 +126,7 @@ export const savedMaterialOperations: Record<string, AgentOperationDefinition> =
             ...savedMaterialOperationBehavior,
             materialRead: true,
             version: 1,
-            description:
-                "Read a passageOrder returned by saved-material search in the same capture. Returns an exact quotation with paged context; optionally request a range in capture character offsets that includes the focal passage, then copy continuation unchanged to continue that same range. Capture and response omissions are separate. Returns bounded context and current documentary-use permissions. Capture/index omissions differ from response truncation; an unavailable locator was not read. Search again rather than guessing an order.",
+            description: `Read a passageOrder returned by saved-material search in the same capture. Returns an exact quotation with paged context; optionally request a range in capture character offsets that includes the focal passage, then copy continuation unchanged to continue that same range. Capture and response omissions are separate. Returns bounded context and current documentary-use permissions. Capture/index omissions differ from response truncation; an unavailable locator was not read. Search again rather than guessing an order. ${readingProvenanceGuidance}`,
             inputValidator: readInContextInputValidator,
             resultValidator: readInContextResult,
         },

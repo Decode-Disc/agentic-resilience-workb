@@ -322,6 +322,85 @@ test("an unavailable passage gives a recovery instruction and a searched passage
     });
 }, 30000);
 
+test("native Workbench retains its active question and recorded document dates through a real saved read", async () => {
+    const f = await seedWorkbenchMaterials(1, 0, nativePiFixtureRoute);
+    const instruction =
+        "Keep migration costs distinct from continuity of insurer-repairer relationships. Explain the retained material without changing the saved program.";
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.sourceId, {
+            origin: "sec",
+            title: "Annual filing",
+            secForm: "10-K",
+            publishedAt: 1771891200000,
+        }),
+    );
+    await f.client.mutation(api.execution.conversations.submit, {
+        runId: f.runId,
+        requestKey: "conversational-answer",
+        text: instruction,
+        delivery: "queue",
+    });
+    const active = await f.start();
+    assert(active);
+    vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
+    let calls = 0;
+    const requests: string[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url, init) => {
+            requests.push(init.body);
+            calls++;
+            if (calls === 1)
+                return toolReply("search_available_material", {
+                    sourceId: f.sourceId,
+                    query: "workflow",
+                });
+            if (calls === 2) {
+                return reply(
+                    "The filing describes workflow software; those passages do not establish the effects of changing platforms.",
+                );
+            }
+            throw new Error("Unexpected generation beyond the saved read");
+        }),
+    );
+    await f.t.action((ctx) =>
+        runPiMission(
+            ctx,
+            { missionId: active.missionId, expectedGeneration: 1 },
+            "documentary-answer-input",
+        ),
+    );
+    expect(calls).toBe(2);
+    for (const request of requests) {
+        const payload = JSON.parse(request);
+        expect(payload.messages).toContainEqual(
+            expect.objectContaining({ role: "user", content: instruction }),
+        );
+    }
+    const payload = JSON.parse(requests[1] ?? "{}");
+    const result = payload.messages
+        .filter((message: { role: string }) => message.role === "tool")
+        .at(-1);
+    const value = JSON.parse(result.content).value;
+    expect(value.document).toEqual({
+        title: "Annual filing",
+        publishedAt: 1771891200000,
+        date: "2026-02-24T00:00:00.000Z",
+        dateKind: "filing",
+        form: "10-K",
+    });
+    expect(value.passages.length).toBeGreaterThan(0);
+    const turn = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(active.missionId);
+        assert(mission?.conversationTurnId);
+        return ctx.db.get(mission.conversationTurnId);
+    });
+    expect(turn?.responseControl).toMatchObject({
+        policy: { enabled: false },
+        checks: [],
+    });
+});
+
 test("native tools omit mechanical revisions, persist canonical arguments and return readable results before final prose", async () => {
     const payloads: Array<{
         tools: Array<{

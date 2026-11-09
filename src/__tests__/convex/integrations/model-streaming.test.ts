@@ -1,6 +1,40 @@
 import { createBoundedModelFetch } from "@convex/integrations/modelTransport";
 import { assert, expect, test, vi } from "vitest";
 
+test.each([
+    false,
+    true,
+])("a failed header observation cancels the unread stream and retains both failures when cancellation fails: %s", async (cancelFails) => {
+    const cancellationFailure = new Error("Cancellation was not acknowledged");
+    const cancel = vi.fn(async () => {
+        if (cancelFails) throw cancellationFailure;
+    });
+    const failure = new Error("Header observation was not acknowledged");
+    const bounded = createBoundedModelFetch(
+        {
+            fetch: vi.fn(
+                async () =>
+                    new Response(new ReadableStream({ cancel }), {
+                        headers: { "content-type": "text/event-stream" },
+                    }),
+            ),
+            onHeaders: async () => {
+                throw failure;
+            },
+        },
+        { responseTooLarge: false },
+    );
+    if (cancelFails) {
+        await expect(bounded("https://fixture.invalid")).rejects.toMatchObject({
+            cause: failure,
+            errors: [failure, cancellationFailure],
+        });
+    } else {
+        await expect(bounded("https://fixture.invalid")).rejects.toBe(failure);
+    }
+    expect(cancel).toHaveBeenCalledOnce();
+});
+
 test("delivers SSE before EOF and observes a complete response only after EOF", async () => {
     let upstream!: ReadableStreamDefaultController<Uint8Array>;
     const prefix = new TextEncoder().encode(

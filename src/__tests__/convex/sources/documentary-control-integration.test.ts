@@ -1,6 +1,11 @@
 import { internal } from "@convex/_generated/api";
+import type {
+    DocumentaryContribution,
+    documentarySubmissionValue,
+} from "@convex/domain/sourcesContracts";
 import { runPiMission } from "@convex/integrations/piMission";
 import { pinMissionModel } from "@convex/modelConfiguration";
+import type { Infer } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
@@ -134,7 +139,7 @@ test("a real documentary examination retains exact evidence through the Sources 
     ]);
 });
 
-async function fixture() {
+async function fixture(kind: DocumentaryContribution["kind"] = "context") {
     const f = await seedCapturedSources();
     vi.stubEnv("OPENROUTER_API_KEY", "offline-only");
     await installModel(f.t, { model: "z-ai/glm-5.3-flash" }, "sources");
@@ -168,7 +173,7 @@ async function fixture() {
                             period: "undated",
                             modality: "description",
                             attribution: "Publisher",
-                            kind: "context",
+                            kind,
                             evidence: [
                                 {
                                     readRequestId: f.readRequestId,
@@ -183,6 +188,179 @@ async function fixture() {
     );
     return { ...f, requestId };
 }
+
+function mockControlReply(permittedUse: "documentary" | "context_only") {
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            const wire = JSON.parse(String(init?.body));
+            const input = JSON.parse(wire.messages.at(-1).content);
+            return Response.json({
+                id: "offline-permission-control",
+                model: "z-ai/glm-5.3-flash",
+                choices: [
+                    {
+                        index: 0,
+                        message: {
+                            role: "assistant",
+                            content: JSON.stringify({
+                                coherence: true,
+                                limitations: ["Attributed context only."],
+                                findings: Object.fromEntries(
+                                    input.contributions.map(
+                                        (c: { id: string }) => [
+                                            c.id,
+                                            {
+                                                conclusion: "supported",
+                                                permittedUse,
+                                                diagnostic:
+                                                    "The passage supports the reported statement.",
+                                            },
+                                        ],
+                                    ),
+                                ),
+                            }),
+                        },
+                        finish_reason: "stop",
+                    },
+                ],
+                usage: {
+                    prompt_tokens: 10,
+                    completion_tokens: 10,
+                    total_tokens: 20,
+                    cost: 0.00001,
+                },
+            });
+        }),
+    );
+}
+
+test.each([
+    "attributed_argument",
+    "forecast",
+] as const)("an incompatible documentary permission for %s cannot become an admitted control", async (kind) => {
+    const f = await fixture(kind);
+    mockControlReply("documentary");
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    expect(result).toMatchObject({
+        kind: "unavailable",
+        code: "documentary_control_unfinished",
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.qualifications,
+    ).toEqual([]);
+});
+
+test("a successful submission returns its effective permitted use with the pinned contribution identity", async () => {
+    const f = await fixture();
+    mockControlReply("context_only");
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    assert(result.kind === "success");
+    const value: Infer<typeof documentarySubmissionValue> = JSON.parse(
+        result.valueJson,
+    );
+    const task = await f.t.run((ctx) => ctx.db.get(value.taskId));
+    assert(task?.output.kind === "documentary_qualification");
+    expect(value.effectiveContributions).toEqual([
+        {
+            id: task.output.contributions[0]?.id,
+            version: 1,
+            permittedUse: "context_only",
+            useStatus: "support_with_restrictions",
+            diagnostic: "The passage supports the reported statement.",
+        },
+    ]);
+});
+
+test("a reused historical control cannot bypass the contribution-kind permission guard", async () => {
+    const f = await fixture("attributed_argument");
+    mockControlReply("context_only");
+    const first = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    assert(first.kind === "success");
+    const { taskId }: Infer<typeof documentarySubmissionValue> = JSON.parse(
+        first.valueJson,
+    );
+    const task = await f.t.run((ctx) => ctx.db.get(taskId));
+    assert(task?.output.kind === "documentary_qualification");
+    const qualification = task.output;
+    const contribution = qualification.contributions[0];
+    assert(contribution);
+    await f.t.run(async (ctx) => {
+        const control = await ctx.db.get(qualification.controlTaskId);
+        assert(control?.output.kind === "documentary_control");
+        await ctx.db.patch(control._id, {
+            output: {
+                ...control.output,
+                control: {
+                    ...control.output.control,
+                    findings: control.output.control.findings.map(
+                        (finding) => ({
+                            ...finding,
+                            permittedUse: "documentary" as const,
+                        }),
+                    ),
+                },
+            },
+        });
+    });
+    const { id, version, evidence: _evidence, ...content } = contribution;
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "reused-historical-control",
+            input: {
+                kind: "submit_documentary_qualification",
+                sourceId: f.sourceId,
+                captureId: f.captureId,
+                expectedTaskId: taskId,
+                changes: [
+                    {
+                        contributionId: id,
+                        expectedVersion: version,
+                        contribution: {
+                            ...content,
+                            evidence: [
+                                {
+                                    readRequestId: f.readRequestId,
+                                    passageOrder: f.passage.order,
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        },
+    );
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    expect(result).toMatchObject({
+        kind: "unavailable",
+        code: "documentary_control_invalid",
+        validation: {
+            path: "control.findings[0].permittedUse",
+            expected: expect.stringContaining("attributed_argument"),
+        },
+    });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.qualifications,
+    ).toEqual([taskId]);
+});
 
 test("an unfinished real documentary examination reaches Sources with precise bounded feedback", async () => {
     const f = await fixture();

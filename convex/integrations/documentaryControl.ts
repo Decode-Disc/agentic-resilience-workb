@@ -1,4 +1,5 @@
 "use node";
+import { documentaryPermittedUses } from "@convex/domain/sourceSelectionPolicy";
 import type { DocumentaryContribution } from "@convex/domain/sourcesContracts";
 import { SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION } from "@convex/resourceLimits";
 import { z } from "zod";
@@ -65,9 +66,17 @@ export async function examineDocumentaryContributions(
                       Object.fromEntries(
                           contributions.map((contribution) => [
                               contribution.id,
-                              controlSchema.shape.findings.element.omit({
-                                  contributionId: true,
-                              }),
+                              controlSchema.shape.findings.element
+                                  .omit({
+                                      contributionId: true,
+                                  })
+                                  .extend({
+                                      permittedUse: z.enum(
+                                          documentaryPermittedUses(
+                                              contribution.kind,
+                                          ),
+                                      ),
+                                  }),
                           ]),
                       ),
                   )
@@ -124,6 +133,29 @@ export async function examineDocumentaryContributions(
             retryable: false,
             outputDiagnostic: rejectedOutputDiagnostic(
                 "documentary_control_identity_invalid",
+                assistantOutput,
+                "stop",
+            ),
+        };
+    const incompatible = contributions.find((contribution) => {
+        const finding = normalized.data.findings.find(
+            (item) => item.contributionId === contribution.id,
+        );
+        return (
+            finding &&
+            !documentaryPermittedUses(contribution.kind).some(
+                (use) => use === finding.permittedUse,
+            )
+        );
+    });
+    if (incompatible)
+        return {
+            ...receipt,
+            status: "failed",
+            errorCode: "invalid_output",
+            retryable: false,
+            outputDiagnostic: rejectedOutputDiagnostic(
+                `documentary_control_permission_invalid:${incompatible.id}:${incompatible.kind}`,
                 assistantOutput,
                 "stop",
             ),

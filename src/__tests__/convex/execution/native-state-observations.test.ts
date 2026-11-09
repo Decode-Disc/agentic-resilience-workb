@@ -1281,6 +1281,177 @@ test("an observation queued behind an active Pi generation is not acknowledged o
     });
 });
 
+test("native reopen and compaction preserve Sources assessment authorship and code-owned resource facts", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "offline-fixture-only");
+    vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
+    const requests: NativeWireRequest[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            requests.push(JSON.parse(String(init?.body)));
+            if (requests.length > 3)
+                throw new Error("Unexpected additional generation");
+            return response(
+                requests.length === 1
+                    ? "The retained material is available for inspection."
+                    : requests.length === 2
+                      ? "Working note: distinguish Sources' unverified explanation from current execution facts."
+                      : "Sources returned with unfinished work; the external discovery allowance is not exhausted.",
+            );
+        }),
+    );
+    const f = await seedCapturedSources();
+    await installModel(f.t, nativePiFixtureRoute);
+    await f.t.run(async (ctx) => {
+        const framingId = await ctx.db.insert("framingRevisions", {
+            runId: f.runId,
+            revision: 1,
+            content: { scope: "Workflow context", questions: [] },
+            requestKey: "source-return-framing",
+            contentHash: "fixture",
+            origin: "analyst",
+            createdAt: 1,
+        });
+        await ctx.db.patch(f.runId, {
+            startMode: "framed",
+            agentExecutionVersion: 3,
+            currentFramingRevisionId: framingId,
+            fixedFramingRevisionId: framingId,
+        });
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        await ctx.db.patch(f.preparationId, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                searches: 2,
+                envelope: {
+                    ...preparation.sourcesMission.envelope,
+                    initialSearches: 6,
+                },
+            },
+        });
+    });
+    const client = f.t.withIdentity({ subject: f.userId });
+    await client.mutation(api.execution.conversations.submit, {
+        runId: f.runId,
+        requestKey: "before-source-return",
+        text: "Inspect the existing material.",
+        delivery: "queue",
+    });
+    const first = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(first);
+    await f.t.action((ctx) =>
+        runPiMission(
+            ctx,
+            {
+                missionId: first.missionId,
+                expectedGeneration: 1,
+            },
+            "before-source-return",
+        ),
+    );
+    const source = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "returned-source-assessment",
+        provenance: "simulation",
+    });
+    assert(source.kind === "ready");
+    const complete = await f.t.mutation(internal.execution.invocations.finish, {
+        invocationId: source.invocationId,
+        expectedGeneration: 4,
+        response: {
+            kind: "complete",
+            needs: [
+                {
+                    needId: "common-context",
+                    unfinished: [
+                        "Search allowance for saved material was exhausted (6/6).",
+                    ],
+                    readRequestIds: [f.readRequestId],
+                },
+            ],
+        },
+    });
+    expect(complete.kind).toBe("completed");
+    await f.t.mutation(internal.sourcesMission.finish, {
+        preparationId: f.preparationId,
+        missionId: f.missionId,
+        expectedGeneration: 4,
+    });
+    await client.mutation(api.execution.conversations.submit, {
+        runId: f.runId,
+        requestKey: "after-source-return",
+        text: "Explain what Sources returned and its limits.",
+        delivery: "queue",
+    });
+    const next = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(next);
+    const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
+    await seedPiHistory(f.t, next.missionId, 1, 8, 56000);
+    await f.t.action((ctx) =>
+        runPiMission(
+            ctx,
+            {
+                missionId: next.missionId,
+                expectedGeneration: 1,
+            },
+            "after-source-return",
+        ),
+    );
+    expect(requests).toHaveLength(3);
+    const system = requests[2]?.messages[0]?.content;
+    assert(system);
+    const state = JSON.parse(
+        system.slice(
+            system.indexOf("\n") + 1,
+            system.indexOf("\n\n<instructions>"),
+        ),
+    );
+    expect(state.domain.documentaryPreparation).toMatchObject({
+        missionStatus: "completed",
+        allowance: {
+            searches: {
+                used: 2,
+                limit: 6,
+                blockCode: null,
+                operation: "discover_sources_for_need",
+            },
+        },
+        documentaryAssessment: {
+            author: {
+                type: "agent",
+                missionId: f.missionId,
+                invocationId: source.invocationId,
+            },
+            verification: "not_semantically_reviewed",
+        },
+    });
+    const calls = await f.t.run((ctx) =>
+        ctx.db.query("providerCalls").collect(),
+    );
+    expect(
+        calls.filter((call) => call.operation === "agent_compaction"),
+    ).toHaveLength(1);
+}, 30000);
+
 test("a saved observation remains available after native compaction and conversation reopen", async () => {
     const requests: Array<{
         messages: Array<{ role: string; content: string }>;

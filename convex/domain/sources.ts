@@ -19,6 +19,7 @@ import { SourceReviewReads } from "./sourceReviewReads";
 import { controlledDocumentaryUse } from "./sourceSelectionPolicy";
 import {
     type DocumentaryContribution,
+    type documentaryAssessmentAuthorValidator,
     type materializedQualificationInput,
     SOURCES_MAX_EVIDENCE_REFERENCES,
     SOURCES_PROTOCOL,
@@ -66,6 +67,55 @@ export async function requireSourcesPreparation(
     if (!preparation.sourcesMission || run.sourcesProtocol !== SOURCES_PROTOCOL)
         throw executionError("sources_scope_invalid");
     return { preparation, run, revision, data: preparation.sourcesMission };
+}
+
+export const SOURCES_RESOURCE_LIMIT_CODES = {
+    searches: "sources_discovery_limit",
+    acquisitions: "sources_acquisition_limit",
+    controls: "sources_control_limit",
+    work: "sources_work_limit",
+} as const;
+
+/** The same preparation counters govern reservation and explain current capacity. */
+export function sourcesResourceStatus(data: SourcesPreparation) {
+    const capacity = (
+        resource: keyof typeof SOURCES_RESOURCE_LIMIT_CODES,
+        used: number,
+        limit: number,
+    ) => ({
+        used,
+        limit,
+        blockCode:
+            used >= limit ? SOURCES_RESOURCE_LIMIT_CODES[resource] : null,
+    });
+    return {
+        searches: {
+            ...capacity(
+                "searches",
+                data.searches,
+                data.phase === "initial"
+                    ? data.envelope.initialSearches
+                    : data.envelope.complementSearches,
+            ),
+            operation: "discover_sources_for_need" as const,
+        },
+        acquisitions: {
+            ...capacity(
+                "acquisitions",
+                data.acquisitions,
+                data.envelope.acquisitions,
+            ),
+            operation: "make_source_consultable" as const,
+        },
+        controls: {
+            ...capacity("controls", data.controls, data.envelope.controls),
+            operations: [
+                "submit_documentary_qualification",
+                "request_documentary_check",
+            ],
+        },
+        work: capacity("work", data.work.length, 160),
+    };
 }
 
 /** The system constructs the shared brief once; conversation is never its storage authority. */
@@ -323,6 +373,9 @@ export function summarizeSourcesPreparation(
             acquisitions: data.acquisitions,
             controls: data.controls,
         },
+        allowance: sourcesResourceStatus(data),
+        documentaryAssessment:
+            projectPreparedMaterial(preparation)?.documentaryAssessment ?? null,
         restrictionCount: data.restrictedContributions.length,
         result: data.result
             ? {
@@ -354,6 +407,12 @@ export function projectPreparedMaterial(
               preparationId: preparation._id,
               needs: data.needs,
               material: data.result ?? null,
+              documentaryAssessment: data.result
+                  ? (data.result.documentaryAssessment ?? {
+                        author: { type: "unrecorded" as const },
+                        verification: "not_semantically_reviewed" as const,
+                    })
+                  : null,
               restrictions: data.restrictedContributions,
               nextCapability: "investigation_unavailable" as const,
           }
@@ -417,6 +476,9 @@ export async function readPreparedNeed(
     const value = {
         preparationId: prepared.preparationId,
         needsRevision: prepared.material.needsRevision,
+        ...(prepared.documentaryAssessment
+            ? { documentaryAssessment: prepared.documentaryAssessment }
+            : {}),
         need,
         outcome,
         controlledContributions: (
@@ -566,32 +628,46 @@ export async function controlledSourcesContributions(
                 coherence: control.coherence,
                 limitations: control.limitations,
                 contributions: qualification.contributions.map(
-                    ({ evidence, ...contribution }) => ({
-                        ...contribution,
-                        evidence: evidence.map(
-                            ({ captureId, passageOrder }) => ({
-                                captureId,
-                                passageOrder,
-                            }),
-                        ),
-                        permittedUse:
+                    ({ evidence, ...contribution }) => {
+                        const permittedUse =
                             sourceDecision === "rejected"
                                 ? ("blocked" as const)
                                 : controlledDocumentaryUse(
                                       { ...contribution, evidence },
                                       control,
                                       data.restrictedContributions,
-                                  ),
-                        finding:
-                            control.findings.find(
-                                (finding) =>
-                                    finding.contributionId === contribution.id,
-                            ) ?? null,
-                        restrictions: data.restrictedContributions.filter(
-                            (restriction) =>
-                                restriction.contributionId === contribution.id,
-                        ),
-                    }),
+                                  );
+                        const finding = control.findings.find(
+                            (item) => item.contributionId === contribution.id,
+                        );
+                        return {
+                            ...contribution,
+                            evidence: evidence.map(
+                                ({ captureId, passageOrder }) => ({
+                                    captureId,
+                                    passageOrder,
+                                }),
+                            ),
+                            permittedUse,
+                            useStatus:
+                                permittedUse === "blocked"
+                                    ? ("inspection_only" as const)
+                                    : ("support_with_restrictions" as const),
+                            finding: finding
+                                ? {
+                                      contributionId: finding.contributionId,
+                                      conclusion: finding.conclusion,
+                                      diagnostic: finding.diagnostic,
+                                      reportedUse: finding.permittedUse,
+                                  }
+                                : null,
+                            restrictions: data.restrictedContributions.filter(
+                                (restriction) =>
+                                    restriction.contributionId ===
+                                    contribution.id,
+                            ),
+                        };
+                    },
                 ),
                 contributionCount: qualification.contributions.length,
             };
@@ -913,6 +989,7 @@ export async function completeSources(
     preparationId: Id<"sourceSelectionProposalRebuilds">,
     response: Infer<typeof sourcesCompletionValidator>,
     sharedReads?: SourceReviewReads,
+    assessmentAuthor?: Infer<typeof documentaryAssessmentAuthorValidator>,
 ) {
     const { preparation, run, data } = await requireSourcesPreparation(
         ctx,
@@ -1147,6 +1224,14 @@ export async function completeSources(
             ...need,
             contributions: coveredNeeds.get(need.needId) ?? [],
         })),
+        ...(assessmentAuthor
+            ? {
+                  documentaryAssessment: {
+                      author: assessmentAuthor,
+                      verification: "not_semantically_reviewed" as const,
+                  },
+              }
+            : {}),
         retentionAuthority: "system_mandate" as const,
         policyVersion: SOURCES_PROTOCOL as typeof SOURCES_PROTOCOL,
     };

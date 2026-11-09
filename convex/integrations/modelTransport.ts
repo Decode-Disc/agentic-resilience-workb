@@ -51,6 +51,9 @@ export type AttemptDependencies = {
     fetch?: typeof fetch;
     signal?: AbortSignal;
     onResponse?: (response: ProviderResponse) => void;
+    onHeaders?: (
+        response: Omit<ProviderResponse, "body">,
+    ) => Promise<void> | void;
     beforeDispatch?: AgentGenerationLifecycle["beforeDispatch"];
     onObservation?: (observation: AgentGenerationObservation) => Promise<void>;
 };
@@ -187,7 +190,10 @@ function readOptionalNumber(value: unknown): number | undefined {
 
 /** Shared HTTP bound for both generation engines; redirects cannot issue an unadmitted request. */
 export function createBoundedModelFetch(
-    dependencies: Pick<AttemptDependencies, "fetch" | "onResponse">,
+    dependencies: Pick<
+        AttemptDependencies,
+        "fetch" | "onResponse" | "onHeaders"
+    >,
     state: Pick<
         BoundedTransportState,
         "httpStatus" | "retryAfterAt" | "responseTooLarge"
@@ -199,6 +205,26 @@ export function createBoundedModelFetch(
             redirect: "error",
         });
         state.httpStatus = response.status;
+        try {
+            await dependencies.onHeaders?.({
+                status: response.status,
+                requestId: response.headers.get("x-request-id") ?? undefined,
+                generationId:
+                    response.headers.get("x-generation-id") ?? undefined,
+            });
+        } catch (error) {
+            try {
+                await response.body?.cancel(error);
+            } catch (cancellationError) {
+                const failure = new AggregateError(
+                    [error, cancellationError],
+                    "Provider header observation and response cancellation failed",
+                );
+                Object.defineProperty(failure, "cause", { value: error });
+                throw failure;
+            }
+            throw error;
+        }
         state.retryAfterAt = providerRetryAfterAt(
             response.headers.get("retry-after"),
             Date.now(),

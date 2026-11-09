@@ -147,7 +147,8 @@ export async function assertQualificationAllowance(
                 .lte("leaseExpiresAt", Date.now()),
         )
         .first();
-    if (expired) throw sourcePreparationError("qualification_budget_exhausted");
+    if (expired)
+        throw sourcePreparationError("qualification_outcome_unresolved");
     const kind = qualificationCategory(call);
     for (const [scopedRunId, limits] of [
         [
@@ -168,9 +169,10 @@ export async function assertQualificationAllowance(
     ] as const) {
         const row = await readQualificationUsage(ctx, contextId, scopedRunId);
         if (!row) throw new Error("Qualification usage unavailable");
+        if (row.unknown)
+            throw sourcePreparationError("qualification_outcome_unresolved");
         const ceiling: Partial<CampaignLimits> = limits;
         if (
-            row.unknown ||
             row.overruns ||
             (kind !== "technical" &&
                 row.usage[kind] + 1 > (ceiling[kind] ?? Infinity)) ||

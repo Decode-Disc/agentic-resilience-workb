@@ -10,6 +10,7 @@ import {
 import { researchStartBlock } from "./framingEditAuthority";
 import { requireSavedMaterialScope } from "./savedMaterialInspection";
 import { sha256Hex, stableStringify } from "./sourcePassages";
+import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
 import {
     controlledSourcesContributions,
     readSourcesMission,
@@ -37,7 +38,7 @@ export async function readWorkbenchFacts(
         return { kind: "blocked", code: "context_capacity" };
     let availableMaterials = sources.map((s) => ({
         sourceId: s._id,
-        title: s.title,
+        ...sourceDocumentMetadata(s),
         url: s.canonicalUrl,
     }));
     let captureMetadata: Awaited<

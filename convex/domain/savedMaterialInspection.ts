@@ -25,6 +25,7 @@ import {
 } from "./savedMaterialOperations";
 import { savedMaterialSimulation } from "./savedMaterialSimulation";
 import { readPreparationSourceDecision } from "./sourcePreparationAuthority";
+import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
 
 const MAX_INSPECTED_CAPTURES = 64;
 
@@ -134,7 +135,7 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
             if (source)
                 availableMaterials.push({
                     sourceId: source._id,
-                    title: source.title,
+                    ...sourceDocumentMetadata(source),
                     canonicalUrl: source.canonicalUrl,
                     humanDecision: {
                         decisionId: head.latestDecisionId,

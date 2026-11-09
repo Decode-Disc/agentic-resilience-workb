@@ -165,25 +165,52 @@ const PROVIDER_LEASE_MS = {
 export const observeGeneration = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
-        generationId: v.string(),
+        generationId: v.optional(v.string()),
         httpStatus: v.optional(v.number()),
+        requestId: v.optional(v.string()),
+        diagnostic:
+            schema.tables.providerCalls.validator.fields.transportDiagnostic,
     },
     returns: v.null(),
     handler: async (ctx, args) => {
         const call = await invocationCall(ctx, args.invocationId);
-        if (!/^[\w.:-]{1,256}$/.test(args.generationId))
+        if (
+            (args.generationId !== undefined &&
+                !/^[\w.:-]{1,256}$/.test(args.generationId)) ||
+            (args.requestId !== undefined &&
+                !/^[\w.:-]{1,256}$/.test(args.requestId)) ||
+            (args.httpStatus !== undefined &&
+                (!Number.isInteger(args.httpStatus) ||
+                    args.httpStatus < 100 ||
+                    args.httpStatus > 599)) ||
+            (args.generationId === undefined &&
+                args.httpStatus === undefined &&
+                args.requestId === undefined &&
+                args.diagnostic === undefined)
+        )
             throw new Error("Invalid provider observation");
-        if (call.providerObservation) {
+        if (call.providerObservation?.generationId && args.generationId) {
             if (call.providerObservation.generationId !== args.generationId)
                 throw new Error("Provider generation identity changed");
-            return null;
         }
         await patchQualificationReceipt(ctx, call, {
             providerObservation: {
-                generationId: args.generationId,
-                httpStatus: args.httpStatus,
-                observedAt: Date.now(),
+                ...call.providerObservation,
+                ...(args.generationId
+                    ? { generationId: args.generationId }
+                    : {}),
+                ...(args.httpStatus !== undefined
+                    ? { httpStatus: args.httpStatus }
+                    : {}),
+                ...(args.requestId ? { requestId: args.requestId } : {}),
+                observedAt: call.providerObservation?.observedAt ?? Date.now(),
             },
+            ...(args.diagnostic
+                ? {
+                      transportDiagnostic:
+                          call.transportDiagnostic ?? args.diagnostic,
+                  }
+                : {}),
         });
         return null;
     },
@@ -270,7 +297,7 @@ export const requestBilling = internalMutation({
         if (!invocation?.providerCallId) return null;
         const call = await invocationCall(ctx, args.invocationId);
         if (
-            !call.providerObservation ||
+            !call.providerObservation?.generationId ||
             call.billing ||
             call.reportedCost !== undefined ||
             call.status === "succeeded"
@@ -303,7 +330,7 @@ export const retryBilling = mutation({
         if (!call?.invocationId) return { scheduled: false };
         await invocationCall(ctx, call.invocationId);
         if (
-            !call.providerObservation ||
+            !call.providerObservation?.generationId ||
             !call.billing ||
             !["pending", "unavailable", "checking"].includes(
                 call.billing.state,
@@ -337,7 +364,7 @@ export const claimBilling = internalMutation({
             !call?.invocationId ||
             call.billing?.state !== "pending" ||
             call.billing.attempt + 1 !== args.attempt ||
-            !call.providerObservation
+            !call.providerObservation?.generationId
         )
             return null;
         await invocationCall(ctx, call.invocationId);

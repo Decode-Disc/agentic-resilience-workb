@@ -9,7 +9,11 @@ import {
     agentToolSchemas,
     modelOperationOutcome,
 } from "@convex/execution/agentDefinition";
-import { executionError, executionFailureCode } from "@convex/execution/errors";
+import {
+    executionError,
+    executionFailureCode,
+    protectedDiagnostic,
+} from "@convex/execution/errors";
 import type { AgentGenerationBackend } from "@convex/execution/executionProtocol";
 import { invokeControlledGeneration } from "@convex/execution/invokeAgentModel";
 import { revisionRoute } from "@convex/modelConfiguration";
@@ -195,28 +199,6 @@ export async function runPiMission(
         httpStatus?: number;
         retryAfterAt?: number;
     } = { responseTooLarge: false };
-    const nativeFetch = createBoundedModelFetch(
-        {
-            fetch: async (input, init) => {
-                const origin = await ctx.runQuery(
-                    internal.execution.fixtures.workbenchRelay,
-                    args,
-                );
-                if (!origin) return fetch(input, init);
-                const request = new Request(input, init);
-                if (
-                    request.url !==
-                    "https://openrouter.ai/api/v1/chat/completions"
-                )
-                    throw executionError("evaluation_dossier_not_authorized");
-                request.headers.delete("authorization");
-                return fetch(
-                    new Request(`${origin}/chat/completions`, request),
-                );
-            },
-        },
-        responseState,
-    );
     const registry = createRegistry();
     let harness: Harness;
     let root: Conversation;
@@ -818,6 +800,49 @@ export async function runPiMission(
                     );
                     responseState.httpStatus = undefined;
                     responseState.responseTooLarge = false;
+                    const nativeFetch = createBoundedModelFetch(
+                        {
+                            fetch: async (input, init) => {
+                                const origin = await ctx.runQuery(
+                                    internal.execution.fixtures.workbenchRelay,
+                                    args,
+                                );
+                                if (!origin) return fetch(input, init);
+                                const request = new Request(input, init);
+                                if (
+                                    request.url !==
+                                    "https://openrouter.ai/api/v1/chat/completions"
+                                )
+                                    throw executionError(
+                                        "evaluation_dossier_not_authorized",
+                                    );
+                                request.headers.delete("authorization");
+                                return fetch(
+                                    new Request(
+                                        `${origin}/chat/completions`,
+                                        request,
+                                    ),
+                                );
+                            },
+                            onHeaders: async ({
+                                status,
+                                generationId,
+                                requestId,
+                            }) => {
+                                await lifecycle.observeProvider?.({
+                                    httpStatus: status,
+                                    generationId,
+                                    requestId,
+                                });
+                            },
+                        },
+                        responseState,
+                    );
+                    const generationSignal = AbortSignal.any([
+                        abort.signal,
+                        ...(lifecycle.signal ? [lifecycle.signal] : []),
+                        AbortSignal.timeout(generation.timeout),
+                    ]);
                     const stream = base.streamSimple(
                         model,
                         { ...transcript, messages },
@@ -837,11 +862,7 @@ export async function runPiMission(
                                       ),
                             temperature: generation.temperature,
                             timeoutMs: generation.timeout,
-                            signal: AbortSignal.any([
-                                abort.signal,
-                                ...(lifecycle.signal ? [lifecycle.signal] : []),
-                                AbortSignal.timeout(generation.timeout),
-                            ]),
+                            signal: generationSignal,
                             onProviderStreamEvent: async (data, eventModel) => {
                                 argumentCapture.observe(data);
                                 await options?.onProviderStreamEvent?.(
@@ -903,6 +924,40 @@ export async function runPiMission(
                     );
                     const received = await stream.result();
                     if (preparationCode) return reject(preparationCode);
+                    if (
+                        received.stopReason === "error" ||
+                        received.stopReason === "aborted"
+                    ) {
+                        const cause = new Error(
+                            received.errorMessage ??
+                                "Native generation ended without a confirmed result",
+                        );
+                        if (responseState.responseTooLarge) {
+                            cause.name = "ResponseCapacityError";
+                            cause.message = `Provider response exceeded its byte bound: ${cause.message}`;
+                        } else if (generationSignal.aborted) {
+                            const reason: unknown = generationSignal.reason;
+                            if (reason && typeof reason === "object") {
+                                if (
+                                    "name" in reason &&
+                                    typeof reason.name === "string"
+                                )
+                                    cause.name = reason.name;
+                                if (
+                                    "message" in reason &&
+                                    typeof reason.message === "string"
+                                )
+                                    cause.message = `${reason.message}: ${cause.message}`;
+                            }
+                        }
+                        await lifecycle.observeProvider?.({
+                            httpStatus: responseState.httpStatus,
+                            diagnostic: protectedDiagnostic(
+                                cause,
+                                "provider_transport",
+                            ),
+                        });
+                    }
                     const toolArguments = new Map(
                         received.content.flatMap((c) =>
                             !simulated && c.type === "toolCall"

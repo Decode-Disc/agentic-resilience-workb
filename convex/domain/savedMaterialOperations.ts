@@ -1,6 +1,9 @@
 import { operationResultValidator } from "@convex/execution/operationResults";
 import { type Infer, v } from "convex/values";
-import { sourceMaterialReferenceValidator } from "./sourceRetrievalPolicy";
+import {
+    sourceDocumentMetadataValidator,
+    sourceMaterialReferenceValidator,
+} from "./sourceRetrievalPolicy";
 import { documentaryStatusValidator } from "./sourcesContracts";
 
 export const SAVED_MATERIAL_DEFINITION_ID = "saved_material_inspection_v1";
@@ -95,6 +98,7 @@ export const savedMaterialSchemas = {
 
 const materialFields = {
     ...sourceMaterialReferenceValidator.fields,
+    document: v.optional(sourceDocumentMetadataValidator),
     documentaryStatus: v.optional(documentaryStatusValidator),
 };
 export const searchAvailableMaterialResult = operationResultValidator(

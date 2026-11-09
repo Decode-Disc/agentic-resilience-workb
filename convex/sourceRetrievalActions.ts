@@ -15,6 +15,7 @@ import {
     SOURCE_RETRIEVAL_VERSION,
     type SourcePassageRankIdentity,
     shortRetrievalQuery,
+    sourceDocumentMetadataValidator,
     sourceEmbeddingScopeKey,
 } from "@convex/domain/sourceRetrievalPolicy";
 import {
@@ -597,6 +598,7 @@ const approvedContextReadResult = v.object({
     kind: v.literal("context"),
     captureId: v.id("sourceCaptures"),
     contentHash: v.string(),
+    document: sourceDocumentMetadataValidator,
     captureOmittedPassageCount: v.optional(v.union(v.number(), v.null())),
     passage: v.object({
         ...approvedPassageResult.fields,
@@ -615,6 +617,7 @@ const approvedMaterialReadResult = v.union(
     v.object({
         status: v.literal("ready"),
         kind: v.literal("search"),
+        document: sourceDocumentMetadataValidator,
         captureId: v.id("sourceCaptures"),
         contentHash: v.string(),
         canonicalUrl: v.string(),
@@ -665,7 +668,9 @@ async function readVerifiedCaptureText(
 
 async function ensureApprovedIndex(
     ctx: ActionCtx,
-    allowed: MissionApprovedCapture,
+    allowed: FunctionReturnType<
+        typeof internal.sourceRetrieval.getApprovedCapture
+    >,
     persistBatch: (
         identity: ApprovedIndexIdentity,
         passages: ApprovedIndexPassage[],
@@ -861,6 +866,7 @@ export const readApprovedMaterialForMission = internalAction({
             return {
                 status: "ready",
                 kind: "search",
+                document: current.document,
                 captureId: result.captureId,
                 contentHash: result.contentHash,
                 canonicalUrl: result.canonicalUrl,
@@ -965,6 +971,7 @@ export const readApprovedMaterialForMission = internalAction({
             return {
                 status: "ready",
                 kind: "context",
+                document: current.document,
                 captureId: result.capture.captureId,
                 contentHash: result.capture.contentHash,
                 captureOmittedPassageCount:
