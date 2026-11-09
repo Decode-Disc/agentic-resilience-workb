@@ -392,14 +392,93 @@ export const configurableCampaignManifestSchema = v2.superRefine((m, ctx) => {
                 "Correction paths must be explicit repository paths or directories",
             );
 });
+const analysisAllowanceSchema = z
+    .object({
+        requests: z.number().int().positive().safe(),
+        costMicros: z.number().int().positive().safe(),
+    })
+    .strict();
+export const analysisMandateSchema = z
+    .object({
+        scope: z.literal("evidence_review"),
+        routes: z
+            .array(
+                z
+                    .object({
+                        provider: z.enum(["openai", "opencode-go"]),
+                        model: z.string().min(1).max(200),
+                    })
+                    .strict(),
+            )
+            .min(1)
+            .max(2),
+        perLot: analysisAllowanceSchema,
+        total: analysisAllowanceSchema,
+        maxRequestCostMicros: z.number().int().positive().safe().optional(),
+        maxInputTokens: z.number().int().positive().safe(),
+        maxOutputTokens: z.number().int().positive().safe(),
+        timeoutMs: z
+            .number()
+            .int()
+            .positive()
+            .max(15 * 60 * 1000),
+    })
+    .strict()
+    .superRefine((m, ctx) => {
+        if (
+            m.routes[0]?.provider !== "openai" ||
+            (m.routes[1] && m.routes[1].provider !== "opencode-go")
+        )
+            ctx.addIssue({
+                code: "custom",
+                message:
+                    "Analysis routes must use OpenAI first and OpenCode Go only as fallback",
+            });
+        if (
+            m.maxRequestCostMicros !== undefined &&
+            m.maxRequestCostMicros > m.perLot.costMicros
+        )
+            ctx.addIssue({
+                code: "custom",
+                message: "Request cost exceeds lot allowance",
+            });
+        if (
+            m.perLot.requests > m.total.requests ||
+            m.perLot.costMicros > m.total.costMicros
+        )
+            ctx.addIssue({
+                code: "custom",
+                message: "Per-lot analysis allowance exceeds campaign total",
+            });
+    });
+export const automatedCampaignManifestSchema = v2
+    .extend({
+        version: z.literal(3),
+        analysis: analysisMandateSchema,
+    })
+    .strict()
+    .superRefine(({ analysis: _analysis, ...manifest }, ctx) => {
+        const result = configurableCampaignManifestSchema.safeParse({
+            ...manifest,
+            version: 2,
+        });
+        if (!result.success)
+            for (const issue of result.error.issues)
+                ctx.addIssue({
+                    code: "custom",
+                    message: issue.message,
+                    path: issue.path,
+                });
+    });
 export const campaignManifestSchema = z.union([
     legacyCampaignManifestSchema,
     configurableCampaignManifestSchema,
+    automatedCampaignManifestSchema,
 ]);
 export type CampaignManifest = z.infer<typeof campaignManifestSchema>;
-export type ConfigurableCampaignManifest = z.infer<
-    typeof configurableCampaignManifestSchema
->;
+export type ConfigurableCampaignManifest =
+    | z.infer<typeof configurableCampaignManifestSchema>
+    | z.infer<typeof automatedCampaignManifestSchema>;
 export type QualificationScenario = z.infer<typeof qualificationScenarioSchema>;
 export type QualificationStep = z.infer<typeof qualificationStepSchema>;
 export type QualificationConfiguration = z.infer<
@@ -409,7 +488,7 @@ export type QualificationConfiguration = z.infer<
 export function campaignConfigurations(
     m: CampaignManifest,
 ): QualificationConfiguration[] {
-    return m.version === 2
+    return m.version !== 1
         ? m.configurations
         : [
               {

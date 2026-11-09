@@ -127,7 +127,8 @@ export async function assertQualificationAllowance(
     if (
         !context ||
         !lot ||
-        campaign?.manifest.version !== 2 ||
+        !campaign ||
+        campaign.manifest.version === 1 ||
         !context.paidQualification?.scenarios
     )
         throw new Error("Configurable qualification grant required");

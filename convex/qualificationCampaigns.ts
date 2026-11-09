@@ -28,11 +28,13 @@ const hash = (value: unknown) => sha256Hex(stableStringify(value));
 const keys = ["model", "search", "acquisition", "costUsd"] as const;
 async function owned(ctx: QueryCtx, campaignId: Id<"qualificationCampaigns">) {
     // Status and cleanup remain available after temporary fixture flags are restored.
-    if (
-        !["localhost", "127.0.0.1"].includes(
-            new URL(env.CONVEX_CLOUD_URL).hostname,
-        )
-    )
+    let hostname: string;
+    try {
+        hostname = new URL(env.CONVEX_CLOUD_URL).hostname;
+    } catch {
+        throw new Error("Local campaign configuration invalid");
+    }
+    if (!["localhost", "127.0.0.1"].includes(hostname))
         throw new Error("Local campaign required");
     const campaign = await ctx.db.get(campaignId);
     const invitation = await ctx.db
@@ -132,7 +134,7 @@ export const authorize = internalMutation({
         return ctx.db.insert("qualificationCampaigns", {
             configurationHash,
             configurationHashes:
-                manifest.version === 2 ? configurationHashes : undefined,
+                manifest.version !== 1 ? configurationHashes : undefined,
             key: manifest.key,
             manifest,
             manifestHash,
@@ -186,7 +188,7 @@ export const admit = internalMutation({
             throw new Error("Campaign lot pending reconciliation or review");
         let configurationId: string | undefined;
         let coverage: Doc<"qualificationCoverage"> | null | undefined;
-        if (m.version === 2) {
+        if (m.version !== 1) {
             const entries = await Promise.all(
                 m.configurations.map(async (c) => ({
                     configuration: c,
@@ -349,6 +351,144 @@ export const bind = internalMutation({
         return null;
     },
 });
+export const reserveAnalysis = internalMutation({
+    args: {
+        lotId: v.id("qualificationLots"),
+        attemptKey: v.string(),
+        evidenceHash: v.string(),
+        provider: v.union(v.literal("openai"), v.literal("opencode-go")),
+        model: v.string(),
+        reservationMicros: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const lot = await ctx.db.get(args.lotId);
+        if (!lot) throw new Error("Campaign lot unavailable");
+        const campaign = await owned(ctx, lot.campaignId);
+        const manifest = campaign.manifest;
+        if (args.provider === "opencode-go")
+            throw new Error(
+                "OpenCode Go subscription-only guarantee unverified",
+            );
+        if (
+            manifest.version !== 3 ||
+            campaign.status !== "active" ||
+            manifest.expiresAt <= Date.now() ||
+            campaign.activeLotId !== lot._id ||
+            (lot.status !== "closing" && lot.status !== "review")
+        )
+            throw new Error("Analysis not authorized");
+        if (
+            !/^[a-zA-Z0-9-]{1,100}$/.test(args.attemptKey) ||
+            !/^[a-f0-9]{64}$/.test(args.evidenceHash) ||
+            !Number.isSafeInteger(args.reservationMicros) ||
+            args.reservationMicros < 1 ||
+            !manifest.analysis.routes.some(
+                (route) =>
+                    route.provider === args.provider &&
+                    route.model === args.model,
+            )
+        )
+            throw new Error("Invalid analysis reservation");
+        if (
+            args.reservationMicros !==
+            (manifest.analysis.maxRequestCostMicros ??
+                manifest.analysis.perLot.costMicros)
+        )
+            throw new Error(
+                "Analysis reservation must cover the authorized request bound",
+            );
+        const existing = await ctx.db
+            .query("qualificationAnalysisAttempts")
+            .withIndex("by_lot_and_attempt", (q) =>
+                q.eq("lotId", lot._id).eq("attemptKey", args.attemptKey),
+            )
+            .unique();
+        if (existing) throw new Error("Analysis attempt already reserved");
+        const attempts = await ctx.db
+            .query("qualificationAnalysisAttempts")
+            .withIndex("by_lot_and_attempt", (q) => q.eq("lotId", lot._id))
+            .take(manifest.analysis.perLot.requests + 1);
+        if (
+            attempts.some(
+                (attempt) =>
+                    attempt.status === "reserved" &&
+                    attempt.provider === args.provider &&
+                    attempt.model === args.model,
+            )
+        )
+            throw new Error("Prior analysis dispatch outcome unknown");
+        const total = campaign.analysisAllocated ?? {
+            requests: 0,
+            costMicros: 0,
+        };
+        const used = lot.analysisAllocated ?? { requests: 0, costMicros: 0 };
+        const nextTotal = {
+            requests: total.requests + 1,
+            costMicros: total.costMicros + args.reservationMicros,
+        };
+        const nextLot = {
+            requests: used.requests + 1,
+            costMicros: used.costMicros + args.reservationMicros,
+        };
+        if (
+            !Number.isSafeInteger(nextTotal.costMicros) ||
+            nextTotal.requests > manifest.analysis.total.requests ||
+            nextTotal.costMicros > manifest.analysis.total.costMicros ||
+            nextLot.requests > manifest.analysis.perLot.requests ||
+            nextLot.costMicros > manifest.analysis.perLot.costMicros
+        )
+            throw new Error("Analysis allowance exhausted");
+        await ctx.db.insert("qualificationAnalysisAttempts", {
+            ...args,
+            campaignId: campaign._id,
+            status: "reserved",
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(campaign._id, { analysisAllocated: nextTotal });
+        await ctx.db.patch(lot._id, { analysisAllocated: nextLot });
+        return null;
+    },
+});
+export const settleAnalysis = internalMutation({
+    args: {
+        lotId: v.id("qualificationLots"),
+        attemptKey: v.string(),
+        costMicros: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const lot = await ctx.db.get(args.lotId);
+        if (!lot) throw new Error("Campaign lot unavailable");
+        const campaign = await owned(ctx, lot.campaignId);
+        const attempt = await ctx.db
+            .query("qualificationAnalysisAttempts")
+            .withIndex("by_lot_and_attempt", (q) =>
+                q.eq("lotId", lot._id).eq("attemptKey", args.attemptKey),
+            )
+            .unique();
+        if (
+            !attempt ||
+            !Number.isSafeInteger(args.costMicros) ||
+            args.costMicros < 0
+        )
+            throw new Error("Invalid analysis settlement");
+        if (attempt.status === "settled") {
+            if (attempt.costMicros !== args.costMicros)
+                throw new Error("Analysis settlement conflict");
+            return null;
+        }
+        if (args.costMicros > attempt.reservationMicros)
+            throw new Error("Analysis reservation overrun");
+        if (!campaign.analysisAllocated || !lot.analysisAllocated)
+            throw new Error("Analysis allocation unavailable");
+        await ctx.db.patch(attempt._id, {
+            status: "settled",
+            costMicros: args.costMicros,
+        });
+        return null;
+    },
+});
 export const reconcile = internalMutation({
     args: { lotId: v.id("qualificationLots"), cleanupCompleted: v.boolean() },
     returns: v.object({
@@ -366,7 +506,7 @@ export const reconcile = internalMutation({
             return { reconciled: false, usage: lot.allocation };
         const usage = emptyCampaignLimits();
         if (
-            campaign.manifest.version === 2 &&
+            campaign.manifest.version !== 1 &&
             context?.paidQualification?.scenarios
         ) {
             const retained = await readQualificationUsage(ctx, context._id);
@@ -495,7 +635,7 @@ export const inspect = internalQuery({
             .query("qualificationLots")
             .withIndex("by_campaign", (q) => q.eq("campaignId", campaign._id));
         const page =
-            campaign.manifest.version === 2
+            campaign.manifest.version !== 1
                 ? await query
                       .order("desc")
                       .paginate(
@@ -507,7 +647,7 @@ export const inspect = internalQuery({
             : await query.take(campaign.manifest.maximumLots + 1);
         const candidateHash = campaign.lastCandidateHash;
         const coverage =
-            campaign.manifest.version === 2 && candidateHash
+            campaign.manifest.version !== 1 && candidateHash
                 ? (
                       await Promise.all(
                           campaign.manifest.configurations.map((c) =>

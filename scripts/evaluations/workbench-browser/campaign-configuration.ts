@@ -87,7 +87,7 @@ export async function configureCampaign(
         // A shared catalogue keeps one default; Workbench's existing per-conversation selection carries its own effort.
         const sourcesChoice = profile.models.sources;
         const preference =
-            manifest.version === 2 &&
+            manifest.version !== 1 &&
             role === "workbench" &&
             sourcesChoice?.model === choice.model &&
             sourcesChoice?.provider === choice.provider
@@ -162,7 +162,14 @@ export async function restoreCampaignConfiguration(
     root: string,
 ) {
     if (!existsSync(file(root))) return;
-    const state: Saved = JSON.parse(readFileSync(file(root), "utf8"));
+    let state: Saved;
+    try {
+        state = JSON.parse(readFileSync(file(root), "utf8"));
+    } catch (error) {
+        throw new Error("Retained configuration cannot be restored", {
+            cause: error,
+        });
+    }
     for (const change of [...state.changes].reverse()) {
         if (change.restored) continue;
         const current = await client.query(api.modelConfiguration.list, {});

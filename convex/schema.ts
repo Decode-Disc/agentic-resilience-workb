@@ -183,6 +183,9 @@ export default defineSchema({
         ownerVisitorId: v.id("visitors"),
         status: v.union(v.literal("active"), v.literal("closed")),
         allocated: zodToConvex(campaignLimitsSchema),
+        analysisAllocated: v.optional(
+            v.object({ requests: v.number(), costMicros: v.number() }),
+        ),
         lots: v.number(),
         createdAt: v.number(),
         activeLotId: v.optional(v.id("qualificationLots")),
@@ -196,6 +199,18 @@ export default defineSchema({
         unknown: v.number(),
         overruns: v.number(),
     }).index("by_context_and_run", ["contextId", "runId"]),
+    qualificationAnalysisAttempts: defineTable({
+        campaignId: v.id("qualificationCampaigns"),
+        lotId: v.id("qualificationLots"),
+        attemptKey: v.string(),
+        evidenceHash: v.string(),
+        provider: v.union(v.literal("openai"), v.literal("opencode-go")),
+        model: v.string(),
+        reservationMicros: v.number(),
+        status: v.union(v.literal("reserved"), v.literal("settled")),
+        costMicros: v.optional(v.number()),
+        createdAt: v.number(),
+    }).index("by_lot_and_attempt", ["lotId", "attemptKey"]),
     qualificationCoverage: defineTable({
         campaignId: v.id("qualificationCampaigns"),
         candidateHash: v.string(),
@@ -221,6 +236,9 @@ export default defineSchema({
             v.literal("finished"),
         ),
         allocation: zodToConvex(campaignLimitsSchema),
+        analysisAllocated: v.optional(
+            v.object({ requests: v.number(), costMicros: v.number() }),
+        ),
         createdAt: v.number(),
         contextId: v.optional(v.id("browserTestContexts")),
         contextKey: v.optional(v.string()),

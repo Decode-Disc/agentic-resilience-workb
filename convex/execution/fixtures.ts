@@ -118,7 +118,7 @@ async function requireCampaignScenarios(
     const { campaign } = await requireCampaignLot(ctx, context.campaignLotId);
     const m = campaign.manifest;
     if (
-        m.version !== 2 ||
+        m.version === 1 ||
         dossiers.length !== m.scenarios.length ||
         new Set(dossiers.map((d) => d.runId)).size !== dossiers.length ||
         new Set(dossiers.map((d) => d.scenarioId)).size !== dossiers.length
@@ -224,7 +224,7 @@ export const activateValidation = internalMutation({
             )
                 throw new Error("Fixture backend configuration conflict");
             if (
-                !!args.largeJournal !==
+                Boolean(args.largeJournal) !==
                 (existing.blockCode === "fixture_inspection_only")
             )
                 throw new Error("Fixture journal configuration conflict");
@@ -550,14 +550,17 @@ export const inspect = internalQuery({
         const quoted = requests.find(
             (request) => request.input.kind === "read_in_context",
         );
-        const quotation =
-            quoted?.outcome?.kind === "success"
-                ? (
-                      JSON.parse(quoted.outcome.valueJson) as {
-                          passage?: { exactQuote?: string };
-                      }
-                  ).passage?.exactQuote
-                : undefined;
+        let quotation: string | undefined;
+        if (quoted?.outcome?.kind === "success") {
+            try {
+                const parsed = JSON.parse(quoted.outcome.valueJson) as {
+                    passage?: { exactQuote?: string };
+                };
+                quotation = parsed.passage?.exactQuote;
+            } catch {
+                throw new Error("Invalid retained simulation result");
+            }
+        }
         const turn = mission.conversationTurnId
             ? await ctx.db.get(mission.conversationTurnId)
             : null;
@@ -782,7 +785,7 @@ export const authorizeWorkbenchQualification = internalMutation({
             ? await requireCampaignLot(ctx, context.campaignLotId)
             : null;
         const configurable =
-            scope?.campaign.manifest.version === 2
+            scope && scope.campaign.manifest.version !== 1
                 ? scope.campaign.manifest
                 : null;
         const dossierEntries =
@@ -819,8 +822,14 @@ export const authorizeWorkbenchQualification = internalMutation({
             !/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(args.relayOrigin)
         )
             throw new Error("Invalid qualification relay origin");
-        if (args.relayOrigin && new URL(args.relayOrigin).port === "")
-            throw new Error("Invalid qualification relay origin");
+        if (args.relayOrigin) {
+            try {
+                if (new URL(args.relayOrigin).port === "")
+                    throw new Error("Invalid qualification relay origin");
+            } catch {
+                throw new Error("Invalid qualification relay origin");
+            }
+        }
         if (
             run.researchStartedAt !== undefined ||
             !["framing", "awaiting_source_review"].includes(run.lifecycleState)
@@ -1022,13 +1031,13 @@ export const authorizeWorkbenchQualification = internalMutation({
                 }),
             );
             const expectedHash =
-                m.version === 2
+                m.version !== 1
                     ? campaign.configurationHashes?.find(
                           (c) => c.id === lot.configurationId,
                       )?.hash
                     : campaign.configurationHash;
             if (
-                (m.version === 2 && !expectedHash) ||
+                (m.version !== 1 && !expectedHash) ||
                 (expectedHash && expectedHash !== configurationHash)
             )
                 throw new Error("Campaign route or price drift");
