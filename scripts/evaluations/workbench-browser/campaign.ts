@@ -2,15 +2,20 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import {
+    closeSync,
+    constants,
     cpSync,
     existsSync,
+    fstatSync,
     mkdirSync,
+    openSync,
     readdirSync,
     readFileSync,
+    readSync,
     writeFileSync,
 } from "node:fs";
 import type { Server } from "node:http";
-import { join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { type Browser, chromium, expect, type Page } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
 import {
@@ -28,7 +33,10 @@ import {
     campaignManifestSchema,
 } from "../../../convex/qualificationCampaignPolicy.ts";
 import { initialFixtureContent } from "../../../convex/qualificationInitialFixtures.ts";
-import { resolveLocalRuntime } from "../../local-runtime.ts";
+import {
+    type RuntimeOrigins,
+    resolveLocalRuntime,
+} from "../../local-runtime.ts";
 import {
     configureCampaign,
     prepareCampaignModels,
@@ -65,7 +73,13 @@ function ref<R extends FunctionReference<"query" | "mutation", "internal">>(
         FunctionReturnType<R>
     >(getFunctionName(r));
 }
-const read = (path: string): unknown => JSON.parse(readFileSync(path, "utf8"));
+function read(path: string) {
+    try {
+        return JSON.parse(readFileSync(path, "utf8"));
+    } catch (error) {
+        throw new Error("Retained campaign data is invalid", { cause: error });
+    }
+}
 const save = (root: string, name: string, value: unknown) =>
     writeFileSync(
         join(root, `${name}.json`),
@@ -94,6 +108,8 @@ export function campaignReviewTemplate(
     const collect = (directory: string) => {
         for (const item of readdirSync(directory, { withFileTypes: true })) {
             const path = join(directory, item.name);
+            if (directory === root && item.name.startsWith("automated-review-"))
+                continue;
             if (item.isDirectory()) collect(path);
             else if (
                 !item.name.startsWith("assessment-") &&
@@ -192,9 +208,300 @@ export function campaignReviewTemplate(
     return template;
 }
 
-/** Appends an assessment; a mechanical success cannot fill missing semantic judgments. */
-export function assessCampaignLot(root: string, review: unknown) {
+function readIndexedEvidence(
+    root: string,
+    evidenceIndex: Record<string, string>,
+    path: string,
+    maxBytes: number,
+) {
+    assert(
+        typeof path === "string" &&
+            !isAbsolute(path) &&
+            path
+                .split(sep)
+                .every(
+                    (part) => part !== "" && part !== "." && part !== "..",
+                ) &&
+            Object.hasOwn(evidenceIndex, path),
+        "Invalid indexed review evidence reference",
+    );
+    assert(
+        process.platform === "linux",
+        "Race-safe evidence reading requires Linux",
+    );
+    const descriptors: number[] = [];
+    let fd: number;
+    try {
+        let directory = openSync(
+            sep,
+            constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+        );
+        descriptors.push(directory);
+        for (const part of resolve(root).split(sep).filter(Boolean)) {
+            directory = openSync(
+                `/proc/self/fd/${directory}/${part}`,
+                constants.O_RDONLY |
+                    constants.O_DIRECTORY |
+                    constants.O_NOFOLLOW,
+            );
+            descriptors.push(directory);
+        }
+        const parts = path.split(sep);
+        for (const part of parts.slice(0, -1)) {
+            directory = openSync(
+                `/proc/self/fd/${directory}/${part}`,
+                constants.O_RDONLY |
+                    constants.O_DIRECTORY |
+                    constants.O_NOFOLLOW,
+            );
+            descriptors.push(directory);
+        }
+        fd = openSync(
+            `/proc/self/fd/${directory}/${parts.at(-1)}`,
+            constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+        );
+        descriptors.push(fd);
+        const stat = fstatSync(fd);
+        assert(stat.isFile(), "Invalid review evidence file");
+        assert(stat.size <= maxBytes, "Review evidence byte limit exceeded");
+        const buffer = Buffer.allocUnsafe(stat.size + 1);
+        let length = 0;
+        while (length < buffer.length) {
+            const count = readSync(
+                fd,
+                buffer,
+                length,
+                buffer.length - length,
+                null,
+            );
+            if (count === 0) break;
+            length += count;
+        }
+        assert(length <= maxBytes, "Review evidence byte limit exceeded");
+        const content = buffer.subarray(0, length);
+        assert.equal(
+            sha256(content),
+            evidenceIndex[path],
+            "Stale review evidence",
+        );
+        return content;
+    } catch (error) {
+        if (
+            error instanceof Error &&
+            "code" in error &&
+            (error.code === "ELOOP" || error.code === "ENOTDIR")
+        )
+            throw new Error("Invalid review evidence path or symlink", {
+                cause: error,
+            });
+        throw error;
+    } finally {
+        for (let i = descriptors.length - 1; i >= 0; i--) {
+            const descriptor = descriptors[i];
+            if (descriptor !== undefined) closeSync(descriptor);
+        }
+    }
+}
+
+function writeSnapshotFile(root: string, path: string, content: Buffer) {
+    assert(
+        process.platform === "linux",
+        "Race-safe evidence snapshots require Linux",
+    );
+    const descriptors: number[] = [];
+    try {
+        let directory = openSync(
+            sep,
+            constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+        );
+        descriptors.push(directory);
+        for (const part of resolve(root).split(sep).filter(Boolean)) {
+            directory = openSync(
+                `/proc/self/fd/${directory}/${part}`,
+                constants.O_RDONLY |
+                    constants.O_DIRECTORY |
+                    constants.O_NOFOLLOW,
+            );
+            descriptors.push(directory);
+        }
+        const parts = path.split(sep);
+        for (const part of parts.slice(0, -1)) {
+            const next = `/proc/self/fd/${directory}/${part}`;
+            try {
+                mkdirSync(next, { mode: 0o700 });
+            } catch (error) {
+                if (
+                    !(
+                        error instanceof Error &&
+                        "code" in error &&
+                        error.code === "EEXIST"
+                    )
+                )
+                    throw error;
+            }
+            directory = openSync(
+                next,
+                constants.O_RDONLY |
+                    constants.O_DIRECTORY |
+                    constants.O_NOFOLLOW,
+            );
+            descriptors.push(directory);
+        }
+        const destination = `/proc/self/fd/${directory}/${parts.at(-1)}`;
+        let fd: number;
+        try {
+            fd = openSync(
+                destination,
+                constants.O_WRONLY |
+                    constants.O_CREAT |
+                    constants.O_EXCL |
+                    constants.O_NOFOLLOW,
+                0o600,
+            );
+        } catch (error) {
+            if (
+                !(
+                    error instanceof Error &&
+                    "code" in error &&
+                    error.code === "EEXIST"
+                )
+            )
+                throw error;
+            const existing = readIndexedEvidence(
+                root,
+                { [path]: sha256(content) },
+                path,
+                content.length,
+            );
+            assert.deepEqual(
+                existing,
+                content,
+                "Incomplete evidence snapshot changed",
+            );
+            return;
+        }
+        descriptors.push(fd);
+        writeFileSync(fd, content, { flush: true });
+    } catch (error) {
+        if (
+            error instanceof Error &&
+            "code" in error &&
+            (error.code === "ELOOP" || error.code === "ENOTDIR")
+        )
+            throw new Error("Invalid review evidence path or symlink", {
+                cause: error,
+            });
+        throw error;
+    } finally {
+        for (let i = descriptors.length - 1; i >= 0; i--) {
+            const fd = descriptors[i];
+            if (fd !== undefined) closeSync(fd);
+        }
+    }
+}
+
+function reviewEvidenceIndex(root: string, evidenceHash: string) {
+    assert(/^[a-f0-9]{64}$/.test(evidenceHash), "Invalid evidence revision");
+    const index = read(
+        join(root, `evidence-index-${evidenceHash}.json`),
+    ) as Record<string, string>;
+    assert.equal(candidateHash(index), evidenceHash, "Stale evidence index");
+    return index;
+}
+
+/** Lists a bounded page of paths in a frozen evidence index. */
+export function listCampaignReviewEvidence(
+    root: string,
+    evidenceHash: string,
+    cursor = 0,
+    limit = 50,
+) {
+    assert(
+        Number.isSafeInteger(cursor) &&
+            cursor >= 0 &&
+            Number.isSafeInteger(limit) &&
+            limit > 0 &&
+            limit <= 100,
+        "Invalid evidence inventory range",
+    );
+    const paths = Object.keys(reviewEvidenceIndex(root, evidenceHash)).sort();
+    assert(cursor <= paths.length, "Invalid evidence inventory range");
+    const end = Math.min(paths.length, cursor + limit);
+    return {
+        paths: paths.slice(cursor, end),
+        nextCursor: end < paths.length ? end : null,
+    };
+}
+
+/** Reads a bounded UTF-8 window after verifying the entire frozen file. */
+export function readCampaignReviewEvidenceWindow(
+    root: string,
+    evidenceHash: string,
+    path: string,
+    offset = 0,
+    maxBytes = 8192,
+) {
+    assert(
+        Number.isSafeInteger(offset) &&
+            offset >= 0 &&
+            Number.isSafeInteger(maxBytes) &&
+            maxBytes >= 4 &&
+            maxBytes <= 50 * 1024,
+        "Invalid evidence window",
+    );
+    const content = readIndexedEvidence(
+        root,
+        reviewEvidenceIndex(root, evidenceHash),
+        path,
+        64 * 1024 * 1024,
+    );
+    assert(
+        offset <= content.length &&
+            (offset === content.length ||
+                (content.readUInt8(offset) & 0xc0) !== 0x80),
+        "Invalid evidence window offset",
+    );
+    let end = Math.min(content.length, offset + maxBytes);
+    while (end < content.length && (content.readUInt8(end) & 0xc0) === 0x80)
+        end--;
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(
+        content.subarray(offset, end),
+    );
+    return { content: text, nextOffset: end, totalBytes: content.length };
+}
+
+/** Reads only bytes retained in the selected, hash-bound evidence revision. */
+export function readCampaignReviewEvidence(
+    root: string,
+    evidenceHash: string,
+    path: string,
+    maxBytes: number,
+) {
+    assert(
+        Number.isSafeInteger(maxBytes) && maxBytes > 0,
+        "Invalid evidence byte limit",
+    );
+    return readIndexedEvidence(
+        root,
+        reviewEvidenceIndex(root, evidenceHash),
+        path,
+        maxBytes,
+    ).toString("utf8");
+}
+
+/** Validates review judgments against the selected evidence revision. */
+export function validateCampaignReview(
+    root: string,
+    review: unknown,
+    options: { reviewer?: "automated" } = {},
+) {
     const expected = campaignReviewTemplate(root);
+    const evidenceIndex =
+        options.reviewer === "automated"
+            ? (read(
+                  join(root, `evidence-index-${expected.evidenceHash}.json`),
+              ) as Record<string, string>)
+            : undefined;
     assert(
         review && typeof review === "object" && "cases" in review,
         "Review required",
@@ -225,12 +532,22 @@ export function assessCampaignLot(root: string, review: unknown) {
             Array.isArray(item.evidence) && item.evidence.length > 0,
             "Evidence references required",
         );
-        for (const path of item.evidence)
+        for (const path of item.evidence) {
             assert(
-                !relative(root, resolve(root, path)).startsWith("..") &&
+                typeof path === "string" &&
+                    !relative(root, resolve(root, path)).startsWith("..") &&
                     existsSync(resolve(root, path)),
                 "Invalid review evidence reference",
             );
+            if (evidenceIndex) {
+                readIndexedEvidence(
+                    root,
+                    evidenceIndex,
+                    path,
+                    Number.MAX_SAFE_INTEGER,
+                );
+            }
+        }
         assert(
             Object.values(item.checks).every((v) =>
                 ["passed", "failed", "inconclusive"].includes(v),
@@ -238,6 +555,132 @@ export function assessCampaignLot(root: string, review: unknown) {
             "Invalid review verdict",
         );
     }
+    return input;
+}
+
+/** Retains a simulated review intent without dispatching when cleanup is incomplete. */
+export function runSimulatedCampaignReview(
+    root: string,
+    options: {
+        evidenceHash: string;
+        review?: unknown;
+        simulatedOutcome?: "unknown";
+    },
+) {
+    const expected = campaignReviewTemplate(root);
+    assert.equal(
+        options.evidenceHash,
+        expected.evidenceHash,
+        "Stale campaign review",
+    );
+    const mechanical = read(join(root, "campaign-result.json")) as {
+        completed: boolean;
+        cleanupCompleted: boolean;
+        evidenceCaptureFailed?: boolean;
+    };
+    const intent = {
+        kind: "simulated",
+        evidenceHash: expected.evidenceHash,
+        candidateHash: expected.candidateHash,
+        batteryHash: expected.batteryHash,
+    };
+    const intentPath = join(root, "automated-review-intent.json");
+    if (existsSync(intentPath)) {
+        assert.deepEqual(
+            read(intentPath),
+            intent,
+            "Simulated review intent changed",
+        );
+    } else {
+        writeFileSync(intentPath, `${JSON.stringify(intent, null, 2)}\n`, {
+            flag: "wx",
+            mode: 0o600,
+            flush: true,
+        });
+    }
+    const attemptPath = join(root, "automated-review-attempt.json");
+    if (existsSync(attemptPath)) {
+        return {
+            status: "pending" as const,
+            reason: "unknown_dispatch_outcome",
+        };
+    }
+    if (
+        mechanical.cleanupCompleted &&
+        !mechanical.evidenceCaptureFailed &&
+        options.simulatedOutcome === "unknown"
+    ) {
+        writeFileSync(
+            attemptPath,
+            `${JSON.stringify({ evidenceHash: expected.evidenceHash, state: "dispatched", route: "simulated" })}\n`,
+            { flag: "wx", mode: 0o600, flush: true },
+        );
+        return {
+            status: "pending" as const,
+            reason: "unknown_dispatch_outcome",
+        };
+    }
+    if (
+        mechanical.cleanupCompleted &&
+        !mechanical.evidenceCaptureFailed &&
+        options.review !== undefined
+    ) {
+        const review = validateCampaignReview(root, options.review, {
+            reviewer: "automated",
+        });
+        const result = { status: "completed" as const, review };
+        const resultPath = join(root, "automated-review-result.json");
+        if (existsSync(resultPath)) {
+            assert.deepEqual(
+                read(resultPath),
+                result,
+                "Simulated review result changed",
+            );
+        } else {
+            writeFileSync(resultPath, `${JSON.stringify(result, null, 2)}\n`, {
+                flag: "wx",
+                mode: 0o600,
+                flush: true,
+            });
+        }
+        return result;
+    }
+    const result = {
+        status: "pending" as const,
+        reason:
+            !mechanical.cleanupCompleted || mechanical.evidenceCaptureFailed
+                ? "incomplete_evidence_or_cleanup"
+                : "simulated_dispatch_not_implemented",
+    };
+    const statusPath = join(root, "automated-review-status.jsonl");
+    const entry = `${JSON.stringify(result)}\n`;
+    if (!existsSync(statusPath)) {
+        writeFileSync(statusPath, entry, {
+            flag: "wx",
+            mode: 0o600,
+            flush: true,
+        });
+    } else {
+        assert.equal(
+            readFileSync(statusPath, "utf8"),
+            entry,
+            "Simulated review status changed",
+        );
+    }
+    return result;
+}
+
+/** Appends an assessment; a mechanical success cannot fill missing semantic judgments. */
+export function assessCampaignLot(
+    root: string,
+    review: unknown,
+    options: { reviewer?: "automated"; evidenceRoot?: string } = {},
+) {
+    const input = validateCampaignReview(
+        options.evidenceRoot ?? root,
+        review,
+        options,
+    );
     const mechanical = read(join(root, "campaign-result.json")) as {
         completed: boolean;
         cleanupCompleted: boolean;
@@ -257,7 +700,7 @@ export function assessCampaignLot(root: string, review: unknown) {
     const assessment = {
         ...input,
         verdict,
-        reviewer: "development_agent",
+        reviewer: options.reviewer ?? "development_agent",
         modelTaskQuality: "limited_to_declared_expectations",
     };
     const assessmentHash = sha256(JSON.stringify(assessment));
@@ -268,6 +711,164 @@ export function assessCampaignLot(root: string, review: unknown) {
             mode: 0o600,
         });
     return { assessmentHash, verdict, path };
+}
+
+/** Retains one evidence-bound review and hands it off only after reconciliation. */
+export async function runCampaignReviewStage(options: {
+    root: string;
+    evidenceHash: string;
+    reconciled: boolean;
+    review?: (
+        evidenceRoot: string,
+    ) => Promise<
+        | { status: "pending"; reason: string }
+        | { status: "completed"; review: unknown }
+    >;
+    assess: (assessment: ReturnType<typeof assessCampaignLot>) => Promise<void>;
+}) {
+    const { root, evidenceHash } = options;
+    assert(/^[a-f0-9]{64}$/.test(evidenceHash), "Invalid evidence revision");
+    const path = join(root, "automated-review-result.json");
+    const receiptPath = join(root, "automated-review-assessment.json");
+    assert(
+        !existsSync(receiptPath) || existsSync(path),
+        "Automated assessment receipt without review",
+    );
+    if (!existsSync(path) && !options.review) {
+        const result = {
+            status: "pending" as const,
+            reason: "transport_unqualified",
+        };
+        save(root, "automated-review-status", result);
+        return result;
+    }
+    const evidenceRoot = join(
+        root,
+        `automated-review-evidence-${evidenceHash}`,
+    );
+    const complete = join(evidenceRoot, ".complete");
+    if (!existsSync(complete)) {
+        const index = read(
+            join(root, `evidence-index-${evidenceHash}.json`),
+        ) as Record<string, string>;
+        assert.equal(
+            candidateHash(index),
+            evidenceHash,
+            "Stale evidence index",
+        );
+        mkdirSync(evidenceRoot, { recursive: true, mode: 0o700 });
+        let total = 0;
+        for (const file of Object.keys(index)) {
+            const bytes = readIndexedEvidence(
+                root,
+                index,
+                file,
+                64 * 1024 * 1024,
+            );
+            total += bytes.length;
+            assert(
+                total <= 256 * 1024 * 1024,
+                "Review evidence snapshot limit exceeded",
+            );
+            writeSnapshotFile(evidenceRoot, file, bytes);
+        }
+        const template = read(
+            join(root, `review-template-${evidenceHash}.json`),
+        );
+        for (const [name, value] of [
+            [`evidence-index-${evidenceHash}.json`, index],
+            ["review-template.json", template],
+        ] as const) {
+            writeSnapshotFile(
+                evidenceRoot,
+                name,
+                Buffer.from(JSON.stringify(value)),
+            );
+        }
+        writeSnapshotFile(evidenceRoot, ".complete", Buffer.from(evidenceHash));
+    }
+    assert.equal(
+        readFileSync(complete, "utf8"),
+        evidenceHash,
+        "Invalid review evidence snapshot",
+    );
+    let review: unknown;
+    if (existsSync(path)) {
+        const retained = read(path) as {
+            kind: string;
+            evidenceHash: string;
+            review: unknown;
+        };
+        assert.equal(
+            retained.kind,
+            "automated",
+            "Automated review result conflict",
+        );
+        assert.equal(
+            retained.evidenceHash,
+            evidenceHash,
+            "Automated review evidence changed",
+        );
+        review = retained.review;
+    } else {
+        const result = options.review
+            ? await options.review(evidenceRoot)
+            : { status: "pending" as const, reason: "transport_unqualified" };
+        if (result.status === "pending") {
+            save(root, "automated-review-status", result);
+            return result;
+        }
+        const validatedReview = validateCampaignReview(
+            evidenceRoot,
+            result.review,
+            {
+                reviewer: "automated",
+            },
+        );
+        assert.equal(
+            validatedReview.evidenceHash,
+            evidenceHash,
+            "Automated review evidence changed",
+        );
+        review = validatedReview;
+        writeFileSync(
+            path,
+            `${JSON.stringify({ kind: "automated", evidenceHash, review }, null, 2)}\n`,
+            { flag: "wx", mode: 0o600, flush: true },
+        );
+    }
+    const validated = validateCampaignReview(evidenceRoot, review, {
+        reviewer: "automated",
+    });
+    assert.equal(
+        validated.evidenceHash,
+        evidenceHash,
+        "Automated review evidence changed",
+    );
+    if (!options.reconciled)
+        return { status: "awaiting_reconciliation" as const };
+    const assessment = assessCampaignLot(root, validated, {
+        reviewer: "automated",
+        evidenceRoot,
+    });
+    if (existsSync(receiptPath)) {
+        assert.deepEqual(
+            read(receiptPath),
+            {
+                assessmentHash: assessment.assessmentHash,
+                verdict: assessment.verdict,
+            },
+            "Automated assessment conflict",
+        );
+    } else {
+        await options.assess(assessment);
+        writeFileSync(
+            receiptPath,
+            `${JSON.stringify({ assessmentHash: assessment.assessmentHash, verdict: assessment.verdict })}\n`,
+            { flag: "wx", mode: 0o600, flush: true },
+        );
+    }
+    return { status: "assessed" as const, assessment };
 }
 
 /** Closes the fenced context completely; inspection page size cannot limit campaign cleanup. */
@@ -300,6 +901,15 @@ type WorkbenchRunner = (options: {
     campaignLotId?: Id<"qualificationLots">;
     maximumCostUsd?: number;
 }) => Promise<void>;
+type CampaignBoundaries = {
+    reviewTransport?: import("./campaign-review.ts").CampaignReviewTransport;
+    connect?: () => Promise<{
+        client: ConvexHttpClient;
+        origins: RuntimeOrigins;
+    }>;
+    archive?: (root: string, name: string) => void;
+};
+
 async function executeCampaign(
     action: string,
     output: string,
@@ -310,6 +920,7 @@ async function executeCampaign(
         configuration?: string;
     },
     runWorkbench?: WorkbenchRunner,
+    boundaries: CampaignBoundaries = {},
 ) {
     assert(
         ["prepare", "authorize", "run", "status", "assess", "close"].includes(
@@ -335,7 +946,7 @@ async function executeCampaign(
             input &&
             typeof input === "object" &&
             "version" in input &&
-            input.version === 2
+            (input.version === 2 || input.version === 3)
         ) {
             let values = { executionSurface: "backend", ...input } as Record<
                 string,
@@ -411,7 +1022,7 @@ async function executeCampaign(
             };
         }
         const manifest = campaignManifestSchema.parse(resolvedInput);
-        if (manifest.version === 2) {
+        if (manifest.version !== 1) {
             for (const scenario of manifest.scenarios)
                 if (scenario.initialFixture)
                     assert.equal(
@@ -446,21 +1057,30 @@ async function executeCampaign(
     if (action === "run" && options.configuration)
         campaignConfiguration(manifest, options.configuration);
     const backend =
-        manifest.version === 2 && manifest.executionSurface === "backend";
-    const runtime = await resolveLocalRuntime(process.cwd(), {
-        requiredOrigins: ["convex"],
-        verificationScope: backend ? "required" : "all",
-    });
+        manifest.version !== 1 && manifest.executionSurface === "backend";
+    const connection = boundaries.connect
+        ? await boundaries.connect()
+        : await (async () => {
+              const runtime = await resolveLocalRuntime(process.cwd(), {
+                  requiredOrigins: ["convex"],
+                  verificationScope: backend ? "required" : "all",
+              });
+              const client = new ConvexHttpClient(runtime.origins.convex, {
+                  logger: false,
+              });
+              const config = read(".convex/local/default/config.json") as {
+                  adminKey: string;
+              };
+              (
+                  client as ConvexHttpClient & {
+                      setAdminAuth(key: string): void;
+                  }
+              ).setAdminAuth(config.adminKey);
+              return { client, origins: runtime.origins };
+          })();
+    const runtime = { origins: connection.origins };
     const web = runtime.origins.web;
-    const client = new ConvexHttpClient(runtime.origins.convex, {
-        logger: false,
-    });
-    const config = read(".convex/local/default/config.json") as {
-        adminKey: string;
-    };
-    (
-        client as ConvexHttpClient & { setAdminAuth(key: string): void }
-    ).setAdminAuth(config.adminKey);
+    const client = connection.client;
     const command = (args: string[]) => {
         const result = spawnSync(
             process.execPath,
@@ -505,9 +1125,100 @@ async function executeCampaign(
             lots: lots.sort((a, b) => a.createdAt - b.createdAt),
         };
     };
+    const reviewLot = async (
+        lot: {
+            _id: Id<"qualificationLots">;
+            key: string;
+            candidateHash: string;
+        },
+        reconciled: boolean,
+        evidenceHash?: string,
+    ) => {
+        const lotRoot = join(root, "lots", lot.key);
+        const captured = read(join(lotRoot, "campaign-lot.json")) as {
+            manifest: CampaignManifest;
+            candidateHash: string;
+        };
+        assert.deepEqual(
+            captured.manifest,
+            manifest,
+            "Captured review mandate changed",
+        );
+        assert.equal(
+            captured.candidateHash,
+            lot.candidateHash,
+            "Captured review candidate differs from authorized lot",
+        );
+        const retainedPath = join(lotRoot, "automated-review-result.json");
+        const revision = existsSync(retainedPath)
+            ? (read(retainedPath) as { evidenceHash: string }).evidenceHash
+            : (evidenceHash ?? campaignReviewTemplate(lotRoot).evidenceHash);
+        assert(revision, "Review evidence revision unavailable");
+        assert(state.campaignId, "Authorized campaign required");
+        const campaignId = state.campaignId;
+        const { runAccountableCampaignReview } = await import(
+            "./campaign-review.ts"
+        );
+        const review = (evidenceRoot: string) =>
+            runAccountableCampaignReview({
+                root: lotRoot,
+                evidenceRoot,
+                template: campaignReviewTemplate(evidenceRoot),
+                manifest,
+                campaignId,
+                lotId: lot._id,
+                client,
+                transport: boundaries.reviewTransport,
+            });
+        if (!boundaries.reviewTransport && !existsSync(retainedPath)) {
+            const pending = await review(lotRoot);
+            save(lotRoot, "automated-review-status", pending);
+            return pending;
+        }
+        return runCampaignReviewStage({
+            root: lotRoot,
+            evidenceHash: revision,
+            reconciled,
+            review,
+            assess: async (assessment) => {
+                const name =
+                    `campaign-${manifest.key}-${lot.key}-assessment`.slice(
+                        0,
+                        64,
+                    );
+                if (boundaries.archive) boundaries.archive(lotRoot, name);
+                else {
+                    const archived = spawnSync(
+                        "pnpm",
+                        [
+                            "evaluation:archive",
+                            "--name",
+                            name,
+                            "--external",
+                            `qualification=${lotRoot}`,
+                        ],
+                        { encoding: "utf8", timeout: 120000 },
+                    );
+                    assert.equal(
+                        archived.status,
+                        0,
+                        "Assessment archive failed; retained evidence is unchanged",
+                    );
+                }
+                await client.mutation(
+                    ref(internal.qualificationCampaigns.assess),
+                    {
+                        lotId: lot._id,
+                        assessmentHash: assessment.assessmentHash,
+                        verdict: assessment.verdict,
+                    },
+                );
+            },
+        });
+    };
     const verifyBattery = () =>
         assert.equal(
-            manifest.version === 2
+            manifest.version !== 1
                 ? sha256(JSON.stringify(manifest.scenarios))
                 : sha256(readFileSync(batteryPath(manifest))),
             manifest.batteryHash,
@@ -581,6 +1292,62 @@ async function executeCampaign(
                   ? 2
                   : 1;
         return;
+    }
+    if (
+        manifest.version === 3 &&
+        existingCampaign &&
+        ["run", "close"].includes(action)
+    ) {
+        const pending =
+            existingCampaign.lots.find(
+                (lot) =>
+                    lot._id === existingCampaign.campaign.activeLotId &&
+                    lot.status === "review",
+            ) ??
+            [...existingCampaign.lots]
+                .reverse()
+                .find(
+                    (lot) =>
+                        lot.status === "finished" &&
+                        existsSync(
+                            join(
+                                root,
+                                "lots",
+                                lot.key,
+                                "automated-review-result.json",
+                            ),
+                        ) &&
+                        !existsSync(
+                            join(
+                                root,
+                                "lots",
+                                lot.key,
+                                "automated-review-assessment.json",
+                            ),
+                        ),
+                );
+        if (pending) {
+            assert.deepEqual(
+                manifest,
+                existingCampaign.campaign.manifest,
+                "Local mandate differs from the server authorization",
+            );
+            const result = await reviewLot(pending, true);
+            if (action === "close")
+                await client.mutation(
+                    ref(internal.qualificationCampaigns.close),
+                    { campaignId: existingCampaign.campaign._id },
+                );
+            process.exitCode =
+                result.status === "assessed"
+                    ? result.assessment.verdict === "passed"
+                        ? 0
+                        : result.assessment.verdict === "failed"
+                          ? 1
+                          : 2
+                    : 2;
+            return;
+        }
     }
     let recovering = false;
     if (action === "close" && state.campaignId)
@@ -908,7 +1675,7 @@ async function executeCampaign(
             );
         }
         assert(!interrupted, "Campaign interrupted before dispatch");
-        if (manifest.version === 2) {
+        if (manifest.version !== 1) {
             assert(lot?.configurationId, "Declared configuration required");
             save(lotRoot, "protocol", {
                 version: 3,
@@ -1040,7 +1807,7 @@ async function executeCampaign(
         }
         if (lotRoot && existsSync(join(lotRoot, "prepared.json"))) {
             try {
-                if (manifest.version === 2)
+                if (manifest.version !== 1)
                     await inspectCampaignScenarios(client, lotRoot);
                 else await sourcesQualificationPhase("inspect", lotRoot);
             } catch {
@@ -1203,13 +1970,13 @@ async function executeCampaign(
                     "Campaign archive failed; original evidence retained",
                 );
             }
-            save(
-                lotRoot,
-                "review-template",
-                campaignReviewTemplate(lotRoot, {
-                    recovery: recovering || action === "close",
-                }),
-            );
+            const template = campaignReviewTemplate(lotRoot, {
+                recovery: recovering || action === "close",
+            });
+            save(lotRoot, "review-template", template);
+            if (manifest.version === 3) {
+                await reviewLot(lot, result.reconciled, template.evidenceHash);
+            }
         }
         if (!cleanupCompleted || failure) process.exitCode = 1;
     }
@@ -1547,14 +2314,27 @@ export async function runCampaign(
         configuration?: string;
     },
     runWorkbench?: WorkbenchRunner,
+    boundaries: CampaignBoundaries = {},
 ) {
     if (["prepare", "status"].includes(action))
-        return executeCampaign(action, output, options, runWorkbench);
+        return executeCampaign(
+            action,
+            output,
+            options,
+            runWorkbench,
+            boundaries,
+        );
     const release = await acquireCampaignLock(
         join(process.cwd(), ".local-runtime", "workbench-qualification.lock"),
     );
     try {
-        await executeCampaign(action, output, options, runWorkbench);
+        await executeCampaign(
+            action,
+            output,
+            options,
+            runWorkbench,
+            boundaries,
+        );
     } finally {
         await release();
     }

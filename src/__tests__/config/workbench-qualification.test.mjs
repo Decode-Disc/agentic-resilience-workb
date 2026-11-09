@@ -40,6 +40,101 @@ test("resuming an unfinished scenario preserves its identity and refuses another
     }
 });
 
+test("analysis attempts retain bound intent and receipt across recovery without redispatch", () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-review-journal-"));
+    const protocol = { mode: "live" };
+    const identity = {
+        campaignId: "campaign",
+        lotId: "lot",
+        mandateHash: "a".repeat(64),
+        candidateHash: "b".repeat(64),
+        evidenceHash: "c".repeat(64),
+        provider: "openai",
+        model: "fixture",
+        attemptKey: "first",
+    };
+    const journal = openQualificationJournal(root, protocol);
+    journal.beginAnalysis(identity);
+    const reopened = openQualificationJournal(root, protocol);
+    assert.throws(() => reopened.beginAnalysis(identity), /outcome unknown/i);
+    assert.equal(reopened.analysisAttempts()[0].status, "unknown");
+    reopened.finishAnalysis(identity, { input: 12, output: 3, costMicros: 15 });
+    reopened.finishAnalysis(identity, { input: 12, output: 3, costMicros: 15 });
+    assert.throws(
+        () =>
+            reopened.finishAnalysis(identity, {
+                input: 12,
+                output: 3,
+                costMicros: 16,
+            }),
+        /conflict/i,
+    );
+    assert.throws(
+        () =>
+            reopened.beginAnalysis({
+                ...identity,
+                evidenceHash: "d".repeat(64),
+            }),
+        /conflict/i,
+    );
+    const finished = openQualificationJournal(root, protocol);
+    assert.deepEqual(finished.analysisAttempts()[0].receipt, {
+        input: 12,
+        output: 3,
+        costMicros: 15,
+    });
+    assert.throws(() => finished.beginAnalysis(identity), /already completed/i);
+    assert.equal(finished.results().length, 0);
+});
+
+test("analysis journal treats reordered identities as the same and rejects invalid records", () => {
+    const root = mkdtempSync(
+        join(tmpdir(), "qualification-analysis-validation-"),
+    );
+    const journal = openQualificationJournal(root, { mode: "live" });
+    const identity = {
+        campaignId: "campaign",
+        lotId: "lot",
+        mandateHash: "a".repeat(64),
+        candidateHash: "b".repeat(64),
+        evidenceHash: "c".repeat(64),
+        provider: "openai",
+        model: "fixture",
+        attemptKey: "first",
+    };
+    journal.beginAnalysis(identity);
+    const reordered = {
+        attemptKey: identity.attemptKey,
+        model: identity.model,
+        provider: identity.provider,
+        evidenceHash: identity.evidenceHash,
+        candidateHash: identity.candidateHash,
+        mandateHash: identity.mandateHash,
+        lotId: identity.lotId,
+        campaignId: identity.campaignId,
+    };
+    journal.finishAnalysis(reordered, { costMicros: 3, output: 2, input: 1 });
+    journal.finishAnalysis(identity, { input: 1, output: 2, costMicros: 3 });
+    assert.throws(
+        () =>
+            journal.beginAnalysis({
+                ...identity,
+                attemptKey: "",
+                evidenceHash: "../../bad",
+            }),
+        /invalid/i,
+    );
+    assert.throws(
+        () =>
+            journal.finishAnalysis(identity, {
+                input: -1,
+                output: 2,
+                costMicros: 3,
+            }),
+        /invalid/i,
+    );
+});
+
 test("a completed scenario is retained on resume and is never submitted again", () => {
     const root = mkdtempSync(join(tmpdir(), "qualification-journal-"));
     try {
