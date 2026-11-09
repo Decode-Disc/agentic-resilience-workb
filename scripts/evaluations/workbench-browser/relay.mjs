@@ -68,7 +68,7 @@ export function createQualificationRelay(
     const protocol = existsSync(`${root}/protocol.json`)
         ? JSON.parse(readFileSync(`${root}/protocol.json`, "utf8"))
         : null;
-    const configurable = protocol?.manifest?.version === 2;
+    const configurable = [2, 3].includes(protocol?.manifest?.version);
     const maximumRequests = protocol?.maximumRequests ?? 20;
     const maximumCostUsd = configurable ? protocol.maximumCostUsd : 0.5;
     if (

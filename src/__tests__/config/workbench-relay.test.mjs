@@ -479,99 +479,100 @@ test("a versioned qualification refuses inference before a passing validation of
     );
 });
 
-test("a v2 campaign relay accepts its frozen route and allowance above legacy samples", async () => {
-    const root = mkdtempSync(join(tmpdir(), "relay-v2-"));
-    const fixture = join(root, "frozen.txt");
-    writeFileSync(fixture, "retained");
-    const fingerprints = {
-        [fixture]: createHash("sha256").update("retained").digest("hex"),
-    };
-    writeFileSync(
-        join(root, "fingerprints.json"),
-        JSON.stringify(fingerprints),
-    );
-    writeFileSync(
-        join(root, "validation.json"),
-        JSON.stringify({
-            status: "passed",
-            fingerprintsSha256: createHash("sha256")
-                .update(readFileSync(join(root, "fingerprints.json")))
-                .digest("hex"),
-        }),
-    );
-    writeFileSync(
-        join(root, "protocol.json"),
-        JSON.stringify({
-            version: 3,
-            manifest: { version: 2 },
-            maximumRequests: 24,
-            maximumCostUsd: 4,
-        }),
-    );
-    writeFileSync(
-        join(root, "relay-route.json"),
-        JSON.stringify({
-            model: "fixture/alternative",
-            reasoningEffort: "high",
-            descriptor: { maxTokens: 12000, inputPrice: 2, outputPrice: 6 },
-        }),
-    );
-    writeFileSync(
-        join(root, "control.json"),
-        JSON.stringify({
-            runId: "unpaid-fixture",
-            mode: "live",
-            scenario: "free-scenario",
-        }),
-    );
-    let dispatches = 0;
-    let relay;
-    try {
-        relay = createQualificationRelay(root, "fixture-key", async () => {
-            dispatches++;
-            return new Response(
-                'data: {"choices":[{"finish_reason":"stop"}],"usage":{"cost":0}}\n\ndata: [DONE]\n\n',
-                { headers: { "content-type": "text/event-stream" } },
-            );
-        });
-        relay.listen(0, "127.0.0.1");
-        await once(relay, "listening");
-        const request = {
-            model: "fixture/alternative",
-            messages: [
-                {
-                    role: "system",
-                    content:
-                        'Required current mission state:\n{"mission":{"runId":"unpaid-fixture","id":"fixture"}}',
-                },
-            ],
-            max_tokens: 12000,
-            provider: {
-                require_parameters: true,
-                max_price: { prompt: 2, completion: 6 },
-            },
-            reasoning: { enabled: true, effort: "high", exclude: true },
-            temperature: 0,
+for (const version of [2, 3])
+    test(`a v${version} campaign relay accepts its frozen route and allowance above legacy samples`, async () => {
+        const root = mkdtempSync(join(tmpdir(), "relay-v2-"));
+        const fixture = join(root, "frozen.txt");
+        writeFileSync(fixture, "retained");
+        const fingerprints = {
+            [fixture]: createHash("sha256").update("retained").digest("hex"),
         };
-        for (let i = 0; i < 24; i++) {
-            const r = await fetch(
+        writeFileSync(
+            join(root, "fingerprints.json"),
+            JSON.stringify(fingerprints),
+        );
+        writeFileSync(
+            join(root, "validation.json"),
+            JSON.stringify({
+                status: "passed",
+                fingerprintsSha256: createHash("sha256")
+                    .update(readFileSync(join(root, "fingerprints.json")))
+                    .digest("hex"),
+            }),
+        );
+        writeFileSync(
+            join(root, "protocol.json"),
+            JSON.stringify({
+                version: 3,
+                manifest: { version },
+                maximumRequests: 24,
+                maximumCostUsd: 4,
+            }),
+        );
+        writeFileSync(
+            join(root, "relay-route.json"),
+            JSON.stringify({
+                model: "fixture/alternative",
+                reasoningEffort: "high",
+                descriptor: { maxTokens: 12000, inputPrice: 2, outputPrice: 6 },
+            }),
+        );
+        writeFileSync(
+            join(root, "control.json"),
+            JSON.stringify({
+                runId: "unpaid-fixture",
+                mode: "live",
+                scenario: "free-scenario",
+            }),
+        );
+        let dispatches = 0;
+        let relay;
+        try {
+            relay = createQualificationRelay(root, "fixture-key", async () => {
+                dispatches++;
+                return new Response(
+                    'data: {"choices":[{"finish_reason":"stop"}],"usage":{"cost":0}}\n\ndata: [DONE]\n\n',
+                    { headers: { "content-type": "text/event-stream" } },
+                );
+            });
+            relay.listen(0, "127.0.0.1");
+            await once(relay, "listening");
+            const request = {
+                model: "fixture/alternative",
+                messages: [
+                    {
+                        role: "system",
+                        content:
+                            'Required current mission state:\n{"mission":{"runId":"unpaid-fixture","id":"fixture"}}',
+                    },
+                ],
+                max_tokens: 12000,
+                provider: {
+                    require_parameters: true,
+                    max_price: { prompt: 2, completion: 6 },
+                },
+                reasoning: { enabled: true, effort: "high", exclude: true },
+                temperature: 0,
+            };
+            for (let i = 0; i < 24; i++) {
+                const r = await fetch(
+                    `http://127.0.0.1:${relay.address().port}/chat/completions`,
+                    { method: "POST", body: JSON.stringify(request) },
+                );
+                assert.equal(r.status, 200);
+                await r.text();
+            }
+            assert.equal(dispatches, 24);
+            const over = await fetch(
                 `http://127.0.0.1:${relay.address().port}/chat/completions`,
                 { method: "POST", body: JSON.stringify(request) },
             );
-            assert.equal(r.status, 200);
-            await r.text();
+            await over.text();
+            assert.equal(over.status, 400);
+            assert.equal(dispatches, 24);
+        } finally {
+            relay?.closeAllConnections();
+            if (relay) await new Promise((resolve) => relay.close(resolve));
+            rmSync(root, { recursive: true, force: true });
         }
-        assert.equal(dispatches, 24);
-        const over = await fetch(
-            `http://127.0.0.1:${relay.address().port}/chat/completions`,
-            { method: "POST", body: JSON.stringify(request) },
-        );
-        await over.text();
-        assert.equal(over.status, 400);
-        assert.equal(dispatches, 24);
-    } finally {
-        relay?.closeAllConnections();
-        if (relay) await new Promise((resolve) => relay.close(resolve));
-        rmSync(root, { recursive: true, force: true });
-    }
-});
+    });
