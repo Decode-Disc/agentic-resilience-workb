@@ -1,5 +1,5 @@
 {
-    "profileCatalog": "154249869362de42752f48a810ed131edb8049cc131fd4482af302b54c95772c",
+    "profileCatalog": "5425f2d8946a33f1b8e8e08b96cb41e19b0a16f99b083810f5761add1b66bffa",
     "generatedBy": "UPDATE_PI_INPUT_PROFILES=1 pnpm exec vitest run src/__tests__/convex/execution/pi-input-capacity.test.ts --maxWorkers=1",
     "versions": {
         "pi-ai": "1.4.0",
@@ -7,10 +7,10 @@
         "chord": "1.4.0"
     },
     "profiles": {
-        "508bd486d46a23f9eb3359b814eca5627ad05bacd65433046d5b1babc322c09f": 14218,
-        "c55ccfdffcf0b8666094e05d4e459ee46f88b0796696d090c0866e81d77ebc19": 14789,
-        "c0d0fdc2a0e8f241a08de9df7cbf7de1a24fcd5cc06e3a7b4599a55ee2ee1f46": 14454,
-        "a6c5f1e9fec816ec59302afb816571c5a2c402bb2fdbc8e70b735600b1efd22d": 15025,
+        "0aafcb5491e39aee6d4dd2c36b808d1b1b77f438ca91abe1e0f302962ac84f03": 14290,
+        "b33ebb73bc7aaf42e26d4d17d8151423e5c2f5c9944bf0ce40a603ffbebb185e": 14861,
+        "b7d0cdf2e4207547c2180215489c3079cabdf3e26b6a714e9e742e3f7793babb": 14526,
+        "87b1ddf91396c6e6aec228781796e28782e05663022421e3f17238cfb83c0632": 15097,
         "01dd858de498c90c3567beb8aabc9402c39b5005b5efc56902c9d8293062e12d": 18632,
         "a12dbee3868eceb278edaaa4ba66f9600eb2774d5f68dac766babf384f770953": 19203,
         "15252205de9bc21bdde7796bb4945634c931e7260c47ef33d532d6ad897a402b": 19152,

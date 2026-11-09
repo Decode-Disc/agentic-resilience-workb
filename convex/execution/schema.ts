@@ -317,6 +317,7 @@ export const executionTables = {
         inputJson: v.string(),
         inputTextId: v.optional(v.id("retainedTexts")),
         inputContentHash: v.optional(v.string()),
+        preparationInputHash: v.optional(v.string()),
         nativePreparation: v.optional(
             v.object({
                 observationSequence: v.optional(v.number()),

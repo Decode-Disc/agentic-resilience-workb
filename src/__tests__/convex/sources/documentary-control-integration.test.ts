@@ -153,40 +153,40 @@ async function fixture(kind: DocumentaryContribution["kind"] = "context") {
             executionPlanVersion: "source_actions_v4",
         }),
     );
+    const input = {
+        kind: "submit_documentary_qualification" as const,
+        sourceId: f.sourceId,
+        captureId: f.captureId,
+        expectedTaskId: null,
+        changes: [
+            {
+                contribution: {
+                    needIds: ["common-context"],
+                    statement: "The source describes workflow software.",
+                    period: "undated",
+                    modality: "description",
+                    attribution: "Publisher",
+                    kind,
+                    evidence: [
+                        {
+                            readRequestId: f.readRequestId,
+                            passageOrder: f.passage.order,
+                        },
+                    ],
+                },
+            },
+        ],
+    };
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
             missionId: f.missionId,
             expectedGeneration: 4,
             cause: "real-documentary-examiner",
-            input: {
-                kind: "submit_documentary_qualification",
-                sourceId: f.sourceId,
-                captureId: f.captureId,
-                expectedTaskId: null,
-                changes: [
-                    {
-                        contribution: {
-                            needIds: ["common-context"],
-                            statement:
-                                "The source describes workflow software.",
-                            period: "undated",
-                            modality: "description",
-                            attribution: "Publisher",
-                            kind,
-                            evidence: [
-                                {
-                                    readRequestId: f.readRequestId,
-                                    passageOrder: f.passage.order,
-                                },
-                            ],
-                        },
-                    },
-                ],
-            },
+            input,
         },
     );
-    return { ...f, requestId };
+    return { ...f, requestId, input };
 }
 
 function mockControlReply(permittedUse: "documentary" | "context_only") {
@@ -524,4 +524,227 @@ test("the native Sources continuation actually receives the unfinished examinati
             }),
         ],
     });
+});
+
+test.each([
+    true,
+    false,
+])("an interrupted documentary control retains its observations without replay or adoption; provider identity: %s", async (hasIdentity) => {
+    const f = await fixture();
+    let dispatches = 0;
+    let observedBeforeRead: unknown;
+    let billingReads = 0;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url) => {
+            if (
+                String(url).startsWith(
+                    "https://openrouter.ai/api/v1/generation?",
+                )
+            ) {
+                billingReads++;
+                return Response.json({
+                    data: {
+                        id: "documentary-generation",
+                        total_cost: 0.0002137,
+                    },
+                });
+            }
+            dispatches++;
+            return new Response(
+                new ReadableStream(
+                    {
+                        async pull(controller) {
+                            observedBeforeRead = await f.t.run((ctx) =>
+                                ctx.db
+                                    .query("providerCalls")
+                                    .withIndex("by_run", (q) =>
+                                        q.eq("runId", f.runId),
+                                    )
+                                    .first(),
+                            );
+                            controller.error(
+                                new DOMException(
+                                    "Documentary deadline elapsed token=fixture-private-token",
+                                    "TimeoutError",
+                                ),
+                            );
+                        },
+                    },
+                    { highWaterMark: 0 },
+                ),
+                {
+                    headers: {
+                        "content-type": "application/json",
+                        ...(hasIdentity
+                            ? { "x-generation-id": "documentary-generation" }
+                            : {}),
+                        "x-request-id": "documentary-request",
+                    },
+                },
+            );
+        }),
+    );
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    expect(result).toMatchObject({
+        kind: "unavailable",
+        code: "request_timeout",
+    });
+    expect(observedBeforeRead).toMatchObject({
+        status: "started",
+        providerObservation: {
+            ...(hasIdentity ? { generationId: "documentary-generation" } : {}),
+            requestId: "documentary-request",
+            httpStatus: 200,
+        },
+    });
+    const saved = await f.t.run(async (ctx) => ({
+        calls: await ctx.db
+            .query("providerCalls")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .take(5),
+        preparation: await ctx.db.get(f.preparationId),
+    }));
+    expect(saved.calls).toHaveLength(1);
+    expect(saved.calls[0]).toMatchObject({
+        status: "failed",
+        dispatchOutcome: "response_received",
+        errorCode: "request_timeout",
+        transportDiagnostic: {
+            phase: "provider_transport",
+            name: "TimeoutError",
+            message: "Documentary deadline elapsed token=[redacted]",
+        },
+    });
+    const call = saved.calls[0];
+    assert(call);
+    expect(call.reportedCost).toBeUndefined();
+    if (hasIdentity) {
+        expect(call.billing).toMatchObject({ state: "pending" });
+        await f.t.action(internal.integrations.openRouterGeneration.reconcile, {
+            providerCallId: call._id,
+            attempt: 1,
+        });
+        expect(await f.t.run((ctx) => ctx.db.get(call._id))).toMatchObject({
+            status: "failed",
+            errorCode: "request_timeout",
+            reportedCost: 0.0002137,
+            billing: { state: "confirmed" },
+        });
+        expect(billingReads).toBe(1);
+    } else {
+        expect(call.billing).toBeUndefined();
+        expect(billingReads).toBe(0);
+    }
+    expect(saved.preparation?.sourcesMission?.qualifications).toEqual([]);
+    expect(dispatches).toBe(1);
+});
+
+test("an oversized Sources submission returns the capacity field and its corrected proposal can be controlled", async () => {
+    const f = await fixture();
+    const input = f.input;
+    const change = input.changes[0];
+    assert(change);
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "oversized-documentary-submission",
+            input: {
+                ...input,
+                changes: Array.from({ length: 16 }, () => change),
+            },
+        },
+    );
+    const refused = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    expect(refused).toMatchObject({
+        kind: "unavailable",
+        code: "qualification_invalid",
+        validation: {
+            path: "changes",
+            expected: expect.stringContaining("15"),
+        },
+    });
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .take(2),
+        ),
+    ).toEqual([]);
+    mockControlReply("context_only");
+    const correctedId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "corrected-documentary-submission",
+            input: {
+                ...input,
+                changes: Array.from({ length: 15 }, () => change),
+            },
+        },
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: correctedId,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({ kind: "success" });
+    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    expect(preparation?.sourcesMission?.qualifications).toHaveLength(1);
+    const taskId = preparation?.sourcesMission?.qualifications[0];
+    assert(taskId);
+    const overflowId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "resulting-qualification-overflow",
+            input: { ...input, expectedTaskId: taskId },
+        },
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: overflowId,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({
+        kind: "unavailable",
+        code: "qualification_capacity",
+        validation: {
+            path: "changes",
+            expected: expect.stringContaining("15"),
+        },
+    });
+    const retained = await f.t.run(async (ctx) => ({
+        task: await ctx.db.get(taskId),
+        preparation: await ctx.db.get(f.preparationId),
+        calls: await ctx.db
+            .query("providerCalls")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .take(3),
+    }));
+    expect(retained.task?.output).toMatchObject({
+        kind: "documentary_qualification",
+        contributions: expect.arrayContaining([
+            expect.objectContaining({
+                statement: change.contribution.statement,
+            }),
+        ]),
+    });
+    assert(retained.task?.output.kind === "documentary_qualification");
+    expect(retained.task.output.contributions).toHaveLength(15);
+    expect(retained.preparation?.sourcesMission?.qualifications).toEqual([
+        taskId,
+    ]);
+    expect(retained.calls).toHaveLength(1);
 });

@@ -37,3 +37,9 @@ test("Sources selects the retained model contract from the admitted snapshot and
         }),
     ).toThrow(/qualification_input_version_unavailable/);
 });
+
+test("the offered Sources tool states its existing contribution capacity before submission", () => {
+    const tool =
+        agentToolSchemas(sourcesDefinition).submit_documentary_qualification;
+    expect(tool?.description).toContain("15");
+});

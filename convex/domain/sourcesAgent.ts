@@ -41,6 +41,8 @@ import {
     documentaryCheckInput,
     documentarySubmissionResult,
     qualificationSubmissionInput,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
+    SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
     sourcesCompletionProposalValidator,
     sourcesPreparationValidator,
     sourcesSchemas,
@@ -207,7 +209,7 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
         },
         submit_documentary_qualification: {
             ...operation(
-                "Submit new contributions or corrections for one primary capture. Select each evidence passage using readRequestId and passageOrder from a successful search/read result in this scope; the system supplies its exact text. Each contribution must include the primary capture; submit contributions supported only by another capture separately. Omit contributionId for a new contribution; select its observed identity to correct it. The harness binds versions from the invocation's observed qualification. Mandatory documentary control governs use.",
+                `Submit 1–${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} new contributions or corrections for one primary capture, keeping at most ${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} contributions in the resulting qualification. Select each evidence passage using readRequestId and passageOrder from a successful search/read result in this scope; the system supplies its exact text. Each contribution must include the primary capture; submit contributions supported only by another capture separately. Omit contributionId for a new contribution; select its observed identity to correct it. The harness binds versions from the invocation's observed qualification. Mandatory documentary control governs use.`,
                 qualificationSubmissionInput,
                 documentarySubmissionResult,
             ),
@@ -276,7 +278,7 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
         if (code === "documentary_control_unfinished")
             return "The documentary examination did not complete. No contribution from this submission was adopted and no absence of support was established. Inspect the validation feedback and retained examination before choosing another action; do not treat a malformed examination as a rejected proposition.";
         if (code === "qualification_invalid")
-            return "No qualification was adopted. Supply 1–15 complete contributions with known need IDs, a statement, attribution, period, modality and 1–8 exact evidence references. Use a declared kind value; modality describes how the statement is expressed, not its kind.";
+            return `No qualification was adopted. Supply 1–${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} complete contributions with known need IDs, a statement, attribution, period, modality and 1–${SOURCES_MAX_EVIDENCE_REFERENCES} exact evidence references. Use a declared kind value; modality describes how the statement is expressed, not its kind.`;
         if (code === "documentary_quote_invalid")
             return "No contribution was adopted. Select readRequestId and passageOrder from a successful adopted search or contextual-read result in this scope. Only passages actually returned in that result are eligible; search or read again to obtain missing evidence.";
         if (code === "qualification_version_conflict")

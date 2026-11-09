@@ -410,11 +410,10 @@ export const execute = internalAction({
                       validate: async () => {
                           await active();
                       },
-                      execute: (route, signal, beforeDispatch) =>
+                      execute: (route, dependencies) =>
                           examineDocumentaryContributions(examination, route, {
                               apiKey: process.env.OPENROUTER_API_KEY ?? "",
-                              signal,
-                              beforeDispatch,
+                              ...dependencies,
                           }),
                   });
             if ("reasonCode" in outcome)

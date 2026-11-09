@@ -95,7 +95,7 @@ test("retains an original observable turn before the generation runtime receives
     expect(JSON.stringify(observed)).not.toContain("test-secret");
 });
 
-test("journals the prepared SDK request before dispatch and the original reply before parsing", async () => {
+test("journals the serialized HTTP request before dispatch and the original reply before parsing", async () => {
     const events: string[] = [];
     let requestJson = "";
     let wireJson = "";
@@ -145,18 +145,7 @@ test("journals the prepared SDK request before dispatch and the original reply b
     expect(events).toEqual(["journal", "dispatch"]);
     const snapshot = JSON.parse(requestJson);
     const wire = JSON.parse(wireJson);
-    expect(snapshot.input.temperature).toBe(wire.temperature);
-    expect(snapshot.input.maxOutputTokens).toBe(wire.max_tokens);
-    expect(snapshot.input.responseFormat.schema).toEqual(
-        wire.response_format.json_schema.schema,
-    );
-    expect(snapshot.input.prompt[0]).toMatchObject({
-        role: wire.messages[0].role,
-        content: wire.messages[0].content[0].text,
-    });
-    expect(snapshot.input.prompt.at(-1).content).toEqual([
-        { type: "text", text: wire.messages.at(-1).content },
-    ]);
+    expect(snapshot.input).toEqual(wire);
     expect(snapshot.settings.provider).toEqual(wire.provider);
     expect(requestJson).toContain("Use the retained evidence.");
     expect(requestJson).toContain("What does it establish?");
@@ -330,9 +319,7 @@ test("returns typed tool requests for persisted dispatch without an SDK loop", a
     expect(result.requests[1]?.inputJson).toBe('{"requested":true}');
     expect(request).toHaveBeenCalledOnce();
     const requestBody = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
-    expect(JSON.parse(requestSnapshot).input.tools[0].inputSchema).toEqual(
-        requestBody.tools[0].function.parameters,
-    );
+    expect(JSON.parse(requestSnapshot).input).toEqual(requestBody);
     expect(JSON.parse(result.observableReplyJson ?? "null").content).toEqual([
         {
             type: "tool-call",
@@ -600,4 +587,42 @@ test("invalid structured output retains the original observable reply before sch
     expect(JSON.parse(result.observableReplyJson ?? "null").content).toEqual([
         { type: "text", text: original },
     ]);
+});
+
+test("one-shot cancellation retains the actual DOM abort cause rather than a generic transport error", async () => {
+    const cancellation = new AbortController();
+    let diagnostic: unknown;
+    const result = await invokeOneShot({
+        route: { model: "test/structured" },
+        dependencies: {
+            apiKey: "offline-only",
+            signal: cancellation.signal,
+            observeProvider: async (observation) => {
+                diagnostic = observation.diagnostic;
+            },
+            fetch: async () => {
+                cancellation.abort(
+                    new DOMException(
+                        "Preparation deadline elapsed",
+                        "TimeoutError",
+                    ),
+                );
+                throw new Error("Generic transport cancellation");
+            },
+        },
+        instructions: "Read.",
+        prompt: "Material.",
+        schema: z.object({ answer: z.string() }),
+        schemaName: "cancelled_documentary_control",
+    });
+    expect(result).toMatchObject({
+        status: "failed",
+        errorCode: "cancelled",
+        retryable: false,
+    });
+    expect(diagnostic).toMatchObject({
+        name: "TimeoutError",
+        message: "Preparation deadline elapsed",
+        phase: "provider_transport",
+    });
 });

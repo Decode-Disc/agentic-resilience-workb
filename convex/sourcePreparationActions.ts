@@ -111,8 +111,10 @@ export async function executePreparationModel<
         validate?: () => Promise<void>;
         execute: (
             route: SourceQualificationRoute,
-            signal: AbortSignal,
-            beforeDispatch: NonNullable<AttemptDependencies["beforeDispatch"]>,
+            dependencies: Pick<
+                AttemptDependencies,
+                "signal" | "beforeDispatch" | "observeProvider"
+            >,
         ) => Promise<Result>;
     },
 ): Promise<
@@ -210,33 +212,54 @@ export async function executePreparationModel<
                 inputJson: input.invocationInputJson,
             },
         );
-        const result = await input.execute(
-            route,
-            AbortSignal.timeout(
-                Math.max(1, (preparation.deadlineAt ?? 0) - Date.now()),
-            ),
-            async (requestJson, metadata) => {
-                const retained = await ctx.runMutation(
-                    internal.execution.invocationLifecycle.retainRequest,
-                    {
-                        invocationId,
-                        expectedGeneration: preparation.executionGeneration,
-                        requestJson,
-                        effectiveMaxOutputTokens:
-                            metadata?.effectiveMaxOutputTokens,
-                    },
-                );
-                if (retained.kind === "blocked")
-                    throw sourcePreparationError(retained.code);
-                await ctx.runQuery(
-                    internal.execution.invocationLifecycle.authorizeDispatch,
-                    {
-                        invocationId,
-                        expectedGeneration: preparation.executionGeneration,
-                    },
-                );
-            },
-        );
+        let result: Result | undefined;
+        let providerIdentityObserved = false;
+        try {
+            result = await input.execute(route, {
+                signal: AbortSignal.timeout(
+                    Math.max(1, (preparation.deadlineAt ?? 0) - Date.now()),
+                ),
+                beforeDispatch: async (requestJson, metadata) => {
+                    const retained = await ctx.runMutation(
+                        internal.execution.invocationLifecycle.retainRequest,
+                        {
+                            invocationId,
+                            expectedGeneration: preparation.executionGeneration,
+                            requestJson,
+                            effectiveMaxOutputTokens:
+                                metadata?.effectiveMaxOutputTokens,
+                        },
+                    );
+                    if (retained.kind === "blocked")
+                        throw sourcePreparationError(retained.code);
+                    await ctx.runQuery(
+                        internal.execution.invocationLifecycle
+                            .authorizeDispatch,
+                        {
+                            invocationId,
+                            expectedGeneration: preparation.executionGeneration,
+                        },
+                    );
+                },
+                observeProvider: async (observation) => {
+                    await ctx.runMutation(
+                        internal.providerCalls.observeGeneration,
+                        { invocationId, ...observation },
+                    );
+                    providerIdentityObserved ||=
+                        observation.generationId !== undefined;
+                },
+            });
+        } finally {
+            if (
+                providerIdentityObserved &&
+                result?.status !== "succeeded" &&
+                result?.reportedCost === undefined
+            )
+                await ctx.runMutation(internal.providerCalls.requestBilling, {
+                    invocationId,
+                });
+        }
         receipt = {
             latencyMs: result.latencyMs,
             reportedCost: result.reportedCost,
@@ -799,11 +822,10 @@ async function qualifyCapturedSource(
             operation: "source_qualification",
             inputHash: prepared.inputHash,
             invocationInputJson: JSON.stringify(prepared.request),
-            execute: (route, signal, beforeDispatch) =>
+            execute: (route, dependencies) =>
                 qualifySourceDocument(prepared, route, {
                     apiKey: process.env.OPENROUTER_API_KEY ?? "",
-                    signal,
-                    beforeDispatch,
+                    ...dependencies,
                 }),
         });
         if ("reasonCode" in outcome)
@@ -1403,11 +1425,10 @@ export const compareSource = internalAction({
                     if (!current)
                         throw sourcePreparationError("stale_execution");
                 },
-                execute: (route, signal, beforeDispatch) =>
+                execute: (route, dependencies) =>
                     compareSourceContributions(prepared, route, {
                         apiKey: process.env.OPENROUTER_API_KEY ?? "",
-                        signal,
-                        beforeDispatch,
+                        ...dependencies,
                     }),
             });
             if (!("reasonCode" in outcome)) {

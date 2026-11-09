@@ -366,7 +366,7 @@ test("new invocations identify their journal version without expanding continuat
     expect(begun.inputJson).not.toContain("requestSnapshot");
 });
 
-async function oneShotFixture() {
+async function oneShotFixture(logicalInputHash?: string) {
     const fixture = await seedSourcePreparation();
     const { t, runId, corpusRevisionId, sourceId } = fixture;
     await t.mutation(internal.researchPlanning.createForRun, {
@@ -385,7 +385,7 @@ async function oneShotFixture() {
         }),
     );
     const inputJson = JSON.stringify({ instructions: "Read.", sourceId });
-    const inputHash = sha256Hex(inputJson);
+    const inputHash = logicalInputHash ?? sha256Hex(inputJson);
     const attempt = {
         runId,
         corpusRevisionId,
@@ -852,4 +852,38 @@ test("recovery retention leaves document capacity for bounded lifecycle results"
     expect(
         await f.t.run((ctx) => invocationRawOutputJson(ctx, invocation)),
     ).toBe(rawOutputJson);
+});
+
+test("one-shot provider observations use the admitted preparation hash and reject a changed receipt identity", async () => {
+    const f = await oneShotFixture(sha256Hex("domain-logical-input"));
+    await f.t.mutation(internal.execution.invocations.retainRequest, {
+        invocationId: f.invocationId,
+        expectedGeneration: 3,
+        requestJson: '{"input":{"model":"test"}}',
+        effectiveMaxOutputTokens: 1024,
+    });
+    await f.t.mutation(internal.providerCalls.observeGeneration, {
+        invocationId: f.invocationId,
+        generationId: "one-shot-generation",
+        httpStatus: 200,
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(f.providerCallId))).toMatchObject({
+        status: "started",
+        providerObservation: { generationId: "one-shot-generation" },
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.providerCallId, {
+            inputHash: sha256Hex("another-logical-input"),
+        }),
+    );
+    await expect(
+        f.t.mutation(internal.providerCalls.observeGeneration, {
+            invocationId: f.invocationId,
+            requestId: "foreign-receipt-observation",
+        }),
+    ).rejects.toThrow("Invalid provider observation");
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.providerCallId)))
+            ?.providerObservation?.requestId,
+    ).toBeUndefined();
 });

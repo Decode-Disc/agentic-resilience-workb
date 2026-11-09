@@ -22,6 +22,7 @@ import {
     type documentaryAssessmentAuthorValidator,
     type materializedQualificationInput,
     SOURCES_MAX_EVIDENCE_REFERENCES,
+    SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
     SOURCES_PROTOCOL,
     type SourcesPreparation,
     type sourcesCompletionValidator,
@@ -180,9 +181,15 @@ export function reconstructQualification(
 ) {
     if (
         input.changes.length < 1 ||
-        input.changes.length > 15 ||
-        (previous?.captureId && previous.captureId !== input.captureId)
+        input.changes.length > SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS
     )
+        throw executionError("qualification_invalid", [
+            {
+                path: "changes",
+                expected: `Supply 1–${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} contribution changes for this capture; no contribution from this submission was adopted.`,
+            },
+        ]);
+    if (previous?.captureId && previous.captureId !== input.captureId)
         throw executionError("qualification_invalid");
     const contributions: DocumentaryContribution[] = previous
         ? previous.contributions.map((c) => ({ ...c }))
@@ -257,8 +264,13 @@ export function reconstructQualification(
         else contributions[existing] = next;
         changed.add(id);
     }
-    if (contributions.length > 15)
-        throw executionError("qualification_capacity");
+    if (contributions.length > SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS)
+        throw executionError("qualification_capacity", [
+            {
+                path: "changes",
+                expected: `The resulting qualification may contain at most ${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} contributions; correct an observed contribution or submit material for another capture separately.`,
+            },
+        ]);
     return contributions;
 }
 

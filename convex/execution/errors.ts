@@ -15,9 +15,20 @@ export function protectedDiagnostic(
     error: unknown,
     phase: Diagnostic["phase"],
 ): Diagnostic {
-    const name = error instanceof Error ? error.name : "UnknownError";
+    const name =
+        typeof error === "object" &&
+        error !== null &&
+        "name" in error &&
+        typeof error.name === "string"
+            ? error.name
+            : "UnknownError";
     const message =
-        error instanceof Error ? error.message : "Non-Error exception";
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error &&
+        typeof error.message === "string"
+            ? error.message
+            : "Non-Error exception";
     const redact = (value: string, limit: number) =>
         value
             .replace(/\bBearer\s+[^\s;,]+/gi, "Bearer [redacted]")

@@ -237,7 +237,14 @@ async function invocationCall(
         request?.state !== "complete" ||
         call.service !== "model" ||
         call.invocationId !== invocation._id ||
-        call.inputHash !== admittedInputHash(invocation) ||
+        call.inputHash !==
+            (invocation.preparationInputHash ??
+                admittedInputHash(invocation)) ||
+        (invocation.preparationInputHash !== undefined &&
+            (invocation.missionId !== undefined ||
+                !call.preparationId ||
+                call.operationKey !== invocation.taskKey ||
+                call.corpusRevisionId !== invocation.corpusRevisionId)) ||
         call.executionGeneration !== invocation.generation ||
         call.missionId !== invocation.missionId ||
         call.runId !== invocation.runId

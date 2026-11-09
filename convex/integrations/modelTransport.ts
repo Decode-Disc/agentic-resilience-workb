@@ -2,7 +2,10 @@
 
 import type { Doc } from "@convex/_generated/dataModel";
 import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
-import { executionFailureCode } from "@convex/execution/errors";
+import {
+    executionFailureCode,
+    protectedDiagnostic,
+} from "@convex/execution/errors";
 import type {
     AgentGenerationLifecycle,
     AgentGenerationObservation,
@@ -56,6 +59,7 @@ export type AttemptDependencies = {
     ) => Promise<void> | void;
     beforeDispatch?: AgentGenerationLifecycle["beforeDispatch"];
     onObservation?: (observation: AgentGenerationObservation) => Promise<void>;
+    observeProvider?: AgentGenerationLifecycle["observeProvider"];
 };
 
 export type StructuredAttempt<T> =
@@ -159,6 +163,7 @@ type BoundedTransportState = {
     httpStatus?: number;
     retryAfterAt?: number;
     dispatched?: boolean;
+    effectiveMaxOutputTokens?: number;
     turn?: {
         startedAt: number;
         result?: AgentGenerationObservation;
@@ -325,10 +330,53 @@ export function createBoundedModelFetch(
 function createBoundedProvider(
     dependencies: AttemptDependencies,
     state: BoundedTransportState,
+    route: InvocationRoute,
 ) {
     return createOpenRouter({
         apiKey: dependencies.apiKey,
-        fetch: createBoundedModelFetch(dependencies, state),
+        fetch: createBoundedModelFetch(
+            {
+                ...dependencies,
+                fetch: async (url, init) => {
+                    try {
+                        await dependencies.beforeDispatch?.(
+                            JSON.stringify({
+                                version: 2,
+                                route,
+                                input: JSON.parse(String(init?.body)),
+                                settings: modelCallSettings(route).request,
+                            }),
+                            {
+                                effectiveMaxOutputTokens:
+                                    state.effectiveMaxOutputTokens,
+                            },
+                        );
+                    } catch (error) {
+                        state.requestBlockCode =
+                            executionFailureCode(error) ??
+                            "journal_request_unavailable";
+                        if (state.turn)
+                            throw new Error("model_dispatch_refused");
+                        throw error;
+                    }
+                    state.dispatched = true;
+                    return (dependencies.fetch ?? globalThis.fetch)(url, init);
+                },
+                onHeaders: async ({ status, generationId, requestId }) => {
+                    await dependencies.observeProvider?.({
+                        httpStatus: status,
+                        generationId,
+                        requestId,
+                    });
+                    await dependencies.onHeaders?.({
+                        status,
+                        generationId,
+                        requestId,
+                    });
+                },
+            },
+            state,
+        ),
     });
 }
 
@@ -367,25 +415,7 @@ function createRoutedModel(
             wrapGenerate: async ({ params, doGenerate }) => {
                 if (state.turn && state.dispatched)
                     throw new Error("A controlled turn cannot generate twice");
-                const {
-                    abortSignal: _signal,
-                    headers: _headers,
-                    providerOptions: _providerOptions,
-                    ...input
-                } = params;
-                try {
-                    await dependencies.beforeDispatch?.(
-                        JSON.stringify({ version: 1, route, input, settings }),
-                        { effectiveMaxOutputTokens: params.maxOutputTokens },
-                    );
-                } catch (error) {
-                    state.requestBlockCode =
-                        executionFailureCode(error) ??
-                        "journal_request_unavailable";
-                    if (state.turn) throw new Error("model_dispatch_refused");
-                    throw error;
-                }
-                state.dispatched = true;
+                state.effectiveMaxOutputTokens = params.maxOutputTokens;
                 let result: Awaited<ReturnType<typeof doGenerate>>;
                 try {
                     result = await doGenerate();
@@ -589,13 +619,13 @@ function preflightFailure(
     return undefined;
 }
 
-function failedAttemptFromError(args: {
+async function failedAttemptFromError(args: {
     error: unknown;
     route: InvocationRoute;
     dependencies: AttemptDependencies;
     state: BoundedTransportState;
     startedAt: number;
-}): AttemptFailure {
+}): Promise<AttemptFailure> {
     const { error, route, dependencies, state, startedAt } = args;
     if (state.requestBlockCode)
         return {
@@ -606,6 +636,16 @@ function failedAttemptFromError(args: {
             dispatchOutcome: "not_dispatched",
             retryable: false,
         };
+    if (state.dispatched)
+        await dependencies.observeProvider?.({
+            diagnostic: protectedDiagnostic(
+                dependencies.signal?.aborted &&
+                    dependencies.signal.reason !== undefined
+                    ? dependencies.signal.reason
+                    : error,
+                "provider_transport",
+            ),
+        });
     const receipt: AttemptReceipt = {
         ...(state.observableReplyJson
             ? { observableReplyJson: state.observableReplyJson }
@@ -701,7 +741,7 @@ export async function invokeOneShot<T>(args: {
                 contextWindow: route.descriptor.contextWindow,
                 maxTokens: maxOutputTokens,
             };
-        const provider = createBoundedProvider(dependencies, state);
+        const provider = createBoundedProvider(dependencies, state, route);
         const result = await generateText({
             model: createRoutedModel(provider, route, dependencies, state),
             instructions: args.instructions,
@@ -771,7 +811,7 @@ export async function invokeDeferredAgentTurn(args: {
         turn: { startedAt },
     };
     try {
-        const provider = createBoundedProvider(dependencies, state);
+        const provider = createBoundedProvider(dependencies, state, route);
         const input = {
             model: createRoutedModel(provider, route, dependencies, state),
             instructions: args.instructions,

@@ -857,6 +857,8 @@ export const beginOneShot = internalMutation({
             provenance: "live",
             status: "started",
             inputJson: args.inputJson,
+            inputContentHash: sha256Hex(args.inputJson),
+            preparationInputHash: receipt.inputHash,
             providerCallId: receipt._id,
             createdAt: Date.now(),
         });
