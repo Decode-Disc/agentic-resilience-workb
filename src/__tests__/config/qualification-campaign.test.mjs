@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { campaignManifestSchema } from "../../../convex/qualificationCampaignPolicy.ts";
-import { qualificationReviewResponse } from "../setup/qualification-review.ts";
+import {
+    qualificationReviewCodexCredential,
+    qualificationReviewResponse,
+    qualificationReviewRuntime,
+} from "../setup/qualification-review.ts";
 
 test("new analysis mandates require independent finite allowances and leave old mandates unchanged", () => {
     const base = makeManifest();
@@ -46,6 +50,17 @@ test("new analysis mandates require independent finite allowances and leave old 
     };
     delete mandate.models;
     assert.equal(campaignManifestSchema.safeParse(mandate).success, true);
+    assert.equal(
+        campaignManifestSchema.safeParse({
+            ...mandate,
+            analysis: {
+                ...mandate.analysis,
+                routes: [{ provider: "openai-codex", model: "fixture-codex" }],
+            },
+        }).success,
+        true,
+        "Pi OpenAI subscription identity must remain explicit",
+    );
     assert.equal(
         campaignManifestSchema.safeParse({
             ...mandate,
@@ -248,9 +263,18 @@ for (const fault of [
     "unqualified",
     "tampered",
     "foreign-candidate",
+    "auth-key",
+    "auth-oauth",
+    "auth-missing",
+    "auth-codex",
+    "auth-subscription",
+    "auth-subscription-key",
+    "isolated-lock",
 ])
     test(`campaign command review handles ${fault}`, async () => {
         const retained = fault === "retained";
+        const subscription = fault.startsWith("auth-subscription");
+        const codex = fault === "auth-codex" || subscription;
         const { mock } = await import("node:test");
         const { mkdirSync } = await import("node:fs");
         const { ConvexHttpClient } = await import("convex/browser");
@@ -290,12 +314,25 @@ for (const fault of [
             ],
             analysis: {
                 scope: "evidence_review",
-                routes: [{ provider: "openai", model: "gpt-4o-mini" }],
-                maxRequestCostMicros: 100000,
-                perLot: { requests: 3, costMicros: 300000 },
-                total: { requests: 6, costMicros: 600000 },
+                routes: [
+                    {
+                        provider: codex ? "openai-codex" : "openai",
+                        model: codex ? "gpt-6.1-sol" : "gpt-4o-mini",
+                    },
+                ],
+                ...(subscription
+                    ? {
+                          accounting: "native_subscription",
+                          perLot: { requests: 3 },
+                          total: { requests: 6 },
+                      }
+                    : {
+                          maxRequestCostMicros: 100000,
+                          perLot: { requests: 3, costMicros: 300000 },
+                          total: { requests: 6, costMicros: 600000 },
+                          maxOutputTokens: 1000,
+                      }),
                 maxInputTokens: 32000,
-                maxOutputTokens: 1000,
                 timeoutMs: 10000,
             },
         });
@@ -367,6 +404,26 @@ for (const fault of [
                 getFunctionName(reference),
                 "qualificationCampaigns:inspect",
             );
+            if (fault === "isolated-lock") {
+                let excluded = false;
+                try {
+                    const release = await acquireCampaignLock(
+                        join(root, "fixture.lock"),
+                    );
+                    await release();
+                } catch (error) {
+                    assert.match(
+                        error.message,
+                        /Another qualification is active/,
+                    );
+                    excluded = true;
+                }
+                assert.equal(
+                    excluded,
+                    true,
+                    "The deployment lock must cover query and assessment effects",
+                );
+            }
             return snapshot;
         });
         mock.method(client, "mutation", async (reference, args) => {
@@ -382,13 +439,24 @@ for (const fault of [
             );
             if (name.endsWith(":reserveAnalysis")) {
                 assert.equal(args.evidenceHash, review.evidenceHash);
-                assert.equal(args.reservationMicros, 100000);
+                assert.equal(
+                    args.reservationMicros,
+                    subscription ? undefined : 100000,
+                );
                 if (fault === "denied")
                     throw new Error("Analysis allowance exhausted");
                 allocation = {
                     requests: allocation.requests + 1,
-                    costMicros: allocation.costMicros + args.reservationMicros,
+                    costMicros:
+                        allocation.costMicros + (args.reservationMicros ?? 0),
                 };
+            }
+            if (name.endsWith(":settleAnalysis") && subscription) {
+                assert.equal(args.costMicros, undefined);
+                assert.equal(args.receipt.accounting, "native_subscription");
+                assert.equal(args.receipt.input, 100);
+                assert.equal(args.receipt.output, 100);
+                assert.equal(args.receipt.costMicros, undefined);
             }
             if (
                 name.endsWith(":settleAnalysis") &&
@@ -411,7 +479,12 @@ for (const fault of [
         });
         let archives = 0;
         let dispatches = 0;
+        let mockFailure;
         const boundaries = {
+            lock: () => acquireCampaignLock(join(root, "fixture.lock")),
+            modelRuntime: fault.startsWith("auth-")
+                ? undefined
+                : await qualificationReviewRuntime(),
             connect: async () => ({
                 client,
                 origins: {
@@ -424,37 +497,114 @@ for (const fault of [
             },
             reviewTransport: {
                 kind: "mock-openai",
-                fetch: async (_url, init) => {
-                    dispatches++;
-                    if (fault === "unknown")
-                        throw new Error("connection lost after dispatch");
-                    if (fault === "503")
-                        return new Response("unavailable", { status: 503 });
-                    const body = JSON.parse(init.body);
-                    assert.equal(body.model, "gpt-4o-mini");
-                    assert.equal(body.max_output_tokens, 1000);
-                    assert.match(
-                        JSON.stringify(
-                            body.tools.find((tool) => tool.name === "read")
-                                .parameters.properties.offset,
-                        ),
-                        /byte position/,
-                    );
-                    if (dispatches === 2)
-                        assert.match(
-                            JSON.stringify(body.input),
-                            /retained evidence/,
+                fetch: async (url, init) => {
+                    try {
+                        dispatches++;
+                        if (fault === "auth-key") {
+                            assert.equal(
+                                url,
+                                "https://pi-auth-fixture.invalid/v1/responses",
+                            );
+                            assert.equal(
+                                sha256(
+                                    new Headers(init.headers).get(
+                                        "authorization",
+                                    ),
+                                ),
+                                sha256("Bearer synthetic-native-pi-key"),
+                            );
+                        }
+                        if (fault === "unknown")
+                            throw new Error("connection lost after dispatch");
+                        if (fault === "503")
+                            return new Response("unavailable", { status: 503 });
+                        const { qualificationReviewPayload } = await import(
+                            "../setup/qualification-review.ts"
                         );
-                    return qualificationReviewResponse(
-                        JSON.stringify(review),
-                        dispatches,
-                    );
+                        const body = await qualificationReviewPayload(init);
+                        assert.equal(
+                            body.model,
+                            codex ? "gpt-6.1-sol" : "gpt-4o-mini",
+                        );
+                        assert.equal(
+                            body.max_output_tokens,
+                            codex ? undefined : 1000,
+                        );
+                        assert.match(
+                            JSON.stringify(body),
+                            /1-based UTF-8 byte position/,
+                        );
+                        if (dispatches === 2)
+                            assert.match(
+                                JSON.stringify(body.input),
+                                /retained evidence/,
+                            );
+                        return qualificationReviewResponse(
+                            JSON.stringify(review),
+                            dispatches,
+                        );
+                    } catch (error) {
+                        mockFailure = error.message;
+                        throw error;
+                    }
                 },
             },
         };
         const exitCode = process.exitCode;
+        const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+        const previousApiKey = process.env.OPENAI_API_KEY;
+        let nativeFetchMock;
         try {
-            if (fault === "unqualified") boundaries.reviewTransport = undefined;
+            if (fault.startsWith("auth-")) {
+                const agentDir = mkdtempSync(join(tmpdir(), "pi-native-auth-"));
+                process.env.PI_CODING_AGENT_DIR = agentDir;
+                delete process.env.OPENAI_API_KEY;
+                const credential = [
+                    "auth-oauth",
+                    "auth-codex",
+                    "auth-subscription",
+                ].includes(fault)
+                    ? codex
+                        ? qualificationReviewCodexCredential()
+                        : {
+                              type: "oauth",
+                              access: "synthetic-oauth-access",
+                              refresh: "synthetic-oauth-refresh",
+                              expires: Date.now() + 600000,
+                          }
+                    : { type: "api_key", key: "synthetic-native-pi-key" };
+                writeFileSync(
+                    join(agentDir, "auth.json"),
+                    JSON.stringify(
+                        fault === "auth-missing"
+                            ? {}
+                            : {
+                                  [codex ? "openai-codex" : "openai"]:
+                                      credential,
+                              },
+                    ),
+                );
+                writeFileSync(
+                    join(agentDir, "models.json"),
+                    JSON.stringify({
+                        providers: {
+                            openai: {
+                                baseUrl: "https://pi-auth-fixture.invalid/v1",
+                            },
+                        },
+                    }),
+                );
+            }
+            if (subscription) {
+                nativeFetchMock = mock.method(
+                    globalThis,
+                    "fetch",
+                    boundaries.reviewTransport.fetch,
+                );
+                boundaries.reviewTransport = undefined;
+            }
+            if (["unqualified", "auth-oauth", "auth-missing"].includes(fault))
+                boundaries.reviewTransport = undefined;
             const run = () =>
                 runCampaign(
                     "run",
@@ -491,7 +641,39 @@ for (const fault of [
                 assert.equal(archives, 0);
                 return;
             }
-            if (fault === "unqualified") {
+            if (fault === "auth-subscription-key") {
+                assert.equal(dispatches, 0);
+                assert.equal(operations.length, 0);
+                assert.equal(archives, 0);
+                assert.equal(lot.status, "review");
+                const status = JSON.parse(
+                    readFileSync(
+                        join(lotRoot, "automated-review-status.json"),
+                        "utf8",
+                    ),
+                );
+                assert.equal(status.reason, "provider_login_required");
+                assert.match(status.message, /\/login openai-codex/);
+                return;
+            }
+            if (fault === "auth-missing") {
+                assert.equal(dispatches, 0);
+                assert.equal(operations.length, 0);
+                const status = JSON.parse(
+                    readFileSync(
+                        join(lotRoot, "automated-review-status.json"),
+                        "utf8",
+                    ),
+                );
+                assert.equal(status.reason, "provider_login_required");
+                assert.match(status.message, /\/login openai/);
+                assert.equal(
+                    existsSync(join(lotRoot, "automated-review-auth.json")),
+                    false,
+                );
+                return;
+            }
+            if (["unqualified", "auth-oauth"].includes(fault)) {
                 assert.equal(dispatches, 0);
                 assert.equal(archives, 0);
                 assert.equal(lot.status, "review");
@@ -502,7 +684,12 @@ for (const fault of [
                             "utf8",
                         ),
                     ),
-                    { status: "pending", reason: "live_transport_unqualified" },
+                    {
+                        status: "pending",
+                        reason: "live_transport_unqualified",
+                        authentication:
+                            fault === "auth-oauth" ? "oauth" : "api_key",
+                    },
                 );
                 assert.equal(
                     existsSync(
@@ -547,6 +734,7 @@ for (const fault of [
                 JSON.stringify({
                     dispatches,
                     operations,
+                    mockFailure,
                     status: existsSync(
                         join(lotRoot, "automated-review-status.json"),
                     )
@@ -592,7 +780,7 @@ for (const fault of [
                 );
                 assert.deepEqual(allocation, {
                     requests: 2,
-                    costMicros: 200000,
+                    costMicros: subscription ? 0 : 200000,
                 });
             }
             assert.equal(
@@ -600,7 +788,13 @@ for (const fault of [
                 frozen,
             );
         } finally {
+            nativeFetchMock?.mock.restore();
             process.exitCode = exitCode;
+            if (previousAgentDir === undefined)
+                delete process.env.PI_CODING_AGENT_DIR;
+            else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+            if (previousApiKey === undefined) delete process.env.OPENAI_API_KEY;
+            else process.env.OPENAI_API_KEY = previousApiKey;
         }
     });
 

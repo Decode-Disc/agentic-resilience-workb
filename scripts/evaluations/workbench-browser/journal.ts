@@ -7,6 +7,12 @@ import {
     writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import {
+    type AnalysisProvider,
+    type AnalysisReceipt,
+    analysisProviderSchema,
+    analysisReceiptSchema,
+} from "../../../convex/qualificationCampaignPolicy.ts";
 
 type AnalysisIdentity = {
     campaignId: string;
@@ -14,15 +20,9 @@ type AnalysisIdentity = {
     mandateHash: string;
     candidateHash: string;
     evidenceHash: string;
-    provider: "openai" | "opencode-go";
+    provider: AnalysisProvider;
     model: string;
     attemptKey: string;
-};
-type AnalysisReceipt = {
-    input: number;
-    output: number;
-    costMicros: number;
-    observationHash?: string;
 };
 const identityKeys = [
     "campaignId",
@@ -34,7 +34,7 @@ const identityKeys = [
     "model",
     "attemptKey",
 ] as const;
-const receiptKeys = ["input", "output", "costMicros"] as const;
+const receiptKeys = ["input", "output", "costMicros", "accounting"] as const;
 function sameFields<T>(left: T, right: T, keys: readonly (keyof T)[]) {
     return keys.every((key) => left[key] === right[key]);
 }
@@ -60,19 +60,12 @@ function validateAnalysisIdentity(identity: AnalysisIdentity) {
             (value) =>
                 typeof value === "string" && /^[a-f0-9]{64}$/.test(value),
         ) ||
-        !["openai", "opencode-go"].includes(identity.provider)
+        !analysisProviderSchema.safeParse(identity.provider).success
     )
         throw new Error("Invalid analysis attempt identity");
 }
 function validateAnalysisReceipt(receipt: AnalysisReceipt) {
-    if (
-        !receipt ||
-        !receiptKeys.every(
-            (key) => Number.isSafeInteger(receipt[key]) && receipt[key] >= 0,
-        ) ||
-        (receipt.observationHash !== undefined &&
-            !/^[a-f0-9]{64}$/.test(receipt.observationHash))
-    )
+    if (!analysisReceiptSchema.safeParse(receipt).success)
         throw new Error("Invalid analysis receipt");
 }
 

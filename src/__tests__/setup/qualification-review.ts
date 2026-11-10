@@ -1,3 +1,55 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+/** Synthetic native Codex login shared by isolated runtime and discovery tests. */
+export function qualificationReviewCodexCredential() {
+    return {
+        type: "oauth",
+        access: `fixture.${Buffer.from(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "fixture-account" } })).toString("base64url")}.signature`,
+        refresh: "synthetic-oauth-refresh",
+        expires: Date.now() + 600000,
+    };
+}
+
+/** Test-only native runtime with synthetic credentials and no user configuration or model-network access. */
+export async function qualificationReviewRuntime(
+    provider: "openai" | "openai-codex" = "openai",
+) {
+    const { ModelRuntime } = await import("@earendil-works/pi-coding-agent");
+    const root = mkdtempSync(join(tmpdir(), "pi-review-auth-fixture-"));
+    if (provider === "openai-codex")
+        writeFileSync(
+            join(root, "auth.json"),
+            JSON.stringify({
+                "openai-codex": qualificationReviewCodexCredential(),
+            }),
+        );
+    const runtime = await ModelRuntime.create({
+        authPath: join(root, "auth.json"),
+        modelsPath: null,
+        allowModelNetwork: false,
+        refreshOnCreate: false,
+    });
+    if (provider === "openai")
+        await runtime.setRuntimeApiKey(
+            "openai",
+            "synthetic-offline-qualification-key",
+        );
+    return runtime;
+}
+
+/** Decode the SDK wire request, including native Codex compression, at the mocked HTTP boundary. */
+export async function qualificationReviewPayload(init?: RequestInit) {
+    const bytes = Buffer.from(await new Response(init?.body).arrayBuffer());
+    const { zstdDecompressSync } = await import("node:zlib");
+    const text =
+        new Headers(init?.headers).get("content-encoding") === "zstd"
+            ? zstdDecompressSync(bytes).toString("utf8")
+            : bytes.toString("utf8");
+    return JSON.parse(text) as Record<string, unknown>;
+}
+
 /** Synthetic OpenAI Responses stream: inspect evidence, then return the supplied review. */
 export function qualificationReviewResponse(reviewJson: string, turn: number) {
     const tool = turn === 1;

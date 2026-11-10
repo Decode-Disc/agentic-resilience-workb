@@ -902,6 +902,8 @@ type WorkbenchRunner = (options: {
     maximumCostUsd?: number;
 }) => Promise<void>;
 type CampaignBoundaries = {
+    lock?: typeof acquireCampaignLock;
+    modelRuntime?: import("@earendil-works/pi-coding-agent").ModelRuntime;
     reviewTransport?: import("./campaign-review.ts").CampaignReviewTransport;
     connect?: () => Promise<{
         client: ConvexHttpClient;
@@ -1168,9 +1170,17 @@ async function executeCampaign(
                 campaignId,
                 lotId: lot._id,
                 client,
+                modelRuntime: boundaries.modelRuntime,
                 transport: boundaries.reviewTransport,
             });
-        if (!boundaries.reviewTransport && !existsSync(retainedPath)) {
+        if (
+            !boundaries.reviewTransport &&
+            !existsSync(retainedPath) &&
+            !(
+                manifest.version === 3 &&
+                manifest.analysis.accounting === "native_subscription"
+            )
+        ) {
             const pending = await review(lotRoot);
             save(lotRoot, "automated-review-status", pending);
             return pending;
@@ -2324,7 +2334,7 @@ export async function runCampaign(
             runWorkbench,
             boundaries,
         );
-    const release = await acquireCampaignLock(
+    const release = await (boundaries.lock ?? acquireCampaignLock)(
         join(process.cwd(), ".local-runtime", "workbench-qualification.lock"),
     );
     try {

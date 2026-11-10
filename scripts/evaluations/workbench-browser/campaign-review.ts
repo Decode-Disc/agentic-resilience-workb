@@ -21,7 +21,10 @@ import {
 import { z } from "zod";
 import { internal } from "../../../convex/_generated/api.js";
 import type { Id } from "../../../convex/_generated/dataModel";
-import type { CampaignManifest } from "../../../convex/qualificationCampaignPolicy.ts";
+import {
+    analysisReceiptSchema,
+    type CampaignManifest,
+} from "../../../convex/qualificationCampaignPolicy.ts";
 import {
     type campaignReviewTemplate,
     listCampaignReviewEvidence,
@@ -58,7 +61,7 @@ const responseRecord = z
     })
     .strict();
 
-/** Connects Pi review to campaign authority and durable per-request accounting. Live dispatch remains gated. */
+/** Connects Pi review to campaign authority and durable per-request accounting. API-paid transport remains gated. */
 export async function runAccountableCampaignReview(options: {
     root: string;
     evidenceRoot: string;
@@ -67,6 +70,7 @@ export async function runAccountableCampaignReview(options: {
     campaignId: Id<"qualificationCampaigns">;
     lotId: Id<"qualificationLots">;
     client: Pick<ConvexHttpClient, "mutation">;
+    modelRuntime?: ModelRuntime;
     transport?: CampaignReviewTransport;
 }) {
     const { root, manifest, template, client } = options;
@@ -76,17 +80,37 @@ export async function runAccountableCampaignReview(options: {
             reason: "analysis_not_authorized",
         };
     const route = manifest.analysis.routes[0];
-    if (route?.provider !== "openai")
+    if (!route || route.provider === "opencode-go")
         return {
             status: "pending" as const,
             reason: "subscription_guarantee_unverified",
         };
-    if (!options.transport)
+    const runtime =
+        options.modelRuntime ??
+        (await ModelRuntime.create({
+            allowModelNetwork: false,
+            refreshOnCreate: false,
+        }));
+    const authentication = await runtime.checkAuth(route.provider);
+    if (!authentication)
+        return {
+            status: "pending" as const,
+            reason: "provider_login_required",
+            message: `Sign in through Pi with /login ${route.provider} before running this review.`,
+        };
+    const subscription = manifest.analysis.accounting === "native_subscription";
+    if (subscription && authentication.type !== "oauth")
+        return {
+            status: "pending" as const,
+            reason: "provider_subscription_login_required",
+        };
+    if (!options.transport && !subscription)
         return {
             status: "pending" as const,
             reason: "live_transport_unqualified",
+            authentication: authentication.type,
         };
-    const transport = options.transport;
+    const transport = options.transport ?? { fetch: globalThis.fetch };
     const mandateHash = sha256(JSON.stringify(manifest));
     const protocolPath = join(root, "protocol.json");
     const protocol = existsSync(protocolPath)
@@ -111,28 +135,23 @@ export async function runAccountableCampaignReview(options: {
             root,
             `automated-review-response-${identity(attempt).attemptKey}.json`,
         );
-    const runtime = await ModelRuntime.create({
-        authPath: join(root, "automated-review-auth.json"),
-        modelsPath: null,
-        modelsStorePath: join(root, "automated-review-models.json"),
-        allowModelNetwork: false,
-        refreshOnCreate: false,
-    });
-    const model = runtime.getModel("openai", route.model);
+    const model = runtime.getModel(route.provider, route.model);
     if (
-        model?.api !== "openai-responses" ||
-        manifest.analysis.maxOutputTokens > model.maxTokens ||
-        manifest.analysis.maxInputTokens + manifest.analysis.maxOutputTokens >
+        (model?.api !== "openai-responses" &&
+            model?.api !== "openai-codex-responses") ||
+        (subscription &&
+            (route.provider !== "openai-codex" ||
+                model.api !== "openai-codex-responses")) ||
+        (manifest.analysis.maxOutputTokens ?? model.maxTokens) >
+            model.maxTokens ||
+        manifest.analysis.maxInputTokens +
+            (manifest.analysis.maxOutputTokens ?? model.maxTokens) >
             model.contextWindow
     )
         return {
             status: "pending" as const,
             reason: "model_bounds_unqualified",
         };
-    await runtime.setRuntimeApiKey(
-        "openai",
-        "synthetic-offline-qualification-key",
-    );
     const reserveRef = makeFunctionReference<
         "mutation",
         FunctionArgs<typeof internal.qualificationCampaigns.reserveAnalysis>,
@@ -150,15 +169,10 @@ export async function runAccountableCampaignReview(options: {
         model,
         limits: manifest.analysis,
         transport: {
-            kind: "mock-openai",
+            kind: "metered-openai",
             fetch: (attempt) => async (input, init) => {
                 const request = new Request(input, init);
-                assert.equal(
-                    request.url,
-                    "https://api.openai.com/v1/responses",
-                    "Unexpected analysis destination",
-                );
-                const body = await request.text();
+                const body = new Uint8Array(await request.arrayBuffer());
                 const requestHash = sha256(body);
                 const path = responsePath(attempt);
                 if (existsSync(path)) {
@@ -265,18 +279,22 @@ export async function runAccountableCampaignReview(options: {
                 "Invalid analysis usage",
             );
             const bound = identity(attempt);
-            // Mock transport has no charge. Live provider estimates are never accepted as billing receipts.
-            const receipt = {
+            // Only the injected mock has a known zero charge; native subscriptions retain usage without dollar settlement.
+            const receipt = analysisReceiptSchema.parse({
                 input: usage.input,
                 output: usage.output,
-                costMicros: 0,
+                ...(subscription
+                    ? { accounting: "native_subscription" }
+                    : { costMicros: 0 }),
                 observationHash: sha256(readFileSync(responsePath(attempt))),
-            };
+            });
             journal.finishAnalysis(bound, receipt);
             await client.mutation(settleRef, {
                 lotId: options.lotId,
                 attemptKey: bound.attemptKey,
-                costMicros: receipt.costMicros,
+                ...(subscription
+                    ? { receipt }
+                    : { costMicros: receipt.costMicros }),
             });
         },
     });
@@ -291,12 +309,12 @@ export async function runPiCampaignReview(options: {
     transport:
         | "mock"
         | {
-              kind: "mock-openai";
+              kind: "mock-openai" | "metered-openai";
               fetch: (attempt: number) => typeof globalThis.fetch;
           };
     limits: {
         maxInputTokens: number;
-        maxOutputTokens: number;
+        maxOutputTokens?: number;
         timeoutMs: number;
     };
     reserve: (attempt: number) => Promise<unknown>;
@@ -315,7 +333,10 @@ export async function runPiCampaignReview(options: {
     if (
         options.transport === "mock"
             ? model.provider !== "faux"
-            : model.provider !== "openai" || model.api !== "openai-responses"
+            : !["openai", "openai-codex"].includes(model.provider) ||
+              !["openai-responses", "openai-codex-responses"].includes(
+                  model.api,
+              )
     )
         throw new Error("Unqualified reviewer transport is blocked");
     const loader: ResourceLoader = {
@@ -445,10 +466,17 @@ export async function runPiCampaignReview(options: {
                 : {
                       fetch: options.transport.fetch(attempt),
                       cacheRetention: "none",
-                      onPayload: (payload: unknown) => ({
-                          ...z.record(z.string(), z.unknown()).parse(payload),
-                          max_output_tokens: limits.maxOutputTokens,
-                      }),
+                      transport: "sse",
+                      ...(model.api === "openai-responses"
+                          ? {
+                                onPayload: (payload: unknown) => ({
+                                    ...z
+                                        .record(z.string(), z.unknown())
+                                        .parse(payload),
+                                    max_output_tokens: limits.maxOutputTokens,
+                                }),
+                            }
+                          : {}),
                   }),
         });
         const iterator = response[Symbol.asyncIterator].bind(response);

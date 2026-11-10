@@ -392,20 +392,51 @@ export const configurableCampaignManifestSchema = v2.superRefine((m, ctx) => {
                 "Correction paths must be explicit repository paths or directories",
             );
 });
+export const analysisReceiptSchema = z
+    .object({
+        input: z.number().int().nonnegative().safe(),
+        output: z.number().int().nonnegative().safe(),
+        accounting: z.enum(["api_cost", "native_subscription"]).optional(),
+        costMicros: z.number().int().nonnegative().safe().optional(),
+        observationHash: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+    })
+    .strict()
+    .superRefine((receipt, ctx) => {
+        if (
+            receipt.accounting === "native_subscription"
+                ? receipt.costMicros !== undefined
+                : receipt.costMicros === undefined
+        )
+            ctx.addIssue({
+                code: "custom",
+                message: "Invalid analysis receipt accounting",
+            });
+    });
+export type AnalysisReceipt = z.infer<typeof analysisReceiptSchema>;
 const analysisAllowanceSchema = z
     .object({
         requests: z.number().int().positive().safe(),
-        costMicros: z.number().int().positive().safe(),
+        costMicros: z.number().int().positive().safe().optional(),
     })
     .strict();
+export const analysisProviderSchema = z.enum([
+    "openai",
+    "openai-codex",
+    "opencode-go",
+]);
+export type AnalysisProvider = z.infer<typeof analysisProviderSchema>;
 export const analysisMandateSchema = z
     .object({
         scope: z.literal("evidence_review"),
+        accounting: z.literal("native_subscription").optional(),
         routes: z
             .array(
                 z
                     .object({
-                        provider: z.enum(["openai", "opencode-go"]),
+                        provider: analysisProviderSchema,
                         model: z.string().min(1).max(200),
                     })
                     .strict(),
@@ -416,7 +447,7 @@ export const analysisMandateSchema = z
         total: analysisAllowanceSchema,
         maxRequestCostMicros: z.number().int().positive().safe().optional(),
         maxInputTokens: z.number().int().positive().safe(),
-        maxOutputTokens: z.number().int().positive().safe(),
+        maxOutputTokens: z.number().int().positive().safe().optional(),
         timeoutMs: z
             .number()
             .int()
@@ -426,7 +457,7 @@ export const analysisMandateSchema = z
     .strict()
     .superRefine((m, ctx) => {
         if (
-            m.routes[0]?.provider !== "openai" ||
+            m.routes[0]?.provider === "opencode-go" ||
             (m.routes[1] && m.routes[1].provider !== "opencode-go")
         )
             ctx.addIssue({
@@ -434,9 +465,34 @@ export const analysisMandateSchema = z
                 message:
                     "Analysis routes must use OpenAI first and OpenCode Go only as fallback",
             });
+        if (m.accounting === "native_subscription") {
+            if (
+                m.routes.length !== 1 ||
+                m.routes[0]?.provider !== "openai-codex" ||
+                m.perLot.costMicros !== undefined ||
+                m.total.costMicros !== undefined ||
+                m.maxRequestCostMicros !== undefined ||
+                m.maxOutputTokens !== undefined
+            )
+                ctx.addIssue({
+                    code: "custom",
+                    message:
+                        "Native subscription review requires Codex quota accounting without dollar or output-token ceilings",
+                });
+        } else if (
+            m.perLot.costMicros === undefined ||
+            m.total.costMicros === undefined ||
+            m.maxOutputTokens === undefined
+        ) {
+            ctx.addIssue({
+                code: "custom",
+                message:
+                    "API analysis requires explicit cost and output-token ceilings",
+            });
+        }
         if (
             m.maxRequestCostMicros !== undefined &&
-            m.maxRequestCostMicros > m.perLot.costMicros
+            m.maxRequestCostMicros > (m.perLot.costMicros ?? 0)
         )
             ctx.addIssue({
                 code: "custom",
@@ -444,7 +500,7 @@ export const analysisMandateSchema = z
             });
         if (
             m.perLot.requests > m.total.requests ||
-            m.perLot.costMicros > m.total.costMicros
+            (m.perLot.costMicros ?? 0) > (m.total.costMicros ?? 0)
         )
             ctx.addIssue({
                 code: "custom",

@@ -14,6 +14,8 @@ import { preparationFailureClass } from "./domain/sourcePreparationAuthority";
 import { resolveReasoningPreference } from "./integrations/modelRouting";
 import { readResponseControlPolicy } from "./modelConfiguration";
 import {
+    analysisProviderSchema,
+    analysisReceiptSchema,
     campaignConfiguration,
     campaignConfigurations,
     campaignLimitsSchema,
@@ -356,9 +358,9 @@ export const reserveAnalysis = internalMutation({
         lotId: v.id("qualificationLots"),
         attemptKey: v.string(),
         evidenceHash: v.string(),
-        provider: v.union(v.literal("openai"), v.literal("opencode-go")),
+        provider: zodToConvex(analysisProviderSchema),
         model: v.string(),
-        reservationMicros: v.number(),
+        reservationMicros: v.optional(v.number()),
     },
     returns: v.null(),
     handler: async (ctx, args) => {
@@ -378,11 +380,16 @@ export const reserveAnalysis = internalMutation({
             (lot.status !== "closing" && lot.status !== "review")
         )
             throw new Error("Analysis not authorized");
+        const subscription =
+            manifest.analysis.accounting === "native_subscription";
         if (
             !/^[a-zA-Z0-9-]{1,100}$/.test(args.attemptKey) ||
             !/^[a-f0-9]{64}$/.test(args.evidenceHash) ||
-            !Number.isSafeInteger(args.reservationMicros) ||
-            args.reservationMicros < 1 ||
+            (subscription
+                ? args.reservationMicros !== undefined
+                : args.reservationMicros === undefined ||
+                  !Number.isSafeInteger(args.reservationMicros) ||
+                  args.reservationMicros < 1) ||
             !manifest.analysis.routes.some(
                 (route) =>
                     route.provider === args.provider &&
@@ -425,18 +432,18 @@ export const reserveAnalysis = internalMutation({
         const used = lot.analysisAllocated ?? { requests: 0, costMicros: 0 };
         const nextTotal = {
             requests: total.requests + 1,
-            costMicros: total.costMicros + args.reservationMicros,
+            costMicros: total.costMicros + (args.reservationMicros ?? 0),
         };
         const nextLot = {
             requests: used.requests + 1,
-            costMicros: used.costMicros + args.reservationMicros,
+            costMicros: used.costMicros + (args.reservationMicros ?? 0),
         };
         if (
             !Number.isSafeInteger(nextTotal.costMicros) ||
             nextTotal.requests > manifest.analysis.total.requests ||
-            nextTotal.costMicros > manifest.analysis.total.costMicros ||
+            nextTotal.costMicros > (manifest.analysis.total.costMicros ?? 0) ||
             nextLot.requests > manifest.analysis.perLot.requests ||
-            nextLot.costMicros > manifest.analysis.perLot.costMicros
+            nextLot.costMicros > (manifest.analysis.perLot.costMicros ?? 0)
         )
             throw new Error("Analysis allowance exhausted");
         await ctx.db.insert("qualificationAnalysisAttempts", {
@@ -454,7 +461,8 @@ export const settleAnalysis = internalMutation({
     args: {
         lotId: v.id("qualificationLots"),
         attemptKey: v.string(),
-        costMicros: v.number(),
+        costMicros: v.optional(v.number()),
+        receipt: v.optional(zodToConvex(analysisReceiptSchema)),
     },
     returns: v.null(),
     handler: async (ctx, args) => {
@@ -467,8 +475,30 @@ export const settleAnalysis = internalMutation({
                 q.eq("lotId", lot._id).eq("attemptKey", args.attemptKey),
             )
             .unique();
+        if (!attempt) throw new Error("Invalid analysis settlement");
         if (
-            !attempt ||
+            campaign.manifest.version === 3 &&
+            campaign.manifest.analysis.accounting === "native_subscription"
+        ) {
+            const parsed = analysisReceiptSchema.safeParse(args.receipt);
+            if (
+                args.costMicros !== undefined ||
+                !parsed.success ||
+                parsed.data.accounting !== "native_subscription"
+            )
+                throw new Error("Invalid analysis settlement");
+            const receipt = parsed.data;
+            if (attempt.status === "settled") {
+                if (hash(attempt.receipt) !== hash(receipt))
+                    throw new Error("Analysis settlement conflict");
+                return null;
+            }
+            await ctx.db.patch(attempt._id, { status: "settled", receipt });
+            return null;
+        }
+        if (
+            args.receipt !== undefined ||
+            args.costMicros === undefined ||
             !Number.isSafeInteger(args.costMicros) ||
             args.costMicros < 0
         )
@@ -478,7 +508,10 @@ export const settleAnalysis = internalMutation({
                 throw new Error("Analysis settlement conflict");
             return null;
         }
-        if (args.costMicros > attempt.reservationMicros)
+        if (
+            attempt.reservationMicros === undefined ||
+            args.costMicros > attempt.reservationMicros
+        )
             throw new Error("Analysis reservation overrun");
         if (!campaign.analysisAllocated || !lot.analysisAllocated)
             throw new Error("Analysis allocation unavailable");

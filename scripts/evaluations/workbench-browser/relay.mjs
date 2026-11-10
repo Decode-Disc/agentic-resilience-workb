@@ -65,9 +65,17 @@ export function createQualificationRelay(
     providerFetch = globalThis.fetch,
 ) {
     if (!key) throw new Error("Provider credential unavailable");
-    const protocol = existsSync(`${root}/protocol.json`)
-        ? JSON.parse(readFileSync(`${root}/protocol.json`, "utf8"))
-        : null;
+    let protocol = null;
+    try {
+        if (existsSync(`${root}/protocol.json`))
+            protocol = JSON.parse(
+                readFileSync(`${root}/protocol.json`, "utf8"),
+            );
+    } catch (error) {
+        throw new Error("Invalid retained qualification protocol", {
+            cause: error,
+        });
+    }
     const configurable = [2, 3].includes(protocol?.manifest?.version);
     const maximumRequests = protocol?.maximumRequests ?? 20;
     const maximumCostUsd = configurable ? protocol.maximumCostUsd : 0.5;

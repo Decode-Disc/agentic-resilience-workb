@@ -187,11 +187,19 @@ export async function runWorkbenchQualification(
         unavailableCapabilities: battery.unavailableCapabilities.map((c) => ({
             ...c,
             referenceHash: digest(readFileSync(c.reference)),
-            caseIds: (
-                JSON.parse(readFileSync(c.reference, "utf8")) as Array<{
-                    id: string;
-                }>
-            ).map((item) => item.id),
+            caseIds: (() => {
+                try {
+                    return (
+                        JSON.parse(readFileSync(c.reference, "utf8")) as Array<{
+                            id: string;
+                        }>
+                    ).map((item) => item.id);
+                } catch (error) {
+                    throw new Error("Invalid qualification reference", {
+                        cause: error,
+                    });
+                }
+            })(),
             status: "unavailable",
         })),
     };
@@ -217,9 +225,16 @@ export async function runWorkbenchQualification(
         });
         throw error;
     }
-    const config = JSON.parse(
-        readFileSync(".convex/local/default/config.json", "utf8"),
-    );
+    let config: { adminKey: string };
+    try {
+        config = JSON.parse(
+            readFileSync(".convex/local/default/config.json", "utf8"),
+        );
+    } catch (error) {
+        throw new Error("Invalid local backend configuration", {
+            cause: error,
+        });
+    }
     const client = new ConvexHttpClient(runtime.origins.convex, {
         logger: false,
     });
@@ -266,7 +281,16 @@ export async function runWorkbenchQualification(
                   .trim()
                   .split("\n")
                   .filter(Boolean)
-                  .map((line) => JSON.parse(line))
+                  .map((line) => {
+                      try {
+                          return JSON.parse(line);
+                      } catch (error) {
+                          throw new Error(
+                              "Invalid retained qualification ledger",
+                              { cause: error },
+                          );
+                      }
+                  })
             : [];
     let failure = false;
     let activeStep = "setup";

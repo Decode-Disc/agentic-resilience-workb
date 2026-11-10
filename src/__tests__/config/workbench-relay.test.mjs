@@ -7,6 +7,22 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { createQualificationRelay } from "../../../scripts/evaluations/workbench-browser/relay.mjs";
 
+test("relay rejects a malformed retained protocol before any provider call", () => {
+    const root = mkdtempSync(join(tmpdir(), "relay-invalid-protocol-"));
+    try {
+        writeFileSync(join(root, "protocol.json"), "{");
+        assert.throws(
+            () =>
+                createQualificationRelay(root, "synthetic-key", () =>
+                    assert.fail("no provider call"),
+                ),
+            /Invalid retained qualification protocol/,
+        );
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test("normal qualification forwards the first SSE frame before upstream EOF", async () => {
     const root = mkdtempSync(join(tmpdir(), "workbench-relay-"));
     writeFileSync(

@@ -40,52 +40,72 @@ test("resuming an unfinished scenario preserves its identity and refuses another
     }
 });
 
-test("analysis attempts retain bound intent and receipt across recovery without redispatch", () => {
-    const root = mkdtempSync(join(tmpdir(), "qualification-review-journal-"));
-    const protocol = { mode: "live" };
-    const identity = {
-        campaignId: "campaign",
-        lotId: "lot",
-        mandateHash: "a".repeat(64),
-        candidateHash: "b".repeat(64),
-        evidenceHash: "c".repeat(64),
-        provider: "openai",
-        model: "fixture",
-        attemptKey: "first",
-    };
-    const journal = openQualificationJournal(root, protocol);
-    journal.beginAnalysis(identity);
-    const reopened = openQualificationJournal(root, protocol);
-    assert.throws(() => reopened.beginAnalysis(identity), /outcome unknown/i);
-    assert.equal(reopened.analysisAttempts()[0].status, "unknown");
-    reopened.finishAnalysis(identity, { input: 12, output: 3, costMicros: 15 });
-    reopened.finishAnalysis(identity, { input: 12, output: 3, costMicros: 15 });
-    assert.throws(
-        () =>
-            reopened.finishAnalysis(identity, {
-                input: 12,
-                output: 3,
-                costMicros: 16,
-            }),
-        /conflict/i,
-    );
-    assert.throws(
-        () =>
-            reopened.beginAnalysis({
-                ...identity,
-                evidenceHash: "d".repeat(64),
-            }),
-        /conflict/i,
-    );
-    const finished = openQualificationJournal(root, protocol);
-    assert.deepEqual(finished.analysisAttempts()[0].receipt, {
-        input: 12,
-        output: 3,
-        costMicros: 15,
+for (const accounting of ["api_cost", "native_subscription"])
+    test(`analysis attempts retain ${accounting} intent and receipt across recovery without redispatch`, () => {
+        const root = mkdtempSync(
+            join(tmpdir(), "qualification-review-journal-"),
+        );
+        const protocol = { mode: "live" };
+        const identity = {
+            campaignId: "campaign",
+            lotId: "lot",
+            mandateHash: "a".repeat(64),
+            candidateHash: "b".repeat(64),
+            evidenceHash: "c".repeat(64),
+            provider: "openai",
+            model: "fixture",
+            attemptKey: "first",
+        };
+        const journal = openQualificationJournal(root, protocol);
+        journal.beginAnalysis(identity);
+        const reopened = openQualificationJournal(root, protocol);
+        assert.throws(
+            () => reopened.beginAnalysis(identity),
+            /outcome unknown/i,
+        );
+        assert.equal(reopened.analysisAttempts()[0].status, "unknown");
+        const receipt = {
+            input: 12,
+            output: 3,
+            ...(accounting === "native_subscription"
+                ? { accounting }
+                : { costMicros: 15 }),
+        };
+        reopened.finishAnalysis(identity, receipt);
+        reopened.finishAnalysis(identity, receipt);
+        assert.throws(
+            () =>
+                reopened.finishAnalysis(identity, {
+                    ...receipt,
+                    output: 4,
+                }),
+            /conflict/i,
+        );
+        assert.throws(
+            () =>
+                reopened.beginAnalysis({
+                    ...identity,
+                    evidenceHash: "d".repeat(64),
+                }),
+            /conflict/i,
+        );
+        const finished = openQualificationJournal(root, protocol);
+        assert.deepEqual(finished.analysisAttempts()[0].receipt, receipt);
+        if (accounting === "native_subscription")
+            assert.throws(
+                () =>
+                    finished.finishAnalysis(identity, {
+                        ...receipt,
+                        costMicros: 0,
+                    }),
+                /invalid/i,
+            );
+        assert.throws(
+            () => finished.beginAnalysis(identity),
+            /already completed/i,
+        );
+        assert.equal(finished.results().length, 0);
     });
-    assert.throws(() => finished.beginAnalysis(identity), /already completed/i);
-    assert.equal(finished.results().length, 0);
-});
 
 test("analysis journal treats reordered identities as the same and rejects invalid records", () => {
     const root = mkdtempSync(

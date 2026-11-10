@@ -81,6 +81,8 @@ import {
     qualificationReasoningSelection,
 } from "./modelConfigurationSchema";
 import {
+    analysisProviderSchema,
+    analysisReceiptSchema,
     campaignLimitsSchema,
     campaignManifestSchema,
 } from "./qualificationCampaignPolicy";
@@ -204,11 +206,12 @@ export default defineSchema({
         lotId: v.id("qualificationLots"),
         attemptKey: v.string(),
         evidenceHash: v.string(),
-        provider: v.union(v.literal("openai"), v.literal("opencode-go")),
+        provider: zodToConvex(analysisProviderSchema),
         model: v.string(),
-        reservationMicros: v.number(),
+        reservationMicros: v.optional(v.number()),
         status: v.union(v.literal("reserved"), v.literal("settled")),
         costMicros: v.optional(v.number()),
+        receipt: v.optional(zodToConvex(analysisReceiptSchema)),
         createdAt: v.number(),
     }).index("by_lot_and_attempt", ["lotId", "attemptKey"]),
     qualificationCoverage: defineTable({
