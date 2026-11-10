@@ -2,6 +2,8 @@
 
 Status: direction accepted on 2026-11-09; design only. The [technical contract](../../context/TECH.md#access-resources-and-security) owns current obligations. No implementation, dependency change, paid experiment or provider authorization follows from this document.
 
+Supersession, 2026-11-10: the approved first-pass investigator extends the delivered Pi reviewer with a trusted diagnostic mission, confined indexed source search, independently persisted developer handoff and same-session assessment-format feedback. Its serialization, preservation and reconciliation boundaries are verified offline; diagnostic usefulness remains unqualified. The [current qualification contract](../../context/TECH.md#qualification-campaigns) supersedes the original default grading/development-agent investigation split below. Comprehensive local probes remain a separate scope, and no historical mandate, evidence or provider grant is renewed.
+
 ## Purpose and current boundary
 
 Reduce the time between a qualification lot and an actionable assessment while keeping execution integrity, model usefulness and unsupported conclusions distinguishable. A reviewer should identify what the evidence establishes, what failed or remains unfinished, and what requires further investigation. A truthful inconclusive result is useful; a plausible explanation without supporting evidence is not a demonstrated cause.

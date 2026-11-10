@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    unlinkSync,
+    writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { internal } from "@convex/_generated/api";
@@ -21,6 +27,7 @@ import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import {
     qualificationReviewPayload,
+    qualificationReviewReport,
     qualificationReviewResponse,
     qualificationReviewRuntime,
 } from "@/__tests__/setup/qualification-review";
@@ -44,6 +51,7 @@ for (const subscription of [false, true])
             assert(visitor);
             await ctx.db.patch(visitor.invitationId, { slotKey: "analyst-4" });
         });
+        vi.stubEnv("WORKBENCH_REVIEW_REASONING", subscription ? "high" : "off");
         vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
         vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
         const manifest = campaignManifestSchema.parse({
@@ -161,6 +169,8 @@ for (const subscription of [false, true])
                     costMicros: subscription ? 0 : requests * 100000,
                 });
                 const body = await qualificationReviewPayload(init);
+                if (subscription)
+                    expect(body.reasoning).toMatchObject({ effort: "high" });
                 expect(body.max_output_tokens).toBe(
                     subscription ? undefined : 1000,
                 );
@@ -169,7 +179,7 @@ for (const subscription of [false, true])
                         "Synthetic evidence fixture",
                     );
                 return qualificationReviewResponse(
-                    JSON.stringify(review),
+                    qualificationReviewReport(review),
                     requests,
                 );
             },
@@ -200,6 +210,56 @@ for (const subscription of [false, true])
                 assert.fail("No assessment before reconciliation"),
         });
         expect(stage.status).toBe("awaiting_reconciliation");
+        expect(
+            readFileSync(join(lotRoot, "automated-review-report.md"), "utf8"),
+        ).toContain("saved framing");
+        expect(
+            JSON.parse(
+                readFileSync(
+                    join(lotRoot, "automated-review-report.json"),
+                    "utf8",
+                ),
+            ),
+        ).toMatchObject({
+            evidenceHash: template.evidenceHash,
+            assessment: "pending",
+        });
+        expect(
+            JSON.parse(
+                readFileSync(
+                    join(lotRoot, "automated-review-mission.json"),
+                    "utf8",
+                ),
+            ),
+        ).toMatchObject({
+            protocol: "investigator_v1",
+            evidenceHash: template.evidenceHash,
+            mission: expect.stringContaining("source-supported"),
+            missionHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        });
+        const missionPath = join(lotRoot, "automated-review-mission.json");
+        const pinnedMission = readFileSync(missionPath);
+        unlinkSync(missionPath);
+        const legacy = await runAccountableCampaignReview({
+            root: lotRoot,
+            evidenceRoot: join(
+                lotRoot,
+                `automated-review-evidence-${template.evidenceHash}`,
+            ),
+            template,
+            manifest,
+            campaignId,
+            lotId,
+            client,
+            modelRuntime,
+            transport,
+        });
+        expect(legacy).toMatchObject({
+            status: "pending",
+            reason: "legacy_review_protocol_unavailable",
+        });
+        expect(requests).toBe(2);
+        writeFileSync(missionPath, pinnedMission, { flag: "wx" });
         expect((await t.run((ctx) => ctx.db.get(lotId)))?.status).toBe(
             "closing",
         );
@@ -268,6 +328,27 @@ for (const subscription of [false, true])
             ).toBe(true);
             expect(requests).toBe(2);
             expect(archived).toBe(1);
+            expect(
+                JSON.parse(
+                    readFileSync(
+                        join(lotRoot, "automated-review-report.json"),
+                        "utf8",
+                    ),
+                ),
+            ).toMatchObject({ assessment: "assessed", verdict: "passed" });
+            const logged = vi
+                .spyOn(console, "log")
+                .mockImplementation(() => {});
+            await runCampaign("status", root, {}, undefined, boundaries);
+            const status = JSON.parse(logged.mock.calls.at(-1)?.[0] ?? "{}");
+            expect(status.diagnosticReports[0]).toMatchObject({
+                lot: "lot-1",
+                path: join(lotRoot, "automated-review-report.md"),
+                assessment: "assessed",
+                summary:
+                    "The synthetic fixture records the expected saved framing.",
+            });
+            expect(requests).toBe(2);
             expect(
                 JSON.parse(
                     readFileSync(

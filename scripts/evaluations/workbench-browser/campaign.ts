@@ -25,6 +25,7 @@ import {
     getFunctionName,
     makeFunctionReference,
 } from "convex/server";
+import { z } from "zod";
 import { api, internal } from "../../../convex/_generated/api.js";
 import type { Id } from "../../../convex/_generated/dataModel";
 import {
@@ -433,6 +434,175 @@ export function listCampaignReviewEvidence(
     };
 }
 
+/** Searches verified indexed bytes, with explicit continuation rather than an implied whole-corpus absence. */
+export function searchCampaignReviewEvidence(
+    root: string,
+    evidenceHash: string,
+    options: {
+        pattern: string;
+        path?: string;
+        ignoreCase?: boolean;
+        limit?: number;
+        cursor?: string | null;
+        signal?: AbortSignal;
+    },
+) {
+    const { pattern, signal } = options;
+    const limit = options.limit ?? 50;
+    const scope = options.path === "." ? "" : (options.path ?? "");
+    assert(
+        typeof pattern === "string" &&
+            pattern.length > 0 &&
+            Buffer.byteLength(pattern) <= 8192,
+        "Invalid evidence search pattern",
+    );
+    assert(
+        Number.isSafeInteger(limit) && limit > 0 && limit <= 100,
+        "Invalid evidence search limit",
+    );
+    assert(
+        !isAbsolute(scope) &&
+            !scope.includes("\\") &&
+            (scope === "" ||
+                scope
+                    .split("/")
+                    .every(
+                        (part) => part !== ".." && part !== "." && part !== "",
+                    )),
+        "Invalid evidence search scope",
+    );
+    signal?.throwIfAborted();
+    const index = reviewEvidenceIndex(root, evidenceHash);
+    const paths = Object.keys(index)
+        .filter(
+            (path) => !scope || path === scope || path.startsWith(`${scope}/`),
+        )
+        .sort();
+    assert(!scope || paths.length > 0, "Evidence search scope is not indexed");
+    const query = sha256(
+        JSON.stringify({
+            evidenceHash,
+            pattern,
+            scope,
+            ignoreCase: Boolean(options.ignoreCase),
+        }),
+    );
+    let file = 0;
+    let line = 0;
+    if (options.cursor) {
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(
+                Buffer.from(options.cursor, "base64url").toString("utf8"),
+            );
+        } catch {
+            throw new Error("Invalid evidence search cursor");
+        }
+        assert(
+            parsed &&
+                typeof parsed === "object" &&
+                "query" in parsed &&
+                parsed.query === query &&
+                "file" in parsed &&
+                typeof parsed.file === "number" &&
+                Number.isSafeInteger(parsed.file) &&
+                parsed.file >= 0 &&
+                parsed.file < paths.length &&
+                "line" in parsed &&
+                typeof parsed.line === "number" &&
+                Number.isSafeInteger(parsed.line) &&
+                parsed.line >= 0,
+            "Invalid evidence search cursor",
+        );
+        file = parsed.file;
+        line = parsed.line;
+    }
+    const matches: Array<{
+        path: string;
+        line: number;
+        offset: number;
+        content: string;
+        truncated: boolean;
+    }> = [];
+    assert(
+        "escape" in RegExp && typeof RegExp.escape === "function",
+        "Literal search requires native RegExp.escape support",
+    );
+    const escaped: unknown = RegExp.escape(pattern);
+    assert(typeof escaped === "string");
+    const matcher = new RegExp(escaped, options.ignoreCase ? "iu" : "u");
+    let bytes = 0;
+    let scanned = 0;
+    const continuation = () =>
+        Buffer.from(JSON.stringify({ query, file, line })).toString(
+            "base64url",
+        );
+    for (; file < paths.length && scanned < 100; file++, scanned++) {
+        signal?.throwIfAborted();
+        const path = paths[file];
+        assert(path);
+        const content = new TextDecoder("utf-8", { fatal: true }).decode(
+            readIndexedEvidence(root, index, path, 64 * 1024 * 1024),
+        );
+        let position = 0;
+        let offset = 0;
+        let currentLine = 0;
+        for (;;) {
+            signal?.throwIfAborted();
+            const newline = content.indexOf("\n", position);
+            const text = content.slice(
+                position,
+                newline < 0 ? content.length : newline,
+            );
+            if (currentLine >= line) {
+                line = currentLine;
+                const at = matcher.exec(text)?.index ?? -1;
+                if (at >= 0) {
+                    const start = Math.max(0, at - 100);
+                    const preview = text.slice(start, start + 8192);
+                    const match = {
+                        path,
+                        line: line + 1,
+                        offset:
+                            offset + Buffer.byteLength(text.slice(0, at)) + 1,
+                        content: preview,
+                        truncated:
+                            start > 0 || start + preview.length < text.length,
+                    };
+                    const size = Buffer.byteLength(JSON.stringify(match));
+                    if (bytes + size > 50 * 1024)
+                        return {
+                            matches,
+                            nextCursor: continuation(),
+                            truncated: true,
+                        };
+                    matches.push(match);
+                    bytes += size;
+                    if (matches.length === limit) {
+                        line++;
+                        return {
+                            matches,
+                            nextCursor: continuation(),
+                            truncated: true,
+                        };
+                    }
+                }
+            }
+            offset += Buffer.byteLength(text) + 1;
+            currentLine++;
+            if (newline < 0) break;
+            position = newline + 1;
+        }
+        assert(line <= currentLine, "Invalid evidence search cursor");
+        line = 0;
+    }
+    return {
+        matches,
+        nextCursor: file < paths.length ? continuation() : null,
+        truncated: file < paths.length,
+    };
+}
+
 /** Reads a bounded UTF-8 window after verifying the entire frozen file. */
 export function readCampaignReviewEvidenceWindow(
     root: string,
@@ -489,6 +659,29 @@ export function readCampaignReviewEvidence(
     ).toString("utf8");
 }
 
+export const campaignReviewVerdicts = [
+    "passed",
+    "failed",
+    "inconclusive",
+] as const;
+
+/** Correctable model-output errors, distinct from evidence or filesystem failures. */
+export class CampaignReviewFormatError extends Error {}
+
+const campaignReviewShape = z.object({
+    candidateHash: z.string(),
+    batteryHash: z.string(),
+    evidenceHash: z.string(),
+    cases: z.array(
+        z.object({
+            id: z.string(),
+            checks: z.record(z.string(), z.string()),
+            finding: z.string(),
+            evidence: z.array(z.string()),
+        }),
+    ),
+});
+
 /** Validates review judgments against the selected evidence revision. */
 export function validateCampaignReview(
     root: string,
@@ -502,36 +695,40 @@ export function validateCampaignReview(
                   join(root, `evidence-index-${expected.evidenceHash}.json`),
               ) as Record<string, string>)
             : undefined;
-    assert(
-        review && typeof review === "object" && "cases" in review,
-        "Review required",
-    );
-    const input = review as typeof expected;
+    const parsed = campaignReviewShape.safeParse(review);
+    if (!parsed.success)
+        throw new CampaignReviewFormatError(
+            `Invalid review format: ${parsed.error.issues
+                .slice(0, 3)
+                .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+                .join("; ")
+                .slice(0, 500)}`,
+        );
+    const input = parsed.data;
     for (const key of ["candidateHash", "batteryHash", "evidenceHash"] as const)
         assert.equal(input[key], expected[key], "Stale campaign review");
     assert(Array.isArray(input.cases));
-    assert.deepEqual(
-        input.cases.map((c) => c.id).sort(),
-        expected.cases.map((c) => c.id).sort(),
-        "Review must cover every mandatory case exactly once",
-    );
+    if (
+        JSON.stringify(input.cases.map((c) => c.id).sort()) !==
+        JSON.stringify(expected.cases.map((c) => c.id).sort())
+    )
+        throw new CampaignReviewFormatError(
+            "Review must cover every mandatory case exactly once",
+        );
     for (const item of input.cases) {
         const required = expected.cases.find((c) => c.id === item.id);
         assert(required);
-        assert.deepEqual(
-            Object.keys(item.checks).sort(),
-            Object.keys(required.checks).sort(),
-            "Review expectations changed",
-        );
-        assert(
-            typeof item.finding === "string" &&
-                item.finding.trim().length >= 10,
-            "Evidence-backed finding required",
-        );
-        assert(
-            Array.isArray(item.evidence) && item.evidence.length > 0,
-            "Evidence references required",
-        );
+        if (
+            JSON.stringify(Object.keys(item.checks).sort()) !==
+            JSON.stringify(Object.keys(required.checks).sort())
+        )
+            throw new CampaignReviewFormatError("Review expectations changed");
+        if (item.finding.trim().length < 10)
+            throw new CampaignReviewFormatError(
+                "Evidence-backed finding required",
+            );
+        if (item.evidence.length === 0)
+            throw new CampaignReviewFormatError("Evidence references required");
         for (const path of item.evidence) {
             assert(
                 typeof path === "string" &&
@@ -548,14 +745,145 @@ export function validateCampaignReview(
                 );
             }
         }
-        assert(
-            Object.values(item.checks).every((v) =>
-                ["passed", "failed", "inconclusive"].includes(v),
-            ),
-            "Invalid review verdict",
-        );
+        if (
+            !Object.values(item.checks).every((value) =>
+                (campaignReviewVerdicts as readonly string[]).includes(value),
+            )
+        )
+            throw new CampaignReviewFormatError("Invalid review verdict");
     }
-    return input;
+    // Historical assessment identities include property order and accepted extra fields.
+    return review as typeof input;
+}
+
+const campaignReportSchema = z.object({
+    path: z.literal("automated-review-report.md"),
+    candidateHash: z.string(),
+    batteryHash: z.string(),
+    evidenceHash: z.string(),
+    reportHash: z.string(),
+    attempt: z.number().int().positive(),
+    summary: z.string(),
+    assessment: z.enum(["pending", "assessed"]),
+    complete: z.boolean().default(true),
+    verdict: z.enum(campaignReviewVerdicts).optional(),
+});
+
+/** Preserves the model's diagnostic output before any assessment parsing or reconciliation. */
+export function retainCampaignReviewReport(
+    root: string,
+    template: ReturnType<typeof campaignReviewTemplate>,
+    text: string,
+    attempt: number,
+    options: { complete?: boolean } = {},
+) {
+    assert(
+        Number.isSafeInteger(attempt) &&
+            attempt > 0 &&
+            Buffer.byteLength(text) <= 256 * 1024,
+        "Invalid review report",
+    );
+    const retained = join(root, `automated-review-report-${attempt}.md`);
+    if (existsSync(retained))
+        assert.equal(
+            readFileSync(retained, "utf8"),
+            text,
+            "Retained review report changed",
+        );
+    else
+        writeFileSync(retained, text, { flag: "wx", mode: 0o600, flush: true });
+    const report = {
+        path: "automated-review-report.md" as const,
+        candidateHash: template.candidateHash,
+        batteryHash: template.batteryHash,
+        evidenceHash: template.evidenceHash,
+        reportHash: sha256(text),
+        attempt,
+        complete: options.complete !== false,
+        summary: text.trim().startsWith("{")
+            ? "Structured diagnostic output retained; assessment pending."
+            : (
+                  text
+                      .split(/\n/)
+                      .find((line) => line.trim() && !line.startsWith("#")) ??
+                  "Diagnostic output retained."
+              ).slice(0, 500),
+        assessment: "pending" as const,
+    };
+    writeFileSync(join(root, report.path), text, { mode: 0o600, flush: true });
+    save(root, "automated-review-report", report);
+    return report;
+}
+
+/** Verifies the handoff and repairs its projection from a matching acknowledged assessment. */
+export function campaignReviewReport(root: string) {
+    const path = join(root, "automated-review-report.json");
+    if (!existsSync(path)) return null;
+    const report = campaignReportSchema.parse(read(path));
+    assert.equal(
+        sha256(readFileSync(join(root, report.path))),
+        report.reportHash,
+        "Retained review report changed",
+    );
+    const receiptPath = join(root, "automated-review-assessment.json");
+    if (report.assessment === "assessed" || !existsSync(receiptPath))
+        return report;
+    const receipt = z
+        .object({
+            assessmentHash: z.string().regex(/^[a-f0-9]{64}$/),
+            verdict: z.enum(campaignReviewVerdicts),
+        })
+        .parse(read(receiptPath));
+    const assessment = read(
+        join(root, `assessment-${receipt.assessmentHash}.json`),
+    );
+    assert.equal(
+        sha256(JSON.stringify(assessment)),
+        receipt.assessmentHash,
+        "Acknowledged assessment changed",
+    );
+    const accepted = campaignReviewShape
+        .extend({
+            verdict: z.enum(campaignReviewVerdicts),
+            reviewer: z.literal("automated"),
+        })
+        .parse(assessment);
+    for (const key of ["candidateHash", "batteryHash", "evidenceHash"] as const)
+        assert.equal(
+            accepted[key],
+            report[key],
+            "Diagnostic report assessment identity changed",
+        );
+    assert.equal(
+        accepted.verdict,
+        receipt.verdict,
+        "Diagnostic assessment verdict changed",
+    );
+    const retained = z
+        .object({
+            kind: z.literal("automated"),
+            evidenceHash: z.string(),
+            review: campaignReviewShape,
+        })
+        .parse(read(join(root, "automated-review-result.json")));
+    assert.equal(
+        retained.evidenceHash,
+        report.evidenceHash,
+        "Diagnostic report evidence changed",
+    );
+    assert.deepEqual(
+        retained.review,
+        campaignReviewShape.parse(assessment),
+        "Diagnostic assessment differs from retained review",
+    );
+    const restored = {
+        ...report,
+        assessment: "assessed" as const,
+        verdict: receipt.verdict,
+        summary: accepted.cases[0]?.finding ?? report.summary,
+    };
+    save(root, "automated-review-report", restored);
+    return restored;
 }
 
 /** Retains a simulated review intent without dispatching when cleanup is incomplete. */
@@ -845,6 +1173,18 @@ export async function runCampaignReviewStage(options: {
         evidenceHash,
         "Automated review evidence changed",
     );
+    const report = campaignReviewReport(root);
+    if (report)
+        for (const key of [
+            "candidateHash",
+            "batteryHash",
+            "evidenceHash",
+        ] as const)
+            assert.equal(
+                report[key],
+                validated[key],
+                "Diagnostic report identity changed",
+            );
     if (!options.reconciled)
         return { status: "awaiting_reconciliation" as const };
     const assessment = assessCampaignLot(root, validated, {
@@ -868,6 +1208,7 @@ export async function runCampaignReviewStage(options: {
             { flag: "wx", mode: 0o600, flush: true },
         );
     }
+    if (report) campaignReviewReport(root);
     return { status: "assessed" as const, assessment };
 }
 
@@ -1152,8 +1493,15 @@ async function executeCampaign(
             "Captured review candidate differs from authorized lot",
         );
         const retainedPath = join(lotRoot, "automated-review-result.json");
-        const revision = existsSync(retainedPath)
-            ? (read(retainedPath) as { evidenceHash: string }).evidenceHash
+        const missionPath = join(lotRoot, "automated-review-mission.json");
+        const pinned = existsSync(retainedPath)
+            ? retainedPath
+            : existsSync(missionPath)
+              ? missionPath
+              : undefined;
+        const revision = pinned
+            ? z.object({ evidenceHash: z.string() }).parse(read(pinned))
+                  .evidenceHash
             : (evidenceHash ?? campaignReviewTemplate(lotRoot).evidenceHash);
         assert(revision, "Review evidence revision unavailable");
         assert(state.campaignId, "Authorized campaign required");
@@ -1185,46 +1533,114 @@ async function executeCampaign(
             save(lotRoot, "automated-review-status", pending);
             return pending;
         }
-        return runCampaignReviewStage({
-            root: lotRoot,
-            evidenceHash: revision,
-            reconciled,
-            review,
-            assess: async (assessment) => {
-                const name =
-                    `campaign-${manifest.key}-${lot.key}-assessment`.slice(
-                        0,
-                        64,
-                    );
-                if (boundaries.archive) boundaries.archive(lotRoot, name);
-                else {
-                    const archived = spawnSync(
-                        "pnpm",
-                        [
-                            "evaluation:archive",
-                            "--name",
-                            name,
+        const archiveReview = (kind: "assessment" | "diagnostic") => {
+            const name = `campaign-${manifest.key}-${lot.key}-${kind}`.slice(
+                0,
+                64,
+            );
+            const receiptName = "automated-review-diagnostic-archive";
+            const selected =
+                kind === "assessment"
+                    ? [lotRoot]
+                    : [
+                          ...readdirSync(lotRoot, { withFileTypes: true })
+                              .filter(
+                                  (item) =>
+                                      item.isFile() &&
+                                      item.name !== `${receiptName}.json` &&
+                                      (item.name.startsWith(
+                                          "automated-review-",
+                                      ) ||
+                                          item.name === "progress.jsonl"),
+                              )
+                              .map((item) => join(lotRoot, item.name)),
+                          ...[
+                              ".complete",
+                              "review-template.json",
+                              `evidence-index-${revision}.json`,
+                          ].map((file) =>
+                              join(
+                                  lotRoot,
+                                  `automated-review-evidence-${revision}`,
+                                  file,
+                              ),
+                          ),
+                      ];
+            const inputsHash =
+                kind === "diagnostic"
+                    ? candidateHash(
+                          Object.fromEntries(
+                              selected.map((path) => [
+                                  relative(lotRoot, path),
+                                  sha256(readFileSync(path)),
+                              ]),
+                          ),
+                      )
+                    : null;
+            if (
+                inputsHash &&
+                existsSync(join(lotRoot, `${receiptName}.json`)) &&
+                z
+                    .object({ inputsHash: z.string() })
+                    .parse(read(join(lotRoot, `${receiptName}.json`)))
+                    .inputsHash === inputsHash
+            )
+                return;
+            if (boundaries.archive) boundaries.archive(lotRoot, name);
+            else {
+                const archived = spawnSync(
+                    "pnpm",
+                    [
+                        "evaluation:archive",
+                        "--name",
+                        name,
+                        ...selected.flatMap((path, index) => [
                             "--external",
-                            `qualification=${lotRoot}`,
-                        ],
-                        { encoding: "utf8", timeout: 120000 },
-                    );
-                    assert.equal(
-                        archived.status,
-                        0,
-                        "Assessment archive failed; retained evidence is unchanged",
-                    );
-                }
-                await client.mutation(
-                    ref(internal.qualificationCampaigns.assess),
-                    {
-                        lotId: lot._id,
-                        assessmentHash: assessment.assessmentHash,
-                        verdict: assessment.verdict,
-                    },
+                            `review${index}=${path}`,
+                        ]),
+                    ],
+                    { encoding: "utf8", timeout: 120000 },
                 );
-            },
-        });
+                assert.equal(
+                    archived.status,
+                    0,
+                    "Review archive failed; retained diagnostics and evidence are unchanged",
+                );
+            }
+            if (inputsHash) save(lotRoot, receiptName, { inputsHash });
+        };
+        let assessmentArchived = false;
+        try {
+            return await runCampaignReviewStage({
+                root: lotRoot,
+                evidenceHash: revision,
+                reconciled,
+                review,
+                assess: async (assessment) => {
+                    archiveReview("assessment");
+                    assessmentArchived = true;
+                    await client.mutation(
+                        ref(internal.qualificationCampaigns.assess),
+                        {
+                            lotId: lot._id,
+                            assessmentHash: assessment.assessmentHash,
+                            verdict: assessment.verdict,
+                        },
+                    );
+                },
+            });
+        } finally {
+            const report = campaignReviewReport(lotRoot);
+            if (report) {
+                console.log(
+                    JSON.stringify({
+                        status: "diagnostic_available",
+                        report: { ...report, path: join(lotRoot, report.path) },
+                    }),
+                );
+                if (!assessmentArchived) archiveReview("diagnostic");
+            }
+        }
     };
     const verifyBattery = () =>
         assert.equal(
@@ -1243,9 +1659,41 @@ async function executeCampaign(
             existingCampaign.campaign.manifest,
             "Local mandate differs from the server authorization",
         );
+    if (
+        manifest.version === 3 &&
+        existingCampaign &&
+        ["run", "close"].includes(action)
+    )
+        for (const lot of existingCampaign.lots)
+            if (lot.status === "finished")
+                campaignReviewReport(join(root, "lots", lot.key));
     if (action === "status") {
-        const snapshot = state.campaignId
+        const inspected = state.campaignId
             ? await inspectCampaign(state.campaignId)
+            : null;
+        const snapshot = inspected
+            ? {
+                  ...inspected,
+                  diagnosticReports: inspected.lots.flatMap((lot) => {
+                      const report = campaignReviewReport(
+                          join(root, "lots", lot.key),
+                      );
+                      return report
+                          ? [
+                                {
+                                    ...report,
+                                    lot: lot.key,
+                                    path: join(
+                                        root,
+                                        "lots",
+                                        lot.key,
+                                        report.path,
+                                    ),
+                                },
+                            ]
+                          : [];
+                  }),
+              }
             : { status: "not_authorized" };
         save(root, "status", snapshot);
         console.log(JSON.stringify(snapshot, null, 2));

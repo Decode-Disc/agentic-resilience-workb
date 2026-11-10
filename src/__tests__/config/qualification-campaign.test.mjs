@@ -1,11 +1,24 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { execFileSync } from "node:child_process";
+import test, { beforeEach } from "node:test";
 import { campaignManifestSchema } from "../../../convex/qualificationCampaignPolicy.ts";
 import {
     qualificationReviewCodexCredential,
+    qualificationReviewReport,
     qualificationReviewResponse,
     qualificationReviewRuntime,
 } from "../setup/qualification-review.ts";
+
+// Most legacy fixtures use non-reasoning API/faux models; reasoning cases control their own environment.
+beforeEach((t) => {
+    const previous = process.env.WORKBENCH_REVIEW_REASONING;
+    process.env.WORKBENCH_REVIEW_REASONING = "off";
+    t.after(() => {
+        if (previous === undefined)
+            delete process.env.WORKBENCH_REVIEW_REASONING;
+        else process.env.WORKBENCH_REVIEW_REASONING = previous;
+    });
+});
 
 test("new analysis mandates require independent finite allowances and leave old mandates unchanged", () => {
     const base = makeManifest();
@@ -90,7 +103,9 @@ test("a campaign cannot silently default its spending allowance or expiration", 
 });
 
 import {
+    copyFileSync,
     existsSync,
+    mkdirSync,
     mkdtempSync,
     readFileSync,
     symlinkSync,
@@ -256,10 +271,14 @@ for (const fault of [
     "retained",
     "none",
     "settlement",
+    "legacy-reasoning",
+    "settlement-revision",
     "unknown",
     "denied",
     "503",
     "assess-ack",
+    "report-ack-status",
+    "report-ack-close",
     "unqualified",
     "tampered",
     "foreign-candidate",
@@ -267,14 +286,22 @@ for (const fault of [
     "auth-oauth",
     "auth-missing",
     "auth-codex",
+    "auth-codex-reasoning",
+    "auth-codex-legacy-reasoning",
     "auth-subscription",
     "auth-subscription-key",
     "isolated-lock",
+    "invalid-verdict",
 ])
     test(`campaign command review handles ${fault}`, async () => {
         const retained = fault === "retained";
         const subscription = fault.startsWith("auth-subscription");
-        const codex = fault === "auth-codex" || subscription;
+        const codex = fault.startsWith("auth-codex") || subscription;
+        process.env.WORKBENCH_REVIEW_REASONING = codex
+            ? fault === "auth-codex-reasoning"
+                ? "high"
+                : "low"
+            : "off";
         const { mock } = await import("node:test");
         const { mkdirSync } = await import("node:fs");
         const { ConvexHttpClient } = await import("convex/browser");
@@ -363,7 +390,8 @@ for (const fault of [
         const review = campaignReviewTemplate(lotRoot);
         review.cases[0].finding =
             "The saved framing matches the captured evidence.";
-        review.cases[0].checks["proposed-framing-is-saved"] = "passed";
+        review.cases[0].checks["proposed-framing-is-saved"] =
+            fault === "invalid-verdict" ? "pass" : "passed";
         review.cases[0].evidence = ["published.json"];
         writeFileSync(
             join(lotRoot, "review-template.json"),
@@ -460,7 +488,10 @@ for (const fault of [
             }
             if (
                 name.endsWith(":settleAnalysis") &&
-                ["settlement", "tampered"].includes(fault) &&
+                (["settlement", "tampered"].includes(fault) ||
+                    fault.endsWith("reasoning") ||
+                    (fault === "settlement-revision" &&
+                        args.attemptKey.endsWith("-2"))) &&
                 !interrupted
             ) {
                 interrupted = true;
@@ -530,6 +561,13 @@ for (const fault of [
                             body.max_output_tokens,
                             codex ? undefined : 1000,
                         );
+                        if (codex)
+                            assert.equal(
+                                body.reasoning.effort,
+                                fault === "auth-codex-reasoning"
+                                    ? "high"
+                                    : "low",
+                            );
                         assert.match(
                             JSON.stringify(body),
                             /1-based UTF-8 byte position/,
@@ -540,7 +578,7 @@ for (const fault of [
                                 /retained evidence/,
                             );
                         return qualificationReviewResponse(
-                            JSON.stringify(review),
+                            qualificationReviewReport(review),
                             dispatches,
                         );
                     } catch (error) {
@@ -559,20 +597,18 @@ for (const fault of [
                 const agentDir = mkdtempSync(join(tmpdir(), "pi-native-auth-"));
                 process.env.PI_CODING_AGENT_DIR = agentDir;
                 delete process.env.OPENAI_API_KEY;
-                const credential = [
-                    "auth-oauth",
-                    "auth-codex",
-                    "auth-subscription",
-                ].includes(fault)
-                    ? codex
-                        ? qualificationReviewCodexCredential()
-                        : {
-                              type: "oauth",
-                              access: "synthetic-oauth-access",
-                              refresh: "synthetic-oauth-refresh",
-                              expires: Date.now() + 600000,
-                          }
-                    : { type: "api_key", key: "synthetic-native-pi-key" };
+                const credential =
+                    (codex && fault !== "auth-subscription-key") ||
+                    fault === "auth-oauth"
+                        ? codex
+                            ? qualificationReviewCodexCredential()
+                            : {
+                                  type: "oauth",
+                                  access: "synthetic-oauth-access",
+                                  refresh: "synthetic-oauth-refresh",
+                                  expires: Date.now() + 600000,
+                              }
+                        : { type: "api_key", key: "synthetic-native-pi-key" };
                 writeFileSync(
                     join(agentDir, "auth.json"),
                     JSON.stringify(
@@ -622,6 +658,97 @@ for (const fault of [
             if (fault === "assess-ack")
                 await assert.rejects(run(), /acknowledgement lost/);
             else await run();
+            if (fault.startsWith("report-ack-")) {
+                const reportPath = join(
+                    lotRoot,
+                    "automated-review-report.json",
+                );
+                const stale = JSON.parse(readFileSync(reportPath, "utf8"));
+                assert.equal(stale.assessment, "assessed");
+                assert.equal(
+                    existsSync(
+                        join(lotRoot, "automated-review-assessment.json"),
+                    ),
+                    true,
+                );
+                stale.assessment = "pending";
+                delete stale.verdict;
+                writeFileSync(reportPath, JSON.stringify(stale));
+                const action = fault.endsWith("status") ? "status" : "close";
+                await runCampaign(
+                    action,
+                    root,
+                    {},
+                    async () => assert.fail("no scenario replay"),
+                    boundaries,
+                );
+                const restored = JSON.parse(readFileSync(reportPath, "utf8"));
+                assert.equal(
+                    restored.assessment,
+                    "assessed",
+                    "Acknowledged assessment must repair its report projection",
+                );
+                assert.equal(restored.verdict, "passed");
+                if (action === "status") {
+                    const status = JSON.parse(
+                        readFileSync(join(root, "status.json"), "utf8"),
+                    );
+                    assert.equal(
+                        status.diagnosticReports[0].assessment,
+                        "assessed",
+                    );
+                }
+                assert.equal(dispatches, 2);
+                assert.equal(
+                    operations.filter((name) => name.endsWith(":assess"))
+                        .length,
+                    1,
+                );
+            }
+            if (fault === "settlement-revision") {
+                assert.equal(dispatches, 2);
+                assert.equal(
+                    existsSync(join(lotRoot, "automated-review-result.json")),
+                    false,
+                );
+                assert.equal(
+                    existsSync(join(lotRoot, "automated-review-report.md")),
+                    true,
+                );
+                writeFileSync(
+                    join(lotRoot, "reconciliation.json"),
+                    JSON.stringify({ reconciled: true, cleanup: "completed" }),
+                );
+                const recovered = campaignReviewTemplate(lotRoot, {
+                    recovery: true,
+                });
+                writeFileSync(
+                    join(lotRoot, "review-template.json"),
+                    JSON.stringify(recovered),
+                );
+                assert.notEqual(recovered.evidenceHash, review.evidenceHash);
+                process.env.WORKBENCH_REVIEW_REASONING =
+                    "invalid-after-interruption";
+                await run();
+                assert.equal(
+                    JSON.parse(
+                        readFileSync(
+                            join(lotRoot, "automated-review-mission.json"),
+                            "utf8",
+                        ),
+                    ).evidenceHash,
+                    review.evidenceHash,
+                );
+                assert.equal(
+                    JSON.parse(
+                        readFileSync(
+                            join(lotRoot, "review-template.json"),
+                            "utf8",
+                        ),
+                    ).evidenceHash,
+                    recovered.evidenceHash,
+                );
+            }
             if (fault === "tampered") {
                 const { readdirSync } = await import("node:fs");
                 const file = readdirSync(lotRoot).find((name) =>
@@ -639,6 +766,46 @@ for (const fault of [
                 assert.equal(dispatches, 1);
                 assert.equal(lot.status, "review");
                 assert.equal(archives, 0);
+                return;
+            }
+            if (fault === "invalid-verdict") {
+                assert.equal(lot.status, "review");
+                assert.equal(dispatches, 3);
+                assert.equal(
+                    archives,
+                    1,
+                    "Pending developer findings must be archived independently of assessment",
+                );
+                assert.equal(
+                    existsSync(join(lotRoot, "automated-review-report.md")),
+                    true,
+                );
+                assert.equal(
+                    existsSync(
+                        join(lotRoot, "automated-review-assessment.json"),
+                    ),
+                    false,
+                );
+                assert.equal(
+                    JSON.parse(
+                        readFileSync(
+                            join(lotRoot, "automated-review-status.json"),
+                            "utf8",
+                        ),
+                    ).reason,
+                    "analysis_reservation_unavailable",
+                );
+                await run();
+                assert.equal(
+                    dispatches,
+                    3,
+                    "Recovery must reuse known responses",
+                );
+                assert.equal(
+                    archives,
+                    1,
+                    "Unchanged diagnostic evidence must reuse its archive receipt",
+                );
                 return;
             }
             if (fault === "auth-subscription-key") {
@@ -727,7 +894,22 @@ for (const fault of [
                 );
                 return;
             }
-            if (fault === "settlement" || fault === "assess-ack") await run();
+            if (
+                ["settlement", "assess-ack"].includes(fault) ||
+                fault.endsWith("reasoning")
+            ) {
+                const pinPath = join(lotRoot, "automated-review-mission.json");
+                if (fault.endsWith("legacy-reasoning")) {
+                    const pin = JSON.parse(readFileSync(pinPath, "utf8"));
+                    delete pin.reasoning;
+                    writeFileSync(pinPath, JSON.stringify(pin));
+                }
+                const originalPin = readFileSync(pinPath, "utf8");
+                process.env.WORKBENCH_REVIEW_REASONING =
+                    "invalid-after-interruption";
+                await run();
+                assert.equal(readFileSync(pinPath, "utf8"), originalPin);
+            }
             assert.equal(
                 lot.status,
                 "finished",
@@ -756,7 +938,10 @@ for (const fault of [
                 operations.filter((name) => name.endsWith(":assess")).length,
                 fault === "assess-ack" ? 2 : 1,
             );
-            assert.equal(archives, fault === "assess-ack" ? 2 : 1);
+            assert.equal(
+                archives,
+                ["assess-ack", "settlement-revision"].includes(fault) ? 2 : 1,
+            );
             assert.equal(dispatches, retained ? 0 : 2);
             if (!retained) {
                 const journal = readFileSync(
@@ -981,7 +1166,9 @@ test("Pi review stage resumes its retained result and completes reconciled asses
         refreshOnCreate: false,
     });
     runtime.registerNativeProvider(faux.provider);
-    faux.setResponses([ai.fauxAssistantMessage(JSON.stringify(review))]);
+    faux.setResponses([
+        ai.fauxAssistantMessage(qualificationReviewReport(review)),
+    ]);
     const calls = [];
     const options = {
         root,
@@ -1118,6 +1305,154 @@ test("assessment handoff rejects a retained receipt without a retained review", 
     );
     assert.equal(calls, 0);
 });
+
+for (const mismatch of ["foreign-identity", "changed-assessment"])
+    test(`report projection refuses mismatched acknowledged artifacts (${mismatch})`, async () => {
+        const { campaignReviewReport, retainCampaignReviewReport } =
+            await import(
+                "../../../scripts/evaluations/workbench-browser/campaign.ts"
+            );
+        const root = mkdtempSync(join(tmpdir(), "campaign-report-projection-"));
+        writeFileSync(
+            join(root, "campaign-lot.json"),
+            JSON.stringify({
+                manifest: makeManifest(),
+                candidateHash: "b".repeat(64),
+                fingerprints: {},
+            }),
+        );
+        writeFileSync(join(root, "published.json"), "Retained evidence.");
+        const review = campaignReviewTemplate(root);
+        review.cases[0].finding =
+            "The saved result matches the captured evidence.";
+        review.cases[0].evidence = ["published.json"];
+        retainCampaignReviewReport(
+            root,
+            review,
+            "# Findings\n\nRetained diagnosis awaiting its acknowledged assessment.",
+            1,
+        );
+        writeFileSync(
+            join(root, "automated-review-result.json"),
+            JSON.stringify({
+                kind: "automated",
+                evidenceHash: review.evidenceHash,
+                review,
+            }),
+        );
+        const assessment = {
+            ...review,
+            candidateHash:
+                mismatch === "foreign-identity"
+                    ? "c".repeat(64)
+                    : review.candidateHash,
+            verdict: "inconclusive",
+            reviewer: "automated",
+            modelTaskQuality: "limited_to_declared_expectations",
+        };
+        const assessmentHash = sha256(JSON.stringify(assessment));
+        writeFileSync(
+            join(root, "automated-review-assessment.json"),
+            JSON.stringify({ assessmentHash, verdict: "inconclusive" }),
+        );
+        const stored = structuredClone(assessment);
+        if (mismatch === "changed-assessment")
+            stored.cases[0].finding =
+                "Changed after the receipt was acknowledged.";
+        writeFileSync(
+            join(root, `assessment-${assessmentHash}.json`),
+            JSON.stringify(stored),
+        );
+        assert.throws(() => campaignReviewReport(root), /changed|differs/i);
+        assert.equal(
+            JSON.parse(
+                readFileSync(
+                    join(root, "automated-review-report.json"),
+                    "utf8",
+                ),
+            ).assessment,
+            "pending",
+        );
+    });
+
+for (const variant of ["property-order", "extra-field"])
+    test(`legacy assessment recovery preserves committed identity (${variant})`, async () => {
+        const { runCampaignReviewStage } = await import(
+            "../../../scripts/evaluations/workbench-browser/campaign.ts"
+        );
+        const root = mkdtempSync(join(tmpdir(), "campaign-legacy-identity-"));
+        writeFileSync(
+            join(root, "campaign-lot.json"),
+            JSON.stringify({
+                manifest: makeManifest(),
+                candidateHash: "b".repeat(64),
+                fingerprints: {},
+            }),
+        );
+        writeFileSync(
+            join(root, "campaign-result.json"),
+            JSON.stringify({ completed: true, cleanupCompleted: true }),
+        );
+        writeFileSync(
+            join(root, "published.json"),
+            "Historical retained evidence.",
+        );
+        const template = campaignReviewTemplate(root);
+        template.cases[0].finding =
+            "The historical judgment matches the captured result.";
+        template.cases[0].checks["proposed-framing-is-saved"] = "passed";
+        template.cases[0].evidence = ["published.json"];
+        const legacy =
+            variant === "property-order"
+                ? Object.fromEntries(Object.entries(template).reverse())
+                : {
+                      ...template,
+                      legacyAnnotation: "Previously accepted annotation",
+                  };
+        const committedHash = sha256(
+            JSON.stringify({
+                ...legacy,
+                verdict: "passed",
+                reviewer: "automated",
+                modelTaskQuality: "limited_to_declared_expectations",
+            }),
+        );
+        writeFileSync(
+            join(root, "automated-review-result.json"),
+            JSON.stringify({
+                kind: "automated",
+                evidenceHash: template.evidenceHash,
+                review: legacy,
+            }),
+        );
+        let reviewerCalls = 0;
+        const result = await runCampaignReviewStage({
+            root,
+            evidenceHash: template.evidenceHash,
+            reconciled: true,
+            review: async () => {
+                reviewerCalls++;
+                throw new Error("Retained review must not dispatch");
+            },
+            assess: async (assessment) =>
+                assert.equal(
+                    assessment.assessmentHash,
+                    committedHash,
+                    "Recovery must reuse the already committed assessment",
+                ),
+        });
+        assert.equal(result.status, "assessed");
+        assert.equal(reviewerCalls, 0);
+        assert.equal(
+            JSON.parse(
+                readFileSync(
+                    join(root, "automated-review-assessment.json"),
+                    "utf8",
+                ),
+            ).assessmentHash,
+            committedHash,
+        );
+    });
 
 test("assessment handoff retries the same retained assessment after interruption", async () => {
     const { runCampaignReviewStage } = await import(
@@ -1355,6 +1690,200 @@ test("reviewer discovers indexed evidence and reads bounded windows of large ver
     );
 });
 
+test("investigator search finds archived source beyond the first inventory page", async () => {
+    const campaign = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "campaign-search-"));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(join(root, "code"));
+    for (let i = 0; i < 101; i++)
+        writeFileSync(
+            join(root, "code", `${String(i).padStart(3, "0")}.ts`),
+            "unrelated source\n",
+        );
+    writeFileSync(
+        join(root, "code", "owner.ts"),
+        "export function settleBilling() {}\nsettleBilling();\n",
+    );
+    const { evidenceHash } = campaignReviewTemplate(root);
+    const matches = [];
+    let cursor;
+    let pages = 0;
+    do {
+        const page = campaign.searchCampaignReviewEvidence(root, evidenceHash, {
+            pattern: "settlebilling",
+            ignoreCase: true,
+            limit: 1,
+            cursor,
+        });
+        matches.push(...page.matches);
+        cursor = page.nextCursor;
+        assert(++pages < 10, "Search continuation must advance");
+    } while (cursor);
+    assert(
+        pages > 1,
+        "Bounded search must disclose incomplete inventory coverage",
+    );
+    assert.deepEqual(
+        matches.map(({ path, line }) => ({ path, line })),
+        [
+            { path: "code/owner.ts", line: 1 },
+            { path: "code/owner.ts", line: 2 },
+        ],
+    );
+    assert.match(matches[0].content, /settleBilling/);
+});
+
+test("newline-heavy evidence returns and resumes within a bounded search heap", async () => {
+    const { spawnSync } = await import("node:child_process");
+    const root = mkdtempSync(join(tmpdir(), "campaign-search-heap-"));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    const blankLines = 16 * 1024 * 1024;
+    writeFileSync(
+        join(root, "large.txt"),
+        `needle\n${"\n".repeat(blankLines)}🙂 İ needle\n`,
+    );
+    const { evidenceHash } = campaignReviewTemplate(root);
+    const script = `
+        const { searchCampaignReviewEvidence: search } = await import('./scripts/evaluations/workbench-browser/campaign.ts');
+        const [root, evidenceHash] = process.argv.slice(1);
+        const options = { path: 'large.txt', pattern: 'needle', limit: 1 };
+        const first = search(root, evidenceHash, options);
+        const second = search(root, evidenceHash, { ...options, cursor: first.nextCursor });
+        const tail = search(root, evidenceHash, { ...options, cursor: second.nextCursor });
+        console.log(JSON.stringify({ first: first.matches, second: second.matches, finished: tail.nextCursor }));
+    `;
+    const result = spawnSync(
+        "/bin/sh",
+        [
+            "-c",
+            'ulimit -c 0; exec "$@"',
+            "search-heap-probe",
+            process.execPath,
+            "--max-old-space-size=96",
+            "--experimental-strip-types",
+            "--input-type=module",
+            "-e",
+            script,
+            root,
+            evidenceHash,
+        ],
+        { encoding: "utf8", timeout: 30000 },
+    );
+    assert.equal(
+        result.status,
+        0,
+        `${result.signal ?? result.error ?? "Search failed"}: ${result.stderr.match(/^FATAL ERROR.*$/m)?.[0] ?? result.stderr.slice(-1200)}`,
+    );
+    const page = JSON.parse(result.stdout);
+    assert.equal(page.first[0].line, 1);
+    assert.equal(page.first[0].offset, 1);
+    assert.equal(page.second[0].line, blankLines + 2);
+    assert.equal(page.second[0].offset, blankLines + 16);
+    assert.equal(page.finished, null);
+});
+
+test("case-insensitive evidence search returns a read-ready Unicode byte locator", async () => {
+    const { searchCampaignReviewEvidence } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "campaign-search-unicode-"));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    writeFileSync(join(root, "owner.ts"), "İ🙂 settleBilling();\n");
+    const { evidenceHash } = campaignReviewTemplate(root);
+    const page = searchCampaignReviewEvidence(root, evidenceHash, {
+        pattern: "settlebilling",
+        ignoreCase: true,
+    });
+    assert.equal(page.matches[0].offset, 8);
+});
+
+test("investigator search excludes unindexed data and rejects changed, escaped or cancelled reads", async () => {
+    const { searchCampaignReviewEvidence } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "campaign-search-integrity-"));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    writeFileSync(join(root, "owner.ts"), "billing\nbilling\n");
+    const { evidenceHash } = campaignReviewTemplate(root);
+    writeFileSync(join(root, "unindexed.txt"), "private billing");
+    const options = { pattern: "billing", path: "owner.ts", limit: 1 };
+    const first = searchCampaignReviewEvidence(root, evidenceHash, options);
+    assert(first.nextCursor);
+    assert.throws(
+        () =>
+            searchCampaignReviewEvidence(root, evidenceHash, {
+                ...options,
+                pattern: "different",
+                cursor: first.nextCursor,
+            }),
+        /cursor/,
+    );
+    for (const path of ["../owner.ts", "/etc/passwd", "unindexed.txt"])
+        assert.throws(
+            () =>
+                searchCampaignReviewEvidence(root, evidenceHash, {
+                    ...options,
+                    path,
+                }),
+            /scope/,
+        );
+    const whole = searchCampaignReviewEvidence(root, evidenceHash, {
+        pattern: "private billing",
+    });
+    assert.equal(whole.matches.length, 0);
+    assert.equal(whole.nextCursor, null);
+    assert.throws(
+        () =>
+            searchCampaignReviewEvidence(root, evidenceHash, {
+                ...options,
+                signal: AbortSignal.abort(),
+            }),
+        /abort/i,
+    );
+    writeFileSync(join(root, "owner.ts"), "changed billing");
+    assert.throws(
+        () => searchCampaignReviewEvidence(root, evidenceHash, options),
+        /changed|stale/i,
+    );
+    unlinkSync(join(root, "owner.ts"));
+    symlinkSync(join(root, "unindexed.txt"), join(root, "owner.ts"));
+    assert.throws(
+        () => searchCampaignReviewEvidence(root, evidenceHash, options),
+        /symlink/i,
+    );
+});
+
 test("automated evidence reading permits only unchanged indexed files within its byte limit", async () => {
     const { readCampaignReviewEvidence } = await import(
         "../../../scripts/evaluations/workbench-browser/campaign.ts"
@@ -1550,7 +2079,9 @@ for (const changedEvidence of [false, true])
                         join(root, "published.json"),
                         "changed after reading",
                     );
-                return ai.fauxAssistantMessage(JSON.stringify(review));
+                return ai.fauxAssistantMessage(
+                    qualificationReviewReport(review),
+                );
             },
         ]);
         const events = [];
@@ -1573,6 +2104,7 @@ for (const changedEvidence of [false, true])
         );
         const pending = runPiCampaignReview({
             root,
+            reportRoot: root,
             template: campaignReviewTemplate(root),
             runtime,
             model: faux.getModel(),
@@ -1587,6 +2119,10 @@ for (const changedEvidence of [false, true])
         });
         if (changedEvidence) {
             await assert.rejects(pending, /stale/i);
+            assert.match(
+                readFileSync(join(root, "automated-review-report.md"), "utf8"),
+                /captured evidence/,
+            );
             return;
         }
         const result = await pending;
@@ -1604,6 +2140,845 @@ for (const changedEvidence of [false, true])
             "settle:3",
         ]);
         assert.equal(faux.state.callCount, 3);
+    });
+
+test("a rejected assessment retains a developer report while reconciliation is blocked", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const { runCampaignReviewStage } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "campaign-investigator-"));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    const mechanical = { completed: false, cleanupCompleted: true };
+    writeFileSync(
+        join(root, "campaign-result.json"),
+        JSON.stringify(mechanical),
+    );
+    writeFileSync(
+        join(root, "published.json"),
+        "The documentary control timed out.",
+    );
+    const template = campaignReviewTemplate(root);
+    const review = structuredClone(template);
+    review.cases[0].finding =
+        "Documentary control timed out before a useful handoff.";
+    review.cases[0].checks["proposed-framing-is-saved"] = "fail";
+    review.cases[0].evidence = ["published.json"];
+    const report = `# Developer handoff\n\nDocumentary control timed out; inspect the attempt deadline before changing the model.\n\n## Assessment\n\n\`\`\`json\n${JSON.stringify(review)}\n\`\`\``;
+    const runtime = await qualificationReviewRuntime();
+    let requests = 0;
+    const result = await runCampaignReviewStage({
+        root,
+        evidenceHash: template.evidenceHash,
+        reconciled: false,
+        review: (evidenceRoot) =>
+            runPiCampaignReview({
+                root: evidenceRoot,
+                reportRoot: root,
+                template,
+                runtime,
+                model: runtime.getModel("openai", "gpt-4o-mini"),
+                transport: {
+                    kind: "mock-openai",
+                    fetch: () => async () => {
+                        requests++;
+                        return qualificationReviewResponse(report, requests);
+                    },
+                },
+                limits: {
+                    maxInputTokens: 32000,
+                    maxOutputTokens: 1000,
+                    timeoutMs: 10000,
+                },
+                reserve: async (attempt) =>
+                    assert(attempt <= 2, "Analysis allowance exhausted"),
+                settle: async () => {},
+            }),
+        assess: async () =>
+            assert.fail("Invalid or unreconciled review cannot be assessed"),
+    });
+    assert.equal(result.status, "pending");
+    assert.equal(result.reason, "analysis_reservation_unavailable");
+    assert.equal(requests, 2);
+    assert.match(
+        readFileSync(join(root, "automated-review-report.md"), "utf8"),
+        /inspect the attempt deadline/,
+    );
+    assert.equal(
+        existsSync(join(root, "automated-review-assessment.json")),
+        false,
+    );
+    assert.deepEqual(
+        JSON.parse(readFileSync(join(root, "campaign-result.json"), "utf8")),
+        mechanical,
+    );
+});
+
+test("a length-limited diagnostic remains available without accepting assessment", async () => {
+    const { dirname } = await import("node:path");
+    const { fileURLToPath, pathToFileURL } = await import("node:url");
+    const sdk = dirname(
+        fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent")),
+    );
+    const ai = await import(
+        pathToFileURL(join(sdk, "../../pi-ai/dist/index.js")).href
+    );
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "campaign-review-partial-"));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    const template = campaignReviewTemplate(root);
+    const runtime = await qualificationReviewRuntime();
+    const faux = ai.fauxProvider();
+    runtime.registerNativeProvider(faux.provider);
+    const text =
+        "# Findings\n\nUseful partial diagnosis: inspect the captured operation and its archived owner.";
+    faux.setResponses([
+        ai.fauxAssistantMessage(text, { stopReason: "length" }),
+    ]);
+    const events = [];
+    const result = await runPiCampaignReview({
+        root,
+        reportRoot: root,
+        template,
+        runtime,
+        model: faux.getModel(),
+        transport: "mock",
+        limits: {
+            maxInputTokens: 32000,
+            maxOutputTokens: 1000,
+            timeoutMs: 10000,
+        },
+        reserve: async () => {
+            events.push("reserve");
+        },
+        settle: async () => {
+            events.push("settle");
+        },
+    });
+    assert.equal(result.status, "pending");
+    assert.equal(
+        readFileSync(join(root, "automated-review-report.md"), "utf8"),
+        text,
+    );
+    const report = JSON.parse(
+        readFileSync(join(root, "automated-review-report.json"), "utf8"),
+    );
+    assert.equal(report.assessment, "pending");
+    assert.equal(report.complete, false);
+    assert.deepEqual(events, ["reserve", "settle"]);
+    assert.equal(faux.state.callCount, 1);
+});
+
+test("a completed diagnostic survives a lost reviewer settlement acknowledgement without another call", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "campaign-report-settlement-"));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    const template = campaignReviewTemplate(root);
+    const runtime = await qualificationReviewRuntime();
+    let requests = 0;
+    const text =
+        "# Findings\n\nSource-supported suspect: the billing observation is not marked final. Verify the settlement owner.\n";
+    const result = await runPiCampaignReview({
+        root,
+        reportRoot: root,
+        template,
+        runtime,
+        model: runtime.getModel("openai", "gpt-4o-mini"),
+        transport: {
+            kind: "mock-openai",
+            fetch: () => async () => {
+                requests++;
+                return qualificationReviewResponse(text, 2);
+            },
+        },
+        limits: {
+            maxInputTokens: 32000,
+            maxOutputTokens: 1000,
+            timeoutMs: 10000,
+        },
+        reserve: async () => {},
+        settle: async () => {
+            throw new Error("Settlement acknowledgement lost");
+        },
+    });
+    assert.equal(result.status, "pending");
+    assert.equal(requests, 1);
+    assert.equal(
+        readFileSync(join(root, "automated-review-report.md"), "utf8"),
+        text,
+    );
+    assert.equal(
+        JSON.parse(
+            readFileSync(join(root, "automated-review-report.json"), "utf8"),
+        ).assessment,
+        "pending",
+    );
+});
+
+test("report filesystem failure stays explicit and cannot prevent known usage settlement", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const { mkdirSync, renameSync } = await import("node:fs");
+    const root = mkdtempSync(join(tmpdir(), "campaign-report-io-"));
+    const reportRoot = join(root, "reports");
+    mkdirSync(reportRoot);
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    const template = campaignReviewTemplate(root);
+    const runtime = await qualificationReviewRuntime();
+    let settled = 0;
+    let requests = 0;
+    await assert.rejects(
+        runPiCampaignReview({
+            root,
+            reportRoot,
+            template,
+            runtime,
+            model: runtime.getModel("openai", "gpt-4o-mini"),
+            transport: {
+                kind: "mock-openai",
+                fetch: () => async () => {
+                    requests++;
+                    renameSync(reportRoot, `${reportRoot}-retained`);
+                    writeFileSync(reportRoot, "Directory no longer available");
+                    return qualificationReviewResponse(
+                        "# Findings\n\nUseful diagnostic before I/O failure.",
+                        2,
+                    );
+                },
+            },
+            limits: {
+                maxInputTokens: 32000,
+                maxOutputTokens: 1000,
+                timeoutMs: 10000,
+            },
+            reserve: async () => {},
+            settle: async () => {
+                settled++;
+            },
+        }),
+        { code: "ENOTDIR" },
+    );
+    assert.equal(settled, 1);
+    assert.equal(requests, 1);
+});
+
+for (const shape of ["bare-json", "assessment-only"])
+    test(`new investigator requires a developer handoff before accepting assessment (${shape})`, async () => {
+        const { runPiCampaignReview } = await import(
+            "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+        );
+        const root = mkdtempSync(join(tmpdir(), "campaign-review-envelope-"));
+        writeFileSync(
+            join(root, "campaign-lot.json"),
+            JSON.stringify({
+                manifest: makeManifest(),
+                candidateHash: "b".repeat(64),
+                fingerprints: {},
+            }),
+        );
+        writeFileSync(
+            join(root, "published.json"),
+            "Synthetic retained result.",
+        );
+        const review = campaignReviewTemplate(root);
+        review.cases[0].finding =
+            "The saved result matches the captured evidence.";
+        review.cases[0].checks["proposed-framing-is-saved"] = "passed";
+        review.cases[0].evidence = ["published.json"];
+        const appendix = `## Assessment\n\n\`\`\`json\n${JSON.stringify(review)}\n\`\`\``;
+        const first = shape === "bare-json" ? JSON.stringify(review) : appendix;
+        const report = `# Findings\n\nThe captured result supports the saved finding.\n\n${appendix}`;
+        const runtime = await qualificationReviewRuntime();
+        let calls = 0;
+        let settled = 0;
+        const result = await runPiCampaignReview({
+            root,
+            reportRoot: root,
+            template: review,
+            runtime,
+            model: runtime.getModel("openai", "gpt-4o-mini"),
+            transport: {
+                kind: "mock-openai",
+                fetch: () => async () => {
+                    assert(++calls <= 2);
+                    return qualificationReviewResponse(
+                        calls === 1 ? first : report,
+                        2,
+                    );
+                },
+            },
+            limits: {
+                maxInputTokens: 32000,
+                maxOutputTokens: 1000,
+                timeoutMs: 10000,
+            },
+            reserve: async () => {},
+            settle: async () => {
+                settled++;
+            },
+        });
+        assert.equal(result.status, "completed");
+        assert.equal(
+            calls,
+            2,
+            "The new protocol must correct a missing handoff",
+        );
+        assert.equal(settled, 2);
+        assert.equal(
+            readFileSync(join(root, "automated-review-report-1.md"), "utf8"),
+            first,
+        );
+        assert.equal(
+            readFileSync(join(root, "automated-review-report.md"), "utf8"),
+            report,
+        );
+    });
+
+test("malformed assessment formatting stays within its review deadline", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "campaign-review-whitespace-"));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    writeFileSync(join(root, "published.json"), "Synthetic captured result.");
+    const review = campaignReviewTemplate(root);
+    review.cases[0].finding = "The saved result matches the captured evidence.";
+    review.cases[0].checks["proposed-framing-is-saved"] = "passed";
+    review.cases[0].evidence = ["published.json"];
+    const runtime = await qualificationReviewRuntime();
+    let calls = 0;
+    const deadline = 1000;
+    const begun = performance.now();
+    const result = await runPiCampaignReview({
+        root,
+        reportRoot: root,
+        template: review,
+        runtime,
+        model: runtime.getModel("openai", "gpt-4o-mini"),
+        transport: {
+            kind: "mock-openai",
+            fetch: () => async () => {
+                assert(++calls <= 2, "Format correction must remain bounded");
+                const text =
+                    calls === 1
+                        ? `# Findings\n\nUseful diagnosis.\n\n## Assessment${"\n".repeat(65536)}not fenced JSON`
+                        : `# Findings\n\nThe captured result supports the finding.\n\n## Assessment\n\n\`\`\`json\n${JSON.stringify(review)}\n\`\`\``;
+                return qualificationReviewResponse(text, 2);
+            },
+        },
+        limits: {
+            maxInputTokens: 200000,
+            maxOutputTokens: 1000,
+            timeoutMs: deadline,
+        },
+        reserve: async () => {},
+        settle: async () => {},
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(calls, 2);
+    assert(
+        performance.now() - begun < deadline,
+        "Malformed whitespace must not block the review deadline",
+    );
+});
+
+test("Pi corrects assessment format in its existing session without losing the original report", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const { qualificationReviewPayload } = await import(
+        "../setup/qualification-review.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "campaign-format-feedback-"));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    writeFileSync(join(root, "published.json"), "The saved framing matches.");
+    const template = campaignReviewTemplate(root);
+    const review = structuredClone(template);
+    review.cases[0].finding =
+        "The saved framing matches the inspected evidence.";
+    review.cases[0].evidence = ["published.json"];
+    review.cases[0].checks["proposed-framing-is-saved"] = "pass";
+    const invalid = `# Findings\n\nSaved framing matches.\n\n## Assessment\n\`\`\`json\n${JSON.stringify(review)}\n\`\`\``;
+    const runtime = await qualificationReviewRuntime();
+    const requests = [];
+    const result = await runPiCampaignReview({
+        root,
+        reportRoot: root,
+        template,
+        runtime,
+        model: runtime.getModel("openai", "gpt-4o-mini"),
+        transport: {
+            kind: "mock-openai",
+            fetch: () => async (_input, init) => {
+                const body = await qualificationReviewPayload(init);
+                requests.push(body);
+                if (requests.length === 3) {
+                    assert.match(
+                        JSON.stringify(body.input),
+                        /Invalid review verdict/,
+                    );
+                    assert.match(
+                        JSON.stringify(body.input),
+                        /passed.*failed.*inconclusive/,
+                    );
+                    review.cases[0].checks["proposed-framing-is-saved"] =
+                        "passed";
+                }
+                const text =
+                    requests.length <= 2
+                        ? invalid
+                        : `# Findings\n\nSaved framing matches.\n\n## Assessment\n\`\`\`json\n${JSON.stringify(review)}\n\`\`\``;
+                return qualificationReviewResponse(text, requests.length);
+            },
+        },
+        limits: {
+            maxInputTokens: 32000,
+            maxOutputTokens: 1000,
+            timeoutMs: 10000,
+        },
+        reserve: async (attempt) =>
+            assert(attempt <= 3, "Analysis allowance exhausted"),
+        settle: async () => {},
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(
+        result.review.cases[0].checks["proposed-framing-is-saved"],
+        "passed",
+    );
+    assert.equal(requests.length, 3);
+    assert.equal(
+        readFileSync(join(root, "automated-review-report-2.md"), "utf8"),
+        invalid,
+    );
+    assert.match(
+        readFileSync(join(root, "automated-review-report.md"), "utf8"),
+        /"passed"/,
+    );
+});
+
+async function reviewerReasoningFixture() {
+    const root = mkdtempSync(join(tmpdir(), "campaign-reasoning-"));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    writeFileSync(join(root, "published.json"), "Saved framing matches.");
+    const template = campaignReviewTemplate(root);
+    const review = structuredClone(template);
+    review.cases[0].finding = "Saved framing matches the inspected evidence.";
+    review.cases[0].evidence = ["published.json"];
+    const runtime = await qualificationReviewRuntime("openai-codex");
+    const requests = [];
+    const reservations = [];
+    const settlements = [];
+    return {
+        requests,
+        reservations,
+        settlements,
+        options: {
+            root,
+            reportRoot: root,
+            template,
+            runtime,
+            model: runtime.getModel("openai-codex", "gpt-6.1-sol"),
+            transport: {
+                kind: "mock-openai",
+                fetch: () => async (_input, init) => {
+                    const { qualificationReviewPayload } = await import(
+                        "../setup/qualification-review.ts"
+                    );
+                    requests.push(await qualificationReviewPayload(init));
+                    return qualificationReviewResponse(
+                        qualificationReviewReport(review),
+                        requests.length,
+                    );
+                },
+            },
+            limits: { maxInputTokens: 32000, timeoutMs: 10000 },
+            reserve: async (attempt) => reservations.push(attempt),
+            settle: async (attempt) => settlements.push(attempt),
+        },
+    };
+}
+
+async function withReviewerReasoningProject(
+    run,
+    { environment, shared, linked = false } = {},
+) {
+    const cwd = process.cwd();
+    const previous = process.env.WORKBENCH_REVIEW_REASONING;
+    const project = mkdtempSync(join(tmpdir(), "reviewer-project-"));
+    execFileSync("git", ["init", "-q", project], {
+        env: {
+            ...process.env,
+            GIT_CONFIG_GLOBAL: "/dev/null",
+            GIT_CONFIG_NOSYSTEM: "1",
+        },
+    });
+    const resources = ".agents/skills/workbench-evaluation/references";
+    mkdirSync(join(project, resources), { recursive: true });
+    copyFileSync(
+        join(cwd, resources, "reviewer-mission.md"),
+        join(project, resources, "reviewer-mission.md"),
+    );
+    if (shared !== undefined)
+        writeFileSync(
+            join(project, ".env.local"),
+            `WORKBENCH_REVIEW_REASONING=${shared}\n`,
+        );
+    let selected = project;
+    if (linked) {
+        const gitEnv = {
+            ...process.env,
+            GIT_CONFIG_GLOBAL: "/dev/null",
+            GIT_CONFIG_NOSYSTEM: "1",
+        };
+        execFileSync(
+            "git",
+            [
+                "-C",
+                project,
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.com",
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "core.hooksPath=/dev/null",
+                "commit",
+                "--allow-empty",
+                "-qm",
+                "fixture",
+            ],
+            { env: gitEnv },
+        );
+        selected = join(project, "linked");
+        execFileSync(
+            "git",
+            [
+                "-C",
+                project,
+                "worktree",
+                "add",
+                "--detach",
+                "-q",
+                selected,
+                "HEAD",
+            ],
+            { env: gitEnv },
+        );
+        mkdirSync(join(selected, resources), { recursive: true });
+        copyFileSync(
+            join(cwd, resources, "reviewer-mission.md"),
+            join(selected, resources, "reviewer-mission.md"),
+        );
+        writeFileSync(
+            join(selected, ".env.local"),
+            "WORKBENCH_REVIEW_REASONING=xhigh\n",
+        );
+    }
+    if (environment === undefined)
+        delete process.env.WORKBENCH_REVIEW_REASONING;
+    else process.env.WORKBENCH_REVIEW_REASONING = environment;
+    process.chdir(selected);
+    try {
+        return await run(project);
+    } finally {
+        process.chdir(cwd);
+        if (previous === undefined)
+            delete process.env.WORKBENCH_REVIEW_REASONING;
+        else process.env.WORKBENCH_REVIEW_REASONING = previous;
+    }
+}
+
+test("reviewer reasoning defaults to high in the native Codex request", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const fixture = await reviewerReasoningFixture();
+    await withReviewerReasoningProject(async () => {
+        const result = await runPiCampaignReview(fixture.options);
+        assert.equal(result.status, "completed");
+        assert.equal(fixture.requests[0].reasoning.effort, "high");
+        assert.equal(fixture.requests.length, 2);
+        assert.deepEqual(fixture.settlements, [1, 2]);
+        const pin = JSON.parse(
+            readFileSync(
+                join(fixture.options.root, "automated-review-mission.json"),
+                "utf8",
+            ),
+        );
+        assert.deepEqual(pin.reasoning, {
+            requested: "high",
+            effective: "high",
+        });
+    });
+});
+
+test("reviewer reasoning defaults with an unrelated shared setting without loading it", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const fixture = await reviewerReasoningFixture();
+    const previous = process.env.UNRELATED_REVIEWER_SETTING;
+    await withReviewerReasoningProject(async (project) => {
+        writeFileSync(
+            join(project, ".env.local"),
+            "UNRELATED_REVIEWER_SETTING=EXCLUDED_ENV_SENTINEL\n",
+        );
+        const result = await runPiCampaignReview(fixture.options);
+        assert.equal(result.status, "completed");
+        assert.equal(fixture.requests[0].reasoning.effort, "high");
+        assert.equal(process.env.UNRELATED_REVIEWER_SETTING, previous);
+        assert.doesNotMatch(
+            JSON.stringify(fixture.requests),
+            /EXCLUDED_ENV_SENTINEL/,
+        );
+    });
+});
+
+test("reviewer reasoning uses process configuration before the shared file", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const fixture = await reviewerReasoningFixture();
+    await withReviewerReasoningProject(
+        async () => {
+            const result = await runPiCampaignReview(fixture.options);
+            assert.equal(result.status, "completed");
+            assert.deepEqual(
+                fixture.requests.map((request) => request.reasoning.effort),
+                ["medium", "medium"],
+            );
+        },
+        { environment: "medium", shared: "high" },
+    );
+});
+
+test("reviewer reasoning reads the shared main-worktree file from a linked checkout", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const fixture = await reviewerReasoningFixture();
+    await withReviewerReasoningProject(
+        async () => {
+            const result = await runPiCampaignReview(fixture.options);
+            assert.equal(result.status, "completed");
+            assert.deepEqual(
+                fixture.requests.map((request) => request.reasoning.effort),
+                ["medium", "medium"],
+            );
+        },
+        { shared: "medium", linked: true },
+    );
+});
+
+test("reviewer reasoning reports shared configuration I/O failure without dispatch", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const fixture = await reviewerReasoningFixture();
+    await withReviewerReasoningProject(async (project) => {
+        mkdirSync(join(project, ".env.local"));
+        await assert.rejects(runPiCampaignReview(fixture.options), (error) => {
+            assert.match(
+                error.message,
+                /Cannot read shared reviewer reasoning configuration/,
+            );
+            assert.equal(error.cause?.code, "EISDIR");
+            return true;
+        });
+        assert.deepEqual(fixture.reservations, []);
+        assert.deepEqual(fixture.requests, []);
+        assert.equal(
+            existsSync(
+                join(fixture.options.root, "automated-review-mission.json"),
+            ),
+            false,
+        );
+    });
+});
+
+for (const invalid of ["", "hgh", "off"])
+    test(`reviewer reasoning blocks invalid or unsupported selection ${JSON.stringify(invalid)}`, async () => {
+        const { runPiCampaignReview } = await import(
+            "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+        );
+        const fixture = await reviewerReasoningFixture();
+        await withReviewerReasoningProject(
+            async () => {
+                const result = await runPiCampaignReview(fixture.options);
+                assert.deepEqual(result, {
+                    status: "pending",
+                    reason: "reviewer_reasoning_unavailable",
+                });
+                assert.deepEqual(fixture.reservations, []);
+                assert.deepEqual(fixture.requests, []);
+                assert.equal(
+                    existsSync(
+                        join(
+                            fixture.options.root,
+                            "automated-review-mission.json",
+                        ),
+                    ),
+                    false,
+                );
+            },
+            { environment: invalid },
+        );
+    });
+
+for (const provider of ["openai", "openai-codex"])
+    test(`investigator receives its mission and searches archived source through Pi (${provider})`, async () => {
+        const { runPiCampaignReview } = await import(
+            "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+        );
+        const { qualificationReviewPayload } = await import(
+            "../setup/qualification-review.ts"
+        );
+        const { mkdirSync } = await import("node:fs");
+        const root = mkdtempSync(
+            join(tmpdir(), "campaign-investigator-tools-"),
+        );
+        writeFileSync(
+            join(root, "campaign-lot.json"),
+            JSON.stringify({
+                manifest: makeManifest(),
+                candidateHash: "b".repeat(64),
+                fingerprints: {},
+            }),
+        );
+        writeFileSync(
+            join(root, "campaign-result.json"),
+            JSON.stringify({ completed: false, cleanupCompleted: true }),
+        );
+        writeFileSync(
+            join(root, "reconciliation.json"),
+            JSON.stringify({ reconciled: false, usage: { model: 9 } }),
+        );
+        mkdirSync(join(root, "code"));
+        writeFileSync(
+            join(root, "code", "owner.ts"),
+            "export const reportedCostFinal = false;\n",
+        );
+        const template = campaignReviewTemplate(root);
+        const review = structuredClone(template);
+        review.cases[0].finding =
+            "The finality flag is false; inspect its source owner.";
+        review.cases[0].evidence = ["code/owner.ts"];
+        const runtime = await qualificationReviewRuntime(provider);
+        process.env.WORKBENCH_REVIEW_REASONING =
+            provider === "openai-codex" ? "low" : "off";
+        let requests = 0;
+        const result = await runPiCampaignReview({
+            root,
+            reportRoot: root,
+            template,
+            runtime,
+            model: runtime.getModel(
+                provider,
+                provider === "openai" ? "gpt-4o-mini" : "gpt-6.1-sol",
+            ),
+            transport: {
+                kind: "mock-openai",
+                fetch: () => async (_input, init) => {
+                    const body = await qualificationReviewPayload(init);
+                    const serialized = JSON.stringify(body);
+                    requests++;
+                    if (requests === 1) {
+                        assert.match(serialized, /grep/);
+                        assert.match(
+                            serialized,
+                            /Qualify the protected Workbench path/,
+                        );
+                        assert.match(serialized, /source-supported/);
+                        assert.match(serialized, /reconciled/);
+                        assert.doesNotMatch(
+                            serialized,
+                            /"name":"(?:bash|write|edit)"/,
+                        );
+                    } else {
+                        assert.match(serialized, /code\/owner\.ts/);
+                        assert.match(serialized, /reportedCostFinal = false/);
+                    }
+                    return qualificationReviewResponse(
+                        qualificationReviewReport(review),
+                        requests,
+                        {
+                            name: "grep",
+                            arguments: {
+                                pattern: "reportedCostFinal",
+                                literal: true,
+                                path: "code",
+                            },
+                        },
+                    );
+                },
+            },
+            limits: {
+                maxInputTokens: 32000,
+                maxOutputTokens: 1000,
+                timeoutMs: 10000,
+            },
+            reserve: async (attempt) => assert(attempt <= 2),
+            settle: async () => {},
+        });
+        assert.equal(result.status, "completed");
+        assert.equal(requests, 2);
     });
 
 test("real Pi OpenAI transport does not retry a mocked HTTP 503 when retries are disabled", async () => {

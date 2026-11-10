@@ -50,16 +50,28 @@ export async function qualificationReviewPayload(init?: RequestInit) {
     return JSON.parse(text) as Record<string, unknown>;
 }
 
+/** Canonical synthetic investigator envelope; raw malformed-response fixtures stay explicit. */
+export function qualificationReviewReport(assessment: unknown) {
+    return `# Findings\n\nSynthetic diagnostic handoff for offline boundary verification.\n\n## Assessment\n\n\`\`\`json\n${JSON.stringify(assessment)}\n\`\`\``;
+}
+
 /** Synthetic OpenAI Responses stream: inspect evidence, then return the supplied review. */
-export function qualificationReviewResponse(reviewJson: string, turn: number) {
+export function qualificationReviewResponse(
+    reviewJson: string,
+    turn: number,
+    consultation = {
+        name: "read",
+        arguments: { path: "published.json" } as Record<string, unknown>,
+    },
+) {
     const tool = turn === 1;
     const item = tool
         ? {
               id: "fc-fixture",
               type: "function_call",
               call_id: "call-fixture",
-              name: "read",
-              arguments: JSON.stringify({ path: "published.json" }),
+              name: consultation.name,
+              arguments: JSON.stringify(consultation.arguments),
               status: "completed",
           }
         : {
