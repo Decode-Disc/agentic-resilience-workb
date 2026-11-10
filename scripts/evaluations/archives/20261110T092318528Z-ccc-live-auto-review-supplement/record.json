@@ -1,0 +1,243 @@
+{
+    "schemaVersion": 1,
+    "id": "20261110T092318528Z-ccc-live-auto-review-supplement",
+    "createdAt": "2026-11-10T09:23:18.528Z",
+    "git": {
+        "head": "1e8ba6812c8c1e6de566a2aa25c3786ebc0cee94",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/native-context-compaction/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review",
+            "archivePath": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/native-context-compaction/docs/verification/2026-11-10-ccc-live-automated-review.md",
+            "archivePath": "repository/docs/verification/2026-11-10-ccc-live-automated-review.md"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/campaign.json",
+            "archivePath": "external/state0/campaign.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/cleanup.json",
+            "archivePath": "external/state1/cleanup.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/configuration-readiness.json",
+            "archivePath": "external/state2/configuration-readiness.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/model-readiness.json",
+            "archivePath": "external/state3/model-readiness.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/lots/lot-1/archive-result.json",
+            "archivePath": "external/review0/archive-result.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/lots/lot-1/automated-review-response-analysis-f6bbf918440bae68-1.json",
+            "archivePath": "external/review1/automated-review-response-analysis-f6bbf918440bae68-1.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/lots/lot-1/automated-review-response-analysis-f6bbf918440bae68-2.json",
+            "archivePath": "external/review2/automated-review-response-analysis-f6bbf918440bae68-2.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/lots/lot-1/automated-review-response-analysis-f6bbf918440bae68-3.json",
+            "archivePath": "external/review3/automated-review-response-analysis-f6bbf918440bae68-3.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/lots/lot-1/automated-review-response-analysis-f6bbf918440bae68-4.json",
+            "archivePath": "external/review4/automated-review-response-analysis-f6bbf918440bae68-4.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/lots/lot-1/automated-review-response-analysis-f6bbf918440bae68-5.json",
+            "archivePath": "external/review5/automated-review-response-analysis-f6bbf918440bae68-5.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/lots/lot-1/progress.jsonl",
+            "archivePath": "external/review6/progress.jsonl"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/lots/lot-1/automated-review-evidence-f6bbf918440bae68c687e2885ad599a8f3f1efcc1858d5ee208e494f0f7de2c6/.complete",
+            "archivePath": "external/frozen0/.complete"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/lots/lot-1/automated-review-evidence-f6bbf918440bae68c687e2885ad599a8f3f1efcc1858d5ee208e494f0f7de2c6/review-template.json",
+            "archivePath": "external/frozen1/review-template.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-live-auto-review-20261110/lots/lot-1/automated-review-evidence-f6bbf918440bae68c687e2885ad599a8f3f1efcc1858d5ee208e494f0f7de2c6/evidence-index-f6bbf918440bae68c687e2885ad599a8f3f1efcc1858d5ee208e494f0f7de2c6.json",
+            "archivePath": "external/frozen2/evidence-index-f6bbf918440bae68c687e2885ad599a8f3f1efcc1858d5ee208e494f0f7de2c6.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/frozen0/.complete",
+            "bytes": 64,
+            "sha256": "1449d0c7c77c73ae0d0e635b524bd61642de1f04d143c33b46524ee218dabf12"
+        },
+        {
+            "path": "external/frozen1/review-template.json",
+            "bytes": 759,
+            "sha256": "e33ab3aecddf480edff830559544c6156166ee0a60daa4e67244178d172dae36"
+        },
+        {
+            "path": "external/frozen2/evidence-index-f6bbf918440bae68c687e2885ad599a8f3f1efcc1858d5ee208e494f0f7de2c6.json",
+            "bytes": 118500,
+            "sha256": "321b76004139ae5bef9bc4f382eccd8eecbbe754ef6b5e1031099d9c789227c2"
+        },
+        {
+            "path": "external/review0/archive-result.json",
+            "bytes": 24,
+            "sha256": "93b2b5d505d88d67c54bd0e60b27a21e3acb019e8dda704a715863e2701771f0"
+        },
+        {
+            "path": "external/review1/automated-review-response-analysis-f6bbf918440bae68-1.json",
+            "bytes": 14109,
+            "sha256": "5f54157a9118031a849ba1822f7b505bdd136b50b511734ce185f7af122d0a6f"
+        },
+        {
+            "path": "external/review2/automated-review-response-analysis-f6bbf918440bae68-2.json",
+            "bytes": 18091,
+            "sha256": "154d922853036f74891893c0add157c860aee52d879f01d9ed2af4749b2e75e4"
+        },
+        {
+            "path": "external/review3/automated-review-response-analysis-f6bbf918440bae68-3.json",
+            "bytes": 19825,
+            "sha256": "bfff559ce3d1c54a4dfffbb08a3fbbd072f7d7a9a4789c59332686773d518bf6"
+        },
+        {
+            "path": "external/review4/automated-review-response-analysis-f6bbf918440bae68-4.json",
+            "bytes": 28972,
+            "sha256": "ff6d35b4f0fafd8b985633e3d5ddbccbec8c2b1a5b2cd4f063779e43306b9027"
+        },
+        {
+            "path": "external/review5/automated-review-response-analysis-f6bbf918440bae68-5.json",
+            "bytes": 220797,
+            "sha256": "81705f4e24bcd8f2cf6b474f9e0159cc3d04e7cd65efeb71e830678cbad8ddfc"
+        },
+        {
+            "path": "external/review6/progress.jsonl",
+            "bytes": 6048,
+            "sha256": "556784a8da1b84be6014f203c4ad78705e22cd6a69d92266d4e45eb305b40494"
+        },
+        {
+            "path": "external/state0/campaign.json",
+            "bytes": 120501,
+            "sha256": "9409026d0f46fdfe4b64a8303d6950a85845f07844708927263e32356852dac8"
+        },
+        {
+            "path": "external/state1/cleanup.json",
+            "bytes": 45,
+            "sha256": "5dfa4c8ffc66a7bd9b6aa8bedf71185cec59b805ad698b4c0b3e6b266a8f5d3f"
+        },
+        {
+            "path": "external/state2/configuration-readiness.json",
+            "bytes": 137,
+            "sha256": "d80a1a361bb9df0af923cab60a9a60c041a32ba25d077f01a01c372dc8cd94f8"
+        },
+        {
+            "path": "external/state3/model-readiness.json",
+            "bytes": 963,
+            "sha256": "c9289890d875bed6876f27c1300f72c17180cb5d17a2cc638b9604283a06dc30"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/archive-preview.log",
+            "bytes": 10002,
+            "sha256": "c93e77ed26005f543e67b3fc2a28ba4804eac2d594d10426b5070f006fa91924"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/backend-final-state.json",
+            "bytes": 8437,
+            "sha256": "d50750024f91639a4315d032080fe5356a09ceca5c61c5ccf27fdc855e492624"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/environment-restoration.json",
+            "bytes": 579,
+            "sha256": "afa0e7bd4e61a24d185440ad669f2f99f2410643e70be5d249c11316ebd84c7c"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/evaluation-summary.json",
+            "bytes": 4308,
+            "sha256": "cd735630619156d41167193dab95b5414b47f251955e56e5287e457daf44031e"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/failure.json",
+            "bytes": 158,
+            "sha256": "99584c8c664d7f525638efcb1aedc6ddcaa7ab88042a4883a568dd5380990543"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/inspect-billing.mjs",
+            "bytes": 2376,
+            "sha256": "ecb0f4858c22a44182df73292edd52c3b0e1beebb08df361da492e8dbc208542"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/inspect-review.mjs",
+            "bytes": 1767,
+            "sha256": "868356970788a18c4e1c24917f51c0f064d40fd70dd7b0a036ff6ec85030ade1"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/intent.json",
+            "bytes": 1383,
+            "sha256": "252bd2958ea583d21c176d77bb652ede047d6b4a96345c7a24abc277d1f3c67d"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/manifest.json",
+            "bytes": 5668,
+            "sha256": "ffa01a4dc53aba59cdb9385035ab03d2c2b421576bac5dc5524ab8a106f6f8a7"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/original-review.json",
+            "bytes": 2541,
+            "sha256": "c3081ef153709758e92910dd1d6a61d64e507532c04e8610c4109632fa91dffc"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/provider-configuration.json",
+            "bytes": 211,
+            "sha256": "75ce2867ea442fa9da8631f84dfc06b68bda018f67702988a6009a6c63c2285e"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/provider-generation-observation.json",
+            "bytes": 2103,
+            "sha256": "d2bc7765444cd9ebbd6ccd2163a248a3c3a94ba44ba6792a2fddb3d391bfa76e"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/publication-final-state.json",
+            "bytes": 49,
+            "sha256": "75817c860ac5fa795ccedcfb78a2c87c3001d96fe7a90aca20b6f5a2e40b9c04"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/retain-summary.mjs",
+            "bytes": 3683,
+            "sha256": "7ae1aa1e7da3643acf61f89537094902fb9de134f99a3556402e1e962618e391"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/review-validation.json",
+            "bytes": 2024,
+            "sha256": "ef47011f0a8d23e753dc53a8aa832be2daa6866890d5da2423adc50eb9e0cdd9"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/run.mjs",
+            "bytes": 8402,
+            "sha256": "1e3b5f92a2fe8f0a295dff1fccfb76c72865beb980411533a9e06e37de01cbd1"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/ccc-live-auto-review/supplement-selection.json",
+            "bytes": 3013,
+            "sha256": "68418be706ccd1265909d84503abba8f40f886732f94b2c600820cc08ea7f1af"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-10-ccc-live-automated-review.md",
+            "bytes": 8834,
+            "sha256": "3dc33422d548ca3ed5897635618e5763e2a14fc723e8b38992a34bf526466d16"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261110T092318528Z-ccc-live-auto-review-supplement.tar.gz",
+        "bytes": 142537,
+        "sha256": "12c2991d5c5f780903d3af868bd27c29f341a9f9e7ab97be96fcb6542984680b"
+    },
+    "verification": "restored_and_verified"
+}

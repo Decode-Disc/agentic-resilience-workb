@@ -1,0 +1,283 @@
+{
+    "schemaVersion": 1,
+    "id": "20261109T073508284Z-native-diagnostic-qualification-closeout-20261109",
+    "createdAt": "2026-11-09T07:35:08.284Z",
+    "git": {
+        "head": "867f08a17a4ab08f59cccdaa907379abf487ce58",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/qualification-report.md",
+            "archivePath": "external/item-1/qualification-report.md"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/review.json",
+            "archivePath": "external/item-2/review.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/assessment-boundary.json",
+            "archivePath": "external/item-3/assessment-boundary.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/mandate.json",
+            "archivePath": "external/item-4/mandate.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/approval.json",
+            "archivePath": "external/item-5/approval.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/provider-configuration.json",
+            "archivePath": "external/item-6/provider-configuration.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/cleanup-verification.json",
+            "archivePath": "external/item-7/cleanup-verification.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/native-archives.json",
+            "archivePath": "external/item-8/native-archives.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/prepare.log",
+            "archivePath": "external/item-9/prepare.log"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/authorize.log",
+            "archivePath": "external/item-10/authorize.log"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/run.log",
+            "archivePath": "external/item-11/run.log"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/run-exit.json",
+            "archivePath": "external/item-12/run-exit.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/assess.log",
+            "archivePath": "external/item-13/assess.log"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/close.log",
+            "archivePath": "external/item-14/close.log"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/status-before-assessment.log",
+            "archivePath": "external/item-15/status-before-assessment.log"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/status-after-close.log",
+            "archivePath": "external/item-16/status-after-close.log"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/campaign/status.json",
+            "archivePath": "external/item-17/status.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/campaign/cleanup.json",
+            "archivePath": "external/item-18/cleanup.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/metadata",
+            "archivePath": "external/metadata"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/diagnosis",
+            "archivePath": "external/diagnosis"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-diagnostic-live-qualification-20261109065452Z/closeout-archive-selection.json",
+            "archivePath": "external/selection/closeout-archive-selection.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/diagnosis/metrics.json",
+            "bytes": 590,
+            "sha256": "cc2dfb3c2827f85dddb0996ec4a43fa14bfee126233ed6403f89a533df410974"
+        },
+        {
+            "path": "external/diagnosis/probe-documentary-timeout.mjs",
+            "bytes": 5276,
+            "sha256": "2423adef2b85240cc83fd0a4a9e1a5502593c78f53f3d291ef1b948b72b7e491"
+        },
+        {
+            "path": "external/diagnosis/probe-qualification-capacity.mjs",
+            "bytes": 3669,
+            "sha256": "803102a428abe82ae421e64cbda1912619b497c8544d6fa2ee60c0ab48a6064b"
+        },
+        {
+            "path": "external/diagnosis/probe.log",
+            "bytes": 496,
+            "sha256": "88a3b8e731d03d6a43825da8b0098b0974d5fff9877bfab3e33c045ee6b15844"
+        },
+        {
+            "path": "external/diagnosis/qualification-capacity-probe-import-prerequisite.log",
+            "bytes": 1232,
+            "sha256": "9901198e9eebb315311279b1776511ee8fe2c8a55a08f0b1cc36534f62a508d4"
+        },
+        {
+            "path": "external/diagnosis/qualification-capacity-probe-node-flag-prerequisite.log",
+            "bytes": 198,
+            "sha256": "84e91c0261bde52ea9ece696e400b84c73661b39e95e0e36f38da6d7920bff13"
+        },
+        {
+            "path": "external/diagnosis/qualification-capacity-probe-transpiler-prerequisite.log",
+            "bytes": 1544,
+            "sha256": "29b8d6e0c60cbafee70a037a867e0413c167f84a9783e9fc01ee0f8080a60111"
+        },
+        {
+            "path": "external/diagnosis/qualification-capacity-probe.json",
+            "bytes": 353,
+            "sha256": "51aa82c7ce68e9dd41fe2f5ed040ebf8978b53f2b1f0440de918b9dcc2debf61"
+        },
+        {
+            "path": "external/diagnosis/qualification-capacity-probe.log",
+            "bytes": 328,
+            "sha256": "d9b5b1de12c54ab2c7fe8b1aa9703e5235ba76db46ae5cd5483414effeaa8481"
+        },
+        {
+            "path": "external/diagnosis/reconstructed-wire.json",
+            "bytes": 64193,
+            "sha256": "a8b1e66ebe3cb16afdc709d4d3efa00fc92b604e7bf99bb36457791492a315a6"
+        },
+        {
+            "path": "external/diagnosis/timeout-probe.json",
+            "bytes": 577,
+            "sha256": "335b86da8e96788a0d67104366ae534251f2951ab6f76114019bf4f4e1340864"
+        },
+        {
+            "path": "external/diagnosis/valid-probe.json",
+            "bytes": 4648,
+            "sha256": "a58072af9bd3c8b013f5306b289c2c334ecfd9c648cff269faf61dcf9bd932e8"
+        },
+        {
+            "path": "external/diagnosis/valid-probe.log",
+            "bytes": 3960,
+            "sha256": "66160474dfe4635476e1b5fab6e85a4b34c335bb15ad4927ba389ce94e387c06"
+        },
+        {
+            "path": "external/item-1/qualification-report.md",
+            "bytes": 12496,
+            "sha256": "0eb21edf796f299cd50801843867607c5f7276b7b0b44a23efd5fa8120176e19"
+        },
+        {
+            "path": "external/item-10/authorize.log",
+            "bytes": 230,
+            "sha256": "d618e76a02b7f04b0561a678c491690ce48012e5aa1353333ade1f8600ba4a8e"
+        },
+        {
+            "path": "external/item-11/run.log",
+            "bytes": 459,
+            "sha256": "5a77977f15af106627651f2be4dcbe95fc4777153f1d6570f89713027f510385"
+        },
+        {
+            "path": "external/item-12/run-exit.json",
+            "bytes": 64,
+            "sha256": "71bfda0ab1c287114dcccc6541b0fd9e877fb34424e3c99fdbdbda825d7d47a3"
+        },
+        {
+            "path": "external/item-13/assess.log",
+            "bytes": 591,
+            "sha256": "1ccc39b45fc4b1d756d15eb12d91fad0d69c42d1a569e7b2090834788b93e487"
+        },
+        {
+            "path": "external/item-14/close.log",
+            "bytes": 226,
+            "sha256": "006976aee2838e99147e07fb39177de790d5f722889ea37c7ad1725ff347a8be"
+        },
+        {
+            "path": "external/item-15/status-before-assessment.log",
+            "bytes": 9048,
+            "sha256": "31b5d3aca6e576d40df7c153f4df50faec5ae9f162d04a382c78348ff660d4b3"
+        },
+        {
+            "path": "external/item-16/status-after-close.log",
+            "bytes": 9048,
+            "sha256": "934fcc0d54925a7919a227f22c4ec82bde421f0f6e2a835bee1d0b908c655cd8"
+        },
+        {
+            "path": "external/item-17/status.json",
+            "bytes": 8821,
+            "sha256": "880d820a334aae89ef9acbc26f7283c159af7c2c3895bf87b385999f2b407713"
+        },
+        {
+            "path": "external/item-18/cleanup.json",
+            "bytes": 45,
+            "sha256": "5dfa4c8ffc66a7bd9b6aa8bedf71185cec59b805ad698b4c0b3e6b266a8f5d3f"
+        },
+        {
+            "path": "external/item-2/review.json",
+            "bytes": 2820,
+            "sha256": "edc185b0d50f355ac234980a0bb4085ad4e490fcc73ba4eaf3a3b82625e23132"
+        },
+        {
+            "path": "external/item-3/assessment-boundary.json",
+            "bytes": 503,
+            "sha256": "f1cc970960618a8784a4de3b0697568a7da3d833d47e91db76c78fdd94c4a227"
+        },
+        {
+            "path": "external/item-4/mandate.json",
+            "bytes": 6271,
+            "sha256": "e3dd33a9701218b8d8f78dbc37deca480c75b5d62e01c8d5e48f9cf82bedcb3e"
+        },
+        {
+            "path": "external/item-5/approval.json",
+            "bytes": 346,
+            "sha256": "3186ae43de42badf29b2dfe6600ee26b4de0bc5a9db609115a40645a875a8334"
+        },
+        {
+            "path": "external/item-6/provider-configuration.json",
+            "bytes": 595,
+            "sha256": "38a672f639b42197f2be8c490643f5b90788ba4cc76bedc7e0bdb65b8a91e5af"
+        },
+        {
+            "path": "external/item-7/cleanup-verification.json",
+            "bytes": 573,
+            "sha256": "a4b27a7ad8a4f09431405dcdfa74086a3fb540a338f60ac75395545947abf45b"
+        },
+        {
+            "path": "external/item-8/native-archives.json",
+            "bytes": 1227,
+            "sha256": "066be4bd48655db84684c15facf0e0df31b07c208ce2f913e5fd17accc2359ec"
+        },
+        {
+            "path": "external/item-9/prepare.log",
+            "bytes": 360,
+            "sha256": "f997f6c6922150259e58bf254662540a6e53f1cf9674cb4ca243f071b2825c59"
+        },
+        {
+            "path": "external/metadata/deepseek-endpoints.json",
+            "bytes": 92069,
+            "sha256": "b4ee09b580eb41a6ad7a7d3c145e03b790d98760e1a91c75ec0db7418bf34d38"
+        },
+        {
+            "path": "external/metadata/models.json",
+            "bytes": 7987,
+            "sha256": "3e27b81f01760f803a423fec61579b2e34d389317ea50239b40e32edc0d50ba2"
+        },
+        {
+            "path": "external/metadata/runtime-readiness.json",
+            "bytes": 942,
+            "sha256": "8cf4851c3e85131b8e5370bb3aa6ea86ba5704abec790490ce8ce9dd885ced9a"
+        },
+        {
+            "path": "external/metadata/z-ai-endpoints.json",
+            "bytes": 71680,
+            "sha256": "8533d73d3c3ef785a136e202558b7d07d9d441fdd3aaa18e36be5f5394f9d10e"
+        },
+        {
+            "path": "external/selection/closeout-archive-selection.json",
+            "bytes": 6599,
+            "sha256": "ba010b29bc01fcbe4f684d5f09efdd694ea8da716eacb958cb794195efcb9310"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261109T073508284Z-native-diagnostic-qualification-closeout-20261109.tar.gz",
+        "bytes": 36498,
+        "sha256": "c06d581519cbe72fe1687759f3c88595c85078992bd0f2a655f4ecdf6454329c"
+    },
+    "verification": "restored_and_verified"
+}
