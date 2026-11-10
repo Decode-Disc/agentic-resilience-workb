@@ -79,13 +79,20 @@ export const preparationBudgetValidator = v.object({
 });
 
 type PreparationBudget = Infer<typeof preparationBudgetValidator>;
+type PreparationAttemptObservation = Pick<
+    Doc<"providerCalls">,
+    "status" | "errorCode" | "dispatchOutcome" | "httpStatus"
+> &
+    Partial<
+        Pick<
+            Doc<"providerCalls">,
+            "service" | "operation" | "providerObservation" | "billing"
+        >
+    >;
 
 /** A received valid response is productive; ambiguity retains both possible charges. */
 export function preparationBudgetOutcome(
-    call: Pick<
-        Doc<"providerCalls">,
-        "status" | "errorCode" | "dispatchOutcome" | "httpStatus"
-    >,
+    call: PreparationAttemptObservation,
 ): "work" | "incidents" | "reserved" | "released" {
     const kind = preparationFailureClass(call);
     if (kind === "not_dispatched") return "released";
@@ -188,12 +195,7 @@ export function readPreparationConcurrency(
 }
 
 /** A retry flag alone cannot prove that a dispatched request returned a failure. */
-export function preparationFailureClass(
-    call: Pick<
-        Doc<"providerCalls">,
-        "status" | "errorCode" | "dispatchOutcome" | "httpStatus"
-    >,
-) {
+export function preparationFailureClass(call: PreparationAttemptObservation) {
     if (
         call.dispatchOutcome === "not_dispatched" ||
         ["missing_configuration", "paid_work_disabled"].includes(
@@ -203,6 +205,15 @@ export function preparationFailureClass(
         return "not_dispatched";
     if (call.status === "succeeded" || call.status === "partial")
         return "succeeded";
+    if (
+        call.status === "failed" &&
+        call.service === "model" &&
+        call.operation === "source_documentary_control" &&
+        call.providerObservation?.generationId &&
+        call.providerObservation.cancelled === true &&
+        call.billing?.state === "confirmed"
+    )
+        return "terminal";
     if (
         [
             "request_timeout",

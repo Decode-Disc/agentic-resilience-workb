@@ -1,5 +1,6 @@
 import { internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
+import { modelCallSettings } from "@convex/integrations/modelRouting";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
@@ -93,10 +94,18 @@ test("settlement is idempotent and technical failures do not consume work", asyn
     vi.stubEnv("SOURCE_PREPARATION_INCIDENT_LIMIT", "2");
     const { t, runId, attempt } = await activePreparation();
     const first = attempt("first");
-    await t.mutation(internal.providerCalls.recordAttempt, {
+    const started = await t.mutation(internal.providerCalls.recordAttempt, {
         ...first,
         status: "started",
     });
+    const receipt = await t.run((ctx) => ctx.db.get(started.providerCallId));
+    expect((receipt?.leaseExpiresAt ?? 0) - (receipt?.createdAt ?? 0)).toBe(
+        70000,
+    );
+    expect(
+        modelCallSettings({ model: "fixture/ordinary-model" }).generation
+            .timeout,
+    ).toBe(60000);
     const failure = {
         ...first,
         status: "failed" as const,

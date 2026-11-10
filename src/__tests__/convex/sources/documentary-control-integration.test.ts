@@ -5,12 +5,18 @@ import type {
 } from "@convex/domain/sourcesContracts";
 import { runPiMission } from "@convex/integrations/piMission";
 import { pinMissionModel } from "@convex/modelConfiguration";
+import {
+    initializeQualificationUsage,
+    readQualificationUsage,
+    updateQualificationUsage,
+} from "@convex/qualificationUsage";
 import type { Infer } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
 });
@@ -137,6 +143,91 @@ test("a real documentary examination retains exact evidence through the Sources 
             reservedMaxOutputTokens: 8192,
         }),
     ]);
+});
+
+test.each([
+    { windowMs: 15 * 60000, succeeds: true },
+    { windowMs: 30000, succeeds: false },
+])("a documentary examination can finish beyond the ordinary model deadline within its aligned lease: $windowMs ms authority", async ({
+    windowMs,
+    succeeds,
+}) => {
+    const f = await fixture();
+    const deadlineAt = await f.t.run(async (ctx) => {
+        const deadlineAt = Date.now() + windowMs;
+        await ctx.db.patch(f.missionId, { deadlineAt });
+        await ctx.db.patch(f.preparationId, { deadlineAt });
+        await ctx.db.patch(f.requestId, { deadlineAt });
+        return deadlineAt;
+    });
+    mockControlReply("context_only");
+    const respond = globalThis.fetch;
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    const deadlines: number[] = [];
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+        deadlines.push(ms);
+        return timeout(Math.max(1, Math.floor(ms / 100)));
+    });
+    let leaseMs: number | undefined;
+    let leaseExpiresAt: number | undefined;
+    vi.stubGlobal("fetch", async (url: unknown, init?: RequestInit) => {
+        const call = await f.t.run((ctx) =>
+            ctx.db.query("providerCalls").first(),
+        );
+        leaseExpiresAt = call?.leaseExpiresAt;
+        leaseMs =
+            call?.leaseExpiresAt !== undefined
+                ? call.leaseExpiresAt - call.createdAt
+                : undefined;
+        return new Promise<Response>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                void respond(url as RequestInfo, init).then(resolve, reject);
+            }, 1200);
+            init?.signal?.addEventListener(
+                "abort",
+                () => {
+                    clearTimeout(timer);
+                    reject(init.signal?.reason);
+                },
+                { once: true },
+            );
+        });
+    });
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    expect({ result, deadlines, leaseMs }).toMatchObject({
+        result: { kind: succeeds ? "success" : "unavailable" },
+        deadlines: expect.arrayContaining([300000]),
+    });
+    expect(deadlines).toContain(300000);
+    if (succeeds) expect(leaseMs).toBe(310000);
+    expect(leaseExpiresAt).toBeLessThanOrEqual(deadlineAt + 10000);
+    const retained = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    expect(retained?.sourcesMission?.qualifications).toHaveLength(
+        succeeds ? 1 : 0,
+    );
+});
+
+test("the documentary provider lease cannot outlive remaining preparation authority plus its grace", async () => {
+    const f = await fixture();
+    const deadlineAt = await f.t.run(async (ctx) => {
+        const deadlineAt = Date.now() + 30000;
+        await ctx.db.patch(f.missionId, { deadlineAt });
+        await ctx.db.patch(f.preparationId, { deadlineAt });
+        await ctx.db.patch(f.requestId, { deadlineAt });
+        return deadlineAt;
+    });
+    mockControlReply("context_only");
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: f.requestId,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({ kind: "success" });
+    const call = await f.t.run((ctx) => ctx.db.query("providerCalls").first());
+    expect(call?.leaseExpiresAt).toBe(deadlineAt + 10000);
 });
 
 async function fixture(kind: DocumentaryContribution["kind"] = "context") {
@@ -527,9 +618,14 @@ test("the native Sources continuation actually receives the unfinished examinati
 });
 
 test.each([
-    true,
-    false,
-])("an interrupted documentary control retains its observations without replay or adoption; provider identity: %s", async (hasIdentity) => {
+    { hasIdentity: true, cancelled: true },
+    { hasIdentity: true, cancelled: false },
+    { hasIdentity: true, cancelled: undefined },
+    { hasIdentity: false, cancelled: undefined },
+])("an interrupted documentary control retains its observations without replay or adoption: $hasIdentity / cancellation $cancelled", async ({
+    hasIdentity,
+    cancelled,
+}) => {
     const f = await fixture();
     let dispatches = 0;
     let observedBeforeRead: unknown;
@@ -547,6 +643,7 @@ test.each([
                     data: {
                         id: "documentary-generation",
                         total_cost: 0.0002137,
+                        cancelled,
                     },
                 });
             }
@@ -622,6 +719,31 @@ test.each([
     const call = saved.calls[0];
     assert(call);
     expect(call.reportedCost).toBeUndefined();
+    const contextId = await f.t.run(async (ctx) => {
+        const contextId = await ctx.db.insert("browserTestContexts", {
+            ownerVisitorId: f.visitorId,
+            authUserId: f.userId,
+            contextKey: "documentary-cancellation-accounting",
+            status: "active",
+            expiresAt: Date.now() + 60000,
+            createdAt: Date.now(),
+        });
+        await initializeQualificationUsage(ctx, contextId, [f.runId]);
+        const tracking = {
+            qualificationContextId: contextId,
+            costAccountingPolicy: "known_final_v1" as const,
+            qualificationReservationUsd: 1,
+        };
+        await ctx.db.patch(call._id, tracking);
+        await updateQualificationUsage(ctx, null, { ...call, ...tracking });
+        return contextId;
+    });
+    expect(
+        await f.t.run((ctx) => readQualificationUsage(ctx, contextId)),
+    ).toMatchObject({ unknown: 1 });
+    const beforeBudget = (await f.t.run((ctx) => ctx.db.get(f.runId)))
+        ?.sourcePreparationBudget;
+    assert(beforeBudget);
     if (hasIdentity) {
         expect(call.billing).toMatchObject({ state: "pending" });
         await f.t.action(internal.integrations.openRouterGeneration.reconcile, {
@@ -639,7 +761,98 @@ test.each([
         expect(call.billing).toBeUndefined();
         expect(billingReads).toBe(0);
     }
-    expect(saved.preparation?.sourcesMission?.qualifications).toEqual([]);
+    const verified = hasIdentity && cancelled === true;
+    const after = await f.t.run(async (ctx) => ({
+        call: await ctx.db.get(call._id),
+        run: await ctx.db.get(f.runId),
+        preparation: await ctx.db.get(f.preparationId),
+        lotUsage: await readQualificationUsage(ctx, contextId),
+        runUsage: await readQualificationUsage(ctx, contextId, f.runId),
+    }));
+    expect(after.lotUsage).toMatchObject({
+        unknown: verified ? 0 : 1,
+        pending: 0,
+        usage: { model: 1 },
+    });
+    expect(after.lotUsage?.usage.costUsd).toBeCloseTo(
+        hasIdentity ? 0.0002137 : 1,
+        12,
+    );
+    expect(after.runUsage).toMatchObject({ unknown: verified ? 0 : 1 });
+    expect(after.run?.sourcePreparationBudget).toEqual({
+        ...beforeBudget,
+        reserved: beforeBudget.reserved - (verified ? 1 : 0),
+        incidents: beforeBudget.incidents + (verified ? 1 : 0),
+    });
+    expect(after.call?.reportedCostFinal).not.toBe(true);
+    expect(after.call).toMatchObject({
+        status: "failed",
+        errorCode: "request_timeout",
+    });
+    if (verified)
+        expect(after.call?.providerObservation).toMatchObject({
+            generationId: "documentary-generation",
+            cancelled: true,
+        });
+    expect(after.preparation?.sourcesMission?.qualifications).toEqual([]);
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: f.requestId,
+            expectedGeneration: 4,
+        }),
+    ).toEqual(result);
+    if (hasIdentity)
+        await f.t.action(internal.integrations.openRouterGeneration.reconcile, {
+            providerCallId: call._id,
+            attempt: 1,
+        });
+    expect(await f.t.run((ctx) => ctx.db.get(call._id))).toEqual(after.call);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.runId)))?.sourcePreparationBudget,
+    ).toEqual(after.run?.sourcePreparationBudget);
+    assert(call.inputHash);
+    expect(
+        await f.t.query(internal.providerCalls.nextPreparationAttemptForInput, {
+            preparationId: f.preparationId,
+            sourceId: f.sourceId,
+            operation: "source_documentary_control",
+            inputHash: call.inputHash,
+            now: Date.now(),
+        }),
+    ).toMatchObject({
+        errorCode: verified ? "request_timeout" : "attempt_outcome_unknown",
+    });
+    if (verified) {
+        await f.t.mutation(internal.providerCalls.recordAttempt, {
+            preparationId: call.preparationId,
+            runId: call.runId,
+            corpusRevisionId: call.corpusRevisionId,
+            sourceId: call.sourceId,
+            executionGeneration: call.executionGeneration,
+            workflowVersion: call.workflowVersion,
+            stepKey: call.stepKey,
+            inputHash: call.inputHash,
+            service: "model",
+            operation: call.operation,
+            operationKey: call.operationKey,
+            attempt: call.attempt,
+            status: "failed",
+            dispatchOutcome: call.dispatchOutcome,
+            errorCode: "request_timeout",
+            reportedCost: 0.5,
+        });
+        const conflict = await f.t.run(async (ctx) => ({
+            call: await ctx.db.get(call._id),
+            run: await ctx.db.get(f.runId),
+            usage: await readQualificationUsage(ctx, contextId),
+        }));
+        expect(conflict.call).toMatchObject({
+            reportedCost: 0.0002137,
+            billing: { state: "conflict", reason: "amount_conflict" },
+        });
+        expect(conflict.usage).toMatchObject({ unknown: 1 });
+        expect(conflict.run?.sourcePreparationBudget).toEqual(beforeBudget);
+    }
     expect(dispatches).toBe(1);
 });
 

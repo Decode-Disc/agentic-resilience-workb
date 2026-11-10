@@ -34,7 +34,6 @@ import {
     MAX_PREPARATION_ATTEMPT_HISTORY,
     nextPreparationAttempt,
     preparationBudgetBlock,
-    preparationBudgetOutcome,
     preparationDispatchOutcomeValidator,
     preparationFailureClass,
     readPreparationBudget,
@@ -45,6 +44,8 @@ import { requireMissionAuthority } from "./execution/authority";
 import { MAX_CONTEXT_BYTES } from "./execution/executionProtocol";
 import { admittedInputHash } from "./execution/journal";
 import {
+    DOCUMENTARY_CONTROL_ATTEMPT_TIMEOUT_MS,
+    MODEL_ATTEMPT_TIMEOUT_MS,
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_TOKENS,
@@ -153,8 +154,9 @@ const providerCallStatusValidator = v.union(
     v.literal("failed"),
 );
 
+const MODEL_LEASE_GRACE_MS = 10_000;
 const PROVIDER_LEASE_MS = {
-    model: 70_000,
+    model: MODEL_ATTEMPT_TIMEOUT_MS + MODEL_LEASE_GRACE_MS,
     sec: 15_000,
     exa: 15_000,
     url_metadata: 15_000,
@@ -402,6 +404,7 @@ export const settleBilling = internalMutation({
         providerCallId: v.id("providerCalls"),
         attempt: v.number(),
         generationId: v.string(),
+        cancelled: v.optional(v.literal(true)),
         cost: v.optional(v.number()),
         reason: billingReason,
         httpStatus: v.optional(v.number()),
@@ -435,6 +438,14 @@ export const settleBilling = internalMutation({
                     : {}),
             },
             ...reportedCostSettlement(call, args.cost),
+            ...(args.cost !== undefined && args.cancelled
+                ? {
+                      providerObservation: {
+                          ...call.providerObservation,
+                          cancelled: args.cancelled,
+                      },
+                  }
+                : {}),
         });
         return null;
     },
@@ -443,7 +454,16 @@ export const settleBilling = internalMutation({
 function providerLeaseDurationMs(
     service: "sec" | "exa" | "url_metadata" | "pdf" | "model",
     operation: string,
+    remainingAuthorityMs = Infinity,
 ): number {
+    if (service === "model" && operation === "source_documentary_control") {
+        return (
+            Math.min(
+                DOCUMENTARY_CONTROL_ATTEMPT_TIMEOUT_MS,
+                Math.max(0, remainingAuthorityMs),
+            ) + MODEL_LEASE_GRACE_MS
+        );
+    }
     if (service === "exa" && operation === "get_contents") {
         return 150_000;
     }
@@ -1049,6 +1069,7 @@ export const recordAttempt = internalMutation({
             }
 
             let recoveryOfProviderCallId: Id<"providerCalls"> | undefined;
+            let remainingModelAuthorityMs: number | undefined;
             if (
                 args.preparationId &&
                 args.inputHash &&
@@ -1186,6 +1207,11 @@ export const recordAttempt = internalMutation({
                 const run = args.runId ? await ctx.db.get(args.runId) : null;
                 if ((!preparation && !mission) || !run)
                     throw sourcePreparationError("stale_execution");
+                remainingModelAuthorityMs =
+                    Math.min(
+                        preparation?.deadlineAt ?? Infinity,
+                        mission?.deadlineAt ?? Infinity,
+                    ) - now;
                 const budget = await readPreparationBudget(
                     ctx.db,
                     run,
@@ -1465,7 +1491,12 @@ export const recordAttempt = internalMutation({
                 attempt: args.attempt,
                 recoveryOfProviderCallId,
                 leaseExpiresAt:
-                    now + providerLeaseDurationMs(args.service, args.operation),
+                    now +
+                    providerLeaseDurationMs(
+                        args.service,
+                        args.operation,
+                        remainingModelAuthorityMs,
+                    ),
                 usage:
                     args.operation === "source_embedding"
                         ? { reservedInputBytes: args.embeddingInputBytes }
@@ -1540,53 +1571,13 @@ export const recordAttempt = internalMutation({
                     args.reportedCost,
                     args,
                 );
-                await updateQualificationUsage(ctx, existing, {
-                    ...existing,
-                    ...settlement,
-                });
-                await ctx.db.patch(existing._id, settlement);
+                await patchQualificationReceipt(ctx, existing, settlement);
                 return {
                     providerCallId: existing._id,
                     shouldExecute: false,
                     status: existing.status,
                 };
             }
-            const run = args.runId ? await ctx.db.get(args.runId) : null;
-            const preparation = args.preparationId
-                ? await ctx.db.get(args.preparationId)
-                : null;
-            if (!run || (!preparation && !args.missionId))
-                throw sourcePreparationError("stale_execution");
-            const budget = await readPreparationBudget(
-                ctx.db,
-                run,
-                preparation ?? undefined,
-            );
-            const before = preparationBudgetOutcome(existing);
-            const after = preparationBudgetOutcome({
-                ...args,
-                dispatchOutcome:
-                    args.dispatchOutcome ??
-                    (["succeeded", "partial"].includes(args.status)
-                        ? "response_received"
-                        : undefined),
-            });
-            if (before !== "released") budget[before]--;
-            if (after !== "released") budget[after]++;
-            else {
-                budget.dispatches--;
-                if (preparation)
-                    await ctx.db.patch(preparation._id, {
-                        modelAttemptCount: Math.max(
-                            0,
-                            (preparation.modelAttemptCount ?? 0) - 1,
-                        ),
-                    });
-            }
-            await ctx.db.patch(run._id, {
-                sourcePreparationBudget: budget,
-                sourceQualificationAttemptCount: budget.dispatches,
-            });
         }
         const update = {
             status: args.status,
@@ -1605,11 +1596,7 @@ export const recordAttempt = internalMutation({
             retryAfterAt: args.retryAfterAt,
             completedAt: now,
         };
-        await updateQualificationUsage(ctx, existing, {
-            ...existing,
-            ...update,
-        });
-        await ctx.db.patch(existing._id, update);
+        await patchQualificationReceipt(ctx, existing, update);
         return {
             providerCallId: existing._id,
             shouldExecute: false,

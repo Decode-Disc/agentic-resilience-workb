@@ -721,6 +721,7 @@ export async function invokeOneShot<T>(args: {
     prompt: string;
     schema: ZodType<T>;
     schemaName: string;
+    timeoutMs?: number;
 }): Promise<StructuredAttempt<T>> {
     const { route, dependencies } = args;
     const preflight = preflightFailure(route, dependencies);
@@ -751,6 +752,9 @@ export async function invokeOneShot<T>(args: {
                 name: args.schemaName,
             }),
             ...modelCallSettings(route).generation,
+            ...(args.timeoutMs === undefined
+                ? {}
+                : { timeout: args.timeoutMs }),
             maxOutputTokens,
             abortSignal: dependencies.signal,
         });

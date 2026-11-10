@@ -9,6 +9,7 @@ import {
     invokeOneShot,
     rejectedOutputDiagnostic,
 } from "./modelTransport";
+import { DOCUMENTARY_CONTROL_ATTEMPT_TIMEOUT_MS } from "./modelRouting";
 import type { SourceQualificationRoute } from "./sourceQualificationConfig";
 
 const controlSchema = z
@@ -101,6 +102,7 @@ export async function examineDocumentaryContributions(
         prompt: JSON.stringify(input),
         schema,
         schemaName: "documentary_control",
+        timeoutMs: DOCUMENTARY_CONTROL_ATTEMPT_TIMEOUT_MS,
     });
     if (attempt.status === "failed") return attempt;
     const { value: received, assistantOutput, ...receipt } = attempt;

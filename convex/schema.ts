@@ -1011,6 +1011,7 @@ export default defineSchema({
         reportedCost: v.optional(v.number()),
         providerObservation: v.optional(
             v.object({
+                cancelled: v.optional(v.literal(true)),
                 generationId: v.optional(v.string()),
                 observedAt: v.number(),
                 httpStatus: v.optional(v.number()),

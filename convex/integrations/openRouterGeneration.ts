@@ -18,6 +18,7 @@ export const reconcile = internalAction({
         const startedAt = Date.now();
         let httpStatus: number | undefined;
         let cost: number | undefined;
+        let cancelled: true | undefined;
         let reason: NonNullable<Doc<"providerCalls">["billing"]>["reason"];
         const key = process.env.OPENROUTER_API_KEY?.trim();
         if (!key) reason = "missing_configuration";
@@ -80,9 +81,11 @@ export const reconcile = internalAction({
                             typeof data.total_cost === "number" &&
                             Number.isFinite(data.total_cost) &&
                             data.total_cost >= 0
-                        )
+                        ) {
                             cost = data.total_cost;
-                        else reason = "invalid_response";
+                            if ("cancelled" in data && data.cancelled === true)
+                                cancelled = true;
+                        } else reason = "invalid_response";
                     }
                 }
             } catch {
@@ -104,7 +107,7 @@ export const reconcile = internalAction({
             generationId: claim.generationId,
             httpStatus,
             latencyMs: Date.now() - startedAt,
-            ...(cost !== undefined ? { cost } : { reason }),
+            ...(cost !== undefined ? { cost, cancelled } : { reason }),
         });
         return null;
     },

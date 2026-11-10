@@ -84,6 +84,7 @@ export function preparationModelOutputLimit(
     return Math.min(descriptor.maxTokens, descriptor.contextWindow);
 }
 export const MODEL_ATTEMPT_TIMEOUT_MS = 60_000;
+export const DOCUMENTARY_CONTROL_ATTEMPT_TIMEOUT_MS = 5 * 60_000;
 export const MODEL_MAX_INPUT_PRICE_PER_MILLION = 0.15;
 export const MODEL_MAX_OUTPUT_PRICE_PER_MILLION = 0.6;
 export const INITIAL_MODEL_CATALOG = [
