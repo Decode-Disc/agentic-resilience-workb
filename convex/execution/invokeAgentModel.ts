@@ -10,6 +10,12 @@ import {
     rejectedOutputDiagnostic,
 } from "@convex/integrations/modelTransport";
 import { revisionRoute } from "@convex/modelConfiguration";
+import {
+    MAX_CONTEXT_BYTES,
+    MAX_OPERATION_RESULT_BYTES,
+    nodeActionGenerationDeadline,
+    resolveGenerationAuthority,
+} from "@convex/resourcePolicy";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -24,8 +30,6 @@ import {
     invocationResponseValidator,
     invocationStructureError,
     LEGACY_AGENT_BACKEND,
-    MAX_CONTEXT_BYTES,
-    MAX_OPERATION_RESULT_BYTES,
 } from "./executionProtocol";
 
 import { retainedTextParts } from "./retainedText";
@@ -98,9 +102,14 @@ export async function invokeControlledGeneration(
         invocationId: import("@convex/_generated/dataModel").Id<"agentInvocations">;
         expectedGeneration: number;
     },
+    executionDeadlineAt: number,
     nativeBackend?: AgentGenerationBackend,
 ): Promise<Infer<typeof invocationReplyValidator>> {
-    const { invocation, mission } = await ctx.runQuery(
+    const {
+        invocation,
+        mission,
+        authority: grantedAuthority,
+    } = await ctx.runQuery(
         internal.execution.invocationLifecycle.forExecution,
         args,
     );
@@ -118,6 +127,19 @@ export async function invokeControlledGeneration(
             },
         );
         return reply;
+    };
+    const execution = resolveGenerationAuthority(
+        grantedAuthority,
+        Date.now(),
+        executionDeadlineAt,
+    );
+    if (execution.kind === "blocked")
+        return retainReply({
+            response: { kind: "blocked", code: execution.code },
+        });
+    const authority = {
+        resourcePolicy: grantedAuthority.resourcePolicy,
+        deadlineAt: execution.deadlineAt,
     };
     if (
         invocation.provenance === "simulation" &&
@@ -162,8 +184,8 @@ export async function invokeControlledGeneration(
           });
     const route = simulated
         ? {
+              ...SIMULATION_MODEL_ROUTE,
               model: "simulation/controlled-turn",
-              provider: "simulation",
               authorizedForAgent: true as const,
           }
         : configuredModel
@@ -408,6 +430,8 @@ export async function invokeControlledGeneration(
             {
                 beforeDispatch: async (requestJson, metadata) => {
                     try {
+                        if (Date.now() >= executionDeadlineAt)
+                            throw executionError("node_action_deadline");
                         const effectiveMaxOutputTokens =
                             metadata?.effectiveMaxOutputTokens;
                         if (
@@ -475,6 +499,8 @@ export async function invokeControlledGeneration(
                                 .authorizeDispatch,
                             args,
                         );
+                        if (Date.now() >= executionDeadlineAt)
+                            throw executionError("node_action_deadline");
                     } catch (error) {
                         dispatchRefusal = executionFailureCode(error);
                         throw error;
@@ -492,10 +518,11 @@ export async function invokeControlledGeneration(
                           );
                       },
                 signal: AbortSignal.timeout(
-                    Math.max(1, mission.deadlineAt - Date.now()),
+                    Math.max(1, authority.deadlineAt - Date.now()),
                 ),
             },
             {
+                authority,
                 ctx,
                 invocationId: invocation._id,
                 expectedGeneration: args.expectedGeneration,
@@ -548,5 +575,10 @@ export const invoke = internalAction({
         expectedGeneration: v.number(),
     },
     returns: invocationReplyValidator,
-    handler: (ctx, args) => invokeControlledGeneration(ctx, args),
+    handler: (ctx, args) =>
+        invokeControlledGeneration(
+            ctx,
+            args,
+            nodeActionGenerationDeadline(Date.now()),
+        ),
 });

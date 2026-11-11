@@ -1,9 +1,9 @@
 import type { DataModel, Id } from "@convex/_generated/dataModel";
 import {
-    MAX_INITIAL_SOURCE_CANDIDATES,
     sourceCandidateLimit,
     sourceDossierCandidateLimit,
 } from "@convex/resourceLimits";
+import { MAX_INITIAL_SOURCE_CANDIDATES } from "@convex/resourcePolicy";
 import type { GenericDatabaseReader } from "convex/server";
 
 export type SourceCandidateCapacity = {

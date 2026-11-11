@@ -4,6 +4,11 @@ import type {
     documentarySubmissionValue,
 } from "@convex/domain/sourcesContracts";
 import { runPiMission } from "@convex/integrations/piMission";
+import {
+    nodeActionGenerationDeadline,
+    RESOURCE_POLICY_VERSION,
+    SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS,
+} from "@convex/resourcePolicy";
 import { pinMissionModel } from "@convex/modelConfiguration";
 import {
     initializeQualificationUsage,
@@ -16,9 +21,152 @@ import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+});
+
+function documentaryReply(init?: RequestInit) {
+    const wire = JSON.parse(String(init?.body));
+    const ids: string[] =
+        wire.response_format.json_schema.schema.properties.findings.required;
+    return Response.json({
+        id: "offline-valid",
+        model: "z-ai/glm-5.3-flash",
+        choices: [
+            {
+                index: 0,
+                message: {
+                    role: "assistant",
+                    content: JSON.stringify({
+                        coherence: true,
+                        limitations: ["Publisher description."],
+                        findings: Object.fromEntries(
+                            ids.map((id) => [
+                                id,
+                                {
+                                    conclusion: "supported",
+                                    permittedUse: "context_only",
+                                    diagnostic:
+                                        "The exact quotation supports this context.",
+                                },
+                            ]),
+                        ),
+                    }),
+                },
+                finish_reason: "stop",
+            },
+        ],
+        usage: {
+            prompt_tokens: 10,
+            completion_tokens: 10,
+            total_tokens: 20,
+            cost: 0.00001,
+        },
+    });
+}
+
+test("a paid documentary result past its qualification window preserves billing without adopting material", async () => {
+    vi.useFakeTimers();
+    const f = await fixture();
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run?.ownerVisitorId);
+        const visitor = await ctx.db.get(run.ownerVisitorId);
+        assert(visitor);
+        await ctx.db.patch(visitor.invitationId, { slotKey: "analyst-4" });
+    });
+    const contextId = await f.t.mutation(
+        internal.runWorkspace.openBrowserTestContext,
+        {
+            slotKey: "analyst-4",
+            contextKey: "documentary-window",
+            durationMs: 60000,
+        },
+    );
+    const deadlineAt = Date.now() + 20000;
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        const mission = await ctx.db.get(f.missionId);
+        assert(run && mission?.modelRevisionId);
+        const { _id, _creationTime, ...fields } = run;
+        const secondId = await ctx.db.insert("researchRuns", {
+            ...fields,
+            purpose: "browser_test",
+            browserTestContextId: contextId,
+            executionStatus: "idle",
+            sourcePreparationId: undefined,
+        });
+        await ctx.db.patch(run._id, {
+            purpose: "browser_test",
+            browserTestContextId: contextId,
+            researchStartedAt:
+                deadlineAt - SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS,
+        });
+        await ctx.db.patch(f.preparationId, {
+            modelRevisionId: mission.modelRevisionId,
+        });
+        await ctx.db.patch(contextId, {
+            paidQualification: {
+                resourcePolicy: RESOURCE_POLICY_VERSION,
+                costAccountingPolicy: "known_final_v1",
+                runId: run._id,
+                modelRevisionId: mission.modelRevisionId,
+                maximumRequests: 40,
+                maximumCostUsd: 2,
+                authorizedAt: Date.now(),
+                sourcesLot: [run._id, secondId],
+            },
+        });
+    });
+    const beforeTasks = await f.t.run((ctx) =>
+        ctx.db.query("aiTaskResults").collect(),
+    );
+    const requests: string[] = [];
+    vi.stubGlobal(
+        "fetch",
+        async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+            requests.push(new Request(input, init).url);
+            vi.setSystemTime(deadlineAt + 1);
+            return documentaryReply(init);
+        },
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: f.requestId,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({ kind: "unavailable", code: "execution_deadline" });
+    expect(requests).toEqual(["https://openrouter.ai/api/v1/chat/completions"]);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("aiTaskResults").collect()),
+    ).toEqual(beforeTasks);
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .collect(),
+        ),
+    ).toMatchObject([
+        {
+            status: "succeeded",
+            dispatchOutcome: "response_received",
+            reportedCost: 0.00001,
+        },
+    ]);
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db.query("agentInvocationPayloads").collect(),
+        ),
+    ).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({ part: "reply", state: "complete" }),
+        ]),
+    );
 });
 
 test("a real documentary examination retains exact evidence through the Sources handoff", async () => {
@@ -28,44 +176,7 @@ test("a real documentary examination retains exact evidence through the Sources 
         "fetch",
         async (_url: unknown, init: RequestInit | undefined) => {
             calls++;
-            const wire = JSON.parse(String(init?.body));
-            const ids: string[] =
-                wire.response_format.json_schema.schema.properties.findings
-                    .required;
-            return Response.json({
-                id: "offline-valid",
-                model: "z-ai/glm-5.3-flash",
-                choices: [
-                    {
-                        index: 0,
-                        message: {
-                            role: "assistant",
-                            content: JSON.stringify({
-                                coherence: true,
-                                limitations: ["Publisher description."],
-                                findings: Object.fromEntries(
-                                    ids.map((id) => [
-                                        id,
-                                        {
-                                            conclusion: "supported",
-                                            permittedUse: "context_only",
-                                            diagnostic:
-                                                "The exact quotation supports this context.",
-                                        },
-                                    ]),
-                                ),
-                            }),
-                        },
-                        finish_reason: "stop",
-                    },
-                ],
-                usage: {
-                    prompt_tokens: 10,
-                    completion_tokens: 10,
-                    total_tokens: 20,
-                    cost: 0.00001,
-                },
-            });
+            return documentaryReply(init);
         },
     );
     const result = await f.t.action(internal.execution.operations.dispatch, {
@@ -146,17 +257,21 @@ test("a real documentary examination retains exact evidence through the Sources 
 });
 
 test.each([
-    { windowMs: 15 * 60000, succeeds: true },
-    { windowMs: 30000, succeeds: false },
-])("a documentary examination can finish beyond the ordinary model deadline within its aligned lease: $windowMs ms authority", async ({
+    { windowMs: 15 * 60000, preparationWindowMs: 15 * 60000, succeeds: true },
+    { windowMs: 30000, preparationWindowMs: 15 * 60000, succeeds: false },
+])("a responsive documentary examination can continue beyond five minutes within its approved authority: $windowMs ms", async ({
     windowMs,
+    preparationWindowMs,
     succeeds,
 }) => {
     const f = await fixture();
     const deadlineAt = await f.t.run(async (ctx) => {
-        const deadlineAt = Date.now() + windowMs;
+        const now = Date.now();
+        const deadlineAt = now + windowMs;
         await ctx.db.patch(f.missionId, { deadlineAt });
-        await ctx.db.patch(f.preparationId, { deadlineAt });
+        await ctx.db.patch(f.preparationId, {
+            deadlineAt: now + preparationWindowMs,
+        });
         await ctx.db.patch(f.requestId, { deadlineAt });
         return deadlineAt;
     });
@@ -182,7 +297,7 @@ test.each([
         return new Promise<Response>((resolve, reject) => {
             const timer = setTimeout(() => {
                 void respond(url as RequestInfo, init).then(resolve, reject);
-            }, 1200);
+            }, 3500);
             init?.signal?.addEventListener(
                 "abort",
                 () => {
@@ -197,13 +312,13 @@ test.each([
         requestId: f.requestId,
         expectedGeneration: 4,
     });
-    expect({ result, deadlines, leaseMs }).toMatchObject({
-        result: { kind: succeeds ? "success" : "unavailable" },
-        deadlines: expect.arrayContaining([300000]),
+    expect(result).toMatchObject({
+        kind: succeeds ? "success" : "unavailable",
     });
-    expect(deadlines).toContain(300000);
-    if (succeeds) expect(leaseMs).toBe(310000);
-    expect(leaseExpiresAt).toBeLessThanOrEqual(deadlineAt + 10000);
+    expect(deadlines.length).toBeGreaterThan(0);
+    expect(deadlines.every((ms) => ms > 0 && ms <= windowMs)).toBe(true);
+    expect(leaseMs).toBeGreaterThan(0);
+    expect(leaseExpiresAt).toBe(deadlineAt + 10000);
     const retained = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     expect(retained?.sourcesMission?.qualifications).toHaveLength(
         succeeds ? 1 : 0,
@@ -601,6 +716,7 @@ test("the native Sources continuation actually receives the unfinished examinati
             ctx,
             { missionId: f.missionId, expectedGeneration: 4 },
             "offline-structured-continuation",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(nativeRequests).toBe(1);

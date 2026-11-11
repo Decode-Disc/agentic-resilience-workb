@@ -2,6 +2,7 @@ import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import { executionError } from "@convex/execution/errors";
+import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import type { Context } from "@earendil-works/chord/context";
 import type {
     AssistantMessage,
@@ -47,7 +48,10 @@ export function createNativeInputDelivery(
                 internal.execution.piStore.pendingControlInputs,
                 {
                     ...lease(),
-                    paginationOpts: { numItems: 20, cursor },
+                    paginationOpts: {
+                        numItems: PERSISTENCE_PAGE_SIZE.nativeInputs,
+                        cursor,
+                    },
                     throughCreationTime,
                 },
             );

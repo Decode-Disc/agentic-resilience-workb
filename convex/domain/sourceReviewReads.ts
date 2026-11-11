@@ -1,5 +1,5 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
-import { MAX_HISTORICAL_SOURCE_CANDIDATES } from "@convex/resourceLimits";
+import { MAX_HISTORICAL_SOURCE_CANDIDATES } from "@convex/resourcePolicy";
 import type {
     DocumentByName,
     GenericDatabaseReader,

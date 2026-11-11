@@ -1,6 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
 import { openMissionPiStorage } from "@convex/integrations/piStorage";
-import { PI_SESSION_MAX_BYTES } from "@convex/resourceLimits";
+import { PI_SESSION_MAX_BYTES } from "@convex/resourcePolicy";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { ROOT_CONVERSATION_ID } from "@earendil-works/pi-durable";
 import { afterEach, assert, expect, test, vi } from "vitest";

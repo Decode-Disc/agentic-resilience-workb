@@ -21,14 +21,14 @@ import {
 } from "@convex/integrations/evidenceNormalization";
 import {
     MAX_APPROVED_SOURCE_BYTES,
+    MAX_PDF_ATTEMPTS,
     MAX_PDF_PAGES,
     MAX_REDIRECTS,
-} from "@convex/resourceLimits";
+    PDF_REQUEST_TIMEOUT_MS,
+} from "@convex/resourcePolicy";
 import { requestPinnedPublicSource } from "@convex/sourceActions";
 
 export const PDF_RETRIEVAL_VERSION = "pdf-direct-v1";
-export const MAX_PDF_ATTEMPTS = 2;
-export const PDF_REQUEST_TIMEOUT_MS = 10_000;
 
 export type PdfFixtureDefinition = {
     bytes: Uint8Array | string;

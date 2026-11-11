@@ -2,6 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { CLIENT_PAGE_SIZE } from "@convex/resourcePolicy";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { type Ref, useLayoutEffect, useRef, useState } from "react";
@@ -67,7 +68,7 @@ function FragmentedPayload({
     const page = usePaginatedQuery(
         api.adminOperations.listInvocationPayloadFragmentsPage,
         { runId, invocationId, part },
-        { initialNumItems: 1 },
+        { initialNumItems: CLIENT_PAGE_SIZE.invocationPayloadFragments },
     );
     const container = useRef<HTMLDivElement>(null);
     const snapshot = useRef<HTMLPreElement>(null);
@@ -280,7 +281,7 @@ function JournalEvents({ runId }: { runId: Id<"researchRuns"> }) {
     const events = usePaginatedQuery(
         api.adminOperations.listRunJournalEventsPage,
         { runId },
-        { initialNumItems: 20 },
+        { initialNumItems: CLIENT_PAGE_SIZE.adminJournalEvents },
     );
     const [selectedId, setSelectedId] =
         useState<Id<"agentExecutionEvents"> | null>(null);

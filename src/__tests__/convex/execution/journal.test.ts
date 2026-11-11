@@ -2,13 +2,13 @@ import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { recordMissionEvent } from "@convex/execution/authority";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/execution/executionProtocol";
 import {
     projectMissionHistoryEvent,
     readMissionHistoryEventFragment,
     retainExecutionEventPayload,
     retainInvocationPayload,
 } from "@convex/execution/journal";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { makeFunctionReference } from "convex/server";
 import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -367,7 +367,7 @@ test("new invocations identify their journal version without expanding continuat
 });
 
 async function oneShotFixture(logicalInputHash?: string) {
-    const fixture = await seedSourcePreparation();
+    const fixture = await seedSourcePreparation({ models: true });
     const { t, runId, corpusRevisionId, sourceId } = fixture;
     await t.mutation(internal.researchPlanning.createForRun, {
         runId,
@@ -377,6 +377,10 @@ async function oneShotFixture(logicalInputHash?: string) {
         internal.sourcePreparation.claimForDiscovery,
         { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
     );
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     const preparation = await t.run((ctx) => ctx.db.get(preparationId));
     if (!preparation) throw new Error("Expected preparation");
     await t.run((ctx) =>
@@ -622,6 +626,7 @@ test("dispatch authority is checked again after request persistence", async () =
         invocationId,
         expectedGeneration: 3,
         requestJson: '{"version":1,"input":{}}',
+        effectiveMaxOutputTokens: 8192,
     });
     expect(
         await t.query(internal.execution.invocations.authorizeDispatch, {

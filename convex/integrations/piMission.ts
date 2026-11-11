@@ -17,7 +17,14 @@ import {
 import type { AgentGenerationBackend } from "@convex/execution/executionProtocol";
 import { invokeControlledGeneration } from "@convex/execution/invokeAgentModel";
 import { revisionRoute } from "@convex/modelConfiguration";
-import { PI_LEASE_RENEW_INTERVAL_MS } from "@convex/resourceLimits";
+import {
+    NATIVE_WORKER_POLICY,
+    PI_LEASE_RENEW_INTERVAL_MS,
+    PI_OPERATION_WAIT_POLL_MS,
+    PI_RETAINED_OPERATION_BATCH,
+    PI_WORKER_SLICE_MS,
+    resolveGenerationAuthority,
+} from "@convex/resourcePolicy";
 import {
     BACKGROUND_CONTEXT,
     withAbortSignal,
@@ -126,6 +133,7 @@ export async function runPiMission(
     ctx: ActionCtx,
     args: { missionId: Id<"agentMissions">; expectedGeneration: number },
     writer: string,
+    executionDeadlineAt: number,
 ) {
     const mission = await ctx.runQuery(
         internal.execution.piControl.state,
@@ -256,7 +264,7 @@ export async function runPiMission(
                     task.input.requestId,
                 );
                 if (outcome.kind === "waiting") {
-                    resumeAt = Date.now() + 30_000;
+                    resumeAt = Date.now() + PI_OPERATION_WAIT_POLL_MS;
                     yieldSleep();
                     // Graceful close retains the read checkpoint as pending, so a result can resume it before recovery.
                     await new Promise<void>((resolve) => {
@@ -471,7 +479,7 @@ export async function runPiMission(
     }
 
     async function drainRetainedOperations() {
-        for (let count = 0; count < 20; count++) {
+        for (let count = 0; count < PI_RETAINED_OPERATION_BATCH; count++) {
             const pending = await ctx.runQuery(
                 internal.execution.piControl.nextOperation,
                 args,
@@ -479,7 +487,7 @@ export async function runPiMission(
             if (!pending) return;
             const outcome = await dispatchRetainedOperation(pending._id);
             if (outcome.kind === "waiting") {
-                resumeAt = Date.now() + 30_000;
+                resumeAt = Date.now() + PI_OPERATION_WAIT_POLL_MS;
                 throw executionError("pi_slice_complete");
             }
         }
@@ -525,7 +533,7 @@ export async function runPiMission(
         transcript: TranscriptContext,
         options?: SimpleStreamOptions,
     ): Promise<AssistantMessage> {
-        if (Date.now() - startedAt > 80_000)
+        if (Date.now() - startedAt > PI_WORKER_SLICE_MS)
             throw executionError("pi_slice_complete");
         const inspection = await harness.inspect(context);
         const task = inspection.tasks.find(
@@ -706,7 +714,7 @@ export async function runPiMission(
             const native: AgentGenerationBackend = {
                 id: "pi-durable",
                 version: 1,
-                async generate(_input, lifecycle) {
+                async generate(_input, lifecycle, runtime) {
                     const reject = async (code: string) => {
                         message = fauxAssistantMessage([], {
                             stopReason: "error",
@@ -800,6 +808,12 @@ export async function runPiMission(
                     );
                     responseState.httpStatus = undefined;
                     responseState.responseTooLarge = false;
+                    const authority = resolveGenerationAuthority(
+                        runtime.authority,
+                        Date.now(),
+                    );
+                    if (authority.kind === "blocked")
+                        throw executionError(authority.code);
                     const nativeFetch = createBoundedModelFetch(
                         {
                             fetch: async (input, init) => {
@@ -841,7 +855,7 @@ export async function runPiMission(
                     const generationSignal = AbortSignal.any([
                         abort.signal,
                         ...(lifecycle.signal ? [lifecycle.signal] : []),
-                        AbortSignal.timeout(generation.timeout),
+                        AbortSignal.timeout(authority.timeoutMs),
                     ]);
                     const stream = base.streamSimple(
                         model,
@@ -861,7 +875,7 @@ export async function runPiMission(
                                           model.maxTokens,
                                       ),
                             temperature: generation.temperature,
-                            timeoutMs: generation.timeout,
+                            timeoutMs: authority.timeoutMs,
                             signal: generationSignal,
                             onProviderStreamEvent: async (data, eventModel) => {
                                 argumentCapture.observe(data);
@@ -1025,7 +1039,14 @@ export async function runPiMission(
                             responseState.httpStatus >= 400
                         )
                     ) {
-                        const error = executionError("attempt_outcome_unknown");
+                        const error = executionError(
+                            generationSignal.aborted &&
+                                Date.now() >= executionDeadlineAt &&
+                                runtime.authority.deadlineAt ===
+                                    executionDeadlineAt
+                                ? "node_action_deadline"
+                                : "attempt_outcome_unknown",
+                        );
                         stop(error);
                         throw error;
                     }
@@ -1130,6 +1151,7 @@ export async function runPiMission(
             const reply = await invokeControlledGeneration(
                 ctx,
                 invocationArgs,
+                executionDeadlineAt,
                 native,
             );
             if (
@@ -1277,7 +1299,6 @@ export async function runPiMission(
                 retry: { enabled: false, maxRetries: 0 },
                 stream: {
                     maxRetries: generation.maxRetries,
-                    timeoutMs: generation.timeout,
                 },
                 compaction: {
                     enabled: true,
@@ -1469,9 +1490,17 @@ export async function runPiMission(
                           "execution_interrupted",
                   }
                 : executionFailureCode(failure) === "pi_slice_complete"
-                  ? { at: resumeAt ?? Date.now() + 1000 }
+                  ? {
+                        at:
+                            resumeAt ??
+                            Date.now() + NATIVE_WORKER_POLICY.resumeDelayMs,
+                    }
                   : nextWake.at !== undefined || nextWake.active
-                    ? { at: nextWake.at ?? Date.now() + 1000 }
+                    ? {
+                          at:
+                              nextWake.at ??
+                              Date.now() + NATIVE_WORKER_POLICY.resumeDelayMs,
+                      }
                     : {}),
         });
     }

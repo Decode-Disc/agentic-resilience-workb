@@ -34,7 +34,7 @@ export async function qualificationReviewRuntime(
     if (provider === "openai")
         await runtime.setRuntimeApiKey(
             "openai",
-            "synthetic-offline-qualification-key",
+            "sk-synthetic-offline-qualification-key",
         );
     return runtime;
 }
@@ -55,27 +55,34 @@ export function qualificationReviewReport(assessment: unknown) {
     return `# Findings\n\nSynthetic diagnostic handoff for offline boundary verification.\n\n## Assessment\n\n\`\`\`json\n${JSON.stringify(assessment)}\n\`\`\``;
 }
 
-/** Synthetic OpenAI Responses stream: inspect evidence, then return the supplied review. */
+/** Synthetic Responses stream. Default first turn reads evidence; null consultation emits text instead. */
 export function qualificationReviewResponse(
     reviewJson: string,
     turn: number,
-    consultation = {
-        name: "read",
-        arguments: { path: "published.json" } as Record<string, unknown>,
+    consultation?: { name: string; arguments: Record<string, unknown> } | null,
+    usage = {
+        input_tokens: 100,
+        output_tokens: 100,
+        input_tokens_details: { cached_tokens: 0 },
     },
 ) {
-    const tool = turn === 1;
+    const tool =
+        consultation !== null && (turn === 1 || consultation !== undefined);
+    const operation = consultation ?? {
+        name: "read",
+        arguments: { path: "published.json" },
+    };
     const item = tool
         ? {
-              id: "fc-fixture",
+              id: `fc-fixture-${turn}`,
               type: "function_call",
-              call_id: "call-fixture",
-              name: consultation.name,
-              arguments: JSON.stringify(consultation.arguments),
+              call_id: `call-fixture-${turn}`,
+              name: operation.name,
+              arguments: JSON.stringify(operation.arguments),
               status: "completed",
           }
         : {
-              id: "msg-fixture",
+              id: `msg-fixture-${turn}`,
               type: "message",
               role: "assistant",
               content: [
@@ -112,11 +119,7 @@ export function qualificationReviewResponse(
                 id: `response-${turn}`,
                 status: "completed",
                 output: [item],
-                usage: {
-                    input_tokens: 100,
-                    output_tokens: 100,
-                    input_tokens_details: { cached_tokens: 0 },
-                },
+                usage,
             },
         },
     ];

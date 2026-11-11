@@ -2,12 +2,12 @@ import { api, internal } from "@convex/_generated/api";
 import { completeSources } from "@convex/domain/sources";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/execution/executionProtocol";
 import { completionFeedbackValidator } from "@convex/execution/operationContracts";
 import {
     piInputProfileKey,
     piMissionMessages,
 } from "@convex/integrations/modelInput";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { ConvexError } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";

@@ -34,7 +34,7 @@ test("claiming a recovery preserves the existing preparation protocol and engage
 
 test("an existing authorized preparation attempt retains its one-shot context and late result", async () => {
     const { t, runId, corpusRevisionId, sourceId } =
-        await seedSourcePreparation();
+        await seedSourcePreparation({ models: true });
     await t.mutation(internal.researchPlanning.createForRun, {
         runId,
         expectedExecutionGeneration: 3,
@@ -45,6 +45,10 @@ test("an existing authorized preparation attempt retains its one-shot context an
     );
     const preparation = await t.run((ctx) => ctx.db.get(preparationId));
     if (!preparation) throw new Error("Missing preparation");
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     await t.run((ctx) =>
         ctx.db.patch(preparationId, {
             executionPlanVersion: "source_actions_v3",

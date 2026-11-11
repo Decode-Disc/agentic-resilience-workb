@@ -14,9 +14,10 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { syncResourcePolicy } from "@scripts/sync-resource-policy";
 import type { UserConfig } from "vite";
 import { createServer as createViteServer } from "vite";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const roots: string[] = [];
 const servers: Server[] = [];
@@ -26,7 +27,12 @@ const runtimeModule = await import(
     pathToFileURL(resolve(process.cwd(), "scripts/local-runtime.ts")).href
 );
 
+beforeEach(() => {
+    vi.stubEnv("CONVEX_DEPLOYMENT", undefined);
+});
+
 afterEach(async () => {
+    vi.unstubAllEnvs();
     for (const child of testProcesses.splice(0)) {
         if (child.exitCode === null && child.signalCode === null)
             child.kill("SIGTERM");
@@ -364,6 +370,15 @@ function runGit(root: string, args: string[]) {
 function initializeRuntimeFixture(root: string, selector: string) {
     mkdirSync(join(root, ".convex/local/default"), { recursive: true });
     mkdirSync(join(root, "scripts"), { recursive: true });
+    mkdirSync(join(root, "convex"), { recursive: true });
+    copyFileSync(
+        resolve(process.cwd(), "scripts/sync-resource-policy.ts"),
+        join(root, "scripts/sync-resource-policy.ts"),
+    );
+    copyFileSync(
+        resolve(process.cwd(), "convex/resourcePolicy.ts"),
+        join(root, "convex/resourcePolicy.ts"),
+    );
     mkdirSync(join(root, "node_modules/convex/bin"), { recursive: true });
     writeFileSync(join(root, "package.json"), '{"type":"module"}\n');
     writeFileSync(
@@ -726,6 +741,7 @@ process.once("SIGINT", shutdown);
 }
 
 function fakePreviewNpm(root: string) {
+    syncResourcePolicy(root);
     const serviceRoot = join(root, "services/playwright-browser");
     mkdirSync(serviceRoot, { recursive: true });
     writeFileSync(
@@ -1217,6 +1233,73 @@ it.each([
     expect(await (await fetch(`${occupied.origin}/instance_name`)).text()).toBe(
         "occupied-reserved-port",
     );
+}, 20_000);
+
+it("stops preview cleanly when interrupted between readiness and releasing the startup lock", async () => {
+    const root = createProjectRoot();
+    initializeRuntimeFixture(root, "local:runtime-fixture");
+    const native = await backend("runtime-fixture");
+    configureNativeRuntime(root, "runtime-fixture", native.origin);
+    const env = fakePreviewNpm(root);
+    const bin = join(root, "unlock-gate-bin");
+    mkdirSync(bin);
+    const marker = join(root, "unlock-pending");
+    const release = join(root, "unlock-release");
+    const flock = spawnSync("sh", ["-c", "command -v flock"], {
+        encoding: "utf8",
+    });
+    expect(flock.status).toBe(0);
+    const original = flock.stdout.trim();
+    expect(original.startsWith("/")).toBe(true);
+    writeFileSync(
+        join(bin, "flock"),
+        `#!/bin/sh
+if [ "$1" = "--unlock" ]; then
+    printf '%s' "$PPID" > "$LOCAL_RUNTIME_UNLOCK_MARKER"
+    while [ ! -f "$LOCAL_RUNTIME_UNLOCK_RELEASE" ]; do sleep 0.01; done
+fi
+exec ${JSON.stringify(original)} "$@"
+`,
+        { mode: 0o755 },
+    );
+    const child = spawnLocalDev(root, "dev:browser", {
+        ...env,
+        PATH: `${bin}:${env.PATH}`,
+        PORT: undefined,
+        LOCAL_RUNTIME_UNLOCK_MARKER: marker,
+        LOCAL_RUNTIME_UNLOCK_RELEASE: release,
+    });
+    let runId: string | undefined;
+    try {
+        const manifest = await waitForManifest(root, "preview");
+        runId = manifest.originOwners.preview.runId;
+        await expect
+            .poll(() => existsSync(marker), { timeout: 10_000 })
+            .toBe(true);
+        const pid = Number(readFileSync(marker, "utf8"));
+        const { readLocalProcess } = await import(
+            pathToFileURL(resolve(process.cwd(), "scripts/local-processes.ts"))
+                .href
+        );
+        const owner = readLocalProcess(pid);
+        expect(owner?.cwd).toBe(root);
+        expect(owner?.parentPid).toBe(child.pid);
+        process.kill(pid, "SIGTERM");
+        writeFileSync(release, "release");
+        expect(await processExit(child)).toBe(0);
+        const stopped = JSON.parse(
+            readFileSync(join(root, ".local-runtime/manifest.json"), "utf8"),
+        );
+        expect(
+            stopped.ownedPids.filter(
+                (entry: { role: string }) => entry.role === "preview",
+            ),
+        ).toEqual([]);
+        expect(stopped.originOwners.preview).toBeUndefined();
+    } finally {
+        writeFileSync(release, "release");
+        if (runId) await runtimeModule.stopLocalRuntimeInvocation(root, runId);
+    }
 }, 20_000);
 
 it("forwards dev web arguments to Vite", async () => {

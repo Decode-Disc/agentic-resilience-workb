@@ -6,6 +6,11 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
+import {
+    NATIVE_WORKER_POLICY,
+    PERSISTENCE_PAGE_SIZE,
+    PI_SESSION_LEASE_MS,
+} from "@convex/resourcePolicy";
 import schema from "@convex/schema";
 import { v } from "convex/values";
 import { getAgentDefinition } from "./agentCatalog";
@@ -77,8 +82,8 @@ export const recoverPublicationWorkers = internalMutation({
             .withIndex("by_pi_active_writer", (q) =>
                 q.gt("piActiveWriter", undefined),
             )
-            .take(17);
-        if (marked.length > 16)
+            .take(NATIVE_WORKER_POLICY.publicationRecoveryMaxWorkers + 1);
+        if (marked.length > NATIVE_WORKER_POLICY.publicationRecoveryMaxWorkers)
             throw executionError("publication_recovery_capacity");
         for (const mission of marked) {
             const session = await sessionForMission(ctx, mission);
@@ -286,16 +291,18 @@ async function recordWorkerFailure(
         mission.executionScope !== "conversation" &&
         (run?.executionStatus === "paused" ||
             (run?.researchPauseRequested && code === "research_paused"));
+    const blockCode =
+        code === "node_action_deadline" ? "execution_interrupted" : code;
     await ctx.db.patch(mission._id, {
         status: paused ? "waiting" : "blocked",
-        blockCode: paused ? undefined : code,
+        blockCode: paused ? undefined : blockCode,
     });
     await recordMissionEvent(ctx, mission, {
         kind: paused ? "mission_waiting" : "mission_blocked",
         cause: "pi_worker",
         code,
     });
-    if (code === "execution_interrupted" && !paused)
+    if (blockCode === "execution_interrupted" && !paused)
         await suspendInterruptedResearch(ctx, mission);
 }
 
@@ -325,7 +332,7 @@ export const prepare = internalMutation({
                 ctx,
                 mission._id,
                 args.expectedGeneration,
-                Date.now() + 5000,
+                Date.now() + NATIVE_WORKER_POLICY.publicationHoldPollMs,
             );
             return false;
         }
@@ -389,7 +396,7 @@ export const prepare = internalMutation({
             ctx,
             mission._id,
             args.expectedGeneration,
-            Date.now() + 90_000,
+            Date.now() + PI_SESSION_LEASE_MS,
         );
         return true;
     },
@@ -584,7 +591,7 @@ export const closeWorker = internalMutation({
                     ].includes(code));
             const failure = permanent
                 ? code
-                : attempts >= 3
+                : attempts >= NATIVE_WORKER_POLICY.settlementMaxAttempts
                   ? "native_settlement_incomplete"
                   : undefined;
             await ctx.db.patch(session._id, {
@@ -607,7 +614,9 @@ export const closeWorker = internalMutation({
                     ctx,
                     mission._id,
                     args.expectedGeneration,
-                    Date.now() + 1000 * 2 ** (attempts - 1),
+                    Date.now() +
+                        NATIVE_WORKER_POLICY.settlementRetryBaseMs *
+                            2 ** (attempts - 1),
                 );
         }
         if (mission.parentRequestId || mission.completionEventId)
@@ -701,7 +710,10 @@ export const rebind = internalMutation({
             .withIndex("by_mission_and_status", (q) =>
                 q.eq("missionId", mission._id).eq("status", status),
             )
-            .paginate({ numItems: 20, cursor: args.cursor });
+            .paginate({
+                numItems: PERSISTENCE_PAGE_SIZE.nativeRebind,
+                cursor: args.cursor,
+            });
         for (const request of page.page)
             await ctx.db.patch(
                 request._id,

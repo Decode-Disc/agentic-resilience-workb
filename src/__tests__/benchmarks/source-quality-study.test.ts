@@ -6,7 +6,28 @@ const { evaluationTransport, validateAnswers } = await import(
     ).href
 );
 
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import type {
+    StudyCase,
+    StudyCall,
+} from "@scripts/evaluations/source-selection/source-quality-study";
+
+vi.mock("node:fs", async (original) => {
+    const fs = await original<typeof import("node:fs")>();
+    return {
+        ...fs,
+        readFileSync: new Proxy(fs.readFileSync, {
+            apply(target, receiver, args) {
+                if (
+                    typeof args[0] === "string" &&
+                    args[0].endsWith("/.env.local")
+                )
+                    return args[1] === "utf8" ? "" : Buffer.alloc(0);
+                return Reflect.apply(target, receiver, args);
+            },
+        }),
+    };
+});
 
 test("routes Luna through native decisions rather than chat completions", () => {
     expect(evaluationTransport("openai/gpt-6-luna-decisions")).toMatchObject({
@@ -315,6 +336,291 @@ const { runStudyCli } = await import(
         import.meta.url,
     ).href
 );
+
+test.each([
+    "completed",
+    "cancelled-before-dispatch",
+] as const)("approved grouped execution %s preserves frozen SDK budgets and settles its real result", async (outcome) => {
+    const fixture = studyFixture();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+        const initial = prepareStudy(readStudy(fixture.path));
+        writeFileSync(
+            join(fixture.directory, "reference.json"),
+            JSON.stringify({
+                ...fixture.reference,
+                judgments: Object.fromEntries(
+                    initial.cases
+                        .filter(
+                            (item: StudyCase) => item.family !== "regression",
+                        )
+                        .map((item: StudyCase) => [
+                            item.sourceCaseId ?? item.id,
+                            Object.fromEntries(
+                                Object.entries(item.questions).map(
+                                    ([key, question]) => [
+                                        key,
+                                        {
+                                            accepted: [
+                                                Object.keys(
+                                                    question.criteria,
+                                                )[0],
+                                            ],
+                                            unsafeChoices: [],
+                                            rationale:
+                                                "Synthetic reference for execution mechanics only.",
+                                            metric: "classification",
+                                            evidence: [],
+                                        },
+                                    ],
+                                ),
+                            ),
+                        ]),
+                ),
+                grouped: Object.fromEntries(
+                    initial.calls
+                        .filter((call: StudyCall) => call.task !== "choices")
+                        .map((call: StudyCall) => [
+                            `${call.task}:${call.caseId}`,
+                            {
+                                rationale:
+                                    "Synthetic reference for execution mechanics only.",
+                                expected: {},
+                            },
+                        ]),
+                ),
+            }),
+        );
+        const catalog = join(fixture.directory, "catalog.json");
+        writeFileSync(
+            catalog,
+            JSON.stringify({
+                observedAt: new Date().toISOString(),
+                models: initial.models.map((id: string) => ({
+                    id,
+                    provider: "fixture",
+                    contextLength: 64000,
+                    maximumOutputTokens: 6144,
+                    inputPricePerToken: 0.00000007,
+                    outputPricePerToken: 0.0000005,
+                    sourceUrl: "https://openrouter.ai/api/v1/models",
+                    descriptor: {
+                        contextWindow: 64000,
+                        maxTokens: 2048,
+                        reasoning: false,
+                        inputPrice: 0.07,
+                        outputPrice: 0.5,
+                        cacheReadPrice: 0,
+                        structuredOutputs: true,
+                    },
+                })),
+            }),
+        );
+        const base = ["--study", fixture.path, "--catalog", catalog];
+        await runStudyCli("qualification", [
+            ...base,
+            "--prepare",
+            "--run",
+            "capture",
+        ]);
+        const capture = JSON.parse(
+            readFileSync(
+                join(fixture.directory, "runs/capture/manifest.json"),
+                "utf8",
+            ),
+        );
+        expect(capture.blockers).toEqual(["missing_input_contract"]);
+        writeFileSync(
+            join(fixture.directory, "input-contract.json"),
+            JSON.stringify({
+                protocolSha256: fixture.study.protocolSha256,
+                frozenAt: fixture.study.instructionsFrozenAt,
+                providerInputHashes: Object.fromEntries(
+                    capture.calls.map((call: StudyCall) => [
+                        call.key,
+                        call.requestHash,
+                    ]),
+                ),
+            }),
+        );
+        writeFileSync(
+            fixture.path,
+            JSON.stringify({
+                ...fixture.study,
+                inputContractFile: "input-contract.json",
+            }),
+        );
+        const model = capture.calls.find(
+            (call: StudyCall) => call.task === "qualification",
+        ).model;
+        const selected = [
+            ...base,
+            "--tasks",
+            "qualification",
+            "--models",
+            model,
+            "--run",
+            "approved",
+        ];
+        await runStudyCli("qualification", [...selected, "--prepare"]);
+        const path = join(fixture.directory, "runs/approved/manifest.json");
+        const manifestBytes = readFileSync(path, "utf8");
+        const manifest = JSON.parse(manifestBytes);
+        expect(manifest.status).toBe("prepared");
+        expect(manifest.maximumAttempts).toBe(32);
+        expect(manifest.calls[0].body.max_tokens).toBe(2048);
+        const authorization = join(fixture.directory, "authorization.json");
+        writeFileSync(
+            authorization,
+            JSON.stringify({
+                manifestSha256: digest(JSON.stringify(manifest)),
+                maximumAttempts: 32,
+                budgetUsd: 1,
+                approvedAt: new Date().toISOString(),
+            }),
+        );
+        const { SOURCE_COVERAGE_ROLES } = await import(
+            "@convex/domain/sourceSelectionPolicy"
+        );
+        const output = {
+            companyMatch: "uncertain",
+            companyPassageKeys: [],
+            documentKind: "independent_analysis",
+            reportingPeriodEnd: null,
+            reportingPeriodPassageKeys: [],
+            contributions: Object.fromEntries(
+                SOURCE_COVERAGE_ROLES.map((role) => [role, null]),
+            ),
+            limitations: [],
+        };
+        const requests: string[] = [];
+        vi.stubEnv("OPENROUTER_API_KEY", "synthetic-study-only-key");
+        vi.stubGlobal(
+            "fetch",
+            async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+                const request = new Request(url, init);
+                expect(request.url).toBe(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                );
+                const body = await request.text();
+                requests.push(body);
+                expect(
+                    manifest.calls.map((call: StudyCall) => call.requestHash),
+                ).toContain(digest(body));
+                expect(JSON.parse(body).max_tokens).toBe(2048);
+                return new Response(
+                    JSON.stringify({
+                        id: "study-fixture",
+                        model,
+                        provider: "fixture",
+                        created: 1,
+                        choices: [
+                            {
+                                index: 0,
+                                message: {
+                                    role: "assistant",
+                                    content: JSON.stringify(output),
+                                },
+                                finish_reason: "stop",
+                            },
+                        ],
+                        usage: {
+                            prompt_tokens: 200,
+                            completion_tokens: 50,
+                            total_tokens: 250,
+                            cost: 0.0001,
+                        },
+                    }),
+                    { headers: { "content-type": "application/json" } },
+                );
+            },
+        );
+        if (outcome === "cancelled-before-dispatch") {
+            const once = process.once.bind(process);
+            vi.spyOn(process, "once").mockImplementation((event, listener) => {
+                const registered = once(event, listener);
+                if (event === "SIGTERM") queueMicrotask(() => listener());
+                return registered;
+            });
+        }
+        await runStudyCli("qualification", [
+            ...selected,
+            "--live",
+            "--authorization",
+            authorization,
+        ]);
+        const journalPath = join(
+            fixture.directory,
+            "runs/approved/calls.jsonl",
+        );
+        const entries = readFileSync(journalPath, "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
+        const result = entries.find((entry) => entry.event === "result");
+        if (outcome === "cancelled-before-dispatch") {
+            expect(requests).toHaveLength(0);
+            const results = entries.filter((entry) => entry.event === "result");
+            expect(results).toHaveLength(2);
+            for (const item of results)
+                expect(item).toMatchObject({
+                    status: "failed",
+                    costUsd: 0,
+                    costBasis: "not_dispatched",
+                    output: {
+                        status: "failed",
+                        errorCode: "cancelled",
+                        dispatchOutcome: "not_dispatched",
+                    },
+                });
+            expect(JSON.parse(log.mock.calls.at(-1)?.[0])).toMatchObject({
+                reportedCostUsd: 0,
+                unknownChargeReservedUsd: 0,
+                actualAttempts: 2,
+            });
+            return;
+        }
+        expect(result, result?.output?.outputDiagnostic?.reason).toMatchObject({
+            status: "succeeded",
+            costUsd: 0.0001,
+            costBasis: "provider_reported",
+            output: {
+                status: "succeeded",
+                qualification: {
+                    companyMatch: "uncertain",
+                    documentKind: "independent_analysis",
+                    reportingPeriodEnd: null,
+                    findings: [],
+                    limitations: output.limitations,
+                },
+            },
+        });
+        expect(requests).toHaveLength(8);
+        expect(readFileSync(path, "utf8")).toBe(manifestBytes);
+        const summary = JSON.parse(log.mock.calls.at(-1)?.[0]);
+        expect(summary).toMatchObject({
+            actualAttempts: 8,
+            unknownChargeReservedUsd: 0,
+            unresolvedAttempts: 0,
+            appWrites: 0,
+        });
+        expect(summary.reportedCostUsd).toBeCloseTo(0.0008, 12);
+        const before = readFileSync(journalPath, "utf8");
+        await runStudyCli("qualification", [
+            ...selected,
+            "--live",
+            "--authorization",
+            authorization,
+        ]);
+        expect(requests).toHaveLength(8);
+        expect(readFileSync(journalPath, "utf8")).toBe(before);
+    } finally {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+        vi.unstubAllEnvs();
+        rmSync(fixture.directory, { recursive: true, force: true });
+    }
+}, 60000);
 
 test("rejects orphaned ledger results instead of understating an experiment's spending", () => {
     const fixture = studyFixture();
@@ -990,6 +1296,21 @@ test("selects the same 96 real grouped requests through either grouped entrypoin
                     inputPricePerToken: 0.00000007,
                     outputPricePerToken: 0.0000005,
                     contextLength: 1048576,
+                    maximumOutputTokens: 6144,
+                    reasoning: {
+                        enabled: false,
+                        effort: "none",
+                        exclude: true,
+                    },
+                    descriptor: {
+                        contextWindow: 1048576,
+                        maxTokens: 8192,
+                        reasoning: false,
+                        inputPrice: 0.07,
+                        outputPrice: 0.5,
+                        cacheReadPrice: 0,
+                        structuredOutputs: true,
+                    },
                     sourceUrl: `https://openrouter.ai/api/v1/models/${id}/endpoints`,
                 })),
             }),
@@ -1015,6 +1336,9 @@ test("selects the same 96 real grouped requests through either grouped entrypoin
                 "utf8",
             ),
         );
+        expect(manifest.codeHashes["convex/resourcePolicy.ts"]).toBe(
+            digest(readFileSync("convex/resourcePolicy.ts", "utf8")),
+        );
         expect(manifest.calls).toHaveLength(96);
         expect(manifest.maximumAttempts).toBe(96);
         expect(
@@ -1038,6 +1362,8 @@ test("selects the same 96 real grouped requests through either grouped entrypoin
                     item.task === call.task && item.caseId === call.caseId,
             );
             expect(call.prepared).toEqual(original?.prepared);
+            expect(call.body.messages.length).toBeGreaterThan(0);
+            expect(call.body.response_format.type).toBe("json_schema");
             expect(call.body).toMatchObject({
                 model: call.model,
                 max_tokens: 6144,
@@ -1060,6 +1386,126 @@ test("selects the same 96 real grouped requests through either grouped entrypoin
         rmSync(fixture.directory, { recursive: true, force: true });
     }
 }, 15_000);
+
+test("grouped study capture preserves the SDK output bound below the selected ceiling", async () => {
+    const fixture = studyFixture();
+    try {
+        const catalog = join(fixture.directory, "bounded-model.json");
+        writeFileSync(
+            catalog,
+            JSON.stringify({
+                observedAt: new Date().toISOString(),
+                models: [
+                    {
+                        id: "example/narrow-output",
+                        provider: "fixture",
+                        inputPricePerToken: 0.00000007,
+                        outputPricePerToken: 0.0000005,
+                        contextLength: 64000,
+                        maximumOutputTokens: 6144,
+                        descriptor: {
+                            contextWindow: 64000,
+                            maxTokens: 2048,
+                            reasoning: false,
+                            inputPrice: 0.07,
+                            outputPrice: 0.5,
+                            cacheReadPrice: 0,
+                            structuredOutputs: true,
+                        },
+                        sourceUrl:
+                            "https://openrouter.ai/api/v1/models/example/narrow-output/endpoints",
+                    },
+                ],
+            }),
+        );
+        await runStudyCli("qualification", [
+            "--study",
+            fixture.path,
+            "--catalog",
+            catalog,
+            "--tasks",
+            "qualification,comparison",
+            "--models",
+            "all",
+            "--prepare",
+            "--run",
+            "bounded",
+        ]);
+        const manifest = JSON.parse(
+            readFileSync(
+                join(fixture.directory, "runs/bounded/manifest.json"),
+                "utf8",
+            ),
+        );
+        expect(manifest.calls).toHaveLength(48);
+        for (const call of manifest.calls) {
+            expect(call.body.messages.length).toBeGreaterThan(0);
+            expect(call.body.max_tokens).toBe(2048);
+        }
+        expect(manifest.providerRequests).toBe(0);
+    } finally {
+        rmSync(fixture.directory, { recursive: true, force: true });
+    }
+});
+
+test("grouped study preparation refuses missing capabilities without guessing a request", async () => {
+    const fixture = studyFixture();
+    try {
+        const catalog = join(fixture.directory, "missing-capabilities.json");
+        writeFileSync(
+            catalog,
+            JSON.stringify({
+                observedAt: new Date().toISOString(),
+                models: [
+                    {
+                        id: "example/unprepared",
+                        provider: "fixture",
+                        inputPricePerToken: 0.00000007,
+                        outputPricePerToken: 0.0000005,
+                        contextLength: 64000,
+                        sourceUrl:
+                            "https://openrouter.ai/api/v1/models/example/unprepared/endpoints",
+                    },
+                ],
+            }),
+        );
+        await runStudyCli("qualification", [
+            "--study",
+            fixture.path,
+            "--catalog",
+            catalog,
+            "--tasks",
+            "qualification,comparison",
+            "--models",
+            "all",
+            "--prepare",
+            "--run",
+            "unprepared",
+        ]);
+        const manifest = JSON.parse(
+            readFileSync(
+                join(fixture.directory, "runs/unprepared/manifest.json"),
+                "utf8",
+            ),
+        );
+        expect(manifest.status).toBe("blocked");
+        expect(manifest.calls).toHaveLength(48);
+        expect(
+            manifest.blockers.filter((code: string) =>
+                code.startsWith("missing_model_capabilities:"),
+            ),
+        ).toHaveLength(48);
+        expect(
+            manifest.calls.every(
+                (call: { body: { messages?: unknown } }) =>
+                    call.body.messages === undefined,
+            ),
+        ).toBe(true);
+        expect(manifest.providerRequests).toBe(0);
+    } finally {
+        rmSync(fixture.directory, { recursive: true, force: true });
+    }
+});
 
 const { scoreReviewedRetrieval } = await import(
     new URL(

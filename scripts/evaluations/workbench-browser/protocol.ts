@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { z } from "zod";
 import { reasoningPreferenceValues } from "../../../convex/modelConfigurationValues.ts";
+import { QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY } from "../../../convex/resourcePolicy.ts";
 import { qualificationDecision } from "./qualification.ts";
 
 const mode = z.enum(["deterministic", "live"]);
@@ -179,6 +180,9 @@ export function qualificationFingerprints() {
             "scripts/evaluations/workbench/continuity-cases.json",
             "scripts/check-imports.ts",
             "scripts/check-execution-boundaries.ts",
+            "scripts/check-resource-policy.ts",
+            "scripts/sync-resource-policy.ts",
+            "services/playwright-browser/src/resource-policy.generated.json",
             "scripts/archive-evaluation.ts",
             "scripts/local-runtime.ts",
             "package.json",
@@ -323,7 +327,7 @@ const executeCheck: CheckExecutor = (binary, args) =>
     spawnSync(binary, args, {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
-        timeout: 300_000,
+        timeout: TOOLING_POLICY.candidateValidationTimeoutMs,
     });
 
 /** No setup or paid admission may follow unless every sequential check passed on these exact source bytes. */

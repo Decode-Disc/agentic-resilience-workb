@@ -4,6 +4,8 @@ Status: direction accepted on 2026-11-09; design only. The [technical contract](
 
 Supersession, 2026-11-10: the approved first-pass investigator extends the delivered Pi reviewer with a trusted diagnostic mission, confined indexed source search, independently persisted developer handoff and same-session assessment-format feedback. Its serialization, preservation and reconciliation boundaries are verified offline; diagnostic usefulness remains unqualified. The [current qualification contract](../../context/TECH.md#qualification-campaigns) supersedes the original default grading/development-agent investigation split below. Comprehensive local probes remain a separate scope, and no historical mandate, evidence or provider grant is renewed.
 
+Supersession, 2026-11-11: the approved resource refactor uses one authored policy, remaining immutable analysis authority and metered native Pi compaction. It replaces the reviewer byte-as-token input proxy and guessed generation cutoffs, not historical grants or evidence. The [current resource contract](../../context/TECH.md#locked-resource-limits) owns these obligations. Offline mechanics do not establish fresh reviewer quality or authorize another live lot.
+
 ## Purpose and current boundary
 
 Reduce the time between a qualification lot and an actionable assessment while keeping execution integrity, model usefulness and unsupported conclusions distinguishable. A reviewer should identify what the evidence establishes, what failed or remains unfinished, and what requires further investigation. A truthful inconclusive result is useful; a plausible explanation without supporting evidence is not a demonstrated cause.

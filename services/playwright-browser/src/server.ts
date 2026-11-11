@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { createConnection, isIP, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { type Browser, chromium } from "playwright";
+import policy from "./resource-policy.generated.json" with { type: "json" };
 
 import {
     buildBrowserContextOptions,
@@ -15,19 +16,19 @@ import {
 const PORT = Number.parseInt(process.env["PORT"] ?? "3000", 10);
 const SHARED_SECRET = process.env["PREVIEW_SERVICE_SECRET"];
 const MAX_CONCURRENT_RENDERS = Number.parseInt(
-    process.env["MAX_CONCURRENT_RENDERS"] ?? "3",
+    process.env["MAX_CONCURRENT_RENDERS"] ?? String(policy.maxConcurrentRenders),
     10,
 );
 const RENDER_TIMEOUT_MS = Number.parseInt(
-    process.env["RENDER_TIMEOUT_MS"] ?? "30000",
+    process.env["RENDER_TIMEOUT_MS"] ?? String(policy.renderTimeoutMs),
     10,
 );
 const NAVIGATION_TIMEOUT_MS = Number.parseInt(
-    process.env["NAVIGATION_TIMEOUT_MS"] ?? "15000",
+    process.env["NAVIGATION_TIMEOUT_MS"] ?? String(policy.navigationTimeoutMs),
     10,
 );
-const MAX_REDIRECTS = 5;
-const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+const MAX_REDIRECTS = policy.maxRedirects;
+const MAX_RESPONSE_BYTES = policy.maxResponseBytes;
 const VIEWPORT = { width: 1280, height: 720 };
 
 // ─── Concurrency ──────────────────────────────────────────────────────────
@@ -232,7 +233,7 @@ async function createPublicEgress(timeoutMs: number) {
             return;
         }
         void (async () => {
-            if (closed || ++connections > 128)
+            if (closed || ++connections > policy.maxConnections)
                 throw new RenderError(
                     "resource_limit",
                     "Preview connection limit reached",
@@ -251,7 +252,7 @@ async function createPublicEgress(timeoutMs: number) {
             upstream.setTimeout(timeoutMs, () => upstream.destroy());
             const meter = (chunk: Buffer) => {
                 transferredBytes += chunk.length;
-                if (transferredBytes > 32 * 1024 * 1024) {
+                if (transferredBytes > policy.maxTransferredBytes) {
                     failure = new RenderError(
                         "resource_limit",
                         "Preview transfer limit reached",
@@ -449,7 +450,7 @@ async function render(url: string): Promise<RenderResult> {
             const request = route.request();
             const type = request.resourceType();
             if (
-                ++requests > 256 ||
+                ++requests > policy.maxRequests ||
                 type === "media" ||
                 type === "other" ||
                 request.method() !== "GET"
@@ -567,7 +568,7 @@ async function render(url: string): Promise<RenderResult> {
 
 async function readBody(
     req: import("node:http").IncomingMessage,
-    maxBytes = 10240,
+    maxBytes = policy.requestBodyBytes,
 ): Promise<string> {
     return new Promise((resolve, reject) => {
         let data = "";
@@ -659,8 +660,8 @@ if (!SHARED_SECRET) {
 }
 
 const server: Server = createServer(handleRequest);
-server.keepAliveTimeout = 35_000;
-server.headersTimeout = 36_000;
+server.keepAliveTimeout = policy.keepAliveTimeoutMs;
+server.headersTimeout = policy.headersTimeoutMs;
 
 // Only auto-listen when run directly (not imported by tests).
 // Vitest sets VITEST env var by default.

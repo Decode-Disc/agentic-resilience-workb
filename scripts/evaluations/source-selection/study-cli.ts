@@ -13,7 +13,10 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
+import type { modelDescriptor } from "@convex/modelConfigurationSchema";
+import type { Infer } from "convex/values";
 import { createServer } from "vite";
+import { RESOURCE_POLICY_VERSION } from "../../../convex/resourcePolicy.ts";
 import { evaluationTransport, validateAnswers } from "./decision-protocol.ts";
 import {
     EvaluationBudget,
@@ -39,6 +42,7 @@ type Catalog = {
         sourceUrl: string;
         reasoning?: { enabled?: boolean; effort?: string; exclude?: boolean };
         maximumOutputTokens?: number;
+        descriptor?: Infer<typeof modelDescriptor>;
     }>;
 };
 /** Applies evaluation routing and billing settings without changing task inputs or schemas. */
@@ -112,6 +116,7 @@ type Entry = {
     key: string;
     reservation?: number;
     requestHash?: string;
+    deadlineAt?: number;
     status?: string;
     response?: Record<string, unknown>;
     costUsd?: number;
@@ -134,6 +139,7 @@ const SOURCE_FILES = [
     "convex/integrations/sourceQualificationConfig.ts",
     "convex/integrations/evidenceNormalization.ts",
     "convex/resourceLimits.ts",
+    "convex/resourcePolicy.ts",
     "pnpm-lock.yaml",
 ];
 
@@ -261,63 +267,110 @@ export async function runStudyCli(
         )) as typeof import("@convex/integrations/sourceQualification");
         const loaded = domain.readStudy(path);
         const manifest = domain.prepareStudy(loaded);
-        // Capture the SDK's actual wire bodies using only an external-I/O double.
-        // This request-local fake credential never leaves the process.
-        for (const call of manifest.calls.filter((c) => c.task !== "choices")) {
-            let body: Record<string, unknown> | undefined;
-            const fetchCapture: typeof fetch = async (_url, init) => {
-                assert.equal(
-                    typeof init?.body,
-                    "string",
-                    "SDK did not serialize a JSON request",
-                );
-                body = JSON.parse(init?.body as string) as Record<
-                    string,
-                    unknown
-                >;
-                return new Response(
-                    JSON.stringify({
-                        error: { message: "Offline wire capture", code: 400 },
-                    }),
-                    {
-                        status: 400,
-                        headers: { "content-type": "application/json" },
+        const groupedGeneration = (call: (typeof manifest.calls)[number]) => {
+            const profile = catalog?.models.find(
+                (model) => model.id === call.model,
+            );
+            if (!profile?.descriptor) return;
+            assert.equal(
+                profile.descriptor.contextWindow,
+                profile.contextLength,
+                "Catalog context capacity mismatch",
+            );
+            const selection = { id: call.model, provider: profile.provider };
+            const configured = selectGenerativeRequest({}, selection, profile);
+            const { maximumOutputTokens: _outputSelection, ...wireSettings } =
+                profile;
+            return {
+                route: {
+                    model: call.model,
+                    provider: profile.provider,
+                    descriptor: {
+                        ...profile.descriptor,
+                        maxTokens: Math.min(
+                            profile.descriptor.maxTokens,
+                            Number(
+                                configured.max_tokens ??
+                                    profile.descriptor.maxTokens,
+                            ),
+                        ),
                     },
-                );
+                },
+                // Output selection precedes SDK context reduction; later routing cannot enlarge it.
+                applyWireSettings: (body: Record<string, unknown>) =>
+                    selectGenerativeRequest(body, selection, wireSettings),
             };
-            const route = {
-                model: call.model,
-                provider: call.model.startsWith("deepseek/")
-                    ? "reka"
-                    : "deepinfra/fp8",
-            } as Parameters<typeof transport.qualifySourceDocument>[1];
-            const dependencies = {
-                apiKey: "offline-wire-capture-not-a-provider-key",
-                fetch: fetchCapture,
-            };
-            if (call.task === "qualification")
-                await transport.qualifySourceDocument(
-                    call.prepared as Parameters<
-                        typeof transport.qualifySourceDocument
-                    >[0],
-                    route,
-                    dependencies,
-                );
-            else
-                await transport.compareSourceContributions(
-                    call.prepared as Parameters<
-                        typeof transport.compareSourceContributions
-                    >[0],
-                    route,
-                    dependencies,
-                );
-            if (body) {
-                call.body = body;
-                call.requestHash = sha(JSON.stringify(body));
-            } else
-                manifest.blockers.push(`adapter_issued_no_request:${call.key}`);
-        }
+        };
+        // No credentials or provider I/O: the real adapter serializes against a local fetch double.
+        const captureGroupedRequests = async (calls: typeof manifest.calls) => {
+            for (const call of calls.filter((c) => c.task !== "choices")) {
+                const generation = groupedGeneration(call);
+                if (!generation) {
+                    manifest.blockers.push(
+                        `missing_model_capabilities:${call.key}`,
+                    );
+                    continue;
+                }
+                let body: Record<string, unknown> | undefined;
+                const fetchCapture: typeof fetch = async (_url, init) => {
+                    assert.equal(
+                        typeof init?.body,
+                        "string",
+                        "SDK did not serialize a JSON request",
+                    );
+                    body = JSON.parse(init?.body as string) as Record<
+                        string,
+                        unknown
+                    >;
+                    return new Response(
+                        JSON.stringify({
+                            error: {
+                                message: "Offline wire capture",
+                                code: 400,
+                            },
+                        }),
+                        {
+                            status: 400,
+                            headers: { "content-type": "application/json" },
+                        },
+                    );
+                };
+                const route = generation.route;
+                const dependencies = {
+                    apiKey: "offline-wire-capture-not-a-provider-key",
+                    fetch: fetchCapture,
+                    authority: {
+                        resourcePolicy: RESOURCE_POLICY_VERSION,
+                        deadlineAt: Date.now() + manifest.timeoutSeconds * 1000,
+                    },
+                };
+                if (call.task === "qualification")
+                    await transport.qualifySourceDocument(
+                        call.prepared as Parameters<
+                            typeof transport.qualifySourceDocument
+                        >[0],
+                        route,
+                        dependencies,
+                    );
+                else
+                    await transport.compareSourceContributions(
+                        call.prepared as Parameters<
+                            typeof transport.compareSourceContributions
+                        >[0],
+                        route,
+                        dependencies,
+                    );
+                if (body) {
+                    call.body = generation.applyWireSettings(body);
+                    call.requestHash = sha(JSON.stringify(call.body));
+                } else
+                    manifest.blockers.push(
+                        `adapter_issued_no_request:${call.key}`,
+                    );
+            }
+        };
         if (loaded.inputContract) {
+            await captureGroupedRequests(manifest.calls);
             assert.equal(
                 Object.keys(loaded.inputContract.providerInputHashes).length,
                 manifest.calls.length,
@@ -545,6 +598,8 @@ export async function runStudyCli(
             );
             manifest.models = selectedModels.map((selected) => selected.id);
         }
+        if (!loaded.inputContract || selectedModels !== null)
+            await captureGroupedRequests(manifest.calls);
         const quoteBlockers: string[] = [];
         if (!catalog) quoteBlockers.push("missing_official_price_snapshot");
         for (const call of manifest.calls) {
@@ -853,14 +908,17 @@ export async function runStudyCli(
                             );
                             return;
                         }
+                        const began = Date.now();
+                        const deadlineAt =
+                            began + manifest.timeoutSeconds * 1000;
                         record({
                             event: "started",
                             key: call.key,
                             reservation: reservation,
                             requestHash: call.requestHash,
-                            at: new Date().toISOString(),
+                            deadlineAt,
+                            at: new Date(began).toISOString(),
                         });
-                        const began = Date.now();
                         const saved: Entry = {
                             event: "result",
                             key: call.key,
@@ -873,7 +931,9 @@ export async function runStudyCli(
                         try {
                             const signal = AbortSignal.any([
                                 controller.signal,
-                                AbortSignal.timeout(60000),
+                                AbortSignal.timeout(
+                                    Math.max(1, deadlineAt - Date.now()),
+                                ),
                             ]);
                             if (call.task === "choices") {
                                 const response = await fetch(call.endpoint, {
@@ -966,15 +1026,59 @@ export async function runStudyCli(
                                     quotedProvider,
                                     "Frozen evaluation provider is missing",
                                 );
-                                const route = {
-                                    model: call.model,
-                                    provider: quotedProvider,
-                                } satisfies Parameters<
-                                    typeof transport.qualifySourceDocument
-                                >[1];
+                                const generation = groupedGeneration(call);
+                                assert(
+                                    generation,
+                                    "Frozen grouped model capabilities are missing",
+                                );
+                                const route = generation.route;
+                                assert.equal(
+                                    route.provider,
+                                    quotedProvider,
+                                    "Frozen evaluation provider changed",
+                                );
                                 const dependencies = {
+                                    authority: {
+                                        resourcePolicy: RESOURCE_POLICY_VERSION,
+                                        deadlineAt,
+                                    },
                                     apiKey,
                                     signal,
+                                    beforeDispatch: async (
+                                        requestJson: string,
+                                    ) => {
+                                        const snapshot = JSON.parse(
+                                            requestJson,
+                                        ) as {
+                                            version?: unknown;
+                                            input?: unknown;
+                                        };
+                                        assert.equal(
+                                            snapshot.version,
+                                            2,
+                                            "Unknown grouped SDK request snapshot",
+                                        );
+                                        assert(
+                                            snapshot.input &&
+                                                typeof snapshot.input ===
+                                                    "object" &&
+                                                !Array.isArray(snapshot.input),
+                                            "Grouped SDK request body is missing",
+                                        );
+                                        const body = JSON.stringify(
+                                            generation.applyWireSettings(
+                                                snapshot.input as Record<
+                                                    string,
+                                                    unknown
+                                                >,
+                                            ),
+                                        );
+                                        assert.equal(
+                                            sha(body),
+                                            call.requestHash,
+                                            "SDK request differs from the approved manifest",
+                                        );
+                                    },
                                     onResponse: (response: {
                                         status: number;
                                         body: string;
@@ -1021,23 +1125,13 @@ export async function runStudyCli(
                                     ) => {
                                         const body = requestedTasks
                                             ? JSON.stringify(
-                                                  selectGenerativeRequest(
+                                                  generation.applyWireSettings(
                                                       JSON.parse(
                                                           String(init?.body),
                                                       ) as Record<
                                                           string,
                                                           unknown
                                                       >,
-                                                      {
-                                                          id: call.model,
-                                                          provider:
-                                                              route.provider,
-                                                      },
-                                                      catalog?.models.find(
-                                                          (model) =>
-                                                              model.id ===
-                                                              call.model,
-                                                      ),
                                                   ),
                                               )
                                             : String(init?.body);
@@ -1067,7 +1161,13 @@ export async function runStudyCli(
                                           );
                                 saved.output = result;
                                 saved.status = result.status;
-                                if (result.reportedCost !== undefined) {
+                                if (
+                                    result.status === "failed" &&
+                                    result.dispatchOutcome === "not_dispatched"
+                                ) {
+                                    saved.costUsd = 0;
+                                    saved.costBasis = "not_dispatched";
+                                } else if (result.reportedCost !== undefined) {
                                     saved.costUsd = result.reportedCost;
                                     saved.costBasis = "provider_reported";
                                 }

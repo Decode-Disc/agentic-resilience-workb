@@ -2,6 +2,8 @@
 
 Follow-up, 2026-11-01: the [message-authority repair and final paid cases](../../verification/2026-11-01-workbench-message-authority-requalification.md) supersede current-status readings of analyst-field precedence and documentary registration below. Their targeted corrections pass; read-only compliance, framing usefulness and local browser execution remain unaccepted. Original observations and raw evidence are preserved.
 
+Supersession, 2026-11-11: current `authority_native_v1` work derives model deadlines and receipt leases from remaining approved authority rather than historical 60-second/five-minute generation ceilings. Application defaults have one [resource-policy owner](../../../context/TECH.md#locked-resource-limits); native context/output management and retained evidence remain distinct. Earlier implementation values below preserve their dated meaning and grant no renewed execution authority.
+
 ## Status and Ownership
 
 Accepted on 2026-10-26 and refined on 2026-10-27, 2026-10-29, 2026-11-01 and 2026-11-07. This document preserves dated execution rationale; the [technical contract](../../../context/TECH.md#agentic-missions-and-shared-operations) owns current obligations and the [global conception](2026-10-23-question-led-workbench-conception.md) preserves workflow rationale.

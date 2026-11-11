@@ -10,7 +10,12 @@ import {
     type SourceCoverageRole,
 } from "@convex/domain/sourceSelectionPolicy";
 import { normalizeQualificationText } from "@convex/integrations/evidenceNormalization";
-import { MAX_QUOTATION_CHARS } from "@convex/resourceLimits";
+import {
+    MAX_SOURCE_CONTRIBUTIONS_PER_ROLE as MAX_CONTRIBUTIONS_PER_ROLE,
+    MAX_QUALIFICATION_FINDINGS,
+    MAX_QUALIFICATION_INPUT_BYTES,
+    MAX_QUOTATION_CHARS,
+} from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
@@ -62,9 +67,6 @@ export const qualificationSelectionStrategyValidator = v.union(
     v.literal("full_document"),
     v.literal("retrieved_passages"),
 );
-export const MAX_QUALIFICATION_INPUT_BYTES = 128 * 1024;
-export const MAX_QUALIFICATION_FINDINGS = 15;
-const MAX_CONTRIBUTIONS_PER_ROLE = 2;
 
 const quotationSchema = z
     .object({

@@ -17,9 +17,9 @@ import {
     requiredAnalystInput,
 } from "@convex/integrations/modelInput";
 import {
-    MODEL_MAX_OUTPUT_TOKENS,
     type ModelRoute,
     nativeProfileCatalogueRevision,
+    SIMULATION_MAX_OUTPUT_TOKENS,
     SIMULATION_MODEL_ROUTE,
     WORKBENCH_MODEL_ROUTE,
 } from "@convex/integrations/modelRouting";
@@ -75,7 +75,7 @@ async function minimalTranscript(definition: AgentDefinition) {
             {
                 id: "controlled",
                 contextWindow: 32000,
-                maxTokens: MODEL_MAX_OUTPUT_TOKENS,
+                maxTokens: SIMULATION_MAX_OUTPUT_TOKENS,
             },
         ],
     });

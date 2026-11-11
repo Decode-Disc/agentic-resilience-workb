@@ -1,11 +1,11 @@
 import { readResearchContext } from "@convex/domain/researchContext";
 import {
-    SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
     SOURCE_COMPARISON_VERSION,
     type SourceComparisonOutput,
     sourceComparisonOutputSchema,
     sourceFindingNeedsComparison,
 } from "@convex/domain/sourceComparison";
+import { SOURCE_PREPARATION_EXECUTION_PLAN_VERSION } from "@convex/domain/sourcePreparationAuthority";
 import {
     isExecutableQualificationVersion,
     qualificationExecutionVersion,
@@ -17,13 +17,14 @@ import {
     SOURCE_RETRIEVAL_VERSION,
 } from "@convex/domain/sourceRetrievalPolicy";
 import { applyRequestedResearchPause } from "@convex/execution/researchControl";
+import { sourcePreparationEnabled } from "@convex/resourceLimits";
 import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     MAX_SUPPLEMENT_SEARCHES,
+    RESOURCE_POLICY_VERSION,
+    SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
     SOURCE_PREPARATION_DEADLINE_MS,
-    SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
-    sourcePreparationEnabled,
-} from "@convex/resourceLimits";
+} from "@convex/resourcePolicy";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { type Infer, v } from "convex/values";
@@ -187,6 +188,12 @@ export async function startReviewPreparation(
         : null;
     if (
         previous?.kind === "preparation" &&
+        previous.resourcePolicy !== RESOURCE_POLICY_VERSION &&
+        !args.manualSourceId
+    )
+        throw sourcePreparationError("resource_policy_unsupported");
+    if (
+        previous?.kind === "preparation" &&
         previous.status === "started" &&
         (previous.deadlineAt ?? Infinity) <= Date.now() &&
         previous.executionGeneration === run.executionGeneration &&
@@ -238,6 +245,8 @@ export async function startReviewPreparation(
                 retryAt: recovery.retryAt,
             };
         previous = recovery.scopePreparation;
+        if (previous.resourcePolicy !== RESOURCE_POLICY_VERSION)
+            throw sourcePreparationError("resource_policy_unsupported");
     }
     const resumingTargetedReading =
         !args.target &&
@@ -343,6 +352,7 @@ export async function startReviewPreparation(
             corpusRevisionId: revision._id,
             expectedProposalId: proposal._id,
             kind: "preparation",
+            resourcePolicy: RESOURCE_POLICY_VERSION,
             ...(previous?.kind === "preparation"
                 ? {
                       resumesPreparationId: previous._id,
@@ -383,7 +393,8 @@ export async function startReviewPreparation(
             policyVersion: qualificationVersion,
             qualificationVersion,
             executionPlanVersion:
-                previous?.kind === "preparation"
+                previous?.kind === "preparation" &&
+                previous.resourcePolicy === RESOURCE_POLICY_VERSION
                     ? previous.executionPlanVersion
                     : SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
             modelRevisionId:
@@ -1503,6 +1514,11 @@ export const claimForDiscovery = internalMutation({
         const previous = run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
+        if (
+            previous?.kind === "preparation" &&
+            previous.resourcePolicy !== RESOURCE_POLICY_VERSION
+        )
+            throw sourcePreparationError("resource_policy_unsupported");
         const qualificationVersion = qualificationExecutionVersion(
             previous?.kind === "preparation"
                 ? previous.qualificationVersion
@@ -1528,6 +1544,7 @@ export const claimForDiscovery = internalMutation({
                 runId: run._id,
                 corpusRevisionId: revision._id,
                 kind: "preparation",
+                resourcePolicy: RESOURCE_POLICY_VERSION,
                 entryPoint: "initial_discovery",
                 workflowVersion: run.workflowVersion ?? 1,
                 executionGeneration: run.executionGeneration,

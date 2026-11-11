@@ -27,7 +27,6 @@ import {
     readPreparedNeed,
     reconstructQualification,
     requireSourcesPreparation,
-    SOURCES_HANDOFF_READ_CAPACITY,
     sourcesResourceStatus,
 } from "@convex/domain/sources";
 import {
@@ -38,7 +37,6 @@ import {
     documentarySubmissionValue,
     preparedMaterialInspectionValidator,
     preparedNeedInspectionValidator,
-    SOURCES_MAX_EVIDENCE_REFERENCES,
     type SourcesOperation,
     sourcesEnvelopeValidator,
     sourcesOperationValidator,
@@ -61,6 +59,11 @@ import {
 import { executionError } from "@convex/execution/errors";
 import { recordContextObservation } from "@convex/execution/journal";
 import { registerOperationWaitEvent } from "@convex/execution/operations";
+import { requireQualificationResultDeadline } from "@convex/providerCalls";
+import {
+    SOURCES_HANDOFF_READ_CAPACITY,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
+} from "@convex/resourcePolicy";
 import {
     simulatedDocumentaryControl,
     sourcesSimulationEnabled,
@@ -579,6 +582,7 @@ export const retainControl = internalMutation({
                 call.operation !== "source_documentary_control")
         )
             throw executionError("documentary_control_unavailable");
+        if (call) await requireQualificationResultDeadline(ctx, call);
         if (
             args.control.findings.length !== args.contributions.length ||
             new Set(args.control.findings.map((f) => f.contributionId)).size !==

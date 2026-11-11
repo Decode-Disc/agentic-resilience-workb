@@ -6,9 +6,10 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { sourcePreparationExecutionPlanValidator } from "./domain/sourcePreparationAuthority";
 import { SOURCE_QUALIFICATION_VERSION } from "./domain/sourceQualification";
 import {
+    EVALUATION_IO_POLICY,
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     SOURCE_PREPARATION_DEADLINE_MS,
-} from "./resourceLimits";
+} from "./resourcePolicy";
 import { assertLocalFixture } from "./retrievalEvaluation";
 import schema from "./schema";
 import {
@@ -553,7 +554,11 @@ export const inspect = internalQuery({
         const steps = handle
             ? (
                   await workflow.listSteps(ctx, handle, {
-                      paginationOpts: { cursor: null, numItems: 1000 },
+                      paginationOpts: {
+                          cursor: null,
+                          numItems:
+                              EVALUATION_IO_POLICY.workflowStepInspectionPageSize,
+                      },
                   })
               ).page
             : [];

@@ -49,6 +49,7 @@ test("a controlled reply after public Resume settles its original receipt withou
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         await f.t.mutation(internal.execution.piControl.closeWorker, {
             missionId: f.missionId,
@@ -178,6 +179,7 @@ test("capacity planning preserves independent qualification when earlier contrib
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         return {
             status: "succeeded",
@@ -284,6 +286,7 @@ test.each([
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         return {
             status: "succeeded",
@@ -461,6 +464,7 @@ test("one examination loads a shared capture once and supplies each exact contex
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         return {
             status: "succeeded",
@@ -539,6 +543,7 @@ test("controlled material is handed off partially with exact contribution versio
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         return {
             status: "succeeded",
@@ -685,6 +690,7 @@ test("a control already dispatched when the analyst pauses retains its controlle
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         await f.t
             .withIdentity({ subject: f.userId })

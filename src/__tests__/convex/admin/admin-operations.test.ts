@@ -240,12 +240,16 @@ test("admin can inspect preparation configuration and dispatch evidence without 
         "@/__tests__/setup/source-preparation"
     );
     const { t, runId, corpusRevisionId, sourceId } =
-        await seedSourcePreparation();
+        await seedSourcePreparation({ models: true });
     const { adminUserId } = await createVisitors(t);
     const preparationId = await t.mutation(
         internal.sourcePreparation.claimForDiscovery,
         { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
     );
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     await t.mutation(internal.sourcePreparation.recordConfigurationCheck, {
         preparationId,
         available: false,

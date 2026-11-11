@@ -25,7 +25,7 @@ import { retrieveAndNormalizeSecFiling } from "./integrations/secEvidence";
 import {
     MAX_NORMALIZED_ARTIFACT_BYTES,
     MAX_PASSAGES_PER_SOURCE,
-} from "./resourceLimits";
+} from "./resourcePolicy";
 import {
     inspectPublicSourceMetadata,
     requestPinnedPublicSource,

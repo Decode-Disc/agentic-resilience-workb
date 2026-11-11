@@ -2,7 +2,6 @@ import {
     createSourceComparisonResponseSchema,
     materializeSourceComparisonOutput,
     prepareSourceComparisonInput,
-    SOURCE_COMPARISON_MAX_INPUT_BYTES,
     type SourceComparisonTarget,
     sourceComparisonInputPolicyHash,
     sourceComparisonOutputSchema,
@@ -13,6 +12,7 @@ import {
     sourceComparisonQuery,
 } from "@convex/domain/sourceRetrievalPolicy";
 import { sourceFindingUsage } from "@convex/domain/sourceSelectionPolicy";
+import { SOURCE_COMPARISON_MAX_INPUT_BYTES } from "@convex/resourcePolicy";
 import { expect, test } from "vitest";
 
 const company = {

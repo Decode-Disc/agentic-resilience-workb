@@ -35,8 +35,8 @@ import {
 } from "@convex/domain/sourceSelectionPolicy";
 import { z } from "zod";
 
-export const SOURCES_APPROACH_PROTOCOL = "sources-approach-v2";
-export const SOURCES_INSPECTION_PROTOCOL = "sources-inspection-v2";
+export const SOURCES_APPROACH_PROTOCOL = "sources-approach-v3";
+export const SOURCES_INSPECTION_PROTOCOL = "sources-inspection-v3";
 export const SOURCES_INSPECTION_LIMITS = {
     modelCalls: 12,
     inspectionSteps: 6,
@@ -49,10 +49,38 @@ export const SOURCES_INSPECTION_LIMITS = {
 export const SOURCES_APPROACH_LIMITS = {
     modelCalls: 16,
     outputTokens: 16_384,
-    callTimeoutMs: 180_000,
     missionTimeoutMs: 600_000,
     requestBytes: 512 * 1024,
 } as const;
+
+export type SourcesModelProfile = {
+    model: string;
+    provider: string;
+    inputPricePerToken: number;
+    outputPricePerToken: number;
+    contextLength: number;
+};
+
+/** Conservative prepared-capacity exposure, not measured token consumption or a charge. */
+export function sourcesCallReservationUsd(profile: SourcesModelProfile) {
+    assert(
+        Number.isSafeInteger(profile.contextLength) &&
+            profile.contextLength > 0 &&
+            Number.isFinite(profile.inputPricePerToken) &&
+            profile.inputPricePerToken >= 0 &&
+            Number.isFinite(profile.outputPricePerToken) &&
+            profile.outputPricePerToken >= 0,
+        "model_capacity_unavailable",
+    );
+    assert(
+        SOURCES_APPROACH_LIMITS.outputTokens <= profile.contextLength,
+        "context_reservation_limit",
+    );
+    return (
+        profile.contextLength * profile.inputPricePerToken +
+        SOURCES_APPROACH_LIMITS.outputTokens * profile.outputPricePerToken
+    );
+}
 
 export type SourcesApproach = "fixed" | "agent";
 export type SourcesReasoning = "off" | "on";
@@ -127,6 +155,9 @@ export type SourcesCaptureSearch = (
 export type SourcesApproachResult = {
     schemaVersion:
         | typeof SOURCES_APPROACH_PROTOCOL
+        | "sources-approach-v1"
+        | "sources-approach-v2"
+        | "sources-inspection-v2"
         | "sources-inspection-v1"
         | typeof SOURCES_INSPECTION_PROTOCOL;
     inspection?: {

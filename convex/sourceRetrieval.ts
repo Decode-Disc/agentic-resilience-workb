@@ -12,6 +12,7 @@ import {
     sourceEmbeddingScopeKey,
 } from "@convex/domain/sourceRetrievalPolicy";
 import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
+import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import type { PaginationResult } from "convex/server";
 import { ConvexError, type Infer, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -26,7 +27,7 @@ import {
     MAX_SOURCE_EMBEDDING_TEXT_BYTES,
     MAX_SOURCE_SEARCH_CANDIDATES,
     SOURCE_EMBEDDING_DIMENSIONS,
-} from "./resourceLimits";
+} from "./resourcePolicy";
 import schema from "./schema";
 import { authorizeReviewRead } from "./sources";
 
@@ -946,7 +947,10 @@ async function searchApprovedCapture(
                           .eq("scopeKey", key)
                           .eq("captureId", capture._id),
                   )
-                  .paginate({ numItems: 64, cursor: args.cursor ?? null })
+                  .paginate({
+                      numItems: PERSISTENCE_PAGE_SIZE.sourceRetrieval,
+                      cursor: args.cursor ?? null,
+                  })
             : { page: [], isDone: true, continueCursor: "" };
     } catch (error) {
         if (

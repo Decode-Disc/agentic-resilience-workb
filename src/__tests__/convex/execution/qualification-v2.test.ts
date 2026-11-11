@@ -685,11 +685,16 @@ test("future policy settles a final known cost and retains reservations for unkn
     expect(after?.usage.model).toBe(2);
 });
 
+test("a new grant cannot silently replace an explicitly selected legacy accounting policy", async () => {
+    await expect(liveFixture(23, false, "conservative_v1")).rejects.toThrow(
+        "resource_policy_unsupported",
+    );
+});
+
 test.each([
     undefined,
-    "conservative_v1",
     "known_final_v1",
-] as const)("native reservation and capacity preserve the explicitly selected policy (%s)", async (policy) => {
+] as const)("current native reservation uses admitted model capacity (%s)", async (policy) => {
     const f = await liveFixture(23, false, policy);
     const args = await f.attempt(0);
     await f.t.run(async (ctx) => {
@@ -720,10 +725,7 @@ test.each([
         args,
     );
     const receipt = await f.t.run((ctx) => ctx.db.get(admitted.providerCallId));
-    expect(receipt?.qualificationReservationUsd).toBeCloseTo(
-        policy === "known_final_v1" ? 0.0086016 : 0.0239616,
-        10,
-    );
+    expect(receipt?.qualificationReservationUsd).toBeCloseTo(0.0086016, 10);
     await f.t.mutation(internal.providerCalls.recordAttempt, {
         ...args,
         status: "succeeded",
@@ -750,24 +752,7 @@ test.each([
         internal.providerCalls.recordAttempt,
         expanded,
     );
-    if (policy === "known_final_v1")
-        expect((await reserve).shouldExecute).toBe(true);
-    else {
-        await expect(reserve).rejects.toThrow(
-            "qualification_native_capacity_not_authorized",
-        );
-        expect(
-            await f.t.run((ctx) =>
-                ctx.db
-                    .query("providerCalls")
-                    .withIndex("by_run", (q) => q.eq("runId", expanded.runId))
-                    .filter((q) =>
-                        q.eq(q.field("invocationId"), expanded.invocationId),
-                    )
-                    .collect(),
-            ),
-        ).toEqual([]);
-    }
+    expect((await reserve).shouldExecute).toBe(true);
 });
 
 test.each([

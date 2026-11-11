@@ -27,7 +27,7 @@ import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
-import { MAX_NORMALIZED_ARTIFACT_BYTES } from "./resourceLimits";
+import { MAX_NORMALIZED_ARTIFACT_BYTES } from "./resourcePolicy";
 import {
     approvedSourceScope,
     type MissionApprovedCapture,

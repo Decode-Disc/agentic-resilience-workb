@@ -53,6 +53,79 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
 });
+test("a historical campaign cannot dispatch more analysis but can settle an already reserved attempt", async () => {
+    const { t } = await seedWorkbench(true);
+    const m = campaignManifestSchema.parse({
+        ...configurableCampaign(),
+        version: 3,
+        mode: "deterministic",
+        batteryHash: "a".repeat(64),
+        perLot: emptyCampaignLimits(),
+        total: emptyCampaignLimits(),
+        analysis: {
+            scope: "evidence_review",
+            routes: [{ provider: "openai", model: "fixture" }],
+            perLot: { requests: 2, costMicros: 200 },
+            total: { requests: 2, costMicros: 200 },
+            maxRequestCostMicros: 100,
+            maxInputTokens: 1000,
+            maxOutputTokens: 100,
+            timeoutMs: 10000,
+        },
+    });
+    const campaignId = await t.mutation(authorize, { manifest: m });
+    expect(await t.run((ctx) => ctx.db.get(campaignId))).toMatchObject({
+        resourcePolicy: "authority_native_v1",
+        manifest: m,
+    });
+    const lotId = await t.mutation(admit, {
+        campaignId,
+        key: "before-cutover",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    });
+    await t.mutation(internal.qualificationCampaigns.beginCleanup, { lotId });
+    const input = {
+        lotId,
+        attemptKey: "before-cutover",
+        evidenceHash: "c".repeat(64),
+        provider: "openai" as const,
+        model: "fixture",
+        reservationMicros: 100,
+    };
+    await t.mutation(internal.qualificationCampaigns.reserveAnalysis, input);
+    await t.run((ctx) =>
+        ctx.db.patch(campaignId, { resourcePolicy: undefined }),
+    );
+    await expect(
+        t.mutation(internal.qualificationCampaigns.reserveAnalysis, {
+            ...input,
+            attemptKey: "after-cutover",
+        }),
+    ).rejects.toThrow("resource_policy_unsupported");
+    await t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+        lotId,
+        attemptKey: input.attemptKey,
+        costMicros: 40,
+    });
+    const result = await t.run(async (ctx) => ({
+        campaign: await ctx.db.get(campaignId),
+        attempts: await ctx.db.query("qualificationAnalysisAttempts").collect(),
+    }));
+    expect(result.campaign?.manifest).toEqual(m);
+    expect(result.campaign?.analysisAllocated).toEqual({
+        requests: 1,
+        costMicros: 100,
+    });
+    expect(result.attempts).toEqual([
+        expect.objectContaining({
+            status: "settled",
+            costMicros: 40,
+            attemptKey: "before-cutover",
+        }),
+    ]);
+});
+
 for (const provider of ["openai", "openai-codex"] as const)
     test(`analysis attempts reserve separately without unknown replay (${provider})`, async () => {
         const { t } = await seedWorkbench(true);

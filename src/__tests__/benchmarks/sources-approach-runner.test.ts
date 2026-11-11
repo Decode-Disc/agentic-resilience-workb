@@ -314,6 +314,73 @@ test("inspection rechecks a focused comparison even when its qualification has n
     );
 });
 
+test("study admission keeps request bytes separate from model capacity and reserves prepared exposure", async () => {
+    const args = options();
+    args.profile.contextLength = 24000;
+    args.scenario.sources[0].text += " Additional commercial terms.".repeat(
+        300,
+    );
+    args.scenario.sources[0].contentHash = sourcesDigest(
+        args.scenario.sources[0].text,
+    );
+    let requestBytes = 0;
+    const reservations: number[] = [];
+    const result = await runSourcesMission({
+        ...args,
+        authorizeCall: (usd) => {
+            reservations.push(usd);
+        },
+        fetch: async (_url, init) => {
+            requestBytes = Buffer.byteLength(String(init?.body));
+            return envelope(proposal());
+        },
+    });
+    expect(result.status).toBe("complete");
+    expect(
+        result.sources[0]?.qualification?.findings[0]?.passages[0]?.quotation,
+    ).toContain("Customers pay");
+    expect(requestBytes + 16384).toBeGreaterThan(24000);
+    expect(reservations).toEqual([0.018784]);
+    expect(result.calls[0]).toMatchObject({
+        reservationUsd: 0.018784,
+        costUsd: 0.001,
+        inputTokens: 100,
+        outputTokens: 50,
+    });
+});
+
+test("responsive study generation continues beyond the former call timeout within its mission authority", async () => {
+    vi.useFakeTimers();
+    const clock = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+        const controller = new AbortController();
+        setTimeout(
+            () =>
+                controller.abort(new DOMException("Timed out", "TimeoutError")),
+            ms,
+        );
+        return controller.signal;
+    });
+    try {
+        const result = await runSourcesMission({
+            ...options(),
+            fetch: async (_url, init) => {
+                await vi.advanceTimersByTimeAsync(181000);
+                init?.signal?.throwIfAborted();
+                return envelope(proposal());
+            },
+        });
+        expect(result.status).toBe("complete");
+        expect(result.calls[0]).toMatchObject({
+            status: "succeeded",
+            costUsd: 0.001,
+        });
+        expect(result.elapsedMs).toBe(181000);
+    } finally {
+        clock.mockRestore();
+        vi.useRealTimers();
+    }
+});
+
 test("the fixed pipeline materializes real structured output and retains its useful clauses", async () => {
     const result = await runSourcesMission({
         ...options(),
@@ -640,7 +707,7 @@ test("the agent submits its own comparison against the exact prepared context", 
     expect(result.calls).toHaveLength(6);
 });
 
-test("a context reservation that cannot fit is blocked before dispatch", async () => {
+test("an explicit study output reservation above model context capacity is blocked before dispatch", async () => {
     const input = options();
     input.profile.contextLength = 100;
     const request = vi.fn<typeof fetch>(async () => envelope(proposal()));

@@ -1,6 +1,7 @@
 import { invokeOneShot } from "@convex/integrations/modelTransport";
 import { expect, test } from "vitest";
 import { z } from "zod";
+import { modelAttemptAuthority } from "@/__tests__/setup/model-configuration";
 
 const route = {
     model: "example/structured",
@@ -28,6 +29,7 @@ test("new structured calls without pinned capabilities refuse before HTTP", asyn
         schema: z.object({ value: z.string() }),
         schemaName: "MissingCapacity",
         dependencies: {
+            authority: modelAttemptAuthority(),
             apiKey: "offline-only",
             fetch: async () => {
                 calls++;
@@ -56,6 +58,7 @@ test("structured output is reduced to the remaining context while retaining all 
         schema: z.object({ value: z.string() }),
         schemaName: "ReducedCapacity",
         dependencies: {
+            authority: modelAttemptAuthority(),
             apiKey: "offline-only",
             fetch: async (_url, init) => {
                 const wire = JSON.parse(String(init?.body));
@@ -100,6 +103,7 @@ test("new structured calls refuse exhausted model context without trimming evide
         schema: z.object({ value: z.string() }),
         schemaName: "ContextCapacity",
         dependencies: {
+            authority: modelAttemptAuthority(),
             apiKey: "offline-only",
             fetch: async () => {
                 calls++;
@@ -125,6 +129,7 @@ test("new structured calls retain the effective model output limit before dispat
         schema: z.object({ value: z.string() }),
         schemaName: "StructuredCapacity",
         dependencies: {
+            authority: modelAttemptAuthority(),
             apiKey: "offline-only",
             beforeDispatch: async (
                 _request: string,

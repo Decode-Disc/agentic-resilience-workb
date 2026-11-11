@@ -6,7 +6,6 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
-import { SOURCE_COMPARISON_MAX_OUTPUT_BYTES } from "@convex/domain/sourceComparison";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
     assertPreparationComparisonFence,
@@ -20,9 +19,19 @@ import { NATIVE_MODEL_SERIALIZER } from "@convex/integrations/modelRouting";
 import { pinMissionModel } from "@convex/modelConfiguration";
 import {
     providerAttemptValidator,
+    requireQualificationResultDeadline,
     requireQualifiedBrowserMission,
 } from "@convex/providerCalls";
+import {
+    MAX_CONTEXT_BYTES,
+    MAX_NO_PROGRESS_TURNS,
+    MAX_OBSERVABLE_OUTPUT_BYTES,
+    MAX_OPERATION_RESULT_BYTES,
+    MAX_WORKING_NOTES_BYTES,
+    SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
+} from "@convex/resourcePolicy";
 import schema from "@convex/schema";
+import { readWorkbenchQualificationDeadline } from "@convex/runWorkspace";
 import { type Infer, v } from "convex/values";
 import { ValidationError, validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
@@ -49,11 +58,6 @@ import {
     invocationResponseValidator,
     invocationStructureError,
     LEGACY_AGENT_BACKEND,
-    MAX_CONTEXT_BYTES,
-    MAX_NO_PROGRESS_TURNS,
-    MAX_OBSERVABLE_OUTPUT_BYTES,
-    MAX_OPERATION_RESULT_BYTES,
-    MAX_WORKING_NOTES_BYTES,
     operationInputValidator,
 } from "./executionProtocol";
 import {
@@ -609,6 +613,10 @@ export const forExecution = internalQuery({
     returns: v.object({
         invocation: schema.doc("agentInvocations"),
         mission: schema.doc("agentMissions"),
+        authority: v.object({
+            resourcePolicy: v.optional(v.string()),
+            deadlineAt: v.number(),
+        }),
     }),
     handler: async (ctx, args) => {
         const invocation = await ctx.db.get(args.invocationId);
@@ -618,17 +626,28 @@ export const forExecution = internalQuery({
             invocation.status !== "started"
         )
             throw executionError("invocation_unavailable");
-        const { mission } = await requireMissionAuthority(
+        const { mission, run } = await requireMissionAuthority(
             ctx,
             invocation.missionId,
             args.expectedGeneration,
         );
+        const qualificationDeadline =
+            invocation.provenance === "live"
+                ? await readWorkbenchQualificationDeadline(ctx, run)
+                : undefined;
         return {
             invocation: {
                 ...invocation,
                 inputJson: await admittedInputJson(ctx, invocation),
             },
             mission,
+            authority: {
+                resourcePolicy: mission.resourcePolicy,
+                deadlineAt: Math.min(
+                    mission.deadlineAt,
+                    qualificationDeadline ?? Infinity,
+                ),
+            },
         };
     },
 });
@@ -680,14 +699,15 @@ export const retainOutput = internalMutation({
             invocation.receivedOutputJson !== receivedOutputJson
         )
             throw executionError("invocation_result_conflict");
-        if (invocation.providerCallId) {
-            const receipt = await ctx.db.get(invocation.providerCallId);
-            if (
-                receipt?.invocationId !== invocation._id ||
-                receipt.status === "started"
-            )
-                throw executionError("provider_receipt_required");
-        }
+        const receipt = invocation.providerCallId
+            ? await ctx.db.get(invocation.providerCallId)
+            : null;
+        if (
+            invocation.providerCallId &&
+            (receipt?.invocationId !== invocation._id ||
+                receipt.status === "started")
+        )
+            throw executionError("provider_receipt_required");
         if (invocation.provenance === "simulation")
             await retainInvocationPayload(
                 ctx,
@@ -726,6 +746,8 @@ export const retainOutput = internalMutation({
                     invocation.missionId,
                     args.expectedGeneration,
                 );
+                if (receipt)
+                    await requireQualificationResultDeadline(ctx, receipt);
                 receivedWhileAuthorized = true;
             } catch (error) {
                 if (!executionFailureCode(error)) throw error;
@@ -1135,12 +1157,16 @@ export const finish = internalMutation({
             );
             return { ...refused, correction: feedback };
         };
+        const receipt = invocation.providerCallId
+            ? await ctx.db.get(invocation.providerCallId)
+            : null;
         try {
             await requireMissionAuthority(
                 ctx,
                 mission._id,
                 args.expectedGeneration,
             );
+            if (receipt) await requireQualificationResultDeadline(ctx, receipt);
         } catch (error) {
             const code = executionFailureCode(error);
             if (!code) throw error;
@@ -1174,9 +1200,6 @@ export const finish = internalMutation({
             !canAdoptRetainedResponse(mission, invocation)
         )
             return block("retained_response_not_reusable", true);
-        const receipt = invocation.providerCallId
-            ? await ctx.db.get(invocation.providerCallId)
-            : null;
         if (args.response.kind === "blocked") {
             if (
                 args.response.code === "invalid_output" &&

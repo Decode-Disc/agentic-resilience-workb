@@ -22,7 +22,7 @@ import {
     MAX_CAPTURE_OBSERVED_METADATA_BYTES,
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     MAX_NORMALIZED_ARTIFACT_BYTES,
-} from "./resourceLimits";
+} from "./resourcePolicy";
 import schema from "./schema";
 
 function assertSecDocumentUrl(

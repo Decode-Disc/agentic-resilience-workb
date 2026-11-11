@@ -7,6 +7,10 @@ import {
     type MutationCtx,
 } from "@convex/_generated/server";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import {
+    EXECUTION_WINDOW_MS,
+    MAX_OPERATION_RESULT_BYTES,
+} from "@convex/resourcePolicy";
 import schema from "@convex/schema";
 import { workflow } from "@convex/workflow";
 import type { EventId, WorkflowId } from "@convex-dev/workflow";
@@ -27,8 +31,6 @@ import { requireInstructionVersion } from "./conversations";
 import { classifyDispatchFailure, protectedDiagnostic } from "./errors";
 import {
     type AgentOperationDefinition,
-    EXECUTION_WINDOW_MS,
-    MAX_OPERATION_RESULT_BYTES,
     operationInputValidator,
     operationOutcomeValidator,
     type operationRefusalValidator,

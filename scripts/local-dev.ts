@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
+import { LOCAL_RUNTIME_POLICY } from "../convex/resourcePolicy.ts";
 import { LocalProcessError } from "./local-processes.ts";
 import {
     assertRuntimeStartupLock,
@@ -25,6 +26,7 @@ import {
     stopLocalRuntimeInvocation,
     stopLocalRuntimeListener,
 } from "./local-runtime.ts";
+import { syncResourcePolicy } from "./sync-resource-policy.ts";
 
 class LocalDevError extends Error {
     override name = "LocalDevError";
@@ -35,7 +37,7 @@ type Child = ReturnType<typeof spawn>;
 
 const STARTUP_TIMEOUT_MS = positiveInteger(
     process.env.LOCAL_RUNTIME_STARTUP_TIMEOUT_MS,
-    600_000,
+    LOCAL_RUNTIME_POLICY.maxStartupTimeoutMs,
 );
 
 async function main(): Promise<number> {
@@ -469,13 +471,13 @@ async function waitForBackend(
                     error.message ===
                         "The configured local Convex backend is unavailable."
                 ) {
-                    await delay(250);
+                    await delay(LOCAL_RUNTIME_POLICY.backendReadinessPollMs);
                     continue;
                 }
                 throw error;
             }
         }
-        await delay(250);
+        await delay(LOCAL_RUNTIME_POLICY.backendReadinessPollMs);
     }
     throw new LocalDevError(
         "The native local Convex backend did not become ready before the startup timeout.",
@@ -544,53 +546,31 @@ async function runPreview(root: string, args: string[]): Promise<number> {
         );
         return 0;
     }
+    syncResourcePolicy(root, true);
     const build = await runCommand("npm", ["run", "build"], serviceRoot);
     if (build !== 0) return build;
 
     const runId = randomUUID();
-    let started: PreviewStart;
     try {
-        started = await startPreviewService(
+        return await runPreviewService(
             root,
             serviceRoot,
             ports.preview,
             runId,
             args,
         );
-    } catch (error) {
+    } finally {
         await stopLocalRuntimeInvocation(root, runId);
-        throw error;
     }
-    if (started.status !== null) {
-        await stopLocalRuntimeInvocation(root, runId);
-        return started.status;
-    }
-    if (!started.origin)
-        throw new LocalDevError(
-            "The local preview service did not publish its bound address.",
-        );
-    process.stdout.write(
-        `Local preview service listening at ${started.origin}\n`,
-    );
-    releaseRuntimeStartupLock();
-    return runUntilExit(started.child, async () => {
-        await stopLocalRuntimeInvocation(root, runId);
-    });
 }
 
-type PreviewStart = {
-    child: Child;
-    origin?: string;
-    status: number | null;
-};
-
-async function startPreviewService(
+async function runPreviewService(
     root: string,
     serviceRoot: string,
     port: number,
     runId: string,
     args: string[],
-): Promise<PreviewStart> {
+): Promise<number> {
     const child = spawn(
         "npm",
         ["run", "dev", ...(args.length > 0 ? ["--", ...args] : [])],
@@ -679,13 +659,18 @@ async function startPreviewService(
             }),
         ]);
         await waitForPreviewHealth(boundOrigin, child, exit);
-        return { child, origin: boundOrigin, status: null };
+        if (timeout) clearTimeout(timeout);
+        timeout = undefined;
+        process.stdout.write(
+            `Local preview service listening at ${boundOrigin}\n`,
+        );
+        releaseRuntimeStartupLock();
+        return (await exit).code;
     } catch (error) {
         if (child.exitCode === null && child.signalCode === null)
             await stopChild(child);
         const status = await exit;
-        if (stopping || error instanceof ChildEndedError)
-            return { child, status: status.code };
+        if (stopping || error instanceof ChildEndedError) return status.code;
         throw error;
     } finally {
         if (timeout) clearTimeout(timeout);
@@ -709,13 +694,15 @@ async function waitForPreviewHealth(
         }
         try {
             const response = await fetch(new URL("/health", origin), {
-                signal: AbortSignal.timeout(1_000),
+                signal: AbortSignal.timeout(
+                    LOCAL_RUNTIME_POLICY.previewReadinessProbeTimeoutMs,
+                ),
             });
             if (response.ok) return;
         } catch {
             // Wait for the newly bound HTTP listener to accept requests.
         }
-        await delay(100);
+        await delay(LOCAL_RUNTIME_POLICY.previewReadinessPollMs);
     }
     throw new LocalDevError(
         "The local preview service failed its health check.",
@@ -792,7 +779,7 @@ async function waitForOrigin(
                     error.message ===
                         "The local runtime manifest points to a stale web listener.")
             ) {
-                await delay(150);
+                await delay(LOCAL_RUNTIME_POLICY.webReadinessPollMs);
                 continue;
             }
             throw error;
@@ -946,7 +933,7 @@ async function delay(ms: number): Promise<void> {
 function positiveInteger(value: string | undefined, fallback: number): number {
     const parsed = Number(value);
     return Number.isInteger(parsed) && parsed > 0
-        ? Math.min(parsed, 600_000)
+        ? Math.min(parsed, LOCAL_RUNTIME_POLICY.maxStartupTimeoutMs)
         : fallback;
 }
 

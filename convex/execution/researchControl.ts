@@ -10,6 +10,7 @@ import {
     isResumableResearchPause,
     supportsResearchControl,
 } from "@convex/domain/transitions";
+import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import { researchResumed, workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
@@ -515,7 +516,10 @@ export async function resumeResearch(
         {
             runId: run._id,
             generation,
-            paginationOpts: { numItems: 20, cursor: null },
+            paginationOpts: {
+                numItems: PERSISTENCE_PAGE_SIZE.researchResumeRequests,
+                cursor: null,
+            },
         },
     );
     if (run.startMode === "framed") {

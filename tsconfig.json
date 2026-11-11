@@ -36,6 +36,7 @@
             "@/*": ["./src/*"],
             "@convex/*": ["./convex/*"],
             "@evaluations/*": ["./scripts/evaluations/*"],
+            "@scripts/*": ["./scripts/*"],
             "@preview/*": ["./services/playwright-browser/src/*"],
             "@assets/*": ["./src/assets/*"]
         }

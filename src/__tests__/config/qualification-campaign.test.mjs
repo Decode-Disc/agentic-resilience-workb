@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test, { beforeEach } from "node:test";
-import { campaignManifestSchema } from "../../../convex/qualificationCampaignPolicy.ts";
+import {
+    analysisMandateSchema,
+    campaignManifestSchema,
+} from "../../../convex/qualificationCampaignPolicy.ts";
 import {
     qualificationReviewCodexCredential,
     qualificationReviewReport,
@@ -94,6 +97,37 @@ test("new analysis mandates require independent finite allowances and leave old 
     );
 });
 
+test("native review mandates use SDK capacity without a required input proxy while API bounds remain explicit", () => {
+    const native = {
+        scope: "evidence_review",
+        accounting: "native_subscription",
+        routes: [{ provider: "openai-codex", model: "fixture" }],
+        perLot: { requests: 4 },
+        total: { requests: 4 },
+        timeoutMs: 10000,
+    };
+    assert.deepEqual(analysisMandateSchema.parse(native), native);
+    assert.equal(
+        analysisMandateSchema.parse({ ...native, maxInputTokens: 512 })
+            .maxInputTokens,
+        512,
+    );
+    const api = {
+        ...native,
+        accounting: undefined,
+        routes: [{ provider: "openai", model: "fixture" }],
+        perLot: { requests: 4, costMicros: 1000 },
+        total: { requests: 4, costMicros: 1000 },
+        maxOutputTokens: 100,
+    };
+    assert.equal(analysisMandateSchema.safeParse(api).success, false);
+    assert.equal(
+        analysisMandateSchema.safeParse({ ...api, maxInputTokens: 1000 })
+            .success,
+        true,
+    );
+});
+
 test("a campaign cannot silently default its spending allowance or expiration", () => {
     assert.equal(
         campaignManifestSchema.safeParse({ objective: "Qualify Sources" })
@@ -114,8 +148,44 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runCampaign } from "../../../scripts/evaluations/workbench-browser/campaign.ts";
+import {
+    closeCampaignContext,
+    runCampaign,
+} from "../../../scripts/evaluations/workbench-browser/campaign.ts";
 import { sha256 } from "../../../scripts/evaluations/workbench-browser/protocol.ts";
+
+test("shared context cleanup finishes beyond 25 pages and refuses stalled continuation", async () => {
+    const remaining = Array.from({ length: 31 }, (_, index) => index);
+    let closed = false;
+    await closeCampaignContext(
+        {
+            mutation: async (_ref, args) => {
+                assert.equal(args.contextKey, "fixture-context");
+                remaining.shift();
+                closed = remaining.length === 0;
+                return {
+                    done: closed,
+                    cursor: closed ? undefined : String(remaining.length),
+                };
+            },
+        },
+        "fixture-context",
+    );
+    assert.equal(closed, true);
+    assert.equal(remaining.length, 0);
+    await assert.rejects(
+        closeCampaignContext(
+            {
+                mutation: async (_ref, args) => ({
+                    done: false,
+                    cursor: args.cursor ?? "same",
+                }),
+            },
+            "fixture-context",
+        ),
+        /cursor did not advance/,
+    );
+});
 
 const makeManifest = () => ({
     version: 1,
@@ -271,6 +341,12 @@ for (const fault of [
     "retained",
     "none",
     "settlement",
+    "settlement-expired",
+    "settlement-unsupported",
+    "settlement-expired-subscription",
+    "settlement-expired-no-auth",
+    "settlement-expired-tampered",
+    "unknown-expired",
     "legacy-reasoning",
     "settlement-revision",
     "unknown",
@@ -295,8 +371,11 @@ for (const fault of [
 ])
     test(`campaign command review handles ${fault}`, async () => {
         const retained = fault === "retained";
-        const subscription = fault.startsWith("auth-subscription");
+        const subscription =
+            fault.startsWith("auth-subscription") ||
+            fault === "settlement-expired-subscription";
         const codex = fault.startsWith("auth-codex") || subscription;
+        const nativeAuth = fault.startsWith("auth-") || subscription;
         process.env.WORKBENCH_REVIEW_REASONING = codex
             ? fault === "auth-codex-reasoning"
                 ? "high"
@@ -426,6 +505,7 @@ for (const fault of [
         const client = new ConvexHttpClient("http://127.0.0.1:3210");
         const operations = [];
         let interrupted = false;
+        const settled = new Map();
         let allocation = { requests: 0, costMicros: 0 };
         mock.method(client, "query", async (reference) => {
             assert.equal(
@@ -488,7 +568,9 @@ for (const fault of [
             }
             if (
                 name.endsWith(":settleAnalysis") &&
-                (["settlement", "tampered"].includes(fault) ||
+                ((fault.startsWith("settlement-") &&
+                    fault !== "settlement-revision") ||
+                    ["settlement", "tampered"].includes(fault) ||
                     fault.endsWith("reasoning") ||
                     (fault === "settlement-revision" &&
                         args.attemptKey.endsWith("-2"))) &&
@@ -496,6 +578,11 @@ for (const fault of [
             ) {
                 interrupted = true;
                 throw new Error("settlement acknowledgement lost");
+            }
+            if (name.endsWith(":settleAnalysis")) {
+                if (settled.has(args.attemptKey))
+                    assert.deepEqual(settled.get(args.attemptKey), args);
+                else settled.set(args.attemptKey, structuredClone(args));
             }
             if (name.endsWith(":assess")) {
                 assert.equal(args.verdict, "passed");
@@ -513,7 +600,7 @@ for (const fault of [
         let mockFailure;
         const boundaries = {
             lock: () => acquireCampaignLock(join(root, "fixture.lock")),
-            modelRuntime: fault.startsWith("auth-")
+            modelRuntime: nativeAuth
                 ? undefined
                 : await qualificationReviewRuntime(),
             connect: async () => ({
@@ -542,10 +629,10 @@ for (const fault of [
                                         "authorization",
                                     ),
                                 ),
-                                sha256("Bearer synthetic-native-pi-key"),
+                                sha256("Bearer sk-synthetic-native-pi-key"),
                             );
                         }
-                        if (fault === "unknown")
+                        if (fault === "unknown" || fault === "unknown-expired")
                             throw new Error("connection lost after dispatch");
                         if (fault === "503")
                             return new Response("unavailable", { status: 503 });
@@ -593,7 +680,7 @@ for (const fault of [
         const previousApiKey = process.env.OPENAI_API_KEY;
         let nativeFetchMock;
         try {
-            if (fault.startsWith("auth-")) {
+            if (nativeAuth) {
                 const agentDir = mkdtempSync(join(tmpdir(), "pi-native-auth-"));
                 process.env.PI_CODING_AGENT_DIR = agentDir;
                 delete process.env.OPENAI_API_KEY;
@@ -608,7 +695,10 @@ for (const fault of [
                                   refresh: "synthetic-oauth-refresh",
                                   expires: Date.now() + 600000,
                               }
-                        : { type: "api_key", key: "synthetic-native-pi-key" };
+                        : {
+                              type: "api_key",
+                              key: "sk-synthetic-native-pi-key",
+                          };
                 writeFileSync(
                     join(agentDir, "auth.json"),
                     JSON.stringify(
@@ -658,6 +748,110 @@ for (const fault of [
             if (fault === "assess-ack")
                 await assert.rejects(run(), /acknowledgement lost/);
             else await run();
+            if (
+                [
+                    "settlement-expired",
+                    "settlement-unsupported",
+                    "settlement-expired-subscription",
+                    "settlement-expired-no-auth",
+                    "settlement-expired-tampered",
+                    "unknown-expired",
+                ].includes(fault)
+            ) {
+                assert.equal(dispatches, 1);
+                assert.equal(
+                    settled.size,
+                    0,
+                    "settlement failed before backend commit",
+                );
+                const pinPath = join(lotRoot, "automated-review-mission.json");
+                if (fault === "settlement-unsupported") {
+                    const pin = JSON.parse(readFileSync(pinPath, "utf8"));
+                    pin.resourcePolicy = "unsupported";
+                    writeFileSync(pinPath, JSON.stringify(pin));
+                }
+                if (fault === "settlement-expired-tampered") {
+                    const { readdirSync } = await import("node:fs");
+                    const name = readdirSync(lotRoot).find((name) =>
+                        name.startsWith("automated-review-response-"),
+                    );
+                    const path = join(lotRoot, name);
+                    const record = JSON.parse(readFileSync(path, "utf8"));
+                    record.body += "changed";
+                    writeFileSync(path, JSON.stringify(record));
+                }
+                const pinBytes = readFileSync(pinPath, "utf8");
+                const deadline = JSON.parse(pinBytes).deadlineAt;
+                const before = structuredClone(allocation);
+                if (fault === "settlement-expired-no-auth")
+                    mock.method(
+                        boundaries.modelRuntime,
+                        "checkAuth",
+                        async () => undefined,
+                    );
+                const realNow = Date.now;
+                Date.now = () => deadline + 1;
+                try {
+                    if (fault === "settlement-expired-tampered")
+                        await assert.rejects(
+                            run(),
+                            /Retained analysis observation changed/,
+                        );
+                    else {
+                        await run();
+                        await run();
+                    }
+                } finally {
+                    Date.now = realNow;
+                }
+                const recoverable = ![
+                    "unknown-expired",
+                    "settlement-expired-tampered",
+                ].includes(fault);
+                assert.equal(
+                    settled.size,
+                    recoverable ? 1 : 0,
+                    "only known unchanged receipts can reconcile after expiry",
+                );
+                assert.equal(
+                    dispatches,
+                    1,
+                    "accounting recovery must not invoke inference",
+                );
+                assert.deepEqual(allocation, before);
+                assert.equal(readFileSync(pinPath, "utf8"), pinBytes);
+                assert.equal(
+                    readFileSync(join(lotRoot, "campaign-result.json"), "utf8"),
+                    frozen,
+                );
+                assert.equal(lot.status, "review");
+                assert.equal(
+                    operations.filter((name) =>
+                        name.endsWith(":settleAnalysis"),
+                    ).length,
+                    recoverable ? 2 : fault === "unknown-expired" ? 0 : 1,
+                );
+                assert.equal(
+                    operations.filter((name) => name.endsWith(":assess"))
+                        .length,
+                    0,
+                );
+                if (fault !== "settlement-expired-tampered")
+                    assert.equal(
+                        JSON.parse(
+                            readFileSync(
+                                join(lotRoot, "automated-review-status.json"),
+                                "utf8",
+                            ),
+                        ).reason,
+                        fault === "settlement-unsupported"
+                            ? "resource_policy_unsupported"
+                            : fault === "settlement-expired-no-auth"
+                              ? "provider_login_required"
+                              : "execution_deadline",
+                    );
+                return;
+            }
             if (fault.startsWith("report-ack-")) {
                 const reportPath = join(
                     lotRoot,
@@ -762,7 +956,10 @@ for (const fault of [
                     "campaign-result.json",
                 );
                 writeFileSync(path, JSON.stringify(record));
-                await run();
+                await assert.rejects(
+                    run(),
+                    /Retained analysis observation changed/,
+                );
                 assert.equal(dispatches, 1);
                 assert.equal(lot.status, "review");
                 assert.equal(archives, 0);
@@ -909,6 +1106,51 @@ for (const fault of [
                     "invalid-after-interruption";
                 await run();
                 assert.equal(readFileSync(pinPath, "utf8"), originalPin);
+                if (fault.endsWith("legacy-reasoning")) {
+                    assert.equal(lot.status, "review");
+                    assert.deepEqual(
+                        JSON.parse(
+                            readFileSync(
+                                join(lotRoot, "automated-review-status.json"),
+                                "utf8",
+                            ),
+                        ),
+                        {
+                            status: "pending",
+                            reason: "reviewer_pin_incomplete",
+                        },
+                    );
+                    assert.equal(dispatches, 1);
+                    assert.equal(
+                        operations.filter((name) =>
+                            name.endsWith(":reserveAnalysis"),
+                        ).length,
+                        1,
+                    );
+                    assert.equal(
+                        operations.filter((name) =>
+                            name.endsWith(":settleAnalysis"),
+                        ).length,
+                        2,
+                    );
+                    assert.equal(settled.size, 1);
+                    assert.equal(
+                        operations.filter((name) => name.endsWith(":assess"))
+                            .length,
+                        0,
+                    );
+                    assert.deepEqual(allocation, {
+                        requests: 1,
+                        costMicros: subscription ? 0 : 100000,
+                    });
+                    assert.equal(
+                        existsSync(
+                            join(lotRoot, "automated-review-assessment.json"),
+                        ),
+                        false,
+                    );
+                    return;
+                }
             }
             assert.equal(
                 lot.status,
@@ -2745,6 +2987,88 @@ async function withReviewerReasoningProject(
     }
 }
 
+for (const pinChange of [
+    {
+        label: "missing policy",
+        field: "resourcePolicy",
+        value: undefined,
+        reason: "resource_policy_unsupported",
+    },
+    {
+        label: "unsupported policy",
+        field: "resourcePolicy",
+        value: "unsupported_policy",
+        reason: "resource_policy_unsupported",
+    },
+    {
+        label: "missing reasoning",
+        field: "reasoning",
+        value: undefined,
+        reason: "reviewer_pin_incomplete",
+    },
+    {
+        label: "missing deadline",
+        field: "deadlineAt",
+        value: undefined,
+        reason: "reviewer_pin_incomplete",
+    },
+    {
+        label: "expired deadline",
+        field: "deadlineAt",
+        value: 1,
+        reason: "execution_deadline",
+    },
+    {
+        label: "missing model",
+        field: "model",
+        value: undefined,
+        reason: "reviewer_pin_incomplete",
+    },
+    {
+        label: "changed model capacity",
+        field: "model",
+        value: {
+            provider: "openai-codex",
+            id: "gpt-6.1-sol",
+            api: "openai-codex-responses",
+            contextWindow: 1,
+            maxTokens: 1,
+        },
+        reason: "reviewer_model_changed",
+    },
+])
+    test(`retained reviewer pin with ${pinChange.label} blocks continuation without rewriting evidence or dispatching`, async () => {
+        const { runPiCampaignReview } = await import(
+            "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+        );
+        const fixture = await reviewerReasoningFixture();
+        await withReviewerReasoningProject(async () => {
+            assert.equal(
+                (await runPiCampaignReview(fixture.options)).status,
+                "completed",
+            );
+            const pinPath = join(
+                fixture.options.root,
+                "automated-review-mission.json",
+            );
+            const pin = JSON.parse(readFileSync(pinPath, "utf8"));
+            pin[pinChange.field] = pinChange.value;
+            writeFileSync(pinPath, JSON.stringify(pin));
+            const original = readFileSync(pinPath);
+            const requests = fixture.requests.length;
+            const reservations = [...fixture.reservations];
+            const settlements = [...fixture.settlements];
+            assert.deepEqual(await runPiCampaignReview(fixture.options), {
+                status: "pending",
+                reason: pinChange.reason,
+            });
+            assert.equal(fixture.requests.length, requests);
+            assert.deepEqual(fixture.reservations, reservations);
+            assert.deepEqual(fixture.settlements, settlements);
+            assert.deepEqual(readFileSync(pinPath), original);
+        });
+    });
+
 test("reviewer reasoning defaults to high in the native Codex request", async () => {
     const { runPiCampaignReview } = await import(
         "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
@@ -2958,14 +3282,16 @@ for (const provider of ["openai", "openai-codex"])
                     return qualificationReviewResponse(
                         qualificationReviewReport(review),
                         requests,
-                        {
-                            name: "grep",
-                            arguments: {
-                                pattern: "reportedCostFinal",
-                                literal: true,
-                                path: "code",
-                            },
-                        },
+                        requests === 1
+                            ? {
+                                  name: "grep",
+                                  arguments: {
+                                      pattern: "reportedCostFinal",
+                                      literal: true,
+                                      path: "code",
+                                  },
+                              }
+                            : null,
                     );
                 },
             },
@@ -2992,7 +3318,7 @@ test("real Pi OpenAI transport does not retry a mocked HTTP 503 when retries are
     });
     const model = runtime.getModel("openai", "gpt-4o-mini");
     assert.ok(model);
-    await runtime.setRuntimeApiKey("openai", "synthetic-test-key");
+    await runtime.setRuntimeApiKey("openai", "sk-synthetic-test-key");
     let calls = 0;
     const stream = runtime.streamSimple(
         model,

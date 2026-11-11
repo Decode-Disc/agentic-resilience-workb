@@ -7,6 +7,55 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { createQualificationRelay } from "../../../scripts/evaluations/workbench-browser/relay.mjs";
 
+function relayMissionState(id) {
+    return (
+        "Required current mission state:\n" +
+        JSON.stringify({
+            mission: { runId: "unpaid-fixture", id },
+            constraints: {
+                resourcePolicy: "authority_native_v1",
+                deadlineAt: Date.now() + 90000,
+            },
+        })
+    );
+}
+function authorizeRelayFixture(root, maximumRequests = 20) {
+    writeFileSync(
+        join(root, "protocol.json"),
+        JSON.stringify({
+            version: 3,
+            resourcePolicy: "authority_native_v1",
+            manifest: { version: 3 },
+            maximumRequests,
+            maximumCostUsd: 0.5,
+        }),
+    );
+    writeFileSync(
+        join(root, "relay-route.json"),
+        JSON.stringify({
+            resourcePolicy: "authority_native_v1",
+            deadlineAt: Date.now() + 120000,
+            model: "z-ai/glm-5.3-flash",
+            reasoningEffort: "low",
+            descriptor: {
+                contextWindow: 131072,
+                maxTokens: 8192,
+                inputPrice: 0.15,
+                outputPrice: 0.6,
+            },
+        }),
+    );
+    writeFileSync(
+        join(root, "validation.json"),
+        JSON.stringify({
+            status: "passed",
+            fingerprintsSha256: createHash("sha256")
+                .update(readFileSync(join(root, "fingerprints.json")))
+                .digest("hex"),
+        }),
+    );
+}
+
 test("relay rejects a malformed retained protocol before any provider call", () => {
     const root = mkdtempSync(join(tmpdir(), "relay-invalid-protocol-"));
     try {
@@ -42,6 +91,7 @@ test("normal qualification forwards the first SSE frame before upstream EOF", as
                 .digest("hex"),
         }),
     );
+    authorizeRelayFixture(root);
     const prefix =
         'data: {"id":"gen-unpaid","choices":[{"index":0,"delta":{"content":"First frame"}}]}\n\n';
     let upstream;
@@ -68,8 +118,7 @@ test("normal qualification forwards the first SSE frame before upstream EOF", as
             messages: [
                 {
                     role: "system",
-                    content:
-                        'Required current mission state:\n{"mission":{"runId":"unpaid-fixture","id":"mission-fixture"}}',
+                    content: relayMissionState("mission-fixture"),
                 },
             ],
             provider: {
@@ -139,11 +188,7 @@ async function withRelay(providerFetch, check, maximumRequests) {
                 .digest("hex"),
         }),
     );
-    if (maximumRequests !== undefined)
-        writeFileSync(
-            join(root, "protocol.json"),
-            JSON.stringify({ maximumRequests }),
-        );
+    authorizeRelayFixture(root, maximumRequests);
     let relay;
     const restart = async () => {
         if (relay) {
@@ -172,8 +217,7 @@ async function withRelay(providerFetch, check, maximumRequests) {
                     messages: [
                         {
                             role: "system",
-                            content:
-                                'Required current mission state:\n{"mission":{"runId":"unpaid-fixture","id":"mission-fixture"}}',
+                            content: relayMissionState("mission-fixture"),
                         },
                     ],
                     provider: {
@@ -215,6 +259,72 @@ async function withRelay(providerFetch, check, maximumRequests) {
         rmSync(root, { recursive: true, force: true });
     }
 }
+test("relay carries remaining native authority and full prepared capacity into dispatch", async (t) => {
+    const now = Date.now();
+    t.mock.method(Date, "now", () => now);
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    let latestTimeout;
+    let dispatchedTimeout;
+    t.mock.method(AbortSignal, "timeout", (ms) => {
+        latestTimeout = ms;
+        return timeout(ms);
+    });
+    await withRelay(
+        async (_url, init) => {
+            dispatchedTimeout = latestTimeout;
+            assert.equal(init.signal.aborted, false);
+            return complete();
+        },
+        async ({ send, ledger }) => {
+            assert.equal((await send("native-authority")).status, 200);
+            assert.equal(dispatchedTimeout, 90000);
+            assert.equal(
+                ledger().find((r) => r.event === "dispatch").reserveUsd,
+                0.0233472,
+            );
+        },
+    );
+});
+
+for (const resourcePolicy of [undefined, "unsupported"])
+    test(`relay refuses retained policy ${resourcePolicy} without inference`, async () => {
+        let calls = 0;
+        await withRelay(
+            async () => {
+                calls++;
+                return complete();
+            },
+            async ({ root, restart }) => {
+                const path = join(root, "protocol.json");
+                const protocol = JSON.parse(readFileSync(path, "utf8"));
+                writeFileSync(
+                    path,
+                    JSON.stringify({ ...protocol, resourcePolicy }),
+                );
+                await assert.rejects(restart(), /resource_policy_unsupported/);
+                assert.equal(calls, 0);
+            },
+        );
+    });
+
+test("relay rejects exhausted absolute authority before upstream I/O", async (t) => {
+    let calls = 0;
+    const future = Date.now() + 180000;
+    await withRelay(
+        async () => {
+            calls++;
+            return complete();
+        },
+        async ({ send }) => {
+            t.mock.method(Date, "now", () => future);
+            const result = await send("expired-authority");
+            assert.equal(result.status, 400);
+            assert.match(result.body, /execution_deadline/);
+            assert.equal(calls, 0);
+        },
+    );
+});
+
 const complete = (usage = { cost: 0.000001 }) =>
     new Response(
         `data: ${JSON.stringify({ id: "gen-unpaid", provider: "Unpaid fixture", choices: [{ delta: { content: "Complete" }, finish_reason: "stop" }], usage })}\n\ndata: [DONE]\n\n`,
@@ -468,8 +578,14 @@ test("a versioned qualification refuses inference before a passing validation of
         async ({ root, send, restart }) => {
             writeFileSync(
                 join(root, "protocol.json"),
-                JSON.stringify({ version: 2, maximumRequests: 20 }),
+                JSON.stringify({
+                    ...JSON.parse(
+                        readFileSync(join(root, "protocol.json"), "utf8"),
+                    ),
+                    version: 3,
+                }),
             );
+            rmSync(join(root, "validation.json"));
             await restart();
             assert.equal((await send("unchecked")).status, 400);
             assert.equal(calls, 0);
@@ -520,6 +636,7 @@ for (const version of [2, 3])
             join(root, "protocol.json"),
             JSON.stringify({
                 version: 3,
+                resourcePolicy: "authority_native_v1",
                 manifest: { version },
                 maximumRequests: 24,
                 maximumCostUsd: 4,
@@ -528,9 +645,16 @@ for (const version of [2, 3])
         writeFileSync(
             join(root, "relay-route.json"),
             JSON.stringify({
+                resourcePolicy: "authority_native_v1",
+                deadlineAt: Date.now() + 120000,
                 model: "fixture/alternative",
                 reasoningEffort: "high",
-                descriptor: { maxTokens: 12000, inputPrice: 2, outputPrice: 6 },
+                descriptor: {
+                    contextWindow: 32768,
+                    maxTokens: 12000,
+                    inputPrice: 2,
+                    outputPrice: 6,
+                },
             }),
         );
         writeFileSync(
@@ -558,8 +682,7 @@ for (const version of [2, 3])
                 messages: [
                     {
                         role: "system",
-                        content:
-                            'Required current mission state:\n{"mission":{"runId":"unpaid-fixture","id":"fixture"}}',
+                        content: relayMissionState("fixture"),
                     },
                 ],
                 max_tokens: 12000,

@@ -19,6 +19,7 @@ function transportDependencies(
 ) {
     return {
         ...runtime.transport,
+        authority: runtime.authority,
         signal: lifecycle.signal,
         beforeDispatch: lifecycle.beforeDispatch,
         onObservation: lifecycle.observe,

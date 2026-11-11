@@ -1,5 +1,10 @@
+import {
+    MAX_QUALIFICATION_CONTEXT_DURATION_MS,
+    PERSISTENCE_PAGE_SIZE,
+    SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS,
+} from "@convex/resourcePolicy";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -9,8 +14,8 @@ import {
     type QueryCtx,
 } from "./_generated/server";
 import { cancelRunExecution } from "./domain/runCancellation";
-import { MAX_QUALIFICATION_CONTEXT_DURATION_MS } from "./qualificationCampaignPolicy";
 import { requireCampaignLot } from "./qualificationCampaigns";
+import { RESOURCE_POLICY_VERSION } from "./resourcePolicy";
 
 export const BROWSER_TEST_SLOT = "analyst-4";
 /** Fixed limits of the explicitly authorized local two-dossier Sources qualification. */
@@ -149,6 +154,49 @@ export async function requireBrowserTestOwner(ctx: QueryCtx, slotKey: string) {
     return visitor;
 }
 
+async function readQualificationScope(ctx: QueryCtx, run: Doc<"researchRuns">) {
+    if (run.purpose !== "browser_test" || !run.browserTestContextId)
+        return null;
+    const context = await ctx.db.get(run.browserTestContextId);
+    const grant = context?.paidQualification;
+    if (
+        !context ||
+        !grant ||
+        context.ownerVisitorId !== run.ownerVisitorId ||
+        !(grant.scenarios
+            ? grant.scenarios.some((s) => s.runId === run._id)
+            : grant.sourcesLot
+              ? grant.sourcesLot.includes(run._id)
+              : grant.runId === run._id)
+    )
+        return null;
+    const lot = context.campaignLotId
+        ? await ctx.db.get(context.campaignLotId)
+        : null;
+    const campaign = lot ? await ctx.db.get(lot.campaignId) : null;
+    return {
+        context,
+        deadlineAt: Math.min(
+            context.expiresAt,
+            context.campaignLotId
+                ? (campaign?.manifest.expiresAt ?? 0)
+                : Infinity,
+            grant.sourcesLot && run.researchStartedAt !== undefined
+                ? run.researchStartedAt +
+                      SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS
+                : Infinity,
+        ),
+    };
+}
+
+/** Factual bound, including expired grants. This projection never grants spending or progression authority. */
+export async function readWorkbenchQualificationDeadline(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+) {
+    return (await readQualificationScope(ctx, run))?.deadlineAt;
+}
+
 /** A fixture remains unpaid unless its active local context explicitly authorizes this framing dossier. */
 export async function readWorkbenchQualification(
     ctx: QueryCtx,
@@ -161,20 +209,10 @@ export async function readWorkbenchQualification(
         run.withdrawnAt !== undefined
     )
         return null;
-    const context = await ctx.db.get(run.browserTestContextId);
-    if (
-        context?.status !== "active" ||
-        context.expiresAt <= Date.now() ||
-        !(context.paidQualification?.scenarios
-            ? context.paidQualification.scenarios.some(
-                  (s) => s.runId === run._id,
-              )
-            : context.paidQualification?.sourcesLot
-              ? context.paidQualification.sourcesLot.includes(run._id)
-              : context.paidQualification?.runId === run._id) ||
-        context.ownerVisitorId !== run.ownerVisitorId
-    )
+    const scope = await readQualificationScope(ctx, run);
+    if (scope?.context.status !== "active" || scope.deadlineAt <= Date.now())
         return null;
+    const { context } = scope;
     if (
         !context.paidQualification?.sourcesLot &&
         (run.lifecycleState !== "framing" ||
@@ -183,11 +221,13 @@ export async function readWorkbenchQualification(
     )
         return null;
     if (
-        context.paidQualification?.sourcesLot &&
-        run.researchStartedAt !== undefined &&
-        Date.now() >= run.researchStartedAt + 15 * 60_000
+        context.paidQualification?.resourcePolicy !== RESOURCE_POLICY_VERSION ||
+        context.paidQualification.costAccountingPolicy !== "known_final_v1"
     )
-        return null;
+        throw new ConvexError({
+            area: "execution",
+            code: "resource_policy_unsupported",
+        });
     if (context.campaignLotId)
         await requireCampaignLot(ctx, context.campaignLotId);
     const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
@@ -196,7 +236,10 @@ export async function readWorkbenchQualification(
         visitor.authUserId !== context.authUserId
     )
         return null;
-    return context.paidQualification;
+    return {
+        ...context.paidQualification,
+        deadlineAt: scope.deadlineAt,
+    };
 }
 
 export const openBrowserTestContext = internalMutation({
@@ -328,7 +371,10 @@ export const closeBrowserTestContext = internalMutation({
                     .eq("browserTestContextId", context._id),
             )
             .order("desc")
-            .paginate({ numItems: 20, cursor: args.cursor ?? null });
+            .paginate({
+                numItems: PERSISTENCE_PAGE_SIZE.runContextCleanup,
+                cursor: args.cursor ?? null,
+            });
         let cancelled = 0;
         for (const run of page.page)
             if (

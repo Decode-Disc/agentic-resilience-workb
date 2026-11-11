@@ -1,41 +1,5 @@
-import { MINUTE, RateLimiter, SECOND } from "@convex-dev/rate-limiter";
+import { RateLimiter } from "@convex-dev/rate-limiter";
 import { components } from "./_generated/api";
+import { RATE_LIMITS } from "./resourcePolicy";
 
-export const rateLimiter = new RateLimiter(components.rateLimiter, {
-    secRequests: { kind: "token bucket", rate: 8, period: SECOND },
-    exaWebsiteGlobal: {
-        kind: "fixed window",
-        rate: 25,
-        period: 15 * MINUTE,
-    },
-    exaWebsitePerUser: {
-        kind: "fixed window",
-        rate: 12,
-        period: 15 * MINUTE,
-    },
-    sourceMetadataGlobal: {
-        kind: "fixed window",
-        rate: 60,
-        period: 15 * MINUTE,
-    },
-    sourceMetadataPerUser: {
-        kind: "fixed window",
-        rate: 12,
-        period: 15 * MINUTE,
-    },
-    invitationClaimGlobal: {
-        kind: "fixed window",
-        rate: 25,
-        period: 15 * MINUTE,
-    },
-    invitationClaimPerUser: {
-        kind: "fixed window",
-        rate: 5,
-        period: 15 * MINUTE,
-    },
-    previewRender: {
-        kind: "fixed window",
-        rate: 2,
-        period: 30 * SECOND,
-    },
-});
+export const rateLimiter = new RateLimiter(components.rateLimiter, RATE_LIMITS);

@@ -6,7 +6,10 @@ import type {
     reasoningPreference,
 } from "@convex/modelConfigurationSchema";
 import { reasoningEffortValues } from "@convex/modelConfigurationValues";
-import { SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION } from "@convex/resourceLimits";
+import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+} from "@convex/resourcePolicy";
 import chordPackage from "@earendil-works/chord/package.json";
 import { PI_AI_VERSION } from "@earendil-works/pi-ai/utils/version";
 import durablePackage from "@earendil-works/pi-durable/package.json";
@@ -55,23 +58,25 @@ export function modelConfigurationKey(descriptor: object) {
         stableStringify({ serializer: NATIVE_MODEL_SERIALIZER, descriptor }),
     );
 }
+/** Declared capabilities of the controlled, zero-provider fixture, never live-model defaults. */
+export const SIMULATION_CONTEXT_WINDOW = 32000;
+export const SIMULATION_MAX_OUTPUT_TOKENS = 6144;
 export const SIMULATION_MODEL_ROUTE: ModelRoute = {
     model: "simulation/controlled",
     provider: "simulation",
+    descriptor: {
+        contextWindow: SIMULATION_CONTEXT_WINDOW,
+        maxTokens: SIMULATION_MAX_OUTPUT_TOKENS,
+        reasoning: false,
+        inputPrice: 0,
+        outputPrice: 0,
+        cacheReadPrice: 0,
+        structuredOutputs: true,
+    },
 };
-export const SIMULATION_CONTEXT_WINDOW = 32000;
-export const MODEL_MAX_OUTPUT_TOKENS = 6144;
 
 /** One admitted ceiling serves structured transport and its pre-call reservation. */
-export function preparationModelOutputLimit(
-    route: ModelRoute,
-    executionPlanVersion?: string,
-): number {
-    if (executionPlanVersion !== SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION)
-        return Math.min(
-            MODEL_MAX_OUTPUT_TOKENS,
-            route.descriptor?.maxTokens ?? MODEL_MAX_OUTPUT_TOKENS,
-        );
+export function preparationModelOutputLimit(route: ModelRoute): number {
     const descriptor = route.descriptor;
     if (
         !descriptor ||
@@ -83,10 +88,6 @@ export function preparationModelOutputLimit(
         throw executionError("invalid_model_output_limit");
     return Math.min(descriptor.maxTokens, descriptor.contextWindow);
 }
-export const MODEL_ATTEMPT_TIMEOUT_MS = 60_000;
-export const DOCUMENTARY_CONTROL_ATTEMPT_TIMEOUT_MS = 5 * 60_000;
-export const MODEL_MAX_INPUT_PRICE_PER_MILLION = 0.15;
-export const MODEL_MAX_OUTPUT_PRICE_PER_MILLION = 0.6;
 export const INITIAL_MODEL_CATALOG = [
     {
         model: "z-ai/glm-5.3-flash",
@@ -142,21 +143,25 @@ export function resolveReasoningPreference(
 }
 
 /** Derives wire preferences and bounded generation options from the admitted model capabilities. */
-export function modelCallSettings(route: ModelRoute) {
+export function modelCallSettings(route: ModelRoute, deadlineAt?: number) {
+    const timeout =
+        deadlineAt === undefined ? undefined : deadlineAt - Date.now();
+    if (
+        timeout !== undefined &&
+        (!Number.isSafeInteger(timeout) || timeout <= 0)
+    )
+        throw executionError("execution_deadline");
     const descriptor = route.descriptor;
     const reasoningEnabled = descriptor?.reasoning ?? route.reasoningEnabled;
     const generation = {
-        maxOutputTokens: Math.min(
-            MODEL_MAX_OUTPUT_TOKENS,
-            descriptor?.maxTokens ?? MODEL_MAX_OUTPUT_TOKENS,
-        ),
+        maxOutputTokens: descriptor?.maxTokens,
         temperature:
             descriptor?.supportedParameters &&
             !descriptor.supportedParameters.includes("temperature")
                 ? undefined
                 : 0,
         maxRetries: 0,
-        timeout: MODEL_ATTEMPT_TIMEOUT_MS,
+        timeout,
     };
     const request = {
         provider: {

@@ -107,6 +107,58 @@ for (const accounting of ["api_cost", "native_subscription"])
         assert.equal(finished.results().length, 0);
     });
 
+test("analysis settlement acknowledgements survive reopening without acknowledging unknown work", () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-settlement-ack-"));
+    try {
+        const protocol = { mode: "live" };
+        const journal = openQualificationJournal(root, protocol);
+        const identity = {
+            campaignId: "campaign",
+            lotId: "lot",
+            mandateHash: "a".repeat(64),
+            candidateHash: "b".repeat(64),
+            evidenceHash: "c".repeat(64),
+            provider: "openai",
+            model: "fixture",
+            attemptKey: "first",
+        };
+        journal.beginAnalysis(identity);
+        assert.throws(
+            () => journal.acknowledgeAnalysisSettlement(identity),
+            /conflict/i,
+        );
+        journal.finishAnalysis(identity, {
+            input: 12,
+            output: 3,
+            costMicros: 15,
+            observationHash: "d".repeat(64),
+        });
+        assert.equal(journal.analysisAttempts()[0].settled, undefined);
+        assert.throws(
+            () =>
+                journal.acknowledgeAnalysisSettlement({
+                    ...identity,
+                    lotId: "foreign",
+                }),
+            /conflict/i,
+        );
+        journal.acknowledgeAnalysisSettlement(identity);
+        const reopened = openQualificationJournal(root, protocol);
+        reopened.acknowledgeAnalysisSettlement(identity);
+        assert.equal(reopened.analysisAttempts()[0].settled, true);
+        assert.equal(
+            readFileSync(join(root, "progress.jsonl"), "utf8")
+                .trim()
+                .split("\n")
+                .map(JSON.parse)
+                .filter((entry) => entry.event === "analysis_settled").length,
+            1,
+        );
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test("analysis journal treats reordered identities as the same and rejects invalid records", () => {
     const root = mkdtempSync(
         join(tmpdir(), "qualification-analysis-validation-"),

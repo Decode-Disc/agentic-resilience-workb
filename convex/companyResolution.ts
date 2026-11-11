@@ -24,6 +24,11 @@ import {
     createSecCompanyResolver,
 } from "./integrations/sec";
 import { resolveWebsiteUrl } from "./integrations/websiteResolver";
+import {
+    COMPANY_PREFLIGHT_TTL_MS as PREFLIGHT_TTL_MS,
+    COMPANY_WEBSITE_CACHE_TTL_MS as WEBSITE_CACHE_TTL_MS,
+    COMPANY_WEBSITE_TIMEOUT_MS as WEBSITE_TIMEOUT_MS,
+} from "./resourcePolicy";
 
 const secCompanyMatchValidator = companySnapshotValidator;
 
@@ -57,11 +62,8 @@ type PersistPreflight<PreflightId extends string> = (input: {
     resolverVersion: string;
 }) => Promise<CompanyPreflightResult<PreflightId>>;
 
-const PREFLIGHT_TTL_MS = 15 * 60 * 1_000;
 const RESOLVER_VERSION = "sec-company-v2";
-const WEBSITE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const WEBSITE_RESOLVER_VERSION = "exa-company-website-v1";
-const WEBSITE_TIMEOUT_MS = 5_000;
 
 class WebsiteResolutionTimeoutError extends Error {
     constructor() {

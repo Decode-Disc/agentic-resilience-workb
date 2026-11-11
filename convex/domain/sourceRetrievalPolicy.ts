@@ -3,6 +3,8 @@ import type { GenericDatabaseReader } from "convex/server";
 import { v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
+/** Persisted embedding format identity; changing it requires rebuilding derived indexes. */
+export const SOURCE_EMBEDDING_PROFILE_VERSION = "evidence-embedding-v1";
 export const SOURCE_RETRIEVAL_VERSION = "structured-v1";
 export const SOURCE_RETRIEVAL_RANKING_POLICY = "stable-passages-v1";
 

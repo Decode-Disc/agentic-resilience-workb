@@ -2,6 +2,7 @@ import { api, internal } from "@convex/_generated/api";
 import { executionError } from "@convex/execution/errors";
 import type { ModelRoute } from "@convex/integrations/modelRouting";
 import { runPiMission } from "@convex/integrations/piMission";
+import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { getFunctionName } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
@@ -935,6 +936,150 @@ test("native compaction shares the provider ledger and leaves original history a
     expect(network).toHaveBeenCalledTimes(2);
 }, 30000);
 
+const nodeGenerationWindowMs = nodeActionGenerationDeadline(0);
+test.each([
+    75_000,
+    nodeGenerationWindowMs + 1,
+])("responsive native generation after %s ms respects mission authority and the Node host boundary", async (elapsedMs) => {
+    let entered!: () => void;
+    let release!: () => void;
+    const dispatched = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    const response = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let signal: AbortSignal | null | undefined;
+    let completion: object = {};
+    const network = vi.fn(
+        async (_url: RequestInfo | URL, init?: RequestInit) => {
+            signal = init?.signal;
+            entered();
+            const aborted = new Promise<never>((_resolve, reject) => {
+                signal?.addEventListener(
+                    "abort",
+                    () => reject(signal?.reason),
+                    { once: true },
+                );
+            });
+            await Promise.race([response, aborted]);
+            return reply(completion);
+        },
+    );
+    vi.stubGlobal("fetch", network);
+    const f = await fixture();
+    completion = { kind: "complete", captureIds: [f.captureId] };
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const clock = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+        const controller = new AbortController();
+        timers.push(
+            setTimeout(
+                () =>
+                    controller.abort(
+                        new DOMException("Authority expired", "TimeoutError"),
+                    ),
+                ms,
+            ),
+        );
+        return controller.signal;
+    });
+    const running = f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    try {
+        await dispatched;
+        // Virtual timer callbacks need the Convex action context used by the storage heartbeat.
+        await f.t.action(async () => {
+            await vi.advanceTimersByTimeAsync(elapsedMs);
+        });
+        expect(signal?.aborted, String(signal?.reason)).toBe(
+            elapsedMs > nodeGenerationWindowMs,
+        );
+        const call = await f.t.run((ctx) =>
+            ctx.db.query("providerCalls").first(),
+        );
+        const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
+        if (!call || !mission)
+            throw new Error("Missing admitted native attempt");
+        expect(call.leaseExpiresAt).toBe(mission.deadlineAt + 10000);
+        const duplicate = f.t.mutation(internal.providerCalls.recordAttempt, {
+            missionId: call.missionId,
+            invocationId: call.invocationId,
+            inputHash: call.inputHash,
+            runId: call.runId,
+            corpusRevisionId: call.corpusRevisionId,
+            executionGeneration: call.executionGeneration,
+            workflowVersion: call.workflowVersion,
+            stepKey: call.stepKey,
+            service: "model",
+            operation: call.operation,
+            operationKey: call.operationKey,
+            attempt: call.attempt,
+            status: "started",
+        });
+        if (elapsedMs > nodeGenerationWindowMs)
+            await expect(duplicate).rejects.toThrow("execution_interrupted");
+        else
+            expect(await duplicate).toMatchObject({
+                providerCallId: call._id,
+                shouldExecute: false,
+                status: "started",
+            });
+    } finally {
+        release();
+        try {
+            await running;
+        } finally {
+            clock.mockRestore();
+            for (const timer of timers) clearTimeout(timer);
+        }
+    }
+    const result = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(f.missionId),
+        calls: await ctx.db.query("providerCalls").collect(),
+        invocations: await ctx.db.query("agentInvocations").collect(),
+    }));
+    if (elapsedMs > nodeGenerationWindowMs) {
+        expect(result.mission).toMatchObject({
+            status: "blocked",
+            blockCode: "execution_interrupted",
+        });
+        expect(
+            await f.t.run((ctx) =>
+                ctx.db.query("agentExecutionEvents").collect(),
+            ),
+        ).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    missionId: f.missionId,
+                    kind: "mission_blocked",
+                    code: "node_action_deadline",
+                }),
+            ]),
+        );
+        expect(result.calls).toHaveLength(1);
+        expect(result.calls[0]?.status).not.toBe("succeeded");
+        expect(result.calls[0]?.reportedCost).toBeUndefined();
+        expect(result.mission).not.toHaveProperty("result");
+        await f.t.action(internal.execution.piWorker.run, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            token: "expired-wake",
+        });
+    } else {
+        expect(result.mission).toMatchObject({ status: "completed" });
+        expect(result.calls).toEqual([
+            expect.objectContaining({
+                status: "succeeded",
+                dispatchOutcome: "response_received",
+            }),
+        ]);
+    }
+    expect(result.invocations).toHaveLength(1);
+    expect(network).toHaveBeenCalledOnce();
+});
+
 test("the native HTTP request observes the shared mission-deadline abort signal", async () => {
     let entered!: () => void;
     const dispatched = new Promise<void>((resolve) => {
@@ -1453,6 +1598,7 @@ test.each([
                     },
                     { missionId: f.missionId, expectedGeneration: 4 },
                     "lost-compaction-commit",
+                    nodeActionGenerationDeadline(Date.now()),
                 ),
             ),
         ).rejects.toMatchObject({ data: { code: "execution_interrupted" } });

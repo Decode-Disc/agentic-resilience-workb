@@ -4,7 +4,6 @@ import {
     initializeSources,
     readSourcesMission,
     reconstructQualification,
-    SOURCES_HANDOFF_READ_CAPACITY,
     sourcesMissionKey,
 } from "@convex/domain/sources";
 import { materializeDocumentaryEvidence } from "@convex/domain/sourceUsage";
@@ -18,6 +17,7 @@ import {
     initialCampaignWorkbenchModel,
     requireLocalFixtureRun,
 } from "@convex/execution/fixtures";
+import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import {

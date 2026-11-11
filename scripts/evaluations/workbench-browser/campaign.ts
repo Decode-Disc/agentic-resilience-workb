@@ -35,6 +35,13 @@ import {
 } from "../../../convex/qualificationCampaignPolicy.ts";
 import { initialFixtureContent } from "../../../convex/qualificationInitialFixtures.ts";
 import {
+    PERSISTENCE_PAGE_SIZE,
+    RESOURCE_POLICY_VERSION,
+    REVIEW_EVIDENCE_POLICY,
+    REVIEW_REPORT_MAX_BYTES,
+    QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
+} from "../../../convex/resourcePolicy.ts";
+import {
     type RuntimeOrigins,
     resolveLocalRuntime,
 } from "../../local-runtime.ts";
@@ -415,14 +422,14 @@ export function listCampaignReviewEvidence(
     root: string,
     evidenceHash: string,
     cursor = 0,
-    limit = 50,
+    limit: number = REVIEW_EVIDENCE_POLICY.inventoryPageSize,
 ) {
     assert(
         Number.isSafeInteger(cursor) &&
             cursor >= 0 &&
             Number.isSafeInteger(limit) &&
             limit > 0 &&
-            limit <= 100,
+            limit <= REVIEW_EVIDENCE_POLICY.maxInventoryPageSize,
         "Invalid evidence inventory range",
     );
     const paths = Object.keys(reviewEvidenceIndex(root, evidenceHash)).sort();
@@ -448,16 +455,19 @@ export function searchCampaignReviewEvidence(
     },
 ) {
     const { pattern, signal } = options;
-    const limit = options.limit ?? 50;
+    const limit = options.limit ?? REVIEW_EVIDENCE_POLICY.searchPageSize;
     const scope = options.path === "." ? "" : (options.path ?? "");
     assert(
         typeof pattern === "string" &&
             pattern.length > 0 &&
-            Buffer.byteLength(pattern) <= 8192,
+            Buffer.byteLength(pattern) <=
+                REVIEW_EVIDENCE_POLICY.maxSearchPatternBytes,
         "Invalid evidence search pattern",
     );
     assert(
-        Number.isSafeInteger(limit) && limit > 0 && limit <= 100,
+        Number.isSafeInteger(limit) &&
+            limit > 0 &&
+            limit <= REVIEW_EVIDENCE_POLICY.maxSearchResults,
         "Invalid evidence search limit",
     );
     assert(
@@ -537,12 +547,21 @@ export function searchCampaignReviewEvidence(
         Buffer.from(JSON.stringify({ query, file, line })).toString(
             "base64url",
         );
-    for (; file < paths.length && scanned < 100; file++, scanned++) {
+    for (
+        ;
+        file < paths.length && scanned < REVIEW_EVIDENCE_POLICY.maxSearchFiles;
+        file++, scanned++
+    ) {
         signal?.throwIfAborted();
         const path = paths[file];
         assert(path);
         const content = new TextDecoder("utf-8", { fatal: true }).decode(
-            readIndexedEvidence(root, index, path, 64 * 1024 * 1024),
+            readIndexedEvidence(
+                root,
+                index,
+                path,
+                REVIEW_EVIDENCE_POLICY.maxFileBytes,
+            ),
         );
         let position = 0;
         let offset = 0;
@@ -558,8 +577,14 @@ export function searchCampaignReviewEvidence(
                 line = currentLine;
                 const at = matcher.exec(text)?.index ?? -1;
                 if (at >= 0) {
-                    const start = Math.max(0, at - 100);
-                    const preview = text.slice(start, start + 8192);
+                    const start = Math.max(
+                        0,
+                        at - REVIEW_EVIDENCE_POLICY.searchLeadingCharacters,
+                    );
+                    const preview = text.slice(
+                        start,
+                        start + REVIEW_EVIDENCE_POLICY.searchPreviewCharacters,
+                    );
                     const match = {
                         path,
                         line: line + 1,
@@ -570,7 +595,7 @@ export function searchCampaignReviewEvidence(
                             start > 0 || start + preview.length < text.length,
                     };
                     const size = Buffer.byteLength(JSON.stringify(match));
-                    if (bytes + size > 50 * 1024)
+                    if (bytes + size > REVIEW_EVIDENCE_POLICY.maxPageBytes)
                         return {
                             matches,
                             nextCursor: continuation(),
@@ -609,21 +634,21 @@ export function readCampaignReviewEvidenceWindow(
     evidenceHash: string,
     path: string,
     offset = 0,
-    maxBytes = 8192,
+    maxBytes: number = REVIEW_EVIDENCE_POLICY.defaultReadBytes,
 ) {
     assert(
         Number.isSafeInteger(offset) &&
             offset >= 0 &&
             Number.isSafeInteger(maxBytes) &&
             maxBytes >= 4 &&
-            maxBytes <= 50 * 1024,
+            maxBytes <= REVIEW_EVIDENCE_POLICY.maxPageBytes,
         "Invalid evidence window",
     );
     const content = readIndexedEvidence(
         root,
         reviewEvidenceIndex(root, evidenceHash),
         path,
-        64 * 1024 * 1024,
+        REVIEW_EVIDENCE_POLICY.maxFileBytes,
     );
     assert(
         offset <= content.length &&
@@ -780,7 +805,7 @@ export function retainCampaignReviewReport(
     assert(
         Number.isSafeInteger(attempt) &&
             attempt > 0 &&
-            Buffer.byteLength(text) <= 256 * 1024,
+            Buffer.byteLength(text) <= REVIEW_REPORT_MAX_BYTES,
         "Invalid review report",
     );
     const retained = join(root, `automated-review-report-${attempt}.md`);
@@ -1091,11 +1116,11 @@ export async function runCampaignReviewStage(options: {
                 root,
                 index,
                 file,
-                64 * 1024 * 1024,
+                REVIEW_EVIDENCE_POLICY.maxFileBytes,
             );
             total += bytes.length;
             assert(
-                total <= 256 * 1024 * 1024,
+                total <= REVIEW_EVIDENCE_POLICY.maxSnapshotBytes,
                 "Review evidence snapshot limit exceeded",
             );
             writeSnapshotFile(evidenceRoot, file, bytes);
@@ -1433,7 +1458,7 @@ async function executeCampaign(
                 "--url",
                 runtime.origins.convex,
             ],
-            { encoding: "utf8", timeout: 30000 },
+            { encoding: "utf8", timeout: TOOLING_POLICY.localCommandTimeoutMs },
         );
         assert.equal(
             result.status,
@@ -1454,7 +1479,13 @@ async function executeCampaign(
         while (cursor) {
             const next = await client.query(
                 ref(internal.qualificationCampaigns.inspect),
-                { campaignId, paginationOpts: { numItems: 32, cursor } },
+                {
+                    campaignId,
+                    paginationOpts: {
+                        numItems: PERSISTENCE_PAGE_SIZE.qualificationLots,
+                        cursor,
+                    },
+                },
             );
             lots.push(...next.lots);
             assert(
@@ -1599,7 +1630,10 @@ async function executeCampaign(
                             `review${index}=${path}`,
                         ]),
                     ],
-                    { encoding: "utf8", timeout: 120000 },
+                    {
+                        encoding: "utf8",
+                        timeout: TOOLING_POLICY.backendCommandTimeoutMs,
+                    },
                 );
                 assert.equal(
                     archived.status,
@@ -1726,7 +1760,10 @@ async function executeCampaign(
                 "--external",
                 `qualification=${join(root, "lots", lot.key)}`,
             ],
-            { encoding: "utf8", timeout: 120000 },
+            {
+                encoding: "utf8",
+                timeout: TOOLING_POLICY.backendCommandTimeoutMs,
+            },
         );
         save(root, `assessment-archive-${lot.key}`, {
             completed: archived.status === 0,
@@ -1996,13 +2033,13 @@ async function executeCampaign(
                     }),
             );
             await page.goto(`${runtime.origins.web}/workspace/dossiers`);
-            page.setDefaultTimeout(20_000);
+            page.setDefaultTimeout(TOOLING_POLICY.browserInteractionTimeoutMs);
             await page.locator("#invitation-code").fill(analyst.code);
             await page
                 .locator("form:has(#invitation-code) button[type=submit]")
                 .click();
             await expect(page.locator("#invitation-code")).toHaveCount(0, {
-                timeout: 20_000,
+                timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
             });
         }
         if (action === "authorize") {
@@ -2137,6 +2174,7 @@ async function executeCampaign(
             assert(lot?.configurationId, "Declared configuration required");
             save(lotRoot, "protocol", {
                 version: 3,
+                resourcePolicy: RESOURCE_POLICY_VERSION,
                 manifest,
                 configurationId: lot.configurationId,
                 maximumRequests: manifest.perLot.model,
@@ -2417,7 +2455,10 @@ async function executeCampaign(
                     "--external",
                     `qualification=${lotRoot}`,
                 ],
-                { encoding: "utf8", timeout: 120000 },
+                {
+                    encoding: "utf8",
+                    timeout: TOOLING_POLICY.backendCommandTimeoutMs,
+                },
             );
             save(lotRoot, "archive-result", {
                 completed: archive.status === 0,
@@ -2489,7 +2530,7 @@ async function runSourcesBrowser(
         admitted.setAuth(token);
         await expect
             .poll(() => admitted.query(api.visitors.current), {
-                timeout: 20_000,
+                timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
             })
             .toMatchObject({ status: "active" });
         for (const item of prepared.cases) {
@@ -2531,9 +2572,11 @@ async function runSourcesBrowser(
                         {
                             timeout:
                                 battery.mode === "deterministic"
-                                    ? 120_000
-                                    : 900_000,
-                            intervals: [1000, 2000],
+                                    ? TOOLING_POLICY.deterministicObservationTimeoutMs
+                                    : TOOLING_POLICY.liveObservationTimeoutMs,
+                            intervals: [
+                                ...TOOLING_POLICY.legacyObservationIntervalsMs,
+                            ],
                         },
                     )
                     .toBe(true);
@@ -2571,7 +2614,9 @@ async function runSourcesBrowser(
                     name: firstQuestion.shortLabel,
                     exact: true,
                 }),
-            ).toBeVisible({ timeout: 20_000 });
+            ).toBeVisible({
+                timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
+            });
             step = `${item.id}:start`;
             await page
                 .getByRole("button", { name: "Start research", exact: true })
@@ -2586,7 +2631,7 @@ async function runSourcesBrowser(
                     .click();
                 await expect
                     .poll(async () => (await inspect()).executionStatus, {
-                        timeout: 120_000,
+                        timeout: TOOLING_POLICY.sourcePauseTimeoutMs,
                     })
                     .toBe("paused");
                 save(root, `${item.id}-paused`, await inspect());
@@ -2680,7 +2725,7 @@ async function runSourcesBrowser(
                     .getByRole("button", { name: "Ask AI", exact: true })
                     .click();
             await expect(page.getByRole("textbox")).toBeVisible({
-                timeout: 20_000,
+                timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
             });
             await page
                 .getByRole("textbox")
@@ -2692,7 +2737,7 @@ async function runSourcesBrowser(
                 .click();
             await expect
                 .poll(async () => (await inspect()).missions.length, {
-                    timeout: 20000,
+                    timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
                 })
                 .toBeGreaterThan(beforeCount);
             save(root, `${item.id}-published`, await settle());

@@ -2,6 +2,10 @@
 
 import { lookup } from "node:dns/promises";
 import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
+import {
+    SOURCE_SELECTION_PROPOSAL_MAX_ATTEMPTS as MAX_ATTEMPTS,
+    SOURCE_SELECTION_PROPOSAL_TIMEOUT_MS as PROVIDER_TIMEOUT_MS,
+} from "@convex/resourcePolicy";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
@@ -32,9 +36,6 @@ import {
     secFilingCandidate,
     selectSecFilingsForDiscovery,
 } from "./sourceDiscoveryActions";
-
-const MAX_ATTEMPTS = 2;
-const PROVIDER_TIMEOUT_MS = 10_000;
 
 type SecFiling = {
     accessionNumber: string;

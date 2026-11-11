@@ -24,6 +24,10 @@ import {
     exaDiscoveryDisposition,
 } from "@convex/integrations/exa";
 import {
+    nodeActionGenerationDeadline,
+    SOURCE_PUBLIC_ADDRESS_TIMEOUT_MS,
+} from "@convex/resourcePolicy";
+import {
     simulatedDocumentaryControl,
     simulatedSourceCandidate,
 } from "@convex/sourcesSimulation";
@@ -44,6 +48,7 @@ export const execute = internalAction({
         ctx,
         args,
     ): Promise<Infer<typeof operationOutcomeValidator>> => {
+        const executionDeadlineAt = nodeActionGenerationDeadline(Date.now());
         try {
             const {
                 preparation,
@@ -197,7 +202,7 @@ export const execute = internalAction({
                                           verbatim: true,
                                       })
                                   ).map((r) => r.address),
-                        AbortSignal.timeout(20_000),
+                        AbortSignal.timeout(SOURCE_PUBLIC_ADDRESS_TIMEOUT_MS),
                     );
                     const rejected = found.rejected + validated.rejected;
                     const disposition = exaDiscoveryDisposition(
@@ -403,6 +408,8 @@ export const execute = internalAction({
                       import("@convex/integrations/documentaryControl").DocumentaryControlAttempt
                   >(ctx, {
                       preparation,
+                      executionDeadlineAt,
+                      operationRequestId: args.requestId,
                       sourceId,
                       operation: "source_documentary_control",
                       inputHash,

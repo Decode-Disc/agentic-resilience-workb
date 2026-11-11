@@ -2,7 +2,7 @@ import "@convex/execution/agentCatalog";
 import { internal } from "@convex/_generated/api";
 import { sourcesDefinition } from "@convex/domain/sourcesAgent";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/execution/executionProtocol";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 

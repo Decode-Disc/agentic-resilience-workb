@@ -3,7 +3,16 @@ import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import { requireRunAuthority } from "@convex/execution/authority";
 import { executionError } from "@convex/execution/errors";
 import { operationHistoryReference } from "@convex/execution/journal";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourceLimits";
+import {
+    MAX_OPERATION_RESULT_BYTES,
+    SOURCES_ENVELOPE_MAX_ACQUISITIONS,
+    SOURCES_ENVELOPE_MAX_COUNT,
+    SOURCES_HANDOFF_BASE_READ_RESERVE_BYTES,
+    SOURCES_HANDOFF_READ_CAPACITY,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
+    SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
+    SOURCES_WORK_ENTRY_CAPACITY,
+} from "@convex/resourcePolicy";
 import { getDocumentSize, type Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { readResearchContext } from "./researchContext";
@@ -21,8 +30,6 @@ import {
     type DocumentaryContribution,
     type documentaryAssessmentAuthorValidator,
     type materializedQualificationInput,
-    SOURCES_MAX_EVIDENCE_REFERENCES,
-    SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
     SOURCES_PROTOCOL,
     type SourcesPreparation,
     type sourcesCompletionValidator,
@@ -46,9 +53,11 @@ export function sourcesEnvelope() {
         Object.entries(value).some(
             ([key, count]) =>
                 key !== "version" &&
-                (!Number.isSafeInteger(count) || count < 1 || count > 160),
+                (!Number.isSafeInteger(count) ||
+                    count < 1 ||
+                    count > SOURCES_ENVELOPE_MAX_COUNT),
         ) ||
-        value.acquisitions > 60
+        value.acquisitions > SOURCES_ENVELOPE_MAX_ACQUISITIONS
     )
         throw executionError("sources_configuration_unavailable");
     return value;
@@ -115,7 +124,7 @@ export function sourcesResourceStatus(data: SourcesPreparation) {
                 "request_documentary_check",
             ],
         },
-        work: capacity("work", data.work.length, 160),
+        work: capacity("work", data.work.length, SOURCES_WORK_ENTRY_CAPACITY),
     };
 }
 
@@ -273,12 +282,6 @@ export function reconstructQualification(
         ]);
     return contributions;
 }
-
-/** Leaves room under Convex's transaction ceilings for authority, preparation and lifecycle reads. */
-export const SOURCES_HANDOFF_READ_CAPACITY = {
-    bytes: 10 * 1024 * 1024,
-    ranges: 3072,
-} as const;
 
 /** Phase admission for additional instructions; execution and request-specific capacity still gate treatment. */
 export function sourcesInstructionTreatment(
@@ -897,7 +900,7 @@ export async function assertSourcesCompletionCapacity(
             ))
         )
             throw executionError("documentary_quote_invalid");
-    let pendingReceiptBytes = 64 * 1024;
+    let pendingReceiptBytes = SOURCES_HANDOFF_BASE_READ_RESERVE_BYTES;
     for (const work of data.work) {
         const request = await reads.request(work.requestId);
         if (request && request.status !== "completed")

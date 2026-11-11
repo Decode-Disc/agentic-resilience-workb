@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { runPiMission } from "@convex/integrations/piMission";
+import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
@@ -297,6 +298,7 @@ test("an unavailable passage gives a recovery instruction and a searched passage
             ctx,
             { missionId: active.missionId, expectedGeneration: 1 },
             "passage-recovery",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(calls).toBe(4);
@@ -368,6 +370,7 @@ test("native Workbench retains its active question and recorded document dates t
             ctx,
             { missionId: active.missionId, expectedGeneration: 1 },
             "documentary-answer-input",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(calls).toBe(2);
@@ -1403,6 +1406,7 @@ test("terminal recovery preserves a code-owned receipt instead of rewriting it a
             ctx,
             { missionId: session.missionId, expectedGeneration: 1 },
             "recover-after-control",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(payloads).toHaveLength(1);

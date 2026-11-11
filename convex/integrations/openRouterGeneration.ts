@@ -3,6 +3,10 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { internalAction } from "@convex/_generated/server";
+import {
+    GENERATION_BILLING_LOOKUP_TIMEOUT_MS,
+    GENERATION_BILLING_MAX_RESPONSE_BYTES,
+} from "@convex/resourcePolicy";
 import { v } from "convex/values";
 
 /** Reads bounded provider accounting independently of model output and mission authority. */
@@ -23,7 +27,9 @@ export const reconcile = internalAction({
         const key = process.env.OPENROUTER_API_KEY?.trim();
         if (!key) reason = "missing_configuration";
         else {
-            const signal = AbortSignal.timeout(15_000);
+            const signal = AbortSignal.timeout(
+                GENERATION_BILLING_LOOKUP_TIMEOUT_MS,
+            );
             let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
             try {
                 const url = new URL("https://openrouter.ai/api/v1/generation");
@@ -47,7 +53,7 @@ export const reconcile = internalAction({
                             const part = await reader.read();
                             if (part.done) break;
                             bytes += part.value.byteLength;
-                            if (bytes > 64 * 1024) {
+                            if (bytes > GENERATION_BILLING_MAX_RESPONSE_BYTES) {
                                 reason = "response_too_large";
                                 break;
                             }

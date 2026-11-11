@@ -9,7 +9,6 @@ import {
     materializeSourceComparisonOutput,
     prepareSourceComparisonInput,
     rankSourceComparisonPrimaryMetadata,
-    SOURCE_COMPARISON_MAX_PRIMARY_CAPTURES,
     type SourceComparisonCheckStatus,
     type SourceComparisonOutput,
     type SourceComparisonPrimaryCandidate,
@@ -56,6 +55,7 @@ import {
 } from "@convex/integrations/sourceQualification";
 import type { SourceQualificationRoute } from "@convex/integrations/sourceQualificationConfig";
 import { revisionRoute } from "@convex/modelConfiguration";
+import { SOURCE_COMPARISON_MAX_PRIMARY_CAPTURES } from "@convex/resourcePolicy";
 import {
     simulatedSourceCandidate,
     simulatedSourceText,
@@ -73,7 +73,14 @@ import {
 import { validateExaCandidates } from "./exaDiscoveryActions";
 import { extractObservedDestinations } from "./integrations/evidenceNormalization";
 import { SOURCE_EMBEDDING_PROFILE } from "./integrations/sourceEmbeddings";
-import { MAX_APPROVED_SOURCE_BYTES } from "./resourceLimits";
+import {
+    DEFAULT_EXA_CONTENTS_TIMEOUT_MS,
+    DEFAULT_SEC_TIMEOUT_MS,
+    EXA_DISCOVERY_TIMEOUT_MS,
+    MAX_APPROVED_SOURCE_BYTES,
+    nodeActionGenerationDeadline,
+    resolveGenerationAuthority,
+} from "./resourcePolicy";
 import { requestPinnedPublicSource } from "./sourceActions";
 import {
     secFilingCandidate,
@@ -101,6 +108,8 @@ export async function executePreparationModel<
     ctx: ActionCtx,
     input: {
         preparation: Doc<"sourceSelectionProposalRebuilds">;
+        executionDeadlineAt: number;
+        operationRequestId?: Id<"agentOperationRequests">;
         sourceId: Id<"sources">;
         operation:
             | "source_qualification"
@@ -113,7 +122,7 @@ export async function executePreparationModel<
             route: SourceQualificationRoute,
             dependencies: Pick<
                 AttemptDependencies,
-                "signal" | "beforeDispatch" | "observeProvider"
+                "authority" | "signal" | "beforeDispatch" | "observeProvider"
             >,
         ) => Promise<Result>;
     },
@@ -135,6 +144,13 @@ export async function executePreparationModel<
     let receipt: PreparationModelReceipt | undefined;
     let firstAttempt: number | undefined;
     while (true) {
+        const execution = resolveGenerationAuthority(
+            preparation,
+            Date.now(),
+            input.executionDeadlineAt,
+        );
+        if (execution.kind === "blocked")
+            return { reasonCode: execution.code, providerCallId, receipt };
         const plan = await ctx.runQuery(
             internal.providerCalls.nextPreparationAttemptForInput,
             {
@@ -181,6 +197,9 @@ export async function executePreparationModel<
             executionPlanVersion: preparation.executionPlanVersion,
         };
         const attempt = {
+            ...(input.operationRequestId
+                ? { operationRequestId: input.operationRequestId }
+                : {}),
             inputHash: input.inputHash,
             runId: preparation.runId,
             corpusRevisionId: preparation.corpusRevisionId,
@@ -215,9 +234,17 @@ export async function executePreparationModel<
         let result: Result | undefined;
         let providerIdentityObserved = false;
         try {
+            const deadlineAt = Math.min(
+                claimed.deadlineAt ?? 0,
+                input.executionDeadlineAt,
+            );
             result = await input.execute(route, {
+                authority: {
+                    resourcePolicy: preparation.resourcePolicy,
+                    deadlineAt,
+                },
                 signal: AbortSignal.timeout(
-                    Math.max(1, (preparation.deadlineAt ?? 0) - Date.now()),
+                    Math.max(1, deadlineAt - Date.now()),
                 ),
                 beforeDispatch: async (requestJson, metadata) => {
                     const retained = await ctx.runMutation(
@@ -376,7 +403,7 @@ function preparationSecResolver(
         now: Date.now,
         userAgent,
         retryPolicy: "confirmed_response",
-        timeoutMs: Math.min(10_000, remaining()),
+        timeoutMs: Math.min(DEFAULT_SEC_TIMEOUT_MS, remaining()),
         reserveRequest: async () => {
             await verifyActive();
             const { retryAfter } = await ctx.runMutation(
@@ -392,7 +419,9 @@ function preparationSecResolver(
         fetch: async (url, init) => {
             await verifyActive();
             const signal = AbortSignal.any([
-                AbortSignal.timeout(Math.min(10_000, remaining())),
+                AbortSignal.timeout(
+                    Math.min(DEFAULT_SEC_TIMEOUT_MS, remaining()),
+                ),
                 ...(init?.signal ? [init.signal] : []),
             ]);
             signal.throwIfAborted();
@@ -418,7 +447,7 @@ function preparationSecResolver(
                                         "source_url_unavailable",
                                     ),
                                 ),
-                            Math.min(10_000, remaining()),
+                            Math.min(DEFAULT_SEC_TIMEOUT_MS, remaining()),
                         );
                     }),
                 ]);
@@ -442,7 +471,7 @@ function preparationSecResolver(
                     },
                     maxBytes: MAX_APPROVED_SOURCE_BYTES,
                     signal,
-                    timeoutMs: Math.min(10_000, remaining()),
+                    timeoutMs: Math.min(DEFAULT_SEC_TIMEOUT_MS, remaining()),
                 },
             );
         },
@@ -724,12 +753,18 @@ const qualificationArgsValidator = v.object({
 export const qualifySource = internalAction({
     args: qualificationArgsValidator,
     returns: qualificationResultValidator,
-    handler: qualifyCapturedSource,
+    handler: (ctx, args) =>
+        qualifyCapturedSource(
+            ctx,
+            args,
+            nodeActionGenerationDeadline(Date.now()),
+        ),
 });
 
 async function qualifyCapturedSource(
     ctx: ActionCtx,
     args: Infer<typeof qualificationArgsValidator>,
+    executionDeadlineAt: number,
 ): Promise<Infer<typeof qualificationResultValidator>> {
     try {
         const { capture, source, company, asOfTime, researchAngle } =
@@ -818,6 +853,7 @@ async function qualifyCapturedSource(
 
         const outcome = await executePreparationModel(ctx, {
             preparation,
+            executionDeadlineAt,
             sourceId: source._id,
             operation: "source_qualification",
             inputHash: prepared.inputHash,
@@ -888,6 +924,7 @@ export const compareSource = internalAction({
         ctx,
         args,
     ): Promise<Infer<typeof comparisonResultValidator>> => {
+        const executionDeadlineAt = nodeActionGenerationDeadline(Date.now());
         const persist = async (result: {
             inputHash: string;
             qualificationTaskId: Id<"aiTaskResults">;
@@ -1399,6 +1436,7 @@ export const compareSource = internalAction({
             );
             const outcome = await executePreparationModel(ctx, {
                 preparation,
+                executionDeadlineAt,
                 sourceId: input.targetSource._id,
                 operation: "source_comparison",
                 inputHash: prepared.inputHash,
@@ -1580,7 +1618,7 @@ async function inspectSourceDocument(
                         Math.max(
                             1,
                             Math.min(
-                                10_000,
+                                EXA_DISCOVERY_TIMEOUT_MS,
                                 (preparation.deadlineAt ?? 0) - Date.now(),
                             ),
                         ),
@@ -1745,7 +1783,10 @@ async function inspectSourceDocument(
                                         maxAttempts,
                                     }),
                               retryPolicy: "confirmed_response",
-                              timeoutMs: Math.min(120_000, remainingMs),
+                              timeoutMs: Math.min(
+                                  DEFAULT_EXA_CONTENTS_TIMEOUT_MS,
+                                  remainingMs,
+                              ),
                           },
                       ),
                       input,
@@ -1847,6 +1888,7 @@ export const prepareSource = internalAction({
         ctx,
         args,
     ): Promise<Infer<typeof sourcePreparationOutcomeValidator>> => {
+        const executionDeadlineAt = nodeActionGenerationDeadline(Date.now());
         const inspection = await inspectSourceDocument(ctx, args);
         if (inspection.status === "unavailable") {
             return {
@@ -1861,10 +1903,14 @@ export const prepareSource = internalAction({
         }
         if (!inspection.sourceCaptureId)
             throw new Error("Inspected source has no capture");
-        const qualification = await qualifyCapturedSource(ctx, {
-            preparationId: args.preparationId,
-            sourceCaptureId: inspection.sourceCaptureId,
-        });
+        const qualification = await qualifyCapturedSource(
+            ctx,
+            {
+                preparationId: args.preparationId,
+                sourceCaptureId: inspection.sourceCaptureId,
+            },
+            executionDeadlineAt,
+        );
         return {
             sourceId: args.sourceId,
             result: {

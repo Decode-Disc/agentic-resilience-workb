@@ -1,3 +1,4 @@
+import { MAX_PROGRESS_FACTS } from "@convex/resourcePolicy";
 import { v } from "convex/values";
 import { agentStateValidator } from "./agentSchemas";
 
@@ -7,8 +8,6 @@ export const agentProgressValidator = v.object({
     obligations: v.optional(v.array(v.string())),
     blockCode: v.optional(v.string()),
 });
-
-export const MAX_PROGRESS_FACTS = 256;
 
 /** Deduplicate verified facts atomically, preserving the entire prior set on capacity failure. */
 export function adoptProgress(

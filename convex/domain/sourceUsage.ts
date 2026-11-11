@@ -2,8 +2,13 @@ import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
 import { executionError } from "@convex/execution/errors";
 import {
     MAX_CLAIM_STATEMENT_CHARS,
+    MAX_COMPARISON_HISTORY_REFERENCES,
+    MAX_QUALIFICATION_FINDINGS,
     MAX_QUOTATION_CHARS,
-} from "@convex/resourceLimits";
+    SOURCE_COMPARISON_MAX_CONTEXT_PASSAGES_PER_FINDING,
+    SOURCE_COMPARISON_MAX_PASSAGES_PER_FINDING,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
+} from "@convex/resourcePolicy";
 import type { GenericDatabaseReader } from "convex/server";
 import type { Infer } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
@@ -14,8 +19,6 @@ import {
     searchAvailableMaterialResult,
 } from "./savedMaterialOperations";
 import {
-    SOURCE_COMPARISON_MAX_CONTEXT_PASSAGES_PER_FINDING,
-    SOURCE_COMPARISON_MAX_PASSAGES_PER_FINDING,
     SOURCE_COMPARISON_VERSION,
     type SourceComparisonDisposition,
     type SourceComparisonOutput,
@@ -29,7 +32,6 @@ import {
 import type { SourceQualification } from "./sourceQualification";
 import {
     isReadableQualificationVersion,
-    MAX_QUALIFICATION_FINDINGS,
     sourceQualificationSchema,
 } from "./sourceQualification";
 import type { SourceReviewReads } from "./sourceReviewReads";
@@ -41,15 +43,11 @@ import {
     SOURCE_EVIDENCE_USAGES,
     sourceFindingUsage,
 } from "./sourceSelectionPolicy";
-import {
-    type documentaryEvidenceSelectionValidator,
-    type documentaryQuoteValidator,
-    SOURCES_MAX_EVIDENCE_REFERENCES,
-    type SourcesPreparation,
+import type {
+    documentaryEvidenceSelectionValidator,
+    documentaryQuoteValidator,
+    SourcesPreparation,
 } from "./sourcesContracts";
-
-// A proposal stores comparison references in one Convex array; this is a format capacity, not an attempt allowance.
-const MAX_COMPARISON_HISTORY_REFERENCES = 8192;
 
 /** Reads comparison history newest first, sharing indexed scope and bounded retention across lookup and publication. */
 export async function* readComparisonHistory(

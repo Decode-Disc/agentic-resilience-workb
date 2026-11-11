@@ -10,6 +10,10 @@ import { compareSourceContributions } from "@convex/integrations/sourceQualifica
 import { sourceQualificationRoutes } from "@convex/integrations/sourceQualificationConfig";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
+import {
+    fixtureModelDescriptor,
+    modelAttemptAuthority,
+} from "@/__tests__/setup/model-configuration";
 
 const company = {
     cik: "1373715",
@@ -129,6 +133,7 @@ test("new comparison calls use the admitted model capacity through the real tran
             },
         },
         {
+            authority: modelAttemptAuthority(),
             apiKey: "offline-only",
             fetch: async (_url, init) => {
                 const wire = JSON.parse(String(init?.body));
@@ -200,8 +205,8 @@ test("preserves a complete explanation beyond 600 characters through the bounded
 
     const result = await compareSourceContributions(
         input,
-        sourceQualificationRoutes[0],
-        { apiKey: "test-only-key", fetch },
+        { ...sourceQualificationRoutes[0], descriptor: fixtureModelDescriptor },
+        { authority: modelAttemptAuthority(), apiKey: "test-only-key", fetch },
     );
 
     expect(result).toMatchObject({ status: "succeeded" });
@@ -211,7 +216,7 @@ test("preserves a complete explanation beyond 600 characters through the bounded
     expect(body).toMatchObject({
         model: "deepseek/deepseek-v4.1-flash",
         temperature: 0,
-        max_tokens: 6144,
+        max_tokens: 8192,
         provider: {
             only: ["relace"],
             allow_fallbacks: false,
@@ -252,7 +257,7 @@ test("returns cached-ready inconclusive output without a provider request when n
     const result = await compareSourceContributions(
         input,
         sourceQualificationRoutes[0],
-        { apiKey: "test-only-key", fetch },
+        { authority: modelAttemptAuthority(), apiKey: "test-only-key", fetch },
     );
 
     expect(result).toMatchObject({

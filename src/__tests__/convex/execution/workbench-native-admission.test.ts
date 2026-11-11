@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { runPiMission } from "@convex/integrations/piMission";
+import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import type { TranscriptContext } from "@earendil-works/pi-ai";
 import { getCurrentTools } from "@earendil-works/pi-ai/utils/transcript";
 import { getFunctionName } from "convex/server";
@@ -115,6 +116,7 @@ test("a steer between Pi preparation and invocation admission is retained as a n
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "steer-at-admission",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     assert(messageId);
@@ -208,6 +210,7 @@ test("a domain change before admission rebuilds the offered tools from the admit
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "state-at-admission",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(await t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({
@@ -277,6 +280,7 @@ test("a direct edit after invocation admission is reconsidered before dispatch",
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "edit-after-begin",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(await t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({
@@ -324,6 +328,7 @@ test("unchanged native preparation cannot reschedule indefinitely without an adm
                 },
                 { missionId: active.missionId, expectedGeneration: 1 },
                 "stalled-preparation",
+                nodeActionGenerationDeadline(Date.now()),
             ),
         ),
     ).rejects.toMatchObject({ data: { code: "native_preparation_stalled" } });

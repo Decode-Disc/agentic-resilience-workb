@@ -18,12 +18,12 @@ import {
     type FunctionReturnType,
     makeFunctionReference,
 } from "convex/server";
-
-// Codegen and backend typechecking share this publisher process budget.
-const PUBLICATION_TIMEOUT_MS = 10 * 60_000;
-const GUARD_TIMEOUT_MS = 5_000;
-// The lock-owning parent also covers identity, guard RPCs and child startup.
-const COMMAND_TIMEOUT_MS = PUBLICATION_TIMEOUT_MS + 6 * GUARD_TIMEOUT_MS;
+import {
+    LOCAL_PUBLICATION_COMMAND_TIMEOUT_MS as COMMAND_TIMEOUT_MS,
+    LOCAL_PUBLICATION_GUARD_TIMEOUT_MS as GUARD_TIMEOUT_MS,
+    LOCAL_PUBLICATION_MAX_BUFFER_BYTES,
+    LOCAL_PUBLICATION_TIMEOUT_MS as PUBLICATION_TIMEOUT_MS,
+} from "../convex/resourcePolicy.ts";
 
 class LocalSyncError extends Error {}
 
@@ -123,7 +123,7 @@ async function main(): Promise<number> {
                 ],
                 {
                     timeout: COMMAND_TIMEOUT_MS,
-                    maxBuffer: 4 * 1024 * 1024,
+                    maxBuffer: LOCAL_PUBLICATION_MAX_BUFFER_BYTES,
                 },
                 (error, stdout, stderr) => {
                     process.removeListener("SIGINT", cancel);
@@ -282,7 +282,7 @@ async function main(): Promise<number> {
                 {
                     env,
                     timeout: PUBLICATION_TIMEOUT_MS,
-                    maxBuffer: 4 * 1024 * 1024,
+                    maxBuffer: LOCAL_PUBLICATION_MAX_BUFFER_BYTES,
                     encoding: "utf8",
                 },
                 (error, stdout, stderr) => {

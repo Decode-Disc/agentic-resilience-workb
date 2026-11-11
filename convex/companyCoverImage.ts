@@ -1,5 +1,6 @@
 "use node";
 
+import { PREVIEW_POLICY } from "@convex/resourcePolicy";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
@@ -72,7 +73,7 @@ export const renderCompanyPreview = action({
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({ url: validatedUrl }),
-                signal: AbortSignal.timeout(35_000),
+                signal: AbortSignal.timeout(PREVIEW_POLICY.callerTimeoutMs),
             });
 
             if (response.ok) {

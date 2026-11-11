@@ -1,14 +1,14 @@
 import { internal } from "@convex/_generated/api";
+import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
+import {
+    assertSourcesCompletionCapacity,
+    reconstructQualification,
+} from "@convex/domain/sources";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { agentToolSchemas } from "@convex/execution/agentDefinition";
 import { agentInputByteLength } from "@convex/integrations/modelInput";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
-import {
-    reconstructQualification,
-    assertSourcesCompletionCapacity,
-    SOURCES_HANDOFF_READ_CAPACITY,
-} from "@convex/domain/sources";
-import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
+import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";

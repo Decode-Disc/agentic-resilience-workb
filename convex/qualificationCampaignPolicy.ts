@@ -1,8 +1,12 @@
 import { z } from "zod";
 import { reasoningPreferenceValues } from "./modelConfigurationValues.ts";
 import { initialFixtureIds } from "./qualificationInitialFixtures.ts";
-
-export const MAX_QUALIFICATION_CONTEXT_DURATION_MS = 2 * 60 * 60 * 1000;
+import {
+    MAX_QUALIFICATION_CONTEXT_DURATION_MS,
+    MAX_REVIEW_AUTHORITY_DURATION_MS,
+    SOURCES_ENVELOPE_MAX_ACQUISITIONS,
+    SOURCES_ENVELOPE_MAX_COUNT,
+} from "./resourcePolicy.ts";
 
 export const campaignLimitsSchema = z
     .object({
@@ -193,11 +197,23 @@ export const qualificationStepSchema = z.discriminatedUnion("action", [
 export const qualificationEnvelopeSchema = z
     .object({
         version: z.literal(1),
-        maxNeeds: z.number().int().min(1).max(160),
-        initialSearches: z.number().int().min(1).max(160),
-        complementSearches: z.number().int().min(1).max(160),
-        acquisitions: z.number().int().min(1).max(60),
-        controls: z.number().int().min(1).max(160),
+        maxNeeds: z.number().int().min(1).max(SOURCES_ENVELOPE_MAX_COUNT),
+        initialSearches: z
+            .number()
+            .int()
+            .min(1)
+            .max(SOURCES_ENVELOPE_MAX_COUNT),
+        complementSearches: z
+            .number()
+            .int()
+            .min(1)
+            .max(SOURCES_ENVELOPE_MAX_COUNT),
+        acquisitions: z
+            .number()
+            .int()
+            .min(1)
+            .max(SOURCES_ENVELOPE_MAX_ACQUISITIONS),
+        controls: z.number().int().min(1).max(SOURCES_ENVELOPE_MAX_COUNT),
     })
     .strict();
 export const qualificationScenarioSchema = z
@@ -446,13 +462,13 @@ export const analysisMandateSchema = z
         perLot: analysisAllowanceSchema,
         total: analysisAllowanceSchema,
         maxRequestCostMicros: z.number().int().positive().safe().optional(),
-        maxInputTokens: z.number().int().positive().safe(),
+        maxInputTokens: z.number().int().positive().safe().optional(),
         maxOutputTokens: z.number().int().positive().safe().optional(),
         timeoutMs: z
             .number()
             .int()
             .positive()
-            .max(15 * 60 * 1000),
+            .max(MAX_REVIEW_AUTHORITY_DURATION_MS),
     })
     .strict()
     .superRefine((m, ctx) => {
@@ -482,12 +498,13 @@ export const analysisMandateSchema = z
         } else if (
             m.perLot.costMicros === undefined ||
             m.total.costMicros === undefined ||
+            m.maxInputTokens === undefined ||
             m.maxOutputTokens === undefined
         ) {
             ctx.addIssue({
                 code: "custom",
                 message:
-                    "API analysis requires explicit cost and output-token ceilings",
+                    "API analysis requires explicit cost and token ceilings",
             });
         }
         if (

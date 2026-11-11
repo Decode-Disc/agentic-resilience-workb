@@ -1,8 +1,10 @@
+import type { Doc } from "@convex/_generated/dataModel";
 import {
     type CoherenceScores,
     RESPONSE_CONTROL_LIMITS,
     validCoherenceScores,
 } from "@convex/domain/workbenchResponseControlContracts";
+import { resolveGenerationAuthority } from "@convex/resourcePolicy";
 import { createBoundedModelFetch, readReportedCost } from "./modelTransport";
 
 const DECISIONS_ENDPOINT = "https://openrouter.ai/api/alpha/decisions";
@@ -14,18 +16,30 @@ function record(value: unknown): Record<string, unknown> | undefined {
 /** One native request, using the shared bounded HTTP reader and no provider pin or retry. */
 export async function checkResponseCoherence(args: {
     requestJson: string;
+    authority?: Pick<Doc<"agentMissions">, "resourcePolicy" | "deadlineAt">;
     apiKey: string;
     signal?: AbortSignal;
     fetch?: typeof fetch;
 }) {
+    const authority = resolveGenerationAuthority(args.authority, Date.now());
+    if (authority.kind === "blocked")
+        return {
+            status: "unavailable" as const,
+            reason: authority.code,
+            scores: undefined,
+            rawResponseJson: undefined,
+            model: undefined,
+            reportedCost: undefined,
+            usage: undefined,
+            httpStatus: undefined,
+            latencyMs: 0,
+        };
     const state = { responseTooLarge: false };
     const boundedFetch = createBoundedModelFetch({ fetch: args.fetch }, state);
+    const deadline = AbortSignal.timeout(authority.timeoutMs);
     const signal = args.signal
-        ? AbortSignal.any([
-              args.signal,
-              AbortSignal.timeout(RESPONSE_CONTROL_LIMITS.timeoutMs),
-          ])
-        : AbortSignal.timeout(RESPONSE_CONTROL_LIMITS.timeoutMs);
+        ? AbortSignal.any([args.signal, deadline])
+        : deadline;
     const startedAt = Date.now();
     const response = await boundedFetch(DECISIONS_ENDPOINT, {
         method: "POST",

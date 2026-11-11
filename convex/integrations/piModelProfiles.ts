@@ -34,7 +34,6 @@ import {
     preparePiModelPayload,
 } from "./modelInput";
 import {
-    MODEL_MAX_OUTPUT_TOKENS,
     type ModelRoute,
     modelCallSettings,
     modelConfigurationKey,
@@ -69,13 +68,14 @@ export function configuredNativeModel(
 async function profileTranscript(
     definition: AgentDefinition,
     operations: ReturnType<typeof agentToolSchemas>,
+    descriptor: Infer<typeof modelDescriptor>,
 ) {
     const faux = fauxProvider({
         models: [
             {
                 id: "controlled",
-                contextWindow: 32000,
-                maxTokens: MODEL_MAX_OUTPUT_TOKENS,
+                contextWindow: descriptor.contextWindow,
+                maxTokens: descriptor.maxTokens,
             },
         ],
     });
@@ -194,7 +194,11 @@ export async function prepareNativeProfiles(
                 (request) => !profiles.has(request.key),
             );
             if (!missing.length) continue;
-            const history = await profileTranscript(definition, operations);
+            const history = await profileTranscript(
+                definition,
+                operations,
+                descriptor,
+            );
             for (const { key, nativeRoute } of missing) {
                 const generation = modelCallSettings(nativeRoute).generation;
                 let bytes: number | undefined;

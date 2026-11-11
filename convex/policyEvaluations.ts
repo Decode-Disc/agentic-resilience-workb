@@ -6,19 +6,6 @@ import {
 } from "@convex/domain/claimValidation";
 import { assertEvidenceExecutionFence } from "@convex/domain/evidenceAuthority";
 import {
-    assertWithinLength,
-    MAX_POLICY_INPUT_HASH_CHARS,
-    MAX_POLICY_PUBLISHER_IDENTITY_CHARS,
-    MAX_POLICY_REASON_CODE_CHARS,
-    MAX_POLICY_RULE_ID_CHARS,
-    MAX_POLICY_SOURCE_CATEGORY_CHARS,
-    MAX_POLICY_SOURCE_ID_CHARS,
-    MAX_POLICY_SOURCE_SEC_FORM_CHARS,
-    MAX_VERIFIER_EVIDENCE_REFERENCES,
-    MAX_VERIFIER_INPUT_HASH_CHARS,
-    MAX_VERIFIER_REFERENCE_IDENTITY_CHARS,
-} from "@convex/domain/evidenceLimits";
-import {
     derivePublisherIdentity,
     evaluateEvidencePolicy,
     POLICY_VERSION,
@@ -49,11 +36,24 @@ import {
     type VerifierOutput,
 } from "@convex/integrations/showcaseVerifierAdapter";
 import {
+    assertWithinLength,
     MAX_CLAIMS_PER_RUN,
     MAX_DIMENSION_LINKS_PER_CLAIM,
     MAX_EVIDENCE_ARTIFACT_BYTES,
     MAX_EVIDENCE_PER_CLAIM,
-} from "@convex/resourceLimits";
+    MAX_POLICY_INPUT_HASH_CHARS,
+    MAX_POLICY_PUBLISHER_IDENTITY_CHARS,
+    MAX_POLICY_REASON_CODE_CHARS,
+    MAX_POLICY_REASON_CODES,
+    MAX_POLICY_RULE_ID_CHARS,
+    MAX_POLICY_RULES,
+    MAX_POLICY_SOURCE_CATEGORY_CHARS,
+    MAX_POLICY_SOURCE_ID_CHARS,
+    MAX_POLICY_SOURCE_SEC_FORM_CHARS,
+    MAX_VERIFIER_EVIDENCE_REFERENCES,
+    MAX_VERIFIER_INPUT_HASH_CHARS,
+    MAX_VERIFIER_REFERENCE_IDENTITY_CHARS,
+} from "@convex/resourcePolicy";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
@@ -66,11 +66,10 @@ import {
     claimClassificationValidator,
     evidenceRelationValidator,
 } from "./domain/claims";
-import { assessmentDimensionKeyValidator } from "./domain/researchPlan";
-
-const MAX_POLICY_RULES = 16;
-const MAX_POLICY_REASON_CODES = 16;
-const MAX_RESEARCH_PLAN_QUESTIONS = 11;
+import {
+    assessmentDimensionKeyValidator,
+    MAX_RESEARCH_PLAN_QUESTIONS,
+} from "./domain/researchPlan";
 
 const authorityTierValidator = v.union(
     ...SOURCE_AUTHORITY_TIERS.map((value) => v.literal(value)),

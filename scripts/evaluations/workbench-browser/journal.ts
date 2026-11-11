@@ -14,6 +14,9 @@ import {
     analysisReceiptSchema,
 } from "../../../convex/qualificationCampaignPolicy.ts";
 
+export const analysisCallPurposes = ["investigation", "compaction"] as const;
+export type AnalysisCallPurpose = (typeof analysisCallPurposes)[number];
+
 type AnalysisIdentity = {
     campaignId: string;
     lotId: string;
@@ -116,17 +119,25 @@ export function openQualificationJournal(
             {
                 identity: AnalysisIdentity;
                 status: "unknown" | "completed";
+                purpose?: AnalysisCallPurpose;
                 receipt?: AnalysisReceipt;
+                settled?: true;
             }
         >();
         for (const entry of entries) {
             if (entry.event === "analysis_started") {
                 const identity = entry.identity as AnalysisIdentity;
                 validateAnalysisIdentity(identity);
+                const purpose = analysisCallPurposes.find(
+                    (value) => value === entry.purpose,
+                );
+                if (entry.purpose !== undefined && purpose === undefined)
+                    throw new Error("Invalid analysis call purpose");
                 if (attempts.has(identity.attemptKey))
                     throw new Error("Analysis journal conflict");
                 attempts.set(identity.attemptKey, {
                     identity,
+                    ...(purpose ? { purpose } : {}),
                     status: "unknown",
                 });
             } else if (entry.event === "analysis_finished") {
@@ -142,8 +153,27 @@ export function openQualificationJournal(
                     throw new Error("Analysis journal conflict");
                 attempts.set(identity.attemptKey, {
                     identity,
+                    ...(previous.purpose ? { purpose: previous.purpose } : {}),
                     status: "completed",
                     receipt,
+                });
+            } else if (entry.event === "analysis_settled") {
+                const identity = entry.identity as AnalysisIdentity;
+                validateAnalysisIdentity(identity);
+                const previous = attempts.get(identity.attemptKey);
+                if (
+                    previous?.status !== "completed" ||
+                    previous.settled ||
+                    !sameFields(previous.identity, identity, identityKeys) ||
+                    !previous.receipt?.observationHash ||
+                    previous.receipt.observationHash !== entry.observationHash
+                )
+                    throw new Error(
+                        "Analysis settlement acknowledgement conflict",
+                    );
+                attempts.set(identity.attemptKey, {
+                    ...previous,
+                    settled: true,
                 });
             }
         }
@@ -151,7 +181,10 @@ export function openQualificationJournal(
     };
     return {
         analysisAttempts,
-        beginAnalysis(identity: AnalysisIdentity) {
+        beginAnalysis(
+            identity: AnalysisIdentity,
+            purpose?: AnalysisCallPurpose,
+        ) {
             validateAnalysisIdentity(identity);
             const previous = analysisAttempts().find(
                 (item) => item.identity.attemptKey === identity.attemptKey,
@@ -165,7 +198,16 @@ export function openQualificationJournal(
                         : "Analysis already completed",
                 );
             }
-            append({ event: "analysis_started", identity });
+            if (
+                purpose !== undefined &&
+                !analysisCallPurposes.some((value) => value === purpose)
+            )
+                throw new Error("Invalid analysis call purpose");
+            append({
+                event: "analysis_started",
+                identity,
+                ...(purpose ? { purpose } : {}),
+            });
         },
         finishAnalysis(identity: AnalysisIdentity, receipt: AnalysisReceipt) {
             validateAnalysisIdentity(identity);
@@ -190,6 +232,25 @@ export function openQualificationJournal(
                 return;
             }
             append({ event: "analysis_finished", identity, receipt });
+        },
+        /** Local receipt completion and acknowledged backend settlement are distinct facts. */
+        acknowledgeAnalysisSettlement(identity: AnalysisIdentity) {
+            validateAnalysisIdentity(identity);
+            const previous = analysisAttempts().find(
+                (item) => item.identity.attemptKey === identity.attemptKey,
+            );
+            if (
+                previous?.status !== "completed" ||
+                !sameFields(previous.identity, identity, identityKeys) ||
+                !previous.receipt?.observationHash
+            )
+                throw new Error("Analysis settlement acknowledgement conflict");
+            if (previous.settled) return;
+            append({
+                event: "analysis_settled",
+                identity,
+                observationHash: previous.receipt.observationHash,
+            });
         },
         begin(scenario: string) {
             const previous = entries.filter((e) => e.scenario === scenario);

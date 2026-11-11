@@ -86,7 +86,7 @@ import {
     campaignLimitsSchema,
     campaignManifestSchema,
 } from "./qualificationCampaignPolicy";
-import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourceLimits";
+import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourcePolicy";
 import { preparationStudyEnvelopeValidator } from "./sourcePreparationStudyPolicy";
 
 const sourceDiscoveryQueriesValidator = v.array(
@@ -174,6 +174,7 @@ export default defineSchema({
             "canonicalUrl",
         ]),
     qualificationCampaigns: defineTable({
+        resourcePolicy: v.optional(v.string()),
         key: v.string(),
         manifest: zodToConvex(campaignManifestSchema),
         manifestHash: v.string(),
@@ -264,6 +265,7 @@ export default defineSchema({
         ),
         paidQualification: v.optional(
             v.object({
+                resourcePolicy: v.optional(v.string()),
                 runId: v.id("researchRuns"),
                 modelRevisionId: v.id("modelRevisions"),
                 sourcesModelRevisionId: v.optional(v.id("modelRevisions")),
@@ -628,6 +630,7 @@ export default defineSchema({
         "version",
     ]),
     sourceSelectionProposalRebuilds: defineTable({
+        resourcePolicy: v.optional(v.string()),
         sourcesMission: v.optional(sourcesPreparationValidator),
         modelRevisionId: v.optional(v.id("modelRevisions")),
         executionPlanVersion: v.optional(
@@ -972,6 +975,7 @@ export default defineSchema({
         ])
         .index("by_passage_key", ["passageKey"]),
     providerCalls: defineTable({
+        modelContextWindowTokens: v.optional(v.number()),
         reservedMaxOutputTokens: v.optional(v.number()),
         operationRequestId: v.optional(v.id("agentOperationRequests")),
         qualificationReservationUsd: v.optional(v.number()),

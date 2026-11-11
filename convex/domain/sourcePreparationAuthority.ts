@@ -1,15 +1,23 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
 import {
-    LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT,
-    MAX_HISTORICAL_SOURCE_CANDIDATES,
     preparationMaxConcurrency,
     preparationModelLimits,
-    SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION,
 } from "@convex/resourceLimits";
+import {
+    LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT,
+    MAX_HISTORICAL_SOURCE_CANDIDATES,
+    PREPARATION_RECOVERY_COOLDOWN_MS,
+    RESOURCE_POLICY_VERSION,
+} from "@convex/resourcePolicy";
 import type { GenericDatabaseReader } from "convex/server";
 import { ConvexError, type Infer, v } from "convex/values";
 import { isExecutableQualificationVersion } from "./sourceQualification";
 import { isResumableResearchPause } from "./transitions";
+
+/** Preparation journal protocol identity, not a resource allowance. */
+export const SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION = "source_actions_v4";
+export const SOURCE_PREPARATION_EXECUTION_PLAN_VERSION =
+    SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION;
 
 export const preparationDispatchOutcomeValidator = v.union(
     v.literal("not_dispatched"),
@@ -45,8 +53,6 @@ export const sourcePreparationProgressValidator = v.object({
     total: v.optional(v.number()),
     updatedAt: v.number(),
 });
-
-export const PREPARATION_RECOVERY_COOLDOWN_MS = 15_000;
 export const MAX_PREPARATION_ATTEMPT_HISTORY =
     MAX_HISTORICAL_SOURCE_CANDIDATES + 4;
 
@@ -484,6 +490,8 @@ export async function assertPreparationExecutionFence(
     },
 ) {
     const state = await readCurrentPreparation(db, args);
+    if (state.preparation.resourcePolicy !== RESOURCE_POLICY_VERSION)
+        throw sourcePreparationError("resource_policy_unsupported");
     if (
         (state.preparation.deadlineAt ?? 0) <= args.now ||
         state.preparation.leaseExpiresAt <= args.now

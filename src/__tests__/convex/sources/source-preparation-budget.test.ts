@@ -92,20 +92,20 @@ test("an explicit recovery can reserve a fourth lifetime attempt", async () => {
 test("settlement is idempotent and technical failures do not consume work", async () => {
     vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", "1");
     vi.stubEnv("SOURCE_PREPARATION_INCIDENT_LIMIT", "2");
-    const { t, runId, attempt } = await activePreparation();
+    const { t, runId, preparation, attempt } = await activePreparation();
     const first = attempt("first");
     const started = await t.mutation(internal.providerCalls.recordAttempt, {
         ...first,
         status: "started",
     });
     const receipt = await t.run((ctx) => ctx.db.get(started.providerCallId));
-    expect((receipt?.leaseExpiresAt ?? 0) - (receipt?.createdAt ?? 0)).toBe(
-        70000,
-    );
+    if (preparation.deadlineAt === undefined)
+        throw new Error("Missing preparation deadline");
+    expect(receipt?.leaseExpiresAt).toBe(preparation.deadlineAt + 10000);
     expect(
         modelCallSettings({ model: "fixture/ordinary-model" }).generation
             .timeout,
-    ).toBe(60000);
+    ).toBeUndefined();
     const failure = {
         ...first,
         status: "failed" as const,

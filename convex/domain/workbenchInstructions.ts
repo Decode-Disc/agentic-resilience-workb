@@ -5,13 +5,13 @@ import { requireDossierAuthority } from "@convex/execution/authority";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { recordContextObservation } from "@convex/execution/journal";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
+import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import { preparationFailureCode } from "./sourcePreparationAuthority";
 import { SourceReviewReads } from "./sourceReviewReads";
 import {
     assertSourcesCompletionCapacity,
     hasEngagedSourcesControl,
-    SOURCES_HANDOFF_READ_CAPACITY,
     sourcesInstructionTreatment,
 } from "./sources";
 import { isResumableResearchPause } from "./transitions";

@@ -1,4 +1,9 @@
 import { hasKnownNonDispatch } from "@convex/execution/journal";
+import {
+    ADMIN_BACKFILL_PAGE_MAX_ITEMS,
+    ADMIN_JOURNAL_PAGE_MAX_ITEMS,
+    ADMIN_RECENT_EVENT_LIMIT as RECENT_EVENT_LIMIT,
+} from "@convex/resourcePolicy";
 import type { WorkflowId } from "@convex-dev/workflow";
 import {
     paginationOptsValidator,
@@ -28,7 +33,6 @@ import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 import { workflow } from "./workflow";
 
-const RECENT_EVENT_LIMIT = 50;
 const runFields = schema.tables.researchRuns.validator.fields;
 const checkpointFields = schema.tables.checkpointDecisions.validator.fields;
 const providerCallFields = schema.tables.providerCalls.validator.fields;
@@ -252,9 +256,11 @@ export const backfillSourceReviewProjection = mutation({
         await requireAdmin(ctx);
         if (
             args.paginationOpts.numItems < 1 ||
-            args.paginationOpts.numItems > 10
+            args.paginationOpts.numItems > ADMIN_BACKFILL_PAGE_MAX_ITEMS
         ) {
-            throw new Error("Backfill page size must be between 1 and 10");
+            throw new Error(
+                `Backfill page size must be between 1 and ${ADMIN_BACKFILL_PAGE_MAX_ITEMS}`,
+            );
         }
         const revisions = await ctx.db
             .query("corpusRevisions")
@@ -344,9 +350,11 @@ export const backfillSourceSelectionProposals = mutation({
         await requireAdmin(ctx);
         if (
             args.paginationOpts.numItems < 1 ||
-            args.paginationOpts.numItems > 10
+            args.paginationOpts.numItems > ADMIN_BACKFILL_PAGE_MAX_ITEMS
         ) {
-            throw new Error("Backfill page size must be between 1 and 10");
+            throw new Error(
+                `Backfill page size must be between 1 and ${ADMIN_BACKFILL_PAGE_MAX_ITEMS}`,
+            );
         }
         const revisions = await ctx.db
             .query("corpusRevisions")
@@ -413,9 +421,11 @@ export const backfillPhase5Authority = mutation({
         await requireAdmin(ctx);
         if (
             args.paginationOpts.numItems < 1 ||
-            args.paginationOpts.numItems > 10
+            args.paginationOpts.numItems > ADMIN_BACKFILL_PAGE_MAX_ITEMS
         ) {
-            throw new Error("Backfill page size must be between 1 and 10");
+            throw new Error(
+                `Backfill page size must be between 1 and ${ADMIN_BACKFILL_PAGE_MAX_ITEMS}`,
+            );
         }
         const revisions = await ctx.db
             .query("corpusRevisions")
@@ -767,9 +777,11 @@ export const listRunJournalEventsPage = query({
         if (!(await ctx.db.get(args.runId))) throw new Error("Run not found");
         if (
             args.paginationOpts.numItems < 1 ||
-            args.paginationOpts.numItems > 20
+            args.paginationOpts.numItems > ADMIN_JOURNAL_PAGE_MAX_ITEMS
         )
-            throw new Error("Journal page size must be between 1 and 20");
+            throw new Error(
+                `Journal page size must be between 1 and ${ADMIN_JOURNAL_PAGE_MAX_ITEMS}`,
+            );
         return ctx.db
             .query("agentExecutionEvents")
             .withIndex("by_run", (q) => q.eq("runId", args.runId))

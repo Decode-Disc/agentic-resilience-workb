@@ -4,7 +4,7 @@ import {
     MAX_QUOTATION_CHARS,
     MAX_SOURCE_SEARCH_BLOCKS,
     MAX_SOURCE_SEARCH_CANDIDATES,
-} from "@convex/resourceLimits";
+} from "@convex/resourcePolicy";
 import { v } from "convex/values";
 import { SOURCE_RETRIEVAL_VERSION } from "./sourceRetrievalPolicy";
 

@@ -2,6 +2,7 @@ import {
     executionStatusValidator,
     researchRunLifecycleValidator,
 } from "@convex/domain/validators";
+import { MAX_VALIDATION_FEEDBACK_FIELD_CHARS } from "@convex/resourcePolicy";
 import type { Validator } from "convex/values";
 import { type Infer, v } from "convex/values";
 import type { ValidationError } from "convex-helpers/validators";
@@ -150,8 +151,6 @@ export const runStateResultValidator = v.object({
     executionStatus: executionStatusValidator,
     executionGeneration: v.number(),
 });
-
-const MAX_VALIDATION_FEEDBACK_FIELD_CHARS = 256;
 type FeedbackSchema = Validator<unknown, "required" | "optional", string>;
 
 /** Error paths locate the canonical type; received prototype names are not expected types. */

@@ -33,10 +33,10 @@ import {
     sourceQualificationReviewValidator,
 } from "./domain/sourceUsage";
 import {
-    MAX_HISTORICAL_SOURCE_CANDIDATES,
     sourceDossierCandidateLimit,
     sourcePreparationEnabled,
 } from "./resourceLimits";
+import { MAX_HISTORICAL_SOURCE_CANDIDATES } from "./resourcePolicy";
 import { requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
 import { startReviewPreparation } from "./sourcePreparation";

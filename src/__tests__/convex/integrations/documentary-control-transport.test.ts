@@ -1,7 +1,7 @@
 import type { DocumentaryContribution } from "@convex/domain/sourcesContracts";
 import { examineDocumentaryContributions } from "@convex/integrations/documentaryControl";
 import { expect, test } from "vitest";
-import retained from "@/__tests__/setup/fixtures/documentary-control-replies.json";
+import { modelAttemptAuthority } from "@/__tests__/setup/model-configuration";
 
 const contribution: DocumentaryContribution = {
     id: "documentary-contribution",
@@ -51,56 +51,74 @@ function providerReply(output: unknown, finishReason = "stop") {
     });
 }
 
-test.each(
-    retained.cases,
-)("retains the original documentary refusal $id with its precise reason", async (original) => {
+test.each([
+    "missing",
+    "expired",
+])("a documentary request with %s authority cannot reach the provider", async (state) => {
+    let dispatched = false;
+    const result = await examineDocumentaryContributions(input, currentRoute, {
+        apiKey: "offline-only",
+        authority:
+            state === "missing"
+                ? undefined
+                : {
+                      resourcePolicy: "authority_native_v1",
+                      deadlineAt: Date.now() - 1,
+                  },
+        fetch: async () => {
+            dispatched = true;
+            const { contributionId: _id, ...value } = finding;
+            return providerReply({
+                coherence: true,
+                limitations: [],
+                findings: { [contribution.id]: value },
+            });
+        },
+    });
+    expect(result).toMatchObject({
+        status: "failed",
+        dispatchOutcome: "not_dispatched",
+        errorCode:
+            state === "missing"
+                ? "resource_policy_unsupported"
+                : "execution_deadline",
+    });
+    expect(dispatched).toBe(false);
+});
+
+test.each([
+    undefined,
+    "source_actions_v3" as const,
+])("current documentary authority supports retained workflow version %s", async (executionPlanVersion) => {
+    let dispatched = false;
     const result = await examineDocumentaryContributions(
+        input,
+        { ...currentRoute, executionPlanVersion },
         {
-            ...input,
-            contributions: original.contributionIds.map((id) => ({
-                ...contribution,
-                id,
-            })),
-        },
-        {
-            model: currentRoute.model,
-            executionPlanVersion: "source_actions_v3",
-        },
-        {
+            authority: modelAttemptAuthority(),
             apiKey: "offline-only",
-            fetch: async () =>
-                Response.json({
-                    id: original.id,
-                    model: currentRoute.model,
-                    choices: [
-                        {
-                            index: 0,
-                            message: {
-                                role: "assistant",
-                                content: original.text,
-                            },
-                            finish_reason: original.finishReason,
+            fetch: async () => {
+                dispatched = true;
+                return providerReply({
+                    coherence: true,
+                    limitations: [],
+                    findings: {
+                        [contribution.id]: {
+                            conclusion: finding.conclusion,
+                            permittedUse: finding.permittedUse,
+                            diagnostic: finding.diagnostic,
                         },
-                    ],
-                    usage: {
-                        prompt_tokens: 10,
-                        completion_tokens: 10,
-                        total_tokens: 20,
                     },
-                }),
+                });
+            },
         },
     );
     expect(result).toMatchObject({
-        status: "failed",
-        errorCode: "invalid_output",
-        outputDiagnostic: {
-            output: original.text,
-            reason:
-                original.finishReason === "length"
-                    ? "finish_reason_invalid"
-                    : "documentary_control_identity_invalid",
-        },
+        status: "succeeded",
+        dispatchOutcome: "response_received",
+        output: { findings: [finding] },
     });
+    expect(dispatched).toBe(true);
 });
 
 test.each([
@@ -114,6 +132,7 @@ test.each([
     },
 ])("new documentary examinations refuse incomplete or foreign findings", async (findings) => {
     const result = await examineDocumentaryContributions(input, currentRoute, {
+        authority: modelAttemptAuthority(),
         apiKey: "offline-only",
         fetch: async () =>
             providerReply({ coherence: true, limitations: [], findings }),
@@ -129,6 +148,7 @@ test("new documentary examinations bind provider findings to the submitted ident
     let wire: Record<string, unknown> = {};
     const { contributionId: _id, ...value } = finding;
     const result = await examineDocumentaryContributions(input, currentRoute, {
+        authority: modelAttemptAuthority(),
         apiKey: "offline-only",
         fetch: async (_url, init) => {
             wire = JSON.parse(String(init?.body));
@@ -170,44 +190,41 @@ test("new documentary examinations bind provider findings to the submitted ident
     });
 });
 
-test("duplicate documentary findings retain the rejected reply and a precise diagnostic", async () => {
+test("a legacy findings array is refused by the current schema without losing the raw reply", async () => {
     const output = {
         coherence: true,
         limitations: [],
         findings: [finding, finding],
     };
-    const result = await examineDocumentaryContributions(
-        input,
-        { model: "example/documentary" },
-        {
-            apiKey: "offline-only",
-            fetch: async () =>
-                Response.json({
-                    id: "offline-documentary",
-                    model: "example/documentary",
-                    choices: [
-                        {
-                            index: 0,
-                            message: {
-                                role: "assistant",
-                                content: JSON.stringify(output),
-                            },
-                            finish_reason: "stop",
+    const result = await examineDocumentaryContributions(input, currentRoute, {
+        authority: modelAttemptAuthority(),
+        apiKey: "offline-only",
+        fetch: async () =>
+            Response.json({
+                id: "offline-documentary",
+                model: "example/documentary",
+                choices: [
+                    {
+                        index: 0,
+                        message: {
+                            role: "assistant",
+                            content: JSON.stringify(output),
                         },
-                    ],
-                    usage: {
-                        prompt_tokens: 10,
-                        completion_tokens: 10,
-                        total_tokens: 20,
+                        finish_reason: "stop",
                     },
-                }),
-        },
-    );
+                ],
+                usage: {
+                    prompt_tokens: 10,
+                    completion_tokens: 10,
+                    total_tokens: 20,
+                },
+            }),
+    });
     expect(result).toMatchObject({
         status: "failed",
         errorCode: "invalid_output",
         outputDiagnostic: {
-            reason: "documentary_control_identity_invalid",
+            reason: "schema_invalid",
             output: JSON.stringify(output),
             finishReason: "stop",
         },

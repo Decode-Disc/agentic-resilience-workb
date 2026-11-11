@@ -5,14 +5,14 @@ import {
     type QueryCtx,
 } from "@convex/_generated/server";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
-import { getDocumentSize, type Infer, v } from "convex/values";
-import { recordInvocationEvent, requireMissionAuthority } from "./authority";
-import { executionError } from "./errors";
 import {
     HISTORY_PAGE_SIZE,
     MAX_OBSERVABLE_OUTPUT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
-} from "./executionProtocol";
+} from "@convex/resourcePolicy";
+import { getDocumentSize, type Infer, v } from "convex/values";
+import { recordInvocationEvent, requireMissionAuthority } from "./authority";
+import { executionError } from "./errors";
 import {
     isCommonConsultation,
     type retainedPayloadValidator,

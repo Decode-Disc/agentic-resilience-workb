@@ -14,6 +14,7 @@ import {
 import { z } from "zod";
 import { internal } from "../../../convex/_generated/api.js";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY } from "../../../convex/resourcePolicy.ts";
 import { resolveLocalRuntime } from "../../local-runtime.ts";
 import { openQualificationJournal } from "./journal.ts";
 import {
@@ -47,7 +48,7 @@ function command(args: string[]) {
     const r = spawnSync(
         process.execPath,
         ["node_modules/convex/bin/main.js", ...args, "--deployment", "local"],
-        { encoding: "utf8", timeout: 30000 },
+        { encoding: "utf8", timeout: TOOLING_POLICY.localCommandTimeoutMs },
     );
     assert(
         r.status === 0,
@@ -152,7 +153,7 @@ export async function sourcesQualificationPhase(
                 {
                     slotKey: "analyst-4",
                     contextKey: protocol.contextKey,
-                    durationMs: 40 * 60000,
+                    durationMs: TOOLING_POLICY.sourcesContextDurationMs,
                 },
             );
             if (options?.lotId)
@@ -296,7 +297,9 @@ export async function sourcesQualificationPhase(
                 const target = join(root, "captures", `${capture._id}.txt`);
                 if (!existsSync(target)) {
                     const response = await fetch(download.url, {
-                        signal: AbortSignal.timeout(30000),
+                        signal: AbortSignal.timeout(
+                            TOOLING_POLICY.captureDownloadTimeoutMs,
+                        ),
                     });
                     assert(response.ok);
                     const bytes = new Uint8Array(await response.arrayBuffer());

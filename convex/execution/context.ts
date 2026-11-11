@@ -5,6 +5,7 @@ import { readConversationMessages } from "@convex/integrations/agentStorage";
 import { agentInputByteLength } from "@convex/integrations/modelInput";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { missionModel, revisionRoute } from "@convex/modelConfiguration";
+import { MAX_CONTEXT_BYTES } from "@convex/resourcePolicy";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
@@ -19,7 +20,6 @@ import { conversationInstructions } from "./conversations";
 import {
     invocationResponseValidator,
     MAX_BATCH_REQUESTS,
-    MAX_CONTEXT_BYTES,
 } from "./executionProtocol";
 import {
     contextObservationSequence,
@@ -305,6 +305,7 @@ export async function buildMissionContext(
               }
             : domainContext.context),
         constraints: {
+            resourcePolicy: mission.resourcePolicy,
             generation: mission.generation,
             deadlineAt: mission.deadlineAt,
             operations: Object.keys(definition.operations),

@@ -11,8 +11,6 @@ export const observedDestinationValidator = v.object({
 });
 
 export const SOURCES_PROTOCOL = "sources_mission_v1";
-export const SOURCES_MAX_EVIDENCE_REFERENCES = 8;
-export const SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS = 15;
 export const sourcesEnvelopeValidator = v.object({
     version: v.literal(1),
     maxNeeds: v.number(),

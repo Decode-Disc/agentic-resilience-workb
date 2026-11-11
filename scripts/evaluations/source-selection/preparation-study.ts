@@ -18,6 +18,11 @@ import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { makeFunctionReference } from "convex/server";
 import { createServer } from "vite";
 import type { internal } from "../../../convex/_generated/api.js";
+import {
+    EVALUATION_IO_POLICY,
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+} from "../../../convex/resourcePolicy.ts";
 
 const seedStudy = makeFunctionReference<
     "mutation",
@@ -190,7 +195,9 @@ async function catalog(
     const get = async (url: string) => {
         const r = await fetch(url, {
             redirect: "error",
-            signal: AbortSignal.timeout(30000),
+            signal: AbortSignal.timeout(
+                EVALUATION_IO_POLICY.catalogRequestTimeoutMs,
+            ),
         });
         assert(r.ok, `Catalog HTTP ${r.status}`);
         return r.json();
@@ -247,7 +254,9 @@ export function captureNativeStudyLogs(
                         headers: { Authorization: `Convex ${adminKey}` },
                         signal: AbortSignal.any([
                             controller.signal,
-                            AbortSignal.timeout(30000),
+                            AbortSignal.timeout(
+                                EVALUATION_IO_POLICY.nativeLogPageTimeoutMs,
+                            ),
                         ]),
                     },
                 );
@@ -267,14 +276,24 @@ export function captureNativeStudyLogs(
                 }
                 cursor = page.newCursor;
                 if (!page.entries.length)
-                    await new Promise((resolve) => setTimeout(resolve, 250));
+                    await new Promise((resolve) =>
+                        setTimeout(
+                            resolve,
+                            EVALUATION_IO_POLICY.nativeLogIdlePollMs,
+                        ),
+                    );
             } catch {
                 if (controller.signal.aborted) break;
                 appendFileSync(
                     file,
                     `${JSON.stringify({ event: "log_read_failed", cursor, occurredAt: Date.now() })}\n`,
                 );
-                await new Promise((resolve) => setTimeout(resolve, 1000));
+                await new Promise((resolve) =>
+                    setTimeout(
+                        resolve,
+                        EVALUATION_IO_POLICY.nativeLogFailureBackoffMs,
+                    ),
+                );
             }
         }
     })();
@@ -491,12 +510,8 @@ export async function runPreparationStudy(argv: string[]) {
             const quoted = replayOnly
                 ? { observedAt: new Date().toISOString(), models: [] }
                 : await catalog([...settings.sourceQualificationRoutes], {
-                      input:
-                          settings.QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION /
-                          1e6,
-                      output:
-                          settings.QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION /
-                          1e6,
+                      input: MODEL_MAX_INPUT_PRICE_PER_MILLION / 1e6,
+                      output: MODEL_MAX_OUTPUT_PRICE_PER_MILLION / 1e6,
                   });
             const frozenConditions = conditions ?? [
                 { phase: "reading" as const, concurrency: 2 },
@@ -625,12 +640,8 @@ export async function runPreparationStudy(argv: string[]) {
             const fresh = await catalog(
                 [...settings.sourceQualificationRoutes],
                 {
-                    input:
-                        settings.QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION /
-                        1e6,
-                    output:
-                        settings.QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION /
-                        1e6,
+                    input: MODEL_MAX_INPUT_PRICE_PER_MILLION / 1e6,
+                    output: MODEL_MAX_OUTPUT_PRICE_PER_MILLION / 1e6,
                 },
             );
             const { validateStudyApproval } = (await server.ssrLoadModule(
@@ -884,7 +895,12 @@ export async function runPreparationStudy(argv: string[]) {
                         details: false,
                     });
                     if (result.preparation.status !== "started") break;
-                    await new Promise((r) => setTimeout(r, 1000));
+                    await new Promise((r) =>
+                        setTimeout(
+                            r,
+                            EVALUATION_IO_POLICY.preparationObservationPollMs,
+                        ),
+                    );
                 }
                 assert(
                     result && result.preparation.status !== "started",

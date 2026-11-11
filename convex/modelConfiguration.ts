@@ -4,6 +4,10 @@ import {
     responseControlPolicy,
     validResponseControlConfiguration,
 } from "@convex/domain/workbenchResponseControlContracts";
+import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+} from "@convex/resourcePolicy";
 import { paginationResultValidator } from "convex/server";
 import { type Infer, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -21,15 +25,12 @@ import { assertPreparationExecutionFence } from "./domain/sourcePreparationAutho
 import { requireDossierAuthority } from "./execution/authority";
 import { executionError, executionFailureCode } from "./execution/errors";
 import {
-    recommendedReasoningEffort,
-    resolveReasoningPreference,
-    reasoningChoices,
-    MODEL_MAX_INPUT_PRICE_PER_MILLION,
-    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
-    MODEL_MAX_OUTPUT_TOKENS,
     modelConfigurationKey,
     NATIVE_MODEL_SERIALIZER,
     NATIVE_PROFILE_CATALOG,
+    reasoningChoices,
+    recommendedReasoningEffort,
+    resolveReasoningPreference,
 } from "./integrations/modelRouting";
 import {
     effectiveModelConfiguration,
@@ -447,7 +448,7 @@ export const finishPreparation = internalMutation({
             !Number.isSafeInteger(d.contextWindow) ||
             d.contextWindow < 32768 ||
             !Number.isSafeInteger(d.maxTokens) ||
-            d.maxTokens < MODEL_MAX_OUTPUT_TOKENS ||
+            d.maxTokens < 1 ||
             [d.inputPrice, d.outputPrice, d.cacheReadPrice].some(
                 (p) => !Number.isFinite(p) || p < 0,
             ) ||

@@ -394,7 +394,7 @@ test("inspection freeze preserves the baseline and creates only fixed/off and ag
                 },
             },
         });
-        expect(manifest.protocol).toBe("sources-inspection-v2");
+        expect(manifest.protocol).toBe("sources-inspection-v3");
         expect(manifest.missions.map((m) => [m.approach, m.reasoning])).toEqual(
             [
                 ["fixed", "off"],

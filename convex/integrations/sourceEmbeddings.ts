@@ -1,10 +1,12 @@
+import { SOURCE_EMBEDDING_PROFILE_VERSION } from "@convex/domain/sourceRetrievalPolicy";
 import {
     MAX_SOURCE_EMBEDDING_BATCH_TEXTS,
     MAX_SOURCE_EMBEDDING_TEXT_BYTES,
     SOURCE_EMBEDDING_DIMENSIONS,
+    SOURCE_EMBEDDING_MAX_RESPONSE_BYTES,
     SOURCE_EMBEDDING_PRICE_CEILING_PER_MILLION_TOKENS,
-    SOURCE_EMBEDDING_PROFILE_VERSION,
-} from "@convex/resourceLimits";
+    SOURCE_EMBEDDING_REQUEST_TIMEOUT_MS,
+} from "@convex/resourcePolicy";
 /** Provider details live at this boundary; derived records carry only the opaque profile version. */
 export const SOURCE_EMBEDDING_PROFILE = {
     id: SOURCE_EMBEDDING_PROFILE_VERSION,
@@ -81,7 +83,7 @@ export async function embedSourceTexts(args: {
         )
     )
         return { status: "unavailable", reason: "request_invalid" };
-    const timeout = AbortSignal.timeout(30_000);
+    const timeout = AbortSignal.timeout(SOURCE_EMBEDDING_REQUEST_TIMEOUT_MS);
     const signal = args.signal
         ? AbortSignal.any([timeout, args.signal])
         : timeout;
@@ -115,7 +117,7 @@ export async function embedSourceTexts(args: {
             signal.throwIfAborted();
             if (next.done) break;
             bytes += next.value.byteLength;
-            if (bytes > 1024 * 1024) {
+            if (bytes > SOURCE_EMBEDDING_MAX_RESPONSE_BYTES) {
                 await reader.cancel();
                 return { status: "unavailable", reason: "response_invalid" };
             }

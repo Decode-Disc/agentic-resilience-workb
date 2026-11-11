@@ -4,15 +4,13 @@ import type { ActionCtx } from "@convex/_generated/server";
 import type { SavedMaterialOperation } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { executionFailureCode } from "@convex/execution/errors";
+import type { OperationObservationOutcome } from "@convex/execution/executionProtocol";
 import {
     MAX_OPERATION_RESULT_BYTES,
-    type OperationObservationOutcome,
-} from "@convex/execution/executionProtocol";
+    MAX_SAVED_MATERIAL_SEARCH_RESULT_BYTES as MAX_SEARCH_RESULT_BYTES,
+} from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
-
-// Reserve the remaining result budget for documentary permissions and observed-link previews.
-const MAX_SEARCH_RESULT_BYTES = 30 * 1024;
 
 type MissionOperationArgs = {
     missionId?: Id<"agentMissions">;

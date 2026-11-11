@@ -34,6 +34,7 @@ async function qualifyObservedPassage() {
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         return {
             status: "succeeded",

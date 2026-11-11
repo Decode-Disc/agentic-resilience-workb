@@ -850,26 +850,13 @@ test("a backend change affects the next invocation and preserves the operation r
                 .unique(),
         );
         const request = JSON.parse(snapshot?.json ?? "null");
-        expect(request.input.maxOutputTokens).toBe(6144);
+        expect(request.version).toBe(2);
+        expect(request.input.max_tokens).toBe(8192);
         expect(request.input.temperature).toBe(0);
-        const tools = request.input.tools as Array<{
-            name: string;
-            inputSchema: unknown;
-        }>;
         const wireRequest = wireRequests[index];
         if (!wireRequest) throw new Error("Expected provider request");
-        expect(
-            tools.find((tool) => tool.name === "consult_mission_state")
-                ?.inputSchema,
-        ).toEqual(
-            (
-                wireRequest.tools as Array<{
-                    function: { name: string; parameters: unknown };
-                }>
-            ).find((tool) => tool.function.name === "consult_mission_state")
-                ?.function.parameters,
-        );
-        expect(JSON.stringify(request.input.prompt)).toContain(
+        expect(request.input).toEqual(wireRequest);
+        expect(JSON.stringify(request.input.messages)).toContain(
             "unfinishedObligations",
         );
     }

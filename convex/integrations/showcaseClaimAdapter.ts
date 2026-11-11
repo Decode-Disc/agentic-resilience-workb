@@ -8,11 +8,11 @@ import {
 } from "@convex/domain/researchPlan";
 import {
     CLAIM_SCHEMA_VERSION,
-    SHOWCASE_ADAPTER_VERSION,
-    SHOWCASE_FIXTURE_VERSION,
     computeClaimInputHash,
     lookupShowcaseManifest,
     type NormalizedClaimInput,
+    SHOWCASE_ADAPTER_VERSION,
+    SHOWCASE_FIXTURE_VERSION,
     type ShowcaseClaimOutput,
     type ShowcaseManifestEntry,
 } from "@convex/domain/showcaseManifest";
@@ -22,7 +22,7 @@ import {
     MAX_CLAIMS_PER_RUN,
     MAX_DIMENSION_LINKS_PER_CLAIM,
     MAX_EVIDENCE_PER_CLAIM,
-} from "@convex/resourceLimits";
+} from "@convex/resourcePolicy";
 
 export type ShowcaseClaimAdapterSuccess = {
     status: "success";

@@ -11,6 +11,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { parseArgs, parseEnv } from "node:util";
 import { z } from "zod";
+import { EVALUATION_IO_POLICY } from "../../../convex/resourcePolicy.ts";
 import {
     EvaluationBudget,
     type EvaluationBudgetPolicy,
@@ -19,7 +20,6 @@ import { buildSourcesApproachReport } from "./sources-approach-report.ts";
 import {
     runSourcesMission,
     type SourcesMission,
-    type SourcesModelProfile,
 } from "./sources-approach-runner.ts";
 import {
     inspectionScenarioHash,
@@ -31,9 +31,11 @@ import {
     type SourcesApproachResult,
     type SourcesCallReceipt,
     type SourcesInspectionBaseline,
+    type SourcesModelProfile,
     SourcesPreparation,
     type SourcesReasoning,
     type SourcesScenario,
+    sourcesCallReservationUsd,
     sourcesDigest,
 } from "./sources-approach-study.ts";
 import { openNativeSourcesInspection } from "./sources-inspection-retrieval.ts";
@@ -309,7 +311,9 @@ async function readRouteCatalog(
     const sourceUrl = `https://openrouter.ai/api/v1/models/${profile.model}/endpoints`;
     const response = await fetch(sourceUrl, {
         redirect: "error",
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(
+            EVALUATION_IO_POLICY.catalogRequestTimeoutMs,
+        ),
     });
     assert(response.ok, `Catalog HTTP ${response.status}`);
     const catalog = z
@@ -480,18 +484,7 @@ export function freezeSourcesStudy(args: {
         budgetPolicy: args.budgetPolicy ?? "whole_lot",
         indicativeUncachedUsd: null,
         maximumReservationUsd: profile
-            ? maximumAttempts *
-              (Math.min(
-                  SOURCES_APPROACH_LIMITS.requestBytes,
-                  Math.max(
-                      0,
-                      profile.contextLength -
-                          SOURCES_APPROACH_LIMITS.outputTokens,
-                  ),
-              ) *
-                  profile.inputPricePerToken +
-                  SOURCES_APPROACH_LIMITS.outputTokens *
-                      profile.outputPricePerToken)
+            ? maximumAttempts * sourcesCallReservationUsd(profile)
             : null,
         limits: SOURCES_APPROACH_LIMITS,
         evidenceBoundary: args.inspection

@@ -1,17 +1,24 @@
 "use node";
 
+import {
+    MODEL_CATALOG_MAX_ENDPOINTS,
+    MODEL_CATALOG_MAX_RESPONSE_BYTES,
+    MODEL_CATALOG_MAX_ROWS,
+    MODEL_CATALOG_REFRESH_TIMEOUT_MS,
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+    MODEL_METADATA_REQUEST_TIMEOUT_MS,
+    NATIVE_PROFILE_PREPARATION_TIMEOUT_MS,
+} from "@convex/resourcePolicy";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import {
-    recommendedReasoningEffort,
     INITIAL_MODEL_CATALOG,
-    MODEL_MAX_INPUT_PRICE_PER_MILLION,
-    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
-    MODEL_MAX_OUTPUT_TOKENS,
     NATIVE_PROFILE_CATALOG,
+    recommendedReasoningEffort,
 } from "./integrations/modelRouting";
 import { prepareNativeProfiles } from "./integrations/piModelProfiles";
 import { modelPrepared, revisionRoute } from "./modelConfiguration";
@@ -32,7 +39,10 @@ async function readMetadata(
 ): Promise<unknown> {
     const response = await fetch(url, {
         redirect: "error",
-        signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+        signal: AbortSignal.any([
+            signal,
+            AbortSignal.timeout(MODEL_METADATA_REQUEST_TIMEOUT_MS),
+        ]),
         headers: { accept: "application/json" },
     });
     if (!response.ok || !response.body) throw new Error("catalog_unavailable");
@@ -44,7 +54,8 @@ async function readMetadata(
             const next = await reader.read();
             if (next.done) break;
             bytes += next.value.byteLength;
-            if (bytes > 8 * 1024 * 1024) throw new Error("catalog_capacity");
+            if (bytes > MODEL_CATALOG_MAX_RESPONSE_BYTES)
+                throw new Error("catalog_capacity");
             chunks.push(next.value);
         }
     } finally {
@@ -81,11 +92,14 @@ async function prepareModel(
     };
     if (!pending.claimed) return outcome;
     try {
-        const signal = AbortSignal.timeout(60000);
+        const signal = AbortSignal.timeout(MODEL_CATALOG_REFRESH_TIMEOUT_MS);
         const catalog = object(
             await readMetadata("https://openrouter.ai/api/v1/models", signal),
         );
-        if (!Array.isArray(catalog.data) || catalog.data.length > 8192)
+        if (
+            !Array.isArray(catalog.data) ||
+            catalog.data.length > MODEL_CATALOG_MAX_ROWS
+        )
             throw new Error("catalog_invalid");
         let model = catalog.data
             .map(object)
@@ -102,7 +116,7 @@ async function prepareModel(
             if (
                 data.id !== args.model ||
                 !Array.isArray(data.endpoints) ||
-                data.endpoints.length > 256
+                data.endpoints.length > MODEL_CATALOG_MAX_ENDPOINTS
             )
                 throw new Error("catalog_invalid");
             const endpoint = data.endpoints
@@ -185,8 +199,10 @@ async function prepareModel(
             !Number.isFinite(descriptor.outputPrice) ||
             descriptor.inputPrice > MODEL_MAX_INPUT_PRICE_PER_MILLION ||
             descriptor.outputPrice > MODEL_MAX_OUTPUT_PRICE_PER_MILLION ||
+            !Number.isSafeInteger(descriptor.contextWindow) ||
             descriptor.contextWindow < 32768 ||
-            descriptor.maxTokens < MODEL_MAX_OUTPUT_TOKENS
+            !Number.isSafeInteger(descriptor.maxTokens) ||
+            descriptor.maxTokens < 1
         )
             throw new Error("model_not_compatible");
         const profiles = await prepareNativeProfiles(
@@ -243,7 +259,7 @@ async function refreshRevision(
     const profiles = await prepareNativeProfiles(
         revisionRoute(revision),
         revision.descriptor,
-        AbortSignal.timeout(60000),
+        AbortSignal.timeout(NATIVE_PROFILE_PREPARATION_TIMEOUT_MS),
     );
     await ctx.runMutation(internal.modelConfiguration.retainRefreshedProfiles, {
         revisionId: revision._id,

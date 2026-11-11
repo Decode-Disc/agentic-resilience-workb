@@ -271,10 +271,9 @@ test("a native deadline retains its TimeoutError and header-only identity for bi
     );
     vi.stubEnv("OPENROUTER_API_KEY", "offline-native-deadline");
     const deadline = new AbortController();
-    const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
-    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) =>
-        ms === 60_000 ? deadline.signal : originalTimeout(ms),
-    );
+    const timeout = vi
+        .spyOn(AbortSignal, "timeout")
+        .mockReturnValue(deadline.signal);
     let generations = 0;
     let billingReads = 0;
     vi.stubGlobal(
@@ -340,6 +339,7 @@ test("a native deadline retains its TimeoutError and header-only identity for bi
         billing: { state: "pending" },
     });
     expect(call.reportedCost).toBeUndefined();
+    timeout.mockRestore();
     await vi.advanceTimersByTimeAsync(5000);
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect(await t.run((ctx) => ctx.db.get(call._id))).toMatchObject({

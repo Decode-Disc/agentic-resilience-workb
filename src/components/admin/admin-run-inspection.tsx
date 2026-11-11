@@ -2,6 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { CLIENT_PAGE_SIZE } from "@convex/resourcePolicy";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
@@ -82,7 +83,7 @@ export function AdminRunInspection({
     const calls = usePaginatedQuery(
         api.adminOperations.listRunProviderCallsPage,
         { runId },
-        { initialNumItems: 20 },
+        { initialNumItems: CLIENT_PAGE_SIZE.adminProviderCalls },
     );
     const [filters, setFilters] = useState(attemptFilterDefaults);
 

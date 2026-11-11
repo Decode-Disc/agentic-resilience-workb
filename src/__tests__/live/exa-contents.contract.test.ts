@@ -8,17 +8,17 @@ import { EXA_NORMALIZER_VERSION } from "@convex/integrations/evidenceNormalizati
 import {
     createExaContentsAdapter,
     type ExaContentsClient,
-    MAX_EXA_CONTENTS_ATTEMPTS,
 } from "@convex/integrations/exa";
+import { createExaContentsClient } from "@convex/integrations/exaContentsClient";
 import {
     EXA_RETRIEVAL_VERSION,
     retrieveAndNormalizeExaFiling,
 } from "@convex/integrations/exaEvidence";
 import {
     MAX_APPROVED_SOURCE_BYTES,
+    MAX_EXA_CONTENTS_ATTEMPTS,
     MAX_PASSAGES_PER_SOURCE,
-} from "@convex/resourceLimits";
-import { createExaContentsClient } from "@convex/integrations/exaContentsClient";
+} from "@convex/resourcePolicy";
 import { expect, test } from "vitest";
 
 // One frozen canonical public CCC URL already present in the Phase 5 test

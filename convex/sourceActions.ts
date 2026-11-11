@@ -20,10 +20,13 @@ import { validatePublicSourceUrl } from "./domain/publicSourceUrl";
 import { assertSourceCandidateRequestFits } from "./domain/sourceCandidateCapacity";
 import { sourceCandidateLimit } from "./resourceLimits";
 
-const MAX_REDIRECTS = 5;
-const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
-const REQUEST_TIMEOUT_MS = 10_000;
-const PREPARATION_TTL_MS = 10 * 60_000;
+import {
+    MANUAL_SOURCE_MAX_REDIRECTS as MAX_REDIRECTS,
+    MANUAL_SOURCE_METADATA_MAX_BYTES as MAX_RESPONSE_BYTES,
+    MANUAL_SOURCE_PREPARATION_TTL_MS as PREPARATION_TTL_MS,
+    MANUAL_SOURCE_METADATA_TIMEOUT_MS as REQUEST_TIMEOUT_MS,
+} from "./resourcePolicy";
+
 const manualSourceTargetValidator = v.union(
     v.object({
         kind: v.literal("prelaunch"),

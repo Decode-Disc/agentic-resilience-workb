@@ -1,7 +1,29 @@
 import { prepareQualificationInput } from "@convex/domain/sourceQualification";
 import { SOURCE_COVERAGE_ROLES } from "@convex/domain/sourceSelectionPolicy";
 import { qualifySourceDocument } from "@convex/integrations/sourceQualification";
-import { sourceQualificationRoutes } from "@convex/integrations/sourceQualificationConfig";
+import { modelAttemptAuthority } from "@/__tests__/setup/model-configuration";
+
+// Frozen provider-metadata fixtures, not live catalogue defaults.
+const qualificationRoute = {
+    model: "deepseek/deepseek-v4.1-flash",
+    provider: "relace",
+    executionPlanVersion: "source_actions_v4" as const,
+    descriptor: {
+        contextWindow: 200000,
+        maxTokens: 20000,
+        reasoning: true,
+        inputPrice: 0.15,
+        outputPrice: 0.6,
+        cacheReadPrice: 0,
+        structuredOutputs: true,
+    },
+    reasoningEffort: "low" as const,
+};
+const sourceQualificationRoutes = [
+    qualificationRoute,
+    { ...qualificationRoute, model: "deepseek/deepseek-v4.1-flash-1017" },
+] as const;
+
 import { expect, test, vi } from "vitest";
 
 const unspecifiedPeriod = {
@@ -131,6 +153,7 @@ test.each([
     );
     expect(
         await qualifySourceDocument(input, route, {
+            authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
             fetch: request,
         }),
@@ -141,7 +164,7 @@ test.each([
     expect(body).toMatchObject({
         model,
         temperature: 0,
-        max_tokens: 6144,
+        max_tokens: 20000,
         provider: {
             only: ["relace"],
             allow_fallbacks: false,
@@ -170,7 +193,12 @@ test("rejects an oversized decompressed provider body before parsing", async () 
         await qualifySourceDocument(
             preparedExample(),
             sourceQualificationRoutes[0],
-            { apiKey: "test-only-key", fetch: request, onResponse },
+            {
+                authority: modelAttemptAuthority(),
+                apiKey: "test-only-key",
+                fetch: request,
+                onResponse,
+            },
         ),
     ).toMatchObject({
         status: "failed",
@@ -210,7 +238,12 @@ test("makes the bounded HTTP failure available to an explicit diagnostic observe
         await qualifySourceDocument(
             preparedExample(),
             sourceQualificationRoutes[0],
-            { apiKey: "test-only-key", fetch: request, onResponse },
+            {
+                authority: modelAttemptAuthority(),
+                apiKey: "test-only-key",
+                fetch: request,
+                onResponse,
+            },
         ),
     ).toMatchObject({
         status: "failed",
@@ -249,7 +282,11 @@ test.each([
         await qualifySourceDocument(
             preparedExample(),
             sourceQualificationRoutes[0],
-            { apiKey: "test-only-key", fetch: request },
+            {
+                authority: modelAttemptAuthority(),
+                apiKey: "test-only-key",
+                fetch: request,
+            },
         ),
     ).toMatchObject({ status: "failed", errorCode, retryable });
     expect(request).toHaveBeenCalledOnce();
@@ -261,7 +298,7 @@ test("missing credentials and prior cancellation perform no request", async () =
         await qualifySourceDocument(
             preparedExample(),
             sourceQualificationRoutes[0],
-            { apiKey: "", fetch: request },
+            { authority: modelAttemptAuthority(), apiKey: "", fetch: request },
         ),
     ).toMatchObject({
         status: "failed",
@@ -273,6 +310,7 @@ test("missing credentials and prior cancellation perform no request", async () =
             preparedExample(),
             sourceQualificationRoutes[0],
             {
+                authority: modelAttemptAuthority(),
                 apiKey: "test-only-key",
                 fetch: request,
                 signal: AbortSignal.abort(),
@@ -322,6 +360,7 @@ test.each([
             ),
     );
     await qualifySourceDocument(input, sourceQualificationRoutes[0], {
+        authority: modelAttemptAuthority(),
         apiKey: "test-only-key",
         fetch: request,
     });
@@ -381,7 +420,11 @@ test("retains a bounded rejected assistant output and the exact parsing reason w
     const result = await qualifySourceDocument(
         preparedExample(),
         sourceQualificationRoutes[0],
-        { apiKey: "test-only-key", fetch: request },
+        {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: request,
+        },
     );
     expect(result).toMatchObject({
         status: "failed",
@@ -435,7 +478,11 @@ test.each([
         await qualifySourceDocument(
             preparedExample(),
             sourceQualificationRoutes[0],
-            { apiKey: "test-only-key", fetch: request },
+            {
+                authority: modelAttemptAuthority(),
+                apiKey: "test-only-key",
+                fetch: request,
+            },
         ),
     ).toMatchObject({
         status: "failed",
@@ -491,7 +538,11 @@ test("retains the original assistant text when documentary validation rejects a 
     const result = await qualifySourceDocument(
         preparedExample(),
         sourceQualificationRoutes[0],
-        { apiKey: "test-only-key", fetch: request },
+        {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: request,
+        },
     );
     expect(result).toMatchObject({
         status: "failed",

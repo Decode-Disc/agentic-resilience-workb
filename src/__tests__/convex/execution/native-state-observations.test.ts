@@ -6,6 +6,7 @@ import { recordContextObservation } from "@convex/execution/journal";
 import { suspendInterruptedResearch } from "@convex/execution/researchControl";
 import { readRetainedText } from "@convex/execution/retainedText";
 import { runPiMission } from "@convex/integrations/piMission";
+import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { createNativeInputDelivery } from "@convex/integrations/piNativeInput";
 import {
     openMissionPiStorage,
@@ -106,6 +107,7 @@ test.each([
             ctx,
             { missionId: active.missionId, expectedGeneration: 1 },
             "settlement-before-preparation",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(requests).toHaveLength(2);
@@ -205,6 +207,7 @@ test.each([
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "interrupted-operation-settlement",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(interrupted).toBe(true);
@@ -372,6 +375,7 @@ test("a reopened worker completes a retained read before preparing its first pro
             ctx,
             { missionId: active.missionId, expectedGeneration: 1 },
             "reopened-read-worker",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(requests).toHaveLength(1);
@@ -451,6 +455,7 @@ test("an analyst edit during read continuation is delivered before the next prov
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "concurrent-edit-during-read",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(edited).toBe(true);
@@ -1357,6 +1362,7 @@ test("native reopen and compaction preserve Sources assessment authorship and co
                 expectedGeneration: 1,
             },
             "before-source-return",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     const source = await f.t.mutation(internal.execution.invocations.begin, {
@@ -1414,6 +1420,7 @@ test("native reopen and compaction preserve Sources assessment authorship and co
                 expectedGeneration: 1,
             },
             "after-source-return",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(requests).toHaveLength(3);
@@ -1931,6 +1938,7 @@ test("a native input batch excludes messages and effects admitted after its comm
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "snapshot-race",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(injected).toBe(true);
@@ -1979,6 +1987,7 @@ test("a terminal legacy conversation settles before its current-state anchor is 
                 expectedGeneration: before.generation,
             },
             "legacy-terminal-settlement",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     const settled = await f.t.run((ctx) => ctx.db.get(before.sessionId));

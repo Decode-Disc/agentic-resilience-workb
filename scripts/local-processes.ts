@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, readlinkSync } from "node:fs";
 import { basename } from "node:path";
+import { LOCAL_RUNTIME_POLICY } from "../convex/resourcePolicy.ts";
 
 export type LocalProcess = {
     pid: number;
@@ -78,8 +79,8 @@ export function inspectLocalPorts(
     const selected = new Set(ports);
     const result = spawnSync("ss", ["-H", "-ltnp"], {
         encoding: "utf8",
-        timeout: 5_000,
-        maxBuffer: 4 * 1024 * 1024,
+        timeout: LOCAL_RUNTIME_POLICY.portInspectionTimeoutMs,
+        maxBuffer: LOCAL_RUNTIME_POLICY.portInspectionMaxBufferBytes,
         stdio: ["ignore", "pipe", "pipe"],
     });
     if (result.error || result.status !== 0)
@@ -189,14 +190,16 @@ export async function stopLocalProcessTree(
     const wait = async (timeout: number) => {
         const deadline = Date.now() + timeout;
         while (alive().length && Date.now() < deadline)
-            await new Promise((done) => setTimeout(done, 25));
+            await new Promise((done) =>
+                setTimeout(done, LOCAL_RUNTIME_POLICY.processStopPollMs),
+            );
     };
     signal([target], "SIGINT");
-    await wait(1_500);
+    await wait(LOCAL_RUNTIME_POLICY.interruptGraceMs);
     signal(alive(), "SIGTERM");
-    await wait(1_000);
+    await wait(LOCAL_RUNTIME_POLICY.terminateGraceMs);
     signal(alive(), "SIGKILL");
-    await wait(500);
+    await wait(LOCAL_RUNTIME_POLICY.killGraceMs);
     if (alive().length)
         throw new LocalProcessError("The selected process tree did not stop.");
 }

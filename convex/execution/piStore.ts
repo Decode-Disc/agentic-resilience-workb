@@ -7,9 +7,10 @@ import {
 } from "@convex/_generated/server";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
 import {
+    PI_SESSION_LEASE_MS as LEASE_MS,
     PI_COMMIT_MAX_BYTES,
     PI_SESSION_MAX_BYTES,
-} from "@convex/resourceLimits";
+} from "@convex/resourcePolicy";
 import schema from "@convex/schema";
 import {
     paginationOptsValidator,
@@ -34,8 +35,6 @@ import {
     textManifestValidator,
 } from "./retainedText";
 import { nativeInputsValidator } from "./schema";
-
-const LEASE_MS = 90_000;
 
 /** Resolves the pinned storage owner without moving historical mission journals. */
 export async function sessionForMission(

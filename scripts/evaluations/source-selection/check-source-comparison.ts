@@ -21,12 +21,16 @@ import type {
 import type { SourceQualificationRoute } from "@convex/integrations/sourceQualificationConfig";
 import { createServer } from "vite";
 import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+    SOURCE_COMPARISON_MAX_INPUT_BYTES,
+} from "../../../convex/resourcePolicy.ts";
+import {
     EVALUATION_ATTEMPT_RESERVATION_USD,
     EVALUATION_BUDGET_USD,
     readEvaluationHistory,
     redactEvaluationResponse,
 } from "./evaluation-records.ts";
-
 import { runStudyCli } from "./study-cli.ts";
 
 if (
@@ -237,14 +241,14 @@ try {
                 };
                 assert(
                     price(endpoint.endpoint.pricing.prompt) <=
-                        config.QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION &&
+                        MODEL_MAX_INPUT_PRICE_PER_MILLION &&
                         price(endpoint.endpoint.pricing.completion) <=
-                            config.QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION,
+                            MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
                     "Configured endpoint exceeds production price limits",
                 );
                 assert(
                     item.serializedRequestBytes <=
-                        domain.SOURCE_COMPARISON_MAX_INPUT_BYTES &&
+                        SOURCE_COMPARISON_MAX_INPUT_BYTES &&
                         item.preparedRequest.findings.some(
                             (finding) => finding.primaryPassageKeys.length > 0,
                         ),
@@ -266,6 +270,7 @@ try {
         ),
     );
     const sourcePaths = [
+        "convex/resourcePolicy.ts",
         "convex/domain/sourceComparison.ts",
         "convex/integrations/sourceQualification.ts",
         "convex/integrations/sourceQualificationConfig.ts",

@@ -9,8 +9,10 @@ import {
 import {
     PI_COMMIT_MAX_BYTES,
     PI_LEASE_RENEW_INTERVAL_MS,
+    PI_REPLAY_PAGE_MAX_BYTES,
+    PI_REPLAY_PAGE_SIZE,
     PI_SESSION_MAX_BYTES,
-} from "@convex/resourceLimits";
+} from "@convex/resourcePolicy";
 import type { Context } from "@earendil-works/chord/context";
 import {
     type Id,
@@ -87,8 +89,8 @@ export async function openMissionPiStorage(
                     {
                         ...lease,
                         paginationOpts: {
-                            numItems: 256,
-                            maximumBytesRead: 2 * 1024 * 1024,
+                            numItems: PI_REPLAY_PAGE_SIZE,
+                            maximumBytesRead: PI_REPLAY_PAGE_MAX_BYTES,
                             cursor,
                         },
                     },

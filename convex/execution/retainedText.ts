@@ -5,12 +5,10 @@ import {
     sha256CheckpointHex,
     sha256Hex,
 } from "@convex/domain/sourcePassages";
-import { v } from "convex/values";
+import { TEXT_FRAGMENT_CHARACTERS } from "@convex/resourcePolicy";
 import type { PaginationOptions } from "convex/server";
+import { v } from "convex/values";
 import { executionError } from "./errors";
-
-// A fragment stays comfortably below Convex's document and argument limits.
-export const TEXT_FRAGMENT_CHARACTERS = 60 * 1024;
 export const textManifestValidator = v.object({
     contentHash: v.string(),
     sizeBytes: v.number(),

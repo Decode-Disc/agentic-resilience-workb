@@ -40,9 +40,11 @@ import {
     BROWSER_QUALIFICATION_MAX_COST_USD,
     BROWSER_QUALIFICATION_MAX_REQUESTS,
     MAX_SOURCES_QUALIFICATION_RECEIPTS,
-} from "@convex/resourceLimits";
+    RESOURCE_POLICY_VERSION,
+} from "@convex/resourcePolicy";
 import {
     BROWSER_TEST_SLOT,
+    readWorkbenchQualification,
     requireBrowserFixtureContext,
     requireBrowserTestOwner,
 } from "@convex/runWorkspace";
@@ -788,6 +790,8 @@ export const authorizeWorkbenchQualification = internalMutation({
             scope && scope.campaign.manifest.version !== 1
                 ? scope.campaign.manifest
                 : null;
+        if (configurable?.costAccountingPolicy === "conservative_v1")
+            throw new Error("resource_policy_unsupported");
         const dossierEntries =
             args.dossiers ??
             args.sourcesLot?.map((e) => ({
@@ -1051,6 +1055,11 @@ export const authorizeWorkbenchQualification = internalMutation({
         }
         if (context.paidQualification) {
             if (
+                context.paidQualification.resourcePolicy !==
+                RESOURCE_POLICY_VERSION
+            )
+                throw new Error("resource_policy_unsupported");
+            if (
                 context.paidQualification.runId !== run._id ||
                 context.paidQualification.modelRevisionId !== model._id ||
                 (sourcesModel !== undefined &&
@@ -1058,7 +1067,7 @@ export const authorizeWorkbenchQualification = internalMutation({
                         context.paidQualification.modelRevisionId) !==
                         sourcesModel._id) ||
                 context.paidQualification.costAccountingPolicy !==
-                    configurable?.costAccountingPolicy ||
+                    "known_final_v1" ||
                 context.paidQualification.maximumRequests !== maximumRequests ||
                 context.paidQualification.maximumCostUsd !== maximumCostUsd ||
                 context.paidQualification.relayOrigin !== args.relayOrigin ||
@@ -1079,13 +1088,14 @@ export const authorizeWorkbenchQualification = internalMutation({
         }
         await ctx.db.patch(contextId, {
             paidQualification: {
+                resourcePolicy: RESOURCE_POLICY_VERSION,
                 runId: run._id,
                 modelRevisionId: model._id,
                 sourcesModelRevisionId: sourcesModel?._id,
                 relayOrigin: args.relayOrigin,
                 maximumRequests,
                 maximumCostUsd,
-                costAccountingPolicy: configurable?.costAccountingPolicy,
+                costAccountingPolicy: "known_final_v1",
                 authorizedAt: Date.now(),
                 maximumSearchAttempts: campaignLimits?.search,
                 maximumAcquisitions: campaignLimits?.acquisition,
@@ -1783,39 +1793,41 @@ export const inspectQualificationPage = internalQuery({
 /** Exports the immutable admitted route for the local diagnostic relay, never credentials. */
 export const qualificationRoute = internalQuery({
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
-    returns: effectiveModelConfiguration,
+    returns: effectiveModelConfiguration.extend({
+        resourcePolicy: v.string(),
+        deadlineAt: v.number(),
+    }),
     handler: async (ctx, args) => {
         const { run } = await requireLocalFixtureRun(ctx, args);
         const context = run.browserTestContextId
             ? await ctx.db.get(run.browserTestContextId)
             : null;
-        if (
-            !context?.paidQualification?.scenarios?.some(
-                (s) => s.runId === run._id,
-            )
-        )
-            throw new Error("Admitted campaign route required");
-        if (!context.campaignLotId) throw new Error("Campaign route required");
-        const { campaign, lot } = await requireCampaignLot(
-            ctx,
-            context.campaignLotId,
-        );
-        const revision = await ctx.db.get(
-            context.paidQualification.modelRevisionId,
-        );
+        const qualification = await readWorkbenchQualification(ctx, run);
+        if (!context || !qualification)
+            throw new Error("Admitted qualification route required");
+        const scope = context.campaignLotId
+            ? await requireCampaignLot(ctx, context.campaignLotId)
+            : null;
+        const revision = await ctx.db.get(qualification.modelRevisionId);
         if (!revision) throw new Error("Missing route");
-        const profile = campaignConfiguration(
-            campaign.manifest,
-            lot.configurationId,
-        );
+        const profile = scope
+            ? campaignConfiguration(
+                  scope.campaign.manifest,
+                  scope.lot.configurationId,
+              )
+            : null;
         return {
+            resourcePolicy: RESOURCE_POLICY_VERSION,
+            deadlineAt: qualification.deadlineAt,
             model: revision.model,
             provider: revision.provider,
             descriptor: revision.descriptor,
-            reasoningEffort: resolveReasoningPreference(
-                revision.descriptor,
-                profile.models.workbench.reasoning,
-            ),
+            reasoningEffort: profile
+                ? resolveReasoningPreference(
+                      revision.descriptor,
+                      profile.models.workbench.reasoning,
+                  )
+                : revision.reasoningEffort,
         };
     },
 });

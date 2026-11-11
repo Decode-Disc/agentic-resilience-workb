@@ -40,8 +40,16 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-for (const subscription of [false, true])
-    test(`Pi review reserves real campaign allowances before HTTP and command adopts only after reconciliation (subscription=${subscription})`, async () => {
+for (const { subscription, compaction, fault } of [
+    { subscription: false, compaction: false, fault: "none" },
+    { subscription: true, compaction: false, fault: "none" },
+    { subscription: true, compaction: true, fault: "none" },
+    { subscription: true, compaction: true, fault: "denied" },
+    { subscription: true, compaction: true, fault: "unknown" },
+    { subscription: true, compaction: true, fault: "settlement_ack" },
+] as const)
+    test(`Pi review reserves real campaign allowances before HTTP and command adopts only after reconciliation (subscription=${subscription}, compaction=${compaction}, fault=${fault})`, async () => {
+        const allowance = fault === "denied" ? 8 : compaction ? 12 : 2;
         const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
         const { preflightId } = await createAdmittedPreflight(t);
         await t.run(async (ctx) => {
@@ -72,8 +80,8 @@ for (const subscription of [false, true])
                 ...(subscription
                     ? {
                           accounting: "native_subscription",
-                          perLot: { requests: 2 },
-                          total: { requests: 2 },
+                          perLot: { requests: allowance },
+                          total: { requests: allowance },
                       }
                     : {
                           maxRequestCostMicros: 100000,
@@ -81,8 +89,10 @@ for (const subscription of [false, true])
                           total: { requests: 2, costMicros: 200000 },
                           maxOutputTokens: 1000,
                       }),
-                maxInputTokens: 32000,
-                timeoutMs: 10000,
+                ...(compaction
+                    ? {}
+                    : { maxInputTokens: subscription ? 512 : 32000 }),
+                timeoutMs: compaction ? 60000 : 10000,
             },
         });
         const campaignId = await t.mutation(
@@ -119,7 +129,9 @@ for (const subscription of [false, true])
         );
         writeFileSync(
             join(lotRoot, "published.json"),
-            "Synthetic evidence fixture: the framing was saved.",
+            "Synthetic evidence fixture: the framing was saved.".repeat(
+                compaction ? 7000 : 1,
+            ),
         );
         const template = campaignReviewTemplate(lotRoot);
         writeFileSync(
@@ -139,14 +151,31 @@ for (const subscription of [false, true])
             })),
         };
         const client = new ConvexHttpClient("http://127.0.0.1:3210");
-        vi.spyOn(client, "mutation").mockImplementation((...args) =>
-            t.mutation(
+        let lastPurpose: string | undefined,
+            lostAcknowledgement = false;
+        vi.spyOn(client, "mutation").mockImplementation(async (...args) => {
+            const result = await t.mutation(
                 makeFunctionReference<"mutation", Record<string, Value>, Value>(
                     getFunctionName(args[0]),
                 ),
                 args[1] ?? {},
-            ),
-        );
+            );
+            if (
+                fault === "settlement_ack" &&
+                !lostAcknowledgement &&
+                lastPurpose === "compaction" &&
+                getFunctionName(args[0]) ===
+                    getFunctionName(
+                        internal.qualificationCampaigns.settleAnalysis,
+                    )
+            ) {
+                lostAcknowledgement = true;
+                throw new Error(
+                    "Synthetic lost summary settlement acknowledgement",
+                );
+            }
+            return result;
+        });
         vi.spyOn(client, "query").mockImplementation((...args) =>
             t.query(
                 makeFunctionReference<"query", Record<string, Value>, Value>(
@@ -155,13 +184,24 @@ for (const subscription of [false, true])
                 args[1] ?? {},
             ),
         );
-        let requests = 0;
+        let requests = 0,
+            investigations = 0,
+            summaries = 0,
+            largestInputBytes = 0;
+        const expectedInput = new Map<number, number>();
+        const emittedOutputs: unknown[] = [];
+        const draft =
+            "# Findings\n\nThe saved framing matches the captured evidence; investigation can continue.";
+        const checkpoint =
+            "Native checkpoint: evidence inspected; preserve the saved framing finding.";
         const transport = {
             kind: "mock-openai" as const,
             fetch: async (
                 _input: Parameters<typeof fetch>[0],
                 init?: RequestInit,
+                phase?: string,
             ) => {
+                lastPurpose = phase;
                 requests++;
                 const lot = await t.run((ctx) => ctx.db.get(lotId));
                 expect(lot?.analysisAllocated).toEqual({
@@ -171,10 +211,70 @@ for (const subscription of [false, true])
                 const body = await qualificationReviewPayload(init);
                 if (subscription)
                     expect(body.reasoning).toMatchObject({ effort: "high" });
+                emittedOutputs.push(body.max_output_tokens);
                 expect(body.max_output_tokens).toBe(
                     subscription ? undefined : 1000,
                 );
-                if (requests === 2)
+                largestInputBytes = Math.max(
+                    largestInputBytes,
+                    Buffer.byteLength(JSON.stringify(body.input)),
+                );
+                expectedInput.set(requests, 100);
+                if (compaction && phase === "compaction") {
+                    summaries++;
+                    if (fault === "unknown")
+                        throw new Error("Synthetic summary connection lost");
+                    return qualificationReviewResponse(checkpoint, requests);
+                }
+                investigations++;
+                if (compaction) {
+                    if (investigations === 1)
+                        return qualificationReviewResponse(
+                            draft,
+                            requests,
+                            null,
+                        );
+                    if (investigations <= 7)
+                        return qualificationReviewResponse("", requests, {
+                            name: "read",
+                            arguments: {
+                                path: "published.json",
+                                offset: 1 + (investigations - 2) * 51200,
+                                limit: 51200,
+                            },
+                        });
+                    if (investigations === 8) {
+                        const model = modelRuntime.getModel(
+                            "openai-codex",
+                            "gpt-6.1-sol",
+                        );
+                        assert(model);
+                        const input = model.contextWindow - 1000;
+                        expectedInput.set(requests, input);
+                        return qualificationReviewResponse(
+                            draft,
+                            requests,
+                            undefined,
+                            {
+                                input_tokens: input,
+                                output_tokens: 100,
+                                input_tokens_details: { cached_tokens: 0 },
+                            },
+                        );
+                    }
+                    expect(summaries).toBeGreaterThan(0);
+                    expect(JSON.stringify(body.input)).toContain(checkpoint);
+                    expect(String(body.instructions)).toContain(
+                        template.evidenceHash,
+                    );
+                    expect(
+                        readFileSync(
+                            join(lotRoot, "automated-review-report.md"),
+                            "utf8",
+                        ),
+                    ).toBe(draft);
+                }
+                if (requests === 2 && !compaction)
                     expect(JSON.stringify(body.input)).toContain(
                         "Synthetic evidence fixture",
                     );
@@ -190,7 +290,7 @@ for (const subscription of [false, true])
         const modelRuntime = await qualificationReviewRuntime(
             subscription ? "openai-codex" : "openai",
         );
-        const stage = await runCampaignReviewStage({
+        const stageOptions = {
             root: lotRoot,
             evidenceHash: template.evidenceHash,
             reconciled: false,
@@ -208,8 +308,68 @@ for (const subscription of [false, true])
                 }),
             assess: async () =>
                 assert.fail("No assessment before reconciliation"),
-        });
-        expect(stage.status).toBe("awaiting_reconciliation");
+        } satisfies Parameters<typeof runCampaignReviewStage>[0];
+        let stage = await runCampaignReviewStage(stageOptions);
+        if (fault !== "none") {
+            expect(stage).toMatchObject({
+                status: "pending",
+                reason:
+                    fault === "denied"
+                        ? "analysis_reservation_unavailable"
+                        : fault === "unknown"
+                          ? "unknown_dispatch_outcome"
+                          : "analysis_settlement_unconfirmed",
+            });
+            expect(
+                readFileSync(
+                    join(lotRoot, "automated-review-report.md"),
+                    "utf8",
+                ),
+            ).toBe(draft);
+            const before = requests;
+            const attempts = await t.run((ctx) =>
+                ctx.db
+                    .query("qualificationAnalysisAttempts")
+                    .withIndex("by_lot_and_attempt", (q) =>
+                        q.eq("lotId", lotId),
+                    )
+                    .take(allowance + 1),
+            );
+            expect(attempts).toHaveLength(before);
+            expect(
+                attempts.filter((attempt) => attempt.status === "reserved"),
+            ).toHaveLength(fault === "unknown" ? 1 : 0);
+            expect((await t.run((ctx) => ctx.db.get(lotId)))?.status).toBe(
+                "closing",
+            );
+            stage = await runCampaignReviewStage(stageOptions);
+            if (fault === "denied" || fault === "unknown") {
+                expect(stage.status).toBe("pending");
+                expect(requests).toBe(before);
+                expect(investigations).toBe(8);
+                expect(summaries).toBe(fault === "unknown" ? 1 : 0);
+                return;
+            }
+            expect(lostAcknowledgement).toBe(true);
+        }
+        if (compaction) {
+            expect(summaries).toBe(2);
+            expect(investigations).toBe(9);
+            expect(largestInputBytes).toBeGreaterThan(256 * 1024);
+        }
+        expect(stage.status, JSON.stringify({ stage, emittedOutputs })).toBe(
+            "awaiting_reconciliation",
+        );
+        const completedRequests = requests;
+        const intents = readFileSync(join(lotRoot, "progress.jsonl"), "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line))
+            .filter((entry) => entry.event === "analysis_started");
+        expect(intents).toHaveLength(completedRequests);
+        expect(
+            intents.filter((entry) => entry.purpose === "compaction"),
+        ).toHaveLength(summaries);
         expect(
             readFileSync(join(lotRoot, "automated-review-report.md"), "utf8"),
         ).toContain("saved framing");
@@ -233,6 +393,7 @@ for (const subscription of [false, true])
             ),
         ).toMatchObject({
             protocol: "investigator_v1",
+            resourcePolicy: "authority_native_v1",
             evidenceHash: template.evidenceHash,
             mission: expect.stringContaining("source-supported"),
             missionHash: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -258,7 +419,7 @@ for (const subscription of [false, true])
             status: "pending",
             reason: "legacy_review_protocol_unavailable",
         });
-        expect(requests).toBe(2);
+        expect(requests).toBe(completedRequests);
         writeFileSync(missionPath, pinnedMission, { flag: "wx" });
         expect((await t.run((ctx) => ctx.db.get(lotId)))?.status).toBe(
             "closing",
@@ -295,24 +456,24 @@ for (const subscription of [false, true])
                     .withIndex("by_lot_and_attempt", (q) =>
                         q.eq("lotId", lotId),
                     )
-                    .take(3),
+                    .take(allowance + 1),
             );
             expect(lot).toMatchObject({
                 status: "finished",
                 verdict: "passed",
                 analysisAllocated: {
-                    requests: 2,
+                    requests: completedRequests,
                     costMicros: subscription ? 0 : 200000,
                 },
             });
             expect(campaign).toMatchObject({
                 status: "closed",
                 analysisAllocated: {
-                    requests: 2,
+                    requests: completedRequests,
                     costMicros: subscription ? 0 : 200000,
                 },
             });
-            expect(attempts).toHaveLength(2);
+            expect(attempts).toHaveLength(completedRequests);
             expect(
                 attempts.every(
                     (attempt) =>
@@ -321,12 +482,17 @@ for (const subscription of [false, true])
                             ? attempt.costMicros === undefined &&
                               attempt.receipt?.accounting ===
                                   "native_subscription" &&
-                              attempt.receipt.input === 100 &&
+                              attempt.receipt.input ===
+                                  expectedInput.get(
+                                      Number(
+                                          attempt.attemptKey.split("-").at(-1),
+                                      ),
+                                  ) &&
                               attempt.receipt.output === 100
                             : attempt.costMicros === 0),
                 ),
             ).toBe(true);
-            expect(requests).toBe(2);
+            expect(requests).toBe(completedRequests);
             expect(archived).toBe(1);
             expect(
                 JSON.parse(
@@ -348,7 +514,7 @@ for (const subscription of [false, true])
                 summary:
                     "The synthetic fixture records the expected saved framing.",
             });
-            expect(requests).toBe(2);
+            expect(requests).toBe(completedRequests);
             expect(
                 JSON.parse(
                     readFileSync(

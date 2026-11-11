@@ -45,6 +45,48 @@ async function waitingReview() {
     return { ...fixture, proposal, mainHandle };
 }
 
+test("new preparation authority is pinned and a historical grant cannot silently resume", async () => {
+    vi.useFakeTimers();
+    const { t, runId, corpusRevisionId, userId, proposal } =
+        await waitingReview();
+    const owned = t.withIdentity({ subject: userId });
+    const args = {
+        runId,
+        corpusRevisionId,
+        expectedProposalId: proposal.proposalId,
+    };
+    const first = await owned.mutation(api.sourcePreparation.startForReview, {
+        ...args,
+        requestId: "resource-policy-start",
+    });
+    expect(await t.run((ctx) => ctx.db.get(first.preparationId))).toMatchObject(
+        { resourcePolicy: "authority_native_v1" },
+    );
+    await t.run(async (ctx) => {
+        await ctx.db.patch(first.preparationId, {
+            resourcePolicy: undefined,
+            status: "complete",
+        });
+        await ctx.db.patch(runId, {
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        });
+    });
+    const before = await t.run((ctx) => ctx.db.get(first.preparationId));
+    await expect(
+        owned.mutation(api.sourcePreparation.startForReview, {
+            ...args,
+            requestId: "must-not-upgrade-authority",
+        }),
+    ).rejects.toThrow("resource_policy_unsupported");
+    expect(await t.run((ctx) => ctx.db.get(first.preparationId))).toEqual(
+        before,
+    );
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+});
+
 test("resumes a version-three preparation without adopting the new protocol", async () => {
     vi.useFakeTimers();
     const { t, runId, corpusRevisionId, userId, proposal } =
@@ -757,6 +799,8 @@ test("a genuinely new manual link gets its own window after expiry and never reo
         sourceQualificationAttemptCount: 17,
     });
     expect(state.preparation).toMatchObject({
+        resourcePolicy: "authority_native_v1",
+        executionPlanVersion: "source_actions_v4",
         entryPoint: "manual_addition",
         manualSourceIds: [manualId],
         deadlineAt: Date.now() + 900_000,

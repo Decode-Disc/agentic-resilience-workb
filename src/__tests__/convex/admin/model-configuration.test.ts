@@ -157,7 +157,9 @@ test("a lost preparation acknowledgement can be replayed without duplicating its
     ).toHaveLength(1);
 });
 
-test("administrative import prepares a model absent from Pi's bundled catalogue without inference", async () => {
+test.each([
+    4096, 8192,
+])("administrative import prepares a model absent from Pi's bundled catalogue with %i declared output tokens and no inference", async (maxTokens) => {
     const { t, admin } = await setup();
     const model = "example/new-runtime-model";
     const fetch = vi.fn(async (input: string | URL | Request) => {
@@ -178,7 +180,7 @@ test("administrative import prepares a model absent from Pi's bundled catalogue 
                             completion: "0.0000001",
                             input_cache_read: "0.00000001",
                         },
-                        top_provider: { max_completion_tokens: 8192 },
+                        top_provider: { max_completion_tokens: maxTokens },
                         supported_parameters: [
                             "tools",
                             "max_tokens",
@@ -209,6 +211,7 @@ test("administrative import prepares a model absent from Pi's bundled catalogue 
         await t.run((ctx) => ctx.db.query("modelRevisions").first()),
     ).toMatchObject({
         descriptor: {
+            maxTokens,
             reasoningEfforts: ["low", "high", "max"],
             reasoningMandatory: true,
             supportedParameters: [
@@ -787,9 +790,10 @@ test("response coherence policy has central defaults and administrator-versioned
     ).rejects.toThrow("response_control_policy_invalid");
 });
 
+import { assert } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
-import { assert } from "vitest";
+
 test("an administrator changes reasoning through immutable revisions while explicit low remains selectable", async () => {
     const { t } = await setup();
     const { admin, catalogId } = await installModel(

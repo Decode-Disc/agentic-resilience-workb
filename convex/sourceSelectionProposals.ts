@@ -64,11 +64,11 @@ import {
 } from "./domain/sourceUsage";
 import { canStartNewCorpusRevision } from "./domain/transitions";
 import {
-    MAX_SUPPLEMENT_SEARCHES,
     sourceDossierCandidateLimit,
     sourcePreparationEnabled,
     sourceRecommendedTarget,
 } from "./resourceLimits";
+import { MAX_SUPPLEMENT_SEARCHES } from "./resourcePolicy";
 import { requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
 import { corpusRevisionApproved, workflow } from "./workflow";

@@ -150,7 +150,7 @@ test("a committed Pi append is reused and neither a conflicting payload nor a st
 });
 
 test("the Convex writer rejects a commit beyond retained replay capacity without advancing its sequence", async () => {
-    const { PI_SESSION_MAX_BYTES } = await import("@convex/resourceLimits");
+    const { PI_SESSION_MAX_BYTES } = await import("@convex/resourcePolicy");
     const { t, args } = await seedInspectedEvidence();
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,

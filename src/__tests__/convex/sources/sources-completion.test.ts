@@ -2,7 +2,7 @@ import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
 import { executionFailureCode } from "@convex/execution/errors";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/execution/executionProtocol";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { workflow } from "@convex/workflow";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
@@ -380,6 +380,7 @@ test("fallback finishing waits for native qualification and receives its existin
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         enter();
         await held;

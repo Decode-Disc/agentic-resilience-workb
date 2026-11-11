@@ -11,6 +11,11 @@ import {
 } from "@convex/execution/missionData";
 import { completionFeedbackValidator } from "@convex/execution/operationContracts";
 import { observeOperationOutcome } from "@convex/execution/operationResults";
+import {
+    SOURCES_HANDOFF_READ_CAPACITY,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
+    SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
+} from "@convex/resourcePolicy";
 import { sourcesSimulationEnabled } from "@convex/sourcesSimulation";
 import { ConvexError, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -26,7 +31,6 @@ import {
     completeSources,
     readEngagedSourcesWork,
     requireSourcesPreparation,
-    SOURCES_HANDOFF_READ_CAPACITY,
     sourcesCompletionAccounting,
     sourcesMissionKey,
     sourcesReadingReferences,
@@ -41,8 +45,6 @@ import {
     documentaryCheckInput,
     documentarySubmissionResult,
     qualificationSubmissionInput,
-    SOURCES_MAX_EVIDENCE_REFERENCES,
-    SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
     sourcesCompletionProposalValidator,
     sourcesPreparationValidator,
     sourcesSchemas,

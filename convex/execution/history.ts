@@ -6,6 +6,11 @@ import {
 } from "@convex/_generated/server";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
+import {
+    HISTORY_PAGE_SIZE,
+    MAX_CONVERSATION_SCAN,
+    MAX_HISTORY_RESULT_BYTES,
+} from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { requireMissionAuthority } from "./authority";
@@ -13,7 +18,6 @@ import { requireInstructionVersion } from "./conversations";
 import { executionError } from "./errors";
 import {
     type AgentOperationDefinition,
-    HISTORY_PAGE_SIZE,
     historyReadResultValidator,
 } from "./executionProtocol";
 import {
@@ -30,8 +34,6 @@ import {
     historySourceFor,
 } from "./operationContracts";
 
-const MAX_HISTORY_RESULT_BYTES = 48 * 1024;
-const MAX_CONVERSATION_SCAN = 4096;
 const CURSOR_PREFIX = "history:";
 type Frontier = Infer<typeof historyReadReceiptValidator>["frontier"];
 type Position = Infer<typeof historyPositionValidator>;

@@ -1,4 +1,5 @@
 import { readQualificationUsage } from "@convex/qualificationUsage";
+import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
@@ -22,7 +23,10 @@ import {
     campaignManifestSchema,
     emptyCampaignLimits,
 } from "./qualificationCampaignPolicy";
-import { MAX_SOURCES_QUALIFICATION_RECEIPTS } from "./resourceLimits";
+import {
+    MAX_SOURCES_QUALIFICATION_RECEIPTS,
+    RESOURCE_POLICY_VERSION,
+} from "./resourcePolicy";
 import { BROWSER_TEST_SLOT, requireBrowserTestOwner } from "./runWorkspace";
 import schema from "./schema";
 
@@ -134,6 +138,7 @@ export const authorize = internalMutation({
         const configurationHash =
             manifest.version === 1 ? configurationHashes[0]?.hash : undefined;
         return ctx.db.insert("qualificationCampaigns", {
+            resourcePolicy: RESOURCE_POLICY_VERSION,
             configurationHash,
             configurationHashes:
                 manifest.version !== 1 ? configurationHashes : undefined,
@@ -161,6 +166,8 @@ export const admit = internalMutation({
     handler: async (ctx, args) => {
         const campaign = await owned(ctx, args.campaignId);
         const m = campaign.manifest;
+        if (campaign.resourcePolicy !== RESOURCE_POLICY_VERSION)
+            throw new Error("resource_policy_unsupported");
         if (campaign.status !== "active" || m.expiresAt <= Date.now())
             throw new Error("Campaign closed or expired");
         if (
@@ -368,6 +375,8 @@ export const reserveAnalysis = internalMutation({
         if (!lot) throw new Error("Campaign lot unavailable");
         const campaign = await owned(ctx, lot.campaignId);
         const manifest = campaign.manifest;
+        if (campaign.resourcePolicy !== RESOURCE_POLICY_VERSION)
+            throw new Error("resource_policy_unsupported");
         if (args.provider === "opencode-go")
             throw new Error(
                 "OpenCode Go subscription-only guarantee unverified",
@@ -669,11 +678,13 @@ export const inspect = internalQuery({
             .withIndex("by_campaign", (q) => q.eq("campaignId", campaign._id));
         const page =
             campaign.manifest.version !== 1
-                ? await query
-                      .order("desc")
-                      .paginate(
-                          args.paginationOpts ?? { numItems: 32, cursor: null },
-                      )
+                ? await query.order("desc").paginate(
+                      args.paginationOpts ?? {
+                          numItems:
+                              PERSISTENCE_PAGE_SIZE.qualificationAccounting,
+                          cursor: null,
+                      },
+                  )
                 : null;
         const lots = page
             ? page.page.reverse()

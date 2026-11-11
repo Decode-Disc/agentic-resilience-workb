@@ -16,9 +16,13 @@ import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import {
     type ConfigurableCampaignManifest,
     campaignConfiguration,
-    MAX_QUALIFICATION_CONTEXT_DURATION_MS,
     type QualificationScenario,
 } from "../../../convex/qualificationCampaignPolicy.ts";
+import {
+    MAX_QUALIFICATION_CONTEXT_DURATION_MS,
+    PERSISTENCE_PAGE_SIZE,
+    QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
+} from "../../../convex/resourcePolicy.ts";
 import { openQualificationJournal } from "./journal.ts";
 import { sha256 } from "./protocol.ts";
 import { hydrateSourcesTranscriptPage } from "./sources.ts";
@@ -187,7 +191,15 @@ export async function inspectCampaignScenarios(
                     typeof internal.execution.fixtures.inspectQualificationPage
                 > = await client.query(
                     ref(internal.execution.fixtures.inspectQualificationPage),
-                    { ...args, kind, paginationOpts: { cursor, numItems: 32 } },
+                    {
+                        ...args,
+                        kind,
+                        paginationOpts: {
+                            cursor,
+                            numItems:
+                                PERSISTENCE_PAGE_SIZE.qualificationFixtures,
+                        },
+                    },
                 );
                 const { downloads: _, ...retained } = {
                     downloads: undefined,
@@ -225,7 +237,9 @@ export async function inspectCampaignScenarios(
                             "Capture hash unavailable",
                         );
                         const response: Response = await fetch(download.url, {
-                            signal: AbortSignal.timeout(30000),
+                            signal: AbortSignal.timeout(
+                                TOOLING_POLICY.captureDownloadTimeoutMs,
+                            ),
                         });
                         assert(response.ok, "Capture download failed");
                         const bytes: Buffer = Buffer.from(
@@ -327,7 +341,9 @@ export async function runCampaignScenarios(
     }
     assert(admitted, "Admitted backend session required");
     await expect
-        .poll(() => admitted.query(api.visitors.current), { timeout: 20000 })
+        .poll(() => admitted.query(api.visitors.current), {
+            timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
+        })
         .toMatchObject({ status: "active" });
     assert.equal(errors.length, 0, "Browser initialization failed");
     const failedScenarios: string[] = [];
@@ -432,8 +448,10 @@ export async function runCampaignScenarios(
                     },
                     {
                         timeout:
-                            manifest.mode === "deterministic" ? 120000 : 900000,
-                        intervals: [500, 1000],
+                            manifest.mode === "deterministic"
+                                ? TOOLING_POLICY.deterministicObservationTimeoutMs
+                                : TOOLING_POLICY.liveObservationTimeoutMs,
+                        intervals: [...TOOLING_POLICY.observationIntervalsMs],
                     },
                 )
                 .toBe(true);
@@ -461,7 +479,9 @@ export async function runCampaignScenarios(
                         name: question.shortLabel,
                         exact: true,
                     }),
-                ).toBeVisible({ timeout: 20000 });
+                ).toBeVisible({
+                    timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
+                });
         };
         try {
             save(root, "control", {
@@ -553,7 +573,10 @@ export async function runCampaignScenarios(
                                                 exact: true,
                                             })
                                             .isVisible()),
-                                    { timeout: 20000 },
+                                    {
+                                        timeout:
+                                            TOOLING_POLICY.browserInteractionTimeoutMs,
+                                    },
                                 )
                                 .toBe(true);
                             if (!(await page.getByRole("textbox").isVisible()))
@@ -565,7 +588,8 @@ export async function runCampaignScenarios(
                                     .click();
                             await expect(page.getByRole("textbox")).toBeVisible(
                                 {
-                                    timeout: 20000,
+                                    timeout:
+                                        TOOLING_POLICY.browserInteractionTimeoutMs,
                                 },
                             );
                             await page.getByRole("textbox").fill(step.text);
@@ -588,7 +612,10 @@ export async function runCampaignScenarios(
                         await expect
                             .poll(
                                 async () => (await inspect()).lastMessage?._id,
-                                { timeout: 20000 },
+                                {
+                                    timeout:
+                                        TOOLING_POLICY.browserInteractionTimeoutMs,
+                                },
                             )
                             .not.toBe(previous);
                         if (step.wait !== "started") {
@@ -603,7 +630,10 @@ export async function runCampaignScenarios(
                                     async () =>
                                         !!(await inspect()).conversation
                                             ?.activeTurnId,
-                                    { timeout: 20000 },
+                                    {
+                                        timeout:
+                                            TOOLING_POLICY.browserInteractionTimeoutMs,
+                                    },
                                 )
                                 .toBe(true);
                             if (expectedFault === "concurrent_edit")
@@ -616,7 +646,10 @@ export async function runCampaignScenarios(
                                                     `gate-${controlKey}.json`,
                                                 ),
                                             ),
-                                        { timeout: 65000 },
+                                        {
+                                            timeout:
+                                                TOOLING_POLICY.gateObservationTimeoutMs,
+                                        },
                                     )
                                     .toBe(true);
                         }
@@ -726,7 +759,9 @@ export async function runCampaignScenarios(
                                     }),
                                 )
                                 .first(),
-                        ).toBeVisible({ timeout: 20000 });
+                        ).toBeVisible({
+                            timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
+                        });
                         break;
                     case "navigate":
                         assert(page, "Navigation requires browser execution");

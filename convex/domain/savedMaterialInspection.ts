@@ -12,6 +12,7 @@ import {
     missionState,
     operationProgressKeys,
 } from "@convex/execution/missionData";
+import { MAX_INSPECTED_CAPTURES } from "@convex/resourcePolicy";
 import type { Infer } from "convex/values";
 import { readResearchContext } from "./researchContext";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
@@ -26,8 +27,6 @@ import {
 import { savedMaterialSimulation } from "./savedMaterialSimulation";
 import { readPreparationSourceDecision } from "./sourcePreparationAuthority";
 import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
-
-const MAX_INSPECTED_CAPTURES = 64;
 
 /** The approved-corpus prerequisite belongs to inspection, never to every kind of agent. */
 export async function requireSavedMaterialScope(

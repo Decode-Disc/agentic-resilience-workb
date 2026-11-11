@@ -29,6 +29,11 @@ import {
 } from "@convex/modelConfiguration";
 import type { initialModelSelection } from "@convex/modelConfigurationSchema";
 import {
+    HISTORY_PAGE_SIZE,
+    MAX_CONTEXT_BYTES,
+    MAX_OPERATION_RESULT_BYTES,
+} from "@convex/resourcePolicy";
+import {
     localBrowserFixturesEnabled,
     readWorkbenchQualification,
     requireWorkspaceRun,
@@ -51,12 +56,7 @@ import {
     requireMissionAuthority,
 } from "./authority";
 import { executionError, executionFailureCode } from "./errors";
-import {
-    HISTORY_PAGE_SIZE,
-    MAX_CONTEXT_BYTES,
-    MAX_OPERATION_RESULT_BYTES,
-    missionStatusValidator,
-} from "./executionProtocol";
+import { missionStatusValidator } from "./executionProtocol";
 import { nextNativeInputSequence } from "./journal";
 import { cancelPiWake, schedulePiMission } from "./piControl";
 import { sessionForMission } from "./piStore";

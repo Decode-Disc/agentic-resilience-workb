@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { WORKSPACE_DOSSIER_INITIAL_PAGE_SIZE } from "@convex/resourcePolicy";
 import { usePaginatedQuery, useQuery } from "convex/react";
 
 /** Resets dossier pagination when admission or the server-owned workspace changes. */
@@ -10,7 +11,7 @@ export function useWorkspaceDossiers(enabled = true, search = "") {
         enabled && workspace
             ? { workspaceKey: workspace.key, ...(search ? { search } : {}) }
             : "skip",
-        { initialNumItems: 12 },
+        { initialNumItems: WORKSPACE_DOSSIER_INITIAL_PAGE_SIZE },
     );
     return {
         ...page,

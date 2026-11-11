@@ -2,6 +2,7 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { isResumableResearchPause } from "@convex/domain/transitions";
+import { RESOURCE_POLICY_VERSION } from "@convex/resourcePolicy";
 import { runMatchesWorkspace, workspaceForVisitor } from "@convex/runWorkspace";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
@@ -162,6 +163,11 @@ async function requireMissionAccess(
         mission.generation !== expectedGeneration
     )
         throw executionError("stale_execution");
+    if (
+        permission === "progression" &&
+        mission.resourcePolicy !== RESOURCE_POLICY_VERSION
+    )
+        throw executionError("resource_policy_unsupported");
     const scope = missionScope(mission);
     const state = missionState(mission);
     if (

@@ -29,6 +29,7 @@ import { domainSnapshot } from "@convex/execution/agentDefinition";
 import { requireMissionAuthority } from "@convex/execution/authority";
 import { conversationInstructions } from "@convex/execution/conversations";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
+import { generationAuthorityValidator } from "@convex/execution/executionProtocol";
 import {
     operationContextObservation,
     operationHistoryReference,
@@ -38,7 +39,10 @@ import {
     researchStateSummary,
 } from "@convex/execution/researchControl";
 import { readResponseControlPolicy } from "@convex/modelConfiguration";
-import { providerAttemptValidator } from "@convex/providerCalls";
+import {
+    providerAttemptValidator,
+    requireQualifiedBrowserMission,
+} from "@convex/providerCalls";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 
@@ -418,6 +422,7 @@ export async function completeResponseControl(
 }
 
 const reviewJob = v.object({
+    authority: generationAuthorityValidator,
     requestId: v.id("agentOperationRequests"),
     missionId: v.id("agentMissions"),
     invocationId: v.id("agentInvocations"),
@@ -477,6 +482,11 @@ export const forExecution = internalQuery({
             throw executionError("controller_disabled");
         const run = await ctx.db.get(mission.runId);
         if (!run) throw executionError("run_unavailable");
+        const qualification = await requireQualifiedBrowserMission(
+            ctx,
+            run,
+            mission,
+        );
         const currentFacts = await readResponseFacts(ctx, mission, run);
         if (
             currentFacts.kind !== "ready" ||
@@ -484,6 +494,14 @@ export const forExecution = internalQuery({
         )
             throw executionError("response_review_stale");
         return {
+            authority: {
+                resourcePolicy: mission.resourcePolicy,
+                deadlineAt: Math.min(
+                    mission.deadlineAt,
+                    request.deadlineAt ?? 0,
+                    qualification?.deadlineAt ?? Infinity,
+                ),
+            },
             requestId: request._id,
             missionId: mission._id,
             invocationId: invocation._id,
