@@ -6,6 +6,10 @@ import {
 import { revisionRoute } from "@convex/modelConfiguration";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
+import {
+    fixtureModelDescriptor,
+    modelAttemptAuthority,
+} from "@/__tests__/setup/model-configuration";
 
 test.each([
     false,
@@ -53,7 +57,11 @@ test.each([
             ],
         },
     });
-    const dependencies = { apiKey: "test-only-key", fetch };
+    const dependencies = {
+        authority: modelAttemptAuthority(),
+        apiKey: "test-only-key",
+        fetch,
+    };
     const native = JSON.parse(
         preparePiModelPayload(
             {
@@ -127,13 +135,18 @@ test.each([
     const route = {
         model: "mistralai/mistral-nemo",
         provider: "deepinfra/fp8",
+        descriptor: fixtureModelDescriptor,
         reasoningEnabled: false,
         reasoningEffort,
         authorizedForAgent: true as const,
     };
     const result = await invokeDeferredAgentTurn({
         route,
-        dependencies: { apiKey: "test-only-key", fetch },
+        dependencies: {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch,
+        },
         instructions: "Reply briefly.",
         prompt: "Continue.",
         operations: {},
@@ -190,10 +203,15 @@ test.each([
         route: {
             model: "example/model",
             provider: "test",
+            descriptor: { ...fixtureModelDescriptor, reasoning: true },
             authorizedForAgent: true,
             reasoningEffort,
         },
-        dependencies: { apiKey: "test-only-key", fetch },
+        dependencies: {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch,
+        },
         instructions: "Reply briefly.",
         prompt: "Continue.",
         operations: {},
@@ -211,12 +229,13 @@ test.each([
             exclude: true,
         },
         provider: { only: ["test"], allow_fallbacks: false },
-        max_tokens: 6144,
+        max_tokens: 8192,
     });
     expect(fetch).toHaveBeenCalledOnce();
 });
 
 import { recommendedReasoningEffort } from "@convex/integrations/modelRouting";
+
 test("recommended reasoning follows advertised capability rather than a model name or low default", () => {
     const descriptor = {
         contextWindow: 32768,

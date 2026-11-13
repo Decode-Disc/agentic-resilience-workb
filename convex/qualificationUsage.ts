@@ -1,7 +1,9 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import {
+    preparationBudgetOutcome,
     preparationFailureClass,
+    readPreparationBudget,
     sourcePreparationError,
 } from "@convex/domain/sourcePreparationAuthority";
 import {
@@ -35,6 +37,13 @@ export function qualificationReceiptUsage(call: Doc<"providerCalls">) {
         call.qualificationReservationUsd ?? 0,
         call.reportedCost ?? 0,
     );
+    if (
+        call.costAccountingPolicy === "known_final_v1" &&
+        call.reportedCost !== undefined &&
+        (call.reportedCostFinal || call.billing?.state === "confirmed") &&
+        call.billing?.state !== "conflict"
+    )
+        value.usage.costUsd = call.reportedCost;
     value.pending = call.status === "started" ? 1 : 0;
     value.unknown =
         call.status !== "started" && preparationFailureClass(call) === "unknown"
@@ -120,7 +129,8 @@ export async function assertQualificationAllowance(
     if (
         !context ||
         !lot ||
-        campaign?.manifest.version !== 2 ||
+        !campaign ||
+        campaign.manifest.version === 1 ||
         !context.paidQualification?.scenarios
     )
         throw new Error("Configurable qualification grant required");
@@ -140,7 +150,8 @@ export async function assertQualificationAllowance(
                 .lte("leaseExpiresAt", Date.now()),
         )
         .first();
-    if (expired) throw sourcePreparationError("qualification_budget_exhausted");
+    if (expired)
+        throw sourcePreparationError("qualification_outcome_unresolved");
     const kind = qualificationCategory(call);
     for (const [scopedRunId, limits] of [
         [
@@ -161,9 +172,10 @@ export async function assertQualificationAllowance(
     ] as const) {
         const row = await readQualificationUsage(ctx, contextId, scopedRunId);
         if (!row) throw new Error("Qualification usage unavailable");
+        if (row.unknown)
+            throw sourcePreparationError("qualification_outcome_unresolved");
         const ceiling: Partial<CampaignLimits> = limits;
         if (
-            row.unknown ||
             row.overruns ||
             (kind !== "technical" &&
                 row.usage[kind] + 1 > (ceiling[kind] ?? Infinity)) ||
@@ -179,6 +191,43 @@ export async function patchQualificationReceipt(
     call: Doc<"providerCalls">,
     patch: Partial<Omit<Doc<"providerCalls">, "_id" | "_creationTime">>,
 ) {
-    await updateQualificationUsage(ctx, call, { ...call, ...patch });
+    const next = { ...call, ...patch };
+    const before = preparationBudgetOutcome(call);
+    const after = preparationBudgetOutcome(next);
+    if (
+        call.service === "model" &&
+        (call.preparationId || call.missionId) &&
+        call.operation !== "source_embedding" &&
+        before !== after
+    ) {
+        const run = call.runId ? await ctx.db.get(call.runId) : null;
+        const preparation = call.preparationId
+            ? await ctx.db.get(call.preparationId)
+            : null;
+        if (!run || (!preparation && !call.missionId))
+            throw sourcePreparationError("stale_execution");
+        const budget = await readPreparationBudget(
+            ctx.db,
+            run,
+            preparation ?? undefined,
+        );
+        if (before !== "released") budget[before]--;
+        if (after !== "released") budget[after]++;
+        else {
+            budget.dispatches--;
+            if (preparation)
+                await ctx.db.patch(preparation._id, {
+                    modelAttemptCount: Math.max(
+                        0,
+                        (preparation.modelAttemptCount ?? 0) - 1,
+                    ),
+                });
+        }
+        await ctx.db.patch(run._id, {
+            sourcePreparationBudget: budget,
+            sourceQualificationAttemptCount: budget.dispatches,
+        });
+    }
+    await updateQualificationUsage(ctx, call, next);
     await ctx.db.patch(call._id, patch);
 }

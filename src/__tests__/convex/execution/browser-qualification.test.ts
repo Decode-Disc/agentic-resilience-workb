@@ -95,6 +95,77 @@ async function admittedFixture() {
     return { ...f, mission, attempt, calls };
 }
 
+test("mission authority cannot outlive its approved qualification context", async () => {
+    const f = await fixture();
+    await f.authorize();
+    const deadlineAt = Date.now() + 30000;
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run?.browserTestContextId);
+        await ctx.db.patch(run.browserTestContextId, { expiresAt: deadlineAt });
+    });
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(active.missionId)))?.deadlineAt,
+    ).toBe(deadlineAt);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").take(1)),
+    ).toEqual([]);
+});
+
+test.each([
+    undefined,
+    "unsupported_policy",
+])("retained qualification policy %s cannot dispatch, but known work still settles", async (resourcePolicy) => {
+    const f = await admittedFixture();
+    const first = await f.attempt("known-before-cutover");
+    const admitted = await f.t.mutation(
+        internal.providerCalls.recordAttempt,
+        first,
+    );
+    expect(admitted.shouldExecute).toBe(true);
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run?.browserTestContextId);
+        const context = await ctx.db.get(run.browserTestContextId);
+        assert(context?.paidQualification);
+        expect(context.paidQualification).toMatchObject({
+            resourcePolicy: "authority_native_v1",
+            costAccountingPolicy: "known_final_v1",
+        });
+        await ctx.db.patch(context._id, {
+            paidQualification: { ...context.paidQualification, resourcePolicy },
+        });
+    });
+    const next = await f.attempt("not-authorized-after-cutover");
+    await expect(
+        f.t.mutation(internal.providerCalls.recordAttempt, next),
+    ).rejects.toThrow("resource_policy_unsupported");
+    expect(await f.calls()).toHaveLength(1);
+    await f.t.mutation(internal.providerCalls.recordAttempt, {
+        ...first,
+        status: "succeeded",
+        dispatchOutcome: "response_received",
+        reportedCost: 0.001,
+    });
+    expect(await f.calls()).toMatchObject([
+        {
+            _id: admitted.providerCallId,
+            status: "succeeded",
+            reportedCost: 0.001,
+        },
+    ]);
+});
+
 test("a Sources lot pins independent agent models and refuses swapped or renewed routes", async () => {
     const f = await fixture();
     const sources = await installModel(
@@ -353,6 +424,20 @@ test("a frozen lot checks the dossier effort at authorization and rejects later 
 test("an explicitly authorized local Workbench fixture reserves one real model attempt without recharging its replay", async () => {
     const f = await admittedFixture(),
         input = await f.attempt("first");
+    const route = await f.t.query(
+        internal.execution.fixtures.qualificationRoute,
+        { runId: f.runId, fixtureKey: "qualification" },
+    );
+    expect(route).toMatchObject({
+        resourcePolicy: "authority_native_v1",
+        descriptor: { contextWindow: 131072, maxTokens: 8192 },
+    });
+    const context = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run?.browserTestContextId);
+        return ctx.db.get(run.browserTestContextId);
+    });
+    expect(route.deadlineAt).toBe(context?.expiresAt);
     const result = await f.t.mutation(
         internal.providerCalls.recordAttempt,
         input,
@@ -362,7 +447,7 @@ test("an explicitly authorized local Workbench fixture reserves one real model a
         await f.t.run((ctx) => ctx.db.get(result.providerCallId)),
     ).toMatchObject({
         status: "started",
-        qualificationReservationUsd: 0.0239616,
+        qualificationReservationUsd: 0.024576,
     });
     expect(
         await f.t.mutation(internal.providerCalls.recordAttempt, input),
@@ -458,7 +543,7 @@ test("an unknown outcome retains its reservation and an unexpected charge preven
         errorCode: "attempt_outcome_unknown",
     });
     const rows = await f.calls();
-    expect(rows[0]?.qualificationReservationUsd).toBe(0.0239616);
+    expect(rows[0]?.qualificationReservationUsd).toBe(0.024576);
     await f.t.run((ctx) =>
         ctx.db.patch(first.providerCallId, { reportedCost: 0.1 }),
     );

@@ -2,14 +2,18 @@
 import { internal } from "@convex/_generated/api";
 import { internalAction } from "@convex/_generated/server";
 import {
-    RESPONSE_CONTROL_LIMITS,
     responseReviewOperationKey,
     responseReviewResult,
 } from "@convex/domain/workbenchResponseControlContracts";
-import { executionFailureCode } from "@convex/execution/errors";
-import { MODEL_MAX_INPUT_PRICE_PER_MILLION } from "@convex/integrations/modelRouting";
+import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { createBoundedModelFetch } from "@convex/integrations/modelTransport";
 import { checkResponseCoherence } from "@convex/integrations/responseCoherence";
+import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    RESPONSE_CONTROL_METADATA_TIMEOUT_MS,
+    resolveGenerationAuthority,
+    nodeActionGenerationDeadline,
+} from "@convex/resourcePolicy";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 
@@ -21,6 +25,7 @@ export const execute = internalAction({
     },
     returns: responseReviewResult,
     handler: async (ctx, args): Promise<Infer<typeof responseReviewResult>> => {
+        const executionDeadlineAt = nodeActionGenerationDeadline(Date.now());
         let job: FunctionReturnType<
             typeof internal.responseControl.forExecution
         >;
@@ -37,7 +42,15 @@ export const execute = internalAction({
         const apiKey = process.env.OPENROUTER_API_KEY;
         if (!apiKey)
             return { status: "unavailable", reason: "missing_configuration" };
+        const authority = resolveGenerationAuthority(
+            job.authority,
+            Date.now(),
+            executionDeadlineAt,
+        );
+        if (authority.kind === "blocked")
+            return { status: "unavailable", reason: authority.code };
         // Catalogue validation is non-inference I/O and precedes paid admission.
+        let modelContextWindowTokens: number;
         try {
             const fetchCatalogue = createBoundedModelFetch(
                 {},
@@ -47,7 +60,10 @@ export const execute = internalAction({
                 "https://openrouter.ai/api/v1/models?output_modalities=decisions",
                 {
                     signal: AbortSignal.timeout(
-                        RESPONSE_CONTROL_LIMITS.timeoutMs,
+                        Math.min(
+                            RESPONSE_CONTROL_METADATA_TIMEOUT_MS,
+                            authority.timeoutMs,
+                        ),
                     ),
                 },
             );
@@ -75,7 +91,14 @@ export const execute = internalAction({
                 model && typeof model === "object" && "pricing" in model
                     ? model.pricing
                     : undefined;
+            const contextWindow =
+                model && typeof model === "object" && "context_length" in model
+                    ? model.context_length
+                    : undefined;
             if (
+                typeof contextWindow !== "number" ||
+                !Number.isSafeInteger(contextWindow) ||
+                contextWindow < 1 ||
                 !pricing ||
                 typeof pricing !== "object" ||
                 !("prompt" in pricing) ||
@@ -90,6 +113,7 @@ export const execute = internalAction({
                     status: "unavailable",
                     reason: "configuration_unavailable",
                 };
+            modelContextWindowTokens = contextWindow;
         } catch {
             return {
                 status: "unavailable",
@@ -97,6 +121,7 @@ export const execute = internalAction({
             };
         }
         const identity = {
+            modelContextWindowTokens,
             operationRequestId: job.requestId,
             missionId: job.missionId,
             invocationId: job.invocationId,
@@ -136,9 +161,20 @@ export const execute = internalAction({
         let dispatched = false;
         try {
             await ctx.runQuery(internal.responseControl.forExecution, args);
+            const execution = resolveGenerationAuthority(
+                { ...job.authority, deadlineAt: admitted.deadlineAt },
+                Date.now(),
+                executionDeadlineAt,
+            );
+            if (execution.kind === "blocked")
+                throw executionError(execution.code);
             dispatched = true;
             const response = await checkResponseCoherence({
                 requestJson: job.requestJson,
+                authority: {
+                    resourcePolicy: job.authority.resourcePolicy,
+                    deadlineAt: execution.deadlineAt,
+                },
                 apiKey,
             });
             settlement = {

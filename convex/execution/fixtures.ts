@@ -14,7 +14,10 @@ import {
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import { initializeFraming } from "@convex/framing";
-import { agentInputByteLength } from "@convex/integrations/modelInput";
+import {
+    agentInputByteLength,
+    preparePiSimulationRequest,
+} from "@convex/integrations/modelInput";
 import { resolveReasoningPreference } from "@convex/integrations/modelRouting";
 import {
     readResponseControlPolicy,
@@ -37,9 +40,11 @@ import {
     BROWSER_QUALIFICATION_MAX_COST_USD,
     BROWSER_QUALIFICATION_MAX_REQUESTS,
     MAX_SOURCES_QUALIFICATION_RECEIPTS,
-} from "@convex/resourceLimits";
+    RESOURCE_POLICY_VERSION,
+} from "@convex/resourcePolicy";
 import {
     BROWSER_TEST_SLOT,
+    readWorkbenchQualification,
     requireBrowserFixtureContext,
     requireBrowserTestOwner,
 } from "@convex/runWorkspace";
@@ -59,6 +64,8 @@ import {
     agentBackendValidator,
     DEFAULT_AGENT_BACKEND,
 } from "./executionProtocol";
+import { admittedInputJson } from "./journal";
+import { completeRetainedText, retainedTextPage } from "./retainedText";
 
 /** Validates retained fixture provenance without granting or renewing execution authority. */
 async function readLocalFixtureRun(
@@ -78,7 +85,7 @@ async function readLocalFixtureRun(
         !run.reservationKey?.endsWith(`:${args.fixtureKey}`)
     )
         throw new Error("Local simulation scope required");
-    return { run, visitor };
+    return { run, visitor, context };
 }
 
 export async function requireLocalFixtureRun(
@@ -113,7 +120,7 @@ async function requireCampaignScenarios(
     const { campaign } = await requireCampaignLot(ctx, context.campaignLotId);
     const m = campaign.manifest;
     if (
-        m.version !== 2 ||
+        m.version === 1 ||
         dossiers.length !== m.scenarios.length ||
         new Set(dossiers.map((d) => d.runId)).size !== dossiers.length ||
         new Set(dossiers.map((d) => d.scenarioId)).size !== dossiers.length
@@ -169,6 +176,7 @@ export const startValidation = internalAction({
     args: {
         fixtureKey: v.string(),
         generationBackend: v.optional(agentBackendValidator),
+        largeJournal: v.optional(v.boolean()),
     },
     returns: v.id("agentMissions"),
     handler: async (ctx, args): Promise<Id<"agentMissions">> => {
@@ -180,6 +188,7 @@ export const startValidation = internalAction({
         return ctx.runMutation(internal.execution.fixtures.activateValidation, {
             runId: base.runId,
             fixtureKey: args.fixtureKey,
+            largeJournal: args.largeJournal,
             ...(args.generationBackend
                 ? { generationBackend: args.generationBackend }
                 : {}),
@@ -192,10 +201,15 @@ export const activateValidation = internalMutation({
         runId: v.id("researchRuns"),
         fixtureKey: v.string(),
         generationBackend: v.optional(agentBackendValidator),
+        largeJournal: v.optional(v.boolean()),
     },
     returns: v.id("agentMissions"),
     handler: async (ctx, args): Promise<Id<"agentMissions">> => {
         const { run, visitor } = await requireLocalFixtureRun(ctx, args);
+        if (args.largeJournal && args.generationBackend?.id !== "pi-durable")
+            throw new Error(
+                "Large journal fixture requires the native backend",
+            );
         const existing = await ctx.db
             .query("agentMissions")
             .withIndex("by_run_and_request_key", (q) =>
@@ -211,6 +225,11 @@ export const activateValidation = internalMutation({
                 previous.version !== selected.version
             )
                 throw new Error("Fixture backend configuration conflict");
+            if (
+                Boolean(args.largeJournal) !==
+                (existing.blockCode === "fixture_inspection_only")
+            )
+                throw new Error("Fixture journal configuration conflict");
             return existing._id;
         }
         const generation = await claimPausedRunExecution(ctx, {
@@ -262,6 +281,55 @@ export const activateValidation = internalMutation({
             expectedGeneration: generation,
             simulation: true,
         });
+        if (args.largeJournal) {
+            const begun = await ctx.runMutation(
+                internal.execution.invocations.begin,
+                {
+                    missionId,
+                    expectedGeneration: generation,
+                    taskKey: "fragmented-journal-fixture",
+                    provenance: "simulation",
+                },
+            );
+            if (begun.kind !== "ready")
+                throw new Error("Local journal fixture could not be admitted");
+            const observation = {
+                kind: "blocked" as const,
+                code: "fixture_inspection_only",
+            };
+            await ctx.runMutation(
+                internal.execution.invocations.retainRequest,
+                {
+                    invocationId: begun.invocationId,
+                    expectedGeneration: generation,
+                    requestJson: preparePiSimulationRequest([
+                        {
+                            role: "user",
+                            content:
+                                "Retained local verification text. ".repeat(
+                                    23000,
+                                ),
+                            timestamp: 0,
+                        },
+                    ]).json,
+                },
+            );
+            await ctx.runMutation(internal.execution.invocations.retainOutput, {
+                invocationId: begun.invocationId,
+                expectedGeneration: generation,
+                responseJson: JSON.stringify(observation),
+                observableReplyJson: JSON.stringify({
+                    version: 1,
+                    provenance: "simulation",
+                    response: observation,
+                }),
+            });
+            await ctx.runMutation(internal.execution.invocations.finish, {
+                invocationId: begun.invocationId,
+                expectedGeneration: generation,
+                response: observation,
+            });
+        }
         return missionId;
     },
 });
@@ -484,14 +552,17 @@ export const inspect = internalQuery({
         const quoted = requests.find(
             (request) => request.input.kind === "read_in_context",
         );
-        const quotation =
-            quoted?.outcome?.kind === "success"
-                ? (
-                      JSON.parse(quoted.outcome.valueJson) as {
-                          passage?: { exactQuote?: string };
-                      }
-                  ).passage?.exactQuote
-                : undefined;
+        let quotation: string | undefined;
+        if (quoted?.outcome?.kind === "success") {
+            try {
+                const parsed = JSON.parse(quoted.outcome.valueJson) as {
+                    passage?: { exactQuote?: string };
+                };
+                quotation = parsed.passage?.exactQuote;
+            } catch {
+                throw new Error("Invalid retained simulation result");
+            }
+        }
         const turn = mission.conversationTurnId
             ? await ctx.db.get(mission.conversationTurnId)
             : null;
@@ -520,10 +591,14 @@ export const inspect = internalQuery({
             ).length,
             contextIncludesReturnedQuotation:
                 !!quotation &&
-                invocations.some((invocation) =>
-                    invocation.inputJson.includes(
-                        JSON.stringify(quotation).slice(1, -1),
-                    ),
+                (
+                    await Promise.all(
+                        invocations.map((invocation) =>
+                            admittedInputJson(ctx, invocation),
+                        ),
+                    )
+                ).some((input) =>
+                    input.includes(JSON.stringify(quotation).slice(1, -1)),
                 ),
             providerCallCount: calls.length,
             completionCount:
@@ -712,9 +787,11 @@ export const authorizeWorkbenchQualification = internalMutation({
             ? await requireCampaignLot(ctx, context.campaignLotId)
             : null;
         const configurable =
-            scope?.campaign.manifest.version === 2
+            scope && scope.campaign.manifest.version !== 1
                 ? scope.campaign.manifest
                 : null;
+        if (configurable?.costAccountingPolicy === "conservative_v1")
+            throw new Error("resource_policy_unsupported");
         const dossierEntries =
             args.dossiers ??
             args.sourcesLot?.map((e) => ({
@@ -749,8 +826,14 @@ export const authorizeWorkbenchQualification = internalMutation({
             !/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(args.relayOrigin)
         )
             throw new Error("Invalid qualification relay origin");
-        if (args.relayOrigin && new URL(args.relayOrigin).port === "")
-            throw new Error("Invalid qualification relay origin");
+        if (args.relayOrigin) {
+            try {
+                if (new URL(args.relayOrigin).port === "")
+                    throw new Error("Invalid qualification relay origin");
+            } catch {
+                throw new Error("Invalid qualification relay origin");
+            }
+        }
         if (
             run.researchStartedAt !== undefined ||
             !["framing", "awaiting_source_review"].includes(run.lifecycleState)
@@ -952,13 +1035,13 @@ export const authorizeWorkbenchQualification = internalMutation({
                 }),
             );
             const expectedHash =
-                m.version === 2
+                m.version !== 1
                     ? campaign.configurationHashes?.find(
                           (c) => c.id === lot.configurationId,
                       )?.hash
                     : campaign.configurationHash;
             if (
-                (m.version === 2 && !expectedHash) ||
+                (m.version !== 1 && !expectedHash) ||
                 (expectedHash && expectedHash !== configurationHash)
             )
                 throw new Error("Campaign route or price drift");
@@ -972,12 +1055,19 @@ export const authorizeWorkbenchQualification = internalMutation({
         }
         if (context.paidQualification) {
             if (
+                context.paidQualification.resourcePolicy !==
+                RESOURCE_POLICY_VERSION
+            )
+                throw new Error("resource_policy_unsupported");
+            if (
                 context.paidQualification.runId !== run._id ||
                 context.paidQualification.modelRevisionId !== model._id ||
                 (sourcesModel !== undefined &&
                     (context.paidQualification.sourcesModelRevisionId ??
                         context.paidQualification.modelRevisionId) !==
                         sourcesModel._id) ||
+                context.paidQualification.costAccountingPolicy !==
+                    "known_final_v1" ||
                 context.paidQualification.maximumRequests !== maximumRequests ||
                 context.paidQualification.maximumCostUsd !== maximumCostUsd ||
                 context.paidQualification.relayOrigin !== args.relayOrigin ||
@@ -998,12 +1088,14 @@ export const authorizeWorkbenchQualification = internalMutation({
         }
         await ctx.db.patch(contextId, {
             paidQualification: {
+                resourcePolicy: RESOURCE_POLICY_VERSION,
                 runId: run._id,
                 modelRevisionId: model._id,
                 sourcesModelRevisionId: sourcesModel?._id,
                 relayOrigin: args.relayOrigin,
                 maximumRequests,
                 maximumCostUsd,
+                costAccountingPolicy: "known_final_v1",
                 authorizedAt: Date.now(),
                 maximumSearchAttempts: campaignLimits?.search,
                 maximumAcquisitions: campaignLimits?.acquisition,
@@ -1454,9 +1546,68 @@ export const inspectSourcesInvocations = internalQuery({
     },
 });
 
+/** Exports immutable bytes under the same local dossier/fixture provenance as transcript metadata. */
+export const inspectSourcesTextFragments = internalQuery({
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        invocationId: v.id("agentInvocations"),
+        part: v.union(
+            v.literal("input"),
+            v.literal("request"),
+            v.literal("reply"),
+        ),
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: paginationResultValidator(
+        v.object({ index: v.number(), content: v.string() }),
+    ),
+    handler: async (ctx, args) => {
+        await readLocalFixtureRun(ctx, args);
+        const invocation = await ctx.db.get(args.invocationId);
+        if (!invocation || invocation.runId !== args.runId)
+            throw new Error("Transcript correlation mismatch");
+        const payload =
+            args.part === "input"
+                ? null
+                : await ctx.db
+                      .query("agentInvocationPayloads")
+                      .withIndex("by_invocation_and_part", (q) =>
+                          q
+                              .eq("invocationId", invocation._id)
+                              .eq(
+                                  "part",
+                                  args.part === "input" ? "request" : args.part,
+                              ),
+                      )
+                      .unique();
+        const textId =
+            args.part === "input" ? invocation.inputTextId : payload?.textId;
+        const contentHash =
+            args.part === "input"
+                ? invocation.inputContentHash
+                : payload?.contentHash;
+        if (
+            !textId ||
+            (args.part !== "input" &&
+                (payload?.state !== "complete" || payload.runId !== args.runId))
+        )
+            throw new Error("Complete fragmented transcript not found");
+        const text = await completeRetainedText(ctx, textId);
+        if (
+            text.key !== `${invocation._id}:${args.part}` ||
+            text.contentHash !== contentHash ||
+            (payload && text.sizeBytes !== payload.sizeBytes)
+        )
+            throw new Error("Transcript correlation mismatch");
+        return retainedTextPage(ctx, text, args.paginationOpts);
+    },
+});
+
 /** Small polling snapshot: no transcript scan or sample-dependent ceiling. */
 export const qualificationSnapshot = internalQuery({
     returns: v.object({
+        contextExpiresAt: v.number(),
         accounting: v.union(schema.doc("qualificationUsage"), v.null()),
         run: schema.doc("researchRuns"),
         conversation: v.union(schema.doc("agentConversations"), v.null()),
@@ -1472,7 +1623,7 @@ export const qualificationSnapshot = internalQuery({
     }),
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
     handler: async (ctx, args) => {
-        const { run } = await readLocalFixtureRun(ctx, args);
+        const { run, context } = await readLocalFixtureRun(ctx, args);
         const conversation = await ctx.db
             .query("agentConversations")
             .withIndex("by_run", (q) => q.eq("runId", run._id))
@@ -1505,6 +1656,7 @@ export const qualificationSnapshot = internalQuery({
                   .unique()
             : null;
         return {
+            contextExpiresAt: context.expiresAt,
             accounting: run.browserTestContextId
                 ? await readQualificationUsage(
                       ctx,
@@ -1643,39 +1795,41 @@ export const inspectQualificationPage = internalQuery({
 /** Exports the immutable admitted route for the local diagnostic relay, never credentials. */
 export const qualificationRoute = internalQuery({
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
-    returns: effectiveModelConfiguration,
+    returns: effectiveModelConfiguration.extend({
+        resourcePolicy: v.string(),
+        deadlineAt: v.number(),
+    }),
     handler: async (ctx, args) => {
         const { run } = await requireLocalFixtureRun(ctx, args);
         const context = run.browserTestContextId
             ? await ctx.db.get(run.browserTestContextId)
             : null;
-        if (
-            !context?.paidQualification?.scenarios?.some(
-                (s) => s.runId === run._id,
-            )
-        )
-            throw new Error("Admitted campaign route required");
-        if (!context.campaignLotId) throw new Error("Campaign route required");
-        const { campaign, lot } = await requireCampaignLot(
-            ctx,
-            context.campaignLotId,
-        );
-        const revision = await ctx.db.get(
-            context.paidQualification.modelRevisionId,
-        );
+        const qualification = await readWorkbenchQualification(ctx, run);
+        if (!context || !qualification)
+            throw new Error("Admitted qualification route required");
+        const scope = context.campaignLotId
+            ? await requireCampaignLot(ctx, context.campaignLotId)
+            : null;
+        const revision = await ctx.db.get(qualification.modelRevisionId);
         if (!revision) throw new Error("Missing route");
-        const profile = campaignConfiguration(
-            campaign.manifest,
-            lot.configurationId,
-        );
+        const profile = scope
+            ? campaignConfiguration(
+                  scope.campaign.manifest,
+                  scope.lot.configurationId,
+              )
+            : null;
         return {
+            resourcePolicy: RESOURCE_POLICY_VERSION,
+            deadlineAt: qualification.deadlineAt,
             model: revision.model,
             provider: revision.provider,
             descriptor: revision.descriptor,
-            reasoningEffort: resolveReasoningPreference(
-                revision.descriptor,
-                profile.models.workbench.reasoning,
-            ),
+            reasoningEffort: profile
+                ? resolveReasoningPreference(
+                      revision.descriptor,
+                      profile.models.workbench.reasoning,
+                  )
+                : revision.reasoningEffort,
         };
     },
 });

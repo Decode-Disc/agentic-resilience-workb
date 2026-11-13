@@ -12,6 +12,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 import {
+    GIT_METADATA_TIMEOUT_MS,
+    LOCAL_RUNTIME_POLICY,
+} from "../convex/resourcePolicy.ts";
+import {
     findLocalInvocationProcesses,
     inspectLocalPorts,
     readLocalProcess,
@@ -464,7 +468,7 @@ export function getLocalRuntimePorts(
         {
             cwd: identity.root,
             encoding: "utf8",
-            timeout: 20_000,
+            timeout: LOCAL_RUNTIME_POLICY.portReservationTimeoutMs,
             stdio: ["ignore", "pipe", "pipe"],
             env: { ...process.env, CONVEX_DEPLOYMENT: "" },
         },
@@ -752,7 +756,7 @@ export function releaseRuntimeStartupLock(fd = 3): void {
     const result = spawnSync("flock", ["--unlock", String(fd)], {
         encoding: "utf8",
         stdio: ["ignore", "ignore", "ignore", fd],
-        timeout: 2_000,
+        timeout: LOCAL_RUNTIME_POLICY.unlockTimeoutMs,
     });
     if (result.error || result.status !== 0)
         throw new LocalRuntimeError(
@@ -1015,7 +1019,9 @@ async function verifyBackendOrigin(
     try {
         response = await fetch(`${origin}/instance_name`, {
             redirect: "error",
-            signal: AbortSignal.timeout(3_000),
+            signal: AbortSignal.timeout(
+                LOCAL_RUNTIME_POLICY.backendIdentityTimeoutMs,
+            ),
         });
     } catch {
         throw new LocalRuntimeError(
@@ -1041,7 +1047,9 @@ async function verifyWebOrigin(
     try {
         const response = await fetch(new URL("/__local_runtime", origin), {
             redirect: "error",
-            signal: AbortSignal.timeout(2_000),
+            signal: AbortSignal.timeout(
+                LOCAL_RUNTIME_POLICY.webIdentityTimeoutMs,
+            ),
         });
         const identity: unknown = await response.json();
         if (
@@ -1078,7 +1086,9 @@ async function verifyPreviewOrigin(origin: string): Promise<void> {
     try {
         const response = await fetch(new URL("/health", origin), {
             redirect: "error",
-            signal: AbortSignal.timeout(2_000),
+            signal: AbortSignal.timeout(
+                LOCAL_RUNTIME_POLICY.previewIdentityTimeoutMs,
+            ),
         });
         if (!response.ok) throw new Error("unhealthy listener");
         const body: unknown = await response.json();
@@ -1145,7 +1155,7 @@ function canonicalDirectory(root: string): string {
 function gitValue(root: string, args: string[]): string {
     const result = spawnSync("git", ["-C", root, ...args], {
         encoding: "utf8",
-        timeout: 5_000,
+        timeout: GIT_METADATA_TIMEOUT_MS,
         stdio: ["ignore", "pipe", "ignore"],
     });
     if (result.error || result.status !== 0 || !result.stdout?.trim())
@@ -1176,7 +1186,7 @@ async function writeProjection(
         {
             cwd: canonicalRoot,
             encoding: "utf8",
-            timeout: 5_000,
+            timeout: LOCAL_RUNTIME_POLICY.manifestWriteTimeoutMs,
             stdio: ["ignore", "ignore", "ignore"],
             env: { ...process.env, LOCAL_RUNTIME_ROOT: canonicalRoot },
         },

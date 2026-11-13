@@ -6,7 +6,6 @@ import {
     STRUCTURAL_RULE_IDS,
     validateClaimStructure,
 } from "@convex/domain/claimValidation";
-import { MAX_VERIFIER_EVIDENCE_REFERENCES } from "@convex/domain/evidenceLimits";
 import {
     derivePublisherIdentity,
     evaluateEvidencePolicy,
@@ -31,6 +30,7 @@ import {
     VERIFIER_SCHEMA_VERSION,
     type VerifierInput,
 } from "@convex/integrations/showcaseVerifierAdapter";
+import { MAX_VERIFIER_EVIDENCE_REFERENCES } from "@convex/resourcePolicy";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";

@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import { executionError } from "@convex/execution/errors";
 import { runPiMission } from "@convex/integrations/piMission";
+import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { PiConvexStorage } from "@convex/integrations/piStorage";
 import { type FunctionArgs, getFunctionName } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -84,6 +85,7 @@ test("a reopened final reply adopts once after an operation arrived before compl
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "before-late-work",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(interrupted).toBe(true);
@@ -172,6 +174,7 @@ test("reopening after a stale tool reply preserves its refusal instead of execut
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "before-stale-crash",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(interrupted).toBe(true);
@@ -238,6 +241,7 @@ test("a crash after publication settles the original native task before the next
                     ctx,
                     { missionId: active.missionId, expectedGeneration: 1 },
                     "crashed",
+                    nodeActionGenerationDeadline(Date.now()),
                 ),
             ),
         ).rejects.toThrow();
@@ -288,7 +292,7 @@ test("a crash after publication settles the original native task before the next
 }, 30000);
 
 test("journal exhaustion preserves the journal and stops the entire conversation without a new-message escape", async () => {
-    const { PI_SESSION_MAX_BYTES } = await import("@convex/resourceLimits");
+    const { PI_SESSION_MAX_BYTES } = await import("@convex/resourcePolicy");
     const { t, client, runId } = await seedWorkbench(true);
     const active = await t.mutation(
         internal.execution.conversations.startTurn,
@@ -394,7 +398,7 @@ test("native compaction and a later response preserve the same journal and exact
     ).toBe(true);
     expect(
         observed.commits.some((commit) =>
-            commit.payload.includes("EXACT-ORIGINAL-0"),
+            commit.payload?.includes("EXACT-ORIGINAL-0"),
         ),
     ).toBe(true);
 }, 30000);

@@ -1,6 +1,7 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
 import { cancelAgentMissionsForRun } from "@convex/execution/cancellation";
+import { recordResearchObservation } from "@convex/execution/researchControl";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 
@@ -62,5 +63,13 @@ export async function cancelRunExecution(
         executionStatus: "cancelled",
         occurredAt: now,
     });
+    await recordResearchObservation(
+        ctx,
+        run._id,
+        "research_cancelled",
+        run.ownerVisitorId
+            ? { type: "visitor", visitorId: run.ownerVisitorId }
+            : { type: "system" },
+    );
     return { cancelled: true };
 }

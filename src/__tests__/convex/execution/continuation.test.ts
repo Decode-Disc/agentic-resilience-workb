@@ -10,7 +10,11 @@ import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+});
 
 test.each([
     "resume",
@@ -306,25 +310,16 @@ test("a recreated invocation receives retained notes, human instructions and obl
 });
 
 test("required context over capacity blocks without discarding notes or obligations", async () => {
-    const { t, args } = await seedInspectedEvidence();
-    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
-    const missionId = await t.mutation(internal.execution.missions.start, {
-        runId: args.runId,
-        corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
-        requestKey: "capacity",
-        expectedGeneration: 4,
-    });
-    const notes = "x".repeat(128 * 1024);
+    const { seedPiMission } = await import("@/__tests__/setup/pi-mission");
+    const { t, missionId } = await seedPiMission();
+    const notes = "x".repeat(600000);
     await t.run((ctx) => ctx.db.patch(missionId, { workingNotes: notes }));
-    expect(
-        await t.mutation(internal.execution.invocations.begin, {
-            missionId,
-            expectedGeneration: 4,
-            taskKey: "turn-0",
-            provenance: "simulation",
-        }),
-    ).toEqual({ kind: "blocked", code: "context_capacity" });
+    await t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+        simulation: true,
+    });
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
         workingNotes: notes,
         obligations: ["inspect_saved_material"],

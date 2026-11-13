@@ -33,11 +33,13 @@ import { classifySourceCandidate } from "./domain/sourceSelectionPolicy";
 import { readPinnedSourceQualification } from "./domain/sourceUsage";
 import { buildCccShowcaseManifest } from "./fixtures/cccShowcase";
 import {
-    MAX_PASSAGES_PER_SOURCE,
-    SOURCE_PREPARATION_DEADLINE_MS,
     sourceCandidateLimit,
     sourcePreparationEnabled,
 } from "./resourceLimits";
+import {
+    MAX_PASSAGES_PER_SOURCE,
+    SOURCE_PREPARATION_DEADLINE_MS,
+} from "./resourcePolicy";
 import {
     BROWSER_TEST_SLOT,
     requireBrowserFixtureContext,

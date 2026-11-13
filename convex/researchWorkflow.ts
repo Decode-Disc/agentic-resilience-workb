@@ -1,5 +1,8 @@
 import { sourcesEnvelopeValidator } from "@convex/domain/sourcesContracts";
-import { awaitResearchControl } from "@convex/execution/researchControl";
+import {
+    awaitResearchControl,
+    recordResearchObservation,
+} from "@convex/execution/researchControl";
 import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
 
@@ -320,6 +323,7 @@ export const onComplete = internalMutation({
             executionStatus,
             occurredAt: now,
         });
+        await recordResearchObservation(ctx, run._id, eventType);
         return null;
     },
 });

@@ -368,7 +368,8 @@ test.each([
         });
         expect(
             new TextEncoder().encode(JSON.stringify(status)).length,
-        ).toBeLessThan(32 * 1024);
+        ).toBeGreaterThan(32 * 1024);
+        expect(status.controlledContributions.length).toBeGreaterThan(0);
         const requestId = await f.t.mutation(
             internal.execution.operations.enqueue,
             {

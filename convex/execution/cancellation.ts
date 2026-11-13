@@ -2,12 +2,13 @@ import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalMutation, type MutationCtx } from "@convex/_generated/server";
 import { recordMissionEvent } from "@convex/execution/authority";
+import {
+    CANCELLATION_MISSION_BATCH,
+    CANCELLATION_REQUEST_BATCH,
+} from "@convex/resourcePolicy";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
-
-const CANCELLATION_MISSION_BATCH = 4;
-const CANCELLATION_REQUEST_BATCH = 4;
 
 const continuationArgs = {
     runId: v.id("researchRuns"),

@@ -1,3 +1,4 @@
+import { recordContextObservation } from "@convex/execution/journal";
 import { patchQualificationReceipt } from "@convex/qualificationUsage";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { WorkflowId } from "@convex-dev/workflow";
@@ -63,11 +64,11 @@ import {
 } from "./domain/sourceUsage";
 import { canStartNewCorpusRevision } from "./domain/transitions";
 import {
-    MAX_SUPPLEMENT_SEARCHES,
     sourceDossierCandidateLimit,
     sourcePreparationEnabled,
     sourceRecommendedTarget,
 } from "./resourceLimits";
+import { MAX_SUPPLEMENT_SEARCHES } from "./resourcePolicy";
 import { requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
 import { corpusRevisionApproved, workflow } from "./workflow";
@@ -2323,6 +2324,21 @@ export const approveProposedCorpus = mutation({
             targetType: "corpus_revision",
             targetId: revision._id,
             occurredAt: now,
+        });
+        await recordContextObservation(ctx, run._id, {
+            key: `checkpoint-decision:${checkpointDecisionId}`,
+            topic: "analyst_decision",
+            actor: { type: "visitor", visitorId: visitor._id },
+            value: {
+                event: "corpus_approved",
+                decisionId: checkpointDecisionId,
+                decision: "approved",
+                corpusRevisionId: revision._id,
+                revision: revision.revision,
+                proposalId: proposal._id,
+                proposalVersion: proposal.version,
+                executionGeneration,
+            },
         });
         return { accepted: true };
     },

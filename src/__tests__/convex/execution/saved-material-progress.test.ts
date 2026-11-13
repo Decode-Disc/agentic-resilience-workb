@@ -1,4 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
+import type { QueryCtx } from "@convex/_generated/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
+import { ConvexError } from "convex/values";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
@@ -212,4 +215,278 @@ test("Workbench records the unit progress key of a successful contextual reading
     expect(await t.run((ctx) => ctx.db.get(turn.missionId))).toMatchObject({
         progressKeys: [outcome.progressKey],
     });
+});
+
+test("documentary search pages reach passages beyond the first response and refuse a changed search scope", async () => {
+    const text = Array.from(
+        { length: 90 },
+        (_, index) =>
+            `# Section ${index}\n\nSubscription revenue relates to section ${index}. ${"Subscription conditions remain specific. ".repeat(50)}`,
+    ).join("\n\n");
+    const { t, args, sourceId } = await seedInspectedEvidence({ text });
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "paged-search",
+        expectedGeneration: 4,
+    });
+    let readCount = 0;
+    const read = async (query: string, continuation?: string) => {
+        const requestId = await t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId,
+                expectedGeneration: 4,
+                cause: `search:${++readCount}`,
+                input: {
+                    kind: "search_available_material",
+                    sourceId,
+                    query,
+                    ...(continuation ? { continuation } : {}),
+                },
+            },
+        );
+        return t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 4,
+        });
+    };
+    const first = await read("Subscription");
+    expect(first.kind).toBe("success");
+    if (first.kind !== "success") throw new Error("Expected material");
+    const page = JSON.parse(first.valueJson);
+    expect(page.continuation).toEqual(expect.any(String));
+    const seen = new Set<number>(
+        page.passages.map(
+            (passage: { passageOrder: number }) => passage.passageOrder,
+        ),
+    );
+    let continuation: string | null = page.continuation;
+    while (continuation) {
+        const result = await read("Subscription", continuation);
+        if (result.kind !== "success") throw new Error(JSON.stringify(result));
+        const next = JSON.parse(result.valueJson);
+        for (const passage of next.passages) {
+            expect(seen.has(passage.passageOrder)).toBe(false);
+            seen.add(passage.passageOrder);
+        }
+        continuation = next.continuation;
+    }
+    expect(seen.size).toBeGreaterThan(64);
+    expect(await read("Annual", page.continuation)).toMatchObject({
+        kind: "refused",
+        code: "material_continuation_invalid",
+    });
+});
+
+test("requested context ranges continue with exact Unicode offsets without manufacturing new passage progress", async () => {
+    const text = `# Documentary context\n\n${"Reported qualification 🧭 with a specific limitation. ".repeat(1000)}`;
+    const { t, args, sourceId } = await seedInspectedEvidence({ text });
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "context-pages",
+        expectedGeneration: 4,
+    });
+    let count = 0;
+    const read = async (
+        continuation?: string,
+        range?: { startOffset: number; endOffset: number },
+    ) => {
+        const requestId = await t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId,
+                expectedGeneration: 4,
+                cause: `context-page-${++count}`,
+                input: {
+                    kind: "read_in_context",
+                    sourceId,
+                    passageOrder: 0,
+                    ...(continuation ? { continuation } : {}),
+                    ...(range ? { range } : {}),
+                },
+            },
+        );
+        const result = await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 4,
+        });
+        if (result.kind !== "success") throw new Error(JSON.stringify(result));
+        return JSON.parse(result.valueJson);
+    };
+    const focal = await read();
+    const before = await t.run((ctx) => ctx.db.get(missionId));
+    let page = await read(undefined, {
+        startOffset: 0,
+        endOffset: focal.passage.captureCharacters,
+    });
+    let recovered = page.passage.surroundingText;
+    let end = page.passage.contextEndOffset;
+    expect(page.continuation).toEqual(expect.any(String));
+    while (page.continuation) {
+        page = await read(page.continuation);
+        expect(page.passage.contextStartOffset).toBe(end);
+        recovered += page.passage.surroundingText;
+        end = page.passage.contextEndOffset;
+    }
+    expect(recovered).toBe(text);
+    expect((await t.run((ctx) => ctx.db.get(missionId)))?.progressKeys).toEqual(
+        before?.progressKeys,
+    );
+});
+
+test.each([
+    "native-message",
+    "native-data",
+    "unexpected",
+    "range",
+] as const)("documentary continuation normalizes only cursor and range validation failures (%s)", async (failure) => {
+    const f = await seedInspectedEvidence({
+        text: Array.from(
+            { length: 70 },
+            (_, index) =>
+                `# Section ${index}\n\nSubscription revenue depends on section ${index}.`,
+        ).join("\n\n"),
+    });
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "invalid-documentary-continuation",
+        expectedGeneration: 4,
+    });
+    let sequence = 0;
+    const read = async (
+        input: import("@convex/domain/savedMaterialOperations").SavedMaterialOperation,
+    ) => {
+        const requestId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId,
+                expectedGeneration: 4,
+                cause: `continuation-${++sequence}`,
+                input,
+            },
+        );
+        return f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 4,
+        });
+    };
+    const initial = await read({
+        kind: "search_available_material",
+        sourceId: f.sourceId,
+        query: "Subscription",
+    });
+    if (initial.kind !== "success") throw new Error("Expected initial search");
+    const continuation: string = JSON.parse(initial.valueJson).continuation;
+    expect(continuation).toEqual(expect.any(String));
+    const before = await f.t.run((ctx) => ctx.db.get(missionId));
+    const { searchApprovedSourceForMission } = await import(
+        "@convex/sourceRetrieval"
+    );
+    const registered =
+        searchApprovedSourceForMission as typeof searchApprovedSourceForMission & {
+            _handler(
+                ctx: QueryCtx,
+                args: FunctionArgs<
+                    typeof internal.sourceRetrieval.searchApprovedSourceForMission
+                >,
+            ): Promise<
+                FunctionReturnType<
+                    typeof internal.sourceRetrieval.searchApprovedSourceForMission
+                >
+            >;
+        };
+    const original = registered._handler;
+    const nativeError =
+        failure === "native-data"
+            ? new ConvexError({
+                  isConvexSystemError: true,
+                  paginationError: "InvalidCursor",
+              })
+            : new Error(
+                  failure === "unexpected"
+                      ? "database_unavailable"
+                      : "InvalidCursor: malformed pagination cursor",
+              );
+    // convex-test uses JSON cursors; emulate only the native database error at paginate.
+    const observeDatabase = (target: object): object =>
+        new Proxy(target, {
+            get(object, key, receiver) {
+                const value: unknown = Reflect.get(object, key, receiver);
+                if (typeof value !== "function") return value;
+                return (...params: unknown[]) => {
+                    if (key === "paginate") throw nativeError;
+                    const result: unknown = Reflect.apply(
+                        value,
+                        object,
+                        params,
+                    );
+                    return ["query", "withSearchIndex"].includes(String(key)) &&
+                        result &&
+                        typeof result === "object"
+                        ? observeDatabase(result)
+                        : result;
+                };
+            },
+        });
+    const spy = vi
+        .spyOn(registered, "_handler")
+        .mockImplementation((ctx, args) =>
+            original(
+                { ...ctx, db: observeDatabase(ctx.db) as QueryCtx["db"] },
+                args,
+            ),
+        );
+    try {
+        const outcome = await read(
+            failure === "range"
+                ? {
+                      kind: "read_in_context",
+                      sourceId: f.sourceId,
+                      passageOrder: 0,
+                      range: { startOffset: 0, endOffset: 1000000 },
+                  }
+                : {
+                      kind: "search_available_material",
+                      sourceId: f.sourceId,
+                      query: "Subscription",
+                      continuation: JSON.stringify({
+                          ...JSON.parse(continuation),
+                          cursor: "malformed-native",
+                      }),
+                  },
+        );
+        expect(outcome).toMatchObject(
+            failure === "unexpected"
+                ? { kind: "unavailable", code: "operation_outcome_unknown" }
+                : { kind: "refused", code: "material_continuation_invalid" },
+        );
+        expect(
+            (await f.t.run((ctx) => ctx.db.get(missionId)))?.progressKeys,
+        ).toEqual(before?.progressKeys);
+        if (failure === "unexpected") {
+            const events = await f.t.run((ctx) =>
+                ctx.db
+                    .query("agentExecutionEvents")
+                    .withIndex("by_mission_and_kind", (q) =>
+                        q.eq("missionId", missionId),
+                    )
+                    .collect(),
+            );
+            expect(
+                events.some(
+                    (event) =>
+                        event.protectedDiagnostic?.message ===
+                        "database_unavailable",
+                ),
+            ).toBe(true);
+        }
+    } finally {
+        spy.mockRestore();
+    }
 });

@@ -27,6 +27,7 @@ import {
     sep,
 } from "node:path";
 import { parseArgs } from "node:util";
+import { EVALUATION_ARCHIVE_POLICY } from "../convex/resourcePolicy.ts";
 
 type Source = { origin: string; archivePath: string };
 type SelectedFile = {
@@ -165,8 +166,8 @@ function runTar(args: string[]) {
     delete env.GZIP;
     execFileSync("tar", args, {
         env,
-        timeout: 120_000,
-        maxBuffer: 1024 * 1024,
+        timeout: EVALUATION_ARCHIVE_POLICY.commandTimeoutMs,
+        maxBuffer: EVALUATION_ARCHIVE_POLICY.commandMaxBufferBytes,
         stdio: ["ignore", "pipe", "pipe"],
     });
 }

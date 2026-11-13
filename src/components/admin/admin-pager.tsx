@@ -9,9 +9,13 @@ import { Button } from "@/components/ui/button";
 export function AdminLoadMore({
     page,
     label,
+    count = 20,
+    focusableWhenDisabled,
 }: {
     page: { status: string; loadMore: (count: number) => void };
     label: string;
+    count?: number;
+    focusableWhenDisabled?: boolean;
 }) {
     if (page.status !== "CanLoadMore" && page.status !== "LoadingMore") {
         return null;
@@ -19,11 +23,12 @@ export function AdminLoadMore({
     const loading = page.status === "LoadingMore";
     return (
         <Button
-            className="mt-3"
+            className="mt-3 aria-disabled:opacity-50"
             size="sm"
             variant="outline"
             disabled={loading}
-            onClick={() => page.loadMore(20)}>
+            focusableWhenDisabled={focusableWhenDisabled}
+            onClick={() => page.loadMore(count)}>
             {loading ? "Loading…" : label}
         </Button>
     );

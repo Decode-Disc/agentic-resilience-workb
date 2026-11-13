@@ -9,6 +9,10 @@ import {
     patchQualificationReceipt,
     updateQualificationUsage,
 } from "@convex/qualificationUsage";
+import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+} from "@convex/resourcePolicy";
 import { ConvexError, type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -34,22 +38,18 @@ import {
     MAX_PREPARATION_ATTEMPT_HISTORY,
     nextPreparationAttempt,
     preparationBudgetBlock,
-    preparationBudgetOutcome,
     preparationDispatchOutcomeValidator,
     preparationFailureClass,
     readPreparationBudget,
     readPreparationLimits,
     sourcePreparationError,
 } from "./domain/sourcePreparationAuthority";
-import { requireMissionAuthority } from "./execution/authority";
-import { MAX_CONTEXT_BYTES } from "./execution/executionProtocol";
-import {
-    MODEL_MAX_INPUT_PRICE_PER_MILLION,
-    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
-    MODEL_MAX_OUTPUT_TOKENS,
-} from "./integrations/modelRouting";
+import { executionError, requireMissionAuthority } from "./execution/authority";
+import { admittedInputHash } from "./execution/journal";
+import { preparationModelOutputLimit } from "./integrations/modelRouting";
 import { rateLimiter } from "./rateLimiter";
 import {
+    BILLING_LOOKUP_LEASE_MS as BILLING_LEASE_MS,
     MAX_CONCURRENT_SOURCE_EMBEDDING_CALLS,
     MAX_PREPARATION_DIAGNOSTIC_BYTES,
     MAX_SOURCE_EMBEDDING_ATTEMPTS,
@@ -57,9 +57,29 @@ import {
     MAX_SOURCE_EMBEDDING_INPUT_BYTES,
     MAX_SOURCE_EMBEDDING_TEXT_BYTES,
     MAX_SOURCES_QUALIFICATION_RECEIPTS,
-} from "./resourceLimits";
-import { readWorkbenchQualification } from "./runWorkspace";
+    MODEL_SETTLEMENT_GRACE_MS,
+    IO_PROVIDER_LEASE_MS as PROVIDER_LEASE_MS,
+    SOURCE_EMBEDDING_PROVIDER_LEASE_MS,
+} from "./resourcePolicy";
+import {
+    readWorkbenchQualification,
+    readWorkbenchQualificationDeadline,
+} from "./runWorkspace";
 import schema from "./schema";
+
+/** Known observations settle independently; only qualification-funded results carry this adoption deadline. */
+export async function requireQualificationResultDeadline(
+    ctx: QueryCtx,
+    receipt: Doc<"providerCalls">,
+) {
+    if (receipt.qualificationReservationUsd === undefined) return;
+    const run = receipt.runId ? await ctx.db.get(receipt.runId) : null;
+    const deadlineAt = run
+        ? await readWorkbenchQualificationDeadline(ctx, run)
+        : undefined;
+    if (deadlineAt === undefined) throw executionError("not_authorized");
+    if (deadlineAt <= Date.now()) throw executionError("execution_deadline");
+}
 
 async function requireBrowserQualification(
     ctx: QueryCtx,
@@ -150,37 +170,56 @@ const providerCallStatusValidator = v.union(
     v.literal("failed"),
 );
 
-const PROVIDER_LEASE_MS = {
-    model: 70_000,
-    sec: 15_000,
-    exa: 15_000,
-    url_metadata: 15_000,
-    pdf: 15_000,
-} as const;
-
 /** Factual response identity survives an interrupted stream without settling its outcome. */
 export const observeGeneration = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
-        generationId: v.string(),
+        generationId: v.optional(v.string()),
         httpStatus: v.optional(v.number()),
+        requestId: v.optional(v.string()),
+        diagnostic:
+            schema.tables.providerCalls.validator.fields.transportDiagnostic,
     },
     returns: v.null(),
     handler: async (ctx, args) => {
         const call = await invocationCall(ctx, args.invocationId);
-        if (!/^[\w.:-]{1,256}$/.test(args.generationId))
+        if (
+            (args.generationId !== undefined &&
+                !/^[\w.:-]{1,256}$/.test(args.generationId)) ||
+            (args.requestId !== undefined &&
+                !/^[\w.:-]{1,256}$/.test(args.requestId)) ||
+            (args.httpStatus !== undefined &&
+                (!Number.isInteger(args.httpStatus) ||
+                    args.httpStatus < 100 ||
+                    args.httpStatus > 599)) ||
+            (args.generationId === undefined &&
+                args.httpStatus === undefined &&
+                args.requestId === undefined &&
+                args.diagnostic === undefined)
+        )
             throw new Error("Invalid provider observation");
-        if (call.providerObservation) {
+        if (call.providerObservation?.generationId && args.generationId) {
             if (call.providerObservation.generationId !== args.generationId)
                 throw new Error("Provider generation identity changed");
-            return null;
         }
         await patchQualificationReceipt(ctx, call, {
             providerObservation: {
-                generationId: args.generationId,
-                httpStatus: args.httpStatus,
-                observedAt: Date.now(),
+                ...call.providerObservation,
+                ...(args.generationId
+                    ? { generationId: args.generationId }
+                    : {}),
+                ...(args.httpStatus !== undefined
+                    ? { httpStatus: args.httpStatus }
+                    : {}),
+                ...(args.requestId ? { requestId: args.requestId } : {}),
+                observedAt: call.providerObservation?.observedAt ?? Date.now(),
             },
+            ...(args.diagnostic
+                ? {
+                      transportDiagnostic:
+                          call.transportDiagnostic ?? args.diagnostic,
+                  }
+                : {}),
         });
         return null;
     },
@@ -207,7 +246,14 @@ async function invocationCall(
         request?.state !== "complete" ||
         call.service !== "model" ||
         call.invocationId !== invocation._id ||
-        call.inputHash !== sha256Hex(invocation.inputJson) ||
+        call.inputHash !==
+            (invocation.preparationInputHash ??
+                admittedInputHash(invocation)) ||
+        (invocation.preparationInputHash !== undefined &&
+            (invocation.missionId !== undefined ||
+                !call.preparationId ||
+                call.operationKey !== invocation.taskKey ||
+                call.corpusRevisionId !== invocation.corpusRevisionId)) ||
         call.executionGeneration !== invocation.generation ||
         call.missionId !== invocation.missionId ||
         call.runId !== invocation.runId
@@ -219,11 +265,14 @@ async function invocationCall(
 const billingResult = v.object({ scheduled: v.boolean() });
 const billingReason =
     schema.tables.providerCalls.validator.fields.billing.fields.reason;
-const BILLING_LEASE_MS = 30_000;
 
 function reportedCostSettlement(
     call: Doc<"providerCalls">,
     cost: number | undefined,
+    observation?: Pick<
+        Infer<typeof providerAttemptValidator>,
+        "status" | "dispatchOutcome"
+    >,
 ) {
     if (cost !== undefined && (!Number.isFinite(cost) || cost < 0))
         throw new Error("Invalid provider cost");
@@ -242,7 +291,16 @@ function reportedCostSettlement(
             },
         };
     }
-    return { reportedCost: call.reportedCost ?? cost };
+    return {
+        reportedCost: call.reportedCost ?? cost,
+        reportedCostFinal:
+            call.reportedCostFinal === true ||
+            (cost !== undefined &&
+                observation !== undefined &&
+                observation.status !== "partial" &&
+                (observation.dispatchOutcome === "response_received" ||
+                    observation.status === "succeeded")),
+    };
 }
 
 /** Only the original admitted call can request accounting; this grants no execution authority. */
@@ -254,7 +312,7 @@ export const requestBilling = internalMutation({
         if (!invocation?.providerCallId) return null;
         const call = await invocationCall(ctx, args.invocationId);
         if (
-            !call.providerObservation ||
+            !call.providerObservation?.generationId ||
             call.billing ||
             call.reportedCost !== undefined ||
             call.status === "succeeded"
@@ -287,7 +345,7 @@ export const retryBilling = mutation({
         if (!call?.invocationId) return { scheduled: false };
         await invocationCall(ctx, call.invocationId);
         if (
-            !call.providerObservation ||
+            !call.providerObservation?.generationId ||
             !call.billing ||
             !["pending", "unavailable", "checking"].includes(
                 call.billing.state,
@@ -321,7 +379,7 @@ export const claimBilling = internalMutation({
             !call?.invocationId ||
             call.billing?.state !== "pending" ||
             call.billing.attempt + 1 !== args.attempt ||
-            !call.providerObservation
+            !call.providerObservation?.generationId
         )
             return null;
         await invocationCall(ctx, call.invocationId);
@@ -352,6 +410,7 @@ export const settleBilling = internalMutation({
         providerCallId: v.id("providerCalls"),
         attempt: v.number(),
         generationId: v.string(),
+        cancelled: v.optional(v.literal(true)),
         cost: v.optional(v.number()),
         reason: billingReason,
         httpStatus: v.optional(v.number()),
@@ -385,6 +444,14 @@ export const settleBilling = internalMutation({
                     : {}),
             },
             ...reportedCostSettlement(call, args.cost),
+            ...(args.cost !== undefined && args.cancelled
+                ? {
+                      providerObservation: {
+                          ...call.providerObservation,
+                          cancelled: args.cancelled,
+                      },
+                  }
+                : {}),
         });
         return null;
     },
@@ -393,12 +460,24 @@ export const settleBilling = internalMutation({
 function providerLeaseDurationMs(
     service: "sec" | "exa" | "url_metadata" | "pdf" | "model",
     operation: string,
+    remainingAuthorityMs?: number,
 ): number {
+    if (service === "model") {
+        if (operation === "source_embedding")
+            return SOURCE_EMBEDDING_PROVIDER_LEASE_MS;
+        if (
+            remainingAuthorityMs === undefined ||
+            !Number.isSafeInteger(remainingAuthorityMs) ||
+            remainingAuthorityMs <= 0
+        )
+            throw sourcePreparationError("execution_deadline");
+        return remainingAuthorityMs + MODEL_SETTLEMENT_GRACE_MS;
+    }
     if (service === "exa" && operation === "get_contents") {
-        return 150_000;
+        return PROVIDER_LEASE_MS.exaContents;
     }
     if (service === "exa" && operation === "resolve_company_website") {
-        return 10_000;
+        return PROVIDER_LEASE_MS.companyWebsite;
     }
     return PROVIDER_LEASE_MS[service];
 }
@@ -452,11 +531,19 @@ export const reserveSourceMetadataRateLimit = internalMutation({
 });
 
 const recordAttemptResultValidator = v.object({
+    deadlineAt: v.optional(v.number()),
     providerCallId: v.id("providerCalls"),
     shouldExecute: v.boolean(),
     status: providerCallStatusValidator,
     errorCode: v.optional(v.string()),
     retryable: v.optional(v.boolean()),
+});
+
+const preparationAttemptPlanValidator = v.object({
+    attempt: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+    retryAt: v.optional(v.number()),
+    diagnosticReason: v.optional(v.string()),
 });
 
 /** Advises actions before dispatch; recordAttempt revalidates atomically before granting work. */
@@ -468,12 +555,11 @@ export const nextPreparationAttemptForInput = internalQuery({
         inputHash: v.string(),
         now: v.number(),
     },
-    returns: v.object({
-        attempt: v.optional(v.number()),
-        errorCode: v.optional(v.string()),
-        retryAt: v.optional(v.number()),
-    }),
-    handler: async (ctx, args) => {
+    returns: preparationAttemptPlanValidator,
+    handler: async (
+        ctx,
+        args,
+    ): Promise<Infer<typeof preparationAttemptPlanValidator>> => {
         const { preparation } = await assertPreparationExecutionFence(ctx.db, {
             preparationId: args.preparationId,
             now: args.now,
@@ -522,7 +608,12 @@ export const nextPreparationAttemptForInput = internalQuery({
                 "source_documentary_control",
             ].includes(args.operation)
         )
-            return plan;
+            return {
+                ...plan,
+                ...(plan.attempt
+                    ? {}
+                    : { diagnosticReason: calls[0]?.diagnostic?.reason }),
+            };
         const run = await ctx.db.get(preparation.runId);
         if (!run) throw sourcePreparationError("stale_execution");
         const blocked = preparationBudgetBlock(
@@ -535,6 +626,7 @@ export const nextPreparationAttemptForInput = internalQuery({
 });
 
 export const providerAttemptValidator = v.object({
+    modelContextWindowTokens: v.optional(v.number()),
     operationRequestId: v.optional(v.id("agentOperationRequests")),
     missionId: v.optional(v.id("agentMissions")),
     invocationId: v.optional(v.id("agentInvocations")),
@@ -704,7 +796,7 @@ export const recordAttempt = internalMutation({
                               : "agent_reasoning") ||
                       args.stepKey !== args.operation ||
                       args.attempt !== 1 ||
-                      args.inputHash !== sha256Hex(invocation.inputJson) ||
+                      args.inputHash !== admittedInputHash(invocation) ||
                       args.operationKey !==
                           `mission:${mission._id}:invocation:${invocation._id}:attempt:1`)
             )
@@ -988,6 +1080,7 @@ export const recordAttempt = internalMutation({
             }
 
             let recoveryOfProviderCallId: Id<"providerCalls"> | undefined;
+            let remainingModelAuthorityMs: number | undefined;
             if (
                 args.preparationId &&
                 args.inputHash &&
@@ -1119,12 +1212,38 @@ export const recordAttempt = internalMutation({
                 const preparation = args.preparationId
                     ? await ctx.db.get(args.preparationId)
                     : null;
-                const mission = args.missionId
-                    ? await ctx.db.get(args.missionId)
+                const request = args.operationRequestId
+                    ? await ctx.db.get(args.operationRequestId)
                     : null;
+                if (
+                    args.operationRequestId &&
+                    (!request ||
+                        request.runId !== args.runId ||
+                        request.expectedGeneration !==
+                            args.executionGeneration ||
+                        request.status !== "running" ||
+                        (args.missionId &&
+                            request.missionId !== args.missionId))
+                )
+                    throw sourcePreparationError("stale_execution");
+                const missionId = args.missionId ?? request?.missionId;
+                const mission = missionId ? await ctx.db.get(missionId) : null;
                 const run = args.runId ? await ctx.db.get(args.runId) : null;
                 if ((!preparation && !mission) || !run)
                     throw sourcePreparationError("stale_execution");
+                if (missionId)
+                    await requireMissionAuthority(
+                        ctx,
+                        missionId,
+                        args.executionGeneration ?? 0,
+                    );
+                remainingModelAuthorityMs =
+                    Math.min(
+                        preparation?.deadlineAt ?? Infinity,
+                        mission?.deadlineAt ?? Infinity,
+                        request ? (request.deadlineAt ?? 0) : Infinity,
+                        qualification?.deadlineAt ?? Infinity,
+                    ) - now;
                 const budget = await readPreparationBudget(
                     ctx.db,
                     run,
@@ -1152,13 +1271,103 @@ export const recordAttempt = internalMutation({
                 });
             }
             let qualificationReservationUsd: number | undefined;
+            let structuredCapacity:
+                | { contextWindow: number; maxTokens: number }
+                | undefined;
+            if (
+                args.service === "model" &&
+                args.preparationId &&
+                args.operation !== "source_embedding"
+            ) {
+                const preparation = await ctx.db.get(args.preparationId);
+                if (preparation) {
+                    if (preparation.preparationStudy)
+                        throw sourcePreparationError(
+                            "qualification_structured_capacity_not_authorized",
+                        );
+                    const model = preparation.modelRevisionId
+                        ? await ctx.db.get(preparation.modelRevisionId)
+                        : null;
+                    if (!model)
+                        throw sourcePreparationError("missing_configuration");
+                    structuredCapacity = {
+                        contextWindow: model.descriptor.contextWindow,
+                        maxTokens: preparationModelOutputLimit({
+                            model: model.model,
+                            descriptor: model.descriptor,
+                        }),
+                    };
+                }
+            }
             if (qualification) {
-                const modelReservationUsd =
-                    ((MAX_CONTEXT_BYTES + 4096) *
-                        MODEL_MAX_INPUT_PRICE_PER_MILLION +
-                        MODEL_MAX_OUTPUT_TOKENS *
-                            MODEL_MAX_OUTPUT_PRICE_PER_MILLION) /
-                    1_000_000;
+                let modelReservationUsd = 0;
+                if (args.service === "model") {
+                    let capacity = structuredCapacity;
+                    if (args.operation === "response_coherence") {
+                        const contextWindow = args.modelContextWindowTokens;
+                        if (
+                            typeof contextWindow !== "number" ||
+                            !Number.isSafeInteger(contextWindow) ||
+                            contextWindow < 1
+                        )
+                            throw sourcePreparationError(
+                                "missing_configuration",
+                            );
+                        // The verified decisions endpoint charges input only and produces no completion tokens.
+                        capacity = { contextWindow, maxTokens: 0 };
+                    } else if (args.invocationId) {
+                        const invocation = await ctx.db.get(args.invocationId);
+                        const mission = invocation?.missionId
+                            ? await ctx.db.get(invocation.missionId)
+                            : null;
+                        const model = mission?.modelRevisionId
+                            ? await ctx.db.get(mission.modelRevisionId)
+                            : null;
+                        if (!model)
+                            throw sourcePreparationError(
+                                "missing_configuration",
+                            );
+                        capacity = {
+                            contextWindow: model.descriptor.contextWindow,
+                            maxTokens: preparationModelOutputLimit({
+                                model: model.model,
+                                descriptor: model.descriptor,
+                            }),
+                        };
+                        if (
+                            invocation?.generationBackend?.id === "pi-durable"
+                        ) {
+                            const request = await ctx.db
+                                .query("agentInvocationPayloads")
+                                .withIndex("by_invocation_and_part", (q) =>
+                                    q
+                                        .eq("invocationId", invocation._id)
+                                        .eq("part", "request"),
+                                )
+                                .unique();
+                            const output = request?.effectiveMaxOutputTokens;
+                            if (
+                                request?.state !== "complete" ||
+                                typeof output !== "number" ||
+                                !Number.isSafeInteger(output) ||
+                                output < 1 ||
+                                output > model.descriptor.maxTokens
+                            )
+                                throw sourcePreparationError(
+                                    "invalid_model_output_limit",
+                                );
+                            capacity.maxTokens = output;
+                        }
+                    }
+                    if (!capacity)
+                        throw sourcePreparationError("missing_configuration");
+                    modelReservationUsd =
+                        (capacity.contextWindow *
+                            MODEL_MAX_INPUT_PRICE_PER_MILLION +
+                            capacity.maxTokens *
+                                MODEL_MAX_OUTPUT_PRICE_PER_MILLION) /
+                        1_000_000;
+                }
                 qualificationReservationUsd =
                     args.service === "model"
                         ? modelReservationUsd
@@ -1275,8 +1484,11 @@ export const recordAttempt = internalMutation({
                     ? (await ctx.db.get(args.runId))?.browserTestContextId
                     : undefined;
             const providerCallId = await ctx.db.insert("providerCalls", {
+                reservedMaxOutputTokens: structuredCapacity?.maxTokens,
+                modelContextWindowTokens: args.modelContextWindowTokens,
                 qualificationReservationUsd,
                 qualificationContextId,
+                costAccountingPolicy: qualification?.costAccountingPolicy,
                 operationRequestId: args.operationRequestId,
                 missionId: args.missionId,
                 invocationId: args.invocationId,
@@ -1295,7 +1507,12 @@ export const recordAttempt = internalMutation({
                 attempt: args.attempt,
                 recoveryOfProviderCallId,
                 leaseExpiresAt:
-                    now + providerLeaseDurationMs(args.service, args.operation),
+                    now +
+                    providerLeaseDurationMs(
+                        args.service,
+                        args.operation,
+                        remainingModelAuthorityMs,
+                    ),
                 usage:
                     args.operation === "source_embedding"
                         ? { reservedInputBytes: args.embeddingInputBytes }
@@ -1310,6 +1527,9 @@ export const recordAttempt = internalMutation({
             if (args.invocationId && !args.operationRequestId)
                 await ctx.db.patch(args.invocationId, { providerCallId });
             return {
+                ...(remainingModelAuthorityMs === undefined
+                    ? {}
+                    : { deadlineAt: now + remainingModelAuthorityMs }),
                 providerCallId,
                 shouldExecute: true,
                 status: "started" as const,
@@ -1368,60 +1588,21 @@ export const recordAttempt = internalMutation({
                 const settlement = reportedCostSettlement(
                     existing,
                     args.reportedCost,
+                    args,
                 );
-                await updateQualificationUsage(ctx, existing, {
-                    ...existing,
-                    ...settlement,
-                });
-                await ctx.db.patch(existing._id, settlement);
+                await patchQualificationReceipt(ctx, existing, settlement);
                 return {
                     providerCallId: existing._id,
                     shouldExecute: false,
                     status: existing.status,
                 };
             }
-            const run = args.runId ? await ctx.db.get(args.runId) : null;
-            const preparation = args.preparationId
-                ? await ctx.db.get(args.preparationId)
-                : null;
-            if (!run || (!preparation && !args.missionId))
-                throw sourcePreparationError("stale_execution");
-            const budget = await readPreparationBudget(
-                ctx.db,
-                run,
-                preparation ?? undefined,
-            );
-            const before = preparationBudgetOutcome(existing);
-            const after = preparationBudgetOutcome({
-                ...args,
-                dispatchOutcome:
-                    args.dispatchOutcome ??
-                    (["succeeded", "partial"].includes(args.status)
-                        ? "response_received"
-                        : undefined),
-            });
-            if (before !== "released") budget[before]--;
-            if (after !== "released") budget[after]++;
-            else {
-                budget.dispatches--;
-                if (preparation)
-                    await ctx.db.patch(preparation._id, {
-                        modelAttemptCount: Math.max(
-                            0,
-                            (preparation.modelAttemptCount ?? 0) - 1,
-                        ),
-                    });
-            }
-            await ctx.db.patch(run._id, {
-                sourcePreparationBudget: budget,
-                sourceQualificationAttemptCount: budget.dispatches,
-            });
         }
         const update = {
             status: args.status,
             latencyMs: args.latencyMs,
             usage: args.usage,
-            ...reportedCostSettlement(existing, args.reportedCost),
+            ...reportedCostSettlement(existing, args.reportedCost, args),
             errorCode: args.errorCode,
             ...(args.diagnostic ? { diagnostic: args.diagnostic } : {}),
             retryable: args.retryable,
@@ -1434,11 +1615,7 @@ export const recordAttempt = internalMutation({
             retryAfterAt: args.retryAfterAt,
             completedAt: now,
         };
-        await updateQualificationUsage(ctx, existing, {
-            ...existing,
-            ...update,
-        });
-        await ctx.db.patch(existing._id, update);
+        await patchQualificationReceipt(ctx, existing, update);
         return {
             providerCallId: existing._id,
             shouldExecute: false,

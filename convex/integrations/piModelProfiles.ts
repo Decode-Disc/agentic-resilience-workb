@@ -27,13 +27,13 @@ import type { Infer } from "convex/values";
 import {
     PI_MISSION_EXTENSION,
     PI_MISSION_INPUT,
+    PI_STATE_SECTION,
     piInputProfileKey,
-    piMissionMessages,
+    piMissionStateText,
     piToolMetadata,
     preparePiModelPayload,
 } from "./modelInput";
 import {
-    MODEL_MAX_OUTPUT_TOKENS,
     type ModelRoute,
     modelCallSettings,
     modelConfigurationKey,
@@ -68,13 +68,14 @@ export function configuredNativeModel(
 async function profileTranscript(
     definition: AgentDefinition,
     operations: ReturnType<typeof agentToolSchemas>,
+    descriptor: Infer<typeof modelDescriptor>,
 ) {
     const faux = fauxProvider({
         models: [
             {
                 id: "controlled",
-                contextWindow: 32000,
-                maxTokens: MODEL_MAX_OUTPUT_TOKENS,
+                contextWindow: descriptor.contextWindow,
+                maxTokens: descriptor.maxTokens,
             },
         ],
     });
@@ -96,7 +97,25 @@ async function profileTranscript(
         ),
     );
     const registry = createRegistry();
-    registry.install(defineExtension({ name: PI_MISSION_EXTENSION, tools }));
+    registry.install(
+        defineExtension({
+            name: PI_MISSION_EXTENSION,
+            tools,
+            sections: [
+                {
+                    key: PI_STATE_SECTION,
+                    tag: false,
+                    render: () =>
+                        piMissionStateText(
+                            definition.instructions,
+                            "",
+                            definition.nativeConversation,
+                            definition.contextRendering,
+                        ),
+                },
+            ],
+        }),
+    );
     const models = createModels();
     models.setProvider(faux.provider);
     const harness = await Harness.open(
@@ -175,7 +194,11 @@ export async function prepareNativeProfiles(
                 (request) => !profiles.has(request.key),
             );
             if (!missing.length) continue;
-            const history = await profileTranscript(definition, operations);
+            const history = await profileTranscript(
+                definition,
+                operations,
+                descriptor,
+            );
             for (const { key, nativeRoute } of missing) {
                 const generation = modelCallSettings(nativeRoute).generation;
                 let bytes: number | undefined;
@@ -183,18 +206,10 @@ export async function prepareNativeProfiles(
                 const result = provider.streamSimple(
                     model,
                     normalizeContext({
-                        messages: piMissionMessages(
-                            definition.instructions,
-                            "",
-                            history,
-                            0,
-                            definition.nativeConversation,
-                            definition.contextRendering,
-                        ),
+                        messages: history,
                     }),
                     {
                         apiKey: "offline-profile-key",
-                        maxTokens: generation.maxOutputTokens,
                         temperature: generation.temperature,
                         maxRetries: generation.maxRetries,
                         signal,

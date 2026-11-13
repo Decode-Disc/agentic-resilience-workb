@@ -78,8 +78,8 @@ export const sourcesTestEnvelope = {
 };
 
 /** Real mission/capture fixtures share the public operation path; no provider is called. */
-export async function seedCapturedSources() {
-    const f = await seedInspectedEvidence();
+export async function seedCapturedSources(options: { text?: string } = {}) {
+    const f = await seedInspectedEvidence(options);
     const preparationId = await f.t.run(async (ctx) => {
         const run = await ctx.db.get(f.runId);
         if (!run?.sourcePreparationId)
@@ -90,6 +90,7 @@ export async function seedCapturedSources() {
         });
         await ctx.db.patch(f.corpusRevisionId, { status: "draft" });
         await ctx.db.patch(run.sourcePreparationId, {
+            executionPlanVersion: "source_actions_v3",
             status: "started",
             executionGeneration: 4,
             deadlineAt: Date.now() + 60_000,

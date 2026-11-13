@@ -1,0 +1,12 @@
+e3397e8e65c76756e38261fa2b222749596f1e7d14c71aac97c60013ad89c916  external/adoption/automated-review-assessment.json
+1b939a21fea9742881d40c4298dacdd7648863b6a50d312888d7c21d312ce6ff  external/campaign-state/campaign.json
+5dfa4c8ffc66a7bd9b6aa8bedf71185cec59b805ad698b4c0b3e6b266a8f5d3f  external/cleanup/cleanup.json
+49611e6681208e50b6b67cd23ebc5bd10a745639250e0dd580a5c895113a0eb7  external/flags/flags.json
+02d080d8460c061a37cabf3677ed2576beee6141ead3322b41d880a77df46249  external/official-assessment/assessment-f9950504f88a5d416f1a1e93a5ea32b933bd982104408f3a987ef4ad9073b202.json
+db7048a81c3e07e7f0ebd3582f5475ba1e633d5d8e340f1f64c9849940e180c8  repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/pi-subscription-live/check.mjs
+b3c332a354393ee35a2f8e6799c4f47c0fc234b60e7c231d27202227d9e759da  repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/pi-subscription-live/failure.json
+b3f56fc43140969947c7922a0180f9c07079a71ccfb9492e7ba4bd741c2454ee  repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/pi-subscription-live/inspect-retained.mjs
+ffa4609c39a49704071b2da4a851e3925c7451a36c6d3340b8f8f452c88e7e26  repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/pi-subscription-live/intent.json
+ebfa0f4b16773e2c21b496274948841732944115f01d1a4ddf785203bbcd85eb  repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/pi-subscription-live/manifest.json
+d4b216dd180fd958d85f15b03351585dd2132080bb1f8549ec849be0a137ae5d  repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/pi-subscription-live/retained-result.json
+33add28b2e3cdca33047124693e38807f8c8e6c9e9f14a49f36c339e4988cf8c  repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/pi-subscription-live/semantic-verification.json

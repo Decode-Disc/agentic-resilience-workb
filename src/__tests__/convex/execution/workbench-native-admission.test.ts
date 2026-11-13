@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { runPiMission } from "@convex/integrations/piMission";
+import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import type { TranscriptContext } from "@earendil-works/pi-ai";
 import { getCurrentTools } from "@earendil-works/pi-ai/utils/transcript";
 import { getFunctionName } from "convex/server";
@@ -36,6 +37,46 @@ async function savedProgram() {
     });
     return fixture;
 }
+
+test("native conversation instructions can exceed the old 128 KiB transport ceiling without omission", async () => {
+    const { t, client, runId } = await savedProgram();
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    const expected = Array.from(
+        { length: 6 },
+        (_, index) => `Instruction ${index}: ${"界".repeat(7400)}`,
+    );
+    for (let index = 0; index < 6; index++)
+        await client.mutation(api.execution.conversations.submit, {
+            runId,
+            requestKey: `large-steer-${index}`,
+            text: expected[index] ?? "",
+            delivery: "steer",
+            turnId: active.turnId,
+        });
+    const context = await t.query(internal.execution.context.build, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+    });
+    assert(context.kind === "ready");
+    expect(Buffer.byteLength(context.inputJson)).toBeGreaterThan(128 * 1024);
+    expect(
+        JSON.parse(context.inputJson)
+            .conversationInstructions.messages.filter(
+                (message: { text: string }) =>
+                    message.text.startsWith("Instruction "),
+            )
+            .map((message: { text: string }) => message.text),
+    ).toEqual(expected);
+});
 
 test("a steer between Pi preparation and invocation admission is retained as a native user input before publication", async () => {
     const { t, client, runId } = await savedProgram();
@@ -75,6 +116,7 @@ test("a steer between Pi preparation and invocation admission is retained as a n
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "steer-at-admission",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     assert(messageId);
@@ -83,7 +125,11 @@ test("a steer between Pi preparation and invocation admission is retained as a n
     });
     const commits = await t.run((ctx) => ctx.db.query("piCommits").collect());
     const admittedIds = commits
-        .flatMap((commit) => JSON.parse(commit.payload))
+        .flatMap((commit) => {
+            if (commit.payload === undefined)
+                throw new Error("Expected inline fixture commit");
+            return JSON.parse(commit.payload);
+        })
         .filter(
             (write) =>
                 write.type === "entry" &&
@@ -164,6 +210,7 @@ test("a domain change before admission rebuilds the offered tools from the admit
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "state-at-admission",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(await t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({
@@ -233,6 +280,7 @@ test("a direct edit after invocation admission is reconsidered before dispatch",
             },
             { missionId: active.missionId, expectedGeneration: 1 },
             "edit-after-begin",
+            nodeActionGenerationDeadline(Date.now()),
         ),
     );
     expect(await t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({
@@ -280,6 +328,7 @@ test("unchanged native preparation cannot reschedule indefinitely without an adm
                 },
                 { missionId: active.missionId, expectedGeneration: 1 },
                 "stalled-preparation",
+                nodeActionGenerationDeadline(Date.now()),
             ),
         ),
     ).rejects.toMatchObject({ data: { code: "native_preparation_stalled" } });

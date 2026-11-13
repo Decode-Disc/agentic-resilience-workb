@@ -7,6 +7,10 @@ import {
 import { v } from "convex/values";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
+import {
+    fixtureModelDescriptor,
+    modelAttemptAuthority,
+} from "@/__tests__/setup/model-configuration";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
 test("retains an original observable turn before the generation runtime receives it", async () => {
@@ -14,6 +18,7 @@ test("retains an original observable turn before the generation runtime receives
     const originalInput = '{ "query" : "pricing" }';
     let observed: unknown;
     const dependencies = {
+        authority: modelAttemptAuthority(),
         apiKey: "test-secret",
         beforeDispatch: async () => {
             events.push("request");
@@ -65,6 +70,7 @@ test("retains an original observable turn before the generation runtime receives
             model: "test/agent",
             provider: "test",
             authorizedForAgent: true,
+            descriptor: fixtureModelDescriptor,
         },
         dependencies,
         instructions: "Inspect.",
@@ -95,13 +101,18 @@ test("retains an original observable turn before the generation runtime receives
     expect(JSON.stringify(observed)).not.toContain("test-secret");
 });
 
-test("journals the prepared SDK request before dispatch and the original reply before parsing", async () => {
+test("journals the serialized HTTP request before dispatch and the original reply before parsing", async () => {
     const events: string[] = [];
     let requestJson = "";
     let wireJson = "";
     const result = await invokeOneShot({
-        route: { model: "test/journal", provider: "test-provider" },
+        route: {
+            descriptor: fixtureModelDescriptor,
+            model: "test/journal",
+            provider: "test-provider",
+        },
         dependencies: {
+            authority: modelAttemptAuthority(),
             apiKey: "secret-not-for-the-journal",
             beforeDispatch: async (snapshot: string) => {
                 requestJson = snapshot;
@@ -145,18 +156,7 @@ test("journals the prepared SDK request before dispatch and the original reply b
     expect(events).toEqual(["journal", "dispatch"]);
     const snapshot = JSON.parse(requestJson);
     const wire = JSON.parse(wireJson);
-    expect(snapshot.input.temperature).toBe(wire.temperature);
-    expect(snapshot.input.maxOutputTokens).toBe(wire.max_tokens);
-    expect(snapshot.input.responseFormat.schema).toEqual(
-        wire.response_format.json_schema.schema,
-    );
-    expect(snapshot.input.prompt[0]).toMatchObject({
-        role: wire.messages[0].role,
-        content: wire.messages[0].content[0].text,
-    });
-    expect(snapshot.input.prompt.at(-1).content).toEqual([
-        { type: "text", text: wire.messages.at(-1).content },
-    ]);
+    expect(snapshot.input).toEqual(wire);
     expect(snapshot.settings.provider).toEqual(wire.provider);
     expect(requestJson).toContain("Use the retained evidence.");
     expect(requestJson).toContain("What does it establish?");
@@ -169,11 +169,49 @@ test("journals the prepared SDK request before dispatch and the original reply b
     expect(result.observableReplyJson).not.toContain("private reasoning");
 });
 
+test("a current deferred turn refuses missing model capabilities before HTTP", async () => {
+    const request = vi.fn<typeof fetch>(async () =>
+        Response.json({
+            id: "unprepared",
+            model: "test/unprepared",
+            choices: [
+                {
+                    index: 0,
+                    message: { role: "assistant", content: "Acknowledged." },
+                    finish_reason: "stop",
+                },
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+    );
+    const result = await invokeDeferredAgentTurn({
+        route: { model: "test/unprepared", authorizedForAgent: true },
+        dependencies: {
+            authority: modelAttemptAuthority(),
+            apiKey: "offline-only",
+            fetch: request,
+        },
+        instructions: "Reply.",
+        prompt: "Continue.",
+        operations: {},
+    });
+    expect(result).toMatchObject({
+        status: "failed",
+        errorCode: "invalid_model_output_limit",
+        dispatchOutcome: "not_dispatched",
+    });
+    expect(request).not.toHaveBeenCalled();
+});
+
 test("blocks a deferred agent turn when no authorized route exists", async () => {
     const request = vi.fn<typeof fetch>();
     const result = await invokeDeferredAgentTurn({
         route: undefined,
-        dependencies: { apiKey: "", fetch: request },
+        dependencies: {
+            authority: modelAttemptAuthority(),
+            apiKey: "",
+            fetch: request,
+        },
         instructions: "Inspect the approved material.",
         prompt: "Continue the investigation.",
         operations: {},
@@ -193,8 +231,13 @@ test("a backend preparation failure is explicitly not dispatched", async () => {
             model: "test/agent",
             provider: "test",
             authorizedForAgent: true,
+            descriptor: fixtureModelDescriptor,
         },
-        dependencies: { apiKey: "test-only-key", fetch: request },
+        dependencies: {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: request,
+        },
         instructions: "Inspect.",
         prompt: "Continue.",
         operations: {},
@@ -218,8 +261,10 @@ test("a failed request checkpoint prevents dispatch and returns an explicit non-
             model: "test/journal",
             provider: "test-provider",
             authorizedForAgent: true,
+            descriptor: fixtureModelDescriptor,
         },
         dependencies: {
+            authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
             fetch: request,
             beforeDispatch: async () => {
@@ -288,6 +333,7 @@ test("returns typed tool requests for persisted dispatch without an SDK loop", a
             }),
     );
     const route = {
+        descriptor: fixtureModelDescriptor,
         model: "test/saved-material-agent",
         provider: "test-provider",
         authorizedForAgent: true,
@@ -302,6 +348,7 @@ test("returns typed tool requests for persisted dispatch without an SDK loop", a
     const result = await invokeDeferredAgentTurn({
         route,
         dependencies: {
+            authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
             fetch: request,
             beforeDispatch: async (json) => {
@@ -330,9 +377,7 @@ test("returns typed tool requests for persisted dispatch without an SDK loop", a
     expect(result.requests[1]?.inputJson).toBe('{"requested":true}');
     expect(request).toHaveBeenCalledOnce();
     const requestBody = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
-    expect(JSON.parse(requestSnapshot).input.tools[0].inputSchema).toEqual(
-        requestBody.tools[0].function.parameters,
-    );
+    expect(JSON.parse(requestSnapshot).input).toEqual(requestBody);
     expect(JSON.parse(result.observableReplyJson ?? "null").content).toEqual([
         {
             type: "tool-call",
@@ -350,7 +395,7 @@ test("returns typed tool requests for persisted dispatch without an SDK loop", a
     expect(requestBody).toMatchObject({
         model: route.model,
         temperature: 0,
-        max_tokens: 6144,
+        max_tokens: 8192,
         provider: { only: [route.provider], allow_fallbacks: false },
     });
 });
@@ -394,8 +439,13 @@ test("returns final assistant text for persisted completion parsing", async () =
             model: "test/saved-material-agent",
             provider: "test-provider",
             authorizedForAgent: true,
+            descriptor: fixtureModelDescriptor,
         },
-        dependencies: { apiKey: "test-only-key", fetch: request },
+        dependencies: {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: request,
+        },
         instructions: "Inspect the approved material.",
         prompt: "Report whether inspection is complete.",
         operations: {},
@@ -417,8 +467,13 @@ test("blocks tools with inline execution callbacks before provider dispatch", as
             model: "test/saved-material-agent",
             provider: "test-provider",
             authorizedForAgent: true,
+            descriptor: fixtureModelDescriptor,
         },
-        dependencies: { apiKey: "test-only-key", fetch: request },
+        dependencies: {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: request,
+        },
         instructions: "Inspect the approved material.",
         prompt: "Find pricing evidence.",
         operations: { search_material: executableOperation },
@@ -475,8 +530,13 @@ test("serializes canonical mission tools and accepts a real Convex source ID", a
             model: "test/saved-material-agent",
             provider: "test-provider",
             authorizedForAgent: true,
+            descriptor: fixtureModelDescriptor,
         },
-        dependencies: { apiKey: "test-only-key", fetch: request },
+        dependencies: {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: request,
+        },
         instructions: savedMaterialInspectionDefinition.instructions,
         prompt: "Read the requested retained passage.",
         operations: agentToolSchemas(savedMaterialInspectionDefinition),
@@ -544,8 +604,13 @@ test("a response containing only invalid tool calls cannot trigger an SDK repair
             model: "test/agent",
             provider: "test-provider",
             authorizedForAgent: true,
+            descriptor: fixtureModelDescriptor,
         },
-        dependencies: { apiKey: "test-only-key", fetch: request },
+        dependencies: {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: request,
+        },
         instructions: "Inspect approved material.",
         prompt: "Continue.",
         operations: {},
@@ -563,12 +628,17 @@ test("a response containing only invalid tool calls cannot trigger an SDK repair
 test("invalid structured output retains the original observable reply before schema rejection", async () => {
     const original = ' { "wrong_field": true } ';
     const result = await invokeOneShot({
-        route: { model: "test/journal", provider: "test-provider" },
+        route: {
+            descriptor: fixtureModelDescriptor,
+            model: "test/journal",
+            provider: "test-provider",
+        },
         instructions: "Inspect.",
         prompt: "Answer.",
         schema: z.object({ answer: z.string() }),
         schemaName: "answer",
         dependencies: {
+            authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
             fetch: async () =>
                 new Response(
@@ -600,4 +670,43 @@ test("invalid structured output retains the original observable reply before sch
     expect(JSON.parse(result.observableReplyJson ?? "null").content).toEqual([
         { type: "text", text: original },
     ]);
+});
+
+test("one-shot cancellation retains the actual DOM abort cause rather than a generic transport error", async () => {
+    const cancellation = new AbortController();
+    let diagnostic: unknown;
+    const result = await invokeOneShot({
+        route: { descriptor: fixtureModelDescriptor, model: "test/structured" },
+        dependencies: {
+            authority: modelAttemptAuthority(),
+            apiKey: "offline-only",
+            signal: cancellation.signal,
+            observeProvider: async (observation) => {
+                diagnostic = observation.diagnostic;
+            },
+            fetch: async () => {
+                cancellation.abort(
+                    new DOMException(
+                        "Preparation deadline elapsed",
+                        "TimeoutError",
+                    ),
+                );
+                throw new Error("Generic transport cancellation");
+            },
+        },
+        instructions: "Read.",
+        prompt: "Material.",
+        schema: z.object({ answer: z.string() }),
+        schemaName: "cancelled_documentary_control",
+    });
+    expect(result).toMatchObject({
+        status: "failed",
+        errorCode: "request_timeout",
+        retryable: false,
+    });
+    expect(diagnostic).toMatchObject({
+        name: "TimeoutError",
+        message: "Preparation deadline elapsed",
+        phase: "provider_transport",
+    });
 });

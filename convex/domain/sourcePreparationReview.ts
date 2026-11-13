@@ -2,7 +2,7 @@ import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
 import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     MAX_SUPPLEMENT_SEARCHES,
-} from "@convex/resourceLimits";
+} from "@convex/resourcePolicy";
 import type { GenericDatabaseReader } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { readSourceCandidateCapacity } from "./sourceCandidateCapacity";

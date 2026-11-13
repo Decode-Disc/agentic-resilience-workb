@@ -9,6 +9,7 @@ import {
     getFunctionName,
     makeFunctionReference,
 } from "convex/server";
+import { EVALUATION_IO_POLICY } from "../../../convex/resourcePolicy.ts";
 
 // The SDK exposes public-reference types even when its admin-authenticated client calls internal fixtures.
 function adminReference<
@@ -63,7 +64,9 @@ export async function openNativeSourcesInspection(
         {
             redirect: "error",
             signal: AbortSignal.any([
-                AbortSignal.timeout(5000),
+                AbortSignal.timeout(
+                    EVALUATION_IO_POLICY.inspectionIdentityTimeoutMs,
+                ),
                 ...(options.signal ? [options.signal] : []),
             ]),
         },
@@ -81,7 +84,9 @@ export async function openNativeSourcesInspection(
                 ...init,
                 redirect: "error",
                 signal: AbortSignal.any([
-                    AbortSignal.timeout(180_000),
+                    AbortSignal.timeout(
+                        EVALUATION_IO_POLICY.inspectionBackendRequestTimeoutMs,
+                    ),
                     ...(!closing && activeSignal ? [activeSignal] : []),
                 ]),
             }),

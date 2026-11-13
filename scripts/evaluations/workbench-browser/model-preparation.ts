@@ -3,6 +3,7 @@ import type { Browser } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api.js";
+import { QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY } from "../../../convex/resourcePolicy.ts";
 
 type ModelChoice = Pick<
     FunctionReturnType<typeof api.modelConfiguration.list>["models"][number],
@@ -106,8 +107,13 @@ export async function openQualificationSession(convex: string, code: string) {
             ...init,
             redirect: "error",
             signal: init?.signal
-                ? AbortSignal.any([init.signal, AbortSignal.timeout(120000)])
-                : AbortSignal.timeout(120000),
+                ? AbortSignal.any([
+                      init.signal,
+                      AbortSignal.timeout(
+                          TOOLING_POLICY.backendRequestTimeoutMs,
+                      ),
+                  ])
+                : AbortSignal.timeout(TOOLING_POLICY.backendRequestTimeoutMs),
         });
     };
     const authentication = new ConvexHttpClient(convex, {
@@ -138,7 +144,10 @@ export async function openQualificationSession(convex: string, code: string) {
     const client = new ConvexHttpClient(convex, {
         logger: false,
         fetch: async (input, init) => {
-            if (expiresAt() - Date.now() < 30000) {
+            if (
+                expiresAt() - Date.now() <
+                TOOLING_POLICY.sessionRefreshAheadMs
+            ) {
                 refreshing ??= (async () => {
                     const renewed = await authentication.action(
                         api.auth.signIn,
@@ -188,7 +197,7 @@ export async function withQualificationAdministrator<T>(
     const context = await browser.newContext();
     try {
         const page = await context.newPage();
-        page.setDefaultTimeout(30_000);
+        page.setDefaultTimeout(TOOLING_POLICY.admissionInteractionTimeoutMs);
         await page.goto(`${origins.web}/workspace/admin`);
         await page.locator("#invitation-code").fill(code);
         await page

@@ -2,6 +2,8 @@
 
 Follow-up, 2026-11-01: the [message-authority repair and final paid cases](../../verification/2026-11-01-workbench-message-authority-requalification.md) supersede current-status readings of analyst-field precedence and documentary registration below. Their targeted corrections pass; read-only compliance, framing usefulness and local browser execution remain unaccepted. Original observations and raw evidence are preserved.
 
+Supersession, 2026-11-11: current `authority_native_v1` work derives model deadlines and receipt leases from remaining approved authority rather than historical 60-second/five-minute generation ceilings. Application defaults have one [resource-policy owner](../../../context/TECH.md#locked-resource-limits); native context/output management and retained evidence remain distinct. Earlier implementation values below preserve their dated meaning and grant no renewed execution authority.
+
 ## Status and Ownership
 
 Accepted on 2026-10-26 and refined on 2026-10-27, 2026-10-29, 2026-11-01 and 2026-11-07. This document preserves dated execution rationale; the [technical contract](../../../context/TECH.md#agentic-missions-and-shared-operations) owns current obligations and the [global conception](2026-10-23-question-led-workbench-conception.md) preserves workflow rationale.
@@ -260,6 +262,8 @@ The user accepted 32 MiB for the whole durable Workbench Pi journal, with an exp
 
 ### Destination and Accepted Path
 
+Status update, 2026-11-07: the native-section, complete contribution/continuation, fragmented retention and future accounting-policy mechanisms have been implemented locally. [TECH](../../../context/TECH.md#accepted-native-context-and-compaction-design) owns the current contract and [Phase 7](../../ROADMAP.md#phase-7--shared-execution-and-sources) owns delivery and remaining qualification. The evidence and unimplemented-state descriptions below describe the inspected pre-change checkout; they do not assert current runtime behavior. Deterministic mechanisms do not establish provider summary fidelity or explain the earlier GLM loop.
+
 Accepted by the user after code-based brainstorming. Workbench and Sources should resume useful work after compaction or restart with current authority and completed work available, exact documentary material recoverable and qualitative continuity preserved. This is accepted conception for a future implementation plan, not implementation acceptance or execution authority. Current obligations are maintained in [TECH](../../../context/TECH.md#accepted-native-context-and-compaction-design); [Phase 7](../../ROADMAP.md#phase-7--shared-execution-and-sources) records pending delivery.
 
 The selected combination uses native Pi prompt sections for the existing Convex state projection, native history/compaction for qualitative working memory, and targeted documentary reads with exact references and continuations. Current controlled contribution statements and restrictions return automatically; exact quotations remain available on demand. This avoids asking the model to reconstruct authoritative effects from a lossy summary while retaining Workbench's conversational hypotheses, nuances and exploration history.
@@ -267,6 +271,8 @@ The selected combination uses native Pi prompt sections for the existing Convex 
 The user explicitly included replacement of the fixed 128 KiB native request ceiling, preservation of effective native output budgets, compaction when necessary with anticipation disabled, complete retained payloads through the existing storage owners, and reservation followed by settlement to a known final cost for future mandates identifying that accounting policy. Unknown or partial costs keep their reservations. The [earlier qualification envelope](../../decisions/024-qualify-source-content-before-corpus-approval.md#bounded-reading-and-durable-execution) explains the original bounded-document use of 128 KiB; the examined record supplies no measured derivation for that exact value as a native conversation limit. One-shot qualification/comparison remains a distinct contract.
 
 ### Evidence and Its Limits
+
+Status update, 2026-11-08: the [current native contract](../../../context/TECH.md#accepted-native-context-and-compaction-design) now specifies ordered application observations committed with effects, internal native delivery and checkpoint proof, legacy current-state anchors, and ordinary model/SDK output defaults. These supersede the remaining transport-only continuity and ordinary 6,144-token fallback described in earlier implementation states. Original failed qualification evidence remains unchanged; local correction does not establish fresh provider quality.
 
 The [real Sources preparation report](../../verification/2026-11-07-sources-real-preparation.md) retains the two failed lots, exact configuration, costs and native archive links. DeepSeek's last compaction reached the imposed 6,144-token output ceiling and ended with length; GLM retained controlled contributions before rereading already adopted history fragments and stopping without progress. Compaction preceded that loop, but its causal role remains unproved. Neither restoring defaults nor adding references alone establishes useful completion.
 

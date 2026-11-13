@@ -137,6 +137,9 @@ test("persists valid uncertainty once without semantic escalation", async () => 
         }),
     ).toEqual(result);
     expect(request).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toMatchObject({
+        max_tokens: 8192,
+    });
     const state = await t.run(async (ctx) => ({
         tasks: await ctx.db.query("aiTaskResults").take(3),
         calls: await ctx.db.query("providerCalls").take(3),
@@ -417,6 +420,10 @@ test("commits the model receipt and qualification in one mutation", async () => 
     } = await capturedCandidate();
     const preparation = await t.run((ctx) => ctx.db.get(preparationId));
     if (!preparation) throw new Error("Missing preparation fixture");
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     const call = await t.mutation(internal.providerCalls.recordAttempt, {
         runId,
         corpusRevisionId,
@@ -458,7 +465,7 @@ test("commits the model receipt and qualification in one mutation", async () => 
     ).toBe(taskId);
 });
 
-test("an attempt timeout keeps an unknown outcome without triggering fallback", async () => {
+test("generation survives the former timeout and retains an unknown outcome at its authorized deadline", async () => {
     vi.useFakeTimers();
     vi.spyOn(AbortSignal, "timeout").mockImplementation((milliseconds) => {
         const controller = new AbortController();
@@ -496,10 +503,31 @@ test("an attempt timeout keeps an unknown outcome without triggering fallback", 
         (error) => ({ error }),
     );
     await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+    let completed = false;
+    void outcome.then(() => {
+        completed = true;
+    });
     await vi.advanceTimersByTimeAsync(60_001);
+    expect(completed).toBe(false);
+    expect(request).toHaveBeenCalledOnce();
+    const preparation = await t.run((ctx) => ctx.db.get(preparationId));
+    if (preparation?.deadlineAt === undefined)
+        throw new Error("Missing preparation deadline");
+    await vi.advanceTimersByTimeAsync(preparation.deadlineAt - Date.now() + 1);
     expect(await outcome).toMatchObject({
         result: { status: "unavailable", reasonCode: "request_timeout" },
     });
+    const receipts = await t.run((ctx) =>
+        ctx.db.query("providerCalls").take(2),
+    );
+    expect(receipts).toMatchObject([
+        {
+            status: "failed",
+            errorCode: "request_timeout",
+            dispatchOutcome: "unknown",
+        },
+    ]);
+    expect(receipts).toHaveLength(1);
     expect(request).toHaveBeenCalledOnce();
 });
 
@@ -520,6 +548,10 @@ test.each([
     } = await capturedCandidate();
     const preparation = await t.run((ctx) => ctx.db.get(preparationId));
     if (!preparation) throw new Error("Missing preparation fixture");
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     const call = await t.mutation(internal.providerCalls.recordAttempt, {
         runId,
         corpusRevisionId,
@@ -1328,6 +1360,10 @@ test.each([
             }),
         );
     const inputHash = prepared.inputHash;
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     const call = await t.mutation(internal.providerCalls.recordAttempt, {
         runId,
         corpusRevisionId,

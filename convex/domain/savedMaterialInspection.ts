@@ -12,6 +12,7 @@ import {
     missionState,
     operationProgressKeys,
 } from "@convex/execution/missionData";
+import { MAX_INSPECTED_CAPTURES } from "@convex/resourcePolicy";
 import type { Infer } from "convex/values";
 import { readResearchContext } from "./researchContext";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
@@ -25,8 +26,7 @@ import {
 } from "./savedMaterialOperations";
 import { savedMaterialSimulation } from "./savedMaterialSimulation";
 import { readPreparationSourceDecision } from "./sourcePreparationAuthority";
-
-const MAX_INSPECTED_CAPTURES = 64;
+import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
 
 /** The approved-corpus prerequisite belongs to inspection, never to every kind of agent. */
 export async function requireSavedMaterialScope(
@@ -134,7 +134,7 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
             if (source)
                 availableMaterials.push({
                     sourceId: source._id,
-                    title: source.title,
+                    ...sourceDocumentMetadata(source),
                     canonicalUrl: source.canonicalUrl,
                     humanDecision: {
                         decisionId: head.latestDecisionId,

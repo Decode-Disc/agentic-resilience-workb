@@ -194,6 +194,7 @@ test("overlapping native qualifications cannot admit material that exceeds final
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         enter();
         if (++arrivals === 6) allEnter();

@@ -41,7 +41,7 @@ test("a real Pi Harness reopens its retained conversation through Convex operati
                             requestId: "retained",
                             entry: {
                                 kind: "workbench.note",
-                                data: { text: "exact original" },
+                                data: { text: "exact original".repeat(48000) },
                             },
                         },
                         BACKGROUND_CONTEXT,
@@ -63,7 +63,7 @@ test("a real Pi Harness reopens its retained conversation through Convex operati
         expect.arrayContaining([
             expect.objectContaining({
                 kind: "workbench.note",
-                data: { text: "exact original" },
+                data: { text: "exact original".repeat(48000) },
             }),
         ]),
     );
@@ -150,7 +150,7 @@ test("a committed Pi append is reused and neither a conflicting payload nor a st
 });
 
 test("the Convex writer rejects a commit beyond retained replay capacity without advancing its sequence", async () => {
-    const { PI_SESSION_MAX_BYTES } = await import("@convex/resourceLimits");
+    const { PI_SESSION_MAX_BYTES } = await import("@convex/resourcePolicy");
     const { t, args } = await seedInspectedEvidence();
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
@@ -222,5 +222,92 @@ test("a generation change fences an older mission writer without waiting for its
             key: "late-generation",
             payload: "[]",
         }),
+    ).rejects.toThrow("pi_writer_fenced");
+});
+
+test("fragment staging charges persisted bytes once, publishes only complete commits and fences a replaced writer", async () => {
+    const { retainedTextParts } = await import(
+        "@convex/execution/retainedText"
+    );
+    const { t, args } = await seedInspectedEvidence();
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "staged-commit",
+        expectedGeneration: 4,
+    });
+    const lease = await t.mutation(claim, {
+        missionId,
+        expectedGeneration: 4,
+        writer: "fragment-writer",
+    });
+    const { manifest, parts } = retainedTextParts(
+        JSON.stringify([{ id: 2, value: "🧭".repeat(180000) }]),
+    );
+    const first = {
+        ...lease,
+        key: "immutable",
+        fragment: { ...manifest, index: 0, content: parts[0] ?? "" },
+    };
+    const textId = await t.mutation(
+        internal.execution.piStore.stageCommit,
+        first,
+    );
+    await t.mutation(internal.execution.piStore.stageCommit, first);
+    expect(
+        (await t.run((ctx) => ctx.db.get(lease.sessionId)))?.retainedBytes,
+    ).toBe(new TextEncoder().encode(parts[0]).length);
+    await expect(
+        t.mutation(internal.execution.piStore.publishCommit, {
+            ...lease,
+            key: "immutable",
+            sequence: 1,
+            textId,
+            nextId: 3,
+        }),
+    ).rejects.toThrow("retained_text_incomplete");
+    expect(
+        (
+            await t.query(internal.execution.piStore.scan, {
+                ...lease,
+                paginationOpts: { numItems: 1, cursor: null },
+            })
+        ).page,
+    ).toHaveLength(0);
+    for (let index = 1; index < parts.length; index++)
+        await t.mutation(internal.execution.piStore.stageCommit, {
+            ...first,
+            fragment: { ...manifest, index, content: parts[index] ?? "" },
+        });
+    const publication = {
+        ...lease,
+        key: "immutable",
+        sequence: 1,
+        textId,
+        nextId: 3,
+    };
+    expect(
+        await t.mutation(internal.execution.piStore.publishCommit, publication),
+    ).toBe(1);
+    expect(
+        await t.mutation(internal.execution.piStore.publishCommit, publication),
+    ).toBe(1);
+    expect(
+        (await t.run((ctx) => ctx.db.get(lease.sessionId)))?.retainedBytes,
+    ).toBe(manifest.sizeBytes);
+    await t.run((ctx) =>
+        ctx.db.patch(lease.sessionId, { leaseUntil: Date.now() - 1 }),
+    );
+    await t.mutation(claim, {
+        missionId,
+        expectedGeneration: 4,
+        writer: "replacement",
+    });
+    await expect(
+        t.mutation(internal.execution.piStore.stageCommit, first),
+    ).rejects.toThrow("pi_writer_fenced");
+    await expect(
+        t.mutation(internal.execution.piStore.publishCommit, publication),
     ).rejects.toThrow("pi_writer_fenced");
 });

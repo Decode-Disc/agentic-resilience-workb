@@ -6,6 +6,11 @@ import {
 } from "@convex/_generated/server";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
+import {
+    HISTORY_PAGE_SIZE,
+    MAX_CONVERSATION_SCAN,
+    MAX_HISTORY_RESULT_BYTES,
+} from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { requireMissionAuthority } from "./authority";
@@ -13,10 +18,13 @@ import { requireInstructionVersion } from "./conversations";
 import { executionError } from "./errors";
 import {
     type AgentOperationDefinition,
-    HISTORY_PAGE_SIZE,
     historyReadResultValidator,
 } from "./executionProtocol";
-import { projectMissionHistoryEvent } from "./journal";
+import {
+    historyTextFragment as fragment,
+    isContextObservation,
+    readMissionHistoryEventFragment,
+} from "./journal";
 import { readMissionState } from "./missionHistory";
 import {
     type HistoryReadReceipt,
@@ -26,8 +34,6 @@ import {
     historySourceFor,
 } from "./operationContracts";
 
-const MAX_HISTORY_RESULT_BYTES = 48 * 1024;
-const MAX_CONVERSATION_SCAN = 4096;
 const CURSOR_PREFIX = "history:";
 type Frontier = Infer<typeof historyReadReceiptValidator>["frontier"];
 type Position = Infer<typeof historyPositionValidator>;
@@ -96,7 +102,7 @@ export const pinHistoryRead: AgentOperationDefinition["pin"] = async (
         const event = await ctx.db.get(input.reference);
         if (
             !event ||
-            event.missionId !== mission._id ||
+            (event.missionId !== mission._id && !isContextObservation(event)) ||
             event.runId !== mission.runId ||
             !event.sequence
         )
@@ -242,28 +248,6 @@ async function resolvePosition(
         ...(previous.pin?.kind === "history_read" && previous.pin.reference
             ? { reference: previous.pin.reference }
             : {}),
-    };
-}
-
-/** Canonical boundaries make overlapping offsets unrepresentable without an issued server position. */
-function fragment(text: string, offset: number, limit: number) {
-    if (!Number.isSafeInteger(offset) || offset < 0 || offset >= text.length)
-        throw executionError("history_receipt_invalid");
-    let start = 0;
-    const endAt = (at: number) => {
-        let end = Math.min(text.length, at + limit);
-        if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1] ?? ""))
-            end--;
-        return end;
-    };
-    while (start < offset) start = endAt(start);
-    if (start !== offset) throw executionError("history_receipt_invalid");
-    const end = endAt(offset);
-    return {
-        offset,
-        totalCharacters: text.length,
-        content: text.slice(offset, end),
-        end,
     };
 }
 
@@ -446,7 +430,8 @@ export async function readHistoryPage(
         if (
             reference &&
             (!referenced ||
-                referenced.missionId !== mission._id ||
+                (referenced.missionId !== mission._id &&
+                    !isContextObservation(referenced)) ||
                 referenced.runId !== mission.runId ||
                 referenced.sequence !== frontier.sequence)
         )
@@ -481,8 +466,12 @@ export async function readHistoryPage(
                 event.runId !== mission.runId
             )
                 throw executionError("mission_history_invalid");
-            const source = await projectMissionHistoryEvent(ctx, event);
-            const chunk = fragment(source.json, offset, 4000);
+            const chunk = await readMissionHistoryEventFragment(
+                ctx,
+                event,
+                offset,
+                4000,
+            );
             const entry = {
                 sequence: event.sequence,
                 offset,
@@ -490,7 +479,7 @@ export async function readHistoryPage(
                 content: chunk.content,
             };
             const continuation: Position | null =
-                chunk.end < source.json.length
+                chunk.end < chunk.totalCharacters
                     ? {
                           source: "mission",
                           sequence: event.sequence,
@@ -529,14 +518,14 @@ export async function readHistoryPage(
                 fragmentIdentity(
                     "mission",
                     event._id,
-                    source.contentHash,
+                    chunk.contentHash,
                     offset,
                     chunk.end,
                 ),
             );
             next = continuation;
             if (
-                chunk.end < source.json.length ||
+                chunk.end < chunk.totalCharacters ||
                 sourcesRead >= HISTORY_PAGE_SIZE
             )
                 break;

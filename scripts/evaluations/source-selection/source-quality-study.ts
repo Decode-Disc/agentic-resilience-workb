@@ -368,6 +368,7 @@ function wireRequest(model: string, item: StudyCase, instructions: string) {
               ],
               temperature: 0,
               reasoning: { enabled: false },
+              // resource-policy-exception: Frozen source-quality comparison output condition, not an adaptive application default.
               max_tokens: 1024,
               provider: {
                   require_parameters: true,

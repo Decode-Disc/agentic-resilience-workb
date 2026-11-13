@@ -1,10 +1,14 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { SOURCE_RETRIEVAL_VERSION } from "@convex/domain/sourceRetrievalPolicy";
 import { readPreparationSourceDecision } from "@convex/domain/sourcePreparationAuthority";
+import { SOURCE_RETRIEVAL_VERSION } from "@convex/domain/sourceRetrievalPolicy";
 import {
     readPinnedComparisonReview,
     readPinnedSourceQualification,
 } from "@convex/domain/sourceUsage";
+import {
+    ARTIFACT_CLEANUP_PAGE_SIZE,
+    ARTIFACT_CLEANUP_SAFETY_INTERVAL_DEFAULT_MS,
+} from "@convex/resourcePolicy";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { type Infer, v } from "convex/values";
 import { doc } from "convex-helpers/validators";
@@ -18,10 +22,8 @@ import {
 } from "./_generated/server";
 import { assertEvidenceExecutionFence } from "./domain/evidenceAuthority";
 import { computePassageKey } from "./domain/sourcePassages";
-import {
-    MAX_PASSAGES_PER_SOURCE,
-    sourceDossierCandidateLimit,
-} from "./resourceLimits";
+import { sourceDossierCandidateLimit } from "./resourceLimits";
+import { MAX_PASSAGES_PER_SOURCE } from "./resourcePolicy";
 import schema from "./schema";
 
 const webLocatorValidator = v.object({
@@ -955,12 +957,6 @@ export const listSourcePassages = internalQuery({
             .take(MAX_PASSAGES_PER_SOURCE);
     },
 });
-
-// Default safety window before cleanup may delete an unattached storage object
-// or mark an expired upload lease reconciled. Crashed/abandoned uploads are
-// tolerated only inside this window; recent in-flight uploads are always kept.
-export const ARTIFACT_CLEANUP_SAFETY_INTERVAL_DEFAULT_MS = 24 * 60 * 60 * 1000;
-export const ARTIFACT_CLEANUP_PAGE_SIZE = 100;
 
 function artifactCleanupSafetyIntervalMs(): number {
     const raw =

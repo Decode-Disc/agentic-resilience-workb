@@ -2,15 +2,16 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { CLIENT_PAGE_SIZE } from "@convex/resourcePolicy";
 import { useMutation, usePaginatedQuery } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AdminDetailDisclosure } from "@/components/admin/admin-detail-disclosure";
 import {
     AdminDossierFilters,
+    type DossierRunFilters,
     dossierFilterDefaults,
     dossierMatchesFilters,
-    type DossierRunFilters,
     filterSummary,
 } from "@/components/admin/admin-filters";
 import { AdminList } from "@/components/admin/admin-list";
@@ -117,7 +118,7 @@ function DossierList({
     const runs = usePaginatedQuery(
         api.adminOperations.listRunsPage,
         { purpose },
-        { initialNumItems: 20 },
+        { initialNumItems: CLIENT_PAGE_SIZE.adminDossiers },
     );
 
     if (runs.status === "LoadingFirstPage") {

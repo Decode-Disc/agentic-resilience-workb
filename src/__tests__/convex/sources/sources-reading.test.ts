@@ -43,6 +43,7 @@ test("a retained operation result without capture omission metadata remains usab
         "captureOmittedPassageCount",
     );
     delete value.documentaryStatus.capture.captureOmittedPassageCount;
+    delete value.document;
     const retained = { ...current, valueJson: JSON.stringify(value) };
     await f.t.run((ctx) =>
         ctx.db.patch(requestId, {

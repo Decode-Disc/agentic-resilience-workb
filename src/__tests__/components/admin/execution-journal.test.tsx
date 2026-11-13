@@ -195,3 +195,66 @@ test("a late response retained without authority is shown as ineligible for adop
         screen.queryByText("Response retained · awaiting adoption"),
     ).toBeNull();
 });
+
+test("a complete fragmented snapshot remains inspectable page by page without being labelled incomplete", () => {
+    convexReactHarness
+        .query(api.adminOperations.readInvocationJournalPayload)
+        .returns({
+            kind: "recorded",
+            payload: {
+                state: "complete",
+                textId: "retained-text",
+                sizeBytes: 700000,
+                contentHash: "immutable-hash",
+            },
+        });
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listInvocationPayloadFragmentsPage)
+        .returns({
+            results: [{ index: 0, content: "Exact first fragment" }],
+            status: "CanLoadMore",
+            loadMore,
+        });
+    render(<AdminExecutionJournal runId={runId} />);
+    fireEvent.click(screen.getByRole("button", { name: /Reply recorded/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Request snapshot" }));
+    expect(screen.getByText("Exact first fragment")).toBeTruthy();
+    expect(screen.queryByText("Incomplete snapshot")).toBeNull();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Load more snapshot content" }),
+    );
+    expect(loadMore).toHaveBeenCalledWith(1);
+});
+
+test("finishing snapshot pagination returns keyboard focus to the readable snapshot", () => {
+    convexReactHarness
+        .query(api.adminOperations.readInvocationJournalPayload)
+        .returns({
+            kind: "recorded",
+            payload: {
+                state: "complete",
+                textId: "retained-text",
+                sizeBytes: 10,
+                contentHash: "immutable-hash",
+            },
+        });
+    let status = "CanLoadMore";
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listInvocationPayloadFragmentsPage)
+        .returnsFrom(() => ({
+            results: [{ index: 0, content: "Exact snapshot" }],
+            status,
+            loadMore,
+        }));
+    const view = render(<AdminExecutionJournal runId={runId} />);
+    fireEvent.click(screen.getByRole("button", { name: /Reply recorded/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Request snapshot" }));
+    screen.getByRole("button", { name: "Load more snapshot content" }).focus();
+    status = "LoadingMore";
+    view.rerender(<AdminExecutionJournal runId={runId} />);
+    status = "Exhausted";
+    view.rerender(<AdminExecutionJournal runId={runId} />);
+    expect(document.activeElement).toBe(
+        screen.getByText("Exact snapshot", { selector: "pre" }),
+    );
+});

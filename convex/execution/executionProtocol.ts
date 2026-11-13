@@ -1,7 +1,6 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionCtx, QueryCtx } from "@convex/_generated/server";
 import type { ModelRoute } from "@convex/integrations/modelRouting";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourceLimits";
 import {
     type Infer,
     type PropertyValidators,
@@ -20,6 +19,7 @@ import {
     commonOperationSuccessValidator,
     historyReadReceiptValidator,
     historySourceFor,
+    type protectedDiagnosticValidator,
     validationFeedbackValidator,
 } from "./operationContracts";
 
@@ -28,6 +28,12 @@ export {
     agentDefinitionVersionValidator,
     operationInputValidator,
 } from "./agentSchemas";
+
+/** Stored authority remains readable when historical policy metadata is absent. */
+export const generationAuthorityValidator = v.object({
+    resourcePolicy: v.optional(v.string()),
+    deadlineAt: v.number(),
+});
 
 export const executionScopeValidator = v.union(
     v.literal("research"),
@@ -205,15 +211,21 @@ export type AgentGenerationResult =
       };
 
 export type AgentGenerationLifecycle = {
-    beforeDispatch(requestJson: string): Promise<void>;
+    beforeDispatch(
+        requestJson: string,
+        metadata?: { effectiveMaxOutputTokens?: number },
+    ): Promise<void>;
     observeProvider?(observation: {
-        generationId: string;
+        generationId?: string;
         httpStatus?: number;
+        requestId?: string;
+        diagnostic?: Infer<typeof protectedDiagnosticValidator>;
     }): Promise<void>;
     observe(observation: AgentGenerationObservation): Promise<void>;
     signal?: AbortSignal;
 };
 export type AgentGenerationRuntime = {
+    authority: Pick<Doc<"agentMissions">, "resourcePolicy" | "deadlineAt">;
     ctx: ActionCtx;
     invocationId: Id<"agentInvocations">;
     expectedGeneration: number;
@@ -229,14 +241,7 @@ export type AgentGenerationBackend = AgentBackendIdentity & {
     ): Promise<AgentGenerationResult>;
 };
 
-export const MAX_CONTEXT_BYTES = 128 * 1024;
-export { MAX_OPERATION_RESULT_BYTES };
-export const MAX_OBSERVABLE_OUTPUT_BYTES = 512 * 1024;
-export const MAX_WORKING_NOTES_BYTES = 16 * 1024;
 export const MAX_BATCH_REQUESTS = 4;
-export const MAX_NO_PROGRESS_TURNS = 3;
-export const HISTORY_PAGE_SIZE = 20;
-export const EXECUTION_WINDOW_MS = 15 * 60 * 1000;
 
 export const invocationResponseValidator = v.union(
     v.object({

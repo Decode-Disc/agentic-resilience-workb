@@ -1,15 +1,13 @@
-import { internal } from "./_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { fanOutFrozenBranches } from "@convex/domain/evidenceFanout";
 import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
 import { assertLifecycleTransition } from "./domain/transitions";
-import {
-    MAX_CLAIMS_PER_RUN,
-    sourceDossierCandidateLimit,
-} from "./resourceLimits";
+import { sourceDossierCandidateLimit } from "./resourceLimits";
+import { MAX_CLAIMS_PER_RUN } from "./resourcePolicy";
 import { workflow } from "./workflow";
 
 const clearActiveWorkflowHandleOnSuccessRef =

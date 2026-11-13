@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
+import { EVALUATION_IO_POLICY } from "../../../convex/resourcePolicy.ts";
 
 // The default catalog omits decision models. Query each modality explicitly.
 const endpoints = [
@@ -9,7 +10,9 @@ const endpoints = [
 const collected: Record<string, unknown>[] = [];
 for (const url of endpoints) {
     const response = await fetch(url, {
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(
+            EVALUATION_IO_POLICY.catalogRequestTimeoutMs,
+        ),
         redirect: "error",
     });
     assert(response.ok, `Catalog HTTP ${response.status}`);

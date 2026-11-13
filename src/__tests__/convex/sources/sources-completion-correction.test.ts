@@ -2,7 +2,7 @@ import "@convex/execution/agentCatalog";
 import { internal } from "@convex/_generated/api";
 import { sourcesDefinition } from "@convex/domain/sourcesAgent";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/execution/executionProtocol";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
@@ -244,14 +244,19 @@ test.each([
         const texts: string[] = request.messages.flatMap(
             (message: {
                 content: string | { type: string; text?: string }[];
-            }) =>
-                typeof message.content === "string"
+                sections?: Record<string, string | null>;
+            }) => [
+                ...(typeof message.content === "string"
                     ? [message.content]
                     : message.content.flatMap((part) =>
                           part.type === "text" && typeof part.text === "string"
                               ? [part.text]
                               : [],
-                      ),
+                      )),
+                ...Object.values(message.sections ?? {}).filter(
+                    (value): value is string => value !== null,
+                ),
+            ],
         );
         for (const part of reply.content) {
             if (part.type === "text") expect(texts).toContain(part.text);

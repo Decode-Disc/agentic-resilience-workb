@@ -2,6 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { CLIENT_PAGE_SIZE } from "@convex/resourcePolicy";
 import { useMutation, usePaginatedQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
@@ -137,7 +138,7 @@ function RestorableReservations() {
     const restorable = usePaginatedQuery(
         api.adminOperations.listRestorableRunsPage,
         {},
-        { initialNumItems: 20 },
+        { initialNumItems: CLIENT_PAGE_SIZE.adminReservations },
     );
     const restoreQuota = useMutation(api.admin.restoreQuota);
     const [restoreRunId, setRestoreRunId] = useState<Id<"researchRuns"> | null>(

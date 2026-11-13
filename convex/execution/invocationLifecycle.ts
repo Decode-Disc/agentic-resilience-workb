@@ -6,18 +6,31 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
-import { SOURCE_COMPARISON_MAX_OUTPUT_BYTES } from "@convex/domain/sourceComparison";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
     assertPreparationComparisonFence,
     assertPreparationExecutionFence,
 } from "@convex/domain/sourcePreparationAuthority";
-import { agentToolSetKey } from "@convex/integrations/modelInput";
+import {
+    agentToolSetKey,
+    piInstructionSection,
+} from "@convex/integrations/modelInput";
+import { NATIVE_MODEL_SERIALIZER } from "@convex/integrations/modelRouting";
 import { pinMissionModel } from "@convex/modelConfiguration";
 import {
     providerAttemptValidator,
+    requireQualificationResultDeadline,
     requireQualifiedBrowserMission,
 } from "@convex/providerCalls";
+import {
+    MAX_CONTEXT_BYTES,
+    MAX_NO_PROGRESS_TURNS,
+    MAX_OBSERVABLE_OUTPUT_BYTES,
+    MAX_OPERATION_RESULT_BYTES,
+    MAX_WORKING_NOTES_BYTES,
+    SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
+} from "@convex/resourcePolicy";
+import { readWorkbenchQualificationDeadline } from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import { type Infer, v } from "convex/values";
 import { ValidationError, validate } from "convex-helpers/validators";
@@ -45,17 +58,17 @@ import {
     invocationResponseValidator,
     invocationStructureError,
     LEGACY_AGENT_BACKEND,
-    MAX_CONTEXT_BYTES,
-    MAX_NO_PROGRESS_TURNS,
-    MAX_OBSERVABLE_OUTPUT_BYTES,
-    MAX_OPERATION_RESULT_BYTES,
-    MAX_WORKING_NOTES_BYTES,
     operationInputValidator,
 } from "./executionProtocol";
 import {
+    admittedInputHash,
+    admittedInputJson,
+    contextObservationSequence,
     hasKnownNonDispatch,
     invocationEventObservation,
+    latestNativeControl,
     retainInvocationPayload,
+    retainInvocationRawOutput,
 } from "./journal";
 import {
     domainDataPatch,
@@ -69,6 +82,11 @@ import {
 } from "./operationContracts";
 import { persistOperationRequest } from "./operations";
 import { pauseResearchAtBoundary } from "./researchControl";
+import {
+    retainedTextParts,
+    stageRetainedText,
+    textFragmentValidator,
+} from "./retainedText";
 
 async function hasOutstandingOperations(
     ctx: QueryCtx,
@@ -224,7 +242,76 @@ export const authorizeDispatch = internalQuery({
             .unique();
         if (request?.state !== "complete")
             throw executionError("journal_request_unavailable");
+        if (!invocation.missionId && invocation.providerCallId) {
+            const receipt = await ctx.db.get(invocation.providerCallId);
+            if (
+                receipt?.reservedMaxOutputTokens !== undefined &&
+                (!Number.isSafeInteger(request.effectiveMaxOutputTokens) ||
+                    (request.effectiveMaxOutputTokens ?? 0) < 1 ||
+                    (request.effectiveMaxOutputTokens ?? Infinity) >
+                        receipt.reservedMaxOutputTokens)
+            )
+                throw executionError("invalid_model_output_limit");
+        }
+        const preparation = invocation.nativePreparation;
+        if (
+            !invocation.purpose &&
+            invocation.generationBackend?.id === "pi-durable" &&
+            (invocation.provenance === "live" || preparation)
+        ) {
+            if (!preparation || !invocation.missionId)
+                throw executionError("native_input_unprepared");
+            const mission = await ctx.db.get(invocation.missionId);
+            if (!mission) throw executionError("mission_unavailable");
+            const definition = getAgentDefinition(
+                mission.definitionId,
+                mission.definitionVersion,
+            );
+            if (
+                (preparation.observationSequence ?? 0) !==
+                    (await contextObservationSequence(ctx, mission.runId)) ||
+                (definition.nativeConversation &&
+                    (preparation.controlSequence ?? 0) !==
+                        ((await latestNativeControl(ctx, mission.runId))
+                            ?.nativeInputSequence ?? 0)) ||
+                preparation.inputHash !== admittedInputHash(invocation) ||
+                preparation.serializer !== NATIVE_MODEL_SERIALIZER ||
+                preparation.instructionsHash !==
+                    sha256Hex(piInstructionSection(definition.instructions)) ||
+                preparation.toolSetKey !==
+                    (await agentToolSetKey(
+                        agentToolSchemas(
+                            definition,
+                            JSON.parse(
+                                await admittedInputJson(ctx, invocation),
+                            ),
+                        ),
+                    ))
+            )
+                throw executionError("native_input_changed");
+        }
         return null;
+    },
+});
+
+export const stageRequest = internalMutation({
+    args: {
+        invocationId: v.id("agentInvocations"),
+        expectedGeneration: v.number(),
+        fragment: textFragmentValidator,
+    },
+    returns: v.id("retainedTexts"),
+    handler: async (ctx, args) => {
+        const invocation = await requireDispatchAuthority(
+            ctx,
+            args.invocationId,
+            args.expectedGeneration,
+        );
+        return stageRetainedText(
+            ctx,
+            `${invocation._id}:request`,
+            args.fragment,
+        );
     },
 });
 
@@ -232,7 +319,9 @@ export const retainRequest = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
-        requestJson: v.string(),
+        requestJson: v.optional(v.string()),
+        textId: v.optional(v.id("retainedTexts")),
+        effectiveMaxOutputTokens: v.optional(v.number()),
     },
     returns: v.union(
         v.object({ kind: v.literal("ready") }),
@@ -249,6 +338,11 @@ export const retainRequest = internalMutation({
             invocation,
             "request",
             args.requestJson,
+            "observable_request_unavailable",
+            {
+                textId: args.textId,
+                effectiveMaxOutputTokens: args.effectiveMaxOutputTokens,
+            },
         );
         return payload.state === "complete"
             ? { kind: "ready" as const }
@@ -265,9 +359,15 @@ export const begin = internalMutation({
         expectedGeneration: v.number(),
         taskKey: v.string(),
         piSessionId: v.optional(v.id("piSessions")),
+        preparedInputHash: v.optional(v.string()),
+        preparedObservationSequence: v.optional(v.number()),
+        preparedToolSetKey: v.optional(v.string()),
+        preparedInstructionsHash: v.optional(v.string()),
+        preparedSerializer: v.optional(v.string()),
         nativeInput: v.optional(
             v.object({
                 messageIds: v.array(v.id("agentMessageDeliveries")),
+                controlSequence: v.optional(v.number()),
                 toolSetKey: v.string(),
             }),
         ),
@@ -330,7 +430,7 @@ export const begin = internalMutation({
             return {
                 kind: "ready" as const,
                 invocationId: existing._id,
-                inputJson: existing.inputJson,
+                inputJson: await admittedInputJson(ctx, existing),
             };
         }
         if (await pauseResearchAtBoundary(ctx, mission.runId, mission))
@@ -360,6 +460,27 @@ export const begin = internalMutation({
             });
             return context;
         }
+        const preparedDefinition = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
+        );
+        if (
+            args.preparedInputHash &&
+            (args.preparedInputHash !== sha256Hex(context.inputJson) ||
+                args.preparedToolSetKey !==
+                    (await agentToolSetKey(
+                        agentToolSchemas(
+                            preparedDefinition,
+                            JSON.parse(context.inputJson),
+                        ),
+                    )) ||
+                args.preparedInstructionsHash !==
+                    sha256Hex(
+                        piInstructionSection(preparedDefinition.instructions),
+                    ) ||
+                args.preparedSerializer !== NATIVE_MODEL_SERIALIZER)
+        )
+            return { kind: "blocked" as const, code: "native_input_changed" };
         const turn = mission.conversationTurnId
             ? await ctx.db.get(mission.conversationTurnId)
             : null;
@@ -367,6 +488,14 @@ export const begin = internalMutation({
             mission.definitionId,
             mission.definitionVersion,
         );
+        if (
+            args.preparedInputHash &&
+            !args.purpose &&
+            (args.preparedObservationSequence ?? 0) !==
+                (JSON.parse(context.inputJson).nativeObservations
+                    ?.throughSequence ?? 0)
+        )
+            return { kind: "blocked" as const, code: "native_input_changed" };
         if (definition.nativeConversation && !args.purpose) {
             // Delivery proves native messages and tools; the fresh context returned
             // by begin supplies business state, fenced by the invocation's version.
@@ -374,6 +503,9 @@ export const begin = internalMutation({
             const native = args.nativeInput;
             if (
                 !native ||
+                (native.controlSequence ?? 0) !==
+                    (JSON.parse(context.inputJson).nativeObservations
+                        ?.controlSequence ?? 0) ||
                 !instructions ||
                 stableStringify([...native.messageIds].sort()) !==
                     stableStringify(
@@ -394,6 +526,9 @@ export const begin = internalMutation({
                     code: "native_input_changed",
                 };
         }
+        const fragmentInput =
+            new TextEncoder().encode(context.inputJson).length >
+            MAX_OBSERVABLE_OUTPUT_BYTES;
         const invocationId = await ctx.db.insert("agentInvocations", {
             purpose: args.purpose,
             conversationTurnId: mission.conversationTurnId,
@@ -410,10 +545,47 @@ export const begin = internalMutation({
             taskKey,
             provenance: args.provenance,
             status: "started",
-            inputJson: context.inputJson,
+            inputJson: fragmentInput ? "" : context.inputJson,
+            inputContentHash: sha256Hex(context.inputJson),
+            ...(args.preparedInputHash &&
+            args.preparedToolSetKey &&
+            args.preparedInstructionsHash &&
+            args.preparedSerializer
+                ? {
+                      nativePreparation: {
+                          ...(args.preparedObservationSequence !== undefined
+                              ? {
+                                    observationSequence:
+                                        args.preparedObservationSequence,
+                                }
+                              : {}),
+                          ...(args.nativeInput?.controlSequence !== undefined
+                              ? {
+                                    controlSequence:
+                                        args.nativeInput.controlSequence,
+                                }
+                              : {}),
+                          inputHash: args.preparedInputHash,
+                          toolSetKey: args.preparedToolSetKey,
+                          instructionsHash: args.preparedInstructionsHash,
+                          serializer: args.preparedSerializer,
+                      },
+                  }
+                : {}),
             progressCount: mission.progressKeys.length,
             createdAt: Date.now(),
         });
+        if (fragmentInput) {
+            const { manifest, parts } = retainedTextParts(context.inputJson);
+            let inputTextId: Id<"retainedTexts"> | undefined;
+            for (const [index, content] of parts.entries())
+                inputTextId = await stageRetainedText(
+                    ctx,
+                    `${invocationId}:input`,
+                    { ...manifest, index, content },
+                );
+            await ctx.db.patch(invocationId, { inputTextId });
+        }
         if (!args.purpose)
             await ctx.db.patch(mission._id, {
                 lastInvocationId: invocationId,
@@ -441,6 +613,10 @@ export const forExecution = internalQuery({
     returns: v.object({
         invocation: schema.doc("agentInvocations"),
         mission: schema.doc("agentMissions"),
+        authority: v.object({
+            resourcePolicy: v.optional(v.string()),
+            deadlineAt: v.number(),
+        }),
     }),
     handler: async (ctx, args) => {
         const invocation = await ctx.db.get(args.invocationId);
@@ -450,12 +626,29 @@ export const forExecution = internalQuery({
             invocation.status !== "started"
         )
             throw executionError("invocation_unavailable");
-        const { mission } = await requireMissionAuthority(
+        const { mission, run } = await requireMissionAuthority(
             ctx,
             invocation.missionId,
             args.expectedGeneration,
         );
-        return { invocation, mission };
+        const qualificationDeadline =
+            invocation.provenance === "live"
+                ? await readWorkbenchQualificationDeadline(ctx, run)
+                : undefined;
+        return {
+            invocation: {
+                ...invocation,
+                inputJson: await admittedInputJson(ctx, invocation),
+            },
+            mission,
+            authority: {
+                resourcePolicy: mission.resourcePolicy,
+                deadlineAt: Math.min(
+                    mission.deadlineAt,
+                    qualificationDeadline ?? Infinity,
+                ),
+            },
+        };
     },
 });
 
@@ -493,8 +686,9 @@ export const retainOutput = internalMutation({
         if (
             new TextEncoder().encode(args.responseJson).length >
                 MAX_OPERATION_RESULT_BYTES ||
-            new TextEncoder().encode(args.rawOutputJson ?? "").length >
-                MAX_OBSERVABLE_OUTPUT_BYTES
+            (invocation.generationBackend?.id !== "pi-durable" &&
+                new TextEncoder().encode(args.rawOutputJson ?? "").length >
+                    MAX_OBSERVABLE_OUTPUT_BYTES)
         )
             throw executionError("response_capacity");
         const receivedOutputJson = stableStringify(
@@ -505,14 +699,15 @@ export const retainOutput = internalMutation({
             invocation.receivedOutputJson !== receivedOutputJson
         )
             throw executionError("invocation_result_conflict");
-        if (invocation.providerCallId) {
-            const receipt = await ctx.db.get(invocation.providerCallId);
-            if (
-                receipt?.invocationId !== invocation._id ||
-                receipt.status === "started"
-            )
-                throw executionError("provider_receipt_required");
-        }
+        const receipt = invocation.providerCallId
+            ? await ctx.db.get(invocation.providerCallId)
+            : null;
+        if (
+            invocation.providerCallId &&
+            (receipt?.invocationId !== invocation._id ||
+                receipt.status === "started")
+        )
+            throw executionError("provider_receipt_required");
         if (invocation.provenance === "simulation")
             await retainInvocationPayload(
                 ctx,
@@ -526,7 +721,14 @@ export const retainOutput = internalMutation({
                     }),
             );
         else if (hasKnownNonDispatch({ ...invocation, receivedOutputJson })) {
-            for (const part of ["request", "reply"] as const)
+            for (const part of ["request", "reply"] as const) {
+                const existing = await ctx.db
+                    .query("agentInvocationPayloads")
+                    .withIndex("by_invocation_and_part", (q) =>
+                        q.eq("invocationId", invocation._id).eq("part", part),
+                    )
+                    .unique();
+                if (existing) continue;
                 await retainInvocationPayload(
                     ctx,
                     invocation,
@@ -534,6 +736,7 @@ export const retainOutput = internalMutation({
                     undefined,
                     "not_dispatched",
                 );
+            }
         }
         let receivedWhileAuthorized = invocation.receivedWhileAuthorized;
         if (!invocation.receivedOutputJson && invocation.missionId) {
@@ -543,6 +746,8 @@ export const retainOutput = internalMutation({
                     invocation.missionId,
                     args.expectedGeneration,
                 );
+                if (receipt)
+                    await requireQualificationResultDeadline(ctx, receipt);
                 receivedWhileAuthorized = true;
             } catch (error) {
                 if (!executionFailureCode(error)) throw error;
@@ -554,9 +759,11 @@ export const retainOutput = internalMutation({
             ...(receivedWhileAuthorized !== undefined
                 ? { receivedWhileAuthorized }
                 : {}),
-            ...(args.rawOutputJson
-                ? { rawOutputJson: args.rawOutputJson }
-                : {}),
+            ...(await retainInvocationRawOutput(
+                ctx,
+                invocation,
+                args.rawOutputJson,
+            )),
         });
         if (invocation.missionId) {
             const mission = await ctx.db.get(invocation.missionId);
@@ -672,6 +879,8 @@ export const beginOneShot = internalMutation({
             provenance: "live",
             status: "started",
             inputJson: args.inputJson,
+            inputContentHash: sha256Hex(args.inputJson),
+            preparationInputHash: receipt.inputHash,
             providerCallId: receipt._id,
             createdAt: Date.now(),
         });
@@ -833,8 +1042,9 @@ export const finish = internalMutation({
         if (
             new TextEncoder().encode(outputJson).length >
                 MAX_OPERATION_RESULT_BYTES ||
-            new TextEncoder().encode(args.rawOutputJson ?? "").length >
-                MAX_OBSERVABLE_OUTPUT_BYTES
+            (invocation.generationBackend?.id !== "pi-durable" &&
+                new TextEncoder().encode(args.rawOutputJson ?? "").length >
+                    MAX_OBSERVABLE_OUTPUT_BYTES)
         )
             throw executionError("response_capacity");
         const mission = await ctx.db.get(invocation.missionId);
@@ -865,9 +1075,11 @@ export const finish = internalMutation({
             status: "returned" as const,
             outputJson,
             blockCode: undefined,
-            ...(args.rawOutputJson
-                ? { rawOutputJson: args.rawOutputJson }
-                : {}),
+            ...(await retainInvocationRawOutput(
+                ctx,
+                invocation,
+                args.rawOutputJson,
+            )),
             completedAt: Date.now(),
         };
         const block = async (
@@ -945,12 +1157,16 @@ export const finish = internalMutation({
             );
             return { ...refused, correction: feedback };
         };
+        const receipt = invocation.providerCallId
+            ? await ctx.db.get(invocation.providerCallId)
+            : null;
         try {
             await requireMissionAuthority(
                 ctx,
                 mission._id,
                 args.expectedGeneration,
             );
+            if (receipt) await requireQualificationResultDeadline(ctx, receipt);
         } catch (error) {
             const code = executionFailureCode(error);
             if (!code) throw error;
@@ -984,9 +1200,6 @@ export const finish = internalMutation({
             !canAdoptRetainedResponse(mission, invocation)
         )
             return block("retained_response_not_reusable", true);
-        const receipt = invocation.providerCallId
-            ? await ctx.db.get(invocation.providerCallId)
-            : null;
         if (args.response.kind === "blocked") {
             if (
                 args.response.code === "invalid_output" &&
@@ -1027,7 +1240,9 @@ export const finish = internalMutation({
         if (!awaitingOperations || mission.executionRuntime !== "pi-durable")
             await ctx.db.patch(mission._id, { workingNotes: notes });
         if (awaitingOperations) return block("pending_operations");
-        const snapshot: unknown = JSON.parse(invocation.inputJson);
+        const snapshot: unknown = JSON.parse(
+            await admittedInputJson(ctx, invocation),
+        );
         if (args.response.kind === "complete") {
             const definition = getAgentDefinition(
                 mission.definitionId,
@@ -1197,7 +1412,7 @@ export const finish = internalMutation({
     },
 });
 
-/** A settled invocation consumes non-progress capacity once, whether it returned tools or a rejected completion. */
+/** Settle each invocation once while keeping the first completion refusal actionable. */
 function invocationProgressSettlement(
     mission: Doc<"agentMissions">,
     invocation: Doc<"agentInvocations">,
@@ -1245,7 +1460,10 @@ function invocationProgressSettlement(
               }
             : (mission.recoveryRead ??
               (refusal ? { refusalInvocationId: invocation._id } : undefined));
-    const noProgressTurns = mission.noProgressTurns + (restored ? 0 : 1);
+    let noProgressTurns = mission.noProgressTurns + (restored ? 0 : 1);
+    // Prior consultations must not stop the first completion refusal before its feedback can be used.
+    if (rejectedCompletion && !mission.recoveryRead)
+        noProgressTurns = Math.min(noProgressTurns, MAX_NO_PROGRESS_TURNS - 1);
     return {
         noProgressTurns,
         recoveryRead,

@@ -2496,6 +2496,20 @@ export function buildSourceSelectionProposal(input: {
     };
 }
 
+/** Legal control permissions depend on the submitted documentary role, not wording or model preference. */
+export function documentaryPermittedUses(
+    kind: import("./sourcesContracts").DocumentaryContribution["kind"],
+) {
+    return kind === "forecast" || kind === "attributed_argument"
+        ? (["attributed_argument_only", "context_only", "blocked"] as const)
+        : ([
+              "documentary",
+              "attributed_argument_only",
+              "context_only",
+              "blocked",
+          ] as const);
+}
+
 /** Interprets a controlled contribution for its declared use, independently of corpus membership. */
 export function controlledDocumentaryUse(
     contribution: import("./sourcesContracts").DocumentaryContribution,
@@ -2519,8 +2533,9 @@ export function controlledDocumentaryUse(
     );
     if (finding?.conclusion !== "supported") return "blocked";
     if (
-        ["forecast", "attributed_argument"].includes(contribution.kind) &&
-        finding.permittedUse === "documentary"
+        !documentaryPermittedUses(contribution.kind).some(
+            (use) => use === finding.permittedUse,
+        )
     )
         return "blocked";
     let permittedUse = finding.permittedUse;

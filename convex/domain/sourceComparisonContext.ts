@@ -1,9 +1,9 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
-import { SOURCE_EMBEDDING_PROFILE_VERSION } from "@convex/resourceLimits";
+import { SOURCE_EMBEDDING_PROFILE_VERSION } from "@convex/domain/sourceRetrievalPolicy";
+import { SOURCE_COMPARISON_MAX_CANDIDATES } from "@convex/resourcePolicy";
 import type { GenericDatabaseReader } from "convex/server";
 import { mergeRunCompanyMetadata } from "./companyMetadata";
 import {
-    SOURCE_COMPARISON_MAX_CANDIDATES,
     SOURCE_COMPARISON_VERSION,
     sourceComparisonInputPolicyHash,
     sourceFindingNeedsComparison,

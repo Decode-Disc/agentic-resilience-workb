@@ -1,3 +1,4 @@
+import { recordContextObservation } from "@convex/execution/journal";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
@@ -226,6 +227,18 @@ export const decide = mutation({
             targetId: run._id,
             reason,
             occurredAt: now,
+        });
+        await recordContextObservation(ctx, run._id, {
+            key: `checkpoint-decision:${decisionId}`,
+            topic: "analyst_decision",
+            actor: { type: "visitor", visitorId: visitor._id },
+            value: {
+                event: "evidence_sufficiency_decided",
+                decisionId,
+                decision: args.decision.kind,
+                reason: reason ?? null,
+                executionGeneration,
+            },
         });
         return { accepted: true };
     },

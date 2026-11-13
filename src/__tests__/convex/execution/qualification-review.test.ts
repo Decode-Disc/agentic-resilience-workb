@@ -1,0 +1,937 @@
+import assert from "node:assert/strict";
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    unlinkSync,
+    writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { internal } from "@convex/_generated/api";
+import {
+    type AnalysisReceipt,
+    campaignManifestSchema,
+    emptyCampaignLimits,
+} from "@convex/qualificationCampaignPolicy";
+import schema from "@convex/schema";
+import {
+    acquireCampaignLock,
+    campaignReviewTemplate,
+    runCampaign,
+    runCampaignReviewStage,
+} from "@evaluations/workbench-browser/campaign";
+import { ConvexHttpClient } from "convex/browser";
+import { getFunctionName, makeFunctionReference } from "convex/server";
+import type { Value } from "convex/values";
+import { convexTest } from "convex-test";
+import { afterEach, expect, test, vi } from "vitest";
+import {
+    qualificationReviewApiAnalysis,
+    qualificationReviewPayload,
+    qualificationReviewReport,
+    qualificationReviewResponse,
+    qualificationReviewRuntime,
+} from "@/__tests__/setup/qualification-review";
+import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
+import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
+
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+});
+
+const apiUsageCases = new Map<
+    string,
+    { usage: unknown; receipt?: Partial<AnalysisReceipt> }
+>([
+    ["api_usage_missing_input", { usage: { output_tokens: 100 } }],
+    [
+        "api_usage_negative_input",
+        { usage: { input_tokens: -1, output_tokens: 100 } },
+    ],
+    ["api_usage_missing_output", { usage: { input_tokens: 100 } }],
+    [
+        "api_usage_cache_overflow",
+        {
+            usage: {
+                input_tokens: 100,
+                output_tokens: 100,
+                input_tokens_details: {
+                    cached_tokens: 80,
+                    cache_write_tokens: 21,
+                },
+            },
+        },
+    ],
+    [
+        "api_usage_zero_input",
+        {
+            usage: { input_tokens: 0, output_tokens: 100 },
+            receipt: { input: 0, output: 100, costMicros: 60 },
+        },
+    ],
+    [
+        "api_usage_zero_output",
+        {
+            usage: { input_tokens: 100, output_tokens: 0 },
+            receipt: { input: 100, output: 0, costMicros: 15 },
+        },
+    ],
+    [
+        "api_usage_all_cached",
+        {
+            usage: {
+                input_tokens: 100,
+                output_tokens: 100,
+                input_tokens_details: { cached_tokens: 100 },
+            },
+            receipt: { input: 0, cacheRead: 100, output: 100, costMicros: 68 },
+        },
+    ],
+]);
+
+for (const { subscription, compaction, fault } of [
+    { subscription: false, compaction: false, fault: "none" },
+    { subscription: false, compaction: false, fault: "api" },
+    { subscription: false, compaction: true, fault: "api" },
+    { subscription: false, compaction: false, fault: "api_high" },
+    { subscription: false, compaction: false, fault: "api_command" },
+    ...[
+        "api_401",
+        "api_429",
+        "api_usage",
+        "api_price",
+        "api_settlement",
+        "api_unknown",
+        ...apiUsageCases.keys(),
+    ].map(
+        (fault) => ({ subscription: false, compaction: false, fault }) as const,
+    ),
+    { subscription: true, compaction: false, fault: "none" },
+    { subscription: true, compaction: true, fault: "none" },
+    { subscription: true, compaction: true, fault: "denied" },
+    { subscription: true, compaction: true, fault: "unknown" },
+    { subscription: true, compaction: true, fault: "settlement_ack" },
+] as const)
+    test(`Pi review reserves real campaign allowances before HTTP and command adopts only after reconciliation (subscription=${subscription}, compaction=${compaction}, fault=${fault})`, async () => {
+        const api = fault.startsWith("api");
+        const usageCase = apiUsageCases.get(fault);
+        const high = fault === "api_high";
+        const requestReservation = high ? 4000000 : 100000;
+        const allowance =
+            fault === "denied" ? 8 : compaction ? 12 : api ? 3 : 2;
+        const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
+        const { preflightId } = await createAdmittedPreflight(t);
+        await t.run(async (ctx) => {
+            const preflight = await ctx.db.get(preflightId);
+            assert(preflight?.ownerVisitorId);
+            const visitor = await ctx.db.get(preflight.ownerVisitorId);
+            assert(visitor);
+            await ctx.db.patch(visitor.invitationId, { slotKey: "analyst-4" });
+        });
+        vi.stubEnv(
+            "WORKBENCH_REVIEW_REASONING",
+            subscription || high ? "high" : "off",
+        );
+        vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+        vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+        const manifest = campaignManifestSchema.parse({
+            ...configurableCampaign(),
+            version: 3,
+            mode: "deterministic",
+            batteryHash: "a".repeat(64),
+            perLot: emptyCampaignLimits(),
+            total: emptyCampaignLimits(),
+            analysis: api
+                ? {
+                      ...qualificationReviewApiAnalysis(
+                          high ? "gpt-6.1-sol" : "gpt-4o-mini",
+                      ),
+                      perLot: {
+                          requests: allowance,
+                          costMicros: allowance * requestReservation,
+                      },
+                      total: {
+                          requests: allowance,
+                          costMicros: allowance * requestReservation,
+                      },
+                      timeoutMs: compaction ? 60000 : 10000,
+                  }
+                : {
+                      scope: "evidence_review",
+                      routes: [
+                          {
+                              provider: subscription
+                                  ? "openai-codex"
+                                  : "openai",
+                              model: subscription
+                                  ? "gpt-6.1-sol"
+                                  : "gpt-4o-mini",
+                          },
+                      ],
+                      ...(subscription
+                          ? {
+                                accounting: "native_subscription",
+                                perLot: { requests: allowance },
+                                total: { requests: allowance },
+                            }
+                          : {
+                                maxRequestCostMicros: 100000,
+                                perLot: { requests: 2, costMicros: 200000 },
+                                total: { requests: 2, costMicros: 200000 },
+                                maxOutputTokens: 1000,
+                            }),
+                      ...(compaction
+                          ? {}
+                          : { maxInputTokens: subscription ? 512 : 32000 }),
+                      timeoutMs: compaction ? 60000 : 10000,
+                  },
+        });
+        if (fault === "api_price") {
+            assert(manifest.version === 3 && manifest.analysis.pricing);
+            manifest.analysis.pricing.cost.output = 0.7;
+        }
+        const campaignId = await t.mutation(
+            internal.qualificationCampaigns.authorize,
+            { manifest },
+        );
+        const lotId = await t.mutation(internal.qualificationCampaigns.admit, {
+            campaignId,
+            key: "lot-1",
+            candidateHash: "b".repeat(64),
+            changedPaths: [],
+        });
+        await t.mutation(internal.qualificationCampaigns.beginCleanup, {
+            lotId,
+        });
+        const root = mkdtempSync(join(tmpdir(), "pi-campaign-convex-"));
+        const lotRoot = join(root, "lots", "lot-1");
+        mkdirSync(lotRoot, { recursive: true });
+        writeFileSync(
+            join(root, "campaign.json"),
+            JSON.stringify({ campaignId, manifest, fingerprints: {} }),
+        );
+        writeFileSync(
+            join(lotRoot, "campaign-lot.json"),
+            JSON.stringify({
+                manifest,
+                candidateHash: "b".repeat(64),
+                fingerprints: {},
+            }),
+        );
+        writeFileSync(
+            join(lotRoot, "campaign-result.json"),
+            JSON.stringify({ completed: true, cleanupCompleted: true }),
+        );
+        writeFileSync(
+            join(lotRoot, "published.json"),
+            "Synthetic evidence fixture: the framing was saved.".repeat(
+                compaction ? 7000 : 1,
+            ),
+        );
+        const template = campaignReviewTemplate(lotRoot);
+        writeFileSync(
+            join(lotRoot, "review-template.json"),
+            JSON.stringify(template),
+        );
+        const review = {
+            ...template,
+            cases: template.cases.map((item) => ({
+                ...item,
+                checks: Object.fromEntries(
+                    Object.keys(item.checks).map((key) => [key, "passed"]),
+                ),
+                finding:
+                    "The synthetic fixture records the expected saved framing.",
+                evidence: ["published.json"],
+            })),
+        };
+        const client = new ConvexHttpClient("http://127.0.0.1:3210");
+        let lastPurpose: string | undefined,
+            lostAcknowledgement = false;
+        vi.spyOn(client, "mutation").mockImplementation(async (...args) => {
+            if (
+                fault === "api_settlement" &&
+                requests === 2 &&
+                !lostAcknowledgement &&
+                getFunctionName(args[0]) ===
+                    getFunctionName(
+                        internal.qualificationCampaigns.settleAnalysis,
+                    )
+            ) {
+                lostAcknowledgement = true;
+                throw new Error("Synthetic settlement failed before commit");
+            }
+            const result = await t.mutation(
+                makeFunctionReference<"mutation", Record<string, Value>, Value>(
+                    getFunctionName(args[0]),
+                ),
+                args[1] ?? {},
+            );
+            if (
+                fault === "settlement_ack" &&
+                !lostAcknowledgement &&
+                lastPurpose === "compaction" &&
+                getFunctionName(args[0]) ===
+                    getFunctionName(
+                        internal.qualificationCampaigns.settleAnalysis,
+                    )
+            ) {
+                lostAcknowledgement = true;
+                throw new Error(
+                    "Synthetic lost summary settlement acknowledgement",
+                );
+            }
+            return result;
+        });
+        vi.spyOn(client, "query").mockImplementation((...args) =>
+            t.query(
+                makeFunctionReference<"query", Record<string, Value>, Value>(
+                    getFunctionName(args[0]),
+                ),
+                args[1] ?? {},
+            ),
+        );
+        let requests = 0,
+            investigations = 0,
+            summaries = 0,
+            largestInputBytes = 0;
+        const expectedInput = new Map<number, number>();
+        const emittedOutputs: unknown[] = [];
+        const draft =
+            "# Findings\n\nThe saved framing matches the captured evidence; investigation can continue.";
+        const checkpoint =
+            "Native checkpoint: evidence inspected; preserve the saved framing finding.";
+        const transport = {
+            kind: "mock-openai" as const,
+            fetch: async (
+                _input: Parameters<typeof fetch>[0],
+                init?: RequestInit,
+                phase?: string,
+            ) => {
+                if (api) {
+                    const started = readFileSync(
+                        join(lotRoot, "progress.jsonl"),
+                        "utf8",
+                    )
+                        .trim()
+                        .split("\n")
+                        .map((line) => JSON.parse(line))
+                        .filter((entry) => entry.event === "analysis_started")
+                        .at(-1);
+                    assert(started);
+                    phase = started.purpose;
+                    expect(String(_input)).toContain("api.openai.com");
+                    expect(
+                        new Headers(init?.headers).get("authorization"),
+                    ).toBe("Bearer sk-synthetic-offline-qualification-key");
+                }
+                lastPurpose = phase;
+                requests++;
+                const lot = await t.run((ctx) => ctx.db.get(lotId));
+                expect(lot?.analysisAllocated).toEqual({
+                    requests,
+                    costMicros: subscription
+                        ? 0
+                        : requests * requestReservation,
+                });
+                const body = await qualificationReviewPayload(init);
+                if (api) {
+                    expect(body.service_tier).toBe("default");
+                    expect(JSON.stringify(body)).not.toContain("sk-synthetic");
+                    if (fault === "api_401" || fault === "api_429")
+                        return new Response(
+                            JSON.stringify({
+                                error: {
+                                    message: "Synthetic provider rejection",
+                                },
+                            }),
+                            {
+                                status: fault === "api_401" ? 401 : 429,
+                                headers: { "content-type": "application/json" },
+                            },
+                        );
+                    if (fault === "api_unknown")
+                        throw new Error("Synthetic connection lost");
+                    if (usageCase)
+                        return qualificationReviewResponse(
+                            qualificationReviewReport(review),
+                            requests,
+                            null,
+                            usageCase.usage,
+                        );
+                    if (fault === "api_usage")
+                        return qualificationReviewResponse(
+                            draft,
+                            requests,
+                            null,
+                            {
+                                input_tokens: 0,
+                                output_tokens: 0,
+                                input_tokens_details: { cached_tokens: 0 },
+                            },
+                        );
+                }
+                if (high) {
+                    expect(body.reasoning).toMatchObject({ effort: "medium" });
+                    assert(Array.isArray(body.input));
+                    expect(body.input.at(-1)).toEqual({
+                        type: "configuration_update",
+                        reasoning: { effort: "high" },
+                    });
+                } else if (subscription)
+                    expect(body.reasoning).toMatchObject({ effort: "high" });
+                emittedOutputs.push(body.max_output_tokens);
+                expect(body.max_output_tokens).toBe(
+                    subscription ? undefined : high ? 128000 : 1000,
+                );
+                largestInputBytes = Math.max(
+                    largestInputBytes,
+                    Buffer.byteLength(JSON.stringify(body.input)),
+                );
+                expectedInput.set(requests, 100);
+                if (compaction && phase === "compaction") {
+                    summaries++;
+                    if (fault === "unknown")
+                        throw new Error("Synthetic summary connection lost");
+                    return qualificationReviewResponse(checkpoint, requests);
+                }
+                investigations++;
+                if (compaction) {
+                    if (investigations === 1)
+                        return qualificationReviewResponse(
+                            draft,
+                            requests,
+                            null,
+                        );
+                    if (investigations <= 7)
+                        return qualificationReviewResponse("", requests, {
+                            name: "read",
+                            arguments: {
+                                path: "published.json",
+                                offset: 1 + (investigations - 2) * 51200,
+                                limit: 51200,
+                            },
+                        });
+                    if (investigations === 8) {
+                        const model = modelRuntime.getModel(
+                            subscription ? "openai-codex" : "openai",
+                            subscription ? "gpt-6.1-sol" : "gpt-4o-mini",
+                        );
+                        assert(model);
+                        const input = model.contextWindow - 1000;
+                        expectedInput.set(requests, input);
+                        return qualificationReviewResponse(
+                            draft,
+                            requests,
+                            undefined,
+                            {
+                                input_tokens: input,
+                                output_tokens: 100,
+                                input_tokens_details: { cached_tokens: 0 },
+                            },
+                        );
+                    }
+                    expect(summaries).toBeGreaterThan(0);
+                    expect(JSON.stringify(body.input)).toContain(checkpoint);
+                    expect(
+                        JSON.stringify(body.instructions ?? body.input),
+                    ).toContain(template.evidenceHash);
+                    expect(
+                        readFileSync(
+                            join(lotRoot, "automated-review-report.md"),
+                            "utf8",
+                        ),
+                    ).toBe(draft);
+                }
+                if (requests === 2 && !compaction)
+                    expect(JSON.stringify(body.input)).toContain(
+                        "Synthetic evidence fixture",
+                    );
+                if (api && !compaction && requests === 2)
+                    return qualificationReviewResponse(
+                        "",
+                        requests,
+                        {
+                            name: "write",
+                            arguments: {
+                                path: "automated-review-report.md",
+                                content: draft,
+                            },
+                        },
+                        {
+                            input_tokens: 100,
+                            output_tokens: 100,
+                            input_tokens_details: { cached_tokens: 20 },
+                            output_tokens_details: { reasoning_tokens: 40 },
+                        },
+                    );
+                return qualificationReviewResponse(
+                    qualificationReviewReport(review),
+                    requests,
+                    undefined,
+                    {
+                        input_tokens: 100,
+                        output_tokens: 100,
+                        input_tokens_details: { cached_tokens: api ? 20 : 0 },
+                        output_tokens_details: { reasoning_tokens: 40 },
+                    },
+                );
+            },
+        };
+        const { runAccountableCampaignReview } = await import(
+            "@evaluations/workbench-browser/campaign-review"
+        );
+        const modelRuntime = await qualificationReviewRuntime(
+            subscription ? "openai-codex" : api ? "both" : "openai",
+        );
+        let httpError: unknown;
+        if (api)
+            vi.spyOn(globalThis, "fetch").mockImplementation(
+                async (input, init) => {
+                    try {
+                        return await transport.fetch(input, init);
+                    } catch (error) {
+                        httpError = error;
+                        throw error;
+                    }
+                },
+            );
+        const stageOptions = {
+            root: lotRoot,
+            evidenceHash: template.evidenceHash,
+            reconciled: false,
+            review: (evidenceRoot) =>
+                runAccountableCampaignReview({
+                    root: lotRoot,
+                    evidenceRoot,
+                    template,
+                    manifest,
+                    campaignId,
+                    lotId,
+                    client,
+                    modelRuntime,
+                    ...(api ? {} : { transport }),
+                }),
+            assess: async () =>
+                assert.fail("No assessment before reconciliation"),
+        } satisfies Parameters<typeof runCampaignReviewStage>[0];
+        if (fault === "api_command") {
+            await t.mutation(internal.qualificationCampaigns.reconcile, {
+                lotId,
+                cleanupCompleted: true,
+            });
+            let archived = 0;
+            const boundaries = {
+                modelRuntime,
+                lock: () => acquireCampaignLock(join(root, "fixture.lock")),
+                connect: async () => ({
+                    client,
+                    origins: {
+                        convex: "http://127.0.0.1:3210",
+                        site: "http://127.0.0.1:3211",
+                    },
+                }),
+                archive: () => {
+                    archived++;
+                },
+            };
+            const exitCode = process.exitCode;
+            try {
+                await runCampaign("run", root, {}, undefined, boundaries);
+                if (httpError) throw httpError;
+                expect((await t.run((ctx) => ctx.db.get(lotId)))?.status).toBe(
+                    "finished",
+                );
+                expect(
+                    existsSync(
+                        join(
+                            lotRoot,
+                            `automated-review-evidence-${template.evidenceHash}`,
+                        ),
+                    ),
+                ).toBe(true);
+                expect(
+                    JSON.parse(
+                        readFileSync(
+                            join(lotRoot, "automated-review-result.json"),
+                            "utf8",
+                        ),
+                    ),
+                ).toMatchObject({ evidenceHash: template.evidenceHash });
+                expect(
+                    JSON.parse(
+                        readFileSync(
+                            join(lotRoot, "automated-review-assessment.json"),
+                            "utf8",
+                        ),
+                    ),
+                ).toMatchObject({ verdict: "passed" });
+                const completed = requests;
+                expect(completed).toBe(3);
+                await runCampaign("close", root, {}, undefined, boundaries);
+                expect(requests).toBe(completed);
+                expect(archived).toBe(1);
+                expect(
+                    vi
+                        .mocked(client.mutation)
+                        .mock.calls.filter(
+                            ([ref]) =>
+                                getFunctionName(ref) ===
+                                getFunctionName(
+                                    internal.qualificationCampaigns.assess,
+                                ),
+                        ),
+                ).toHaveLength(1);
+                expect(
+                    (await t.run((ctx) => ctx.db.get(campaignId)))?.status,
+                ).toBe("closed");
+            } finally {
+                process.exitCode = exitCode;
+            }
+            return;
+        }
+        let stage = await runCampaignReviewStage(stageOptions);
+        if (httpError && fault !== "api_unknown") throw httpError;
+        if (usageCase?.receipt) {
+            expect(stage.status).toBe("awaiting_reconciliation");
+            expect(requests).toBe(1);
+            const [attempt] = await t.run((ctx) =>
+                ctx.db.query("qualificationAnalysisAttempts").collect(),
+            );
+            expect(attempt).toMatchObject({
+                status: "settled",
+                receipt: { costBasis: "sdk_estimate", ...usageCase.receipt },
+            });
+            return;
+        }
+        if (api && fault !== "api" && fault !== "api_high") {
+            expect(stage).toMatchObject({
+                status: "pending",
+                reason:
+                    fault === "api_price"
+                        ? "model_pricing_changed"
+                        : fault === "api_401"
+                          ? "provider_authentication_failed"
+                          : fault === "api_429"
+                            ? "provider_rate_limited"
+                            : fault === "api_usage" ||
+                                usageCase !== undefined ||
+                                fault === "api_settlement"
+                              ? "analysis_settlement_unconfirmed"
+                              : "unknown_dispatch_outcome",
+            });
+            const before = requests;
+            expect(before).toBe(
+                fault === "api_price" ? 0 : fault === "api_settlement" ? 2 : 1,
+            );
+            let attempts = await t.run((ctx) =>
+                ctx.db.query("qualificationAnalysisAttempts").collect(),
+            );
+            expect(attempts).toHaveLength(before);
+            if (usageCase) {
+                expect(
+                    vi
+                        .mocked(client.mutation)
+                        .mock.calls.filter(
+                            ([ref]) =>
+                                getFunctionName(ref) ===
+                                getFunctionName(
+                                    internal.qualificationCampaigns
+                                        .settleAnalysis,
+                                ),
+                        ),
+                ).toHaveLength(0);
+                expect(
+                    existsSync(join(lotRoot, "automated-review-result.json")),
+                ).toBe(false);
+                expect(
+                    readFileSync(
+                        join(lotRoot, "automated-review-report.md"),
+                        "utf8",
+                    ),
+                ).toContain("Synthetic diagnostic handoff");
+            }
+            expect(
+                attempts.filter((attempt) => attempt.status === "reserved"),
+            ).toHaveLength(fault === "api_price" ? 0 : 1);
+            if (fault === "api_settlement") {
+                expect(
+                    readFileSync(
+                        join(lotRoot, "automated-review-report.md"),
+                        "utf8",
+                    ),
+                ).toBe(draft);
+                const pinPath = join(lotRoot, "automated-review-mission.json");
+                const pin = JSON.parse(readFileSync(pinPath, "utf8"));
+                pin.deadlineAt = Date.now() - 1;
+                writeFileSync(pinPath, JSON.stringify(pin));
+                await modelRuntime.removeRuntimeApiKey("openai");
+                vi.stubEnv("OPENAI_API_KEY", "");
+            }
+            stage = await runCampaignReviewStage(stageOptions);
+            expect(stage.status).toBe("pending");
+            expect(requests).toBe(before);
+            attempts = await t.run((ctx) =>
+                ctx.db.query("qualificationAnalysisAttempts").collect(),
+            );
+            if (fault === "api_settlement") {
+                expect(
+                    attempts.every(
+                        (attempt) =>
+                            attempt.status === "settled" &&
+                            attempt.receipt?.costBasis === "sdk_estimate",
+                    ),
+                ).toBe(true);
+                expect(stage).toMatchObject({
+                    reason: "provider_login_required",
+                });
+            }
+            expect((await t.run((ctx) => ctx.db.get(lotId)))?.status).toBe(
+                "closing",
+            );
+            return;
+        }
+        if (fault !== "none" && fault !== "api" && fault !== "api_high") {
+            expect(stage).toMatchObject({
+                status: "pending",
+                reason:
+                    fault === "denied"
+                        ? "analysis_reservation_unavailable"
+                        : fault === "unknown"
+                          ? "unknown_dispatch_outcome"
+                          : "analysis_settlement_unconfirmed",
+            });
+            expect(
+                readFileSync(
+                    join(lotRoot, "automated-review-report.md"),
+                    "utf8",
+                ),
+            ).toBe(draft);
+            const before = requests;
+            const attempts = await t.run((ctx) =>
+                ctx.db
+                    .query("qualificationAnalysisAttempts")
+                    .withIndex("by_lot_and_attempt", (q) =>
+                        q.eq("lotId", lotId),
+                    )
+                    .take(allowance + 1),
+            );
+            expect(attempts).toHaveLength(before);
+            expect(
+                attempts.filter((attempt) => attempt.status === "reserved"),
+            ).toHaveLength(fault === "unknown" ? 1 : 0);
+            expect((await t.run((ctx) => ctx.db.get(lotId)))?.status).toBe(
+                "closing",
+            );
+            stage = await runCampaignReviewStage(stageOptions);
+            if (fault === "denied" || fault === "unknown") {
+                expect(stage.status).toBe("pending");
+                expect(requests).toBe(before);
+                expect(investigations).toBe(8);
+                expect(summaries).toBe(fault === "unknown" ? 1 : 0);
+                return;
+            }
+            expect(lostAcknowledgement).toBe(true);
+        }
+        if (compaction) {
+            if (api) expect(summaries).toBeGreaterThan(0);
+            else expect(summaries).toBe(2);
+            expect(investigations).toBe(9);
+            expect(largestInputBytes).toBeGreaterThan(256 * 1024);
+        }
+        expect(stage.status, JSON.stringify({ stage, emittedOutputs })).toBe(
+            "awaiting_reconciliation",
+        );
+        const completedRequests = requests;
+        const intents = readFileSync(join(lotRoot, "progress.jsonl"), "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line))
+            .filter((entry) => entry.event === "analysis_started");
+        expect(intents).toHaveLength(completedRequests);
+        expect(
+            intents.filter((entry) => entry.purpose === "compaction"),
+        ).toHaveLength(summaries);
+        expect(
+            readFileSync(join(lotRoot, "automated-review-report.md"), "utf8"),
+        ).toContain("saved framing");
+        expect(
+            JSON.parse(
+                readFileSync(
+                    join(lotRoot, "automated-review-report.json"),
+                    "utf8",
+                ),
+            ),
+        ).toMatchObject({
+            evidenceHash: template.evidenceHash,
+            assessment: "pending",
+        });
+        expect(
+            JSON.parse(
+                readFileSync(
+                    join(lotRoot, "automated-review-mission.json"),
+                    "utf8",
+                ),
+            ),
+        ).toMatchObject({
+            protocol: "investigator_v2",
+            resourcePolicy: "authority_native_v1",
+            evidenceHash: template.evidenceHash,
+            mission: expect.stringContaining("source-supported"),
+            missionHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        });
+        const missionPath = join(lotRoot, "automated-review-mission.json");
+        const pinnedMission = readFileSync(missionPath);
+        unlinkSync(missionPath);
+        const legacy = await runAccountableCampaignReview({
+            root: lotRoot,
+            evidenceRoot: join(
+                lotRoot,
+                `automated-review-evidence-${template.evidenceHash}`,
+            ),
+            template,
+            manifest,
+            campaignId,
+            lotId,
+            client,
+            modelRuntime,
+            transport,
+        });
+        expect(legacy).toMatchObject({
+            status: "pending",
+            reason: "legacy_review_protocol_unavailable",
+        });
+        expect(requests).toBe(completedRequests);
+        writeFileSync(missionPath, pinnedMission, { flag: "wx" });
+        expect((await t.run((ctx) => ctx.db.get(lotId)))?.status).toBe(
+            "closing",
+        );
+        expect(
+            await t.mutation(internal.qualificationCampaigns.reconcile, {
+                lotId,
+                cleanupCompleted: true,
+            }),
+        ).toMatchObject({ reconciled: true });
+        const exitCode = process.exitCode;
+        try {
+            let archived = 0;
+            const boundaries = {
+                lock: () => acquireCampaignLock(join(root, "fixture.lock")),
+                connect: async () => ({
+                    client,
+                    origins: {
+                        convex: "http://127.0.0.1:3210",
+                        site: "http://127.0.0.1:3211",
+                    },
+                }),
+                archive: () => {
+                    archived++;
+                },
+            };
+            await runCampaign("run", root, {}, undefined, boundaries);
+            await runCampaign("close", root, {}, undefined, boundaries);
+            const lot = await t.run((ctx) => ctx.db.get(lotId));
+            const campaign = await t.run((ctx) => ctx.db.get(campaignId));
+            const attempts = await t.run((ctx) =>
+                ctx.db
+                    .query("qualificationAnalysisAttempts")
+                    .withIndex("by_lot_and_attempt", (q) =>
+                        q.eq("lotId", lotId),
+                    )
+                    .take(allowance + 1),
+            );
+            const analysisAllocated = {
+                requests: completedRequests,
+                costMicros: subscription
+                    ? 0
+                    : completedRequests * requestReservation,
+            };
+            expect(lot).toMatchObject({
+                status: "finished",
+                verdict: "passed",
+                analysisAllocated,
+            });
+            expect(campaign).toMatchObject({
+                status: "closed",
+                analysisAllocated,
+            });
+            expect(attempts).toHaveLength(completedRequests);
+            if (api && !compaction)
+                for (const attempt of attempts) {
+                    expect(attempt).toMatchObject({
+                        status: "settled",
+                        costMicros: high ? 1162 : 74,
+                        receipt: {
+                            accounting: "api_cost",
+                            costBasis: "sdk_estimate",
+                            input: 80,
+                            output: 100,
+                            cacheRead: 20,
+                            cacheWrite: 0,
+                        },
+                    });
+                    expect(attempt.receipt?.costUsd).toBeCloseTo(
+                        high ? 0.001162 : 0.0000735,
+                        12,
+                    );
+                }
+            expect(
+                attempts.every(
+                    (attempt) =>
+                        attempt.status === "settled" &&
+                        (subscription
+                            ? attempt.costMicros === undefined &&
+                              attempt.receipt?.accounting ===
+                                  "native_subscription" &&
+                              attempt.receipt.input ===
+                                  expectedInput.get(
+                                      Number(
+                                          attempt.attemptKey.split("-").at(-1),
+                                      ),
+                                  ) &&
+                              attempt.receipt.output === 100
+                            : api
+                              ? (attempt.costMicros ?? 0) > 0 &&
+                                attempt.receipt?.costBasis === "sdk_estimate"
+                              : attempt.costMicros === 0),
+                ),
+            ).toBe(true);
+            expect(requests).toBe(completedRequests);
+            expect(archived).toBe(1);
+            expect(
+                JSON.parse(
+                    readFileSync(
+                        join(lotRoot, "automated-review-report.json"),
+                        "utf8",
+                    ),
+                ),
+            ).toMatchObject({ assessment: "assessed", verdict: "passed" });
+            const logged = vi
+                .spyOn(console, "log")
+                .mockImplementation(() => {});
+            await runCampaign("status", root, {}, undefined, boundaries);
+            const status = JSON.parse(logged.mock.calls.at(-1)?.[0] ?? "{}");
+            expect(status.diagnosticReports[0]).toMatchObject({
+                lot: "lot-1",
+                path: join(lotRoot, "automated-review-report.md"),
+                assessment: "assessed",
+                summary:
+                    "The synthetic fixture records the expected saved framing.",
+            });
+            expect(requests).toBe(completedRequests);
+            expect(
+                JSON.parse(
+                    readFileSync(
+                        join(lotRoot, `assessment-${lot?.assessmentHash}.json`),
+                        "utf8",
+                    ),
+                ),
+            ).toMatchObject({ reviewer: "automated", verdict: "passed" });
+        } finally {
+            process.exitCode = exitCode;
+        }
+    }, 60000);

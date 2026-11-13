@@ -3,6 +3,10 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { internalAction } from "@convex/_generated/server";
+import {
+    GENERATION_BILLING_LOOKUP_TIMEOUT_MS,
+    GENERATION_BILLING_MAX_RESPONSE_BYTES,
+} from "@convex/resourcePolicy";
 import { v } from "convex/values";
 
 /** Reads bounded provider accounting independently of model output and mission authority. */
@@ -18,11 +22,14 @@ export const reconcile = internalAction({
         const startedAt = Date.now();
         let httpStatus: number | undefined;
         let cost: number | undefined;
+        let cancelled: true | undefined;
         let reason: NonNullable<Doc<"providerCalls">["billing"]>["reason"];
         const key = process.env.OPENROUTER_API_KEY?.trim();
         if (!key) reason = "missing_configuration";
         else {
-            const signal = AbortSignal.timeout(15_000);
+            const signal = AbortSignal.timeout(
+                GENERATION_BILLING_LOOKUP_TIMEOUT_MS,
+            );
             let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
             try {
                 const url = new URL("https://openrouter.ai/api/v1/generation");
@@ -46,7 +53,7 @@ export const reconcile = internalAction({
                             const part = await reader.read();
                             if (part.done) break;
                             bytes += part.value.byteLength;
-                            if (bytes > 64 * 1024) {
+                            if (bytes > GENERATION_BILLING_MAX_RESPONSE_BYTES) {
                                 reason = "response_too_large";
                                 break;
                             }
@@ -80,9 +87,11 @@ export const reconcile = internalAction({
                             typeof data.total_cost === "number" &&
                             Number.isFinite(data.total_cost) &&
                             data.total_cost >= 0
-                        )
+                        ) {
                             cost = data.total_cost;
-                        else reason = "invalid_response";
+                            if ("cancelled" in data && data.cancelled === true)
+                                cancelled = true;
+                        } else reason = "invalid_response";
                     }
                 }
             } catch {
@@ -104,7 +113,7 @@ export const reconcile = internalAction({
             generationId: claim.generationId,
             httpStatus,
             latencyMs: Date.now() - startedAt,
-            ...(cost !== undefined ? { cost } : { reason }),
+            ...(cost !== undefined ? { cost, cancelled } : { reason }),
         });
         return null;
     },

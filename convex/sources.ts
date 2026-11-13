@@ -1,3 +1,4 @@
+import { recordContextObservation } from "@convex/execution/journal";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
     paginationOptsValidator,
@@ -32,10 +33,10 @@ import {
     sourceQualificationReviewValidator,
 } from "./domain/sourceUsage";
 import {
-    MAX_HISTORICAL_SOURCE_CANDIDATES,
     sourceDossierCandidateLimit,
     sourcePreparationEnabled,
 } from "./resourceLimits";
+import { MAX_HISTORICAL_SOURCE_CANDIDATES } from "./resourcePolicy";
 import { requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
 import { startReviewPreparation } from "./sourcePreparation";
@@ -526,6 +527,20 @@ export const decide = mutation({
             targetId: source._id,
             reason: args.reason?.trim() || undefined,
             occurredAt: now,
+        });
+        await recordContextObservation(ctx, run._id, {
+            key: `source-decision:${decisionId}`,
+            topic: "documentary",
+            actor: { type: "visitor", visitorId: visitor._id },
+            value: {
+                event: "source_decided",
+                decisionId,
+                sourceId: source._id,
+                corpusRevisionId: revision._id,
+                decision: args.decision,
+                reason: args.reason?.trim() || null,
+                supersedesDecisionId: prior?._id ?? null,
+            },
         });
         return { accepted: true };
     },

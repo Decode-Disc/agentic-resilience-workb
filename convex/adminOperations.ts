@@ -1,10 +1,15 @@
 import { hasKnownNonDispatch } from "@convex/execution/journal";
+import {
+    ADMIN_BACKFILL_PAGE_MAX_ITEMS,
+    ADMIN_JOURNAL_PAGE_MAX_ITEMS,
+    ADMIN_RECENT_EVENT_LIMIT as RECENT_EVENT_LIMIT,
+} from "@convex/resourcePolicy";
 import type { WorkflowId } from "@convex-dev/workflow";
 import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import {
     env,
@@ -28,7 +33,6 @@ import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 import { workflow } from "./workflow";
 
-const RECENT_EVENT_LIMIT = 50;
 const runFields = schema.tables.researchRuns.validator.fields;
 const checkpointFields = schema.tables.checkpointDecisions.validator.fields;
 const providerCallFields = schema.tables.providerCalls.validator.fields;
@@ -252,9 +256,11 @@ export const backfillSourceReviewProjection = mutation({
         await requireAdmin(ctx);
         if (
             args.paginationOpts.numItems < 1 ||
-            args.paginationOpts.numItems > 10
+            args.paginationOpts.numItems > ADMIN_BACKFILL_PAGE_MAX_ITEMS
         ) {
-            throw new Error("Backfill page size must be between 1 and 10");
+            throw new Error(
+                `Backfill page size must be between 1 and ${ADMIN_BACKFILL_PAGE_MAX_ITEMS}`,
+            );
         }
         const revisions = await ctx.db
             .query("corpusRevisions")
@@ -344,9 +350,11 @@ export const backfillSourceSelectionProposals = mutation({
         await requireAdmin(ctx);
         if (
             args.paginationOpts.numItems < 1 ||
-            args.paginationOpts.numItems > 10
+            args.paginationOpts.numItems > ADMIN_BACKFILL_PAGE_MAX_ITEMS
         ) {
-            throw new Error("Backfill page size must be between 1 and 10");
+            throw new Error(
+                `Backfill page size must be between 1 and ${ADMIN_BACKFILL_PAGE_MAX_ITEMS}`,
+            );
         }
         const revisions = await ctx.db
             .query("corpusRevisions")
@@ -413,9 +421,11 @@ export const backfillPhase5Authority = mutation({
         await requireAdmin(ctx);
         if (
             args.paginationOpts.numItems < 1 ||
-            args.paginationOpts.numItems > 10
+            args.paginationOpts.numItems > ADMIN_BACKFILL_PAGE_MAX_ITEMS
         ) {
-            throw new Error("Backfill page size must be between 1 and 10");
+            throw new Error(
+                `Backfill page size must be between 1 and ${ADMIN_BACKFILL_PAGE_MAX_ITEMS}`,
+            );
         }
         const revisions = await ctx.db
             .query("corpusRevisions")
@@ -767,9 +777,11 @@ export const listRunJournalEventsPage = query({
         if (!(await ctx.db.get(args.runId))) throw new Error("Run not found");
         if (
             args.paginationOpts.numItems < 1 ||
-            args.paginationOpts.numItems > 20
+            args.paginationOpts.numItems > ADMIN_JOURNAL_PAGE_MAX_ITEMS
         )
-            throw new Error("Journal page size must be between 1 and 20");
+            throw new Error(
+                `Journal page size must be between 1 and ${ADMIN_JOURNAL_PAGE_MAX_ITEMS}`,
+            );
         return ctx.db
             .query("agentExecutionEvents")
             .withIndex("by_run", (q) => q.eq("runId", args.runId))
@@ -893,13 +905,20 @@ export const inspectJournalEvent = query({
     },
 });
 
+import {
+    completeRetainedText,
+    retainedTextPage,
+} from "@convex/execution/retainedText";
+
+const invocationPayloadArgs = v.object({
+    runId: v.id("researchRuns"),
+    invocationId: v.id("agentInvocations"),
+    part: v.union(v.literal("request"), v.literal("reply")),
+});
+
 /** Reads one bounded snapshot; legacy context is never invented into a provider request. */
 export const readInvocationJournalPayload = query({
-    args: {
-        runId: v.id("researchRuns"),
-        invocationId: v.id("agentInvocations"),
-        part: v.union(v.literal("request"), v.literal("reply")),
-    },
+    args: invocationPayloadArgs.fields,
     returns: v.union(
         v.object({
             kind: v.literal("recorded"),
@@ -907,28 +926,61 @@ export const readInvocationJournalPayload = query({
         }),
         v.object({ kind: v.literal("unavailable"), code: v.string() }),
     ),
+    handler: readJournalPayload,
+});
+
+async function readJournalPayload(
+    ctx: QueryCtx,
+    args: Infer<typeof invocationPayloadArgs>,
+) {
+    await requireAdmin(ctx);
+    const invocation = await ctx.db.get(args.invocationId);
+    if (!invocation || invocation.runId !== args.runId)
+        throw new Error("Journal entry not found");
+    const payload = await ctx.db
+        .query("agentInvocationPayloads")
+        .withIndex("by_invocation_and_part", (q) =>
+            q.eq("invocationId", invocation._id).eq("part", args.part),
+        )
+        .unique();
+    if (!payload)
+        return {
+            kind: "unavailable" as const,
+            code: hasKnownNonDispatch(invocation)
+                ? "not_dispatched"
+                : invocation.journalVersion
+                  ? `${args.part}_not_recorded`
+                  : "historical_trace",
+        };
+    if (payload.runId !== args.runId)
+        throw new Error("Journal correlation mismatch");
+    return { kind: "recorded" as const, payload };
+}
+
+/** Complete publication and administrator correlation are checked before any fragment becomes observable. */
+export const listInvocationPayloadFragmentsPage = query({
+    args: {
+        ...invocationPayloadArgs.fields,
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: paginationResultValidator(
+        v.object({ index: v.number(), content: v.string() }),
+    ),
     handler: async (ctx, args) => {
-        await requireAdmin(ctx);
-        const invocation = await ctx.db.get(args.invocationId);
-        if (!invocation || invocation.runId !== args.runId)
-            throw new Error("Journal entry not found");
-        const payload = await ctx.db
-            .query("agentInvocationPayloads")
-            .withIndex("by_invocation_and_part", (q) =>
-                q.eq("invocationId", invocation._id).eq("part", args.part),
-            )
-            .unique();
-        if (!payload)
-            return {
-                kind: "unavailable" as const,
-                code: hasKnownNonDispatch(invocation)
-                    ? "not_dispatched"
-                    : invocation.journalVersion
-                      ? `${args.part}_not_recorded`
-                      : "historical_trace",
-            };
-        if (payload.runId !== args.runId)
+        const result = await readJournalPayload(ctx, args);
+        if (
+            result.kind !== "recorded" ||
+            result.payload.state !== "complete" ||
+            !result.payload.textId
+        )
+            throw new Error("Complete fragmented snapshot not found");
+        const text = await completeRetainedText(ctx, result.payload.textId);
+        if (
+            text.key !== `${args.invocationId}:${args.part}` ||
+            text.contentHash !== result.payload.contentHash ||
+            text.sizeBytes !== result.payload.sizeBytes
+        )
             throw new Error("Journal correlation mismatch");
-        return { kind: "recorded" as const, payload };
+        return retainedTextPage(ctx, text, args.paginationOpts);
     },
 });

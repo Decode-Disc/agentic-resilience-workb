@@ -2,7 +2,17 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import { requireRunAuthority } from "@convex/execution/authority";
 import { executionError } from "@convex/execution/errors";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourceLimits";
+import { operationHistoryReference } from "@convex/execution/journal";
+import {
+    MAX_OPERATION_RESULT_BYTES,
+    SOURCES_ENVELOPE_MAX_ACQUISITIONS,
+    SOURCES_ENVELOPE_MAX_COUNT,
+    SOURCES_HANDOFF_BASE_READ_RESERVE_BYTES,
+    SOURCES_HANDOFF_READ_CAPACITY,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
+    SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
+    SOURCES_WORK_ENTRY_CAPACITY,
+} from "@convex/resourcePolicy";
 import { getDocumentSize, type Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { readResearchContext } from "./researchContext";
@@ -18,8 +28,8 @@ import { SourceReviewReads } from "./sourceReviewReads";
 import { controlledDocumentaryUse } from "./sourceSelectionPolicy";
 import {
     type DocumentaryContribution,
+    type documentaryAssessmentAuthorValidator,
     type materializedQualificationInput,
-    SOURCES_MAX_EVIDENCE_REFERENCES,
     SOURCES_PROTOCOL,
     type SourcesPreparation,
     type sourcesCompletionValidator,
@@ -43,9 +53,11 @@ export function sourcesEnvelope() {
         Object.entries(value).some(
             ([key, count]) =>
                 key !== "version" &&
-                (!Number.isSafeInteger(count) || count < 1 || count > 160),
+                (!Number.isSafeInteger(count) ||
+                    count < 1 ||
+                    count > SOURCES_ENVELOPE_MAX_COUNT),
         ) ||
-        value.acquisitions > 60
+        value.acquisitions > SOURCES_ENVELOPE_MAX_ACQUISITIONS
     )
         throw executionError("sources_configuration_unavailable");
     return value;
@@ -65,6 +77,55 @@ export async function requireSourcesPreparation(
     if (!preparation.sourcesMission || run.sourcesProtocol !== SOURCES_PROTOCOL)
         throw executionError("sources_scope_invalid");
     return { preparation, run, revision, data: preparation.sourcesMission };
+}
+
+export const SOURCES_RESOURCE_LIMIT_CODES = {
+    searches: "sources_discovery_limit",
+    acquisitions: "sources_acquisition_limit",
+    controls: "sources_control_limit",
+    work: "sources_work_limit",
+} as const;
+
+/** The same preparation counters govern reservation and explain current capacity. */
+export function sourcesResourceStatus(data: SourcesPreparation) {
+    const capacity = (
+        resource: keyof typeof SOURCES_RESOURCE_LIMIT_CODES,
+        used: number,
+        limit: number,
+    ) => ({
+        used,
+        limit,
+        blockCode:
+            used >= limit ? SOURCES_RESOURCE_LIMIT_CODES[resource] : null,
+    });
+    return {
+        searches: {
+            ...capacity(
+                "searches",
+                data.searches,
+                data.phase === "initial"
+                    ? data.envelope.initialSearches
+                    : data.envelope.complementSearches,
+            ),
+            operation: "discover_sources_for_need" as const,
+        },
+        acquisitions: {
+            ...capacity(
+                "acquisitions",
+                data.acquisitions,
+                data.envelope.acquisitions,
+            ),
+            operation: "make_source_consultable" as const,
+        },
+        controls: {
+            ...capacity("controls", data.controls, data.envelope.controls),
+            operations: [
+                "submit_documentary_qualification",
+                "request_documentary_check",
+            ],
+        },
+        work: capacity("work", data.work.length, SOURCES_WORK_ENTRY_CAPACITY),
+    };
 }
 
 /** The system constructs the shared brief once; conversation is never its storage authority. */
@@ -129,9 +190,15 @@ export function reconstructQualification(
 ) {
     if (
         input.changes.length < 1 ||
-        input.changes.length > 15 ||
-        (previous?.captureId && previous.captureId !== input.captureId)
+        input.changes.length > SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS
     )
+        throw executionError("qualification_invalid", [
+            {
+                path: "changes",
+                expected: `Supply 1–${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} contribution changes for this capture; no contribution from this submission was adopted.`,
+            },
+        ]);
+    if (previous?.captureId && previous.captureId !== input.captureId)
         throw executionError("qualification_invalid");
     const contributions: DocumentaryContribution[] = previous
         ? previous.contributions.map((c) => ({ ...c }))
@@ -206,16 +273,15 @@ export function reconstructQualification(
         else contributions[existing] = next;
         changed.add(id);
     }
-    if (contributions.length > 15)
-        throw executionError("qualification_capacity");
+    if (contributions.length > SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS)
+        throw executionError("qualification_capacity", [
+            {
+                path: "changes",
+                expected: `The resulting qualification may contain at most ${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} contributions; correct an observed contribution or submit material for another capture separately.`,
+            },
+        ]);
     return contributions;
 }
-
-/** Leaves room under Convex's transaction ceilings for authority, preparation and lifecycle reads. */
-export const SOURCES_HANDOFF_READ_CAPACITY = {
-    bytes: 10 * 1024 * 1024,
-    ranges: 3072,
-} as const;
 
 /** Phase admission for additional instructions; execution and request-specific capacity still gate treatment. */
 export function sourcesInstructionTreatment(
@@ -322,6 +388,9 @@ export function summarizeSourcesPreparation(
             acquisitions: data.acquisitions,
             controls: data.controls,
         },
+        allowance: sourcesResourceStatus(data),
+        documentaryAssessment:
+            projectPreparedMaterial(preparation)?.documentaryAssessment ?? null,
         restrictionCount: data.restrictedContributions.length,
         result: data.result
             ? {
@@ -353,6 +422,12 @@ export function projectPreparedMaterial(
               preparationId: preparation._id,
               needs: data.needs,
               material: data.result ?? null,
+              documentaryAssessment: data.result
+                  ? (data.result.documentaryAssessment ?? {
+                        author: { type: "unrecorded" as const },
+                        verification: "not_semantically_reviewed" as const,
+                    })
+                  : null,
               restrictions: data.restrictedContributions,
               nextCapability: "investigation_unavailable" as const,
           }
@@ -368,7 +443,7 @@ export async function readPreparedNeed(
     const preparation = run.sourcePreparationId
         ? await ctx.db.get(run.sourcePreparationId)
         : null;
-    if (!preparation || preparation.runId !== run._id)
+    if (!preparation?.sourcesMission || preparation.runId !== run._id)
         return {
             kind: "unavailable" as const,
             code: "prepared_material_unavailable",
@@ -392,12 +467,12 @@ export async function readPreparedNeed(
         outcome.contributions.map((entry) => entry.qualificationTaskId),
     );
     const restrictedVersions = new Set<string>();
+    const reads = new SourceReviewReads(
+        ctx.db,
+        run._id,
+        SOURCES_HANDOFF_READ_CAPACITY,
+    );
     if (prepared.restrictions.length) {
-        const reads = new SourceReviewReads(
-            ctx.db,
-            run._id,
-            SOURCES_HANDOFF_READ_CAPACITY,
-        );
         for (const taskId of preparation.sourcesMission?.qualifications ?? []) {
             const task = await reads.task(taskId);
             if (
@@ -416,8 +491,21 @@ export async function readPreparedNeed(
     const value = {
         preparationId: prepared.preparationId,
         needsRevision: prepared.material.needsRevision,
+        ...(prepared.documentaryAssessment
+            ? { documentaryAssessment: prepared.documentaryAssessment }
+            : {}),
         need,
         outcome,
+        controlledContributions: (
+            await controlledSourcesContributions(ctx, preparation, reads)
+        )
+            .map((qualification) => ({
+                ...qualification,
+                contributions: qualification.contributions.filter(
+                    (contribution) => contribution.needIds.includes(needId),
+                ),
+            }))
+            .filter((qualification) => qualification.contributions.length),
         documents: prepared.material.documents.filter((document) =>
             qualifications.has(document.qualificationTaskId),
         ),
@@ -463,12 +551,13 @@ export async function readEngagedSourcesWork(
     return blockers.filter((request) => request !== null);
 }
 
-/** Bounded observations accompany exact work/qualification references; previews never establish evidence. */
+/** Current task outcomes and complete controlled contributions survive qualitative compaction. */
 export async function sourcesTaskObservations(
     ctx: QueryCtx,
-    runId: Id<"researchRuns">,
-    data: SourcesPreparation,
+    preparation: Doc<"sourceSelectionProposalRebuilds">,
 ) {
+    const { runId, sourcesMission: data } = preparation;
+    if (!data) throw executionError("sources_mission_unavailable");
     const reads = new SourceReviewReads(
         ctx.db,
         runId,
@@ -495,7 +584,27 @@ export async function sourcesTaskObservations(
             };
         }),
     );
-    const contributionObservations = await Promise.all(
+    const contributionObservations = await controlledSourcesContributions(
+        ctx,
+        preparation,
+        reads,
+    );
+    return { workOutcomes, contributionObservations };
+}
+
+/** One documentary projection serves native state, targeted consultation and advisory review. Exact quotations remain capture-bound reads. */
+export async function controlledSourcesContributions(
+    ctx: QueryCtx,
+    preparation: Doc<"sourceSelectionProposalRebuilds">,
+    reads = new SourceReviewReads(
+        ctx.db,
+        preparation.runId,
+        SOURCES_HANDOFF_READ_CAPACITY,
+    ),
+) {
+    const { runId, sourcesMission: data } = preparation;
+    if (!data) throw executionError("sources_mission_unavailable");
+    return Promise.all(
         data.qualifications.map(async (taskId) => {
             const task = await reads.task(taskId);
             if (
@@ -505,43 +614,80 @@ export async function sourcesTaskObservations(
             )
                 throw executionError("qualification_invalid");
             const qualification = task.output;
-            const control = await reads.task(qualification.controlTaskId);
-            const preview = qualification.contributions
-                .slice(0, 2)
-                .map((contribution) => ({
-                    id: contribution.id,
-                    version: contribution.version,
-                    statementPreview: Array.from(contribution.statement)
-                        .slice(0, 160)
-                        .join(""),
-                    statementComplete:
-                        Array.from(contribution.statement).length <= 160,
-                    permittedUse: controlledDocumentaryUse(
-                        contribution,
-                        control?.output.kind === "documentary_control"
-                            ? control.output.control
-                            : null,
-                        data.restrictedContributions,
-                    ),
-                }));
+            const controlTask = await reads.task(qualification.controlTaskId);
+            if (
+                controlTask?.runId !== runId ||
+                controlTask.output.kind !== "documentary_control"
+            )
+                throw executionError("documentary_control_unavailable");
+            const control = controlTask.output.control;
+            const capture = await reads.capture(qualification.captureId);
+            if (
+                !capture ||
+                capture.runId !== runId ||
+                capture.contentHash !== qualification.contentHash
+            )
+                throw executionError("capture_unavailable");
+            const sourceDecision = await reads.decision(
+                preparation.corpusRevisionId,
+                capture.sourceId,
+            );
             return {
                 taskId,
+                sourceId: capture.sourceId,
+                sourceDecision,
                 captureId: qualification.captureId,
+                contentHash: qualification.contentHash,
                 version: qualification.version,
+                controlTaskId: qualification.controlTaskId,
+                coherence: control.coherence,
+                limitations: control.limitations,
                 contributions: qualification.contributions.map(
-                    ({ id, version }) => ({
-                        id,
-                        version,
-                    }),
+                    ({ evidence, ...contribution }) => {
+                        const permittedUse =
+                            sourceDecision === "rejected"
+                                ? ("blocked" as const)
+                                : controlledDocumentaryUse(
+                                      { ...contribution, evidence },
+                                      control,
+                                      data.restrictedContributions,
+                                  );
+                        const finding = control.findings.find(
+                            (item) => item.contributionId === contribution.id,
+                        );
+                        return {
+                            ...contribution,
+                            evidence: evidence.map(
+                                ({ captureId, passageOrder }) => ({
+                                    captureId,
+                                    passageOrder,
+                                }),
+                            ),
+                            permittedUse,
+                            useStatus:
+                                permittedUse === "blocked"
+                                    ? ("inspection_only" as const)
+                                    : ("support_with_restrictions" as const),
+                            finding: finding
+                                ? {
+                                      contributionId: finding.contributionId,
+                                      conclusion: finding.conclusion,
+                                      diagnostic: finding.diagnostic,
+                                      reportedUse: finding.permittedUse,
+                                  }
+                                : null,
+                            restrictions: data.restrictedContributions.filter(
+                                (restriction) =>
+                                    restriction.contributionId ===
+                                    contribution.id,
+                            ),
+                        };
+                    },
                 ),
                 contributionCount: qualification.contributions.length,
-                preview,
-                previewComplete:
-                    preview.length === qualification.contributions.length,
             };
         }),
     );
-    return { workOutcomes, contributionObservations };
 }
 
 /** Current evidence handles remain available when Pi compacts its conversation history. */
@@ -591,7 +737,15 @@ export async function sourcesReadingReferences(
                 : [];
         });
     return {
-        readingReferences: references.slice(0, limit),
+        readingReferences: await Promise.all(
+            references.slice(0, limit).map(async (reference) => ({
+                ...reference,
+                historyReference: await operationHistoryReference(
+                    ctx,
+                    reference.readRequestId,
+                ),
+            })),
+        ),
         readingReferencesComplete:
             references.length <= limit &&
             pages.every((page) => page.length <= limit),
@@ -746,7 +900,7 @@ export async function assertSourcesCompletionCapacity(
             ))
         )
             throw executionError("documentary_quote_invalid");
-    let pendingReceiptBytes = 64 * 1024;
+    let pendingReceiptBytes = SOURCES_HANDOFF_BASE_READ_RESERVE_BYTES;
     for (const work of data.work) {
         const request = await reads.request(work.requestId);
         if (request && request.status !== "completed")
@@ -850,6 +1004,7 @@ export async function completeSources(
     preparationId: Id<"sourceSelectionProposalRebuilds">,
     response: Infer<typeof sourcesCompletionValidator>,
     sharedReads?: SourceReviewReads,
+    assessmentAuthor?: Infer<typeof documentaryAssessmentAuthorValidator>,
 ) {
     const { preparation, run, data } = await requireSourcesPreparation(
         ctx,
@@ -1084,6 +1239,14 @@ export async function completeSources(
             ...need,
             contributions: coveredNeeds.get(need.needId) ?? [],
         })),
+        ...(assessmentAuthor
+            ? {
+                  documentaryAssessment: {
+                      author: assessmentAuthor,
+                      verification: "not_semantically_reviewed" as const,
+                  },
+              }
+            : {}),
         retentionAuthority: "system_mandate" as const,
         policyVersion: SOURCES_PROTOCOL as typeof SOURCES_PROTOCOL,
     };

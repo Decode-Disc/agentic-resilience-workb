@@ -1,4 +1,13 @@
 import {
+    companySearchResultLimit,
+    preparationMaxConcurrency,
+    preparationModelLimits,
+    previewCacheTtlMs,
+    sourceCandidateLimit,
+    sourcePreparationEnabled,
+    sourceRecommendedTarget,
+} from "@convex/resourceLimits";
+import {
     MAX_APPROVED_SOURCE_BYTES,
     MAX_EVIDENCE_ARTIFACT_BYTES,
     MAX_NORMALIZED_ARTIFACT_BYTES,
@@ -6,9 +15,7 @@ import {
     MAX_PDF_PAGES,
     MAX_QUOTATION_CHARS,
     MAX_REDIRECTS,
-    sourcePreparationEnabled,
-    sourceRecommendedTarget,
-} from "@convex/resourceLimits";
+} from "@convex/resourcePolicy";
 import { afterEach, expect, test, vi } from "vitest";
 
 const originalCandidateLimit = process.env.SOURCE_CANDIDATE_LIMIT;
@@ -62,6 +69,71 @@ test("rejects a source recommendation ceiling above the candidate limit", () => 
 
     expect(() => sourceRecommendedTarget()).toThrow(
         "Source recommendation ceiling must not exceed source candidate limit",
+    );
+});
+
+test("resolves collection defaults and explicit configuration at the environment boundary", () => {
+    vi.stubEnv("COMPANY_SEARCH_RESULT_LIMIT", " ");
+    vi.stubEnv("SOURCE_CANDIDATE_LIMIT", "");
+    expect(companySearchResultLimit()).toBe(40);
+    expect(sourceCandidateLimit()).toBe(48);
+    vi.stubEnv("COMPANY_SEARCH_RESULT_LIMIT", "17");
+    vi.stubEnv("SOURCE_CANDIDATE_LIMIT", "19");
+    expect(companySearchResultLimit()).toBe(17);
+    expect(sourceCandidateLimit()).toBe(19);
+});
+
+test.each([
+    "0",
+    "-1",
+    "1.5",
+    "201",
+    "NaN",
+    "Infinity",
+])("rejects invalid collection configuration %s", (value) => {
+    vi.stubEnv("SOURCE_CANDIDATE_LIMIT", value);
+    expect(() => sourceCandidateLimit()).toThrow(
+        "Source candidate limit must be an integer between 1 and 200",
+    );
+});
+
+test("resolves preview time in milliseconds independently of collection counts", () => {
+    vi.stubEnv("PREVIEW_CACHE_TTL_MS", "");
+    expect(previewCacheTtlMs()).toBe(3_600_000);
+    vi.stubEnv("PREVIEW_CACHE_TTL_MS", "1000");
+    expect(previewCacheTtlMs()).toBe(1000);
+    vi.stubEnv("PREVIEW_CACHE_TTL_MS", "999");
+    expect(() => previewCacheTtlMs()).toThrow(
+        "PREVIEW_CACHE_TTL_MS must be an integer >= 1000",
+    );
+});
+
+test("resolves preparation concurrency separately from collection limits", () => {
+    vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "");
+    expect(preparationMaxConcurrency()).toBe(2);
+    vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "201");
+    expect(preparationMaxConcurrency()).toBe(201);
+    vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "0");
+    expect(() => preparationMaxConcurrency()).toThrow(
+        "Preparation concurrency must be an integer between 1 and 9007199254740991",
+    );
+});
+
+test("resolves independent cumulative work and incident allowances", () => {
+    vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", " ");
+    vi.stubEnv("SOURCE_PREPARATION_INCIDENT_LIMIT", "");
+    expect(preparationModelLimits()).toEqual({ work: 120, incidents: 40 });
+    vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", "37");
+    vi.stubEnv("SOURCE_PREPARATION_INCIDENT_LIMIT", "9");
+    expect(preparationModelLimits()).toEqual({ work: 37, incidents: 9 });
+    vi.stubEnv("SOURCE_PREPARATION_INCIDENT_LIMIT", "0");
+    expect(() => preparationModelLimits()).toThrow(
+        "Preparation limits must be positive safe integers",
+    );
+    vi.stubEnv("SOURCE_PREPARATION_WORK_LIMIT", "9007199254740991");
+    vi.stubEnv("SOURCE_PREPARATION_INCIDENT_LIMIT", "1");
+    expect(() => preparationModelLimits()).toThrow(
+        "Combined preparation limit must be a safe integer",
     );
 });
 

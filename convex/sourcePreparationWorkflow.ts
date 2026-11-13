@@ -5,7 +5,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { SOURCE_COMPARISON_VERSION } from "./domain/sourceComparison";
-import { SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION } from "./resourceLimits";
+import { usesSourceActions } from "./domain/sourcePreparationAuthority";
 import { workflow } from "./workflow";
 
 export const onComplete = internalMutation({
@@ -80,8 +80,7 @@ export const run = workflow
             };
             inlineControls =
                 batch.executionPlanVersion === "inline_controls_v2" ||
-                batch.executionPlanVersion ===
-                    SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION;
+                usesSourceActions(batch.executionPlanVersion);
             const controlOptions = inlineControls
                 ? { inline: true as const }
                 : {};
@@ -224,10 +223,7 @@ export const run = workflow
                 );
             const outcomes = await Promise.all(
                 batch.sourceIds.map(async (sourceId) => {
-                    if (
-                        batch.executionPlanVersion ===
-                        SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION
-                    ) {
+                    if (usesSourceActions(batch.executionPlanVersion)) {
                         return step.runAction(
                             internal.sourcePreparationActions.prepareSource,
                             { ...args, sourceId },

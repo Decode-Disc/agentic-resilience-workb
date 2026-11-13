@@ -1,13 +1,13 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import {
+    assertWithinLength,
     MAX_POLICY_RULE_ID_CHARS,
     MAX_VERIFIER_EVIDENCE_REFERENCES,
     MAX_VERIFIER_INPUT_HASH_CHARS,
     MAX_VERIFIER_REFERENCE_IDENTITY_CHARS,
     MAX_VERIFIER_STATEMENT_CHARS,
-    assertWithinLength,
-} from "@convex/domain/evidenceLimits";
+} from "@convex/resourcePolicy";
 
 export const VERIFIER_SCHEMA_VERSION = "semantic-verification-v1";
 export const VERIFIER_ADAPTER_VERSION = "showcase-verifier-v1";

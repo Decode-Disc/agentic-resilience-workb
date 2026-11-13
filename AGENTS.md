@@ -25,6 +25,7 @@ Read `PRODUCT.md` before product planning or implementation, relevant sections o
 | `context/PROJECT.md` | context | - | Stable candidature purpose and research framing. |
 | `docs/decisions/**` | history | - | Dated decisions and trade-offs, not additional current obligations. |
 | `docs/brainstorming/**` | history | - | Explorations and earlier designs, not execution instructions. |
+| `docs/notes/**` | history | - | Deferred ideas and open alternatives, not accepted decisions or execution instructions. |
 | `docs/research/**` | history | - | Dated research and benchmark interpretation. |
 | `docs/showcases/**` | history | - | Showcase selection rationale and research material. |
 | `docs/examples/**` | history | - | Illustrative references. |
@@ -116,6 +117,16 @@ Impeccable uses the permanent development-only root entry, enabled per page load
 - Decisions, semantic status, presentation tokens, validation, and policy must each have a single owner. When a concept appears on multiple surfaces, expose it through a focused shared helper, hook, or domain module at the owning boundary; never duplicate mapping or conditional logic.
 - Keep shared modules deep: expose the smallest useful API, retain implementation details internally, and make exceptional behavior opt-in with sensible defaults.
 
+### Resource Policy and Adaptive Execution
+
+- Do not estimate adaptive mission completion by inventing token, payload, call-count or wall-clock cutoffs. Use the approved cumulative resource envelope, actual model/provider/platform constraints and evidenced safety requirements.
+- Keep legitimate tunable application limits in one canonical configuration owner. Callers must consume named policies or derive effective values from them, not introduce duplicated literals, shadow limits or independent defaults. Provider capabilities and immutable execution grants remain authoritative inputs; changing defaults must not enlarge existing authority.
+- For every limit, identify its purpose, scope, unit, source and exhaustion behavior. Bytes, tokens, context capacity, connection timeouts, inactivity detection, generation deadlines, leases and mission deadlines are different quantities. Never substitute one for another.
+- Reuse native SDK context, capacity and compaction mechanisms before adding another implementation. Any override must have a demonstrated need and preserve accounting for every resulting provider call.
+- Centralization does not make a limit legitimate. Remove unsupported constraints rather than merely moving arbitrary numbers into configuration.
+- Repeated premature stops require tracing the complete policy path through configuration, overrides, SDK, transport, leases and settlement. Correct the shared mechanism instead of increasing one threshold, lowering reasoning, tuning prompts or repeating paid runs.
+- Protect this policy with deterministic regressions: valid work must continue within authorized capacity beyond previously mistaken cutoffs, while genuine budget exhaustion, cancellation, stalled I/O and stale execution remain safely enforced.
+
 ### Planning
 
 - For planning requests, apply [planning](.agents/skills/planning/SKILL.md) using the harness's native planning facilities. Use `writing-plans` only when explicitly requested, as the detailed alternative.
@@ -132,7 +143,7 @@ Impeccable uses the permanent development-only root entry, enabled per page load
 
 ### External I/O and Durable Execution
 
-- Every external-I/O boundary must specify authorization before I/O, validation, resource limits, timeout, bounded retry, idempotency key, provider-call telemetry, cancellation behavior, and the typed outcome for missing configuration or partial failure.
+- Every external-I/O boundary must specify authorization before I/O, validation, the effective resource and timeout policy with its owning source, bounded retry, idempotency key, provider-call telemetry, cancellation behavior, and the typed outcome for missing configuration or partial failure. Reuse the [resource policy](#resource-policy-and-adaptive-execution); this does not require a new independent cap or timeout at each boundary.
 - For URL retrieval, require authorization before DNS resolution, validation of every redirect, and connection to the public address that was validated so a later DNS resolution cannot redirect the request into a private network.
 - For retryable or durable work, bind each attempt to the active run, workflow version, execution generation, corpus revision, step, and attempt. Check the active generation before the external call and again before persistence; late or cancelled results cannot advance state or trigger another paid call.
 - Any resume that can make work `running` must claim the visitor's execution slot atomically. Provider absence or disabled paid work is an explicit typed blocked or reviewable state, never a silent empty success.

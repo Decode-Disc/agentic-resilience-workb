@@ -74,16 +74,19 @@ import {
     workflowStepStateValidator,
 } from "./domain/validators";
 import { workbenchInstructionTransmissionStatus } from "./domain/workbenchContracts";
+import { protectedDiagnosticValidator } from "./execution/operationContracts";
 import { executionTables } from "./execution/schema";
 import {
     modelConfigurationTables,
     qualificationReasoningSelection,
 } from "./modelConfigurationSchema";
 import {
+    analysisProviderSchema,
+    analysisReceiptSchema,
     campaignLimitsSchema,
     campaignManifestSchema,
 } from "./qualificationCampaignPolicy";
-import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourceLimits";
+import { SOURCE_EMBEDDING_DIMENSIONS } from "./resourcePolicy";
 import { preparationStudyEnvelopeValidator } from "./sourcePreparationStudyPolicy";
 
 const sourceDiscoveryQueriesValidator = v.array(
@@ -171,6 +174,7 @@ export default defineSchema({
             "canonicalUrl",
         ]),
     qualificationCampaigns: defineTable({
+        resourcePolicy: v.optional(v.string()),
         key: v.string(),
         manifest: zodToConvex(campaignManifestSchema),
         manifestHash: v.string(),
@@ -182,6 +186,9 @@ export default defineSchema({
         ownerVisitorId: v.id("visitors"),
         status: v.union(v.literal("active"), v.literal("closed")),
         allocated: zodToConvex(campaignLimitsSchema),
+        analysisAllocated: v.optional(
+            v.object({ requests: v.number(), costMicros: v.number() }),
+        ),
         lots: v.number(),
         createdAt: v.number(),
         activeLotId: v.optional(v.id("qualificationLots")),
@@ -195,6 +202,19 @@ export default defineSchema({
         unknown: v.number(),
         overruns: v.number(),
     }).index("by_context_and_run", ["contextId", "runId"]),
+    qualificationAnalysisAttempts: defineTable({
+        campaignId: v.id("qualificationCampaigns"),
+        lotId: v.id("qualificationLots"),
+        attemptKey: v.string(),
+        evidenceHash: v.string(),
+        provider: zodToConvex(analysisProviderSchema),
+        model: v.string(),
+        reservationMicros: v.optional(v.number()),
+        status: v.union(v.literal("reserved"), v.literal("settled")),
+        costMicros: v.optional(v.number()),
+        receipt: v.optional(zodToConvex(analysisReceiptSchema)),
+        createdAt: v.number(),
+    }).index("by_lot_and_attempt", ["lotId", "attemptKey"]),
     qualificationCoverage: defineTable({
         campaignId: v.id("qualificationCampaigns"),
         candidateHash: v.string(),
@@ -220,6 +240,9 @@ export default defineSchema({
             v.literal("finished"),
         ),
         allocation: zodToConvex(campaignLimitsSchema),
+        analysisAllocated: v.optional(
+            v.object({ requests: v.number(), costMicros: v.number() }),
+        ),
         createdAt: v.number(),
         contextId: v.optional(v.id("browserTestContexts")),
         contextKey: v.optional(v.string()),
@@ -242,6 +265,7 @@ export default defineSchema({
         ),
         paidQualification: v.optional(
             v.object({
+                resourcePolicy: v.optional(v.string()),
                 runId: v.id("researchRuns"),
                 modelRevisionId: v.id("modelRevisions"),
                 sourcesModelRevisionId: v.optional(v.id("modelRevisions")),
@@ -249,6 +273,12 @@ export default defineSchema({
                 relayOrigin: v.optional(v.string()),
                 maximumSearchAttempts: v.optional(v.number()),
                 maximumAcquisitions: v.optional(v.number()),
+                costAccountingPolicy: v.optional(
+                    v.union(
+                        v.literal("conservative_v1"),
+                        v.literal("known_final_v1"),
+                    ),
+                ),
                 maximumRequests: v.number(),
                 maximumCostUsd: v.number(),
                 authorizedAt: v.number(),
@@ -600,6 +630,7 @@ export default defineSchema({
         "version",
     ]),
     sourceSelectionProposalRebuilds: defineTable({
+        resourcePolicy: v.optional(v.string()),
         sourcesMission: v.optional(sourcesPreparationValidator),
         modelRevisionId: v.optional(v.id("modelRevisions")),
         executionPlanVersion: v.optional(
@@ -944,8 +975,14 @@ export default defineSchema({
         ])
         .index("by_passage_key", ["passageKey"]),
     providerCalls: defineTable({
+        modelContextWindowTokens: v.optional(v.number()),
+        reservedMaxOutputTokens: v.optional(v.number()),
         operationRequestId: v.optional(v.id("agentOperationRequests")),
         qualificationReservationUsd: v.optional(v.number()),
+        costAccountingPolicy: v.optional(
+            v.union(v.literal("conservative_v1"), v.literal("known_final_v1")),
+        ),
+        reportedCostFinal: v.optional(v.boolean()),
         qualificationContextId: v.optional(v.id("browserTestContexts")),
         missionId: v.optional(v.id("agentMissions")),
         invocationId: v.optional(v.id("agentInvocations")),
@@ -978,11 +1015,14 @@ export default defineSchema({
         reportedCost: v.optional(v.number()),
         providerObservation: v.optional(
             v.object({
-                generationId: v.string(),
+                cancelled: v.optional(v.literal(true)),
+                generationId: v.optional(v.string()),
                 observedAt: v.number(),
                 httpStatus: v.optional(v.number()),
+                requestId: v.optional(v.string()),
             }),
         ),
+        transportDiagnostic: v.optional(protectedDiagnosticValidator),
         billing: v.optional(
             v.object({
                 state: v.union(

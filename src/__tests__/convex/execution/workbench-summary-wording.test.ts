@@ -185,7 +185,7 @@ test("the real native compaction request receives Workbench provenance and appro
         },
     );
     assert(active);
-    await seedPiHistory(t, active.missionId, 1, 8, 16250);
+    await seedPiHistory(t, active.missionId, 1, 8, 56000);
     await t.mutation(internal.execution.missions.resume, {
         missionId: active.missionId,
         expectedGeneration: 1,

@@ -8,16 +8,18 @@ import {
 import {
     PI_MISSION_EXTENSION,
     PI_MISSION_INPUT,
+    PI_STATE_SECTION,
     piInputProfileKey,
     piMissionMessages,
+    piMissionStateText,
     preparePiModelPayload,
     preparePiSimulationRequest,
     requiredAnalystInput,
 } from "@convex/integrations/modelInput";
 import {
-    MODEL_MAX_OUTPUT_TOKENS,
     type ModelRoute,
     nativeProfileCatalogueRevision,
+    SIMULATION_MAX_OUTPUT_TOKENS,
     SIMULATION_MODEL_ROUTE,
     WORKBENCH_MODEL_ROUTE,
 } from "@convex/integrations/modelRouting";
@@ -73,7 +75,7 @@ async function minimalTranscript(definition: AgentDefinition) {
             {
                 id: "controlled",
                 contextWindow: 32000,
-                maxTokens: MODEL_MAX_OUTPUT_TOKENS,
+                maxTokens: SIMULATION_MAX_OUTPUT_TOKENS,
             },
         ],
     });
@@ -98,7 +100,25 @@ async function minimalTranscript(definition: AgentDefinition) {
         ),
     );
     const registry = createRegistry();
-    registry.install(defineExtension({ name: PI_MISSION_EXTENSION, tools }));
+    registry.install(
+        defineExtension({
+            name: PI_MISSION_EXTENSION,
+            tools,
+            sections: [
+                {
+                    key: PI_STATE_SECTION,
+                    tag: false,
+                    render: () =>
+                        piMissionStateText(
+                            definition.instructions,
+                            "",
+                            definition.nativeConversation,
+                            definition.contextRendering,
+                        ),
+                },
+            ],
+        }),
+    );
     const models = createModels();
     models.setProvider(faux.provider);
     const harness = await Harness.open(
@@ -134,6 +154,24 @@ async function nativeBytes(
     route: ModelRoute,
     observe?: (request: string) => void,
 ) {
+    history = history.map((message) =>
+        message.role === "system" &&
+        message.sections &&
+        PI_STATE_SECTION in message.sections
+            ? {
+                  ...message,
+                  sections: {
+                      ...message.sections,
+                      [PI_STATE_SECTION]: piMissionStateText(
+                          definition.instructions,
+                          prompt,
+                          definition.nativeConversation,
+                          definition.contextRendering,
+                      ),
+                  },
+              }
+            : message,
+    );
     if (definition.nativeConversation && prompt)
         history = history.map((message) =>
             message.role === "user"
@@ -145,16 +183,7 @@ async function nativeBytes(
         route.provider === SIMULATION_MODEL_ROUTE.provider
     )
         return new TextEncoder().encode(
-            preparePiSimulationRequest(
-                piMissionMessages(
-                    definition.instructions,
-                    prompt,
-                    history,
-                    0,
-                    definition.nativeConversation,
-                    definition.contextRendering,
-                ),
-            ).json,
+            preparePiSimulationRequest(history).json,
         ).length;
     const provider = openrouterProvider();
     const model = provider
@@ -171,20 +200,12 @@ async function nativeBytes(
     const stream = provider.streamSimple(
         model,
         normalizeContext({
-            messages: piMissionMessages(
-                definition.instructions,
-                prompt,
-                history,
-                0,
-                definition.nativeConversation,
-                definition.contextRendering,
-            ),
+            messages: history,
         }),
         {
             apiKey: "offline-profile-key",
             fetch: network,
             maxRetries: 0,
-            maxTokens: MODEL_MAX_OUTPUT_TOKENS,
             onPayload(payload) {
                 if (!payload || typeof payload !== "object")
                     throw new Error("Invalid profile payload");
@@ -397,7 +418,7 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
     ).rejects.toThrow("model_input_profile_unavailable");
 }, 30000);
 
-test("native FIFO admission leaves the message queued when its actual required envelope exceeds 128 KiB", async () => {
+test("native FIFO admission uses model context rather than the former 128 KiB envelope cap", async () => {
     const network = vi.fn(() => {
         throw new Error("Unexpected external I/O");
     });
@@ -428,7 +449,7 @@ test("native FIFO admission leaves the message queued when its actual required e
         await f.client.query(api.execution.conversations.get, {
             runId: f.runId,
         }),
-    ).toMatchObject({ queuedCount: 1, activeTurn: { messageCount: 1 } });
+    ).toMatchObject({ queuedCount: 0, activeTurn: { messageCount: 2 } });
     expect(
         await f.t.query(internal.execution.context.build, {
             missionId: started.missionId,
@@ -495,3 +516,31 @@ test("preparing every advertised effort remains within the unchanged native-prof
     );
     expect(profiles.length).toBeLessThanOrEqual(512);
 }, 60000);
+
+test.each([
+    "max_tokens",
+    "max_completion_tokens",
+] as const)("native preparation exposes the effective %s cap independently of its wire representation", (field) => {
+    const prepared = preparePiModelPayload(
+        { [field]: 12000 },
+        {
+            ...WORKBENCH_MODEL_ROUTE,
+            descriptor: {
+                contextWindow: 131072,
+                maxTokens: 8192,
+                inputPrice: 0.03,
+                outputPrice: 0.1,
+                cacheReadPrice: 0.01,
+                reasoning: false,
+                structuredOutputs: true,
+            },
+        },
+    );
+    expect(prepared).toMatchObject({
+        payload: { [field]: 8192 },
+        effectiveMaxOutputTokens: 8192,
+    });
+    expect(preparePiSimulationRequest([])).toMatchObject({
+        effectiveMaxOutputTokens: 6144,
+    });
+});

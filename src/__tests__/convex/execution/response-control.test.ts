@@ -7,6 +7,7 @@ import {
 } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
@@ -233,6 +234,12 @@ test.each([
     "mismatch",
 ])("native Jev respects the %s qualification policy", async (qualificationMode) => {
     const { t, client, runId, missionId, draft } = await liveReviewFixture();
+    let latestTimeout: number | undefined, decisionTimeout: number | undefined;
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+        latestTimeout = ms;
+        return timeout(ms);
+    });
     vi.stubGlobal(
         "fetch",
         vi.fn(async (url: unknown) => {
@@ -241,10 +248,12 @@ test.each([
                     data: [
                         {
                             id: "typesafe/jev-1.14",
+                            context_length: 262144,
                             pricing: { prompt: "0.000000042", completion: "0" },
                         },
                     ],
                 });
+            decisionTimeout = latestTimeout;
             expect(String(url)).toBe(
                 "https://openrouter.ai/api/alpha/decisions",
             );
@@ -295,6 +304,8 @@ test.each([
             });
             await ctx.db.patch(contextId, {
                 paidQualification: {
+                    resourcePolicy: "authority_native_v1",
+                    costAccountingPolicy: "known_final_v1",
                     runId,
                     modelRevisionId: mission.modelRevisionId,
                     maximumRequests: 40,
@@ -417,6 +428,14 @@ test.each([
             .take(2),
     );
     expect(calls).toHaveLength(1);
+    expect(decisionTimeout).toBeGreaterThan(30000);
+    const call = calls[0];
+    assert(call?.leaseExpiresAt);
+    expect(decisionTimeout).toBeLessThanOrEqual(
+        call.leaseExpiresAt - 10000 - call.createdAt,
+    );
+    if (qualificationMode === "sources")
+        expect(calls[0]?.qualificationReservationUsd).toBe(0.0393216);
     expect(calls[0]).toMatchObject({
         status: "succeeded",
         dispatchOutcome: "response_received",
@@ -578,6 +597,7 @@ test.each([
                     data: [
                         {
                             id: "typesafe/jev-1.14",
+                            context_length: 262144,
                             pricing: { prompt: "0.000000042", completion: "0" },
                         },
                     ],
@@ -798,10 +818,19 @@ test("the actual Pi worker delivers the reminder and publishes only the revised 
         assert(request?.json);
         const serializedRequest = JSON.parse(request.json);
         const actualMessageText = serializedRequest.messages
-            .map((message: { content: unknown }) =>
-                typeof message.content === "string"
-                    ? message.content
-                    : JSON.stringify(message.content),
+            .map(
+                (message: {
+                    content: unknown;
+                    sections?: Record<string, string | null>;
+                }) =>
+                    [
+                        typeof message.content === "string"
+                            ? message.content
+                            : JSON.stringify(message.content),
+                        ...Object.values(message.sections ?? {}),
+                    ]
+                        .filter(Boolean)
+                        .join("\n"),
             )
             .join("\n");
         expect(actualMessageText).toContain('"draft":"Research is running."');
@@ -927,6 +956,7 @@ function decisionFetch() {
                   data: [
                       {
                           id: "typesafe/jev-1.14",
+                          context_length: 262144,
                           pricing: { prompt: "0.000000042", completion: "0" },
                       },
                   ],
@@ -952,6 +982,7 @@ function decisionFetch() {
 test.each([
     "disabled",
     "missing_key",
+    "missing_capacity",
     "malformed",
     "timeout",
 ] as const)("unavailable review %s publishes the unchanged reply with a reserve", async (mode) => {
@@ -961,6 +992,15 @@ test.each([
     vi.stubGlobal(
         "fetch",
         vi.fn(async (url: unknown) => {
+            if (String(url).includes("/models?") && mode === "missing_capacity")
+                return Response.json({
+                    data: [
+                        {
+                            id: "typesafe/jev-1.14",
+                            pricing: { prompt: "0.000000042", completion: "0" },
+                        },
+                    ],
+                });
             if (!String(url).includes("/models?")) {
                 if (mode === "malformed") return new Response("not json");
                 if (mode === "timeout")
@@ -1008,6 +1048,19 @@ test.each([
     );
     if (mode === "disabled" || mode === "missing_key")
         expect(fetch).not.toHaveBeenCalled();
+    if (mode === "missing_capacity") {
+        expect(
+            vi
+                .mocked(fetch)
+                .mock.calls.filter(([url]) =>
+                    String(url).endsWith("/decisions"),
+                ),
+        ).toHaveLength(0);
+        expect(
+            (await t.run((ctx) => ctx.db.get(runId)))?.sourcePreparationBudget
+                ?.reserved,
+        ).toBe(0);
+    }
     if (mode === "timeout")
         expect(
             (await t.run((ctx) => ctx.db.get(runId)))?.sourcePreparationBudget

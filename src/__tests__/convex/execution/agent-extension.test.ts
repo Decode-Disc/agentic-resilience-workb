@@ -236,7 +236,10 @@ test("incompatible completion data cannot complete a validation mission", async 
             expectedGeneration: 4,
             response: { kind: "complete", captureIds: [] },
         }),
-    ).toMatchObject({ kind: "blocked", code: "invalid_completion" });
+    ).toMatchObject({
+        kind: "blocked",
+        code: "completion_correction_required",
+    });
     expect(await t.run((ctx) => ctx.db.get(missionId))).not.toHaveProperty(
         "result",
     );

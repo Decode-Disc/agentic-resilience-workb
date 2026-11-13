@@ -1,11 +1,32 @@
-import { NATIVE_PROFILE_CATALOG } from "@convex/integrations/modelRouting";
 import { api, internal } from "@convex/_generated/api";
 import type { ModelRoute } from "@convex/integrations/modelRouting";
+import { NATIVE_PROFILE_CATALOG } from "@convex/integrations/modelRouting";
 import { prepareNativeProfiles } from "@convex/integrations/piModelProfiles";
 import type { modelDescriptor } from "@convex/modelConfigurationSchema";
+import {
+    RESOURCE_POLICY_VERSION,
+    SOURCE_PREPARATION_DEADLINE_MS,
+} from "@convex/resourcePolicy";
 import type schema from "@convex/schema";
 import type { Infer } from "convex/values";
 import type { TestConvex } from "convex-test";
+
+/** An explicit current grant for deterministic transport fixtures, evaluated at fixture creation. */
+export function modelAttemptAuthority(
+    deadlineAt = Date.now() + SOURCE_PREPARATION_DEADLINE_MS,
+) {
+    return { resourcePolicy: RESOURCE_POLICY_VERSION, deadlineAt };
+}
+
+export const fixtureModelDescriptor = {
+    contextWindow: 131072,
+    maxTokens: 8192,
+    reasoning: false,
+    inputPrice: 0.03,
+    outputPrice: 0.1,
+    cacheReadPrice: 0.01,
+    structuredOutputs: true,
+};
 
 const prepared = new Map<string, ReturnType<typeof prepareNativeProfiles>>();
 
@@ -14,9 +35,14 @@ export async function installModel(
     t: TestConvex<typeof schema>,
     route: ModelRoute,
     agent: "workbench" | "sources" | "saved_material_inspection" = "workbench",
-    capabilities: Pick<
-        Infer<typeof modelDescriptor>,
-        "reasoningEfforts" | "reasoningMandatory" | "reasoningDefault"
+    capabilities: Partial<
+        Pick<
+            Infer<typeof modelDescriptor>,
+            | "reasoningEfforts"
+            | "reasoningMandatory"
+            | "reasoningDefault"
+            | "contextWindow"
+        >
     > = {},
 ) {
     const userId = await t.run(async (ctx) => {
@@ -49,16 +75,11 @@ export async function installModel(
     });
     const admin = t.withIdentity({ subject: userId });
     const descriptor = {
-        contextWindow: 131072,
-        maxTokens: 8192,
+        ...fixtureModelDescriptor,
         reasoning: !!route.reasoningEffort,
         ...(route.reasoningEffort
             ? { reasoningEfforts: [route.reasoningEffort] }
             : {}),
-        inputPrice: 0.03,
-        outputPrice: 0.1,
-        cacheReadPrice: 0.01,
-        structuredOutputs: true,
         ...capabilities,
     };
     const key = JSON.stringify({ route, capabilities });

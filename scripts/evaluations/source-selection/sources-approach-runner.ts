@@ -26,20 +26,15 @@ import {
     type SourcesCallReceipt,
     type SourcesCaptureSearch,
     type SourcesInspectionBaseline,
+    type SourcesModelProfile,
     type SourcesObservation,
     SourcesPreparation,
     type SourcesReasoning,
     type SourcesScenario,
+    sourcesCallReservationUsd,
     sourcesDigest,
 } from "./sources-approach-study.ts";
 
-export type SourcesModelProfile = {
-    model: string;
-    provider: string;
-    inputPricePerToken: number;
-    outputPricePerToken: number;
-    contextLength: number;
-};
 export type SourcesMission = {
     missionId: string;
     scenarioId: string;
@@ -192,16 +187,8 @@ function createMissionModel(
                 bytes <= SOURCES_APPROACH_LIMITS.requestBytes,
                 "request_size_limit",
             );
-            assert(
-                bytes + SOURCES_APPROACH_LIMITS.outputTokens <=
-                    options.profile.contextLength,
-                "context_reservation_limit",
-            );
             signal.throwIfAborted();
-            const reservationUsd =
-                bytes * options.profile.inputPricePerToken +
-                SOURCES_APPROACH_LIMITS.outputTokens *
-                    options.profile.outputPricePerToken;
+            const reservationUsd = sourcesCallReservationUsd(options.profile);
             const id = `${options.missionId}:${calls.length + 1}`;
             await options.authorizeCall?.(reservationUsd, id);
             signal.throwIfAborted();
@@ -221,9 +208,6 @@ function createMissionModel(
                     redirect: "error",
                     signal: AbortSignal.any([
                         signal,
-                        AbortSignal.timeout(
-                            SOURCES_APPROACH_LIMITS.callTimeoutMs,
-                        ),
                         ...(init?.signal ? [init.signal] : []),
                     ]),
                 });
@@ -328,7 +312,6 @@ function createMissionModel(
         temperature: 0,
         maxRetries: 0,
         abortSignal: signal,
-        timeout: SOURCES_APPROACH_LIMITS.callTimeoutMs,
     };
 }
 

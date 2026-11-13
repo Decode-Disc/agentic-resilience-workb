@@ -1,3 +1,4 @@
+import { RESPONSE_CONTROL_MAX_INPUT_BYTES } from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 
 /** One versioned policy owns configuration, score boundaries and correction limits. */
@@ -20,8 +21,7 @@ export const DEFAULT_RESPONSE_CONTROL_POLICY: ResponseControlPolicy = {
 };
 export const RESPONSE_CONTROL_LIMITS = {
     checksPerTurn: 2,
-    inputBytes: 32 * 1024,
-    timeoutMs: 30_000,
+    inputBytes: RESPONSE_CONTROL_MAX_INPUT_BYTES,
     vocabularyVersion: 1,
 } as const;
 export const coherenceScores = v.object({

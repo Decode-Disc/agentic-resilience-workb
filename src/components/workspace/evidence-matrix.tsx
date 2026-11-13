@@ -2,6 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { CLIENT_PAGE_SIZE } from "@convex/resourcePolicy";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { useState } from "react";
 
@@ -27,8 +28,6 @@ import {
 } from "@/components/workspace/evidence-claim-list";
 import { EvidenceCoverageSummary } from "@/components/workspace/evidence-coverage-summary";
 import { useResponsive } from "@/hooks/use-responsive";
-
-const EVIDENCE_PAGE_SIZE = 10;
 
 /**
  * Read-only reactive evidence matrix. Selection, classification filter, and
@@ -103,7 +102,7 @@ function EvidenceMatrixContent({
                           : { classification: classificationFilter },
               }
             : "skip",
-        { initialNumItems: EVIDENCE_PAGE_SIZE },
+        { initialNumItems: CLIENT_PAGE_SIZE.evidenceMatrix },
     );
     const detail = useQuery(
         api.evidenceMatrix.getClaimDetail,
@@ -135,7 +134,9 @@ function EvidenceMatrixContent({
             hasMore={claimPage.status === "CanLoadMore"}
             isLoadingMore={claimPage.status === "LoadingMore"}
             isLoadingInitial={claimPage.status === "LoadingFirstPage"}
-            onLoadMore={() => claimPage.loadMore(EVIDENCE_PAGE_SIZE)}
+            onLoadMore={() =>
+                claimPage.loadMore(CLIENT_PAGE_SIZE.evidenceMatrix)
+            }
             autoSelectFirst={!isTabletOrBelow}
             emptyDescription={
                 summary.claimCount === 0

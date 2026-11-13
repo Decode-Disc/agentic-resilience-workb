@@ -16,11 +16,16 @@ import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import {
     type ConfigurableCampaignManifest,
     campaignConfiguration,
-    MAX_QUALIFICATION_CONTEXT_DURATION_MS,
     type QualificationScenario,
 } from "../../../convex/qualificationCampaignPolicy.ts";
+import {
+    MAX_QUALIFICATION_CONTEXT_DURATION_MS,
+    PERSISTENCE_PAGE_SIZE,
+    QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
+} from "../../../convex/resourcePolicy.ts";
 import { openQualificationJournal } from "./journal.ts";
 import { sha256 } from "./protocol.ts";
+import { hydrateSourcesTranscriptPage } from "./sources.ts";
 
 function ref<
     R extends FunctionReference<"query" | "mutation" | "action", "internal">,
@@ -157,14 +162,18 @@ export async function prepareCampaignScenarios(
 export async function inspectCampaignScenarios(
     client: ConvexHttpClient,
     root: string,
+    destination = root,
 ) {
+    const startedAt = Date.now();
+    mkdirSync(destination, { recursive: true, mode: 0o700 });
+    save(destination, "inspection", { startedAt, completedAt: null });
     for (const c of prepared(root).cases) {
         const args = { runId: c.runId, fixtureKey: c.fixtureKey };
-        const directory = join(root, c.id);
+        const directory = join(destination, c.id);
         mkdirSync(directory, { recursive: true, mode: 0o700 });
         save(
             directory,
-            "snapshot",
+            "snapshot-before-inspection",
             await client.query(
                 ref(internal.execution.fixtures.qualificationSnapshot),
                 args,
@@ -186,7 +195,15 @@ export async function inspectCampaignScenarios(
                     typeof internal.execution.fixtures.inspectQualificationPage
                 > = await client.query(
                     ref(internal.execution.fixtures.inspectQualificationPage),
-                    { ...args, kind, paginationOpts: { cursor, numItems: 32 } },
+                    {
+                        ...args,
+                        kind,
+                        paginationOpts: {
+                            cursor,
+                            numItems:
+                                PERSISTENCE_PAGE_SIZE.qualificationFixtures,
+                        },
+                    },
                 );
                 const { downloads: _, ...retained } = {
                     downloads: undefined,
@@ -224,7 +241,9 @@ export async function inspectCampaignScenarios(
                             "Capture hash unavailable",
                         );
                         const response: Response = await fetch(download.url, {
-                            signal: AbortSignal.timeout(30000),
+                            signal: AbortSignal.timeout(
+                                TOOLING_POLICY.captureDownloadTimeoutMs,
+                            ),
                         });
                         assert(response.ok, "Capture download failed");
                         const bytes: Buffer = Buffer.from(
@@ -262,12 +281,33 @@ export async function inspectCampaignScenarios(
                 ref(internal.execution.fixtures.inspectSourcesInvocations),
                 { ...args, paginationOpts: { cursor, numItems: 1 } },
             );
-            save(directory, `invocations-${++pageNumber}`, page);
+            save(
+                directory,
+                `invocations-${++pageNumber}`,
+                await hydrateSourcesTranscriptPage(page, (textArgs) =>
+                    client.query(
+                        ref(
+                            internal.execution.fixtures
+                                .inspectSourcesTextFragments,
+                        ),
+                        { ...args, ...textArgs },
+                    ),
+                ),
+            );
             if (page.isDone) break;
             assert(page.continueCursor !== cursor);
             cursor = page.continueCursor;
         } while (cursor);
+        save(
+            directory,
+            "snapshot",
+            await client.query(
+                ref(internal.execution.fixtures.qualificationSnapshot),
+                args,
+            ),
+        );
     }
+    save(destination, "inspection", { startedAt, completedAt: Date.now() });
 }
 
 /** Finite action interpreter. Configuration supplies domain actions and text, never executable code or selectors. */
@@ -314,7 +354,9 @@ export async function runCampaignScenarios(
     }
     assert(admitted, "Admitted backend session required");
     await expect
-        .poll(() => admitted.query(api.visitors.current), { timeout: 20000 })
+        .poll(() => admitted.query(api.visitors.current), {
+            timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
+        })
         .toMatchObject({ status: "active" });
     assert.equal(errors.length, 0, "Browser initialization failed");
     const failedScenarios: string[] = [];
@@ -354,67 +396,101 @@ export async function runCampaignScenarios(
                 | "paused"
                 | "running",
         ) => {
-            await expect
-                .poll(
-                    async () => {
-                        assert(!interrupted(), "Campaign interrupted");
-                        const s = await inspect();
-                        if (
-                            (state === "conversation_settled" ||
-                                state === "sources_prepared") &&
-                            s.conversation?.activeTurnId &&
-                            s.mission?.status === "blocked" &&
-                            !s.mission.piActiveWriter
-                        )
-                            throw new Error(
-                                `Conversation blocked before native settlement: ${s.mission.blockCode ?? "mission_blocked"}`,
-                            );
-                        if (
-                            state === "sources_prepared" &&
-                            scenario.initialFixture?.id ===
-                                "sources_correction" &&
-                            s.run.lifecycleState !== "sources_prepared" &&
-                            s.sourcesMission &&
-                            ["completed", "blocked"].includes(
-                                s.sourcesMission.status,
-                            )
-                        ) {
-                            await client.mutation(
-                                ref(
-                                    internal.qualificationInitialFixtureSetup
-                                        .finish,
-                                ),
-                                {
-                                    runId: c.runId,
-                                    fixtureKey: c.fixtureKey,
-                                    scenarioId: c.id,
-                                },
-                            );
-                            return false;
-                        }
-                        if (state === "conversation_settled") return settled(s);
-                        if (state === "sources_prepared")
-                            return (
-                                settled(s) &&
-                                s.run.lifecycleState === "sources_prepared" &&
-                                s.run.executionStatus === "idle" &&
-                                !!s.sourcesMission &&
-                                [
-                                    "completed",
-                                    "blocked",
-                                    "failed",
-                                    "cancelled",
-                                ].includes(s.sourcesMission.status)
-                            );
-                        return s.run.executionStatus === state;
-                    },
-                    {
-                        timeout:
-                            manifest.mode === "deterministic" ? 120000 : 900000,
-                        intervals: [500, 1000],
-                    },
+            let deadlineAt =
+                manifest.mode === "deterministic"
+                    ? Math.min(
+                          manifest.expiresAt,
+                          Date.now() +
+                              TOOLING_POLICY.deterministicObservationTimeoutMs,
+                      )
+                    : manifest.expiresAt;
+            let contextExpiresAt: number | undefined;
+            const ready = async () => {
+                assert(!interrupted(), "Campaign interrupted");
+                const s = await inspect();
+                contextExpiresAt = s.contextExpiresAt;
+                if (
+                    state !== "conversation_settled" &&
+                    ["failed", "cancelled"].includes(s.run.executionStatus)
                 )
-                .toBe(true);
+                    throw new Error(
+                        `Research ${s.run.executionStatus} before ${state} (phase: ${s.run.lifecycleState})`,
+                    );
+                if (
+                    (state === "conversation_settled" ||
+                        state === "sources_prepared") &&
+                    s.conversation?.activeTurnId &&
+                    s.mission?.status === "blocked" &&
+                    !s.mission.piActiveWriter
+                )
+                    throw new Error(
+                        `Conversation blocked before native settlement: ${s.mission.blockCode ?? "mission_blocked"}`,
+                    );
+                if (
+                    state === "sources_prepared" &&
+                    scenario.initialFixture?.id === "sources_correction" &&
+                    s.run.lifecycleState !== "sources_prepared" &&
+                    s.sourcesMission &&
+                    ["completed", "blocked"].includes(s.sourcesMission.status)
+                ) {
+                    await client.mutation(
+                        ref(internal.qualificationInitialFixtureSetup.finish),
+                        {
+                            runId: c.runId,
+                            fixtureKey: c.fixtureKey,
+                            scenarioId: c.id,
+                        },
+                    );
+                    return false;
+                }
+                if (
+                    state === "sources_prepared" &&
+                    s.run.lifecycleState !== "sources_prepared" &&
+                    s.run.executionStatus === "paused" &&
+                    s.sourcesMission?.status === "blocked" &&
+                    !s.sourcesMission.piActiveWriter &&
+                    s.sourcesMission.deadlineAt <= Date.now()
+                )
+                    throw new Error(
+                        `Sources blocked before sources_prepared: ${s.sourcesMission.blockCode ?? "mission_blocked"}`,
+                    );
+                if (state === "conversation_settled") return settled(s);
+                if (state === "sources_prepared")
+                    return (
+                        settled(s) &&
+                        s.run.lifecycleState === "sources_prepared" &&
+                        s.run.executionStatus === "idle" &&
+                        !!s.sourcesMission &&
+                        [
+                            "completed",
+                            "blocked",
+                            "failed",
+                            "cancelled",
+                        ].includes(s.sourcesMission.status)
+                    );
+                return s.run.executionStatus === state;
+            };
+            const intervals = TOOLING_POLICY.observationIntervalsMs.values();
+            let interval: number = TOOLING_POLICY.observationIntervalsMs[0];
+            while (!(await ready())) {
+                if (manifest.mode === "live") {
+                    assert(
+                        typeof contextExpiresAt === "number" &&
+                            Number.isFinite(contextExpiresAt),
+                        "Qualification observation authority unavailable",
+                    );
+                    deadlineAt = Math.min(deadlineAt, contextExpiresAt);
+                }
+                const remainingMs = deadlineAt - Date.now();
+                assert(
+                    remainingMs > 0,
+                    `Qualification observation authority expired before ${state}`,
+                );
+                interval = intervals.next().value ?? interval;
+                await new Promise((resolve) =>
+                    setTimeout(resolve, Math.min(interval, remainingMs)),
+                );
+            }
         };
         const release = () => {
             if (controlKey)
@@ -439,7 +515,9 @@ export async function runCampaignScenarios(
                         name: question.shortLabel,
                         exact: true,
                     }),
-                ).toBeVisible({ timeout: 20000 });
+                ).toBeVisible({
+                    timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
+                });
         };
         try {
             save(root, "control", {
@@ -531,7 +609,10 @@ export async function runCampaignScenarios(
                                                 exact: true,
                                             })
                                             .isVisible()),
-                                    { timeout: 20000 },
+                                    {
+                                        timeout:
+                                            TOOLING_POLICY.browserInteractionTimeoutMs,
+                                    },
                                 )
                                 .toBe(true);
                             if (!(await page.getByRole("textbox").isVisible()))
@@ -543,7 +624,8 @@ export async function runCampaignScenarios(
                                     .click();
                             await expect(page.getByRole("textbox")).toBeVisible(
                                 {
-                                    timeout: 20000,
+                                    timeout:
+                                        TOOLING_POLICY.browserInteractionTimeoutMs,
                                 },
                             );
                             await page.getByRole("textbox").fill(step.text);
@@ -566,7 +648,10 @@ export async function runCampaignScenarios(
                         await expect
                             .poll(
                                 async () => (await inspect()).lastMessage?._id,
-                                { timeout: 20000 },
+                                {
+                                    timeout:
+                                        TOOLING_POLICY.browserInteractionTimeoutMs,
+                                },
                             )
                             .not.toBe(previous);
                         if (step.wait !== "started") {
@@ -581,7 +666,10 @@ export async function runCampaignScenarios(
                                     async () =>
                                         !!(await inspect()).conversation
                                             ?.activeTurnId,
-                                    { timeout: 20000 },
+                                    {
+                                        timeout:
+                                            TOOLING_POLICY.browserInteractionTimeoutMs,
+                                    },
                                 )
                                 .toBe(true);
                             if (expectedFault === "concurrent_edit")
@@ -594,7 +682,10 @@ export async function runCampaignScenarios(
                                                     `gate-${controlKey}.json`,
                                                 ),
                                             ),
-                                        { timeout: 65000 },
+                                        {
+                                            timeout:
+                                                TOOLING_POLICY.gateObservationTimeoutMs,
+                                        },
                                     )
                                     .toBe(true);
                         }
@@ -704,7 +795,9 @@ export async function runCampaignScenarios(
                                     }),
                                 )
                                 .first(),
-                        ).toBeVisible({ timeout: 20000 });
+                        ).toBeVisible({
+                            timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
+                        });
                         break;
                     case "navigate":
                         assert(page, "Navigation requires browser execution");

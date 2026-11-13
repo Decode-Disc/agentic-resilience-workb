@@ -166,7 +166,9 @@ test("a failed lookup is explicit and only an administrator can request one boun
 
 test("rejects mismatched billing identity without changing the receipt outcome", async () => {
     const { call } = await interruptedCall(async () =>
-        Response.json({ data: { id: "another-generation", total_cost: 99 } }),
+        Response.json({
+            data: { id: "another-generation", total_cost: 99, cancelled: true },
+        }),
     );
     expect(call.billing).toMatchObject({
         state: "unavailable",
@@ -174,6 +176,7 @@ test("rejects mismatched billing identity without changing the receipt outcome",
     });
     expect(call.reportedCost).toBeUndefined();
     expect(call.status).toBe("started");
+    expect(call.providerObservation?.cancelled).toBeUndefined();
 }, 20000);
 
 test("later terminal observations preserve a reconciled charge and expose contradictory amounts", async () => {
@@ -247,7 +250,9 @@ test.each([
     {
         label: "negative cost",
         response: () =>
-            Response.json({ data: { id: "gen-billing", total_cost: -1 } }),
+            Response.json({
+                data: { id: "gen-billing", total_cost: -1, cancelled: true },
+            }),
         reason: "invalid_response",
     },
     {
@@ -264,6 +269,7 @@ test.each([
     const { call, counts } = await interruptedCall(async () => response());
     expect(call.billing).toMatchObject({ state: "unavailable", reason });
     expect(call.reportedCost).toBeUndefined();
+    expect(call.providerObservation?.cancelled).toBeUndefined();
     expect(counts()).toEqual({ generations: 1, lookups: 1 });
 }, 20000);
 

@@ -229,7 +229,7 @@ test("Sources correction identifies the affected need with its exact domain iden
     expect(JSON.stringify(result.correction)).toContain(affected);
 });
 
-test("the real Pi worker recovers a refused Sources proposal through history before completing honestly", async () => {
+test("the real Pi worker corrects Sources completion after non-progress consultations and preserves its gaps", async () => {
     const { sourcesDefinition } = await import("@convex/domain/sourcesAgent");
     const f = await seedCapturedSources();
     vi.useFakeTimers();
@@ -273,7 +273,9 @@ test("the real Pi worker recovers a refused Sources proposal through history bef
     const original = sourcesDefinition.simulate;
     sourcesDefinition.simulate = (input: unknown) => {
         const state = input as {
+            triggeringRequestsAndResults: { input: { kind: string } }[];
             activeWork: {
+                noProgressTurns: number;
                 needsRevision: number;
                 needs: { id: string }[];
                 work: {
@@ -286,30 +288,44 @@ test("the real Pi worker recovers a refused Sources proposal through history bef
                 correction?: unknown;
             };
         };
-        if (!state.lastObservableInvocation)
+        const restored = state.triggeringRequestsAndResults.some(
+            (request) => request.input.kind === "consult_mission_state",
+        );
+        if (!restored) {
+            if (state.lastObservableInvocation?.correction) {
+                assert(state.lastObservableInvocation.historyReference);
+                return {
+                    kind: "operations",
+                    requests: [
+                        {
+                            callId: "recover-proposal",
+                            name: "consult_mission_state",
+                            inputJson: JSON.stringify({
+                                reference:
+                                    state.lastObservableInvocation
+                                        .historyReference,
+                            }),
+                        },
+                    ],
+                };
+            }
+            if (state.activeWork.noProgressTurns < 2)
+                return {
+                    kind: "operations",
+                    requests: [
+                        {
+                            callId: `state-${state.activeWork.noProgressTurns + 1}`,
+                            name: "consult_run_state",
+                            inputJson: "{}",
+                        },
+                    ],
+                };
             return {
                 kind: "complete",
-
                 needs: [
                     {
                         needId: "invented",
-
                         unfinished: ["REFUSED-PROPOSAL-TO-RECOVER"],
-                    },
-                ],
-            };
-        if (state.lastObservableInvocation.correction) {
-            assert(state.lastObservableInvocation?.historyReference);
-            return {
-                kind: "operations",
-                requests: [
-                    {
-                        callId: "recover-proposal",
-                        name: "consult_mission_state",
-                        inputJson: JSON.stringify({
-                            reference:
-                                state.lastObservableInvocation.historyReference,
-                        }),
                     },
                 ],
             };
@@ -343,7 +359,19 @@ test("the real Pi worker recovers a refused Sources proposal through history bef
         expect(mission?.blockCode).toBeUndefined();
         expect(mission).toMatchObject({
             status: "completed",
-            result: { material: { outcome: "blocked" } },
+            result: {
+                material: {
+                    outcome: "blocked",
+                    needs: [
+                        {
+                            needId: "common-context",
+                            unfinished: [
+                                "No controlled contributions were prepared in this simulated recovery.",
+                            ],
+                        },
+                    ],
+                },
+            },
         });
         expect(
             mission?.workingNotes?.split("Recovery completed once."),
@@ -372,7 +400,17 @@ test("the real Pi worker recovers a refused Sources proposal through history bef
         );
         expect(
             invocations.filter((invocation) => !invocation.purpose),
-        ).toHaveLength(3);
+        ).toHaveLength(5);
+        const rejected = invocations.find(
+            (invocation) => invocation.correction,
+        );
+        expect(rejected).toMatchObject({
+            blockCode: "completion_correction_required",
+        });
+        expect(
+            JSON.parse(rejected?.inputJson ?? "null").activeWork
+                .noProgressTurns,
+        ).toBe(2);
         expect(
             invocations.some(
                 (invocation) => invocation.purpose === "compaction",

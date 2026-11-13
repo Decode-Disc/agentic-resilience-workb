@@ -22,7 +22,7 @@ import {
     internalMutation,
     internalQuery,
 } from "./_generated/server";
-import { MAX_PASSAGES_PER_SOURCE } from "./resourceLimits";
+import { MAX_PASSAGES_PER_SOURCE } from "./resourcePolicy";
 import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 

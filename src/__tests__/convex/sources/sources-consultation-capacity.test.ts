@@ -1,14 +1,14 @@
 import { internal } from "@convex/_generated/api";
+import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
+import {
+    assertSourcesCompletionCapacity,
+    reconstructQualification,
+} from "@convex/domain/sources";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { agentToolSchemas } from "@convex/execution/agentDefinition";
 import { agentInputByteLength } from "@convex/integrations/modelInput";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
-import {
-    reconstructQualification,
-    assertSourcesCompletionCapacity,
-    SOURCES_HANDOFF_READ_CAPACITY,
-} from "@convex/domain/sources";
-import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
+import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
@@ -199,7 +199,7 @@ test.each([
         nativeRoute: SIMULATION_MODEL_ROUTE,
         contextRendering: definition.contextRendering,
     });
-    expect(requestBytes).toBeLessThanOrEqual(128 * 1024);
+    expect(requestBytes).toBeGreaterThan(128 * 1024);
     expect(seeded.distinctPassages).toBe(count * 90);
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
@@ -220,17 +220,11 @@ test.each([
     expect(
         new TextEncoder().encode(outcome.valueJson).length,
     ).toBeLessThanOrEqual(48 * 1024);
-    expect(page.state.activeWork.qualificationReferences).toEqual(
-        snapshot.activeWork.qualificationReferences,
-    );
-    expect(page.state.activeWork.captureIds).toEqual(
-        snapshot.activeWork.captureIds,
-    );
-    expect(page.state.activeWork.work).toEqual(snapshot.activeWork.work);
-    expect(page.state.activeWork.unfinishedObligations).toEqual(
-        snapshot.activeWork.unfinishedObligations,
-    );
-    expect(page.state.activeWork.contributionObservationsComplete).toBe(false);
-    expect(page.state.activeWork.contributionObservationsTotal).toBe(count);
+    expect(page.state.requiredState).toMatchObject({
+        section: "workbench_current_state",
+        contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(page.state).not.toHaveProperty("activeWork");
+    expect(snapshot.activeWork.contributionObservations).toHaveLength(count);
     expect(page.history.entries.length).toBeGreaterThan(0);
 });

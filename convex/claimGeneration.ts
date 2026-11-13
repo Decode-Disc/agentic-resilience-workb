@@ -1,4 +1,3 @@
-import { internal } from "./_generated/api";
 import type { DataModel, Id } from "@convex/_generated/dataModel";
 import {
     groupClaimsForCanonicalization,
@@ -41,14 +40,15 @@ import {
     validatePreparedEvidenceUse,
 } from "@convex/domain/sourceUsage";
 import { executeShowcaseClaimExtractionFromManifest } from "@convex/integrations/showcaseClaimAdapter";
+import { sourceDossierCandidateLimit } from "@convex/resourceLimits";
 import {
     MAX_CLAIM_INPUT_PASSAGES,
     MAX_CLAIMS_PER_RUN,
     MAX_PASSAGES_PER_SOURCE,
-    sourceDossierCandidateLimit,
-} from "@convex/resourceLimits";
+} from "@convex/resourcePolicy";
 import type { GenericDatabaseReader } from "convex/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
 import schema from "./schema";
 

@@ -2,6 +2,7 @@ import {
     executionStatusValidator,
     researchRunLifecycleValidator,
 } from "@convex/domain/validators";
+import { MAX_VALIDATION_FEEDBACK_FIELD_CHARS } from "@convex/resourcePolicy";
 import type { Validator } from "convex/values";
 import { type Infer, v } from "convex/values";
 import type { ValidationError } from "convex-helpers/validators";
@@ -92,6 +93,7 @@ export const protectedDiagnosticValidator = v.object({
         v.literal("effect_callback"),
         v.literal("validate_outcome"),
         v.literal("reduce_progress"),
+        v.literal("provider_transport"),
     ),
     name: v.string(),
     message: v.string(),
@@ -113,6 +115,7 @@ export const retainedPayloadValidator = v.object({
     version: v.literal(1),
     state: v.union(v.literal("complete"), v.literal("incomplete")),
     json: v.optional(v.string()),
+    textId: v.optional(v.id("retainedTexts")),
     contentHash: v.optional(v.string()),
     sizeBytes: v.number(),
     code: v.optional(v.string()),
@@ -148,8 +151,6 @@ export const runStateResultValidator = v.object({
     executionStatus: executionStatusValidator,
     executionGeneration: v.number(),
 });
-
-const MAX_VALIDATION_FEEDBACK_FIELD_CHARS = 256;
 type FeedbackSchema = Validator<unknown, "required" | "optional", string>;
 
 /** Error paths locate the canonical type; received prototype names are not expected types. */

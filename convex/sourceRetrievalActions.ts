@@ -15,6 +15,7 @@ import {
     SOURCE_RETRIEVAL_VERSION,
     type SourcePassageRankIdentity,
     shortRetrievalQuery,
+    sourceDocumentMetadataValidator,
     sourceEmbeddingScopeKey,
 } from "@convex/domain/sourceRetrievalPolicy";
 import {
@@ -26,7 +27,7 @@ import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
-import { MAX_NORMALIZED_ARTIFACT_BYTES } from "./resourceLimits";
+import { MAX_NORMALIZED_ARTIFACT_BYTES } from "./resourcePolicy";
 import {
     approvedSourceScope,
     type MissionApprovedCapture,
@@ -569,8 +570,23 @@ const approvedPassageResult = v.object({
 });
 
 const approvedMaterialReadRequest = v.union(
-    v.object({ kind: v.literal("search"), query: v.string() }),
-    v.object({ kind: v.literal("context"), passageOrder: v.number() }),
+    v.object({
+        kind: v.literal("search"),
+        query: v.string(),
+        cursor: v.optional(v.string()),
+        expectedCaptureId: v.optional(v.id("sourceCaptures")),
+        expectedContentHash: v.optional(v.string()),
+    }),
+    v.object({
+        kind: v.literal("context"),
+        passageOrder: v.number(),
+        expectedCaptureId: v.optional(v.id("sourceCaptures")),
+        expectedContentHash: v.optional(v.string()),
+        range: v.optional(
+            v.object({ startOffset: v.number(), endOffset: v.number() }),
+        ),
+        offset: v.optional(v.number()),
+    }),
     v.object({
         kind: v.literal("contexts"),
         passageOrders: v.array(v.number()),
@@ -582,9 +598,17 @@ const approvedContextReadResult = v.object({
     kind: v.literal("context"),
     captureId: v.id("sourceCaptures"),
     contentHash: v.string(),
+    document: sourceDocumentMetadataValidator,
+    captureOmittedPassageCount: v.optional(v.union(v.number(), v.null())),
     passage: v.object({
         ...approvedPassageResult.fields,
         surroundingText: v.string(),
+        contextStartOffset: v.optional(v.number()),
+        contextEndOffset: v.optional(v.number()),
+        contextRange: v.optional(
+            v.object({ startOffset: v.number(), endOffset: v.number() }),
+        ),
+        captureCharacters: v.optional(v.number()),
     }),
 });
 
@@ -593,12 +617,15 @@ const approvedMaterialReadResult = v.union(
     v.object({
         status: v.literal("ready"),
         kind: v.literal("search"),
+        document: sourceDocumentMetadataValidator,
         captureId: v.id("sourceCaptures"),
         contentHash: v.string(),
         canonicalUrl: v.string(),
         retrievedAt: v.union(v.number(), v.null()),
         passages: v.array(approvedPassageResult),
         limitReached: v.boolean(),
+        continueCursor: v.optional(v.union(v.string(), v.null())),
+        captureOmittedPassageCount: v.optional(v.union(v.number(), v.null())),
     }),
     approvedContextReadResult,
     v.object({
@@ -641,7 +668,9 @@ async function readVerifiedCaptureText(
 
 async function ensureApprovedIndex(
     ctx: ActionCtx,
-    allowed: MissionApprovedCapture,
+    allowed: FunctionReturnType<
+        typeof internal.sourceRetrieval.getApprovedCapture
+    >,
     persistBatch: (
         identity: ApprovedIndexIdentity,
         passages: ApprovedIndexPassage[],
@@ -764,6 +793,18 @@ export const readApprovedMaterialForMission = internalAction({
         );
         if (allowed.status !== "available")
             return { status: "unavailable", reason: allowed.reason };
+        if (
+            args.request.kind !== "contexts" &&
+            ((args.request.expectedCaptureId &&
+                args.request.expectedCaptureId !== allowed.capture._id) ||
+                (args.request.expectedContentHash &&
+                    args.request.expectedContentHash !==
+                        allowed.capture.contentHash))
+        )
+            return {
+                status: "unavailable",
+                reason: "material_continuation_unavailable",
+            };
         const stored = await readVerifiedCaptureText(ctx, allowed.capture);
         if (stored.status !== "available") return stored;
         const index: ApprovedIndexResult = await ensureMissionApprovedIndex(
@@ -793,7 +834,11 @@ export const readApprovedMaterialForMission = internalAction({
                 typeof internal.sourceRetrieval.searchApprovedSourceForMission
             > = await ctx.runQuery(
                 internal.sourceRetrieval.searchApprovedSourceForMission,
-                { ...captureArgs, query: args.request.query },
+                {
+                    ...captureArgs,
+                    query: args.request.query,
+                    cursor: args.request.cursor,
+                },
             );
             if (result.status !== "ready")
                 return {
@@ -821,12 +866,15 @@ export const readApprovedMaterialForMission = internalAction({
             return {
                 status: "ready",
                 kind: "search",
+                document: current.document,
                 captureId: result.captureId,
                 contentHash: result.contentHash,
                 canonicalUrl: result.canonicalUrl,
                 retrievedAt: result.retrievedAt,
                 passages: result.passages,
                 limitReached: result.limitReached,
+                continueCursor: result.continueCursor,
+                captureOmittedPassageCount: result.captureOmittedPassageCount,
             };
         }
 
@@ -884,20 +932,60 @@ export const readApprovedMaterialForMission = internalAction({
                 ) !== result.passage.quotation
             )
                 return { status: "unavailable", reason: "capture_corrupt" };
+            const requested =
+                args.request.kind === "context"
+                    ? args.request.range
+                    : undefined;
+            const range = requested ?? {
+                startOffset: Math.max(0, result.passage.startOffset - 512),
+                endOffset: Math.min(
+                    stored.text.length,
+                    result.passage.endOffset + 512,
+                ),
+            };
+            const offset =
+                args.request.kind === "context"
+                    ? (args.request.offset ?? range.startOffset)
+                    : range.startOffset;
+            if (
+                ![range.startOffset, range.endOffset, offset].every(
+                    Number.isSafeInteger,
+                ) ||
+                range.startOffset < 0 ||
+                range.endOffset > stored.text.length ||
+                range.startOffset > result.passage.startOffset ||
+                range.endOffset < result.passage.endOffset ||
+                offset < range.startOffset ||
+                offset >= range.endOffset
+            )
+                return {
+                    status: "unavailable",
+                    reason: "material_continuation_invalid",
+                };
+            let contextEndOffset = Math.min(range.endOffset, offset + 6000);
+            if (
+                contextEndOffset < stored.text.length &&
+                /[\uD800-\uDBFF]/.test(stored.text[contextEndOffset - 1] ?? "")
+            )
+                contextEndOffset--;
             return {
                 status: "ready",
                 kind: "context",
+                document: current.document,
                 captureId: result.capture.captureId,
                 contentHash: result.capture.contentHash,
+                captureOmittedPassageCount:
+                    allowed.capture.omittedPassageCount ?? null,
                 passage: {
                     ...result.passage,
                     surroundingText: stored.text.slice(
-                        Math.max(0, result.passage.startOffset - 512),
-                        Math.min(
-                            stored.text.length,
-                            result.passage.endOffset + 512,
-                        ),
+                        offset,
+                        contextEndOffset,
                     ),
+                    contextStartOffset: offset,
+                    contextEndOffset,
+                    contextRange: range,
+                    captureCharacters: stored.text.length,
                 },
             };
         };

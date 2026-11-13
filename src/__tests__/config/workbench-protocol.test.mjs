@@ -1,15 +1,33 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
     planQualification,
+    qualificationFingerprints,
     readQualificationBattery,
     sha256,
     sourcesBatterySchema,
     verifyQualificationCandidate,
 } from "../../../scripts/evaluations/workbench-browser/protocol.ts";
+
+test("candidate identity includes authored policy enforcement and generated preview policy", () => {
+    const fingerprints = qualificationFingerprints();
+    for (const path of [
+        "convex/resourcePolicy.ts",
+        "scripts/check-resource-policy.ts",
+        "scripts/sync-resource-policy.ts",
+        "services/playwright-browser/src/resource-policy.generated.json",
+    ]) {
+        assert.equal(
+            fingerprints[path],
+            createHash("sha256").update(readFileSync(path)).digest("hex"),
+            path,
+        );
+    }
+});
 
 function fixture() {
     const root = mkdtempSync(join(tmpdir(), "workbench-protocol-"));

@@ -10,8 +10,9 @@ const modules = import.meta.glob("/convex/**/*.ts");
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
 });
-test("an inadmissible queued message has a recoverable failure and does not silently block later messages", async () => {
+test("native conversation admission preserves recoverable refusal against the configured model capacity", async () => {
     vi.useFakeTimers();
     const network = vi.fn(() => {
         throw new Error("Unexpected external IO");
@@ -20,6 +21,16 @@ test("an inadmissible queued message has a recoverable failure and does not sile
     const t = convexTest(schema, modules);
     agentTest.register(t);
     workflowTest.register(t);
+    vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
+    const { installModel } = await import(
+        "@/__tests__/setup/model-configuration"
+    );
+    const { nativePiFixtureRoute } = await import(
+        "@/__tests__/setup/pi-native"
+    );
+    await installModel(t, nativePiFixtureRoute, "workbench", {
+        contextWindow: 32768,
+    });
     const { userId, preflightId } = await createAdmittedPreflight(t),
         client = t.withIdentity({ subject: userId });
     const { runId } = await client.mutation(api.framing.confirmCompany, {

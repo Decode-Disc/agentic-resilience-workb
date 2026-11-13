@@ -3,7 +3,14 @@ import { internalMutation } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationLimits } from "@convex/domain/sourcePreparationAuthority";
 import { pinMissionModel } from "@convex/modelConfiguration";
-import { localBrowserFixturesEnabled } from "@convex/runWorkspace";
+import {
+    EXECUTION_WINDOW_MS,
+    RESOURCE_POLICY_VERSION,
+} from "@convex/resourcePolicy";
+import {
+    localBrowserFixturesEnabled,
+    readCampaignResearchDeadline,
+} from "@convex/runWorkspace";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { vEventId } from "@convex-dev/workflow";
@@ -23,7 +30,6 @@ import {
     agentBackendValidator,
     agentDefinitionIdValidator,
     DEFAULT_AGENT_BACKEND,
-    EXECUTION_WINDOW_MS,
 } from "./executionProtocol";
 import { isRecoverableInterruption, missionScope } from "./missionData";
 import { cancelPiWake, schedulePiMission } from "./piControl";
@@ -136,16 +142,25 @@ export const start = internalMutation({
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
         const now = Date.now();
-        const deadlineAt =
+        const browserContext =
+            run.purpose === "browser_test" && run.browserTestContextId
+                ? await ctx.db.get(run.browserTestContextId)
+                : null;
+        const deadlineAt = Math.min(
+            run.purpose === "browser_test"
+                ? (browserContext?.expiresAt ?? now)
+                : Infinity,
             (executionScope === "research"
                 ? run.executionHarnessDeadlineAt
                 : undefined) ??
-            Math.min(
-                now + EXECUTION_WINDOW_MS,
-                executionScope === "research"
-                    ? (preparation?.deadlineAt ?? Infinity)
-                    : Infinity,
-            );
+                Math.min(
+                    (await readCampaignResearchDeadline(ctx, run)) ??
+                        now + EXECUTION_WINDOW_MS,
+                    executionScope === "research"
+                        ? (preparation?.deadlineAt ?? Infinity)
+                        : Infinity,
+                ),
+        );
         if (deadlineAt <= now) throw executionError("execution_deadline");
         if (executionScope === "research")
             await ctx.db.patch(run._id, {
@@ -160,6 +175,7 @@ export const start = internalMutation({
             generationBackend: backend,
             runId: run._id,
             protocolVersion: 3,
+            resourcePolicy: RESOURCE_POLICY_VERSION,
             executionScope,
             completionEventId: args.completionEventId,
             conversationTurnId: args.conversationTurnId,

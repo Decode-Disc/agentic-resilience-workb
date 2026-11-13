@@ -5,7 +5,8 @@ import { v } from "convex/values";
 
 import { api, internal } from "./_generated/api";
 import { action } from "./_generated/server";
-import { PREVIEW_CACHE_MAX_BYTES, previewCacheTtlMs } from "./resourceLimits";
+import { previewCacheTtlMs } from "./resourceLimits";
+import { PREVIEW_CACHE_MAX_BYTES, PREVIEW_POLICY } from "./resourcePolicy";
 
 export const renderPreview = action({
     args: {
@@ -106,7 +107,7 @@ export const renderPreview = action({
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({ url: source.canonicalUrl }),
-                signal: AbortSignal.timeout(35_000),
+                signal: AbortSignal.timeout(PREVIEW_POLICY.callerTimeoutMs),
             });
 
             if (response.ok) {

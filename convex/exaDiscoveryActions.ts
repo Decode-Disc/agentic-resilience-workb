@@ -1,6 +1,10 @@
 "use node";
 
 import { lookup } from "node:dns/promises";
+import {
+    EXA_DISCOVERY_TIMEOUT_MS,
+    MAX_EXA_DISCOVERY_ATTEMPTS as MAX_EXA_ATTEMPTS,
+} from "@convex/resourcePolicy";
 import { ConvexError, v } from "convex/values";
 import Exa from "exa-js";
 
@@ -15,9 +19,6 @@ import {
     createExaDiscoveryAdapter,
     exaDiscoveryDisposition,
 } from "./integrations/exa";
-
-const MAX_EXA_ATTEMPTS = 2;
-const EXA_DISCOVERY_TIMEOUT_MS = 10_000;
 
 class ExaLogicalTimeoutError extends Error {
     constructor() {

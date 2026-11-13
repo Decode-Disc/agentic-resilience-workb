@@ -8,10 +8,10 @@ import { assertSourceCandidateRequestFits } from "./domain/sourceCandidateCapaci
 import { readPreparationConcurrency } from "./domain/sourcePreparationAuthority";
 import { coveragePresetValidator } from "./domain/validators";
 import {
-    MAX_ANALYSES_PER_VISITOR,
     sourceCandidateLimit,
     sourcePreparationEnabled,
 } from "./resourceLimits";
+import { MAX_ANALYSES_PER_VISITOR } from "./resourcePolicy";
 import { workspaceForVisitor } from "./runWorkspace";
 import { insertPendingManualSource } from "./sources";
 import { workflow } from "./workflow";

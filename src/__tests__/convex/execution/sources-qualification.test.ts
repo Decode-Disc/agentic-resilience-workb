@@ -2,7 +2,16 @@ import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import {
+    retainedTextParts,
+    stageRetainedText,
+} from "@convex/execution/retainedText";
 import { requireQualifiedBrowserMission } from "@convex/providerCalls";
+import {
+    MODEL_SETTLEMENT_GRACE_MS,
+    RESOURCE_POLICY_VERSION,
+    SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS,
+} from "@convex/resourcePolicy";
 import { type FunctionReturnType, makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
@@ -11,6 +20,310 @@ import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+});
+
+test.each([
+    "before",
+    "after",
+] as const)("Sources qualification projects its research cutoff and refuses adoption when response arrives %s expiry", async (arrival) => {
+    vi.useFakeTimers();
+    const f = await fixture();
+    const deadlineAt = Date.now() + 20_000;
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
+            researchStartedAt:
+                deadlineAt - SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS,
+        });
+        await ctx.db.patch(f.missionId, { provenance: "live" });
+    });
+    const beforeOperations = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission_and_status", (q) =>
+                q.eq("missionId", f.missionId),
+            )
+            .collect(),
+    );
+    const input = await f.attempt("research-cutoff");
+    const args = { invocationId: input.invocationId, expectedGeneration: 4 };
+    expect(
+        await f.t.query(
+            internal.execution.invocationLifecycle.forExecution,
+            args,
+        ),
+    ).toMatchObject({
+        authority: { resourcePolicy: RESOURCE_POLICY_VERSION, deadlineAt },
+    });
+    const started = await f.t.mutation(
+        internal.providerCalls.recordAttempt,
+        input,
+    );
+    expect(started.shouldExecute).toBe(true);
+    expect(
+        await f.t.run((ctx) => ctx.db.get(started.providerCallId)),
+    ).toMatchObject({ leaseExpiresAt: deadlineAt + MODEL_SETTLEMENT_GRACE_MS });
+    await f.t.mutation(internal.execution.invocationLifecycle.retainRequest, {
+        ...args,
+        requestJson: '{"model":"frozen-fixture"}',
+    });
+    const response = {
+        kind: "operations" as const,
+        requests: [
+            {
+                callId: "late-read",
+                name: "consult_mission_state",
+                inputJson: "{}",
+            },
+        ],
+    };
+    vi.setSystemTime(deadlineAt + (arrival === "before" ? -1 : 1));
+    await f.t.mutation(
+        internal.execution.invocationLifecycle.recordModelReply,
+        {
+            attempt: {
+                ...input,
+                status: "succeeded",
+                dispatchOutcome: "response_received",
+                reportedCost: 0.001,
+            },
+            reply: { response },
+            observableReplyJson: JSON.stringify(response),
+        },
+    );
+    expect(
+        await f.t.run((ctx) => ctx.db.get(input.invocationId)),
+    ).toMatchObject({
+        receivedWhileAuthorized: arrival === "before",
+        receivedOutputJson: expect.any(String),
+    });
+    vi.setSystemTime(deadlineAt + 1);
+    expect(
+        await f.t.mutation(internal.execution.invocationLifecycle.finish, {
+            ...args,
+            response,
+        }),
+    ).toMatchObject({
+        kind: "blocked",
+        code: "execution_deadline",
+        requestIds: [],
+    });
+    expect(
+        await f.t.run((ctx) => ctx.db.get(started.providerCallId)),
+    ).toMatchObject({
+        status: "succeeded",
+        reportedCost: 0.001,
+        dispatchOutcome: "response_received",
+    });
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("agentOperationRequests")
+                .withIndex("by_mission_and_status", (q) =>
+                    q.eq("missionId", f.missionId),
+                )
+                .collect(),
+        ),
+    ).toEqual(beforeOperations);
+    await expect(
+        f.t.mutation(
+            internal.providerCalls.recordAttempt,
+            await f.attempt("after-research-cutoff"),
+        ),
+    ).rejects.toThrow("paid_work_disabled");
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .collect(),
+        ),
+    ).toHaveLength(1);
+});
+
+test("a Sources qualification grant cannot activate the legacy structured qualification path", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "source-window-test-only");
+    const f = await fixture();
+    const deadlineAt = Date.now() + 20_000;
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
+            researchStartedAt:
+                deadlineAt - SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS,
+        });
+        await ctx.db.patch(f.preparationId, {
+            executionPlanVersion: "source_actions_v4",
+            qualificationVersion: "source-qualification-v5",
+            modelRevisionId: f.modelRevisionId,
+        });
+    });
+    const beforeTasks = await f.t.run((ctx) =>
+        ctx.db.query("aiTaskResults").collect(),
+    );
+    const requests: string[] = [];
+    vi.stubGlobal(
+        "fetch",
+        async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+            requests.push(new Request(input, init).url);
+            throw new Error(
+                "Legacy qualification must not dispatch under a Sources grant",
+            );
+        },
+    );
+    expect(
+        await f.t.action(internal.sourcePreparationActions.qualifySource, {
+            preparationId: f.preparationId,
+            sourceCaptureId: f.captureId,
+        }),
+    ).toMatchObject({
+        status: "unavailable",
+        reasonCode: "paid_work_disabled",
+    });
+    expect(requests).toEqual([]);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("aiTaskResults").collect()),
+    ).toEqual(beforeTasks);
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .collect(),
+        ),
+    ).toEqual([]);
+});
+
+test("new structured preparation reserves its admitted model ceiling before dispatch", async () => {
+    const f = await fixture();
+    const preparation = await f.t.run(async (ctx) => {
+        const model = await ctx.db.get(f.modelRevisionId);
+        assert(model);
+        await ctx.db.patch(model._id, {
+            descriptor: {
+                ...model.descriptor,
+                contextWindow: 64000,
+                maxTokens: 20000,
+            },
+        });
+        await ctx.db.patch(f.preparationId, {
+            executionPlanVersion: "source_actions_v4",
+            modelRevisionId: model._id,
+        });
+        const context = await ctx.db.get(f.contextId);
+        assert(context?.paidQualification);
+        await ctx.db.patch(context._id, {
+            paidQualification: {
+                ...context.paidQualification,
+                costAccountingPolicy: "known_final_v1",
+            },
+        });
+        return ctx.db.get(f.preparationId);
+    });
+    assert(preparation);
+    const inputHash = sha256Hex("structured-reservation");
+    const call = await f.t.mutation(internal.providerCalls.recordAttempt, {
+        runId: f.runId,
+        corpusRevisionId: f.corpusRevisionId,
+        preparationId: f.preparationId,
+        sourceId: f.sourceId,
+        executionGeneration: 4,
+        workflowVersion: preparation.workflowVersion,
+        stepKey: "source_preparation",
+        service: "model",
+        operation: "source_documentary_control",
+        operationKey: `${preparation.operationKey}:step:source_preparation:input:${inputHash}:attempt:1`,
+        inputHash,
+        attempt: 1,
+        status: "started",
+    });
+    const receipt = await f.t.run((ctx) => ctx.db.get(call.providerCallId));
+    expect(call.shouldExecute).toBe(true);
+    expect(receipt?.qualificationReservationUsd).toBeCloseTo(0.0216, 10);
+    expect(receipt?.reservedMaxOutputTokens).toBe(20000);
+    const invocationId = await f.t.mutation(
+        internal.execution.invocationLifecycle.beginOneShot,
+        { providerCallId: call.providerCallId, inputJson: "{}" },
+    );
+    await f.t.mutation(internal.execution.invocationLifecycle.retainRequest, {
+        invocationId,
+        expectedGeneration: 4,
+        requestJson: '{"model":"z-ai/glm-5.3-flash"}',
+        effectiveMaxOutputTokens: 20001,
+    });
+    await expect(
+        f.t.query(internal.execution.invocationLifecycle.authorizeDispatch, {
+            invocationId,
+            expectedGeneration: 4,
+        }),
+    ).rejects.toThrow("invalid_model_output_limit");
+});
+
+test.each([
+    "campaign",
+    "study",
+] as const)("an older %s envelope stays readable but cannot authorize new dispatch", async (kind) => {
+    const f = await fixture();
+    const preparation = await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.preparationId, {
+            executionPlanVersion: "source_actions_v4",
+            modelRevisionId: f.modelRevisionId,
+        });
+        if (kind === "study") {
+            await ctx.db.patch(f.preparationId, {
+                resourcePolicy: undefined,
+                preparationStudy: {
+                    manifestSha256: sha256Hex("legacy-study"),
+                    sourceRunId: f.runId,
+                    phase: "reading",
+                },
+            });
+            const context = await ctx.db.get(f.contextId);
+            assert(context?.paidQualification);
+            await ctx.db.patch(context._id, {
+                paidQualification: {
+                    ...context.paidQualification,
+                    costAccountingPolicy: "known_final_v1",
+                },
+            });
+        } else {
+            const context = await ctx.db.get(f.contextId);
+            assert(context?.paidQualification);
+            await ctx.db.patch(context._id, {
+                paidQualification: {
+                    ...context.paidQualification,
+                    resourcePolicy: undefined,
+                },
+            });
+        }
+        return ctx.db.get(f.preparationId);
+    });
+    assert(preparation);
+    const inputHash = sha256Hex("old-structured-envelope");
+    await expect(
+        f.t.mutation(internal.providerCalls.recordAttempt, {
+            runId: f.runId,
+            corpusRevisionId: f.corpusRevisionId,
+            preparationId: f.preparationId,
+            sourceId: f.sourceId,
+            executionGeneration: 4,
+            workflowVersion: preparation.workflowVersion,
+            stepKey: "source_preparation",
+            service: "model",
+            operation: "source_documentary_control",
+            operationKey: `${preparation.operationKey}:step:source_preparation:input:${inputHash}:attempt:1`,
+            inputHash,
+            attempt: 1,
+            status: "started",
+        }),
+    ).rejects.toThrow("resource_policy_unsupported");
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .take(1),
+        ),
+    ).toEqual([]);
 });
 async function fixture() {
     const f = await seedCapturedSources();
@@ -55,6 +368,8 @@ async function fixture() {
         });
         await ctx.db.patch(contextId, {
             paidQualification: {
+                resourcePolicy: RESOURCE_POLICY_VERSION,
+                costAccountingPolicy: "known_final_v1",
                 runId: run._id,
                 modelRevisionId: catalog.currentRevisionId,
                 maximumRequests: 40,
@@ -173,7 +488,7 @@ test("the Sources grant admits live reasoning and preparation-bound search, pres
             .collect(),
     );
     expect(rows.map((c) => c.qualificationReservationUsd)).toEqual([
-        0.0239616, 0.007,
+        0.024576, 0.007,
     ]);
 });
 
@@ -411,6 +726,7 @@ test("native documentary control rechecks its exact model and revocable context 
         invocationId,
         expectedGeneration: 4,
         requestJson: '{"model":"z-ai/glm-5.3-flash"}',
+        effectiveMaxOutputTokens: 8192,
     });
     await expect(
         f.t.query(internal.execution.invocationLifecycle.authorizeDispatch, {
@@ -520,6 +836,79 @@ test("Sources inventory inspection does not hydrate invocation transcripts", asy
             paginationOpts: { numItems: 1, cursor: null },
         }),
     ).rejects.toThrow("Local simulation scope required");
+});
+
+test("scoped transcript export reads complete immutable fragments after context closure", async () => {
+    const f = await fixture();
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, { reservationKey: "browser:fragment-export" }),
+    );
+    const attempt = await f.attempt("fragmented");
+    const content = JSON.stringify({ retained: "exacté".repeat(30000) });
+    await f.t.run(async (ctx) => {
+        const { manifest, parts } = retainedTextParts(content);
+        let textId: Id<"retainedTexts"> | undefined;
+        for (const [index, part] of parts.entries())
+            textId = await stageRetainedText(
+                ctx,
+                `${attempt.invocationId}:input`,
+                { ...manifest, index, content: part },
+            );
+        await ctx.db.patch(attempt.invocationId, {
+            inputJson: "",
+            inputTextId: textId,
+            inputContentHash: manifest.contentHash,
+        });
+    });
+    await f.t.mutation(internal.runWorkspace.closeBrowserTestContext, {
+        slotKey: "analyst-4",
+        contextKey: "sources-paid",
+    });
+    const read = makeFunctionReference<
+        "query",
+        {
+            runId: Id<"researchRuns">;
+            fixtureKey: string;
+            invocationId: Id<"agentInvocations">;
+            part: "input";
+            paginationOpts: { numItems: number; cursor: string | null };
+        },
+        {
+            page: Array<{ index: number; content: string }>;
+            isDone: boolean;
+            continueCursor: string;
+        }
+    >("execution/fixtures:inspectSourcesTextFragments");
+    const args = {
+        runId: f.runId,
+        fixtureKey: "fragment-export",
+        invocationId: attempt.invocationId,
+        part: "input" as const,
+    };
+    let cursor: string | null = null;
+    let actual = "";
+    do {
+        const page: FunctionReturnType<typeof read> = await f.t.query(read, {
+            ...args,
+            paginationOpts: { numItems: 1, cursor },
+        });
+        actual += page.page.map((item) => item.content).join("");
+        cursor = page.isDone ? null : page.continueCursor;
+    } while (cursor);
+    expect(actual).toBe(content);
+    await expect(
+        f.t.query(read, {
+            ...args,
+            fixtureKey: "foreign",
+            paginationOpts: { numItems: 1, cursor: null },
+        }),
+    ).rejects.toThrow("Local simulation scope required");
+    await expect(
+        f.t.query(read, {
+            ...args,
+            paginationOpts: { numItems: 1, cursor: "foreign" },
+        }),
+    ).rejects.toThrow("cursor");
 });
 
 test("Sources inspection retains technical receipts in addition to the model allowance", async () => {

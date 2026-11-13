@@ -1,0 +1,289 @@
+{
+    "schemaVersion": 1,
+    "id": "20261111T131245312Z-campaign-resource-policy-ccc-20261111t124130182z-lot-1-diagnosti",
+    "createdAt": "2026-11-11T13:12:45.312Z",
+    "git": {
+        "head": "2bd08082a5a94af187276f88b10a1a0a529abd3a",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-mission.json",
+            "archivePath": "external/review0/automated-review-mission.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-report-22.md",
+            "archivePath": "external/review1/automated-review-report-22.md"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-report.json",
+            "archivePath": "external/review2/automated-review-report.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-report.md",
+            "archivePath": "external/review3/automated-review-report.md"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-1.json",
+            "archivePath": "external/review4/automated-review-response-analysis-7b17c7555cfb8c4a-1.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-10.json",
+            "archivePath": "external/review5/automated-review-response-analysis-7b17c7555cfb8c4a-10.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-11.json",
+            "archivePath": "external/review6/automated-review-response-analysis-7b17c7555cfb8c4a-11.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-12.json",
+            "archivePath": "external/review7/automated-review-response-analysis-7b17c7555cfb8c4a-12.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-13.json",
+            "archivePath": "external/review8/automated-review-response-analysis-7b17c7555cfb8c4a-13.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-14.json",
+            "archivePath": "external/review9/automated-review-response-analysis-7b17c7555cfb8c4a-14.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-15.json",
+            "archivePath": "external/review10/automated-review-response-analysis-7b17c7555cfb8c4a-15.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-16.json",
+            "archivePath": "external/review11/automated-review-response-analysis-7b17c7555cfb8c4a-16.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-17.json",
+            "archivePath": "external/review12/automated-review-response-analysis-7b17c7555cfb8c4a-17.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-18.json",
+            "archivePath": "external/review13/automated-review-response-analysis-7b17c7555cfb8c4a-18.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-19.json",
+            "archivePath": "external/review14/automated-review-response-analysis-7b17c7555cfb8c4a-19.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-2.json",
+            "archivePath": "external/review15/automated-review-response-analysis-7b17c7555cfb8c4a-2.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-20.json",
+            "archivePath": "external/review16/automated-review-response-analysis-7b17c7555cfb8c4a-20.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-21.json",
+            "archivePath": "external/review17/automated-review-response-analysis-7b17c7555cfb8c4a-21.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-22.json",
+            "archivePath": "external/review18/automated-review-response-analysis-7b17c7555cfb8c4a-22.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-3.json",
+            "archivePath": "external/review19/automated-review-response-analysis-7b17c7555cfb8c4a-3.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-4.json",
+            "archivePath": "external/review20/automated-review-response-analysis-7b17c7555cfb8c4a-4.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-5.json",
+            "archivePath": "external/review21/automated-review-response-analysis-7b17c7555cfb8c4a-5.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-6.json",
+            "archivePath": "external/review22/automated-review-response-analysis-7b17c7555cfb8c4a-6.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-7.json",
+            "archivePath": "external/review23/automated-review-response-analysis-7b17c7555cfb8c4a-7.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-8.json",
+            "archivePath": "external/review24/automated-review-response-analysis-7b17c7555cfb8c4a-8.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-response-analysis-7b17c7555cfb8c4a-9.json",
+            "archivePath": "external/review25/automated-review-response-analysis-7b17c7555cfb8c4a-9.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/progress.jsonl",
+            "archivePath": "external/review26/progress.jsonl"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-evidence-7b17c7555cfb8c4a1fef0ebce3ebdd6244328b96d288d050dc335eacbd10fa89/.complete",
+            "archivePath": "external/review27/.complete"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-evidence-7b17c7555cfb8c4a1fef0ebce3ebdd6244328b96d288d050dc335eacbd10fa89/review-template.json",
+            "archivePath": "external/review28/review-template.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/resource-policy-ccc-20261111t124130182z/lots/lot-1/automated-review-evidence-7b17c7555cfb8c4a1fef0ebce3ebdd6244328b96d288d050dc335eacbd10fa89/evidence-index-7b17c7555cfb8c4a1fef0ebce3ebdd6244328b96d288d050dc335eacbd10fa89.json",
+            "archivePath": "external/review29/evidence-index-7b17c7555cfb8c4a1fef0ebce3ebdd6244328b96d288d050dc335eacbd10fa89.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/review0/automated-review-mission.json",
+            "bytes": 5921,
+            "sha256": "4958953dbaa3ddb981eb8f11cbfc3ae008dcbf0e9e4db0de2c5298502447362d"
+        },
+        {
+            "path": "external/review1/automated-review-report-22.md",
+            "bytes": 9375,
+            "sha256": "2ec8426c9324daa1ff281731d4c8a3bc5b6fc30a2ffb38ff08d64e37e6879728"
+        },
+        {
+            "path": "external/review10/automated-review-response-analysis-7b17c7555cfb8c4a-15.json",
+            "bytes": 79767,
+            "sha256": "f764b53a54e6a6267aa6b2371efbfcff14092b67d3eb731f345c1ff536290bc8"
+        },
+        {
+            "path": "external/review11/automated-review-response-analysis-7b17c7555cfb8c4a-16.json",
+            "bytes": 88072,
+            "sha256": "1a8f488b459cec726577504256e9be55e96b66cc680577c3b4742429e65c6bee"
+        },
+        {
+            "path": "external/review12/automated-review-response-analysis-7b17c7555cfb8c4a-17.json",
+            "bytes": 81950,
+            "sha256": "d3aadf23fbd6ea7e1c5caad62492d39bc7def00f6672ca82f35192f2edc43205"
+        },
+        {
+            "path": "external/review13/automated-review-response-analysis-7b17c7555cfb8c4a-18.json",
+            "bytes": 84407,
+            "sha256": "d4ea6fb2cef1e30f7680aef863a984fa4863b162e7a9979dd292f90e648320d3"
+        },
+        {
+            "path": "external/review14/automated-review-response-analysis-7b17c7555cfb8c4a-19.json",
+            "bytes": 102630,
+            "sha256": "c8997ba2950d84e103dfa3673cd7e21d62dffc4350b6ef2a250c0dfeac4cc434"
+        },
+        {
+            "path": "external/review15/automated-review-response-analysis-7b17c7555cfb8c4a-2.json",
+            "bytes": 38818,
+            "sha256": "210d1a482432d7c5943edeb7b4af55da3518f54c7de6d0a1f3507958cf9ddb7c"
+        },
+        {
+            "path": "external/review16/automated-review-response-analysis-7b17c7555cfb8c4a-20.json",
+            "bytes": 80797,
+            "sha256": "05fee1cbd38ea94a344d6079157cceed7768ef47ca8e21b53e165bcfe51d19b3"
+        },
+        {
+            "path": "external/review17/automated-review-response-analysis-7b17c7555cfb8c4a-21.json",
+            "bytes": 88658,
+            "sha256": "9662a35eb21b30f59c2500e1be947b636b12cb34d57c5665ab37374521216dca"
+        },
+        {
+            "path": "external/review18/automated-review-response-analysis-7b17c7555cfb8c4a-22.json",
+            "bytes": 805661,
+            "sha256": "c06405ce8e47e7e75b3a0f1ec57926931e03fdbde9c7b31297ea529df9c2a43b"
+        },
+        {
+            "path": "external/review19/automated-review-response-analysis-7b17c7555cfb8c4a-3.json",
+            "bytes": 42067,
+            "sha256": "3cd24c64a026318751a5a3c242edd6bf2c7a3b8b29a4fc9e7b6d7d40e8b03135"
+        },
+        {
+            "path": "external/review2/automated-review-report.json",
+            "bytes": 792,
+            "sha256": "68ef93d783b8550af61e50f16e584c14d7d4b5a59ae7c6c419e772339d9cea92"
+        },
+        {
+            "path": "external/review20/automated-review-response-analysis-7b17c7555cfb8c4a-4.json",
+            "bytes": 45650,
+            "sha256": "00698dcc01f2510978d1376a4ac7ecbfcc6c7fbf3b8eec4cd5df0af4b39c7796"
+        },
+        {
+            "path": "external/review21/automated-review-response-analysis-7b17c7555cfb8c4a-5.json",
+            "bytes": 52219,
+            "sha256": "511c039c1131901903f007eb624a66098f9497c7982e2eed051b7af03bd0a4e2"
+        },
+        {
+            "path": "external/review22/automated-review-response-analysis-7b17c7555cfb8c4a-6.json",
+            "bytes": 46478,
+            "sha256": "49f486073ec089139986d017265e3a213bf1d83016f8768d03161d3c73c48972"
+        },
+        {
+            "path": "external/review23/automated-review-response-analysis-7b17c7555cfb8c4a-7.json",
+            "bytes": 58353,
+            "sha256": "b27a135740088e123a21b452a255c47ed11312cdd09e324ec112ad3a5e789a41"
+        },
+        {
+            "path": "external/review24/automated-review-response-analysis-7b17c7555cfb8c4a-8.json",
+            "bytes": 59551,
+            "sha256": "0be176865a6552abe18c12542145b1af2887b42e346b6583667161eb95faaf19"
+        },
+        {
+            "path": "external/review25/automated-review-response-analysis-7b17c7555cfb8c4a-9.json",
+            "bytes": 63941,
+            "sha256": "ab403b3f9ffa70d1f7f34ef1fd1d1960c0ab31c1002d2561daebd32ab88e4cba"
+        },
+        {
+            "path": "external/review26/progress.jsonl",
+            "bytes": 39370,
+            "sha256": "0b014a38904a5b74c52420e305cf1de08471a5bbd357e49fcd29e31d75f3909e"
+        },
+        {
+            "path": "external/review27/.complete",
+            "bytes": 64,
+            "sha256": "daf47b616d823116c2e9c21b2c6275d28ff89baa15f420c648904c2c4a06284a"
+        },
+        {
+            "path": "external/review28/review-template.json",
+            "bytes": 759,
+            "sha256": "f9db577692a059ce42d093f47783b9af9bb9b2cabe073d206e55aa2378711255"
+        },
+        {
+            "path": "external/review29/evidence-index-7b17c7555cfb8c4a1fef0ebce3ebdd6244328b96d288d050dc335eacbd10fa89.json",
+            "bytes": 120954,
+            "sha256": "1b07a1ea6b47477b7dd2c6efee813910f319d22fdff56bb14b30c76aa669790f"
+        },
+        {
+            "path": "external/review3/automated-review-report.md",
+            "bytes": 9375,
+            "sha256": "2ec8426c9324daa1ff281731d4c8a3bc5b6fc30a2ffb38ff08d64e37e6879728"
+        },
+        {
+            "path": "external/review4/automated-review-response-analysis-7b17c7555cfb8c4a-1.json",
+            "bytes": 34836,
+            "sha256": "592333d572ef1dd08dd5b956ab1b98f5421eddcd6ec36448ab07e3a6c6490d72"
+        },
+        {
+            "path": "external/review5/automated-review-response-analysis-7b17c7555cfb8c4a-10.json",
+            "bytes": 66856,
+            "sha256": "4fb82e3be6319799caf1a2caba518c38e108f4623cbdb0b8971b610c97dc2ad7"
+        },
+        {
+            "path": "external/review6/automated-review-response-analysis-7b17c7555cfb8c4a-11.json",
+            "bytes": 68260,
+            "sha256": "7a7340f53b524a32397bc9e8d631f87c46059828e6579d6c1d48724183f890ef"
+        },
+        {
+            "path": "external/review7/automated-review-response-analysis-7b17c7555cfb8c4a-12.json",
+            "bytes": 69669,
+            "sha256": "0662c60e122c6a3bda86a53f92d14ae9b6f05d75fd696d476de169441e603206"
+        },
+        {
+            "path": "external/review8/automated-review-response-analysis-7b17c7555cfb8c4a-13.json",
+            "bytes": 72216,
+            "sha256": "350869aefc9c1a09c23723b4ef92160c308e25d0ec961edc66ae29750c60f743"
+        },
+        {
+            "path": "external/review9/automated-review-response-analysis-7b17c7555cfb8c4a-14.json",
+            "bytes": 78890,
+            "sha256": "7c4e63e82c3852c11014f1ba5e29e73f5515c1b5974e9a71b9d5587585d2d956"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261111T131245312Z-campaign-resource-policy-ccc-20261111t124130182z-lot-1-diagnosti.tar.gz",
+        "bytes": 323709,
+        "sha256": "875deef858bd9a317667e3da0d4ff067488cd8564be21a01dd023ca85051cf3e"
+    },
+    "verification": "restored_and_verified"
+}

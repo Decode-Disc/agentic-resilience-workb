@@ -6,6 +6,11 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
+import {
+    NATIVE_WORKER_POLICY,
+    PERSISTENCE_PAGE_SIZE,
+    PI_SESSION_LEASE_MS,
+} from "@convex/resourcePolicy";
 import schema from "@convex/schema";
 import { v } from "convex/values";
 import { getAgentDefinition } from "./agentCatalog";
@@ -17,8 +22,10 @@ import {
     requireMissionAuthority,
 } from "./authority";
 import { readTurnInstructions } from "./conversations";
+import { admittedInputJson, invocationRawOutputJson } from "./journal";
 import { needsNativeSettlement, sessionForMission } from "./piStore";
 import { suspendInterruptedResearch } from "./researchControl";
+import { nativeInputsValidator } from "./schema";
 
 async function publicationControl(ctx: QueryCtx) {
     return ctx.db
@@ -75,8 +82,8 @@ export const recoverPublicationWorkers = internalMutation({
             .withIndex("by_pi_active_writer", (q) =>
                 q.gt("piActiveWriter", undefined),
             )
-            .take(17);
-        if (marked.length > 16)
+            .take(NATIVE_WORKER_POLICY.publicationRecoveryMaxWorkers + 1);
+        if (marked.length > NATIVE_WORKER_POLICY.publicationRecoveryMaxWorkers)
             throw executionError("publication_recovery_capacity");
         for (const mission of marked) {
             const session = await sessionForMission(ctx, mission);
@@ -112,18 +119,7 @@ export const publicationStatus = internalQuery({
 /** Freezes the initial admission lot; later admitted messages keep individual native steering identities. */
 export const admittedInputs = internalMutation({
     args: { missionId: v.id("agentMissions"), expectedGeneration: v.number() },
-    returns: v.array(
-        v.object({
-            requestId: v.string(),
-            instructionVersion: v.number(),
-            messages: v.array(
-                v.object({
-                    messageId: v.id("agentMessageDeliveries"),
-                    text: v.string(),
-                }),
-            ),
-        }),
-    ),
+    returns: nativeInputsValidator,
     handler: async (ctx, args) => {
         const mission = await ctx.db.get(args.missionId);
         if (!mission || mission.generation !== args.expectedGeneration)
@@ -145,6 +141,15 @@ export const admittedInputs = internalMutation({
         const analystMessages = instructions.messages.map(
             ({ messageId, text }) => ({ messageId, text }),
         );
+        const messageOrder = new Map(
+            (
+                await Promise.all(
+                    analystMessages.map((m) => ctx.db.get(m.messageId)),
+                )
+            ).flatMap((m) =>
+                m ? [[m._id, m.nativeInputSequence ?? 0] as const] : [],
+            ),
+        );
         const initialIds =
             turn.nativeInitialMessageIds ??
             analystMessages.map((m) => m.messageId);
@@ -158,6 +163,11 @@ export const admittedInputs = internalMutation({
         return [
             {
                 requestId: `turn:${turn._id}:initial`,
+                nativeInputSequence: Math.min(
+                    ...analystMessages
+                        .filter((m) => initialIds.includes(m.messageId))
+                        .map((m) => messageOrder.get(m.messageId) ?? 0),
+                ),
                 instructionVersion: initialVersion,
                 messages: analystMessages.filter((m) =>
                     initialIds.includes(m.messageId),
@@ -167,6 +177,7 @@ export const admittedInputs = internalMutation({
                 .filter((m) => !initialIds.includes(m.messageId))
                 .map((m) => ({
                     requestId: `message:${m.messageId}`,
+                    nativeInputSequence: messageOrder.get(m.messageId) ?? 0,
                     instructionVersion: turn.instructionVersion,
                     messages: [m],
                 })),
@@ -204,7 +215,13 @@ export const nativeInvocation = internalQuery({
             .unique();
         if (invocation && invocation.missionId !== mission._id)
             throw executionError("pi_task_mission_conflict");
-        return invocation;
+        return invocation
+            ? {
+                  ...invocation,
+                  inputJson: await admittedInputJson(ctx, invocation),
+                  rawOutputJson: await invocationRawOutputJson(ctx, invocation),
+              }
+            : null;
     },
 });
 
@@ -259,6 +276,10 @@ export async function schedulePiMission(
     });
 }
 
+function storageCapacityFailure(code: string | undefined) {
+    return code === "pi_storage_capacity" || code === "pi_commit_capacity";
+}
+
 async function recordWorkerFailure(
     ctx: MutationCtx,
     mission: Doc<"agentMissions">,
@@ -270,16 +291,18 @@ async function recordWorkerFailure(
         mission.executionScope !== "conversation" &&
         (run?.executionStatus === "paused" ||
             (run?.researchPauseRequested && code === "research_paused"));
+    const blockCode =
+        code === "node_action_deadline" ? "execution_interrupted" : code;
     await ctx.db.patch(mission._id, {
         status: paused ? "waiting" : "blocked",
-        blockCode: paused ? undefined : code,
+        blockCode: paused ? undefined : blockCode,
     });
     await recordMissionEvent(ctx, mission, {
         kind: paused ? "mission_waiting" : "mission_blocked",
         cause: "pi_worker",
         code,
     });
-    if (code === "execution_interrupted" && !paused)
+    if (blockCode === "execution_interrupted" && !paused)
         await suspendInterruptedResearch(ctx, mission);
 }
 
@@ -309,7 +332,7 @@ export const prepare = internalMutation({
                 ctx,
                 mission._id,
                 args.expectedGeneration,
-                Date.now() + 5000,
+                Date.now() + NATIVE_WORKER_POLICY.publicationHoldPollMs,
             );
             return false;
         }
@@ -331,36 +354,40 @@ export const prepare = internalMutation({
                     mission._id,
                     args.expectedGeneration,
                 );
+            // A second scheduled action must wait for the admitted writer's lease to expire.
+            if (
+                session &&
+                session.generation === args.expectedGeneration &&
+                session.writer !== args.writer &&
+                session.leaseUntil > Date.now()
+            ) {
+                await schedulePiMission(
+                    ctx,
+                    mission._id,
+                    args.expectedGeneration,
+                    session.leaseUntil,
+                );
+                return false;
+            }
+            await ctx.runMutation(internal.execution.piStore.claim, {
+                missionId: mission._id,
+                expectedGeneration: args.expectedGeneration,
+                writer: args.writer,
+            });
         } catch (error) {
             const code = executionFailureCode(error);
             if (!code) throw error;
             await recordWorkerFailure(ctx, mission, code);
+            if (settling && session && storageCapacityFailure(code))
+                await ctx.db.patch(session._id, {
+                    settlementFailureCode: code,
+                });
             if (mission.parentRequestId || mission.completionEventId)
                 await ctx.runMutation(internal.execution.handoffs.finishChild, {
                     missionId: mission._id,
                 });
             return false;
         }
-        // A second scheduled action must wait for the admitted writer's lease to expire.
-        if (
-            session &&
-            session.generation === args.expectedGeneration &&
-            session.writer !== args.writer &&
-            session.leaseUntil > Date.now()
-        ) {
-            await schedulePiMission(
-                ctx,
-                mission._id,
-                args.expectedGeneration,
-                session.leaseUntil,
-            );
-            return false;
-        }
-        await ctx.runMutation(internal.execution.piStore.claim, {
-            missionId: mission._id,
-            expectedGeneration: args.expectedGeneration,
-            writer: args.writer,
-        });
         await ctx.db.patch(mission._id, {
             piActiveWriter: args.writer,
             piResultWakePending: undefined,
@@ -369,7 +396,7 @@ export const prepare = internalMutation({
             ctx,
             mission._id,
             args.expectedGeneration,
-            Date.now() + 90_000,
+            Date.now() + PI_SESSION_LEASE_MS,
         );
         return true;
     },
@@ -458,6 +485,8 @@ export const finishAuxiliary = internalMutation({
             invocation.missionId,
             args.expectedGeneration,
         );
+        const response = JSON.parse(invocation.receivedOutputJson);
+        if (response.kind === "blocked") throw executionError(response.code);
         await ctx.db.patch(invocation._id, {
             status: "returned",
             outputJson: invocation.receivedOutputJson,
@@ -522,8 +551,7 @@ export const closeWorker = internalMutation({
                   : "execution_interrupted";
         }
         if (code) await recordWorkerFailure(ctx, mission, code);
-        const storageExhausted =
-            code === "pi_storage_capacity" || code === "pi_commit_capacity";
+        const storageExhausted = storageCapacityFailure(code);
         if (session?.conversationId && code && storageExhausted)
             await ctx.db.patch(session.conversationId, {
                 queuePaused: true,
@@ -563,7 +591,7 @@ export const closeWorker = internalMutation({
                     ].includes(code));
             const failure = permanent
                 ? code
-                : attempts >= 3
+                : attempts >= NATIVE_WORKER_POLICY.settlementMaxAttempts
                   ? "native_settlement_incomplete"
                   : undefined;
             await ctx.db.patch(session._id, {
@@ -586,7 +614,9 @@ export const closeWorker = internalMutation({
                     ctx,
                     mission._id,
                     args.expectedGeneration,
-                    Date.now() + 1000 * 2 ** (attempts - 1),
+                    Date.now() +
+                        NATIVE_WORKER_POLICY.settlementRetryBaseMs *
+                            2 ** (attempts - 1),
                 );
         }
         if (mission.parentRequestId || mission.completionEventId)
@@ -622,7 +652,11 @@ export const invocation = internalQuery({
             invocation.missionId,
             args.expectedGeneration,
         );
-        return invocation;
+        return {
+            ...invocation,
+            inputJson: await admittedInputJson(ctx, invocation),
+            rawOutputJson: await invocationRawOutputJson(ctx, invocation),
+        };
     },
 });
 
@@ -676,7 +710,10 @@ export const rebind = internalMutation({
             .withIndex("by_mission_and_status", (q) =>
                 q.eq("missionId", mission._id).eq("status", status),
             )
-            .paginate({ numItems: 20, cursor: args.cursor });
+            .paginate({
+                numItems: PERSISTENCE_PAGE_SIZE.nativeRebind,
+                cursor: args.cursor,
+            });
         for (const request of page.page)
             await ctx.db.patch(
                 request._id,
@@ -740,7 +777,7 @@ export const publicationState = internalQuery({
     },
 });
 
-export const retireCapacity = internalMutation({
+export const retireForRepreparation = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
@@ -761,17 +798,32 @@ export const retireCapacity = internalMutation({
             : null;
         if (
             result.kind !== "blocked" ||
-            result.code !== "context_capacity" ||
+            !["context_capacity", "native_input_changed"].includes(
+                result.code,
+            ) ||
             (invocation.provenance !== "simulation" &&
-                receipt?.dispatchOutcome !== "not_dispatched")
+                receipt &&
+                receipt.dispatchOutcome !== "not_dispatched" &&
+                !(
+                    result.code === "context_capacity" &&
+                    receipt.dispatchOutcome === "response_received"
+                ))
         )
             throw executionError("attempt_outcome_unknown");
+        if (
+            invocation.status === "returned" &&
+            invocation.blockCode === result.code
+        )
+            return null;
         await ctx.db.patch(invocation._id, {
             status: "returned",
-            blockCode: "context_capacity",
+            blockCode: result.code,
             outputJson: invocation.receivedOutputJson,
             completedAt: Date.now(),
         });
         return null;
     },
 });
+
+// Retained function path for older native continuations.
+export const retireCapacity = retireForRepreparation;

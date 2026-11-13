@@ -15,6 +15,7 @@ test("an active authorized run retains one mission for repeated start requests",
     expect(await t.mutation(internal.execution.missions.start, input)).toBe(id);
     expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject({
         ownerVisitorId: visitorId,
+        resourcePolicy: "authority_native_v1",
         generation: 4,
         status: "ready",
         noProgressTurns: 0,
@@ -23,6 +24,37 @@ test("an active authorized run retains one mission for repeated start requests",
     await expect(
         t.mutation(internal.execution.missions.start, input),
     ).rejects.toThrow("not_authorized");
+});
+
+test.each([
+    undefined,
+    "unsupported_policy",
+])("historical mission policy %s cannot admit another invocation or change accounting", async (resourcePolicy) => {
+    const { t, args } = await seedInspectedEvidence();
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "unsupported-resource-policy",
+        expectedGeneration: args.executionGeneration,
+    });
+    await t.run((ctx) => ctx.db.patch(missionId, { resourcePolicy }));
+    const before = await t.run((ctx) => ctx.db.get(missionId));
+    await expect(
+        t.mutation(internal.execution.invocations.begin, {
+            missionId,
+            expectedGeneration: args.executionGeneration,
+            taskKey: "must-not-dispatch",
+            provenance: "simulation",
+        }),
+    ).rejects.toThrow("resource_policy_unsupported");
+    expect(await t.run((ctx) => ctx.db.get(missionId))).toEqual(before);
+    expect(
+        await t.run((ctx) => ctx.db.query("agentInvocations").collect()),
+    ).toEqual([]);
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
 });
 
 test("mission creation cannot cross an unapproved corpus or an inactive generation", async () => {

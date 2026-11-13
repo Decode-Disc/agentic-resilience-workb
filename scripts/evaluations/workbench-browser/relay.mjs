@@ -9,6 +9,11 @@ import {
 import http from "node:http";
 import { pathToFileURL } from "node:url";
 import { parseEnv } from "node:util";
+import {
+    RESOURCE_POLICY_VERSION,
+    resolveGenerationAuthority,
+    QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
+} from "../../../convex/resourcePolicy.ts";
 
 /** Retains observable provider facts even when the consumer closes after the terminal SSE frame. */
 function sseFacts(body) {
@@ -65,20 +70,29 @@ export function createQualificationRelay(
     providerFetch = globalThis.fetch,
 ) {
     if (!key) throw new Error("Provider credential unavailable");
-    const protocol = existsSync(`${root}/protocol.json`)
-        ? JSON.parse(readFileSync(`${root}/protocol.json`, "utf8"))
-        : null;
-    const configurable = protocol?.manifest?.version === 2;
-    const maximumRequests = protocol?.maximumRequests ?? 20;
-    const maximumCostUsd = configurable ? protocol.maximumCostUsd : 0.5;
+    let protocol = null;
+    try {
+        if (existsSync(`${root}/protocol.json`))
+            protocol = JSON.parse(
+                readFileSync(`${root}/protocol.json`, "utf8"),
+            );
+    } catch (error) {
+        throw new Error("Invalid retained qualification protocol", {
+            cause: error,
+        });
+    }
+    if (protocol?.resourcePolicy !== RESOURCE_POLICY_VERSION)
+        throw new Error("resource_policy_unsupported");
+    const maximumRequests = protocol.maximumRequests;
+    const maximumCostUsd = protocol.maximumCostUsd;
     if (
         !Number.isSafeInteger(maximumRequests) ||
         maximumRequests < 1 ||
-        (!configurable && maximumRequests > 20) ||
         !Number.isFinite(maximumCostUsd) ||
         maximumCostUsd <= 0
     )
         throw new Error("Invalid qualification request allowance");
+    let route;
     const prior = existsSync(`${root}/ledger.jsonl`)
         ? readFileSync(`${root}/ledger.jsonl`, "utf8")
               .trim()
@@ -142,7 +156,8 @@ export function createQualificationRelay(
             let inputBytes = 0;
             for await (const part of req) {
                 inputBytes += part.length;
-                if (inputBytes > 131072) throw new Error("Input byte bound");
+                if (inputBytes > TOOLING_POLICY.relayRequestMaxBytes)
+                    throw new Error("Input byte bound");
                 input.push(part);
             }
             const text = Buffer.concat(input).toString("utf8");
@@ -201,62 +216,85 @@ export function createQualificationRelay(
                 payload: p,
                 mode: control.mode,
             });
-            const route = configurable
-                ? JSON.parse(readFileSync(`${root}/relay-route.json`, "utf8"))
-                : null;
-            const inputPrice = route?.descriptor.inputPrice ?? 0.15,
-                outputPrice = route?.descriptor.outputPrice ?? 0.6,
-                maxTokens = route?.descriptor.maxTokens ?? 6144;
-            if (configurable) {
+            // The backend mints this grant after the listener supplies its loopback origin.
+            if (!route) {
+                let prepared;
+                try {
+                    prepared = JSON.parse(
+                        readFileSync(`${root}/relay-route.json`, "utf8"),
+                    );
+                } catch (error) {
+                    throw new Error("Invalid retained relay route", {
+                        cause: error,
+                    });
+                }
+                if (prepared?.resourcePolicy !== RESOURCE_POLICY_VERSION)
+                    throw new Error("resource_policy_unsupported");
                 if (
-                    p.model !== route.model ||
-                    p.temperature !== 0 ||
-                    (p.max_tokens ?? p.max_completion_tokens) > maxTokens ||
-                    !Number.isSafeInteger(
-                        p.max_tokens ?? p.max_completion_tokens,
-                    ) ||
-                    (p.max_tokens ?? p.max_completion_tokens) < 1 ||
-                    p.reasoning?.effort !== route.reasoningEffort ||
-                    (route.provider
-                        ? JSON.stringify(p.provider?.only) !==
-                          JSON.stringify([route.provider])
-                        : p.provider?.only !== undefined) ||
-                    p.provider?.require_parameters !== true
+                    !Number.isSafeInteger(prepared.deadlineAt) ||
+                    prepared.deadlineAt < 1
                 )
-                    throw new Error("Route or request contract changed");
+                    throw new Error("execution_deadline");
+                const { contextWindow, maxTokens, inputPrice, outputPrice } =
+                    prepared.descriptor ?? {};
                 if (
-                    !Number.isFinite(p.provider.max_price?.prompt) ||
-                    p.provider.max_price.prompt < 0 ||
-                    p.provider.max_price.prompt > inputPrice ||
-                    !Number.isFinite(p.provider.max_price.completion) ||
-                    p.provider.max_price.completion < 0 ||
-                    p.provider.max_price.completion > outputPrice
+                    typeof prepared.model !== "string" ||
+                    !prepared.model ||
+                    !Number.isSafeInteger(contextWindow) ||
+                    contextWindow < 1 ||
+                    !Number.isSafeInteger(maxTokens) ||
+                    maxTokens < 1 ||
+                    !Number.isFinite(inputPrice) ||
+                    inputPrice < 0 ||
+                    !Number.isFinite(outputPrice) ||
+                    outputPrice < 0
                 )
-                    throw new Error("Price ceiling changed");
-            } else {
-                if (
-                    p.model !== "z-ai/glm-5.3-flash" ||
-                    p.provider?.only !== undefined ||
-                    p.provider?.order !== undefined ||
-                    p.provider?.allow_fallbacks === false ||
-                    p.provider.require_parameters !== true ||
-                    p.temperature !== 0 ||
-                    (p.max_tokens ?? p.max_completion_tokens) !== 6144 ||
-                    p.reasoning?.enabled !== true ||
-                    p.reasoning?.effort !== "low" ||
-                    p.reasoning?.exclude !== true
-                )
-                    throw new Error("Route or request contract changed");
-                if (
-                    !Number.isFinite(p.provider.max_price.prompt) ||
-                    p.provider.max_price.prompt < 0 ||
-                    p.provider.max_price.prompt > 0.15 ||
-                    !Number.isFinite(p.provider.max_price.completion) ||
-                    p.provider.max_price.completion < 0 ||
-                    p.provider.max_price.completion > 0.6
-                )
-                    throw new Error("Price ceiling changed");
+                    throw new Error("Invalid prepared relay capabilities");
+                route = prepared;
             }
+            const { contextWindow, maxTokens, inputPrice, outputPrice } =
+                route.descriptor;
+            const constraints = states[0].constraints;
+            if (constraints?.resourcePolicy !== RESOURCE_POLICY_VERSION)
+                throw new Error("resource_policy_unsupported");
+            const authority = resolveGenerationAuthority(
+                {
+                    resourcePolicy: protocol.resourcePolicy,
+                    deadlineAt: Math.min(
+                        route.deadlineAt,
+                        constraints.deadlineAt,
+                        protocol.manifest?.expiresAt ?? route.deadlineAt,
+                    ),
+                },
+                Date.now(),
+            );
+            if (authority.kind === "blocked") throw new Error(authority.code);
+            if (
+                p.model !== route.model ||
+                p.temperature !== 0 ||
+                !Number.isSafeInteger(
+                    p.max_tokens ?? p.max_completion_tokens,
+                ) ||
+                (p.max_tokens ?? p.max_completion_tokens) < 1 ||
+                (p.max_tokens ?? p.max_completion_tokens) >
+                    Math.min(maxTokens, contextWindow) ||
+                p.reasoning?.effort !== route.reasoningEffort ||
+                (route.provider
+                    ? JSON.stringify(p.provider?.only) !==
+                      JSON.stringify([route.provider])
+                    : p.provider?.only !== undefined) ||
+                p.provider?.require_parameters !== true
+            )
+                throw new Error("Route or request contract changed");
+            if (
+                !Number.isFinite(p.provider.max_price?.prompt) ||
+                p.provider.max_price.prompt < 0 ||
+                p.provider.max_price.prompt > inputPrice ||
+                !Number.isFinite(p.provider.max_price.completion) ||
+                p.provider.max_price.completion < 0 ||
+                p.provider.max_price.completion > outputPrice
+            )
+                throw new Error("Price ceiling changed");
             if (control.mode === "dry") {
                 json("dry-request.json", { payload: p, live: false });
                 event({
@@ -270,9 +308,6 @@ export function createQualificationRelay(
                 );
             }
             if (control.mode !== "live") throw new Error("Paid mode is off");
-            const protocol = existsSync(`${root}/protocol.json`)
-                ? JSON.parse(readFileSync(`${root}/protocol.json`, "utf8"))
-                : null;
             if (protocol?.version >= 2) {
                 const validation = JSON.parse(
                     readFileSync(`${root}/validation.json`, "utf8"),
@@ -293,7 +328,7 @@ export function createQualificationRelay(
                 if (digest(readFileSync(path)) !== hash)
                     throw new Error("Frozen code changed");
             const reserve =
-                ((Buffer.byteLength(text) + 4096) * inputPrice) / 1e6 +
+                (contextWindow * inputPrice) / 1e6 +
                 ((p.max_tokens ?? p.max_completion_tokens) * outputPrice) / 1e6;
             if (
                 calls >= maximumRequests ||
@@ -342,6 +377,16 @@ export function createQualificationRelay(
                 gate ||
                 ((control.injectInvalidFraming || control.injectHttpRefusal) &&
                     !injected.has(scenario));
+            const dispatchAuthority = resolveGenerationAuthority(
+                {
+                    resourcePolicy: protocol.resourcePolicy,
+                    deadlineAt: authority.deadlineAt,
+                },
+                Date.now(),
+            );
+            if (dispatchAuthority.kind === "blocked")
+                throw new Error(dispatchAuthority.code);
+            abort.signal.throwIfAborted();
             event({
                 event: "dispatch",
                 call,
@@ -363,7 +408,7 @@ export function createQualificationRelay(
                     redirect: "error",
                     signal: AbortSignal.any([
                         abort.signal,
-                        AbortSignal.timeout(60000),
+                        AbortSignal.timeout(dispatchAuthority.timeoutMs),
                     ]),
                 },
             );
@@ -387,7 +432,8 @@ export function createQualificationRelay(
             let bytes = 0;
             for await (const chunk of response.body) {
                 bytes += chunk.length;
-                if (bytes > 1048576) throw new Error("Response byte bound");
+                if (bytes > TOOLING_POLICY.relayResponseMaxBytes)
+                    throw new Error("Response byte bound");
                 chunks.push(chunk);
                 appendFileSync(`${root}/upstream-${call}.sse`, chunk);
                 if (!bufferedFault) {
@@ -417,7 +463,7 @@ export function createQualificationRelay(
             const retryAfter = response.headers.get("retry-after");
             const delay = retryAfter === null ? 0 : Number(retryAfter);
             const retryAfterAt = Math.max(
-                Date.now() + 15000,
+                Date.now() + TOOLING_POLICY.relayRefusalCooldownMs,
                 Number.isFinite(delay)
                     ? Date.now() + delay * 1000
                     : Date.parse(retryAfter),
@@ -442,7 +488,8 @@ export function createQualificationRelay(
                           retryable,
                           retryAfterAt: Number.isFinite(retryAfterAt)
                               ? retryAfterAt
-                              : Date.now() + 15000,
+                              : Date.now() +
+                                TOOLING_POLICY.relayRefusalCooldownMs,
                       }
                     : {}),
                 elapsedMs: Date.now() - startedAt,
@@ -510,12 +557,12 @@ export function createQualificationRelay(
                 }
             }
             if (gate) {
-                const until = Date.now() + 20000;
+                const until = Date.now() + TOOLING_POLICY.relayGateTimeoutMs;
                 while (
                     !existsSync(`${root}/release-${scenario}`) &&
                     Date.now() < until
                 )
-                    await pause(25);
+                    await pause(TOOLING_POLICY.relayGatePollMs);
                 if (!existsSync(`${root}/release-${scenario}`))
                     throw new Error("Gate was not released within its bound");
             }

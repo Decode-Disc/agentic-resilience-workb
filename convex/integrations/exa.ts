@@ -1,4 +1,9 @@
-import { MAX_APPROVED_SOURCE_BYTES } from "@convex/resourceLimits";
+import {
+    DEFAULT_EXA_CONTENTS_TIMEOUT_MS,
+    MAX_APPROVED_SOURCE_BYTES,
+    MAX_EXA_CONTENTS_ATTEMPTS,
+    MAX_EXA_TEXT_CHARACTERS,
+} from "@convex/resourcePolicy";
 
 export type ExaSearchResult = {
     id: string;
@@ -165,10 +170,6 @@ async function withAbortableTimeout<T>(
         clearTimeout(timeout);
     }
 }
-
-export const MAX_EXA_CONTENTS_ATTEMPTS = 2;
-const MAX_EXA_TEXT_CHARACTERS = 1_000_000;
-export const DEFAULT_EXA_CONTENTS_TIMEOUT_MS = 120_000;
 
 export function createExaContentsAdapter(
     client: ExaContentsClient,

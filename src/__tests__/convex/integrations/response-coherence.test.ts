@@ -1,6 +1,34 @@
 import { RESPONSE_CONTROL_LIMITS } from "@convex/domain/workbenchResponseControlContracts";
 import { checkResponseCoherence } from "@convex/integrations/responseCoherence";
 import { expect, test, vi } from "vitest";
+import { modelAttemptAuthority } from "@/__tests__/setup/model-configuration";
+
+test.each([
+    "missing",
+    "expired",
+])("response control with %s authority cannot reach the provider", async (state) => {
+    const fetch = vi.fn(async () => Response.json({}));
+    const result = await checkResponseCoherence({
+        requestJson: "{}",
+        apiKey: "offline-only",
+        fetch,
+        authority:
+            state === "missing"
+                ? undefined
+                : {
+                      resourcePolicy: "authority_native_v1",
+                      deadlineAt: Date.now() - 1,
+                  },
+    });
+    expect(result).toMatchObject({
+        status: "unavailable",
+        reason:
+            state === "missing"
+                ? "resource_policy_unsupported"
+                : "execution_deadline",
+    });
+    expect(fetch).not.toHaveBeenCalled();
+});
 
 test("oversized malformed native responses cannot expand the retained audit", async () => {
     const fetch = vi.fn(
@@ -8,6 +36,7 @@ test("oversized malformed native responses cannot expand the retained audit", as
             new Response("x".repeat(RESPONSE_CONTROL_LIMITS.inputBytes + 1)),
     );
     const result = await checkResponseCoherence({
+        authority: modelAttemptAuthority(),
         requestJson: "{}",
         apiKey: "test-key",
         fetch,
@@ -38,6 +67,7 @@ test.each([
         }),
     );
     const result = await checkResponseCoherence({
+        authority: modelAttemptAuthority(),
         requestJson: "{}",
         apiKey: "test-key",
         fetch,
@@ -72,6 +102,7 @@ test("native transport preserves probabilities and redacts accidental credential
         });
     });
     const result = await checkResponseCoherence({
+        authority: modelAttemptAuthority(),
         requestJson: "{}",
         apiKey: "test-key",
         fetch,

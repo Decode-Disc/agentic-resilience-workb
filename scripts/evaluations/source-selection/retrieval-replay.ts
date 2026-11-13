@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createServer } from "vite";
+import { SOURCE_COMPARISON_CONTEXT_EXPANSION_BYTES } from "../../../convex/resourcePolicy.ts";
 import { prepareRetrievedStudyComparison } from "./retrieval-study.ts";
 
 type Reference = {
@@ -360,10 +361,7 @@ export async function runRetrievalReplay(args: string[]) {
                     r.caseId.startsWith(`${options.get("--company")}-`)),
         );
         assert(originals.length > 0, "No replay conditions selected");
-        const {
-            prepareSourceComparisonInput,
-            SOURCE_COMPARISON_CONTEXT_EXPANSION_BYTES,
-        } = (await server.ssrLoadModule(
+        const { prepareSourceComparisonInput } = (await server.ssrLoadModule(
             "/convex/domain/sourceComparison.ts",
         )) as typeof import("@convex/domain/sourceComparison");
         const texts = new Map(loaded.documents.map((d) => [d.id, d.text]));

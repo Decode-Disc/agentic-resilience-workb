@@ -1,3 +1,5 @@
+import type { Id } from "@convex/_generated/dataModel";
+import type { FunctionReturnType } from "convex/server";
 import { api, internal } from "@convex/_generated/api";
 import { expect, test } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
@@ -283,4 +285,72 @@ test("journal inspection rejects a conversation reference belonging to another d
                 eventId,
             }),
     ).rejects.toThrow("Journal correlation mismatch");
+});
+
+test("administrator pages the exact complete fragmented request with the same authorization and correlation checks", async () => {
+    const { retainedTextParts } = await import(
+        "@convex/execution/retainedText"
+    );
+    const f = await seedInspectedEvidence();
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        expectedGeneration: 4,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "fragmented-admin",
+    });
+    await f.t.run((ctx) => ctx.db.patch(f.visitorId, { role: "admin" }));
+    const identity = f.t.withIdentity({ subject: `${f.userId}|journal-test` });
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: 4,
+        taskKey: "fragmented-admin",
+        provenance: "simulation",
+    });
+    if (begun.kind !== "ready") throw new Error("Expected invocation");
+    const json = JSON.stringify({
+        text: "Exact immutable content 🧭".repeat(26000),
+    });
+    const { manifest, parts } = retainedTextParts(json);
+    let textId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        textId = await f.t.mutation(
+            internal.execution.invocationLifecycle.stageRequest,
+            {
+                invocationId: begun.invocationId,
+                expectedGeneration: 4,
+                fragment: { ...manifest, index, content },
+            },
+        );
+    await f.t.mutation(internal.execution.invocations.retainRequest, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 4,
+        textId,
+    });
+    let cursor: string | null = null;
+    let actual = "";
+    do {
+        const page: FunctionReturnType<
+            typeof api.adminOperations.listInvocationPayloadFragmentsPage
+        > = await identity.query(
+            api.adminOperations.listInvocationPayloadFragmentsPage,
+            {
+                runId: f.args.runId,
+                invocationId: begun.invocationId,
+                part: "request",
+                paginationOpts: { numItems: 1, cursor },
+            },
+        );
+        actual += page.page.map((fragment) => fragment.content).join("");
+        cursor = page.isDone ? null : page.continueCursor;
+    } while (cursor);
+    expect(actual).toBe(json);
+    await expect(
+        f.t.query(api.adminOperations.listInvocationPayloadFragmentsPage, {
+            runId: f.args.runId,
+            invocationId: begun.invocationId,
+            part: "request",
+            paginationOpts: { numItems: 1, cursor: null },
+        }),
+    ).rejects.toThrow();
 });

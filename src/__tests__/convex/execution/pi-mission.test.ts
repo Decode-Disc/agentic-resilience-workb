@@ -141,11 +141,11 @@ test("automatic Pi compaction retains exact originals and journals its own bound
     }));
     expect(
         snapshots.commits.some((c) =>
-            c.payload.includes('"kind":"pi.compaction"'),
+            c.payload?.includes('"kind":"pi.compaction"'),
         ),
     ).toBe(true);
     expect(
-        snapshots.commits.some((c) => c.payload.includes("EXACT-ORIGINAL-0")),
+        snapshots.commits.some((c) => c.payload?.includes("EXACT-ORIGINAL-0")),
     ).toBe(true);
     expect(snapshots.invocations).toEqual(
         expect.arrayContaining([

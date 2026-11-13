@@ -102,12 +102,17 @@ async function seedApprovedSource(
 test("real SDK Contents requests abort before retry and exhaustion", async () => {
     vi.useFakeTimers();
     vi.stubEnv("EXA_API_KEY", "fixture-key");
+    let signalStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+        signalStarted = resolve;
+    });
     let active = 0;
     let peak = 0;
     const signals: AbortSignal[] = [];
     const fetchMock = vi.fn(
         (_url: unknown, options?: RequestInit) =>
             new Promise<Response>((_resolve, reject) => {
+                signalStarted();
                 active += 1;
                 peak = Math.max(peak, active);
                 const signal = options?.signal;
@@ -132,7 +137,8 @@ test("real SDK Contents requests abort before retry and exhaustion", async () =>
         internal.evidenceActions.retrieveAndNormalizeExaSource,
         args,
     );
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await started;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(240_001);
     const result = await work;
     expect(result.status).toBe("failed");

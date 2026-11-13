@@ -3,13 +3,14 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
     type MutationCtx,
-    type QueryCtx,
     mutation,
+    type QueryCtx,
 } from "@convex/_generated/server";
 import {
     isResumableResearchPause,
     supportsResearchControl,
 } from "@convex/domain/transitions";
+import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import { researchResumed, workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
@@ -23,6 +24,7 @@ import {
     researchSlotBlock,
 } from "./authority";
 import { executionError } from "./errors";
+import { recordContextObservation } from "./journal";
 import { isRecoverableInterruption } from "./missionData";
 
 async function recordControl(
@@ -38,6 +40,41 @@ async function recordControl(
         kind,
         cause: "explicit_analyst_control",
         occurredAt: Date.now(),
+    });
+    await recordResearchObservation(
+        ctx,
+        run._id,
+        kind,
+        run.ownerVisitorId
+            ? { type: "visitor", visitorId: run.ownerVisitorId }
+            : { type: "system" },
+    );
+}
+
+/** One state projection owns the meaning of research transitions for native observation delivery. */
+export async function recordResearchObservation(
+    ctx: MutationCtx,
+    runId: Id<"researchRuns">,
+    event: string,
+    actor: NonNullable<Doc<"agentExecutionEvents">["actor"]> = {
+        type: "system",
+    },
+) {
+    const current = await ctx.db.get(runId);
+    if (!current) throw executionError("run_unavailable");
+    await recordContextObservation(ctx, runId, {
+        key: `research:${event}:${current.executionGeneration}:${current.researchControlRevision ?? 0}:${current.nextEventSequence}:${current.lifecycleState}:${current.executionStatus}`,
+        topic: "research",
+        actor,
+        value: {
+            event,
+            phase: current.lifecycleState,
+            status: current.executionStatus,
+            pauseReason: current.pauseReason ?? null,
+            pauseRequested: current.researchPauseRequested ?? false,
+            summary: researchStateSummary(current),
+            framingRevisionId: current.fixedFramingRevisionId ?? null,
+        },
     });
 }
 
@@ -166,6 +203,7 @@ export async function suspendInterruptedResearch(
         cause: "execution_interrupted",
         occurredAt: Date.now(),
     });
+    await recordResearchObservation(ctx, run._id, "research_interrupted");
 }
 
 export const pause = mutation({
@@ -478,7 +516,10 @@ export async function resumeResearch(
         {
             runId: run._id,
             generation,
-            paginationOpts: { numItems: 20, cursor: null },
+            paginationOpts: {
+                numItems: PERSISTENCE_PAGE_SIZE.researchResumeRequests,
+                cursor: null,
+            },
         },
     );
     if (run.startMode === "framed") {

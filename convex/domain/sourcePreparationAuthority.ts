@@ -1,15 +1,23 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
 import {
-    LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT,
-    MAX_HISTORICAL_SOURCE_CANDIDATES,
     preparationMaxConcurrency,
     preparationModelLimits,
-    SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION,
 } from "@convex/resourceLimits";
+import {
+    LEGACY_PREPARATION_MODEL_ATTEMPT_LIMIT,
+    MAX_HISTORICAL_SOURCE_CANDIDATES,
+    PREPARATION_RECOVERY_COOLDOWN_MS,
+    RESOURCE_POLICY_VERSION,
+} from "@convex/resourcePolicy";
 import type { GenericDatabaseReader } from "convex/server";
 import { ConvexError, type Infer, v } from "convex/values";
 import { isExecutableQualificationVersion } from "./sourceQualification";
 import { isResumableResearchPause } from "./transitions";
+
+/** Preparation journal protocol identity, not a resource allowance. */
+export const SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION = "source_actions_v4";
+export const SOURCE_PREPARATION_EXECUTION_PLAN_VERSION =
+    SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION;
 
 export const preparationDispatchOutcomeValidator = v.union(
     v.literal("not_dispatched"),
@@ -20,8 +28,17 @@ export const preparationDispatchOutcomeValidator = v.union(
 export const sourcePreparationExecutionPlanValidator = v.union(
     v.literal("collect_then_compare_v1"),
     v.literal("inline_controls_v2"),
+    v.literal("source_actions_v3"),
     v.literal(SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION),
 );
+
+/** Both versions retain the same source-action workflow; v4 changes structured model contracts. */
+export function usesSourceActions(version: string | undefined): boolean {
+    return (
+        version === "source_actions_v3" ||
+        version === SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION
+    );
+}
 
 export const sourcePreparationPhaseValidator = v.union(
     v.literal("reading"),
@@ -36,8 +53,6 @@ export const sourcePreparationProgressValidator = v.object({
     total: v.optional(v.number()),
     updatedAt: v.number(),
 });
-
-export const PREPARATION_RECOVERY_COOLDOWN_MS = 15_000;
 export const MAX_PREPARATION_ATTEMPT_HISTORY =
     MAX_HISTORICAL_SOURCE_CANDIDATES + 4;
 
@@ -70,13 +85,20 @@ export const preparationBudgetValidator = v.object({
 });
 
 type PreparationBudget = Infer<typeof preparationBudgetValidator>;
+type PreparationAttemptObservation = Pick<
+    Doc<"providerCalls">,
+    "status" | "errorCode" | "dispatchOutcome" | "httpStatus"
+> &
+    Partial<
+        Pick<
+            Doc<"providerCalls">,
+            "service" | "operation" | "providerObservation" | "billing"
+        >
+    >;
 
 /** A received valid response is productive; ambiguity retains both possible charges. */
 export function preparationBudgetOutcome(
-    call: Pick<
-        Doc<"providerCalls">,
-        "status" | "errorCode" | "dispatchOutcome" | "httpStatus"
-    >,
+    call: PreparationAttemptObservation,
 ): "work" | "incidents" | "reserved" | "released" {
     const kind = preparationFailureClass(call);
     if (kind === "not_dispatched") return "released";
@@ -179,12 +201,7 @@ export function readPreparationConcurrency(
 }
 
 /** A retry flag alone cannot prove that a dispatched request returned a failure. */
-export function preparationFailureClass(
-    call: Pick<
-        Doc<"providerCalls">,
-        "status" | "errorCode" | "dispatchOutcome" | "httpStatus"
-    >,
-) {
+export function preparationFailureClass(call: PreparationAttemptObservation) {
     if (
         call.dispatchOutcome === "not_dispatched" ||
         ["missing_configuration", "paid_work_disabled"].includes(
@@ -194,6 +211,15 @@ export function preparationFailureClass(
         return "not_dispatched";
     if (call.status === "succeeded" || call.status === "partial")
         return "succeeded";
+    if (
+        call.status === "failed" &&
+        call.service === "model" &&
+        call.operation === "source_documentary_control" &&
+        call.providerObservation?.generationId &&
+        call.providerObservation.cancelled === true &&
+        call.billing?.state === "confirmed"
+    )
+        return "terminal";
     if (
         [
             "request_timeout",
@@ -464,6 +490,8 @@ export async function assertPreparationExecutionFence(
     },
 ) {
     const state = await readCurrentPreparation(db, args);
+    if (state.preparation.resourcePolicy !== RESOURCE_POLICY_VERSION)
+        throw sourcePreparationError("resource_policy_unsupported");
     if (
         (state.preparation.deadlineAt ?? 0) <= args.now ||
         state.preparation.leaseExpiresAt <= args.now

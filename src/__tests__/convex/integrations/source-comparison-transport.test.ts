@@ -10,6 +10,10 @@ import { compareSourceContributions } from "@convex/integrations/sourceQualifica
 import { sourceQualificationRoutes } from "@convex/integrations/sourceQualificationConfig";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
+import {
+    fixtureModelDescriptor,
+    modelAttemptAuthority,
+} from "@/__tests__/setup/model-configuration";
 
 const company = {
     cik: "1373715",
@@ -110,6 +114,56 @@ function responseFor(input: PreparedSourceComparisonInput) {
     };
 }
 
+test("new comparison calls use the admitted model capacity through the real transport", async () => {
+    const input = makeInput(true);
+    let limit: unknown;
+    const result = await compareSourceContributions(
+        input,
+        {
+            model: "example/comparison",
+            executionPlanVersion: "source_actions_v4",
+            descriptor: {
+                contextWindow: 64000,
+                maxTokens: 20000,
+                reasoning: false,
+                inputPrice: 0.01,
+                outputPrice: 0.02,
+                cacheReadPrice: 0,
+                structuredOutputs: true,
+            },
+        },
+        {
+            authority: modelAttemptAuthority(),
+            apiKey: "offline-only",
+            fetch: async (_url, init) => {
+                const wire = JSON.parse(String(init?.body));
+                limit = wire.max_tokens ?? wire.max_completion_tokens;
+                return Response.json({
+                    id: "offline-comparison",
+                    model: "example/comparison",
+                    choices: [
+                        {
+                            index: 0,
+                            message: {
+                                role: "assistant",
+                                content: JSON.stringify(responseFor(input)),
+                            },
+                            finish_reason: "stop",
+                        },
+                    ],
+                    usage: {
+                        prompt_tokens: 10,
+                        completion_tokens: 10,
+                        total_tokens: 20,
+                    },
+                });
+            },
+        },
+    );
+    expect(result.status).toBe("succeeded");
+    expect(limit).toBe(20000);
+});
+
 test("preserves a complete explanation beyond 600 characters through the bounded comparison transport", async () => {
     const input = makeInput(true);
     const providerOutput = responseFor(input);
@@ -151,8 +205,8 @@ test("preserves a complete explanation beyond 600 characters through the bounded
 
     const result = await compareSourceContributions(
         input,
-        sourceQualificationRoutes[0],
-        { apiKey: "test-only-key", fetch },
+        { ...sourceQualificationRoutes[0], descriptor: fixtureModelDescriptor },
+        { authority: modelAttemptAuthority(), apiKey: "test-only-key", fetch },
     );
 
     expect(result).toMatchObject({ status: "succeeded" });
@@ -162,7 +216,7 @@ test("preserves a complete explanation beyond 600 characters through the bounded
     expect(body).toMatchObject({
         model: "deepseek/deepseek-v4.1-flash",
         temperature: 0,
-        max_tokens: 6144,
+        max_tokens: 8192,
         provider: {
             only: ["relace"],
             allow_fallbacks: false,
@@ -203,7 +257,7 @@ test("returns cached-ready inconclusive output without a provider request when n
     const result = await compareSourceContributions(
         input,
         sourceQualificationRoutes[0],
-        { apiKey: "test-only-key", fetch },
+        { authority: modelAttemptAuthority(), apiKey: "test-only-key", fetch },
     );
 
     expect(result).toMatchObject({

@@ -1,4 +1,8 @@
 import {
+    MAX_EXTRACTION_TASK_SCAN,
+    MAX_POLICY_EVAL_SCAN,
+} from "@convex/resourcePolicy";
+import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
@@ -10,24 +14,23 @@ import {
     claimClassificationValidator,
     evidenceRelationValidator,
 } from "./domain/claims";
-import { assessmentDimensionKeyValidator } from "./domain/researchPlan";
+import {
+    assessmentDimensionKeyValidator,
+    MAX_RESEARCH_PLAN_QUESTIONS,
+} from "./domain/researchPlan";
 import { sourceLocatorValidator } from "./domain/sourcePassages";
 import {
     executionStatusValidator,
     researchRunLifecycleValidator,
     runPauseReasonValidator,
 } from "./domain/validators";
+import { sourceDossierCandidateLimit } from "./resourceLimits";
 import {
     MAX_CLAIMS_PER_RUN,
     MAX_DIMENSION_LINKS_PER_CLAIM,
     MAX_EVIDENCE_PER_CLAIM,
-    sourceDossierCandidateLimit,
-} from "./resourceLimits";
+} from "./resourcePolicy";
 import { requireWorkspaceRun } from "./runWorkspace";
-
-const MAX_RESEARCH_PLAN_QUESTIONS = 11;
-const MAX_EXTRACTION_TASK_SCAN = 16;
-const MAX_POLICY_EVAL_SCAN = 16;
 
 const extractionModeValidator = v.union(
     v.literal("showcase"),

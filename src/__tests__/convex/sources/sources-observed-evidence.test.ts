@@ -1,5 +1,6 @@
 import { internal } from "@convex/_generated/api";
 import { domainSnapshot } from "@convex/execution/agentDefinition";
+import { readRetainedText } from "@convex/execution/retainedText";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
@@ -33,6 +34,7 @@ async function qualifyObservedPassage() {
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         return {
             status: "succeeded",
@@ -138,7 +140,35 @@ async function qualifyObservedPassage() {
 }
 
 test("a qualification selects an observed passage and retains its exact quotation without model transcription", async () => {
-    await qualifyObservedPassage();
+    const f = await qualifyObservedPassage();
+    const observations = await f.t.run(async (ctx) => {
+        const events = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_run_and_native_input_sequence", (q) =>
+                q.eq("runId", f.runId).gt("nativeInputSequence", 0),
+            )
+            .collect();
+        return Promise.all(
+            events.map(async (event) =>
+                event.contextObservation
+                    ? JSON.parse(
+                          await readRetainedText(
+                              ctx,
+                              event.contextObservation.textId,
+                          ),
+                      )
+                    : null,
+            ),
+        );
+    });
+    expect(observations).toContainEqual(
+        expect.objectContaining({
+            event: "contributions_qualified",
+            taskId: f.qualification._id,
+            contributions: expect.any(Array),
+            control: expect.objectContaining({ coherence: true }),
+        }),
+    );
 });
 
 test.each([
@@ -172,6 +202,7 @@ test.each([
         await f.t.run((ctx) =>
             ctx.db.patch(begun.invocationId, {
                 inputJson: JSON.stringify(snapshot),
+                inputContentHash: undefined,
             }),
         );
     }
@@ -265,7 +296,12 @@ test.each([
         },
     ];
     const inputJson = JSON.stringify(snapshot);
-    await f.t.run((ctx) => ctx.db.patch(begun.invocationId, { inputJson }));
+    await f.t.run((ctx) =>
+        ctx.db.patch(begun.invocationId, {
+            inputJson,
+            inputContentHash: undefined,
+        }),
+    );
     const response = {
         kind: "operations" as const,
         requests: [

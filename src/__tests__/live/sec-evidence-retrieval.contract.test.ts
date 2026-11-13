@@ -13,7 +13,7 @@ import { retrieveAndNormalizeSecFiling } from "@convex/integrations/secEvidence"
 import {
     MAX_APPROVED_SOURCE_BYTES,
     MAX_PASSAGES_PER_SOURCE,
-} from "@convex/resourceLimits";
+} from "@convex/resourcePolicy";
 import { expect, test } from "vitest";
 
 // Verified against SEC submissions for this CIK: the 2023 annual report filed

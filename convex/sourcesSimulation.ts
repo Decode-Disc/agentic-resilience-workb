@@ -37,7 +37,7 @@ export async function sourcesSimulationEnabled(
     )
         throw new Error("Active local Sources simulation required");
     if (
-        campaign.manifest.version === 2 &&
+        campaign.manifest.version !== 1 &&
         !context.simulatedScenarios?.some((s) => s.runId === run._id)
     )
         throw new Error("Declared campaign scenario required");
@@ -104,7 +104,8 @@ export async function sourcesQualificationEnvelope(
         ? await ctx.db.get(context.campaignLotId)
         : null;
     const campaign = lot ? await ctx.db.get(lot.campaignId) : null;
-    if (campaign?.manifest.version !== 2) return SOURCES_QUALIFICATION_ENVELOPE;
+    if (!campaign || campaign.manifest.version === 1)
+        return SOURCES_QUALIFICATION_ENVELOPE;
     const binding = (
         context?.paidQualification?.scenarios ?? context?.simulatedScenarios
     )?.find((s) => s.runId === run._id);

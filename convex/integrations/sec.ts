@@ -3,10 +3,12 @@ import type {
     SecCompanyResolver,
 } from "@convex/companyResolution";
 import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
+import { companySearchResultLimit } from "@convex/resourceLimits";
 import {
-    companySearchResultLimit,
+    DEFAULT_SEC_TIMEOUT_MS,
     MAX_APPROVED_SOURCE_BYTES,
-} from "@convex/resourceLimits";
+    MAX_SEC_ATTEMPTS,
+} from "@convex/resourcePolicy";
 import Fuse from "fuse.js";
 
 type ProviderAttempt = {
@@ -39,8 +41,6 @@ type SecCompanyResolverDependencies = {
     retryPolicy?: "confirmed_response";
 };
 
-const MAX_SEC_ATTEMPTS = 2;
-const DEFAULT_SEC_TIMEOUT_MS = 10_000;
 const MAX_FUZZY_COMPANY_SCORE = 0.45;
 
 function secTimeoutMs(custom?: number): number {

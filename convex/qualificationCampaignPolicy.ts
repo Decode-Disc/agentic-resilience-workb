@@ -1,8 +1,12 @@
 import { z } from "zod";
 import { reasoningPreferenceValues } from "./modelConfigurationValues.ts";
 import { initialFixtureIds } from "./qualificationInitialFixtures.ts";
-
-export const MAX_QUALIFICATION_CONTEXT_DURATION_MS = 2 * 60 * 60 * 1000;
+import {
+    MAX_QUALIFICATION_CONTEXT_DURATION_MS,
+    MAX_REVIEW_AUTHORITY_DURATION_MS,
+    SOURCES_ENVELOPE_MAX_ACQUISITIONS,
+    SOURCES_ENVELOPE_MAX_COUNT,
+} from "./resourcePolicy.ts";
 
 export const campaignLimitsSchema = z
     .object({
@@ -193,11 +197,23 @@ export const qualificationStepSchema = z.discriminatedUnion("action", [
 export const qualificationEnvelopeSchema = z
     .object({
         version: z.literal(1),
-        maxNeeds: z.number().int().min(1).max(160),
-        initialSearches: z.number().int().min(1).max(160),
-        complementSearches: z.number().int().min(1).max(160),
-        acquisitions: z.number().int().min(1).max(60),
-        controls: z.number().int().min(1).max(160),
+        maxNeeds: z.number().int().min(1).max(SOURCES_ENVELOPE_MAX_COUNT),
+        initialSearches: z
+            .number()
+            .int()
+            .min(1)
+            .max(SOURCES_ENVELOPE_MAX_COUNT),
+        complementSearches: z
+            .number()
+            .int()
+            .min(1)
+            .max(SOURCES_ENVELOPE_MAX_COUNT),
+        acquisitions: z
+            .number()
+            .int()
+            .min(1)
+            .max(SOURCES_ENVELOPE_MAX_ACQUISITIONS),
+        controls: z.number().int().min(1).max(SOURCES_ENVELOPE_MAX_COUNT),
     })
     .strict();
 export const qualificationScenarioSchema = z
@@ -238,7 +254,11 @@ const v2 = z
     .object({
         ...legacyCampaignManifestSchema.shape,
         version: z.literal(2),
+        costAccountingPolicy: z
+            .enum(["conservative_v1", "known_final_v1"])
+            .optional(),
         executionSurface: z.enum(["browser", "backend"]).optional(),
+        researchDurationMs: z.number().int().positive().safe().optional(),
         contextDurationMs: z
             .number()
             .int()
@@ -389,14 +409,337 @@ export const configurableCampaignManifestSchema = v2.superRefine((m, ctx) => {
                 "Correction paths must be explicit repository paths or directories",
             );
 });
+export const analysisPricingSchema = z
+    .object({
+        provider: z.literal("openai"),
+        model: z.string().min(1),
+        api: z.literal("openai-responses"),
+        contextWindow: z.number().int().positive().safe(),
+        maxTokens: z.number().int().positive().safe(),
+        cost: z
+            .object({
+                input: z.number().finite().nonnegative(),
+                output: z.number().finite().nonnegative(),
+                cacheRead: z.number().finite().nonnegative(),
+                cacheWrite: z.number().finite().nonnegative(),
+                tiers: z
+                    .array(
+                        z
+                            .object({
+                                inputTokensAbove: z
+                                    .number()
+                                    .int()
+                                    .nonnegative()
+                                    .safe(),
+                                input: z
+                                    .number()
+                                    .finite()
+                                    .nonnegative()
+                                    .optional(),
+                                output: z
+                                    .number()
+                                    .finite()
+                                    .nonnegative()
+                                    .optional(),
+                                cacheRead: z
+                                    .number()
+                                    .finite()
+                                    .nonnegative()
+                                    .optional(),
+                                cacheWrite: z
+                                    .number()
+                                    .finite()
+                                    .nonnegative()
+                                    .optional(),
+                            })
+                            .strict(),
+                    )
+                    .optional(),
+            })
+            .strict(),
+        serviceTier: z.literal("default"),
+        sourceUrl: z.url().refine((value) => {
+            try {
+                const url = new URL(value);
+                return (
+                    url.protocol === "https:" &&
+                    (url.hostname === "openai.com" ||
+                        url.hostname.endsWith(".openai.com"))
+                );
+            } catch {
+                return false;
+            }
+        }, "Official OpenAI pricing source required"),
+        verifiedAt: z.number().int().positive().safe(),
+    })
+    .strict();
+
+/** Canonical pricing identity and conservative native-capacity quote; USD/million tokens equals micros/token. */
+export function analysisPricingAuthority(
+    input: z.infer<typeof analysisPricingSchema>,
+) {
+    const pricing = analysisPricingSchema.parse(input);
+    let inputRate = Math.max(
+        pricing.cost.input,
+        pricing.cost.cacheRead,
+        pricing.cost.cacheWrite,
+    );
+    let outputRate = pricing.cost.output;
+    for (const tier of pricing.cost.tiers ?? []) {
+        inputRate = Math.max(
+            inputRate,
+            tier.input ?? 0,
+            tier.cacheRead ?? 0,
+            tier.cacheWrite ?? 0,
+        );
+        outputRate = Math.max(outputRate, tier.output ?? 0);
+    }
+    const maximumCostMicros = Math.ceil(
+        pricing.contextWindow * inputRate + pricing.maxTokens * outputRate,
+    );
+    if (!Number.isSafeInteger(maximumCostMicros) || maximumCostMicros < 0)
+        throw new Error("Invalid analysis pricing capacity");
+    return { identity: JSON.stringify(pricing), maximumCostMicros };
+}
+
+export const analysisReceiptSchema = z
+    .object({
+        input: z.number().int().nonnegative().safe(),
+        output: z.number().int().nonnegative().safe(),
+        accounting: z.enum(["api_cost", "native_subscription"]).optional(),
+        cacheRead: z.number().int().nonnegative().safe().optional(),
+        cacheWrite: z.number().int().nonnegative().safe().optional(),
+        costUsd: z.number().finite().nonnegative().optional(),
+        costBasis: z.enum(["provider_reported", "sdk_estimate"]).optional(),
+        pricingHash: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        costMicros: z.number().int().nonnegative().safe().optional(),
+        observationHash: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+    })
+    .strict()
+    .superRefine((receipt, ctx) => {
+        if (
+            receipt.accounting === "api_cost" &&
+            (receipt.costBasis !== undefined ||
+                receipt.pricingHash !== undefined ||
+                receipt.costUsd !== undefined ||
+                receipt.cacheRead !== undefined ||
+                receipt.cacheWrite !== undefined) &&
+            (receipt.cacheRead === undefined ||
+                receipt.cacheWrite === undefined ||
+                receipt.costUsd === undefined ||
+                receipt.costBasis === undefined ||
+                receipt.pricingHash === undefined ||
+                receipt.observationHash === undefined ||
+                receipt.costMicros !== Math.ceil(receipt.costUsd * 1_000_000))
+        )
+            ctx.addIssue({
+                code: "custom",
+                message:
+                    "Complete native API usage, cost provenance and pricing identity required",
+            });
+        if (
+            receipt.accounting === "native_subscription" &&
+            (receipt.costUsd !== undefined ||
+                receipt.costBasis !== undefined ||
+                receipt.pricingHash !== undefined)
+        )
+            ctx.addIssue({
+                code: "custom",
+                message: "Subscription receipts cannot carry API cost evidence",
+            });
+        if (
+            receipt.accounting === "native_subscription"
+                ? receipt.costMicros !== undefined
+                : receipt.costMicros === undefined
+        )
+            ctx.addIssue({
+                code: "custom",
+                message: "Invalid analysis receipt accounting",
+            });
+    });
+export type AnalysisReceipt = z.infer<typeof analysisReceiptSchema>;
+const analysisAllowanceSchema = z
+    .object({
+        requests: z.number().int().positive().safe(),
+        costMicros: z.number().int().positive().safe().optional(),
+    })
+    .strict();
+export const analysisProviderSchema = z.enum([
+    "openai",
+    "openai-codex",
+    "opencode-go",
+]);
+export type AnalysisProvider = z.infer<typeof analysisProviderSchema>;
+export const analysisMandateSchema = z
+    .object({
+        scope: z.literal("evidence_review"),
+        accounting: z.enum(["native_subscription", "api_cost"]).optional(),
+        pricing: analysisPricingSchema.optional(),
+        routes: z
+            .array(
+                z
+                    .object({
+                        provider: analysisProviderSchema,
+                        model: z.string().min(1).max(200),
+                    })
+                    .strict(),
+            )
+            .min(1)
+            .max(2),
+        perLot: analysisAllowanceSchema,
+        total: analysisAllowanceSchema,
+        maxRequestCostMicros: z.number().int().positive().safe().optional(),
+        maxInputTokens: z.number().int().positive().safe().optional(),
+        maxOutputTokens: z.number().int().positive().safe().optional(),
+        timeoutMs: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_REVIEW_AUTHORITY_DURATION_MS),
+    })
+    .strict()
+    .superRefine((m, ctx) => {
+        if (m.pricing !== undefined && m.accounting !== "api_cost")
+            ctx.addIssue({
+                code: "custom",
+                message: "Pricing metadata requires api_cost accounting",
+            });
+        if (
+            m.routes[0]?.provider === "opencode-go" ||
+            (m.routes[1] && m.routes[1].provider !== "opencode-go")
+        )
+            ctx.addIssue({
+                code: "custom",
+                message:
+                    "Analysis routes must use OpenAI first and OpenCode Go only as fallback",
+            });
+        if (m.accounting === "native_subscription") {
+            if (
+                m.routes.length !== 1 ||
+                m.routes[0]?.provider !== "openai-codex" ||
+                m.perLot.costMicros !== undefined ||
+                m.total.costMicros !== undefined ||
+                m.maxRequestCostMicros !== undefined ||
+                m.maxOutputTokens !== undefined
+            )
+                ctx.addIssue({
+                    code: "custom",
+                    message:
+                        "Native subscription review requires Codex quota accounting without dollar or output-token ceilings",
+                });
+        } else if (m.accounting === "api_cost") {
+            if (
+                !m.pricing ||
+                m.routes.length !== 1 ||
+                m.routes[0]?.provider !== "openai" ||
+                m.routes[0]?.model !== m.pricing.model ||
+                m.perLot.costMicros === undefined ||
+                m.total.costMicros === undefined ||
+                m.maxInputTokens !== undefined ||
+                (m.maxOutputTokens !== undefined &&
+                    m.maxOutputTokens > m.pricing.maxTokens)
+            )
+                ctx.addIssue({
+                    code: "custom",
+                    message:
+                        "Native API review requires one OpenAI route, verified pricing and dollar authority without a legacy input proxy",
+                });
+            else {
+                try {
+                    if (
+                        (m.maxRequestCostMicros ?? m.perLot.costMicros) <
+                        analysisPricingAuthority(m.pricing).maximumCostMicros
+                    )
+                        ctx.addIssue({
+                            code: "custom",
+                            message:
+                                "Analysis reservation does not cover native model capacity",
+                        });
+                } catch {
+                    ctx.addIssue({
+                        code: "custom",
+                        message: "Invalid analysis pricing capacity",
+                    });
+                }
+            }
+        } else if (
+            m.perLot.costMicros === undefined ||
+            m.total.costMicros === undefined ||
+            m.maxInputTokens === undefined ||
+            m.maxOutputTokens === undefined
+        ) {
+            ctx.addIssue({
+                code: "custom",
+                message:
+                    "API analysis requires explicit cost and token ceilings",
+            });
+        }
+        if (
+            m.maxRequestCostMicros !== undefined &&
+            m.maxRequestCostMicros > (m.perLot.costMicros ?? 0)
+        )
+            ctx.addIssue({
+                code: "custom",
+                message: "Request cost exceeds lot allowance",
+            });
+        if (
+            m.perLot.requests > m.total.requests ||
+            (m.perLot.costMicros ?? 0) > (m.total.costMicros ?? 0)
+        )
+            ctx.addIssue({
+                code: "custom",
+                message: "Per-lot analysis allowance exceeds campaign total",
+            });
+    });
+export const automatedCampaignManifestSchema = v2
+    .extend({
+        version: z.literal(3),
+        analysis: analysisMandateSchema,
+    })
+    .strict()
+    .superRefine(({ analysis: _analysis, ...manifest }, ctx) => {
+        const result = configurableCampaignManifestSchema.safeParse({
+            ...manifest,
+            version: 2,
+        });
+        if (!result.success)
+            for (const issue of result.error.issues)
+                ctx.addIssue({
+                    code: "custom",
+                    message: issue.message,
+                    path: issue.path,
+                });
+    });
 export const campaignManifestSchema = z.union([
     legacyCampaignManifestSchema,
     configurableCampaignManifestSchema,
+    automatedCampaignManifestSchema,
 ]);
+/** Fresh Sources authority is explicit; historical manifests remain readable and replayable. */
+export const newCampaignManifestSchema = campaignManifestSchema.superRefine(
+    (manifest, ctx) => {
+        if (
+            manifest.capability === "sources" &&
+            manifest.version !== 1 &&
+            manifest.researchDurationMs === undefined
+        )
+            ctx.addIssue({
+                code: "custom",
+                message:
+                    "Explicit researchDurationMs required for a new configurable Sources campaign",
+            });
+    },
+);
 export type CampaignManifest = z.infer<typeof campaignManifestSchema>;
-export type ConfigurableCampaignManifest = z.infer<
-    typeof configurableCampaignManifestSchema
->;
+export type ConfigurableCampaignManifest =
+    | z.infer<typeof configurableCampaignManifestSchema>
+    | z.infer<typeof automatedCampaignManifestSchema>;
 export type QualificationScenario = z.infer<typeof qualificationScenarioSchema>;
 export type QualificationStep = z.infer<typeof qualificationStepSchema>;
 export type QualificationConfiguration = z.infer<
@@ -406,7 +749,7 @@ export type QualificationConfiguration = z.infer<
 export function campaignConfigurations(
     m: CampaignManifest,
 ): QualificationConfiguration[] {
-    return m.version === 2
+    return m.version !== 1
         ? m.configurations
         : [
               {

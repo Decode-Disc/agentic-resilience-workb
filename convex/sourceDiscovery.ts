@@ -17,7 +17,7 @@ import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import {
     MAX_SUPPLEMENT_CANDIDATES,
     MAX_SUPPLEMENT_SEARCHES,
-} from "./resourceLimits";
+} from "./resourcePolicy";
 
 const candidateValidator = v.object({
     canonicalUrl: v.string(),

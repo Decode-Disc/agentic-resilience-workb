@@ -1,6 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
 import { openMissionPiStorage } from "@convex/integrations/piStorage";
-import { PI_COMMIT_MAX_BYTES } from "@convex/resourceLimits";
+import { PI_SESSION_MAX_BYTES } from "@convex/resourcePolicy";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { ROOT_CONVERSATION_ID } from "@earendil-works/pi-durable";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -53,7 +53,7 @@ test("a late wake closes an expired mission explicitly without provider work", a
     expect(observed.calls).toEqual([]);
 });
 
-test("an oversized retained commit blocks the mission permanently before provider work", async () => {
+test("a session beyond cumulative retained capacity blocks permanently before replay or provider work", async () => {
     const { t, missionId } = await seedPiMission();
     const lease = await t.mutation(internal.execution.piStore.claim, {
         missionId,
@@ -61,13 +61,7 @@ test("an oversized retained commit blocks the mission permanently before provide
         writer: "retained-history",
     });
     // An unsupported retained log must stop explicitly when opened, without rewriting its originals.
-    const payload = JSON.stringify([
-        {
-            type: "conversation",
-            value: { id: 1 },
-            retained: "x".repeat(PI_COMMIT_MAX_BYTES),
-        },
-    ]);
+    const payload = "[]";
     await t.run(async (ctx) => {
         await ctx.db.insert("piCommits", {
             sessionId: lease.sessionId,
@@ -77,7 +71,7 @@ test("an oversized retained commit blocks the mission permanently before provide
         });
         await ctx.db.patch(lease.sessionId, {
             sequence: 1,
-            retainedBytes: new TextEncoder().encode(payload).length,
+            retainedBytes: PI_SESSION_MAX_BYTES + 1,
             leaseUntil: Date.now() - 1,
         });
     });
@@ -97,7 +91,7 @@ test("an oversized retained commit blocks the mission permanently before provide
     ).resolves.toBeNull();
     expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
         status: "blocked",
-        blockCode: "pi_commit_capacity",
+        blockCode: "pi_storage_capacity",
     });
     await expect(
         t.mutation(internal.execution.missions.resume, {
@@ -105,7 +99,7 @@ test("an oversized retained commit blocks the mission permanently before provide
             expectedGeneration: 4,
             simulation: true,
         }),
-    ).rejects.toThrow("pi_commit_capacity");
+    ).rejects.toThrow("pi_storage_capacity");
     expect(
         await t.run((ctx) =>
             ctx.db

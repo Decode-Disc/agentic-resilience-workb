@@ -7,6 +7,25 @@ import { runCampaign } from "../../../scripts/evaluations/workbench-browser/camp
 
 import { configurableCampaign } from "../setup/qualification-v2.ts";
 
+test("new Sources preparation requires explicit research authority without changing historical parsing", async () => {
+    const root = mkdtempSync(
+        join(tmpdir(), "qualification-research-authority-"),
+    );
+    const input = join(root, "input.json");
+    const legacy = { ...configurableCampaign(), batteryHash: "a".repeat(64) };
+    delete legacy.researchDurationMs;
+    assert.equal(
+        campaignManifestSchema.parse(legacy).researchDurationMs,
+        undefined,
+    );
+    writeFileSync(input, JSON.stringify(legacy));
+    await assert.rejects(
+        runCampaign("prepare", root, { manifest: input }),
+        /Explicit researchDurationMs/,
+    );
+    assert.equal(existsSync(join(root, "campaign.json")), false);
+});
+
 test("prepare retains the explicit campaign context duration", async () => {
     const root = mkdtempSync(join(tmpdir(), "qualification-duration-"));
     const input = join(root, "input.json");
@@ -838,6 +857,120 @@ test("backend authentication refreshes expiring credentials before protected req
     assert(signedOut);
 });
 
+for (const status of ["failed", "cancelled", "idle"])
+    test(`research handoff ${status === "idle" ? "accepts a blocked Sources mission after its idle partial handoff" : `stops on terminal ${status} state before another scenario`}`, async () => {
+        const root = mkdtempSync(join(tmpdir(), "backend-terminal-research-"));
+        const base = configurableCampaign();
+        const scenarios =
+            status === "idle" ? base.scenarios.slice(0, 1) : base.scenarios;
+        const manifest = campaignManifestSchema.parse({
+            ...base,
+            executionSurface: "backend",
+            batteryHash: "a".repeat(64),
+            scenarios: scenarios.map((s) => ({
+                ...s,
+                steps: [
+                    {
+                        id: "handoff",
+                        action: "wait_for",
+                        state: "sources_prepared",
+                    },
+                ],
+            })),
+            expectations:
+                status === "idle"
+                    ? base.expectations.slice(0, 1)
+                    : base.expectations,
+        });
+        writeFileSync(
+            join(root, "protocol.json"),
+            `${JSON.stringify({ boundary: "backend" }, null, 2)}\n`,
+        );
+        writeFileSync(
+            join(root, "prepared.json"),
+            JSON.stringify({
+                cases: scenarios.map((s) => ({
+                    id: s.id,
+                    runId: s.id,
+                    fixtureKey: s.id,
+                })),
+            }),
+        );
+        let reads = 0;
+        const execute = () =>
+            runCampaignScenarios(
+                null,
+                {
+                    query: async (reference) => {
+                        if (
+                            getFunctionName(reference) !==
+                            "execution/fixtures:qualificationSnapshot"
+                        )
+                            return {
+                                page: [],
+                                payloads: [],
+                                downloads: [],
+                                isDone: true,
+                                continueCursor: "",
+                            };
+                        reads++;
+                        return {
+                            nativeSettled: true,
+                            conversation: {
+                                activeTurnId: null,
+                                queuedCount: 0,
+                            },
+                            run: {
+                                lifecycleState:
+                                    status === "idle"
+                                        ? "sources_prepared"
+                                        : "draft",
+                                executionStatus: status,
+                            },
+                            sourcesMission: { status: "blocked" },
+                        };
+                    },
+                    mutation: async (reference) => {
+                        assert.equal(
+                            getFunctionName(reference),
+                            "execution/fixtures:activateWorkbench",
+                        );
+                        return null;
+                    },
+                },
+                undefined,
+                "http://127.0.0.1:3210",
+                root,
+                manifest,
+                () => reads > (status === "idle" ? 12 : 3),
+                {
+                    query: async () => ({ status: "active" }),
+                    mutation: async () => {
+                        throw new Error("No analyst action expected");
+                    },
+                },
+            );
+        if (status === "idle") {
+            await execute();
+            assert.equal(existsSync(join(root, "claims/failure.json")), false);
+            assert.match(
+                readFileSync(join(root, "progress.jsonl"), "utf8"),
+                /"executionIntegrity":"passed"/,
+            );
+            return;
+        }
+        await assert.rejects(execute, /first failing scenario/);
+        const failure = JSON.parse(
+            readFileSync(join(root, "claims/failure.json"), "utf8"),
+        );
+        assert.match(
+            failure.reason,
+            new RegExp(`Research ${status} before sources_prepared`),
+        );
+        assert.equal(failure.step, "handoff");
+        assert.equal(existsSync(join(root, "creative")), false);
+    });
+
 test("backend execution records the first failure without starting another scenario", async () => {
     const root = mkdtempSync(join(tmpdir(), "backend-first-failure-"));
     const original = configurableCampaign();
@@ -942,10 +1075,21 @@ for (const workerCompletes of [false, true])
             reads = 0;
         const client = {
             mutation: async () => null,
-            query: async () => {
+            query: async (reference) => {
+                if (
+                    getFunctionName(reference) ===
+                    "execution/fixtures:inspectSourcesInvocations"
+                )
+                    return {
+                        page: [],
+                        payloads: [],
+                        isDone: true,
+                        continueCursor: "",
+                    };
                 reads++;
                 const done = workerCompletes && reads >= 6;
                 return {
+                    contextExpiresAt: manifest.expiresAt,
                     nativeSettled: !submitted || done,
                     conversation: {
                         activeTurnId: submitted && !done ? "turn" : null,

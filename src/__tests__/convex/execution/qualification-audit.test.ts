@@ -42,6 +42,7 @@ test("closed qualification contexts retain read-only capture audit without reope
         slotKey: "analyst-4",
         contextKey: "retained-audit",
     });
+    const context = await f.t.run((ctx) => ctx.db.get(contextId));
     const args = { runId: f.runId, fixtureKey: "retained-audit" };
     const page = await f.t.query(
         internal.execution.fixtures.inspectQualificationPage,
@@ -60,6 +61,7 @@ test("closed qualification contexts retain read-only capture audit without reope
             args,
         ),
     ).toMatchObject({
+        contextExpiresAt: context?.expiresAt,
         run: { _id: f.runId },
         accounting: {
             contextId,

@@ -4,10 +4,13 @@ import { sha256Hex } from "@convex/domain/sourcePassages";
 import { recordMissionEvent } from "@convex/execution/authority";
 import {
     projectMissionHistoryEvent,
+    readMissionHistoryEventFragment,
     retainExecutionEventPayload,
     retainInvocationPayload,
 } from "@convex/execution/journal";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { makeFunctionReference } from "convex/server";
+import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
 import {
@@ -18,6 +21,68 @@ import {
 afterEach(() => {
     vi.unstubAllEnvs();
     vi.useRealTimers();
+});
+
+test.each([
+    "returned",
+    "refused",
+] as const)("fragmented %s history preserves its normalized application observation", async (outcome) => {
+    const f = await seedHistoryMission();
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey: "fragmented-observation",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const response =
+        outcome === "returned"
+            ? { kind: "operations" as const, requests: [] }
+            : { kind: "complete" as const, captureIds: [] };
+    await f.t.mutation(internal.execution.invocations.retainOutput, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 1,
+        responseJson: JSON.stringify(response),
+        observableReplyJson: JSON.stringify({
+            original: "Exact retained reply. ".repeat(30000),
+        }),
+    });
+    await f.t.mutation(internal.execution.invocations.finish, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 1,
+        response,
+    });
+    const event = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_invocation_and_kind", (q) =>
+                q
+                    .eq("invocationId", begun.invocationId)
+                    .eq(
+                        "kind",
+                        outcome === "returned"
+                            ? "invocation_returned"
+                            : "invocation_refused",
+                    ),
+            )
+            .first(),
+    );
+    assert(event?.invocationPayloadId && event.payload);
+    const full = await f.t.run((ctx) => projectMissionHistoryEvent(ctx, event));
+    let actual = "";
+    let offset = 0;
+    let total = Infinity;
+    do {
+        const page = await f.t.run((ctx) =>
+            readMissionHistoryEventFragment(ctx, event, offset, 60000),
+        );
+        actual += page.content;
+        offset = page.end;
+        total = page.totalCharacters;
+    } while (offset < total);
+    expect(JSON.parse(actual).observation).toEqual(
+        JSON.parse(full.json).observation,
+    );
 });
 
 test("older_event_never_acquires_a_later_reply", async () => {
@@ -301,8 +366,8 @@ test("new invocations identify their journal version without expanding continuat
     expect(begun.inputJson).not.toContain("requestSnapshot");
 });
 
-async function oneShotFixture() {
-    const fixture = await seedSourcePreparation();
+async function oneShotFixture(logicalInputHash?: string) {
+    const fixture = await seedSourcePreparation({ models: true });
     const { t, runId, corpusRevisionId, sourceId } = fixture;
     await t.mutation(internal.researchPlanning.createForRun, {
         runId,
@@ -312,10 +377,19 @@ async function oneShotFixture() {
         internal.sourcePreparation.claimForDiscovery,
         { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
     );
+    await t.mutation(internal.modelConfiguration.forPreparation, {
+        preparationId,
+        expectedGeneration: 3,
+    });
     const preparation = await t.run((ctx) => ctx.db.get(preparationId));
     if (!preparation) throw new Error("Expected preparation");
+    await t.run((ctx) =>
+        ctx.db.patch(preparationId, {
+            executionPlanVersion: "source_actions_v3",
+        }),
+    );
     const inputJson = JSON.stringify({ instructions: "Read.", sourceId });
-    const inputHash = sha256Hex(inputJson);
+    const inputHash = logicalInputHash ?? sha256Hex(inputJson);
     const attempt = {
         runId,
         corpusRevisionId,
@@ -552,6 +626,7 @@ test("dispatch authority is checked again after request persistence", async () =
         invocationId,
         expectedGeneration: 3,
         requestJson: '{"version":1,"input":{}}',
+        effectiveMaxOutputTokens: 8192,
     });
     expect(
         await t.query(internal.execution.invocations.authorizeDispatch, {
@@ -575,4 +650,245 @@ test("dispatch authority is checked again after request persistence", async () =
         ctx.db.query("agentInvocationPayloads").unique(),
     );
     expect(payload?.state).toBe("complete");
+});
+
+test("fragmented requests publish only after all exact fragments and refuse conflicting retries", async () => {
+    const { retainedTextParts } = await import(
+        "@convex/execution/retainedText"
+    );
+    const { t, missionId } = await seedHistoryMission();
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        missionId,
+        expectedGeneration: 1,
+        taskKey: "large-request",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const args = { invocationId: begun.invocationId, expectedGeneration: 1 };
+    const json = JSON.stringify({
+        message: "Documentary nuance — 🧭".repeat(40000),
+    });
+    const { manifest, parts } = retainedTextParts(json);
+    const first = {
+        ...args,
+        fragment: { ...manifest, index: 0, content: parts[0] ?? "" },
+    };
+    const textId = await t.mutation(
+        internal.execution.invocationLifecycle.stageRequest,
+        first,
+    );
+    expect(
+        await t.mutation(
+            internal.execution.invocationLifecycle.stageRequest,
+            first,
+        ),
+    ).toBe(textId);
+    await expect(
+        t.mutation(internal.execution.invocations.retainRequest, {
+            ...args,
+            textId,
+        }),
+    ).rejects.toThrow("retained_text_incomplete");
+    for (let index = 1; index < parts.length; index++)
+        await t.mutation(internal.execution.invocationLifecycle.stageRequest, {
+            ...args,
+            fragment: { ...manifest, index, content: parts[index] ?? "" },
+        });
+    expect(
+        await t.mutation(internal.execution.invocations.retainRequest, {
+            ...args,
+            textId,
+        }),
+    ).toEqual({ kind: "ready" });
+    const event = await t.run((ctx) =>
+        ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_invocation_and_kind", (q) =>
+                q
+                    .eq("invocationId", begun.invocationId)
+                    .eq("kind", "invocation_request_recorded"),
+            )
+            .unique(),
+    );
+    assert(event);
+    const observed = await t.run((ctx) =>
+        projectMissionHistoryEvent(ctx, event),
+    );
+    expect(JSON.parse(observed.json).invocation.value).toEqual(
+        JSON.parse(json),
+    );
+    let offset = 0;
+    let recovered = "";
+    let totalCharacters = Infinity;
+    do {
+        const fragment = await t.run((ctx) =>
+            readMissionHistoryEventFragment(
+                ctx,
+                event,
+                offset,
+                offset < 8000 ? 4000 : 60000,
+            ),
+        );
+        recovered += fragment.content;
+        offset = fragment.end;
+        totalCharacters = fragment.totalCharacters;
+    } while (offset < totalCharacters);
+    expect(JSON.parse(recovered).invocation.value).toEqual(JSON.parse(json));
+    await expect(
+        t.mutation(internal.execution.invocationLifecycle.stageRequest, {
+            ...first,
+            fragment: { ...first.fragment, content: "Changed" },
+        }),
+    ).rejects.toThrow("retained_text_invalid");
+});
+
+test("a false complete-content hash cannot publish even when individual fragment hashes match", async () => {
+    const { retainedTextParts } = await import(
+        "@convex/execution/retainedText"
+    );
+    const f = await seedHistoryMission();
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey: "false-hash",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const { manifest, parts } = retainedTextParts("{}");
+    await expect(
+        f.t.mutation(internal.execution.invocationLifecycle.stageRequest, {
+            invocationId: begun.invocationId,
+            expectedGeneration: 1,
+            fragment: {
+                ...manifest,
+                contentHash: "0".repeat(64),
+                index: 0,
+                content: parts[0] ?? "",
+            },
+        }),
+    ).rejects.toThrow("retained_text_invalid");
+});
+
+test("a confirmed native observable reply retains complete large content before adoption", async () => {
+    const f = await seedHistoryMission();
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey: "large-reply",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const replyJson = JSON.stringify({
+        version: 1,
+        content: "Exact provider observation 🧭".repeat(28000),
+    });
+    await f.t.mutation(internal.execution.invocations.retainOutput, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 1,
+        responseJson: JSON.stringify({ kind: "operations", requests: [] }),
+        observableReplyJson: replyJson,
+    });
+    const payload = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentInvocationPayloads")
+            .withIndex("by_invocation_and_part", (q) =>
+                q.eq("invocationId", begun.invocationId).eq("part", "reply"),
+            )
+            .unique(),
+    );
+    expect(payload?.state).toBe("complete");
+    const event = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_invocation_and_kind", (q) =>
+                q
+                    .eq("invocationId", begun.invocationId)
+                    .eq("kind", "invocation_reply_recorded"),
+            )
+            .unique(),
+    );
+    assert(event);
+    const history = await f.t.run((ctx) =>
+        projectMissionHistoryEvent(ctx, event),
+    );
+    expect(JSON.parse(history.json).invocation.value).toEqual(
+        JSON.parse(replyJson),
+    );
+});
+
+test("recovery retention leaves document capacity for bounded lifecycle results", async () => {
+    const f = await seedHistoryMission();
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        taskKey: "recovery-headroom",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    await f.t.run((ctx) =>
+        ctx.db.patch(begun.invocationId, {
+            inputJson: JSON.stringify({ fixture: "i".repeat(450 * 1024) }),
+        }),
+    );
+    const rawOutputJson = JSON.stringify({ original: "r".repeat(400 * 1024) });
+    await f.t.mutation(internal.execution.invocations.retainOutput, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 1,
+        responseJson: JSON.stringify({ kind: "operations", requests: [] }),
+        rawOutputJson,
+    });
+    const invocation = await f.t.run((ctx) => ctx.db.get(begun.invocationId));
+    assert(invocation);
+    const boundedResult = "r".repeat(MAX_OPERATION_RESULT_BYTES);
+    expect(
+        getDocumentSize({
+            ...invocation,
+            receivedOutputJson: boundedResult,
+            outputJson: boundedResult,
+            correction: {
+                code: "correction",
+                issues: [{ path: "field", expected: boundedResult }],
+            },
+        }),
+    ).toBeLessThan(1024 * 1024);
+    const { invocationRawOutputJson } = await import(
+        "@convex/execution/journal"
+    );
+    expect(
+        await f.t.run((ctx) => invocationRawOutputJson(ctx, invocation)),
+    ).toBe(rawOutputJson);
+});
+
+test("one-shot provider observations use the admitted preparation hash and reject a changed receipt identity", async () => {
+    const f = await oneShotFixture(sha256Hex("domain-logical-input"));
+    await f.t.mutation(internal.execution.invocations.retainRequest, {
+        invocationId: f.invocationId,
+        expectedGeneration: 3,
+        requestJson: '{"input":{"model":"test"}}',
+        effectiveMaxOutputTokens: 1024,
+    });
+    await f.t.mutation(internal.providerCalls.observeGeneration, {
+        invocationId: f.invocationId,
+        generationId: "one-shot-generation",
+        httpStatus: 200,
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(f.providerCallId))).toMatchObject({
+        status: "started",
+        providerObservation: { generationId: "one-shot-generation" },
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.providerCallId, {
+            inputHash: sha256Hex("another-logical-input"),
+        }),
+    );
+    await expect(
+        f.t.mutation(internal.providerCalls.observeGeneration, {
+            invocationId: f.invocationId,
+            requestId: "foreign-receipt-observation",
+        }),
+    ).rejects.toThrow("Invalid provider observation");
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.providerCallId)))
+            ?.providerObservation?.requestId,
+    ).toBeUndefined();
 });

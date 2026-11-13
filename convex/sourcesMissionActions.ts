@@ -5,6 +5,7 @@ import { internal } from "@convex/_generated/api";
 import { internalAction } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { preparationFailureCode } from "@convex/domain/sourcePreparationAuthority";
+import { SOURCES_RESOURCE_LIMIT_CODES } from "@convex/domain/sources";
 import {
     consultableSourceResult,
     discoveryResult,
@@ -22,6 +23,10 @@ import {
     createExaDiscoveryAdapter,
     exaDiscoveryDisposition,
 } from "@convex/integrations/exa";
+import {
+    nodeActionGenerationDeadline,
+    SOURCE_PUBLIC_ADDRESS_TIMEOUT_MS,
+} from "@convex/resourcePolicy";
 import {
     simulatedDocumentaryControl,
     simulatedSourceCandidate,
@@ -43,6 +48,7 @@ export const execute = internalAction({
         ctx,
         args,
     ): Promise<Infer<typeof operationOutcomeValidator>> => {
+        const executionDeadlineAt = nodeActionGenerationDeadline(Date.now());
         try {
             const {
                 preparation,
@@ -196,7 +202,7 @@ export const execute = internalAction({
                                           verbatim: true,
                                       })
                                   ).map((r) => r.address),
-                        AbortSignal.timeout(20_000),
+                        AbortSignal.timeout(SOURCE_PUBLIC_ADDRESS_TIMEOUT_MS),
                     );
                     const rejected = found.rejected + validated.rejected;
                     const disposition = exaDiscoveryDisposition(
@@ -298,7 +304,7 @@ export const execute = internalAction({
                 cached?.output.kind === "documentary_control" &&
                 cached.providerCallId
             ) {
-                const taskId = await ctx.runMutation(
+                const result = await ctx.runMutation(
                     internal.sourcesMission.retainControl,
                     {
                         ...args,
@@ -308,11 +314,9 @@ export const execute = internalAction({
                         providerCallId: cached.providerCallId,
                     },
                 );
-                return operationSuccess(
-                    documentarySubmissionResult,
-                    { taskId, control: cached.output.control },
-                    { progressKeys: [sha256Hex(`control:${inputHash}`)] },
-                );
+                return operationSuccess(documentarySubmissionResult, result, {
+                    progressKeys: [sha256Hex(`control:${inputHash}`)],
+                });
             }
             if (!simulation && !process.env.OPENROUTER_API_KEY?.trim())
                 return { kind: "unavailable", code: "missing_configuration" };
@@ -404,6 +408,8 @@ export const execute = internalAction({
                       import("@convex/integrations/documentaryControl").DocumentaryControlAttempt
                   >(ctx, {
                       preparation,
+                      executionDeadlineAt,
+                      operationRequestId: args.requestId,
                       sourceId,
                       operation: "source_documentary_control",
                       inputHash,
@@ -411,21 +417,35 @@ export const execute = internalAction({
                       validate: async () => {
                           await active();
                       },
-                      execute: (route, signal, beforeDispatch) =>
+                      execute: (route, dependencies) =>
                           examineDocumentaryContributions(examination, route, {
                               apiKey: process.env.OPENROUTER_API_KEY ?? "",
-                              signal,
-                              beforeDispatch,
+                              ...dependencies,
                           }),
                   });
             if ("reasonCode" in outcome)
-                return { kind: "unavailable", code: outcome.reasonCode };
+                return {
+                    kind: "unavailable",
+                    code:
+                        outcome.reasonCode === "invalid_output"
+                            ? "documentary_control_unfinished"
+                            : outcome.reasonCode,
+                    ...(outcome.reasonCode === "invalid_output" ||
+                    outcome.diagnosticReason
+                        ? {
+                              validation: {
+                                  path: "documentaryControl",
+                                  expected: `A complete documentary examination matching the submitted contribution identities (${outcome.diagnosticReason ?? "invalid_output"}).`,
+                              },
+                          }
+                        : {}),
+                };
             if (outcome.result.status !== "succeeded")
                 return {
                     kind: "unavailable",
                     code: "documentary_control_unfinished",
                 };
-            const taskId = await ctx.runMutation(
+            const result = await ctx.runMutation(
                 internal.sourcesMission.retainControl,
                 {
                     ...args,
@@ -435,16 +455,19 @@ export const execute = internalAction({
                     providerCallId: outcome.providerCallId,
                 },
             );
-            return operationSuccess(
-                documentarySubmissionResult,
-                { taskId, control: outcome.result.output },
-                { progressKeys: [sha256Hex(`control:${inputHash}`)] },
-            );
+            return operationSuccess(documentarySubmissionResult, result, {
+                progressKeys: [sha256Hex(`control:${inputHash}`)],
+            });
         } catch (error) {
             const code =
                 executionFailureCode(error) ?? preparationFailureCode(error);
             if (!code) throw error;
-            if (code === "source_candidate_limit")
+            if (
+                code === "source_candidate_limit" ||
+                Object.values(SOURCES_RESOURCE_LIMIT_CODES).some(
+                    (limitCode) => limitCode === code,
+                )
+            )
                 return { kind: "refused", code };
             const validation = executionFailureValidation(error);
             return {

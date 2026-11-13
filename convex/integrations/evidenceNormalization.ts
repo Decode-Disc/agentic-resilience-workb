@@ -1,5 +1,5 @@
 import { sha256Hex } from "@convex/domain/sourcePassages";
-import { MAX_NORMALIZED_ARTIFACT_BYTES } from "@convex/resourceLimits";
+import { MAX_NORMALIZED_ARTIFACT_BYTES } from "@convex/resourcePolicy";
 
 export const SEC_NORMALIZER_VERSION = "sec-html-v1";
 export const EXA_NORMALIZER_VERSION = "exa-text-v1";

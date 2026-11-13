@@ -150,11 +150,11 @@ test("successive Workbench responses reopen one native journal and retain the an
     const commits = await t.run((ctx) => ctx.db.query("piCommits").collect());
     expect(
         commits.some((c) =>
-            c.payload.includes("Which participant controls the workflow?"),
+            c.payload?.includes("Which participant controls the workflow?"),
         ),
     ).toBe(true);
     expect(
-        commits.some((c) => c.payload.includes("workbench.analyst-input")),
+        commits.some((c) => c.payload?.includes("workbench.analyst-input")),
     ).toBe(true);
     assert(sessions[0]);
     expect(sessions[0].settledSequence).toBe(sessions[0].sequence);

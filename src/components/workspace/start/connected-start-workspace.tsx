@@ -2,6 +2,7 @@ import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { isResumableResearchPause } from "@convex/domain/transitions";
+import { HISTORY_PAGE_SIZE } from "@convex/resourcePolicy";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
@@ -165,7 +166,7 @@ function StartWorkspaceContent({
     const history = usePaginatedQuery(
         api.workbench.history,
         { runId },
-        { initialNumItems: 20 },
+        { initialNumItems: HISTORY_PAGE_SIZE },
     );
     const submit = useMutation(api.execution.conversations.submit),
         remove = useMutation(api.execution.conversations.removeQueued),

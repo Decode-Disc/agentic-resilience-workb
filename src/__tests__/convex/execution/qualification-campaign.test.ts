@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import type { Id } from "@convex/_generated/dataModel";
+import { sha256Hex } from "@convex/domain/sourcePassages";
 import {
     type CampaignManifest,
+    campaignManifestSchema,
     emptyCampaignLimits,
 } from "@convex/qualificationCampaignPolicy";
 import { ConvexHttpClient } from "convex/browser";
@@ -13,6 +15,8 @@ import {
     type Value,
 } from "convex/values";
 import { afterEach, expect, test, vi } from "vitest";
+import { qualificationReviewApiAnalysis } from "@/__tests__/setup/qualification-review";
+import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 const authorize = makeFunctionReference<
@@ -51,6 +55,605 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
 });
+test("a historical campaign cannot dispatch more analysis but can settle an already reserved attempt", async () => {
+    const { t } = await seedWorkbench(true);
+    const m = campaignManifestSchema.parse({
+        ...configurableCampaign(),
+        version: 3,
+        mode: "deterministic",
+        batteryHash: "a".repeat(64),
+        perLot: emptyCampaignLimits(),
+        total: emptyCampaignLimits(),
+        analysis: {
+            scope: "evidence_review",
+            routes: [{ provider: "openai", model: "fixture" }],
+            perLot: { requests: 2, costMicros: 200 },
+            total: { requests: 2, costMicros: 200 },
+            maxRequestCostMicros: 100,
+            maxInputTokens: 1000,
+            maxOutputTokens: 100,
+            timeoutMs: 10000,
+        },
+    });
+    const campaignId = await t.mutation(authorize, { manifest: m });
+    expect(await t.run((ctx) => ctx.db.get(campaignId))).toMatchObject({
+        resourcePolicy: "authority_native_v1",
+        manifest: m,
+    });
+    const lotId = await t.mutation(admit, {
+        campaignId,
+        key: "before-cutover",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    });
+    await t.mutation(internal.qualificationCampaigns.beginCleanup, { lotId });
+    const input = {
+        lotId,
+        attemptKey: "before-cutover",
+        evidenceHash: "c".repeat(64),
+        provider: "openai" as const,
+        model: "fixture",
+        reservationMicros: 100,
+    };
+    await t.mutation(internal.qualificationCampaigns.reserveAnalysis, input);
+    await t.run((ctx) =>
+        ctx.db.patch(campaignId, { resourcePolicy: undefined }),
+    );
+    await expect(
+        t.mutation(internal.qualificationCampaigns.reserveAnalysis, {
+            ...input,
+            attemptKey: "after-cutover",
+        }),
+    ).rejects.toThrow("resource_policy_unsupported");
+    await t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+        lotId,
+        attemptKey: input.attemptKey,
+        costMicros: 40,
+    });
+    const result = await t.run(async (ctx) => ({
+        campaign: await ctx.db.get(campaignId),
+        attempts: await ctx.db.query("qualificationAnalysisAttempts").collect(),
+    }));
+    expect(result.campaign?.manifest).toEqual(m);
+    expect(result.campaign?.analysisAllocated).toEqual({
+        requests: 1,
+        costMicros: 100,
+    });
+    expect(result.attempts).toEqual([
+        expect.objectContaining({
+            status: "settled",
+            costMicros: 40,
+            attemptKey: "before-cutover",
+        }),
+    ]);
+});
+
+for (const basis of ["sdk_estimate", "provider_reported"] as const)
+    test(`native API settlements bind pricing and provenance without releasing authority (${basis})`, async () => {
+        const { t } = await seedWorkbench(true);
+        const m = campaignManifestSchema.parse({
+            ...configurableCampaign(),
+            version: 3,
+            mode: "deterministic",
+            batteryHash: "a".repeat(64),
+            perLot: emptyCampaignLimits(),
+            total: emptyCampaignLimits(),
+            analysis: qualificationReviewApiAnalysis(),
+        });
+        assert(m.version === 3);
+        const campaignId = await t.mutation(authorize, { manifest: m });
+        const lotId = await t.mutation(admit, {
+            campaignId,
+            key: "native-api",
+            candidateHash: "b".repeat(64),
+            changedPaths: [],
+        });
+        await t.mutation(internal.qualificationCampaigns.beginCleanup, {
+            lotId,
+        });
+        const reserve = {
+            lotId,
+            attemptKey: "first",
+            evidenceHash: "c".repeat(64),
+            provider: "openai" as const,
+            model: "gpt-4o-mini",
+            reservationMicros: 100000,
+        };
+        const raced = await Promise.allSettled([
+            t.mutation(
+                internal.qualificationCampaigns.reserveAnalysis,
+                reserve,
+            ),
+            t.mutation(internal.qualificationCampaigns.reserveAnalysis, {
+                ...reserve,
+                attemptKey: "concurrent",
+            }),
+        ]);
+        expect(raced.map((result) => result.status).sort()).toEqual([
+            "fulfilled",
+            "rejected",
+        ]);
+        const [attempt] = await t.run((ctx) =>
+            ctx.db.query("qualificationAnalysisAttempts").collect(),
+        );
+        assert(attempt);
+        const receipt = {
+            accounting: "api_cost" as const,
+            input: 100,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            costBasis: basis,
+            costUsd: basis === "provider_reported" ? 0 : 0.000015,
+            costMicros: basis === "provider_reported" ? 0 : 15,
+            pricingHash: sha256Hex(JSON.stringify(m.analysis.pricing)),
+            observationHash: "d".repeat(64),
+        };
+        const settle = { lotId, attemptKey: attempt.attemptKey, receipt };
+        await expect(
+            t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+                ...settle,
+                receipt: { ...receipt, pricingHash: "e".repeat(64) },
+            }),
+        ).rejects.toThrow("Invalid native API analysis settlement");
+        await expect(
+            t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+                ...settle,
+                receipt: { ...receipt, costUsd: 0.100001, costMicros: 100001 },
+            }),
+        ).rejects.toThrow("Analysis reservation overrun");
+        await t.mutation(
+            internal.qualificationCampaigns.settleAnalysis,
+            settle,
+        );
+        await t.mutation(
+            internal.qualificationCampaigns.settleAnalysis,
+            settle,
+        );
+        await expect(
+            t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+                ...settle,
+                receipt: {
+                    ...receipt,
+                    costBasis:
+                        basis === "sdk_estimate"
+                            ? "provider_reported"
+                            : "sdk_estimate",
+                },
+            }),
+        ).rejects.toThrow("Analysis settlement conflict");
+        await t.run((ctx) =>
+            ctx.db.patch(campaignId, { resourcePolicy: undefined }),
+        );
+        await t.mutation(
+            internal.qualificationCampaigns.settleAnalysis,
+            settle,
+        );
+        const saved = await t.run((ctx) => ctx.db.get(attempt._id));
+        expect(saved).toMatchObject({
+            status: "settled",
+            costMicros: receipt.costMicros,
+            receipt,
+        });
+        expect(
+            (await t.run((ctx) => ctx.db.get(campaignId)))?.analysisAllocated,
+        ).toEqual({ requests: 1, costMicros: 100000 });
+        expect(
+            (await t.run((ctx) => ctx.db.get(lotId)))?.analysisAllocated,
+        ).toEqual({ requests: 1, costMicros: 100000 });
+    });
+
+for (const provider of ["openai", "openai-codex"] as const)
+    test(`analysis attempts reserve separately without unknown replay (${provider})`, async () => {
+        const { t } = await seedWorkbench(true);
+        const base = configurableCampaign();
+        const m = campaignManifestSchema.parse({
+            ...base,
+            version: 3,
+            mode: "deterministic",
+            batteryHash: "a".repeat(64),
+            perLot: emptyCampaignLimits(),
+            total: emptyCampaignLimits(),
+            analysis: {
+                scope: "evidence_review",
+                routes: [{ provider, model: "fixture" }],
+                perLot: { requests: 1, costMicros: 100 },
+                total: { requests: 1, costMicros: 100 },
+                maxInputTokens: 1000,
+                maxOutputTokens: 100,
+                timeoutMs: 10000,
+            },
+        });
+        const campaignId = await t.mutation(authorize, { manifest: m });
+        const lotId = await t.mutation(admit, {
+            campaignId,
+            key: "first",
+            candidateHash: "b".repeat(64),
+            changedPaths: [],
+        });
+        await t.mutation(internal.qualificationCampaigns.beginCleanup, {
+            lotId,
+        });
+        const reserve = makeFunctionReference<
+            "mutation",
+            {
+                lotId: Id<"qualificationLots">;
+                attemptKey: string;
+                evidenceHash: string;
+                provider: typeof provider;
+                model: string;
+                reservationMicros: number;
+            },
+            null
+        >("qualificationCampaigns:reserveAnalysis");
+        const args = {
+            lotId,
+            attemptKey: "attempt-1",
+            evidenceHash: "c".repeat(64),
+            provider,
+            model: "fixture",
+            reservationMicros: 100,
+        };
+        await t.mutation(reserve, args);
+        const settle = makeFunctionReference<
+            "mutation",
+            {
+                lotId: Id<"qualificationLots">;
+                attemptKey: string;
+                costMicros: number;
+            },
+            null
+        >("qualificationCampaigns:settleAnalysis");
+        await t.mutation(settle, {
+            lotId,
+            attemptKey: "attempt-1",
+            costMicros: 40,
+        });
+        await t.mutation(settle, {
+            lotId,
+            attemptKey: "attempt-1",
+            costMicros: 40,
+        });
+        const accounting = await t.run(async (ctx) => ({
+            campaign: await ctx.db.get(campaignId),
+            lot: await ctx.db.get(lotId),
+        }));
+        expect(accounting.campaign?.analysisAllocated?.costMicros).toBe(100);
+        expect(accounting.lot?.analysisAllocated?.costMicros).toBe(100);
+        await expect(
+            t.mutation(settle, {
+                lotId,
+                attemptKey: "attempt-1",
+                costMicros: 41,
+            }),
+        ).rejects.toThrow("conflict");
+        await expect(t.mutation(reserve, args)).rejects.toThrow(
+            "already reserved",
+        );
+        await expect(
+            t.mutation(reserve, { ...args, attemptKey: "attempt-2" }),
+        ).rejects.toThrow("allowance");
+    });
+
+test("native subscription review records usage without a dollar settlement and consumes its request allowance", async () => {
+    const { t } = await seedWorkbench(true);
+    const m = campaignManifestSchema.parse({
+        ...configurableCampaign(),
+        version: 3,
+        mode: "deterministic",
+        batteryHash: "a".repeat(64),
+        perLot: emptyCampaignLimits(),
+        total: emptyCampaignLimits(),
+        analysis: {
+            scope: "evidence_review",
+            accounting: "native_subscription",
+            routes: [{ provider: "openai-codex", model: "fixture" }],
+            perLot: { requests: 1 },
+            total: { requests: 1 },
+            maxInputTokens: 1000,
+            timeoutMs: 10000,
+        },
+    });
+    const campaignId = await t.mutation(authorize, { manifest: m });
+    const lotId = await t.mutation(admit, {
+        campaignId,
+        key: "subscription",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    });
+    await t.mutation(internal.qualificationCampaigns.beginCleanup, { lotId });
+    const reservation = {
+        lotId,
+        attemptKey: "native-1",
+        evidenceHash: "c".repeat(64),
+        provider: "openai-codex" as const,
+        model: "fixture",
+    };
+    await t.mutation(
+        internal.qualificationCampaigns.reserveAnalysis,
+        reservation,
+    );
+    await expect(
+        t.mutation(internal.qualificationCampaigns.reserveAnalysis, {
+            ...reservation,
+            attemptKey: "native-unknown",
+        }),
+    ).rejects.toThrow("outcome unknown");
+    await expect(
+        t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+            lotId,
+            attemptKey: "native-1",
+            costMicros: 0,
+        }),
+    ).rejects.toThrow("Invalid analysis settlement");
+    const receipt = {
+        accounting: "native_subscription" as const,
+        input: 25,
+        output: 12,
+        observationHash: "d".repeat(64),
+    };
+    await t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+        lotId,
+        attemptKey: "native-1",
+        receipt,
+    });
+    await t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+        lotId,
+        attemptKey: "native-1",
+        receipt,
+    });
+    const retained = await t.run(async (ctx) => ({
+        attempt: await ctx.db
+            .query("qualificationAnalysisAttempts")
+            .withIndex("by_lot_and_attempt", (q) =>
+                q.eq("lotId", lotId).eq("attemptKey", "native-1"),
+            )
+            .unique(),
+        lot: await ctx.db.get(lotId),
+    }));
+    expect(retained.attempt?.status).toBe("settled");
+    expect(retained.attempt?.receipt).toEqual(receipt);
+    expect(retained.attempt?.costMicros).toBeUndefined();
+    expect(retained.attempt?.reservationMicros).toBeUndefined();
+    expect(retained.lot?.analysisAllocated?.requests).toBe(1);
+    await expect(
+        t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+            lotId,
+            attemptKey: "native-1",
+            receipt: { ...receipt, output: 13 },
+        }),
+    ).rejects.toThrow("conflict");
+    await expect(
+        t.mutation(internal.qualificationCampaigns.reserveAnalysis, {
+            ...reservation,
+            attemptKey: "native-2",
+        }),
+    ).rejects.toThrow("allowance exhausted");
+});
+
+test("analysis allowance supports multiple bounded requests without releasing unverified costs", async () => {
+    const { t } = await seedWorkbench(true);
+    const m = campaignManifestSchema.parse({
+        ...configurableCampaign(),
+        version: 3,
+        mode: "deterministic",
+        batteryHash: "a".repeat(64),
+        perLot: emptyCampaignLimits(),
+        total: emptyCampaignLimits(),
+        analysis: {
+            scope: "evidence_review",
+            routes: [{ provider: "openai", model: "fixture" }],
+            perLot: { requests: 2, costMicros: 200 },
+            total: { requests: 2, costMicros: 200 },
+            maxRequestCostMicros: 100,
+            maxInputTokens: 1000,
+            maxOutputTokens: 100,
+            timeoutMs: 10000,
+        },
+    });
+    const campaignId = await t.mutation(authorize, { manifest: m });
+    const lotId = await t.mutation(admit, {
+        campaignId,
+        key: "first",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    });
+    await t.mutation(internal.qualificationCampaigns.beginCleanup, { lotId });
+    const reserve = makeFunctionReference<
+        "mutation",
+        {
+            lotId: Id<"qualificationLots">;
+            attemptKey: string;
+            evidenceHash: string;
+            provider: "openai";
+            model: string;
+            reservationMicros: number;
+        },
+        null
+    >("qualificationCampaigns:reserveAnalysis");
+    const settle = makeFunctionReference<
+        "mutation",
+        {
+            lotId: Id<"qualificationLots">;
+            attemptKey: string;
+            costMicros: number;
+        },
+        null
+    >("qualificationCampaigns:settleAnalysis");
+    const args = {
+        lotId,
+        attemptKey: "first",
+        evidenceHash: "c".repeat(64),
+        provider: "openai" as const,
+        model: "fixture",
+        reservationMicros: 100,
+    };
+    await t.mutation(reserve, args);
+    await t.mutation(settle, { lotId, attemptKey: "first", costMicros: 40 });
+    await t.mutation(reserve, { ...args, attemptKey: "second" });
+    const lot = await t.run(async (ctx) => ctx.db.get(lotId));
+    expect(lot?.analysisAllocated).toEqual({ requests: 2, costMicros: 200 });
+});
+
+test("analysis reservation cannot understate worst-case authorized request cost", async () => {
+    const { t } = await seedWorkbench(true);
+    const m = campaignManifestSchema.parse({
+        ...configurableCampaign(),
+        version: 3,
+        mode: "deterministic",
+        batteryHash: "a".repeat(64),
+        perLot: emptyCampaignLimits(),
+        total: emptyCampaignLimits(),
+        analysis: {
+            scope: "evidence_review",
+            routes: [{ provider: "openai", model: "fixture" }],
+            perLot: { requests: 2, costMicros: 200 },
+            total: { requests: 2, costMicros: 200 },
+            maxInputTokens: 1000,
+            maxOutputTokens: 100,
+            timeoutMs: 10000,
+        },
+    });
+    const campaignId = await t.mutation(authorize, { manifest: m });
+    const lotId = await t.mutation(admit, {
+        campaignId,
+        key: "first",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    });
+    await t.mutation(internal.qualificationCampaigns.beginCleanup, { lotId });
+    const reserve = makeFunctionReference<
+        "mutation",
+        {
+            lotId: Id<"qualificationLots">;
+            attemptKey: string;
+            evidenceHash: string;
+            provider: "openai";
+            model: string;
+            reservationMicros: number;
+        },
+        null
+    >("qualificationCampaigns:reserveAnalysis");
+    await expect(
+        t.mutation(reserve, {
+            lotId,
+            attemptKey: "first",
+            evidenceHash: "c".repeat(64),
+            provider: "openai",
+            model: "fixture",
+            reservationMicros: 1,
+        }),
+    ).rejects.toThrow("reservation");
+});
+
+test("analysis does not repeat a route while its prior dispatch outcome is unknown", async () => {
+    const { t } = await seedWorkbench(true);
+    const m = campaignManifestSchema.parse({
+        ...configurableCampaign(),
+        version: 3,
+        mode: "deterministic",
+        batteryHash: "a".repeat(64),
+        perLot: emptyCampaignLimits(),
+        total: emptyCampaignLimits(),
+        analysis: {
+            scope: "evidence_review",
+            routes: [{ provider: "openai", model: "fixture" }],
+            perLot: { requests: 2, costMicros: 200 },
+            total: { requests: 2, costMicros: 200 },
+            maxInputTokens: 1000,
+            maxOutputTokens: 100,
+            timeoutMs: 10000,
+        },
+    });
+    const campaignId = await t.mutation(authorize, { manifest: m });
+    const lotId = await t.mutation(admit, {
+        campaignId,
+        key: "first",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    });
+    await t.mutation(internal.qualificationCampaigns.beginCleanup, { lotId });
+    const reserve = makeFunctionReference<
+        "mutation",
+        {
+            lotId: Id<"qualificationLots">;
+            attemptKey: string;
+            evidenceHash: string;
+            provider: "openai";
+            model: string;
+            reservationMicros: number;
+        },
+        null
+    >("qualificationCampaigns:reserveAnalysis");
+    const args = {
+        lotId,
+        attemptKey: "first",
+        evidenceHash: "c".repeat(64),
+        provider: "openai" as const,
+        model: "fixture",
+        reservationMicros: 200,
+    };
+    await t.mutation(reserve, args);
+    await expect(
+        t.mutation(reserve, { ...args, attemptKey: "second" }),
+    ).rejects.toThrow("unknown");
+});
+
+test("analysis reservation refuses OpenCode Go without a verified subscription-only guarantee", async () => {
+    const { t } = await seedWorkbench(true);
+    const base = configurableCampaign();
+    const m = campaignManifestSchema.parse({
+        ...base,
+        version: 3,
+        mode: "deterministic",
+        batteryHash: "a".repeat(64),
+        perLot: emptyCampaignLimits(),
+        total: emptyCampaignLimits(),
+        analysis: {
+            scope: "evidence_review",
+            routes: [
+                { provider: "openai", model: "fixture" },
+                { provider: "opencode-go", model: "fallback" },
+            ],
+            perLot: { requests: 2, costMicros: 200 },
+            total: { requests: 2, costMicros: 200 },
+            maxInputTokens: 1000,
+            maxOutputTokens: 100,
+            timeoutMs: 10000,
+        },
+    });
+    const campaignId = await t.mutation(authorize, { manifest: m });
+    const lotId = await t.mutation(admit, {
+        campaignId,
+        key: "first",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    });
+    await t.mutation(internal.qualificationCampaigns.beginCleanup, { lotId });
+    const reserve = makeFunctionReference<
+        "mutation",
+        {
+            lotId: Id<"qualificationLots">;
+            attemptKey: string;
+            evidenceHash: string;
+            provider: "opencode-go";
+            model: string;
+            reservationMicros: number;
+        },
+        null
+    >("qualificationCampaigns:reserveAnalysis");
+    await expect(
+        t.mutation(reserve, {
+            lotId,
+            attemptKey: "fallback",
+            evidenceHash: "c".repeat(64),
+            provider: "opencode-go",
+            model: "fallback",
+            reservationMicros: 100,
+        }),
+    ).rejects.toThrow("subscription-only");
+});
+
 test("one immutable authorization admits a lot idempotently and refuses a concurrent second lot", async () => {
     const { t } = await seedWorkbench(true);
     const m = manifest();

@@ -10,7 +10,12 @@ import {
 import { researchStartBlock } from "./framingEditAuthority";
 import { requireSavedMaterialScope } from "./savedMaterialInspection";
 import { sha256Hex, stableStringify } from "./sourcePassages";
-import { readSourcesMission, summarizeSourcesPreparation } from "./sources";
+import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
+import {
+    controlledSourcesContributions,
+    readSourcesMission,
+    summarizeSourcesPreparation,
+} from "./sources";
 import { supportsResearchControl } from "./transitions";
 import {
     projectWorkbenchInstructions,
@@ -33,7 +38,7 @@ export async function readWorkbenchFacts(
         return { kind: "blocked", code: "context_capacity" };
     let availableMaterials = sources.map((s) => ({
         sourceId: s._id,
-        title: s.title,
+        ...sourceDocumentMetadata(s),
         url: s.canonicalUrl,
     }));
     let captureMetadata: Awaited<
@@ -142,10 +147,17 @@ export async function readWorkbenchFacts(
         analystRequests: await projectWorkbenchInstructions(ctx, instructions),
         ...(preparation?.sourcesMission
             ? {
-                  documentaryPreparation: summarizeSourcesPreparation(
-                      preparation,
-                      sourcesMission?.status,
-                  ),
+                  documentaryPreparation: {
+                      ...summarizeSourcesPreparation(
+                          preparation,
+                          sourcesMission?.status,
+                      ),
+                      controlledContributions:
+                          await controlledSourcesContributions(
+                              ctx,
+                              preparation,
+                          ),
+                  },
               }
             : {}),
         activeWork: {},

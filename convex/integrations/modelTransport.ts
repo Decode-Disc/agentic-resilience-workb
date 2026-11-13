@@ -2,15 +2,25 @@
 
 import type { Doc } from "@convex/_generated/dataModel";
 import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
-import { executionFailureCode } from "@convex/execution/errors";
+import {
+    executionError,
+    executionFailureCode,
+    protectedDiagnostic,
+} from "@convex/execution/errors";
 import type {
+    AgentGenerationLifecycle,
     AgentGenerationObservation,
     AgentGenerationResult,
     AgentModelRoute,
     AgentOperationDefinition,
     ModelAttemptReceipt,
 } from "@convex/execution/executionProtocol";
-import { MAX_PREPARATION_DIAGNOSTIC_BYTES } from "@convex/resourceLimits";
+import {
+    MAX_PREPARATION_DIAGNOSTIC_BYTES,
+    MODEL_WIRE_RESPONSE_MAX_BYTES,
+    resolveGenerationAuthority,
+} from "@convex/resourcePolicy";
+import { estimateTextTokens } from "@earendil-works/pi-ai/utils/estimate";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ToolSet } from "ai";
 import {
@@ -25,11 +35,12 @@ import {
 } from "ai";
 import type { ZodType } from "zod";
 import { createAgentTools } from "./modelInput";
+import type { SourceQualificationRoute } from "./sourceQualificationConfig";
 
 export { agentInputByteLength, agentOperationInputSchema } from "./modelInput";
 
 import type { ModelRoute } from "./modelRouting";
-import { modelCallSettings } from "./modelRouting";
+import { modelCallSettings, preparationModelOutputLimit } from "./modelRouting";
 
 export type AttemptReceipt = ModelAttemptReceipt;
 
@@ -41,12 +52,17 @@ export type ProviderResponse = {
 };
 
 export type AttemptDependencies = {
+    authority?: Pick<Doc<"agentMissions">, "resourcePolicy" | "deadlineAt">;
     apiKey: string;
     fetch?: typeof fetch;
     signal?: AbortSignal;
     onResponse?: (response: ProviderResponse) => void;
-    beforeDispatch?: (requestJson: string) => Promise<void>;
+    onHeaders?: (
+        response: Omit<ProviderResponse, "body">,
+    ) => Promise<void> | void;
+    beforeDispatch?: AgentGenerationLifecycle["beforeDispatch"];
     onObservation?: (observation: AgentGenerationObservation) => Promise<void>;
+    observeProvider?: AgentGenerationLifecycle["observeProvider"];
 };
 
 export type StructuredAttempt<T> =
@@ -143,12 +159,14 @@ type AttemptFailure = AttemptReceipt & {
 };
 
 type BoundedTransportState = {
+    structuredCapacity?: { contextWindow: number; maxTokens: number };
     requestBlockCode?: string;
     observableReplyJson?: string;
     responseTooLarge: boolean;
     httpStatus?: number;
     retryAfterAt?: number;
     dispatched?: boolean;
+    effectiveMaxOutputTokens?: number;
     turn?: {
         startedAt: number;
         result?: AgentGenerationObservation;
@@ -180,7 +198,10 @@ function readOptionalNumber(value: unknown): number | undefined {
 
 /** Shared HTTP bound for both generation engines; redirects cannot issue an unadmitted request. */
 export function createBoundedModelFetch(
-    dependencies: Pick<AttemptDependencies, "fetch" | "onResponse">,
+    dependencies: Pick<
+        AttemptDependencies,
+        "fetch" | "onResponse" | "onHeaders"
+    >,
     state: Pick<
         BoundedTransportState,
         "httpStatus" | "retryAfterAt" | "responseTooLarge"
@@ -192,6 +213,26 @@ export function createBoundedModelFetch(
             redirect: "error",
         });
         state.httpStatus = response.status;
+        try {
+            await dependencies.onHeaders?.({
+                status: response.status,
+                requestId: response.headers.get("x-request-id") ?? undefined,
+                generationId:
+                    response.headers.get("x-generation-id") ?? undefined,
+            });
+        } catch (error) {
+            try {
+                await response.body?.cancel(error);
+            } catch (cancellationError) {
+                const failure = new AggregateError(
+                    [error, cancellationError],
+                    "Provider header observation and response cancellation failed",
+                );
+                Object.defineProperty(failure, "cause", { value: error });
+                throw failure;
+            }
+            throw error;
+        }
         state.retryAfterAt = providerRetryAfterAt(
             response.headers.get("retry-after"),
             Date.now(),
@@ -220,7 +261,7 @@ export function createBoundedModelFetch(
         };
         const retain = async (chunk: Uint8Array) => {
             bytes += chunk.byteLength;
-            if (bytes > 1024 * 1024) {
+            if (bytes > MODEL_WIRE_RESPONSE_MAX_BYTES) {
                 state.responseTooLarge = true;
                 await reader?.cancel();
                 throw new Error(
@@ -292,10 +333,53 @@ export function createBoundedModelFetch(
 function createBoundedProvider(
     dependencies: AttemptDependencies,
     state: BoundedTransportState,
+    route: InvocationRoute,
 ) {
     return createOpenRouter({
         apiKey: dependencies.apiKey,
-        fetch: createBoundedModelFetch(dependencies, state),
+        fetch: createBoundedModelFetch(
+            {
+                ...dependencies,
+                fetch: async (url, init) => {
+                    try {
+                        await dependencies.beforeDispatch?.(
+                            JSON.stringify({
+                                version: 2,
+                                route,
+                                input: JSON.parse(String(init?.body)),
+                                settings: modelCallSettings(route).request,
+                            }),
+                            {
+                                effectiveMaxOutputTokens:
+                                    state.effectiveMaxOutputTokens,
+                            },
+                        );
+                    } catch (error) {
+                        state.requestBlockCode =
+                            executionFailureCode(error) ??
+                            "journal_request_unavailable";
+                        if (state.turn)
+                            throw new Error("model_dispatch_refused");
+                        throw error;
+                    }
+                    state.dispatched = true;
+                    return (dependencies.fetch ?? globalThis.fetch)(url, init);
+                },
+                onHeaders: async ({ status, generationId, requestId }) => {
+                    await dependencies.observeProvider?.({
+                        httpStatus: status,
+                        generationId,
+                        requestId,
+                    });
+                    await dependencies.onHeaders?.({
+                        status,
+                        generationId,
+                        requestId,
+                    });
+                },
+            },
+            state,
+        ),
     });
 }
 
@@ -313,27 +397,28 @@ function createRoutedModel(
             extraBody: { reasoning: settings.reasoning },
         }),
         middleware: {
+            transformParams: async ({ params }) => {
+                if (!state.structuredCapacity) return params;
+                const estimatedInput = estimateTextTokens(
+                    JSON.stringify({
+                        prompt: params.prompt,
+                        responseFormat: params.responseFormat,
+                    }),
+                );
+                const limit = Math.min(
+                    state.structuredCapacity.maxTokens,
+                    state.structuredCapacity.contextWindow - estimatedInput,
+                );
+                if (limit < 1) {
+                    state.requestBlockCode = "context_capacity";
+                    throw new Error("Structured input exceeds model capacity");
+                }
+                return { ...params, maxOutputTokens: limit };
+            },
             wrapGenerate: async ({ params, doGenerate }) => {
                 if (state.turn && state.dispatched)
                     throw new Error("A controlled turn cannot generate twice");
-                const {
-                    abortSignal: _signal,
-                    headers: _headers,
-                    providerOptions: _providerOptions,
-                    ...input
-                } = params;
-                try {
-                    await dependencies.beforeDispatch?.(
-                        JSON.stringify({ version: 1, route, input, settings }),
-                    );
-                } catch (error) {
-                    state.requestBlockCode =
-                        executionFailureCode(error) ??
-                        "journal_request_unavailable";
-                    if (state.turn) throw new Error("model_dispatch_refused");
-                    throw error;
-                }
-                state.dispatched = true;
+                state.effectiveMaxOutputTokens = params.maxOutputTokens;
                 let result: Awaited<ReturnType<typeof doGenerate>>;
                 try {
                     result = await doGenerate();
@@ -512,6 +597,16 @@ function httpResponseFailure(
     };
 }
 
+function abortedSignalCode(signal: AbortSignal) {
+    const reason: unknown = signal.reason;
+    return typeof reason === "object" &&
+        reason !== null &&
+        "name" in reason &&
+        reason.name === "TimeoutError"
+        ? "request_timeout"
+        : "cancelled";
+}
+
 function preflightFailure(
     route: InvocationRoute,
     dependencies: AttemptDependencies,
@@ -530,20 +625,47 @@ function preflightFailure(
             model: route.model,
             latencyMs: 0,
             status: "failed",
-            errorCode: "cancelled",
+            errorCode: abortedSignalCode(dependencies.signal),
             dispatchOutcome: "not_dispatched",
             retryable: false,
         };
+    const authority = resolveGenerationAuthority(
+        dependencies.authority,
+        Date.now(),
+    );
+    if (authority.kind === "blocked")
+        return {
+            model: route.model,
+            latencyMs: 0,
+            status: "failed",
+            errorCode: authority.code,
+            dispatchOutcome: "not_dispatched",
+            retryable: false,
+        };
+    try {
+        preparationModelOutputLimit(route);
+    } catch (error) {
+        if (executionFailureCode(error) !== "invalid_model_output_limit")
+            throw error;
+        return {
+            model: route.model,
+            latencyMs: 0,
+            status: "failed",
+            errorCode: "invalid_model_output_limit",
+            dispatchOutcome: "not_dispatched",
+            retryable: false,
+        };
+    }
     return undefined;
 }
 
-function failedAttemptFromError(args: {
+async function failedAttemptFromError(args: {
     error: unknown;
     route: InvocationRoute;
     dependencies: AttemptDependencies;
     state: BoundedTransportState;
     startedAt: number;
-}): AttemptFailure {
+}): Promise<AttemptFailure> {
     const { error, route, dependencies, state, startedAt } = args;
     if (state.requestBlockCode)
         return {
@@ -554,6 +676,16 @@ function failedAttemptFromError(args: {
             dispatchOutcome: "not_dispatched",
             retryable: false,
         };
+    if (state.dispatched)
+        await dependencies.observeProvider?.({
+            diagnostic: protectedDiagnostic(
+                dependencies.signal?.aborted &&
+                    dependencies.signal.reason !== undefined
+                    ? dependencies.signal.reason
+                    : error,
+                "provider_transport",
+            ),
+        });
     const receipt: AttemptReceipt = {
         ...(state.observableReplyJson
             ? { observableReplyJson: state.observableReplyJson }
@@ -569,7 +701,7 @@ function failedAttemptFromError(args: {
         return {
             ...receipt,
             status: "failed",
-            errorCode: "cancelled",
+            errorCode: abortedSignalCode(dependencies.signal),
             retryable: false,
         };
     if (state.responseTooLarge)
@@ -623,7 +755,7 @@ function toolHasExecuteCallback(candidate: unknown): boolean {
 
 /** Performs one bounded structured-output attempt; orchestration owns fallback and persistence. */
 export async function invokeOneShot<T>(args: {
-    route: ModelRoute;
+    route: SourceQualificationRoute;
     dependencies: AttemptDependencies;
     instructions: string;
     prompt: string;
@@ -636,7 +768,18 @@ export async function invokeOneShot<T>(args: {
     const startedAt = Date.now();
     const state: BoundedTransportState = { responseTooLarge: false };
     try {
-        const provider = createBoundedProvider(dependencies, state);
+        const authority = resolveGenerationAuthority(
+            dependencies.authority,
+            Date.now(),
+        );
+        if (authority.kind === "blocked") throw executionError(authority.code);
+        const maxOutputTokens = preparationModelOutputLimit(route);
+        if (route.descriptor)
+            state.structuredCapacity = {
+                contextWindow: route.descriptor.contextWindow,
+                maxTokens: maxOutputTokens,
+            };
+        const provider = createBoundedProvider(dependencies, state, route);
         const result = await generateText({
             model: createRoutedModel(provider, route, dependencies, state),
             instructions: args.instructions,
@@ -645,8 +788,12 @@ export async function invokeOneShot<T>(args: {
                 schema: args.schema,
                 name: args.schemaName,
             }),
-            ...modelCallSettings(route).generation,
-            abortSignal: dependencies.signal,
+            ...modelCallSettings(route, authority.deadlineAt).generation,
+            maxOutputTokens,
+            abortSignal: AbortSignal.any([
+                ...(dependencies.signal ? [dependencies.signal] : []),
+                AbortSignal.timeout(authority.timeoutMs),
+            ]),
         });
         const receipt = createAttemptReceipt(route, state, startedAt, result);
         if (result.finishReason !== "stop")
@@ -668,6 +815,8 @@ export async function invokeOneShot<T>(args: {
             assistantOutput: result.text,
         };
     } catch (error) {
+        if (!state.dispatched)
+            state.requestBlockCode ??= executionFailureCode(error);
         return failedAttemptFromError({
             error,
             route,
@@ -703,14 +852,23 @@ export async function invokeDeferredAgentTurn(args: {
         turn: { startedAt },
     };
     try {
-        const provider = createBoundedProvider(dependencies, state);
+        const authority = resolveGenerationAuthority(
+            dependencies.authority,
+            Date.now(),
+        );
+        if (authority.kind === "blocked") throw executionError(authority.code);
+        const provider = createBoundedProvider(dependencies, state, route);
         const input = {
             model: createRoutedModel(provider, route, dependencies, state),
             instructions: args.instructions,
             prompt: args.prompt,
             tools: createAgentTools(args.operations),
-            signal: dependencies.signal,
-            generation: modelCallSettings(route).generation,
+            signal: AbortSignal.any([
+                ...(dependencies.signal ? [dependencies.signal] : []),
+                AbortSignal.timeout(authority.timeoutMs),
+            ]),
+            generation: modelCallSettings(route, authority.deadlineAt)
+                .generation,
         };
         if (args.generateStep) await args.generateStep(input);
         else {

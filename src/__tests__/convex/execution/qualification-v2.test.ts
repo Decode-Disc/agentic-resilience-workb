@@ -1,6 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { sha256Hex } from "@convex/domain/sourcePassages";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { retainInvocationPayload } from "@convex/execution/journal";
 import {
     campaignManifestSchema,
@@ -118,8 +118,17 @@ const grant = makeFunctionReference<
     },
     null
 >("execution/fixtures:authorizeWorkbenchQualification");
-async function liveFixture(cap = 23, shared = false) {
-    const f = await seedWorkbench(true);
+async function liveFixture(
+    cap = 23,
+    shared = false,
+    costAccountingPolicy?: "known_final_v1" | "conservative_v1",
+    researchDurationMs?: number,
+) {
+    const f = await seedWorkbench(
+        true,
+        undefined,
+        researchDurationMs === undefined ? 60000 : 50 * 60_000,
+    );
     const raw = configurableCampaign();
     raw.configurations = raw.configurations.slice(0, 1);
     const profile = raw.configurations[0];
@@ -164,6 +173,10 @@ async function liveFixture(cap = 23, shared = false) {
     }
     const m = campaignManifestSchema.parse({
         ...raw,
+        ...(costAccountingPolicy ? { costAccountingPolicy } : {}),
+        ...(researchDurationMs === undefined
+            ? {}
+            : { researchDurationMs, contextDurationMs: 50 * 60_000 }),
         scenarios: raw.scenarios.map((s, index) =>
             index === 0 ? { ...s, limits: { model: cap } } : s,
         ),
@@ -191,10 +204,27 @@ async function liveFixture(cap = 23, shared = false) {
     const bindings = await f.t.run(async (ctx) => {
         const entries = [];
         const { _id, _creationTime, ...fields } = original;
+        const company = original.companyId
+            ? await ctx.db.get(original.companyId)
+            : null;
+        assert(company);
+        const {
+            _id: _companyId,
+            _creationTime: _companyTime,
+            ...companyFields
+        } = company;
         for (const [index, scenario] of raw.scenarios.entries()) {
             const fixtureKey = `qualification-${scenario.id}`;
+            const companyId = await ctx.db.insert("companies", {
+                ...companyFields,
+                cik: scenario.company.cik,
+                legalName: scenario.company.name,
+                ticker: scenario.company.ticker,
+                websiteUrl: scenario.company.websiteUrl,
+            });
             const values = {
                 ...fields,
+                companyId,
                 reservationKey: `browser:${fixtureKey}`,
                 companySnapshot: {
                     ...companySnapshot,
@@ -302,6 +332,228 @@ async function liveFixture(cap = 23, shared = false) {
     };
     return { ...f, contextId, lotId, campaignId, bindings, attempt };
 }
+async function startQualifiedSources(
+    f: Awaited<ReturnType<typeof liveFixture>>,
+) {
+    const scenario = configurableCampaign().scenarios[0];
+    assert(scenario);
+    await f.client.mutation(api.framing.save, {
+        runId: f.runId,
+        expectedRevision: 1,
+        requestKey: "duration-framing",
+        content: scenario.framing,
+    });
+    await f.client.mutation(api.framing.startResearch, {
+        runId: f.runId,
+        expectedRevision: 2,
+        requestKey: "duration-start",
+    });
+    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    assert(
+        run?.activeCorpusRevisionId &&
+            run.researchStartedAt !== undefined &&
+            run.sourcesEnvelope,
+    );
+    await f.t.mutation(internal.researchRuns.transition, {
+        runId: f.runId,
+        expectedExecutionGeneration: run.executionGeneration,
+        lifecycleState: "checking_public_evidence",
+        executionStatus: "running",
+        stepKey: "check_public_evidence",
+    });
+    await f.t.mutation(internal.researchRuns.transition, {
+        runId: f.runId,
+        expectedExecutionGeneration: run.executionGeneration,
+        lifecycleState: "discovering_sources",
+        executionStatus: "running",
+        stepKey: "prepare_sources",
+    });
+    await f.t.mutation(internal.researchPlanning.createForRun, {
+        runId: f.runId,
+        expectedExecutionGeneration: run.executionGeneration,
+    });
+    const claim = {
+        runId: f.runId,
+        corpusRevisionId: run.activeCorpusRevisionId,
+        expectedGeneration: run.executionGeneration,
+        envelope: run.sourcesEnvelope,
+    };
+    const preparationId = await f.t.mutation(
+        internal.sourcesMission.claim,
+        claim,
+    );
+    return {
+        run: { ...run, researchStartedAt: run.researchStartedAt },
+        claim,
+        preparationId,
+    };
+}
+
+test.each([
+    25, 75,
+])("explicit research authority (%i minutes) reaches preparation, mission and provider beyond the old cutoff without renewal", async (minutes) => {
+    const duration = minutes * 60_000;
+    const f = await liveFixture(23, false, "known_final_v1", duration);
+    const context = await f.t.run((ctx) => ctx.db.get(f.contextId));
+    assert(context);
+    vi.setSystemTime(Date.now() + 7000);
+    const { run, claim, preparationId } = await startQualifiedSources(f);
+    const deadline =
+        minutes === 25 ? run.researchStartedAt + duration : context.expiresAt;
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(preparationId)))?.deadlineAt,
+    ).toBe(deadline);
+    const start = {
+        runId: f.runId,
+        expectedGeneration: run.executionGeneration,
+        definitionId: "sources_v1" as const,
+        scope: { kind: "sources_v1" as const, preparationId },
+        requestKey: "duration-mission",
+    };
+    const missionId = await f.t.mutation(
+        internal.execution.missions.start,
+        start,
+    );
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: run.executionGeneration,
+    });
+    expect((await f.t.run((ctx) => ctx.db.get(missionId)))?.deadlineAt).toBe(
+        deadline,
+    );
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId,
+            expectedGeneration: run.executionGeneration,
+            cause: "duration-state",
+            input: { kind: "consult_mission_state" },
+        },
+    );
+    expect((await f.t.run((ctx) => ctx.db.get(requestId)))?.deadlineAt).toBe(
+        deadline,
+    );
+    vi.setSystemTime(run.researchStartedAt + 20 * 60_000);
+    expect(
+        await f.client.mutation(api.framing.startResearch, {
+            runId: f.runId,
+            expectedRevision: 2,
+            requestKey: "duration-start",
+        }),
+    ).toBe(f.runId);
+    expect(await f.t.mutation(internal.sourcesMission.claim, claim)).toBe(
+        preparationId,
+    );
+    expect(await f.t.mutation(internal.execution.missions.start, start)).toBe(
+        missionId,
+    );
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(preparationId)))?.deadlineAt,
+    ).toBe(deadline);
+    const inputJson = JSON.stringify({
+        fixture: "authorized-beyond-old-window",
+    });
+    const sourceMission = await f.t.run((ctx) => ctx.db.get(missionId));
+    assert(sourceMission);
+    const invocationId = await f.t.run((ctx) =>
+        ctx.db.insert("agentInvocations", {
+            missionId,
+            runId: f.runId,
+            generation: run.executionGeneration,
+            definitionVersion: sourceMission.definitionVersion,
+            taskKey: "duration-probe",
+            provenance: "live",
+            status: "started",
+            inputJson,
+            createdAt: Date.now(),
+        }),
+    );
+    const attempt = {
+        runId: f.runId,
+        missionId,
+        invocationId,
+        executionGeneration: run.executionGeneration,
+        workflowVersion: sourceMission.definitionVersion,
+        stepKey: "agent_reasoning",
+        service: "model" as const,
+        operation: "agent_reasoning",
+        operationKey: `mission:${missionId}:invocation:${invocationId}:attempt:1`,
+        attempt: 1,
+        inputHash: sha256Hex(inputJson),
+    };
+    const admitted = await f.t.mutation(internal.providerCalls.recordAttempt, {
+        ...attempt,
+        status: "started",
+    });
+    expect(admitted.shouldExecute).toBe(true);
+    expect(admitted.deadlineAt).toBe(deadline);
+    await f.t.mutation(internal.providerCalls.recordAttempt, {
+        ...attempt,
+        status: "succeeded",
+        reportedCost: 0,
+        dispatchOutcome: "response_received",
+    });
+    vi.setSystemTime(deadline + 1);
+    await expect(
+        f.t.mutation(internal.providerCalls.recordAttempt, {
+            ...attempt,
+            operationKey: `${attempt.operationKey}:expired`,
+            status: "started",
+        }),
+    ).rejects.toThrow(/execution_deadline|paid_work_disabled/);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(preparationId)))?.deadlineAt,
+    ).toBe(deadline);
+    expect((await f.t.run((ctx) => ctx.db.get(missionId)))?.deadlineAt).toBe(
+        deadline,
+    );
+});
+
+test("new server authorization requires research duration but an existing legacy grant keeps its identity and clocks", async () => {
+    const f = await liveFixture(23, false, "known_final_v1", 25 * 60_000);
+    const campaign = await f.t.run((ctx) => ctx.db.get(f.campaignId));
+    assert(campaign?.manifest.version !== 1 && campaign);
+    const historical = { ...campaign.manifest };
+    delete historical.researchDurationMs;
+    await expect(
+        f.t.mutation(internal.qualificationCampaigns.authorize, {
+            manifest: { ...historical, key: "new-without-duration" },
+        }),
+    ).rejects.toThrow(/Explicit researchDurationMs/);
+    // Construct an already-authorized historical record, not a runtime migration.
+    const manifestHash = sha256Hex(stableStringify(historical));
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.campaignId, { manifest: historical, manifestHash }),
+    );
+    const before = await f.t.run((ctx) => ctx.db.get(f.contextId));
+    expect(
+        await f.t.mutation(internal.qualificationCampaigns.authorize, {
+            manifest: historical,
+        }),
+    ).toBe(f.campaignId);
+    const { run, preparationId } = await startQualifiedSources(f);
+    const legacyDeadline = run.researchStartedAt + 15 * 60_000;
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(preparationId)))?.deadlineAt,
+    ).toBe(legacyDeadline);
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.runId,
+        expectedGeneration: run.executionGeneration,
+        definitionId: "sources_v1",
+        scope: { kind: "sources_v1", preparationId },
+        requestKey: "legacy-duration",
+    });
+    expect((await f.t.run((ctx) => ctx.db.get(missionId)))?.deadlineAt).toBe(
+        legacyDeadline,
+    );
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.contextId)))?.paidQualification,
+    ).toEqual(before?.paidQualification);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.campaignId)))?.manifestHash,
+    ).toBe(manifestHash);
+});
+
 test("the backend grants and enforces shared three-dossier budgets above historical caps", async () => {
     const f = await liveFixture();
     const { attempt } = f;
@@ -373,6 +625,44 @@ test("the backend grants and enforces shared three-dossier budgets above histori
     });
 });
 
+test("an expired unresolved attempt fences another dossier without claiming budget exhaustion", async () => {
+    const f = await liveFixture(2);
+    const args = await f.attempt(0);
+    const first = await f.t.mutation(
+        internal.providerCalls.recordAttempt,
+        args,
+    );
+    await f.t.run((ctx) =>
+        ctx.db.patch(first.providerCallId, { leaseExpiresAt: Date.now() - 1 }),
+    );
+    const other = f.bindings[1];
+    assert(other);
+    await expect(
+        f.t.mutation(
+            internal.providerCalls.recordAttempt,
+            await f.attempt(1, other.runId),
+        ),
+    ).rejects.toThrow("qualification_outcome_unresolved");
+    const calls = await f.t.run((ctx) =>
+        ctx.db.query("providerCalls").collect(),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+        _id: first.providerCallId,
+        status: "started",
+    });
+    const usage = await f.t.run((ctx) =>
+        ctx.db
+            .query("qualificationUsage")
+            .withIndex("by_context_and_run", (q) =>
+                q.eq("contextId", f.contextId).eq("runId", undefined),
+            )
+            .unique(),
+    );
+    expect(usage).toMatchObject({ pending: 1, usage: { model: 1 } });
+    expect(usage?.usage.costUsd).toBeLessThan(3);
+});
+
 test("late billing updates retained consumption without reopening an unknown attempt", async () => {
     const f = await liveFixture(2);
     const args = await f.attempt(0);
@@ -429,7 +719,7 @@ test("late billing updates retained consumption without reopening an unknown att
     });
     await expect(
         f.t.mutation(internal.providerCalls.recordAttempt, await f.attempt(1)),
-    ).rejects.toThrow("qualification_budget_exhausted");
+    ).rejects.toThrow("qualification_outcome_unresolved");
 });
 
 test("simulation binds every declared scenario once and inspection pages retain more than legacy limits", async () => {
@@ -586,4 +876,180 @@ test("backend execution surface is retained in the immutable authorization and c
             manifest: input,
         }),
     ).rejects.toThrow("Campaign authorization conflict");
+});
+
+test("future policy settles a final known cost and retains reservations for unknown or partial observations", async () => {
+    const f = await liveFixture(23, false, "known_final_v1");
+    const first = await f.attempt(0);
+    const admitted = await f.t.mutation(
+        internal.providerCalls.recordAttempt,
+        first,
+    );
+    const pending = await f.t.run((ctx) => ctx.db.get(admitted.providerCallId));
+    expect(pending?.qualificationReservationUsd).toBeGreaterThan(0);
+    await f.t.mutation(internal.providerCalls.recordAttempt, {
+        ...first,
+        status: "succeeded",
+        reportedCost: 0.00001,
+        dispatchOutcome: "response_received",
+    });
+    const usage = await f.t.run((ctx) =>
+        ctx.db
+            .query("qualificationUsage")
+            .withIndex("by_context_and_run", (q) =>
+                q.eq("contextId", f.contextId).eq("runId", f.runId),
+            )
+            .unique(),
+    );
+    expect(usage?.usage.costUsd).toBeCloseTo(0.00001, 10);
+    expect(usage?.usage.model).toBe(1);
+    const second = await f.attempt(1);
+    const uncertain = await f.t.mutation(
+        internal.providerCalls.recordAttempt,
+        second,
+    );
+    await f.t.mutation(internal.providerCalls.recordAttempt, {
+        ...second,
+        status: "partial",
+        reportedCost: 0,
+        dispatchOutcome: "response_received",
+    });
+    const receipt = await f.t.run((ctx) =>
+        ctx.db.get(uncertain.providerCallId),
+    );
+    const after = await f.t.run((ctx) =>
+        ctx.db
+            .query("qualificationUsage")
+            .withIndex("by_context_and_run", (q) =>
+                q.eq("contextId", f.contextId).eq("runId", f.runId),
+            )
+            .unique(),
+    );
+    expect(after?.usage.costUsd).toBeCloseTo(
+        0.00001 + (receipt?.qualificationReservationUsd ?? 0),
+        10,
+    );
+    expect(after?.usage.model).toBe(2);
+});
+
+test("a new grant cannot silently replace an explicitly selected legacy accounting policy", async () => {
+    await expect(liveFixture(23, false, "conservative_v1")).rejects.toThrow(
+        "resource_policy_unsupported",
+    );
+});
+
+test.each([
+    undefined,
+    "known_final_v1",
+] as const)("current native reservation uses admitted model capacity (%s)", async (policy) => {
+    const f = await liveFixture(23, false, policy);
+    const args = await f.attempt(0);
+    await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(args.missionId);
+        const invocation = await ctx.db.get(args.invocationId);
+        assert(mission?.modelRevisionId && invocation);
+        const model = await ctx.db.get(mission.modelRevisionId);
+        assert(model);
+        await ctx.db.patch(model._id, {
+            descriptor: { ...model.descriptor, contextWindow: 32768 },
+        });
+        await ctx.db.patch(invocation._id, {
+            generationBackend: { id: "pi-durable", version: 1 },
+        });
+        const native = await ctx.db.get(invocation._id);
+        assert(native);
+        await retainInvocationPayload(
+            ctx,
+            native,
+            "request",
+            JSON.stringify({ input: "small" }),
+            undefined,
+            { effectiveMaxOutputTokens: 6144 },
+        );
+    });
+    const admitted = await f.t.mutation(
+        internal.providerCalls.recordAttempt,
+        args,
+    );
+    const receipt = await f.t.run((ctx) => ctx.db.get(admitted.providerCallId));
+    expect(receipt?.qualificationReservationUsd).toBeCloseTo(0.0086016, 10);
+    await f.t.mutation(internal.providerCalls.recordAttempt, {
+        ...args,
+        status: "succeeded",
+        reportedCost: 0.00001,
+        dispatchOutcome: "response_received",
+    });
+    const expanded = await f.attempt(1);
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(expanded.invocationId, {
+            generationBackend: { id: "pi-durable", version: 1 },
+        });
+        const invocation = await ctx.db.get(expanded.invocationId);
+        assert(invocation);
+        await retainInvocationPayload(
+            ctx,
+            invocation,
+            "request",
+            JSON.stringify({ input: "x".repeat(140000) }),
+            undefined,
+            { effectiveMaxOutputTokens: 6144 },
+        );
+    });
+    const reserve = f.t.mutation(
+        internal.providerCalls.recordAttempt,
+        expanded,
+    );
+    expect((await reserve).shouldExecute).toBe(true);
+});
+
+test.each([
+    "succeeded",
+    "partial",
+] as const)("late %s cost settlement preserves finality and counts the attempt once", async (status) => {
+    const f = await liveFixture(23, false, "known_final_v1");
+    const attempt = await f.attempt(0);
+    const admitted = await f.t.mutation(
+        internal.providerCalls.recordAttempt,
+        attempt,
+    );
+    await f.t.mutation(internal.providerCalls.recordAttempt, {
+        ...attempt,
+        status,
+        dispatchOutcome: "response_received",
+    });
+    const late = {
+        ...attempt,
+        status,
+        dispatchOutcome: "response_received" as const,
+        reportedCost: 0.00001,
+    };
+    await f.t.mutation(internal.providerCalls.recordAttempt, late);
+    await f.t.mutation(internal.providerCalls.recordAttempt, late);
+    await f.t.mutation(internal.providerCalls.recordAttempt, {
+        ...attempt,
+        status,
+        dispatchOutcome: "response_received",
+    });
+    const receipt = await f.t.run((ctx) => ctx.db.get(admitted.providerCallId));
+    assert(receipt);
+    const usage = await f.t.run((ctx) =>
+        ctx.db
+            .query("qualificationUsage")
+            .withIndex("by_context_and_run", (q) =>
+                q.eq("contextId", f.contextId).eq("runId", f.runId),
+            )
+            .unique(),
+    );
+    expect(receipt.reportedCost).toBe(0.00001);
+    expect(receipt.reportedCostFinal ?? false).toBe(status === "succeeded");
+    expect(usage?.usage.costUsd).toBeCloseTo(
+        status === "succeeded"
+            ? 0.00001
+            : (receipt.qualificationReservationUsd ?? 0),
+        10,
+    );
+    expect(usage?.usage.model).toBe(1);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toHaveLength(1);
 });

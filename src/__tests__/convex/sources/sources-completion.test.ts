@@ -2,7 +2,7 @@ import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
 import { executionFailureCode } from "@convex/execution/errors";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/execution/executionProtocol";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { workflow } from "@convex/workflow";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
@@ -380,6 +380,7 @@ test("fallback finishing waits for native qualification and receives its existin
     examiner.mockImplementation(async (input, route, dependencies) => {
         await dependencies.beforeDispatch(
             JSON.stringify({ model: route.model, fixture: true }),
+            { effectiveMaxOutputTokens: route.descriptor.maxTokens },
         );
         enter();
         await held;
@@ -686,7 +687,17 @@ test("unqualified work retains storage headroom for unfinished explanations thro
         taskKey: "fresh-capacity-completion",
         provenance: "simulation",
     });
-    expect(fresh).toMatchObject({ kind: "blocked", code: "context_capacity" });
+    expect(fresh.kind).toBe("ready");
+    if (fresh.kind === "ready")
+        expect(Buffer.byteLength(fresh.inputJson)).toBeGreaterThan(128 * 1024);
+    // Native estimation is covered by the Pi capacity regression; this fixture drives its typed stop into Sources finalization.
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.missionId, {
+            status: "blocked",
+            blockCode: "context_capacity",
+        }),
+    );
+
     expect(
         await f.t.mutation(internal.sourcesMission.finish, {
             preparationId: f.preparationId,

@@ -1,3 +1,4 @@
+import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import {
     internalMutation,
@@ -6,9 +7,10 @@ import {
 } from "@convex/_generated/server";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
 import {
+    PI_SESSION_LEASE_MS as LEASE_MS,
     PI_COMMIT_MAX_BYTES,
     PI_SESSION_MAX_BYTES,
-} from "@convex/resourceLimits";
+} from "@convex/resourcePolicy";
 import schema from "@convex/schema";
 import {
     paginationOptsValidator,
@@ -22,8 +24,17 @@ import {
     requireMissionAuthority,
     requireMissionObservationAuthority,
 } from "./authority";
-
-const LEASE_MS = 90_000;
+import { buildMissionContext } from "./context";
+import { contextObservationSequence, latestNativeControl } from "./journal";
+import {
+    completeRetainedText,
+    readRetainedText,
+    retainedTextFragment,
+    stageRetainedText,
+    textFragmentValidator,
+    textManifestValidator,
+} from "./retainedText";
+import { nativeInputsValidator } from "./schema";
 
 /** Resolves the pinned storage owner without moving historical mission journals. */
 export async function sessionForMission(
@@ -98,6 +109,8 @@ export const claim = internalMutation({
         )
             throw executionError("pi_previous_unsettled");
         const now = Date.now();
+        if ((current?.retainedBytes ?? 0) > PI_SESSION_MAX_BYTES)
+            throw executionError("pi_storage_capacity");
         if (
             current &&
             (current.missionId !== args.missionId ||
@@ -141,6 +154,10 @@ export const claim = internalMutation({
                   sequence: 0,
                   nextId: 2,
                   retainedBytes: 0,
+                  observationSequence: await contextObservationSequence(
+                      ctx,
+                      mission.runId,
+                  ),
                   ...(turn ? { conversationId: turn.conversationId } : {}),
               });
         if (current) await ctx.db.patch(current._id, fields);
@@ -189,12 +206,17 @@ async function writer(
 
 /** Reads only unsynchronized, server-owned exchanges for this fenced native conversation. */
 export const pendingControlInputs = internalQuery({
-    args: { ...leaseValidator.fields, paginationOpts: paginationOptsValidator },
+    args: {
+        ...leaseValidator.fields,
+        paginationOpts: paginationOptsValidator,
+        throughCreationTime: v.optional(v.number()),
+    },
     returns: v.object({
         cursor: v.union(v.string(), v.null()),
         entries: v.array(
             v.object({
                 messageId: v.id("agentMessageDeliveries"),
+                nativeInputSequence: v.number(),
                 confirmationMessageId: v.id("agentMessageDeliveries"),
                 command: v.string(),
                 text: v.string(),
@@ -213,11 +235,14 @@ export const pendingControlInputs = internalQuery({
             throw executionError("native_control_capacity");
         const page = await ctx.db
             .query("agentMessageDeliveries")
-            .withIndex("by_run_and_native_control", (q) =>
-                q
+            .withIndex("by_run_and_native_control", (q) => {
+                const pending = q
                     .eq("runId", conversation.runId)
-                    .eq("nativeControlStatus", "pending"),
-            )
+                    .eq("nativeControlStatus", "pending");
+                return lease.throughCreationTime === undefined
+                    ? pending
+                    : pending.lte("_creationTime", lease.throughCreationTime);
+            })
             .paginate(lease.paginationOpts);
         const entries = [];
         for (const message of page.page) {
@@ -242,6 +267,7 @@ export const pendingControlInputs = internalQuery({
                 throw executionError("native_control_unavailable");
             entries.push({
                 messageId: message._id,
+                nativeInputSequence: message.nativeInputSequence ?? 0,
                 confirmationMessageId: confirmation._id,
                 command,
                 text,
@@ -373,6 +399,116 @@ export const append = internalMutation({
     },
 });
 
+/** Staging remains fenced; no logical commit is visible until publication. */
+export const stageCommit = internalMutation({
+    args: {
+        ...leaseValidator.fields,
+        key: v.string(),
+        fragment: textFragmentValidator,
+    },
+    returns: v.id("retainedTexts"),
+    handler: async (ctx, args) => {
+        const session = await writer(ctx, args, Date.now());
+        const key = `${session._id}:${args.key}`;
+        const previous = await ctx.db
+            .query("retainedTexts")
+            .withIndex("by_key", (q) => q.eq("key", key))
+            .unique();
+        const addedBytes =
+            args.fragment.index < (previous?.received ?? 0)
+                ? 0
+                : new TextEncoder().encode(args.fragment.content).length;
+        const retainedBytes = (session.retainedBytes ?? 0) + addedBytes;
+        if (
+            args.fragment.sizeBytes > PI_SESSION_MAX_BYTES ||
+            retainedBytes > PI_SESSION_MAX_BYTES
+        )
+            throw executionError("pi_storage_capacity");
+        const textId = await stageRetainedText(ctx, key, args.fragment);
+        if (addedBytes) await ctx.db.patch(session._id, { retainedBytes });
+        return textId;
+    },
+});
+
+export const publishCommit = internalMutation({
+    args: {
+        ...leaseValidator.fields,
+        key: v.string(),
+        sequence: v.number(),
+        textId: v.id("retainedTexts"),
+        nextId: v.number(),
+    },
+    returns: v.number(),
+    handler: async (ctx, args) => {
+        const session = await writer(ctx, args, Date.now());
+        const text = await completeRetainedText(ctx, args.textId);
+        if (
+            text.key !== `${session._id}:${args.key}` ||
+            !Number.isSafeInteger(args.nextId) ||
+            args.nextId < 2
+        )
+            throw executionError("pi_commit_invalid");
+        const previous = await ctx.db
+            .query("piCommits")
+            .withIndex("by_session_and_key", (q) =>
+                q.eq("sessionId", session._id).eq("key", args.key),
+            )
+            .unique();
+        if (previous) {
+            if (
+                previous.sequence !== args.sequence ||
+                previous.textId !== args.textId
+            )
+                throw executionError("pi_commit_conflict");
+            return previous.sequence;
+        }
+        if (
+            !Number.isSafeInteger(args.sequence) ||
+            args.sequence !== session.sequence + 1
+        )
+            throw executionError("pi_log_sequence_conflict");
+        const retainedBytes = session.retainedBytes ?? 0;
+        if (retainedBytes > PI_SESSION_MAX_BYTES)
+            throw executionError("pi_storage_capacity");
+        await ctx.db.insert("piCommits", {
+            sessionId: session._id,
+            key: args.key,
+            sequence: args.sequence,
+            textId: args.textId,
+        });
+        await ctx.db.patch(session._id, {
+            sequence: args.sequence,
+            retainedBytes,
+            nextId: Math.max(args.nextId, session.nextId),
+        });
+        return args.sequence;
+    },
+});
+
+export const readCommitFragment = internalQuery({
+    args: {
+        ...leaseValidator.fields,
+        textId: v.id("retainedTexts"),
+        index: v.number(),
+    },
+    returns: v.object({ content: v.string(), manifest: textManifestValidator }),
+    handler: async (ctx, args) => {
+        await writer(ctx, args);
+        const text = await completeRetainedText(ctx, args.textId);
+        if (!text.key.startsWith(`${args.sessionId}:`))
+            throw executionError("pi_commit_invalid");
+        return {
+            content: await retainedTextFragment(ctx, text, args.index),
+            manifest: {
+                contentHash: text.contentHash,
+                sizeBytes: text.sizeBytes,
+                characters: text.characters,
+                fragmentHashes: text.fragmentHashes,
+            },
+        };
+    },
+});
+
 export const mint = internalMutation({
     args: leaseValidator.fields,
     returns: v.number(),
@@ -411,5 +547,228 @@ export const scan = internalQuery({
                 q.eq("sessionId", args.sessionId),
             )
             .paginate(args.paginationOpts);
+    },
+});
+
+/** Pins admitted inputs and both record frontiers in one transaction, including a truthful legacy anchor. */
+export const inputSnapshot = internalMutation({
+    args: leaseValidator.fields,
+    returns: v.object({
+        inputs: nativeInputsValidator,
+        acknowledged: v.union(v.number(), v.null()),
+        throughSequence: v.number(),
+        controlsThroughCreationTime: v.number(),
+        anchor: v.union(v.string(), v.null()),
+    }),
+    handler: async (ctx, args) => {
+        const session = await writer(ctx, args, Date.now());
+        const mission = await ctx.db.get(session.missionId);
+        if (!mission) throw executionError("mission_unavailable");
+        const inputs: Infer<typeof nativeInputsValidator> =
+            session.conversationId
+                ? await ctx.runMutation(
+                      internal.execution.piControl.admittedInputs,
+                      {
+                          missionId: mission._id,
+                          expectedGeneration: args.generation,
+                      },
+                  )
+                : [];
+        const lastControl = session.conversationId
+            ? await ctx.db
+                  .query("agentMessageDeliveries")
+                  .withIndex("by_run_and_native_control", (q) =>
+                      q
+                          .eq("runId", mission.runId)
+                          .eq("nativeControlStatus", "pending"),
+                  )
+                  .order("desc")
+                  .first()
+            : null;
+        const throughSequence = await contextObservationSequence(
+            ctx,
+            mission.runId,
+        );
+        let anchor: string | null = null;
+        if (
+            session.observationSequence === undefined &&
+            !["completed", "cancelled"].includes(mission.status)
+        ) {
+            const current = await buildMissionContext(
+                ctx,
+                mission._id,
+                args.generation,
+            );
+            if (current.kind !== "ready") throw executionError(current.code);
+            const input = JSON.parse(current.inputJson);
+            anchor = JSON.stringify({
+                version: 1,
+                topic: "current_state",
+                historicalSequenceUnknown: true,
+                domain: input.domain,
+                activeWork: input.activeWork,
+            });
+        }
+        return {
+            inputs,
+            acknowledged: session.observationSequence ?? null,
+            throughSequence,
+            controlsThroughCreationTime: lastControl?._creationTime ?? 0,
+            anchor,
+        };
+    },
+});
+
+/** A fenced native reader consumes immutable application observations, one bounded row at a time. */
+export const pendingObservations = internalQuery({
+    args: {
+        ...leaseValidator.fields,
+        after: v.optional(v.number()),
+        through: v.optional(v.number()),
+    },
+    returns: v.object({
+        acknowledged: v.union(v.number(), v.null()),
+        acknowledgedEntry: v.union(v.number(), v.null()),
+        throughSequence: v.number(),
+        entries: v.array(
+            v.object({
+                eventId: v.id("agentExecutionEvents"),
+                sequence: v.number(),
+                json: v.string(),
+                occurredAt: v.number(),
+            }),
+        ),
+    }),
+    handler: async (ctx, args) => {
+        const session = await writer(ctx, args, Date.now());
+        const mission = await ctx.db.get(session.missionId);
+        if (!mission) throw executionError("mission_unavailable");
+        const latest = await contextObservationSequence(ctx, mission.runId);
+        const throughSequence = args.through ?? latest;
+        if (
+            !Number.isSafeInteger(throughSequence) ||
+            throughSequence < 0 ||
+            throughSequence > latest ||
+            (args.after !== undefined &&
+                (!Number.isSafeInteger(args.after) || args.after < 0))
+        )
+            throw executionError("native_observation_invalid");
+        const after =
+            args.after ?? session.observationSequence ?? throughSequence;
+        const events = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_run_and_native_input_sequence", (q) =>
+                q
+                    .eq("runId", mission.runId)
+                    .gt("nativeInputSequence", after)
+                    .lte("nativeInputSequence", throughSequence),
+            )
+            .take(1);
+        const entries = [];
+        for (const event of events) {
+            if (
+                !event.contextObservation ||
+                event.nativeInputSequence === undefined
+            )
+                throw executionError("journal_payload_invalid");
+            entries.push({
+                eventId: event._id,
+                sequence: event.nativeInputSequence,
+                occurredAt: event.occurredAt,
+                json: JSON.stringify({
+                    version: 1,
+                    topic: event.contextObservation.topic,
+                    sequence: event.nativeInputSequence,
+                    historyReference: event._id,
+                    actor: event.actor,
+                    occurredAt: event.occurredAt,
+                    value: JSON.parse(
+                        await readRetainedText(
+                            ctx,
+                            event.contextObservation.textId,
+                        ),
+                    ),
+                }),
+            });
+        }
+        return {
+            acknowledged: session.observationSequence ?? null,
+            acknowledgedEntry: session.observationEntry ?? null,
+            throughSequence,
+            entries,
+        };
+    },
+});
+
+/** Cursor acknowledgement follows durable Pi placement and cannot jump over an unseen observation. */
+export const recordObservationInput = internalMutation({
+    args: {
+        ...leaseValidator.fields,
+        sequence: v.number(),
+        entryId: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const session = await writer(ctx, args, Date.now());
+        if (
+            !Number.isSafeInteger(args.sequence) ||
+            args.sequence < 0 ||
+            !Number.isSafeInteger(args.entryId) ||
+            args.entryId < 1
+        )
+            throw executionError("native_observation_invalid");
+        if (
+            session.observationSequence !== undefined &&
+            args.sequence <= session.observationSequence
+        )
+            return null;
+        const mission = await ctx.db.get(session.missionId);
+        if (!mission) throw executionError("mission_unavailable");
+        if (
+            args.sequence >
+            (await contextObservationSequence(ctx, mission.runId))
+        )
+            throw executionError("native_observation_invalid");
+        if (session.observationSequence !== undefined) {
+            const next = await ctx.db
+                .query("agentExecutionEvents")
+                .withIndex("by_run_and_native_input_sequence", (q) =>
+                    q
+                        .eq("runId", mission.runId)
+                        .gt("nativeInputSequence", session.observationSequence),
+                )
+                .first();
+            if (next?.nativeInputSequence !== args.sequence)
+                throw executionError("native_observation_gap");
+        }
+        await ctx.db.patch(session._id, {
+            observationSequence: args.sequence,
+            observationEntry: args.entryId,
+        });
+        return null;
+    },
+});
+
+/** A command receipt must be placed in the same durable context as the active analyst inputs. */
+export const controlFrontier = internalQuery({
+    args: leaseValidator.fields,
+    returns: v.union(
+        v.object({
+            messageId: v.id("agentMessageDeliveries"),
+            sequence: v.number(),
+        }),
+        v.null(),
+    ),
+    handler: async (ctx, args) => {
+        const session = await writer(ctx, args, Date.now());
+        const mission = await ctx.db.get(session.missionId);
+        if (!mission) throw executionError("mission_unavailable");
+        const command = await latestNativeControl(ctx, mission.runId);
+        return command
+            ? {
+                  messageId: command._id,
+                  sequence: command.nativeInputSequence ?? 0,
+              }
+            : null;
     },
 });

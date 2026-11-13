@@ -1,4 +1,5 @@
 import { readQualificationUsage } from "@convex/qualificationUsage";
+import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
@@ -14,13 +15,20 @@ import { preparationFailureClass } from "./domain/sourcePreparationAuthority";
 import { resolveReasoningPreference } from "./integrations/modelRouting";
 import { readResponseControlPolicy } from "./modelConfiguration";
 import {
+    analysisPricingAuthority,
+    analysisProviderSchema,
+    analysisReceiptSchema,
     campaignConfiguration,
     campaignConfigurations,
     campaignLimitsSchema,
     campaignManifestSchema,
     emptyCampaignLimits,
+    newCampaignManifestSchema,
 } from "./qualificationCampaignPolicy";
-import { MAX_SOURCES_QUALIFICATION_RECEIPTS } from "./resourceLimits";
+import {
+    MAX_SOURCES_QUALIFICATION_RECEIPTS,
+    RESOURCE_POLICY_VERSION,
+} from "./resourcePolicy";
 import { BROWSER_TEST_SLOT, requireBrowserTestOwner } from "./runWorkspace";
 import schema from "./schema";
 
@@ -28,11 +36,13 @@ const hash = (value: unknown) => sha256Hex(stableStringify(value));
 const keys = ["model", "search", "acquisition", "costUsd"] as const;
 async function owned(ctx: QueryCtx, campaignId: Id<"qualificationCampaigns">) {
     // Status and cleanup remain available after temporary fixture flags are restored.
-    if (
-        !["localhost", "127.0.0.1"].includes(
-            new URL(env.CONVEX_CLOUD_URL).hostname,
-        )
-    )
+    let hostname: string;
+    try {
+        hostname = new URL(env.CONVEX_CLOUD_URL).hostname;
+    } catch {
+        throw new Error("Local campaign configuration invalid");
+    }
+    if (!["localhost", "127.0.0.1"].includes(hostname))
         throw new Error("Local campaign required");
     const campaign = await ctx.db.get(campaignId);
     const invitation = await ctx.db
@@ -71,6 +81,7 @@ export const authorize = internalMutation({
                 throw new Error("Campaign closed or expired");
             return previous._id;
         }
+        newCampaignManifestSchema.parse(manifest);
         if (manifest.expiresAt <= Date.now())
             throw new Error("Campaign expired");
         const configurationHashes: { id: string; hash: string }[] = [];
@@ -130,9 +141,10 @@ export const authorize = internalMutation({
         const configurationHash =
             manifest.version === 1 ? configurationHashes[0]?.hash : undefined;
         return ctx.db.insert("qualificationCampaigns", {
+            resourcePolicy: RESOURCE_POLICY_VERSION,
             configurationHash,
             configurationHashes:
-                manifest.version === 2 ? configurationHashes : undefined,
+                manifest.version !== 1 ? configurationHashes : undefined,
             key: manifest.key,
             manifest,
             manifestHash,
@@ -157,6 +169,8 @@ export const admit = internalMutation({
     handler: async (ctx, args) => {
         const campaign = await owned(ctx, args.campaignId);
         const m = campaign.manifest;
+        if (campaign.resourcePolicy !== RESOURCE_POLICY_VERSION)
+            throw new Error("resource_policy_unsupported");
         if (campaign.status !== "active" || m.expiresAt <= Date.now())
             throw new Error("Campaign closed or expired");
         if (
@@ -186,7 +200,7 @@ export const admit = internalMutation({
             throw new Error("Campaign lot pending reconciliation or review");
         let configurationId: string | undefined;
         let coverage: Doc<"qualificationCoverage"> | null | undefined;
-        if (m.version === 2) {
+        if (m.version !== 1) {
             const entries = await Promise.all(
                 m.configurations.map(async (c) => ({
                     configuration: c,
@@ -349,6 +363,202 @@ export const bind = internalMutation({
         return null;
     },
 });
+export const reserveAnalysis = internalMutation({
+    args: {
+        lotId: v.id("qualificationLots"),
+        attemptKey: v.string(),
+        evidenceHash: v.string(),
+        provider: zodToConvex(analysisProviderSchema),
+        model: v.string(),
+        reservationMicros: v.optional(v.number()),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const lot = await ctx.db.get(args.lotId);
+        if (!lot) throw new Error("Campaign lot unavailable");
+        const campaign = await owned(ctx, lot.campaignId);
+        const manifest = campaign.manifest;
+        if (campaign.resourcePolicy !== RESOURCE_POLICY_VERSION)
+            throw new Error("resource_policy_unsupported");
+        if (args.provider === "opencode-go")
+            throw new Error(
+                "OpenCode Go subscription-only guarantee unverified",
+            );
+        if (
+            manifest.version !== 3 ||
+            campaign.status !== "active" ||
+            manifest.expiresAt <= Date.now() ||
+            campaign.activeLotId !== lot._id ||
+            (lot.status !== "closing" && lot.status !== "review")
+        )
+            throw new Error("Analysis not authorized");
+        const subscription =
+            manifest.analysis.accounting === "native_subscription";
+        if (
+            !/^[a-zA-Z0-9-]{1,100}$/.test(args.attemptKey) ||
+            !/^[a-f0-9]{64}$/.test(args.evidenceHash) ||
+            (subscription
+                ? args.reservationMicros !== undefined
+                : args.reservationMicros === undefined ||
+                  !Number.isSafeInteger(args.reservationMicros) ||
+                  args.reservationMicros < 1) ||
+            !manifest.analysis.routes.some(
+                (route) =>
+                    route.provider === args.provider &&
+                    route.model === args.model,
+            )
+        )
+            throw new Error("Invalid analysis reservation");
+        if (
+            args.reservationMicros !==
+            (manifest.analysis.maxRequestCostMicros ??
+                manifest.analysis.perLot.costMicros)
+        )
+            throw new Error(
+                "Analysis reservation must cover the authorized request bound",
+            );
+        const existing = await ctx.db
+            .query("qualificationAnalysisAttempts")
+            .withIndex("by_lot_and_attempt", (q) =>
+                q.eq("lotId", lot._id).eq("attemptKey", args.attemptKey),
+            )
+            .unique();
+        if (existing) throw new Error("Analysis attempt already reserved");
+        const attempts = await ctx.db
+            .query("qualificationAnalysisAttempts")
+            .withIndex("by_lot_and_attempt", (q) => q.eq("lotId", lot._id))
+            .take(manifest.analysis.perLot.requests + 1);
+        if (
+            attempts.some(
+                (attempt) =>
+                    attempt.status === "reserved" &&
+                    attempt.provider === args.provider &&
+                    attempt.model === args.model,
+            )
+        )
+            throw new Error("Prior analysis dispatch outcome unknown");
+        const total = campaign.analysisAllocated ?? {
+            requests: 0,
+            costMicros: 0,
+        };
+        const used = lot.analysisAllocated ?? { requests: 0, costMicros: 0 };
+        const nextTotal = {
+            requests: total.requests + 1,
+            costMicros: total.costMicros + (args.reservationMicros ?? 0),
+        };
+        const nextLot = {
+            requests: used.requests + 1,
+            costMicros: used.costMicros + (args.reservationMicros ?? 0),
+        };
+        if (
+            !Number.isSafeInteger(nextTotal.costMicros) ||
+            nextTotal.requests > manifest.analysis.total.requests ||
+            nextTotal.costMicros > (manifest.analysis.total.costMicros ?? 0) ||
+            nextLot.requests > manifest.analysis.perLot.requests ||
+            nextLot.costMicros > (manifest.analysis.perLot.costMicros ?? 0)
+        )
+            throw new Error("Analysis allowance exhausted");
+        await ctx.db.insert("qualificationAnalysisAttempts", {
+            ...args,
+            campaignId: campaign._id,
+            status: "reserved",
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(campaign._id, { analysisAllocated: nextTotal });
+        await ctx.db.patch(lot._id, { analysisAllocated: nextLot });
+        return null;
+    },
+});
+export const settleAnalysis = internalMutation({
+    args: {
+        lotId: v.id("qualificationLots"),
+        attemptKey: v.string(),
+        costMicros: v.optional(v.number()),
+        receipt: v.optional(zodToConvex(analysisReceiptSchema)),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const lot = await ctx.db.get(args.lotId);
+        if (!lot) throw new Error("Campaign lot unavailable");
+        const campaign = await owned(ctx, lot.campaignId);
+        const attempt = await ctx.db
+            .query("qualificationAnalysisAttempts")
+            .withIndex("by_lot_and_attempt", (q) =>
+                q.eq("lotId", lot._id).eq("attemptKey", args.attemptKey),
+            )
+            .unique();
+        if (!attempt) throw new Error("Invalid analysis settlement");
+        const analysis =
+            campaign.manifest.version === 3
+                ? campaign.manifest.analysis
+                : undefined;
+        if (analysis?.accounting !== undefined) {
+            const api = analysis.accounting === "api_cost";
+            const invalid = api
+                ? "Invalid native API analysis settlement"
+                : "Invalid analysis settlement";
+            const parsed = analysisReceiptSchema.safeParse(args.receipt);
+            if (
+                args.costMicros !== undefined ||
+                !parsed.success ||
+                parsed.data.accounting !== analysis.accounting
+            )
+                throw new Error(invalid);
+            const receipt = parsed.data;
+            if (
+                api &&
+                (!analysis.pricing ||
+                    receipt.pricingHash !==
+                        sha256Hex(
+                            analysisPricingAuthority(analysis.pricing).identity,
+                        ))
+            )
+                throw new Error(invalid);
+            if (attempt.status === "settled") {
+                if (hash(attempt.receipt) !== hash(receipt))
+                    throw new Error("Analysis settlement conflict");
+                return null;
+            }
+            if (
+                api &&
+                (attempt.reservationMicros === undefined ||
+                    receipt.costMicros === undefined ||
+                    receipt.costMicros > attempt.reservationMicros)
+            )
+                throw new Error("Analysis reservation overrun");
+            await ctx.db.patch(attempt._id, {
+                status: "settled",
+                receipt,
+                ...(api ? { costMicros: receipt.costMicros } : {}),
+            });
+            return null;
+        }
+        if (
+            args.receipt !== undefined ||
+            args.costMicros === undefined ||
+            !Number.isSafeInteger(args.costMicros) ||
+            args.costMicros < 0
+        )
+            throw new Error("Invalid analysis settlement");
+        if (attempt.status === "settled") {
+            if (attempt.costMicros !== args.costMicros)
+                throw new Error("Analysis settlement conflict");
+            return null;
+        }
+        if (
+            attempt.reservationMicros === undefined ||
+            args.costMicros > attempt.reservationMicros
+        )
+            throw new Error("Analysis reservation overrun");
+        if (!campaign.analysisAllocated || !lot.analysisAllocated)
+            throw new Error("Analysis allocation unavailable");
+        await ctx.db.patch(attempt._id, {
+            status: "settled",
+            costMicros: args.costMicros,
+        });
+        return null;
+    },
+});
 export const reconcile = internalMutation({
     args: { lotId: v.id("qualificationLots"), cleanupCompleted: v.boolean() },
     returns: v.object({
@@ -366,7 +576,7 @@ export const reconcile = internalMutation({
             return { reconciled: false, usage: lot.allocation };
         const usage = emptyCampaignLimits();
         if (
-            campaign.manifest.version === 2 &&
+            campaign.manifest.version !== 1 &&
             context?.paidQualification?.scenarios
         ) {
             const retained = await readQualificationUsage(ctx, context._id);
@@ -495,19 +705,21 @@ export const inspect = internalQuery({
             .query("qualificationLots")
             .withIndex("by_campaign", (q) => q.eq("campaignId", campaign._id));
         const page =
-            campaign.manifest.version === 2
-                ? await query
-                      .order("desc")
-                      .paginate(
-                          args.paginationOpts ?? { numItems: 32, cursor: null },
-                      )
+            campaign.manifest.version !== 1
+                ? await query.order("desc").paginate(
+                      args.paginationOpts ?? {
+                          numItems:
+                              PERSISTENCE_PAGE_SIZE.qualificationAccounting,
+                          cursor: null,
+                      },
+                  )
                 : null;
         const lots = page
             ? page.page.reverse()
             : await query.take(campaign.manifest.maximumLots + 1);
         const candidateHash = campaign.lastCandidateHash;
         const coverage =
-            campaign.manifest.version === 2 && candidateHash
+            campaign.manifest.version !== 1 && candidateHash
                 ? (
                       await Promise.all(
                           campaign.manifest.configurations.map((c) =>

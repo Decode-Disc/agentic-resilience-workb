@@ -22,6 +22,10 @@ import {
     getFunctionName,
     makeFunctionReference,
 } from "convex/server";
+import {
+    RESOURCE_POLICY_VERSION,
+    QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
+} from "../../../convex/resourcePolicy.ts";
 import { resolveLocalRuntime } from "../../local-runtime.ts";
 import {
     attemptMissions,
@@ -51,7 +55,7 @@ type Snapshot = FunctionReturnType<
     typeof internal.execution.fixtures.inspectWorkbench
 >;
 
-import { runCampaign } from "./campaign.ts";
+import { closeCampaignContext, runCampaign } from "./campaign.ts";
 import { openQualificationJournal } from "./journal.ts";
 import { prepareBrowserQualificationModel } from "./model-preparation.ts";
 import {
@@ -83,7 +87,11 @@ const { values } = parseArgs({
     },
 });
 
-function command(binary: string, args: string[], timeout = 30_000) {
+function command(
+    binary: string,
+    args: string[],
+    timeout: number = TOOLING_POLICY.localCommandTimeoutMs,
+) {
     const result = spawnSync(binary, args, {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
@@ -151,7 +159,10 @@ export async function runWorkbenchQualification(
                 ...process.argv.slice(2),
                 "--locked",
             ],
-            { stdio: "inherit", timeout: 40 * 60_000 },
+            {
+                stdio: "inherit",
+                timeout: TOOLING_POLICY.preflightChecksTimeoutMs,
+            },
         );
         process.exitCode = result.error ? 1 : (result.status ?? 1);
         return;
@@ -173,6 +184,7 @@ export async function runWorkbenchQualification(
     );
     const protocol = {
         version: 2,
+        resourcePolicy: RESOURCE_POLICY_VERSION,
         mode: selectedMode,
         capability: battery.capability,
         batteryHash,
@@ -187,11 +199,19 @@ export async function runWorkbenchQualification(
         unavailableCapabilities: battery.unavailableCapabilities.map((c) => ({
             ...c,
             referenceHash: digest(readFileSync(c.reference)),
-            caseIds: (
-                JSON.parse(readFileSync(c.reference, "utf8")) as Array<{
-                    id: string;
-                }>
-            ).map((item) => item.id),
+            caseIds: (() => {
+                try {
+                    return (
+                        JSON.parse(readFileSync(c.reference, "utf8")) as Array<{
+                            id: string;
+                        }>
+                    ).map((item) => item.id);
+                } catch (error) {
+                    throw new Error("Invalid qualification reference", {
+                        cause: error,
+                    });
+                }
+            })(),
             status: "unavailable",
         })),
     };
@@ -217,9 +237,16 @@ export async function runWorkbenchQualification(
         });
         throw error;
     }
-    const config = JSON.parse(
-        readFileSync(".convex/local/default/config.json", "utf8"),
-    );
+    let config: { adminKey: string };
+    try {
+        config = JSON.parse(
+            readFileSync(".convex/local/default/config.json", "utf8"),
+        );
+    } catch (error) {
+        throw new Error("Invalid local backend configuration", {
+            cause: error,
+        });
+    }
     const client = new ConvexHttpClient(runtime.origins.convex, {
         logger: false,
     });
@@ -266,7 +293,16 @@ export async function runWorkbenchQualification(
                   .trim()
                   .split("\n")
                   .filter(Boolean)
-                  .map((line) => JSON.parse(line))
+                  .map((line) => {
+                      try {
+                          return JSON.parse(line);
+                      } catch (error) {
+                          throw new Error(
+                              "Invalid retained qualification ledger",
+                              { cause: error },
+                          );
+                      }
+                  })
             : [];
     let failure = false;
     let activeStep = "setup";
@@ -317,7 +353,7 @@ export async function runWorkbenchQualification(
             reducedMotion: "reduce",
         });
         const page = await context.newPage();
-        const interactionTimeoutMs = 20_000;
+        const interactionTimeoutMs = TOOLING_POLICY.browserInteractionTimeoutMs;
         page.setDefaultTimeout(interactionTimeoutMs);
         page.on("pageerror", (error) =>
             errors.push(qualificationDiagnostic("browser-page", error)),
@@ -360,7 +396,7 @@ export async function runWorkbenchQualification(
             {
                 slotKey: "analyst-4",
                 contextKey: fixtureKey,
-                durationMs: 35 * 60_000,
+                durationMs: TOOLING_POLICY.legacyContextDurationMs,
             },
         );
         contextOpened = true;
@@ -407,6 +443,16 @@ export async function runWorkbenchQualification(
                     maximumCostUsd: values.maximumCostUsd ?? 0.5,
                 },
             );
+            save(
+                root,
+                "relay-route",
+                await client.query(
+                    localReference(
+                        internal.execution.fixtures.qualificationRoute,
+                    ),
+                    { runId, fixtureKey },
+                ),
+            );
         }
         activeStep = "admission";
         const settle = async (previousMissions: Id<"agentMissions">[]) => {
@@ -435,7 +481,10 @@ export async function runWorkbenchQualification(
                             observed.queuedCount === 0
                         );
                     },
-                    { timeout: 240_000, intervals: [500, 1000] },
+                    {
+                        timeout: TOOLING_POLICY.legacyMissionSettleTimeoutMs,
+                        intervals: [...TOOLING_POLICY.observationIntervalsMs],
+                    },
                 )
                 .toBe(true);
             assert(state);
@@ -559,7 +608,13 @@ export async function runWorkbenchQualification(
                         .poll(
                             () =>
                                 existsSync(join(root, `gate-${scenario}.json`)),
-                            { timeout: 65_000, intervals: [100, 500] },
+                            {
+                                timeout:
+                                    TOOLING_POLICY.gateObservationTimeoutMs,
+                                intervals: [
+                                    ...TOOLING_POLICY.gateObservationIntervalsMs,
+                                ],
+                            },
                         )
                         .toBe(true);
                     if (scenario === "concurrent-edit") {
@@ -608,7 +663,8 @@ export async function runWorkbenchQualification(
                 ) &&
                 refusal?.retryable &&
                 typeof refusal.retryAfterAt === "number" &&
-                refusal.retryAfterAt - Date.now() <= 60_000 &&
+                refusal.retryAfterAt - Date.now() <=
+                    TOOLING_POLICY.refusalRecoveryMaxWaitMs &&
                 ledger().filter((e) => e.event === "dispatch").length <
                     maximumRequests
             ) {
@@ -642,7 +698,8 @@ export async function runWorkbenchQualification(
             save(root, `${scenario}-after`, after);
             const published = await page.getByRole("main").innerText();
             assert(
-                Buffer.byteLength(published, "utf8") <= 262144,
+                Buffer.byteLength(published, "utf8") <=
+                    TOOLING_POLICY.publishedSnapshotMaxBytes,
                 "Published snapshot exceeds its bound",
             );
             save(root, `${scenario}-published`, {
@@ -856,22 +913,7 @@ export async function runWorkbenchQualification(
             },
             closeContext: async () => {
                 if (!contextOpened) return;
-                let cursor: string | undefined;
-                for (let page = 0; page < 25; page++) {
-                    const result = await client.mutation(
-                        localReference(
-                            internal.runWorkspace.closeBrowserTestContext,
-                        ),
-                        {
-                            slotKey: "analyst-4",
-                            contextKey: fixtureKey,
-                            cursor,
-                        },
-                    );
-                    if (result.done) return;
-                    cursor = result.cursor;
-                }
-                throw new Error("Context cancellation did not finish");
+                await closeCampaignContext(client, fixtureKey);
             },
             releasePublication: async () => {
                 if (publicationHeld)
@@ -1019,10 +1061,18 @@ export async function runWorkbenchQualification(
             `qualification=${root}`,
         ];
         try {
-            command("pnpm", [...archiveArgs, "--dry-run"], 120_000);
+            command(
+                "pnpm",
+                [...archiveArgs, "--dry-run"],
+                TOOLING_POLICY.archiveCommandTimeoutMs,
+            );
             writeFileSync(
                 join(root, "archive-result.txt"),
-                command("pnpm", archiveArgs, 120_000),
+                command(
+                    "pnpm",
+                    archiveArgs,
+                    TOOLING_POLICY.archiveCommandTimeoutMs,
+                ),
                 { mode: 0o600 },
             );
         } catch {

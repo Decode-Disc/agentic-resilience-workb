@@ -11,22 +11,30 @@ import {
 } from "@convex/execution/missionData";
 import { completionFeedbackValidator } from "@convex/execution/operationContracts";
 import { observeOperationOutcome } from "@convex/execution/operationResults";
+import {
+    SOURCES_HANDOFF_READ_CAPACITY,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
+    SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
+} from "@convex/resourcePolicy";
 import { sourcesSimulationEnabled } from "@convex/sourcesSimulation";
 import { ConvexError, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { readResearchContext } from "./researchContext";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
 import { preparationFailureCode } from "./sourcePreparationAuthority";
-import { sourceMaterialReferenceValidator } from "./sourceRetrievalPolicy";
+import {
+    sourceDocumentMetadata,
+    sourceMaterialReferenceValidator,
+} from "./sourceRetrievalPolicy";
 import { SourceReviewReads } from "./sourceReviewReads";
 import {
     completeSources,
     readEngagedSourcesWork,
     requireSourcesPreparation,
-    SOURCES_HANDOFF_READ_CAPACITY,
     sourcesCompletionAccounting,
     sourcesMissionKey,
     sourcesReadingReferences,
+    sourcesResourceStatus,
     sourcesTaskObservations,
 } from "./sources";
 import {
@@ -133,6 +141,7 @@ const sourcesInstructions = [
     "Select evidence using readRequestId and passageOrder from a successful search or contextual-read result in this mission. The system materializes that returned passage's exact quotation; do not transcribe evidence text or invent a locator. Attribution, period and modality describe the statement; kind classifies its documentary role and is not its modality. Every submission is controlled. Use targeted checks for precise confrontations, not economic conclusions.",
     "Select a contribution to correct by its observed identity. The harness binds qualification and contribution versions from this invocation's observed state. Omit contributionId for a new contribution. Preserve independent useful material. Do not claim that technical failure establishes a documentary gap.",
     "Use consult_mission_state for retained history. Required state and current documentary requests are in activeWork. Complete with one semantic outcome for every need, preserving unfinished work explicitly. The system supplies the admitted revision and mandatory work accounting.",
+    "Your gap and unfinished-work explanations are documentary assessments, not verified execution facts. Use activeWork.allowance and recorded operation outcomes for technical limits. The searches allowance applies to discover_sources_for_need, not saved-material reading. Distinguish an operation's success from the effective permitted uses of its contributions; inspection-only material cannot support another proposition.",
     "Prepare each shared need by selecting relevant sources, reading their captures and submitting useful contributions for documentary control. Acquisition or reading alone does not create a usable contribution. Preserve attribution, scope, limitations and counter-evidence; do not infer economic conclusions. When further useful work cannot be performed, record an honest partial outcome rather than declaring the need finished.",
     "When done, return JSON conforming to constraints.completion.schema with the current need identities. Select readRequestIds only when a saved-material search or contextual reading actually examined that need and helps justify its gap; do not list discovery, acquisition or control requests there. Recover missing observations through the supplied history references. Declare unfinished work explicitly whenever a need lacks controlled material or a substantiated gap. An exhausted or refused search is unfinished work, not evidence of absence.",
 ].join("\n");
@@ -202,7 +211,7 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
         },
         submit_documentary_qualification: {
             ...operation(
-                "Submit new contributions or corrections for one primary capture. Select each evidence passage using readRequestId and passageOrder from a successful search/read result in this scope; the system supplies its exact text. Each contribution must include the primary capture; submit contributions supported only by another capture separately. Omit contributionId for a new contribution; select its observed identity to correct it. The harness binds versions from the invocation's observed qualification. Mandatory documentary control governs use.",
+                `Submit 1–${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} new contributions or corrections for one primary capture, keeping at most ${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} contributions in the resulting qualification. Select each evidence passage using readRequestId and passageOrder from a successful search/read result in this scope; the system supplies its exact text. Each contribution must include the primary capture; submit contributions supported only by another capture separately. Omit contributionId for a new contribution; select its observed identity to correct it. The harness binds versions from the invocation's observed qualification. Mandatory documentary control governs use.`,
                 qualificationSubmissionInput,
                 documentarySubmissionResult,
             ),
@@ -260,8 +269,18 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
         };
     },
     operationDiagnostic(code) {
+        if (code === "sources_discovery_limit")
+            return "The external discovery allowance for this phase is exhausted. Saved-material search and contextual reading do not consume that allowance and remain subject to their own authority and overall execution limits.";
+        if (code === "sources_acquisition_limit")
+            return "The preparation acquisition allowance is exhausted. Existing captures remain available for authorized reading and documentary work.";
+        if (code === "sources_control_limit")
+            return "The preparation documentary-control allowance is exhausted. Do not describe an unperformed control as a finding; preserve independent admitted material and explicit unfinished work.";
+        if (code === "sources_work_limit")
+            return "The preparation cannot admit more registered documentary work. This is a work-capacity limit, not an exhausted saved-material reading allowance.";
+        if (code === "documentary_control_unfinished")
+            return "The documentary examination did not complete. No contribution from this submission was adopted and no absence of support was established. Inspect the validation feedback and retained examination before choosing another action; do not treat a malformed examination as a rejected proposition.";
         if (code === "qualification_invalid")
-            return "No qualification was adopted. Supply 1–15 complete contributions with known need IDs, a statement, attribution, period, modality and 1–8 exact evidence references. Use a declared kind value; modality describes how the statement is expressed, not its kind.";
+            return `No qualification was adopted. Supply 1–${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} complete contributions with known need IDs, a statement, attribution, period, modality and 1–${SOURCES_MAX_EVIDENCE_REFERENCES} exact evidence references. Use a declared kind value; modality describes how the statement is expressed, not its kind.`;
         if (code === "documentary_quote_invalid")
             return "No contribution was adopted. Select readRequestId and passageOrder from a successful adopted search or contextual-read result in this scope. Only passages actually returned in that result are eligible; search or read again to obtain missing evidence.";
         if (code === "qualification_version_conflict")
@@ -343,42 +362,20 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
                     work: state.data.work,
                     captureIds: state.data.captureIds,
                     qualificationReferences: state.data.qualifications,
-                    ...(await sourcesTaskObservations(
-                        ctx,
-                        run._id,
-                        state.data,
-                    )),
+                    ...(await sourcesTaskObservations(ctx, state.preparation)),
                     ...(await sourcesReadingReferences(
                         ctx,
                         mission,
                         state.data,
                     )),
                     restrictedContributions: state.data.restrictedContributions,
-                    allowance: {
-                        searches: {
-                            used: state.data.searches,
-                            limit:
-                                state.data.phase === "initial"
-                                    ? state.data.envelope.initialSearches
-                                    : state.data.envelope.complementSearches,
-                        },
-                        acquisitions: {
-                            used: state.data.acquisitions,
-                            limit: state.data.envelope.acquisitions,
-                        },
-                        controls: {
-                            used: state.data.controls,
-                            limit: state.data.envelope.controls,
-                        },
-                    },
+                    allowance: sourcesResourceStatus(state.data),
                     candidates: candidates.map((candidate) => ({
                         sourceId: candidate._id,
-                        title: candidate.title,
+                        ...sourceDocumentMetadata(candidate),
                         canonicalUrl: candidate.canonicalUrl,
                         family: candidate.origin,
                         category: candidate.category,
-                        publishedAt: candidate.publishedAt ?? null,
-                        form: candidate.secForm ?? null,
                     })),
                 },
             },
@@ -412,7 +409,7 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
     progress(_mission, outcome) {
         return { facts: operationProgressKeys(outcome) };
     },
-    async complete(ctx, mission, proposal, admittedInput) {
+    async complete(ctx, mission, proposal, admittedInput, invocation) {
         if (
             !("scope" in mission) ||
             mission.scope.kind !== "sources_v1" ||
@@ -511,6 +508,11 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
                 mission.scope.preparationId,
                 response,
                 reads,
+                {
+                    type: "agent",
+                    missionId: mission._id,
+                    invocationId: invocation._id,
+                },
             );
             return {
                 kind: "completed",

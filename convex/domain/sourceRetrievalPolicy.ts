@@ -1,10 +1,40 @@
-import type { DataModel, Id } from "@convex/_generated/dataModel";
+import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
 import type { GenericDatabaseReader } from "convex/server";
 import { v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
+/** Persisted embedding format identity; changing it requires rebuilding derived indexes. */
+export const SOURCE_EMBEDDING_PROFILE_VERSION = "evidence-embedding-v1";
 export const SOURCE_RETRIEVAL_VERSION = "structured-v1";
 export const SOURCE_RETRIEVAL_RANKING_POLICY = "stable-passages-v1";
+
+export const sourceDocumentMetadataValidator = v.object({
+    title: v.string(),
+    publishedAt: v.union(v.number(), v.null()),
+    date: v.union(v.string(), v.null()),
+    dateKind: v.union(v.literal("filing"), v.literal("publication"), v.null()),
+    form: v.union(v.string(), v.null()),
+});
+
+/** Preserve recorded document dates without inferring them from titles or acquisition times. */
+export function sourceDocumentMetadata(source: Doc<"sources">) {
+    return {
+        title: source.title,
+        publishedAt: source.publishedAt ?? null,
+        date:
+            source.publishedAt === undefined
+                ? null
+                : new Date(source.publishedAt).toISOString(),
+        dateKind:
+            source.publishedAt === undefined
+                ? null
+                : source.origin === "sec"
+                  ? ("filing" as const)
+                  : ("publication" as const),
+        form: source.secForm ?? null,
+    };
+}
+
 export type SourcePassageRankIdentity = {
     canonicalUrl: string;
     contentHash: string;

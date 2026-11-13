@@ -198,6 +198,7 @@ function payload(model: Model, item: Case, variant: string) {
                 ? { effort: "low", exclude: true }
                 : { enabled: false },
         temperature: 0,
+        // resource-policy-exception: Fixed comparison output condition, preserved until a new study protocol is authorized.
         max_tokens: 1024,
         provider: {
             require_parameters: true,

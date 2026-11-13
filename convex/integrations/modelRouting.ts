@@ -1,10 +1,15 @@
-import { reasoningEffortValues } from "@convex/modelConfigurationValues";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { executionError } from "@convex/execution/errors";
 import type {
     modelDescriptor,
     reasoningEffort,
     reasoningPreference,
 } from "@convex/modelConfigurationSchema";
+import { reasoningEffortValues } from "@convex/modelConfigurationValues";
+import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+} from "@convex/resourcePolicy";
 import chordPackage from "@earendil-works/chord/package.json";
 import { PI_AI_VERSION } from "@earendil-works/pi-ai/utils/version";
 import durablePackage from "@earendil-works/pi-durable/package.json";
@@ -21,7 +26,7 @@ export type ModelRoute = Readonly<{
     profileKey?: string;
 }>;
 /** Installed SDK identity invalidates prepared profiles without a manually maintained version mirror. */
-export const NATIVE_MODEL_SERIALIZER = `pi-ai@${PI_AI_VERSION}/pi-durable@${durablePackage.version}/chord@${chordPackage.version}:2`;
+export const NATIVE_MODEL_SERIALIZER = `pi-ai@${PI_AI_VERSION}/pi-durable@${durablePackage.version}/chord@${chordPackage.version}:3`;
 /** Additions do not invalidate existing exact profiles; removals or changed profiles require refresh. */
 export function nativeProfileCatalogueRevision(
     previous: { profiles: Record<string, number>; profileCatalog?: string },
@@ -53,14 +58,36 @@ export function modelConfigurationKey(descriptor: object) {
         stableStringify({ serializer: NATIVE_MODEL_SERIALIZER, descriptor }),
     );
 }
+/** Declared capabilities of the controlled, zero-provider fixture, never live-model defaults. */
+export const SIMULATION_CONTEXT_WINDOW = 32000;
+export const SIMULATION_MAX_OUTPUT_TOKENS = 6144;
 export const SIMULATION_MODEL_ROUTE: ModelRoute = {
     model: "simulation/controlled",
     provider: "simulation",
+    descriptor: {
+        contextWindow: SIMULATION_CONTEXT_WINDOW,
+        maxTokens: SIMULATION_MAX_OUTPUT_TOKENS,
+        reasoning: false,
+        inputPrice: 0,
+        outputPrice: 0,
+        cacheReadPrice: 0,
+        structuredOutputs: true,
+    },
 };
-export const MODEL_MAX_OUTPUT_TOKENS = 6144;
-export const MODEL_ATTEMPT_TIMEOUT_MS = 60_000;
-export const MODEL_MAX_INPUT_PRICE_PER_MILLION = 0.15;
-export const MODEL_MAX_OUTPUT_PRICE_PER_MILLION = 0.6;
+
+/** One admitted ceiling serves structured transport and its pre-call reservation. */
+export function preparationModelOutputLimit(route: ModelRoute): number {
+    const descriptor = route.descriptor;
+    if (
+        !descriptor ||
+        !Number.isSafeInteger(descriptor.maxTokens) ||
+        descriptor.maxTokens < 1 ||
+        !Number.isSafeInteger(descriptor.contextWindow) ||
+        descriptor.contextWindow < 1
+    )
+        throw executionError("invalid_model_output_limit");
+    return Math.min(descriptor.maxTokens, descriptor.contextWindow);
+}
 export const INITIAL_MODEL_CATALOG = [
     {
         model: "z-ai/glm-5.3-flash",
@@ -116,21 +143,25 @@ export function resolveReasoningPreference(
 }
 
 /** Derives wire preferences and bounded generation options from the admitted model capabilities. */
-export function modelCallSettings(route: ModelRoute) {
+export function modelCallSettings(route: ModelRoute, deadlineAt?: number) {
+    const timeout =
+        deadlineAt === undefined ? undefined : deadlineAt - Date.now();
+    if (
+        timeout !== undefined &&
+        (!Number.isSafeInteger(timeout) || timeout <= 0)
+    )
+        throw executionError("execution_deadline");
     const descriptor = route.descriptor;
     const reasoningEnabled = descriptor?.reasoning ?? route.reasoningEnabled;
     const generation = {
-        maxOutputTokens: Math.min(
-            MODEL_MAX_OUTPUT_TOKENS,
-            descriptor?.maxTokens ?? MODEL_MAX_OUTPUT_TOKENS,
-        ),
+        maxOutputTokens: descriptor?.maxTokens,
         temperature:
             descriptor?.supportedParameters &&
             !descriptor.supportedParameters.includes("temperature")
                 ? undefined
                 : 0,
         maxRetries: 0,
-        timeout: MODEL_ATTEMPT_TIMEOUT_MS,
+        timeout,
     };
     const request = {
         provider: {

@@ -1,22 +1,10 @@
 import { type Infer, v } from "convex/values";
 import { sourceFindingNeedsComparison } from "./domain/sourceComparison";
-import {
-    MAX_QUALIFICATION_INPUT_BYTES,
-    type SourceQualification,
-} from "./domain/sourceQualification";
-import {
-    QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION,
-    QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION,
-    QUALIFICATION_MAX_OUTPUT_TOKENS,
-} from "./integrations/sourceQualificationConfig";
+import type { SourceQualification } from "./domain/sourceQualification";
 
 export const PREPARATION_STUDY_MAX_ATTEMPTS = 128;
-const maximumAttemptUsd =
-    ((MAX_QUALIFICATION_INPUT_BYTES + 4096) *
-        QUALIFICATION_MAX_INPUT_PRICE_PER_MILLION +
-        QUALIFICATION_MAX_OUTPUT_TOKENS *
-            QUALIFICATION_MAX_OUTPUT_PRICE_PER_MILLION) /
-    1_000_000;
+/** Frozen version-1 quote identity, not a live token allowance or dispatch limit. */
+const maximumAttemptUsd = 0.0239616;
 export const PREPARATION_STUDY_MAX_RESERVATION_USD =
     PREPARATION_STUDY_MAX_ATTEMPTS * maximumAttemptUsd;
 

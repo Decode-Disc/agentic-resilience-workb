@@ -2,15 +2,15 @@ import { v } from "convex/values";
 
 import { env, internalMutation, internalQuery } from "./_generated/server";
 import {
-    showcaseClaimOutputValidator,
     freezeShowcaseManifestEntry,
     type ShowcaseManifestEntry,
+    showcaseClaimOutputValidator,
 } from "./domain/showcaseManifest";
 import {
-    MAX_CLAIMS_PER_RUN,
-    MAX_CLAIM_STATEMENT_CHARS,
     MAX_CLAIM_RATIONALE_CHARS,
-} from "./resourceLimits";
+    MAX_CLAIM_STATEMENT_CHARS,
+    MAX_CLAIMS_PER_RUN,
+} from "./resourcePolicy";
 
 const manifestEntryValidator = v.object({
     inputHash: v.string(),

@@ -3,7 +3,10 @@ import type { QueryCtx } from "@convex/_generated/server";
 import { researchSlotBlock } from "@convex/execution/authority";
 import { conversationInstructions } from "@convex/execution/conversations";
 import { executionError } from "@convex/execution/errors";
-import { MAX_ANALYSES_PER_VISITOR } from "@convex/resourceLimits";
+import {
+    MAX_ANALYSES_PER_VISITOR,
+    MAX_FRAMING_AUTHORITY_REVISIONS as MAX_AUTHORITY_REVISIONS,
+} from "@convex/resourcePolicy";
 import { sourcesQualificationEnabled } from "@convex/sourcesSimulation";
 import { stableStringify } from "./sourcePassages";
 import {
@@ -11,7 +14,6 @@ import {
     explicitResearchCommand,
 } from "./workbenchContracts";
 
-const MAX_AUTHORITY_REVISIONS = 128;
 type Content = Doc<"framingRevisions">["content"];
 
 /** A retry may observe newer framing without renewing the original message's edit authority. */
