@@ -1,0 +1,457 @@
+{
+    "schemaVersion": 1,
+    "id": "20261112T154116056Z-ccc-native-api-live-supplement",
+    "createdAt": "2026-11-12T15:41:16.056Z",
+    "git": {
+        "head": "bd1d03075110b0322cae297974614d1be6c795ba",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/native-context-compaction/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/native-api-live",
+            "archivePath": "external/driver"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/backend-final-state.json",
+            "archivePath": "external/operator-01/backend-final-state.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/campaign.json",
+            "archivePath": "external/operator-02/campaign.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/cleanup.json",
+            "archivePath": "external/operator-03/cleanup.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/configuration-readiness.json",
+            "archivePath": "external/operator-04/configuration-readiness.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/environment-restoration.json",
+            "archivePath": "external/operator-05/environment-restoration.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/execution-intent.json",
+            "archivePath": "external/operator-06/execution-intent.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/exit-status.json",
+            "archivePath": "external/operator-07/exit-status.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/flags.json",
+            "archivePath": "external/operator-08/flags.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/manifest-input.json",
+            "archivePath": "external/operator-09/manifest-input.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/model-readiness.json",
+            "archivePath": "external/operator-10/model-readiness.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/operator-verification.json",
+            "archivePath": "external/operator-11/operator-verification.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/operator.log",
+            "archivePath": "external/operator-12/operator.log"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/phase-authorize.json",
+            "archivePath": "external/operator-13/phase-authorize.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/phase-run.json",
+            "archivePath": "external/operator-14/phase-run.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/phase-temporary-workflow-configuration.json",
+            "archivePath": "external/operator-15/phase-temporary-workflow-configuration.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/process.json",
+            "archivePath": "external/operator-16/process.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/proposal-summary.json",
+            "archivePath": "external/operator-17/proposal-summary.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/public-pricing-verification.json",
+            "archivePath": "external/operator-18/public-pricing-verification.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/publication-final-state.json",
+            "archivePath": "external/operator-19/publication-final-state.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-1.json",
+            "archivePath": "external/operator-20/review-wire-request-1.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-10.json",
+            "archivePath": "external/operator-21/review-wire-request-10.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-11.json",
+            "archivePath": "external/operator-22/review-wire-request-11.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-12.json",
+            "archivePath": "external/operator-23/review-wire-request-12.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-13.json",
+            "archivePath": "external/operator-24/review-wire-request-13.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-14.json",
+            "archivePath": "external/operator-25/review-wire-request-14.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-15.json",
+            "archivePath": "external/operator-26/review-wire-request-15.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-16.json",
+            "archivePath": "external/operator-27/review-wire-request-16.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-17.json",
+            "archivePath": "external/operator-28/review-wire-request-17.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-18.json",
+            "archivePath": "external/operator-29/review-wire-request-18.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-19.json",
+            "archivePath": "external/operator-30/review-wire-request-19.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-2.json",
+            "archivePath": "external/operator-31/review-wire-request-2.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-20.json",
+            "archivePath": "external/operator-32/review-wire-request-20.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-21.json",
+            "archivePath": "external/operator-33/review-wire-request-21.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-22.json",
+            "archivePath": "external/operator-34/review-wire-request-22.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-23.json",
+            "archivePath": "external/operator-35/review-wire-request-23.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-24.json",
+            "archivePath": "external/operator-36/review-wire-request-24.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-3.json",
+            "archivePath": "external/operator-37/review-wire-request-3.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-4.json",
+            "archivePath": "external/operator-38/review-wire-request-4.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-5.json",
+            "archivePath": "external/operator-39/review-wire-request-5.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-6.json",
+            "archivePath": "external/operator-40/review-wire-request-6.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-7.json",
+            "archivePath": "external/operator-41/review-wire-request-7.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-8.json",
+            "archivePath": "external/operator-42/review-wire-request-8.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/review-wire-request-9.json",
+            "archivePath": "external/operator-43/review-wire-request-9.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/run-returned.json",
+            "archivePath": "external/operator-44/run-returned.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/shared-configuration-use.json",
+            "archivePath": "external/operator-45/shared-configuration-use.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/ccc-native-api-20261112t145555143z/supplement-selection.json",
+            "archivePath": "external/selection/supplement-selection.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/driver/archive-supplement.mjs",
+            "bytes": 3069,
+            "sha256": "dcea14c7e5450457036af54b8ec130efda9f6b78ae1c814fd12f66bfe75af96b"
+        },
+        {
+            "path": "external/driver/prepare.mjs",
+            "bytes": 4943,
+            "sha256": "69a4d99288e59a74945bb44ddc9dbbb1dc1bf96537ba9ff90c790e0990f394dd"
+        },
+        {
+            "path": "external/driver/run.mjs",
+            "bytes": 9291,
+            "sha256": "ea539e3dc249ddfd72c3511d468d4d8daecdaa182634b67922b7c01b1e8096ed"
+        },
+        {
+            "path": "external/driver/verify.mjs",
+            "bytes": 7565,
+            "sha256": "ac52cf8c832e75e6358388cf6af7e5d1c4cfb35a9efad56f0b761074246529b8"
+        },
+        {
+            "path": "external/operator-01/backend-final-state.json",
+            "bytes": 8408,
+            "sha256": "fd10a728576d88f654369763b80821e1be52c337b5d9d034eb18dd40fce7430f"
+        },
+        {
+            "path": "external/operator-02/campaign.json",
+            "bytes": 121128,
+            "sha256": "8859c540b3bf8c9bf1c616a83013561e3ee0a988f9903da450d258de0ffaa920"
+        },
+        {
+            "path": "external/operator-03/cleanup.json",
+            "bytes": 45,
+            "sha256": "5dfa4c8ffc66a7bd9b6aa8bedf71185cec59b805ad698b4c0b3e6b266a8f5d3f"
+        },
+        {
+            "path": "external/operator-04/configuration-readiness.json",
+            "bytes": 137,
+            "sha256": "19ced4a565418b646a945f9a07031bbb13183c7ef5fb23bdc2792c4ad578e25b"
+        },
+        {
+            "path": "external/operator-05/environment-restoration.json",
+            "bytes": 576,
+            "sha256": "c758dc7ead99a009963f3dc9f8c63632e34ffd4ca758eb7957df097bc8fcf5aa"
+        },
+        {
+            "path": "external/operator-06/execution-intent.json",
+            "bytes": 6315,
+            "sha256": "5af2da0ed3bdf8c5cb7a8318e69c74512bcb6fd04c4d85b05b1f699449656d92"
+        },
+        {
+            "path": "external/operator-07/exit-status.json",
+            "bytes": 110,
+            "sha256": "c8a6f1e41962bfaf7bfcfb6f9bc3987f736ecf9df2edeafb0efb3a5945c0155a"
+        },
+        {
+            "path": "external/operator-08/flags.json",
+            "bytes": 138,
+            "sha256": "49611e6681208e50b6b67cd23ebc5bd10a745639250e0dd580a5c895113a0eb7"
+        },
+        {
+            "path": "external/operator-09/manifest-input.json",
+            "bytes": 5490,
+            "sha256": "091a3178b9d614d6e56341271c896b236c44d37f70c201cda6ae8169ff40eadf"
+        },
+        {
+            "path": "external/operator-10/model-readiness.json",
+            "bytes": 965,
+            "sha256": "b30ab41ce145ef5dc371efd9cd6820fee80239d2a599a7d7f5ae8b742aac8f52"
+        },
+        {
+            "path": "external/operator-11/operator-verification.json",
+            "bytes": 2196,
+            "sha256": "213de2aca0338342bc70e3c5b53d41c6070abb43634458135755e6d7986a1b1a"
+        },
+        {
+            "path": "external/operator-12/operator.log",
+            "bytes": 2482,
+            "sha256": "b8fe24b33af2a8d74bebe856558d7bbb24c89497169dad6716364ea3a5028c76"
+        },
+        {
+            "path": "external/operator-13/phase-authorize.json",
+            "bytes": 39,
+            "sha256": "163ab76caef74f350435c1776776f74015db4fdef3e754380f972f1f4f66e9d5"
+        },
+        {
+            "path": "external/operator-14/phase-run.json",
+            "bytes": 39,
+            "sha256": "afab14d1f7777c5a7138c938b232186e2b759067e4a47db7471651f546115355"
+        },
+        {
+            "path": "external/operator-15/phase-temporary-workflow-configuration.json",
+            "bytes": 39,
+            "sha256": "ed8d76cbac85079a7e24f76e5d71ba279e238372ce6316be9752836780b2453a"
+        },
+        {
+            "path": "external/operator-16/process.json",
+            "bytes": 952,
+            "sha256": "ba717101a683c0283fa65274171541d4151c2603778a76f2be5917590f7390cd"
+        },
+        {
+            "path": "external/operator-17/proposal-summary.json",
+            "bytes": 1497,
+            "sha256": "c33f92a19757c675cd0729b1bbbf104811ca0a3c3000d17e56dbf7e1c0a8ecf7"
+        },
+        {
+            "path": "external/operator-18/public-pricing-verification.json",
+            "bytes": 866,
+            "sha256": "1e773d440570303ef189c6dc3d8fb2badd38fe1c0f5f817398db514eacfc1c87"
+        },
+        {
+            "path": "external/operator-19/publication-final-state.json",
+            "bytes": 49,
+            "sha256": "75817c860ac5fa795ccedcfb78a2c87c3001d96fe7a90aca20b6f5a2e40b9c04"
+        },
+        {
+            "path": "external/operator-20/review-wire-request-1.json",
+            "bytes": 12584,
+            "sha256": "5b8f9bcc983498bc49a55a29b933d22ad412d510c30932aed5ded9db76694207"
+        },
+        {
+            "path": "external/operator-21/review-wire-request-10.json",
+            "bytes": 247144,
+            "sha256": "4cdcf016bc40c3442ca8acaafdd419d1943f728cae3f27ef62ad35792c23aa46"
+        },
+        {
+            "path": "external/operator-22/review-wire-request-11.json",
+            "bytes": 269557,
+            "sha256": "28f1dd7f5c498fd0ba3b6753155c72a66fd4351b5894cf9da405c925b379793b"
+        },
+        {
+            "path": "external/operator-23/review-wire-request-12.json",
+            "bytes": 280658,
+            "sha256": "e561d62662f3d1658a12c0738672c40184479be0d39f8cc24ddc86d325411344"
+        },
+        {
+            "path": "external/operator-24/review-wire-request-13.json",
+            "bytes": 318720,
+            "sha256": "36660522b57a122eb1ca2ce4ffb4626b666bda30a2383d1caae45fb63dcd7da7"
+        },
+        {
+            "path": "external/operator-25/review-wire-request-14.json",
+            "bytes": 346235,
+            "sha256": "7f1300b39b4454bfaa6e329eaeeead487eaa2ad711c4288eebdd72458528136b"
+        },
+        {
+            "path": "external/operator-26/review-wire-request-15.json",
+            "bytes": 350188,
+            "sha256": "3c6b01de9abcb46019972de266054da2a744a6c3005c573a54e6278affbbe235"
+        },
+        {
+            "path": "external/operator-27/review-wire-request-16.json",
+            "bytes": 384721,
+            "sha256": "15fb11da5691a85a17d6bcbc07eb310ef7d0b1be22a69c3be2482de148d1fc1f"
+        },
+        {
+            "path": "external/operator-28/review-wire-request-17.json",
+            "bytes": 406639,
+            "sha256": "b70aecd41780352bafae9c7f2609383bfa18e52a71ca79af59a6514d8bd2df7c"
+        },
+        {
+            "path": "external/operator-29/review-wire-request-18.json",
+            "bytes": 420290,
+            "sha256": "bfcb92695c88416dc073928891136ecc1db4167a949bf693a4cdd71d5daeb8ed"
+        },
+        {
+            "path": "external/operator-30/review-wire-request-19.json",
+            "bytes": 428547,
+            "sha256": "601b94b279ac33ac37a86b759d31f7be80a5664caa8321c086a6c339cff93afb"
+        },
+        {
+            "path": "external/operator-31/review-wire-request-2.json",
+            "bytes": 17370,
+            "sha256": "e666fd51a518674a6ba8f892ca400f594d78b61e9f55407125465f69209413bd"
+        },
+        {
+            "path": "external/operator-32/review-wire-request-20.json",
+            "bytes": 436948,
+            "sha256": "2caba47d1e94dd147cd11841a6469101dd938235d98e438fd391f538ccb56683"
+        },
+        {
+            "path": "external/operator-33/review-wire-request-21.json",
+            "bytes": 446877,
+            "sha256": "da7a471aeebc4ab43089eb1207adf3f58afa18835b6a307c7ca92f9499b6bb1f"
+        },
+        {
+            "path": "external/operator-34/review-wire-request-22.json",
+            "bytes": 464886,
+            "sha256": "dcd7769ab32f469e420ab2a7fd7bd96e09cc7ce4546b908c1a7a6bea45b44e6d"
+        },
+        {
+            "path": "external/operator-35/review-wire-request-23.json",
+            "bytes": 469145,
+            "sha256": "8d403ba0a7cb1acdaa27ca6e412c7aed01c2cd7e904b8539c63d29406726e4af"
+        },
+        {
+            "path": "external/operator-36/review-wire-request-24.json",
+            "bytes": 485203,
+            "sha256": "46454cfd1c451eb41a3949bcef307a0ebbbc4141fdd3afda5cdabe206672cf57"
+        },
+        {
+            "path": "external/operator-37/review-wire-request-3.json",
+            "bytes": 79513,
+            "sha256": "26e83fef33c56483a76e0d400fe5aa5c7f0f5a587145ed37ed6222ed2a66a00a"
+        },
+        {
+            "path": "external/operator-38/review-wire-request-4.json",
+            "bytes": 103836,
+            "sha256": "b9e75df157947ef41e7f69d4c564d795160e3dcd4c13f56c429d2a39ea25b9af"
+        },
+        {
+            "path": "external/operator-39/review-wire-request-5.json",
+            "bytes": 105870,
+            "sha256": "2eb90181f5878d182efb28883584eb4f5ee5a06c478248fb3048cd2d2f45f0e7"
+        },
+        {
+            "path": "external/operator-40/review-wire-request-6.json",
+            "bytes": 158902,
+            "sha256": "c3eb700248dcdb4b0c875242808f30956edafd2073a3f84e5024e66d8410a993"
+        },
+        {
+            "path": "external/operator-41/review-wire-request-7.json",
+            "bytes": 160987,
+            "sha256": "71ef5bfe02036613ae3abfc1d3e35fd732582c8ad04abc2fcd7ce247bfea899c"
+        },
+        {
+            "path": "external/operator-42/review-wire-request-8.json",
+            "bytes": 187919,
+            "sha256": "e780b99c284c73bc4ca79e70992e79634dbcf54e587254eda79b908eb4c11789"
+        },
+        {
+            "path": "external/operator-43/review-wire-request-9.json",
+            "bytes": 243476,
+            "sha256": "c68c64b4d10a6f1d381bba56e376896f0be8149739d2bd77703618e49e3b9fef"
+        },
+        {
+            "path": "external/operator-44/run-returned.json",
+            "bytes": 56,
+            "sha256": "7b16bacd9ed4a4c49fcae4b65c1596e5ce45528169b57cdd1fa8d5cb18f9f5ae"
+        },
+        {
+            "path": "external/operator-45/shared-configuration-use.json",
+            "bytes": 328,
+            "sha256": "387e4c54659515b55904b3c945424b53a300c6cc68c71ac00387229b0c612113"
+        },
+        {
+            "path": "external/selection/supplement-selection.json",
+            "bytes": 1734,
+            "sha256": "1dfed2c63a96ef96ee38f12962bd3bf84467cef1c5770ddfa1d24ef3a609f77e"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261112T154116056Z-ccc-native-api-live-supplement.tar.gz",
+        "bytes": 1588074,
+        "sha256": "0290196e99f7f22886e5499534d2d6b6da203d554972fbfb97e610e9fc6e0997"
+    },
+    "verification": "restored_and_verified"
+}
