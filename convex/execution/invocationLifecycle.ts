@@ -30,8 +30,8 @@ import {
     MAX_WORKING_NOTES_BYTES,
     SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
 } from "@convex/resourcePolicy";
-import schema from "@convex/schema";
 import { readWorkbenchQualificationDeadline } from "@convex/runWorkspace";
+import schema from "@convex/schema";
 import { type Infer, v } from "convex/values";
 import { ValidationError, validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
@@ -1412,7 +1412,7 @@ export const finish = internalMutation({
     },
 });
 
-/** A settled invocation consumes non-progress capacity once, whether it returned tools or a rejected completion. */
+/** Settle each invocation once while keeping the first completion refusal actionable. */
 function invocationProgressSettlement(
     mission: Doc<"agentMissions">,
     invocation: Doc<"agentInvocations">,
@@ -1460,7 +1460,10 @@ function invocationProgressSettlement(
               }
             : (mission.recoveryRead ??
               (refusal ? { refusalInvocationId: invocation._id } : undefined));
-    const noProgressTurns = mission.noProgressTurns + (restored ? 0 : 1);
+    let noProgressTurns = mission.noProgressTurns + (restored ? 0 : 1);
+    // Prior consultations must not stop the first completion refusal before its feedback can be used.
+    if (rejectedCompletion && !mission.recoveryRead)
+        noProgressTurns = Math.min(noProgressTurns, MAX_NO_PROGRESS_TURNS - 1);
     return {
         noProgressTurns,
         recoveryRead,

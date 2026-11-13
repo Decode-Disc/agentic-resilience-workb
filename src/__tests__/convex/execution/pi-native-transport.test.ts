@@ -336,6 +336,100 @@ test.each([
     expect(observed.requests[0]?.input.kind).toBe("read_in_context");
 }, 30000);
 
+test.each([
+    false,
+    true,
+])("native Pi delivers first completion feedback after two non-progress consultations (repeat=%s)", async (repeat) => {
+    const malformed =
+        'Preparation is finished.\n```json\n{"kind":"complete","captureIds":[]}\n```';
+    let f: Awaited<ReturnType<typeof fixture>>;
+    const bodies: { messages: { content: unknown }[]; tools: unknown[] }[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            bodies.push(JSON.parse(String(init?.body)));
+            const usage = {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+                cost: 0.001,
+            };
+            if (bodies.length <= 2) {
+                const name = "consult_run_state";
+                return new Response(
+                    `data: ${JSON.stringify({ id: name, choices: [{ index: 0, delta: { role: "assistant", tool_calls: [{ index: 0, id: `consult-${bodies.length}`, type: "function", function: { name, arguments: "{}" } }] }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: name, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], usage })}\n\ndata: [DONE]\n\n`,
+                    { headers: { "content-type": "text/event-stream" } },
+                );
+            }
+            if (bodies.length === 3) {
+                expect(
+                    (await f.t.run((ctx) => ctx.db.get(f.missionId)))
+                        ?.noProgressTurns,
+                ).toBe(2);
+            }
+            return reply(
+                repeat || bodies.length === 3
+                    ? malformed
+                    : { kind: "complete", captureIds: [f.captureId] },
+                "stop",
+                usage,
+            );
+        }),
+    );
+    f = await fixture();
+    const before = await f.t.run((ctx) => ctx.db.get(f.missionId));
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    const state = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(f.missionId),
+        receipts: await ctx.db.query("providerCalls").collect(),
+        invocations: await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .collect(),
+    }));
+    const rejected = state.invocations.find((i) => i.correction);
+    expect(rejected?.blockCode).toBe("completion_correction_required");
+    expect(state.mission).toMatchObject({
+        status: repeat ? "blocked" : "completed",
+        deadlineAt: before?.deadlineAt,
+        generation: before?.generation,
+        progressKeys: before?.progressKeys,
+        noProgressTurns: repeat ? 3 : 2,
+        ...(repeat
+            ? { blockCode: "repetition_stop" }
+            : {
+                  result: {
+                      kind: "saved_material_inspection_v1",
+                      captureIds: [f.captureId],
+                  },
+              }),
+    });
+    expect(state.receipts).toHaveLength(4);
+    expect(state.receipts[2]).toMatchObject({
+        status: "failed",
+        errorCode: "invalid_output",
+        dispatchOutcome: "response_received",
+        reportedCost: 0.001,
+        diagnostic: { output: malformed },
+    });
+    expect(state.receipts[3]).toMatchObject({
+        status: repeat ? "failed" : "succeeded",
+        reportedCost: 0.001,
+    });
+    expect(rejected).toMatchObject({ correction: { code: "invalid_output" } });
+    expect(JSON.stringify(bodies[3]?.messages)).toContain(
+        "Preparation is finished.",
+    );
+    expect(JSON.stringify(bodies[3]?.messages)).toContain(
+        "without surrounding prose or Markdown fences",
+    );
+    expect(JSON.stringify(bodies[3]?.messages)).toContain(f.captureId);
+    expect(bodies[3]?.tools).toEqual(bodies[2]?.tools);
+}, 30000);
+
 test("SDK-repaired malformed raw JSON is retained separately and refused before operation admission", async () => {
     let original = "";
     let current: Awaited<ReturnType<typeof fixture>>;
