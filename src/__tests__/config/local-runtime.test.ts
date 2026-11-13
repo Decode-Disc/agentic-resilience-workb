@@ -10,7 +10,7 @@ import {
     rmSync,
     writeFileSync,
 } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer, Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23,6 +23,7 @@ const roots: string[] = [];
 const servers: Server[] = [];
 const testProcesses: ReturnType<typeof spawn>[] = [];
 const fixtureBackendPids: number[] = [];
+const allocatedFixturePorts = new Set<number>();
 const runtimeModule = await import(
     pathToFileURL(resolve(process.cwd(), "scripts/local-runtime.ts")).href
 );
@@ -62,6 +63,7 @@ afterEach(async () => {
     );
     for (const root of roots.splice(0))
         rmSync(root, { recursive: true, force: true });
+    allocatedFixturePorts.clear();
 });
 
 function createProjectRoot(): string {
@@ -103,16 +105,33 @@ async function backend(instanceName: string, port = 0) {
 }
 
 async function freePort(): Promise<number> {
-    const server = createServer();
-    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
-    const address = server.address();
-    if (!address || typeof address === "string")
-        throw new Error("Missing fixture port address");
-    const port = address.port;
-    await new Promise<void>((done, fail) =>
-        server.close((error) => (error ? fail(error) : done())),
-    );
-    return port;
+    // Closed listeners can still be reserved in the fixture's worktree registry.
+    // Retain rejected sockets until allocation finishes so the OS must pick another port.
+    const listeners: Server[] = [];
+    try {
+        while (true) {
+            const server = createServer();
+            listeners.push(server);
+            await new Promise<void>((done) =>
+                server.listen(0, "127.0.0.1", done),
+            );
+            const address = server.address();
+            if (!address || typeof address === "string")
+                throw new Error("Missing fixture port address");
+            if (allocatedFixturePorts.has(address.port)) continue;
+            allocatedFixturePorts.add(address.port);
+            return address.port;
+        }
+    } finally {
+        await Promise.all(
+            listeners.map(
+                (server) =>
+                    new Promise<void>((done, fail) =>
+                        server.close((error) => (error ? fail(error) : done())),
+                    ),
+            ),
+        );
+    }
 }
 
 function writeNativeConfig(
@@ -121,6 +140,8 @@ function writeNativeConfig(
     origin: string,
 ) {
     const cloud = Number(new URL(origin).port);
+    allocatedFixturePorts.add(cloud);
+    allocatedFixturePorts.add(cloud + 1);
     writeFileSync(
         join(root, ".convex/local/default/config.json"),
         JSON.stringify({
@@ -1821,7 +1842,19 @@ it("stops an unmanaged listener only when its reserved port and exact PID are se
 
 it("reuses a healthy owned stack on repeated noninteractive dev without replacing either process", async () => {
     const { first } = await createWorktreePair();
-    const env = await fakeWebPnpm(first);
+    const { site } = runtimeModule.getLocalRuntimePorts(first);
+    // Reproduce the OS reissuing an unbound but reserved native service port.
+    const address = vi.spyOn(Server.prototype, "address").mockReturnValueOnce({
+        address: "127.0.0.1",
+        family: "IPv4",
+        port: site,
+    });
+    let env: NodeJS.ProcessEnv;
+    try {
+        env = await fakeWebPnpm(first);
+    } finally {
+        address.mockRestore();
+    }
     const original = spawnLocalDev(first, "dev", env);
     const before = await waitForManifest(first, "web");
     const repeated = spawnLocalDev(first, "dev", env, [], "pipe");
