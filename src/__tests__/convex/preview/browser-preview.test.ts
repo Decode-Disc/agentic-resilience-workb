@@ -193,33 +193,23 @@ describe("browserPreviewInternals", () => {
             const t = convexTest(schema, modules);
             const { runId, sourceId } = await seedVisitorAndRun(t);
 
-            const otherVisitorId = await t.run(async (ctx) => {
-                const a = await ctx.db.insert("users", {
-                    name: "other",
-                    email: "o@t.t",
-                    isAnonymous: true,
-                } as any);
-                const i = await ctx.db.insert("invitations", {
-                    slotKey: "other",
-                    role: "analyst",
-                    codeDigest: "digest-other",
-                    status: "claimed",
-                    createdAt: Date.now(),
-                });
-                return await ctx.db.insert("visitors", {
-                    authUserId: a,
-                    invitationId: i,
-                    role: "analyst",
-                    status: "active",
-                    analysesReserved: 1,
-                    admittedAt: Date.now(),
-                });
+            const other = await seedVisitorAndRun(t);
+            expect(
+                await t.query(getSourceForPreview, {
+                    sourceId: other.sourceId,
+                    runId: other.runId,
+                    visitorId: other.visitorId,
+                }),
+            ).toEqual({
+                canonicalUrl: "https://example.com/report",
+                title: "Test Report",
+                decision: "pending",
             });
 
             const result = await t.query(getSourceForPreview, {
                 sourceId,
                 runId,
-                visitorId: otherVisitorId,
+                visitorId: other.visitorId,
             });
             expect(result).toBeNull();
         });

@@ -81,6 +81,49 @@ async function readSourceDecision(
     return reviewItem?.decision ?? "pending";
 }
 
+/** Atomically checks workspace admission and reserves the visitor's decorative render allowance. */
+export const authorizeCompanyPreview = internalMutation({
+    args: {},
+    returns: v.union(
+        v.object({ status: v.literal("ok") }),
+        v.object({
+            status: v.literal("unavailable"),
+            error: v.union(
+                v.literal("unauthorized"),
+                v.literal("test_data"),
+                v.literal("rate_limited"),
+            ),
+        }),
+    ),
+    handler: async (ctx) => {
+        const authUserId = await getAuthUserId(ctx);
+        const visitor = authUserId
+            ? await ctx.db
+                  .query("visitors")
+                  .withIndex("by_auth_user_id", (q) =>
+                      q.eq("authUserId", authUserId),
+                  )
+                  .unique()
+            : null;
+        if (visitor?.status !== "active")
+            return { status: "unavailable", error: "unauthorized" } as const;
+        const invitation = await ctx.db.get(visitor.invitationId);
+        if (
+            invitation?.status !== "claimed" ||
+            invitation.claimedByVisitorId !== visitor._id
+        )
+            return { status: "unavailable", error: "unauthorized" } as const;
+        if ((await workspaceForVisitor(ctx, visitor)).isTestData)
+            return { status: "unavailable", error: "test_data" } as const;
+        const allowance = await rateLimiter.limit(ctx, "previewRender", {
+            key: `cover:${visitor._id}`,
+        });
+        return allowance.ok
+            ? ({ status: "ok" } as const)
+            : ({ status: "unavailable", error: "rate_limited" } as const);
+    },
+});
+
 // ─── Internal mutation: rate-limit check ──────────────────────────────────────
 
 export const checkRateLimit = internalMutation({

@@ -13,7 +13,7 @@ import { validateCoverImageUrl } from "./domain/coverImageUrl";
  * self-hosted Playwright preview service.
  *
  * Unlike `browserPreview.renderPreview`, this action is not gated on a source
- * ownership or `pending` decision — it only needs a public HTTPS URL. The
+ * ownership or `pending` decision — an admitted research visitor may supply a public HTTPS URL. The
  * cover image is decorative (not evidence), so it carries no claim
  * classification, provenance, or passage locator.
  *
@@ -41,9 +41,6 @@ export const renderCompanyPreview = action({
             return { status: "unavailable", error: "unauthorized" };
         }
 
-        if (!(await ctx.runQuery(internal.runWorkspace.authorizeProvider, {})))
-            return { status: "unavailable", error: "test_data" };
-
         const validatedUrl = validateCoverImageUrl(args.url);
         if (!validatedUrl) {
             return { status: "unavailable", error: "invalid_url" };
@@ -55,15 +52,11 @@ export const renderCompanyPreview = action({
             return { status: "unavailable", error: "service_unavailable" };
         }
 
-        // Rate-limit only the expensive render path. The key differs from the
-        // evidence previews so the two do not contend for the same bucket.
-        const rateLimitResult = await ctx.runMutation(
-            internal.browserPreviewInternals.checkRateLimit,
-            { key: `cover:${authUserId}:${validatedUrl}` },
+        const authorization = await ctx.runMutation(
+            internal.browserPreviewInternals.authorizeCompanyPreview,
+            {},
         );
-        if (!rateLimitResult.allowed) {
-            return { status: "unavailable", error: "rate_limited" };
-        }
+        if (authorization.status !== "ok") return authorization;
 
         try {
             const response = await fetch(`${serviceUrl}/render`, {
