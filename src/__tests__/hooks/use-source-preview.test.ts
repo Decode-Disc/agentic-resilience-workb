@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const { useAction, useQuery } = vi.hoisted(() => ({
@@ -97,6 +97,68 @@ describe("useSourcePreview", () => {
         );
 
         expect(renderPreview).toHaveBeenCalledWith({ sourceId, runId });
+    });
+
+    test.each([
+        "screenshot",
+        "failure",
+        "late",
+    ] as const)("switching sources cannot reuse the previous source's %s", async (previous) => {
+        useQuery.mockReturnValue(null);
+        let resolveFirst!: (
+            value:
+                | { status: "ok"; base64: string }
+                | { status: "unavailable"; error: string },
+        ) => void;
+        let resolveSecond!: (value: { status: "ok"; base64: string }) => void;
+        const renderPreview = vi
+            .fn()
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        resolveFirst = resolve;
+                    }),
+            )
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        resolveSecond = resolve;
+                    }),
+            );
+        useAction.mockReturnValue(renderPreview);
+        const { result, rerender } = renderHook(
+            ({ source }) => useSourcePreview(source, runId, "pending"),
+            { initialProps: { source: sourceId } },
+        );
+        const firstResult =
+            previous === "failure"
+                ? { status: "unavailable" as const, error: "render_failed" }
+                : {
+                      status: "ok" as const,
+                      base64: "data:image/png;base64,FIRST",
+                  };
+        if (previous !== "late")
+            await act(async () => resolveFirst(firstResult));
+        rerender({ source: "src_other" as never });
+        expect(result.current).toEqual({ status: "loading" });
+        if (previous === "late") {
+            await act(async () => resolveFirst(firstResult));
+            expect(result.current).toEqual({ status: "loading" });
+        }
+        expect(renderPreview).toHaveBeenLastCalledWith({
+            sourceId: "src_other",
+            runId,
+        });
+        await act(async () =>
+            resolveSecond({
+                status: "ok",
+                base64: "data:image/png;base64,SECOND",
+            }),
+        );
+        expect(result.current).toEqual({
+            status: "screenshot",
+            dataUrl: "data:image/png;base64,SECOND",
+        });
     });
 
     test("reports unavailable when rendering fails", async () => {

@@ -30,26 +30,48 @@ export function useSourcePreview(
         decision === "pending" && sourceId && runId ? { sourceId } : "skip",
     );
 
-    const [rendered, setRendered] = useState<string | null>(null);
-    const [failed, setFailed] = useState(false);
-    const requestedRef = useRef(false);
+    const [rendered, setRendered] = useState<{
+        sourceId: Id<"sources">;
+        runId: Id<"researchRuns">;
+        state: PreviewState;
+    } | null>(null);
+    const requestedRef = useRef<{
+        sourceId: Id<"sources">;
+        runId: Id<"researchRuns">;
+        promise: ReturnType<typeof renderPreview>;
+    } | null>(null);
 
     useEffect(() => {
-        if (decision !== "pending" || !sourceId || !runId) return;
-        // Only render on a confirmed miss (null), not while the query is still
-        // loading (undefined), and never more than once per mount.
-        if (cached !== null) return;
-        if (requestedRef.current) return;
-        requestedRef.current = true;
-        renderPreview({ sourceId, runId })
-            .then((result) => {
-                if (result.status === "ok") {
-                    setRendered(result.base64);
-                } else {
-                    setFailed(true);
-                }
-            })
-            .catch(() => setFailed(true));
+        if (decision !== "pending" || !sourceId || !runId || cached !== null)
+            return;
+        if (
+            requestedRef.current?.sourceId !== sourceId ||
+            requestedRef.current.runId !== runId
+        ) {
+            requestedRef.current = {
+                sourceId,
+                runId,
+                promise: renderPreview({ sourceId, runId }),
+            };
+        }
+        let active = true;
+        const settle = (state: PreviewState) => {
+            if (active) setRendered({ sourceId, runId, state });
+        };
+        requestedRef.current.promise
+            .then((result) =>
+                settle(
+                    result.status === "ok"
+                        ? { status: "screenshot", dataUrl: result.base64 }
+                        : { status: "unavailable", reason: "render_failed" },
+                ),
+            )
+            .catch(() =>
+                settle({ status: "unavailable", reason: "render_failed" }),
+            );
+        return () => {
+            active = false;
+        };
     }, [decision, sourceId, runId, cached, renderPreview]);
 
     if (decision !== "pending") {
@@ -60,14 +82,9 @@ export function useSourcePreview(
         return { status: "unavailable", reason: "no_context" };
     }
 
-    const dataUrl = cached?.dataUrl ?? rendered;
-    if (dataUrl) {
-        return { status: "screenshot", dataUrl };
-    }
-
-    if (failed) {
-        return { status: "unavailable", reason: "render_failed" };
-    }
-
-    return { status: "loading" };
+    if (cached?.dataUrl)
+        return { status: "screenshot", dataUrl: cached.dataUrl };
+    return rendered?.sourceId === sourceId && rendered.runId === runId
+        ? rendered.state
+        : { status: "loading" };
 }
