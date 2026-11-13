@@ -25,6 +25,7 @@ Read `PRODUCT.md` before product planning or implementation, relevant sections o
 | `context/PROJECT.md` | context | - | Stable candidature purpose and research framing. |
 | `docs/decisions/**` | history | - | Dated decisions and trade-offs, not additional current obligations. |
 | `docs/brainstorming/**` | history | - | Explorations and earlier designs, not execution instructions. |
+| `docs/notes/**` | history | - | Deferred ideas and open alternatives, not accepted decisions or execution instructions. |
 | `docs/research/**` | history | - | Dated research and benchmark interpretation. |
 | `docs/showcases/**` | history | - | Showcase selection rationale and research material. |
 | `docs/examples/**` | history | - | Illustrative references. |
