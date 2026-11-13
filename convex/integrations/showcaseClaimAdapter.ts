@@ -9,7 +9,6 @@ import {
 import {
     CLAIM_SCHEMA_VERSION,
     computeClaimInputHash,
-    lookupShowcaseManifest,
     type NormalizedClaimInput,
     SHOWCASE_ADAPTER_VERSION,
     SHOWCASE_FIXTURE_VERSION,
@@ -180,28 +179,4 @@ export function executeShowcaseClaimExtractionFromManifest(args: {
         adapterVersion: entry.adapterVersion,
         claims: entry.claims,
     };
-}
-
-/**
- * Executes deterministic showcase claim extraction against the in-memory
- * registry. Performs zero external I/O and creates zero I/O, and refuses any
- * input hash not registered in the showcase manifest.
- */
-export function executeShowcaseClaimExtraction(args: {
-    inputHash: string;
-    normalizedInput: NormalizedClaimInput;
-}): ShowcaseClaimAdapterResult {
-    const entry: ShowcaseManifestEntry | null = lookupShowcaseManifest(
-        args.inputHash,
-    );
-    if (!entry) {
-        return {
-            status: "unavailable",
-            reason: "unknown_input_hash",
-        };
-    }
-    return executeShowcaseClaimExtractionFromManifest({
-        manifest: entry,
-        normalizedInput: args.normalizedInput,
-    });
 }

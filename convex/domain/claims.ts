@@ -26,19 +26,10 @@ export const evidenceRelationValidator = v.union(
     v.literal("context"),
 );
 
-export const CLAIM_DIMENSION_LINK_ORIGINS = ["generated", "analyst"] as const;
-
-export type ClaimDimensionLinkOrigin =
-    (typeof CLAIM_DIMENSION_LINK_ORIGINS)[number];
-
 export const claimDimensionLinkOriginValidator = v.union(
     v.literal("generated"),
     v.literal("analyst"),
 );
-
-export const AI_TASK_EXECUTION_MODES = ["showcase", "live"] as const;
-
-export type AITaskExecutionMode = (typeof AI_TASK_EXECUTION_MODES)[number];
 
 export const aiTaskExecutionModeValidator = v.union(
     v.literal("showcase"),

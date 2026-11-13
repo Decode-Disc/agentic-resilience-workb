@@ -11,9 +11,6 @@ export const SAVED_MATERIAL_DEFINITION_VERSION = 2;
 export const savedMaterialDefinitionId = v.literal(
     SAVED_MATERIAL_DEFINITION_ID,
 );
-export const savedMaterialDefinitionVersion = v.literal(
-    SAVED_MATERIAL_DEFINITION_VERSION,
-);
 export const savedMaterialCompletionValidator = v.object({
     kind: v.literal("complete"),
     captureIds: v.array(sourceMaterialReferenceValidator.fields.captureId),
