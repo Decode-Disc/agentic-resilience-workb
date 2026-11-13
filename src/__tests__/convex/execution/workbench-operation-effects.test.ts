@@ -17,7 +17,9 @@ afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
 });
-test("a committed framing effect is adopted as success", async () => {
+test.each([
+    1, 2,
+])("dispatches persisted framing operation version %i only when supported", async (version) => {
     vi.useFakeTimers();
     const t = convexTest(schema, modules);
     agentTest.register(t);
@@ -60,10 +62,26 @@ test("a committed framing effect is adopted as success", async () => {
             },
         },
     });
+    expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        operationVersion: 2,
+    });
+    const before = await client.query(api.framing.get, { runId });
+    if (version === 1)
+        await t.run((ctx) => ctx.db.patch(requestId, { operationVersion: 1 }));
     const outcome = await t.action(internal.execution.operations.dispatch, {
         requestId,
         expectedGeneration: 1,
     });
+    if (version === 1) {
+        expect(outcome).toEqual({ kind: "refused", code: "stale_execution" });
+        expect(await client.query(api.framing.get, { runId })).toEqual(before);
+        expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+            status: "completed",
+            knownNotDispatched: true,
+            outcome,
+        });
+        return;
+    }
     expect(outcome).toMatchObject({ kind: "success" });
     expect(await client.query(api.framing.get, { runId })).toMatchObject({
         revision: 2,
@@ -357,7 +375,9 @@ async function framedTurn(key: string, launch = false) {
     if (!active) throw Error("Expected turn");
     return { t, client, runId, active };
 }
-test("a refused control settles and does not prevent an independent documentary request", async () => {
+test.each([
+    1, 2,
+])("a refused control leaves documentary dispatch subject to persisted operation version %i", async (version) => {
     const { t, client, runId, active } = await framedTurn(
         "recoverable-refusal",
         true,
@@ -399,16 +419,36 @@ test("a refused control settles and does not prevent an independent documentary 
             interpretedNeed: "Public switching restrictions.",
         },
     });
+    expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        operationVersion: 2,
+    });
+    if (version === 1)
+        await t.run((ctx) => ctx.db.patch(requestId, { operationVersion: 1 }));
+    const outcome = await t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    if (version === 1) {
+        expect(outcome).toEqual({ kind: "refused", code: "stale_execution" });
+        expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+            status: "completed",
+            knownNotDispatched: true,
+            outcome,
+        });
+        expect(
+            await t.run((ctx) =>
+                ctx.db.query("workbenchInstructions").collect(),
+            ),
+        ).toEqual([]);
+        return;
+    }
+    expect(outcome).toMatchObject({ kind: "success" });
     expect(
         await t.action(internal.execution.operations.dispatch, {
             requestId,
             expectedGeneration: 1,
         }),
-    ).toMatchObject({ kind: "success" });
-    await t.action(internal.execution.operations.dispatch, {
-        requestId,
-        expectedGeneration: 1,
-    });
+    ).toEqual(outcome);
     const instructions = await t.run((ctx) =>
         ctx.db
             .query("workbenchInstructions")

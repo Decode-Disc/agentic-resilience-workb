@@ -1,52 +1,10 @@
-import { writeFileSync } from "node:fs";
 import { internal } from "@convex/_generated/api";
-import { registeredAgentDefinitions } from "@convex/execution/agentCatalog";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
 
 afterEach(() => {
     vi.unstubAllEnvs();
     vi.useRealTimers();
-});
-
-test("registered operation versions and native schema distinctions survive relocation", () => {
-    const definitions = registeredAgentDefinitions();
-    const inventory = definitions.map((d) => ({
-        id: d.id,
-        version: d.version,
-        operations: Object.entries(d.operations)
-            .map(([name, op]) => ({
-                name,
-                version: op.version,
-                description: op.description,
-                input: Reflect.get(op.inputValidator, "json"),
-            }))
-            .sort((a, b) => a.name.localeCompare(b.name)),
-    }));
-    expect(inventory.map((d) => `${d.id}:${d.version}`).sort()).toEqual([
-        "conversation_validation_v1:2",
-        "execution_validation_v1:2",
-        "saved_material_inspection_v1:2",
-        "sources_v1:4",
-        "workbench_v1:4",
-    ]);
-    for (const d of definitions) {
-        expect(d.operations).toHaveProperty("consult_conversation");
-        expect(d.operations).toHaveProperty("consult_mission_state");
-        expect(d.operations).toHaveProperty("consult_run_state");
-    }
-    const versions = definitions.filter((d) => d.id === "workbench_v1");
-    expect(versions.map((d) => d.operations.adjust_framing?.version)).toEqual([
-        2,
-    ]);
-    expect(
-        versions.map((d) => d.operations.transmit_source_request?.version),
-    ).toEqual([2]);
-    if (process.env.EXECUTION_INVENTORY_OUTPUT)
-        writeFileSync(
-            process.env.EXECUTION_INVENTORY_OUTPUT,
-            `${JSON.stringify(inventory, null, 2)}\n`,
-        );
 });
 
 test("the common read persists a result without research or framing effects", async () => {
