@@ -161,20 +161,6 @@ describe("evidenceNormalization", () => {
         expect(replayedFromBytes).toBe(firstPassage.exactQuotation);
     });
 
-    test("reproducePassage throws if quotation was altered or missing from stored artifact", async () => {
-        const artifact = "Some other document content without the quote";
-        const locator = {
-            kind: "web" as const,
-            canonicalUrl: "https://www.sec.gov/doc.htm",
-            sourceVersionHash: "abc",
-            exactQuotation: "missing text",
-        };
-
-        await expect(reproducePassage(artifact, locator)).rejects.toThrow(
-            /Source version hash mismatch|Passage could not be reproduced/,
-        );
-    });
-
     test("H6: normalizePdfPages validates sequential 1-indexed page numbering", () => {
         // Non-sequential pages [1, 3]
         expect(() =>

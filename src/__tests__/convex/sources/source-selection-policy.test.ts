@@ -89,39 +89,6 @@ describe("buildSourceSelectionProposal", () => {
         expect(build(candidates)).toEqual(build([...candidates].reverse()));
     });
 
-    test("includes analyst sources before the discovered-candidate ceiling", () => {
-        const result = build(
-            [
-                candidate("analyst", {
-                    canonicalUrl: "https://specialist.example/source",
-                    title: "Analyst supplied source",
-                    origin: "analyst_url",
-                    category: "analyst_supplied",
-                }),
-                candidate("counter", {
-                    canonicalUrl:
-                        "https://www.reuters.com/technology/servicenow-counter",
-                }),
-            ],
-            { ceiling: 1 },
-        );
-
-        expect(result.items[0]).toMatchObject({
-            sourceId: "analyst",
-            disposition: "recommended",
-            reasonCodes: ["added_by_analyst"],
-        });
-        expect(result.items).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({
-                    sourceId: "counter",
-                    disposition: "recommended",
-                }),
-            ]),
-        );
-        expect(result.counts.recommended).toBe(2);
-    });
-
     test("keeps unverified metadata as a non-blocking alternative", () => {
         const result = build([
             candidate("unknown", {

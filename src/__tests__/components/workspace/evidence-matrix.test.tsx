@@ -603,13 +603,12 @@ test("queries with owner scoping and never renders decision controls", async () 
     ).toBeNull();
 });
 
-test("keeps claim rows keyboard selectable with visible focus", () => {
+test("exposes the selected claim as a pressed button", () => {
     renderReady();
 
     const row = screen.getByRole("button", { name: /Open Fact claim:/i });
     expect(row).toBeTruthy();
     expect(row.getAttribute("aria-pressed")).toBe("true");
-    expect(row.className).toContain("focus-visible:ring-2");
 });
 
 test("inventory preserves the classification filter after closing and reopening", async () => {

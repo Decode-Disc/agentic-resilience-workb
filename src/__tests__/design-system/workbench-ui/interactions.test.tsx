@@ -169,8 +169,8 @@ describe("workbench controls", () => {
     });
     it("identifies the selected assertion use and follows controlled selection changes", () => {
         function MatrixSelection() {
-            const [assertion, setAssertion] = useState("a1");
-            const [question, setQuestion] = useState("q1");
+            const [assertion, setAssertion] = useState<string>();
+            const [question, setQuestion] = useState<string>();
             return (
                 <EvidenceMatrix
                     questions={[
@@ -204,6 +204,15 @@ describe("workbench controls", () => {
             );
         }
         render(<MatrixSelection />);
+        expect(screen.queryByText(/· selected/)).toBeNull();
+        expect(
+            screen
+                .getByRole("button", { name: "a1 · Q1 · Supports" })
+                .getAttribute("aria-pressed"),
+        ).toBe("false");
+        fireEvent.click(
+            screen.getByRole("button", { name: "a1 · Q1 · Supports" }),
+        );
         expect(
             screen
                 .getByRole("button", { name: "a1 · Q1 · Supports" })
@@ -264,28 +273,6 @@ describe("workbench controls", () => {
         expect(filter).toHaveBeenCalledWith("fact");
         expect(recent).toHaveBeenCalledWith(false);
         expect(screen.getByText("Supplied evidence")).toBeTruthy();
-    });
-    it("opens the selected assertion use with its question identity", () => {
-        const select = vi.fn();
-        render(
-            <EvidenceMatrix
-                questions={[{ id: "q1", label: "Q1", title: "Control" }]}
-                rows={[
-                    {
-                        id: "a1",
-                        text: "Insurer-owned rules",
-                        kind: "fact",
-                        meta: "p. 8",
-                        uses: { q1: "supports" },
-                    },
-                ]}
-                onSelectUse={select}
-            />,
-        );
-        fireEvent.click(
-            screen.getByRole("button", { name: "a1 · Q1 · Supports" }),
-        );
-        expect(select).toHaveBeenCalledWith("a1", "q1");
     });
     it("moves through supplied pages and disables the document boundaries", () => {
         render(

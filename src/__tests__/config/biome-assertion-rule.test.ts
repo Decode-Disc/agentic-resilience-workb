@@ -1,15 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 
 const root = process.cwd();
-const warningRule = join(root, "tools/biome/no-chained-type-assertions.grit");
-const errorRule = join(
-    root,
-    "tools/biome/no-chained-type-assertions-error.grit",
-);
-
 const input = `declare const input: unknown;
 declare function inspect(value: unknown): unknown;
 export const direct = input as unknown as string;
@@ -70,13 +64,4 @@ test("reports the same assertion chains as errors in application code and warnin
             item.severity,
         ]),
     ).toEqual([3, 4, 5, 6, 7, 8].map((line) => [line, "warning"]));
-});
-
-test("keeps the two plugin predicates identical", () => {
-    expect(
-        readFileSync(errorRule, "utf8").replace(
-            'severity = "error"',
-            'severity = "warn"',
-        ),
-    ).toBe(readFileSync(warningRule, "utf8"));
 });

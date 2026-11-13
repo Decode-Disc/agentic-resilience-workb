@@ -32,6 +32,7 @@ describe("BrowserView", () => {
             ),
         ).toBeTruthy();
         expect(document.querySelector("iframe")).toBeNull();
+        expect(document.querySelector("img")).toBeNull();
         expect(
             screen.queryByRole("button", { name: /Refresh preview/i }),
         ).toBeNull();
@@ -160,18 +161,5 @@ describe("BrowserView", () => {
             ),
         ).toBeTruthy();
         expect(document.querySelector("img")).toBeNull();
-    });
-
-    it("behaves identically without preview props", () => {
-        // No previewState or previewDataUrl → backward-compatible behavior
-        render(<BrowserView {...destination} />);
-
-        expect(
-            screen.getByRole("heading", {
-                name: "Open Independent report in a new tab",
-            }),
-        ).toBeTruthy();
-        expect(document.querySelector("img")).toBeNull();
-        expect(document.querySelector("iframe")).toBeNull();
     });
 });

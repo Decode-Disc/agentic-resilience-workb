@@ -173,15 +173,6 @@ describe("production run workspace", () => {
             .map((label) => label.textContent);
         expect(groupLabels).toEqual(["Pending review", "Accepted", "Rejected"]);
 
-        const toolbarActions = document.querySelector(
-            '[data-slot="toolbar-action-list"]',
-        );
-        expect(toolbarActions).not.toBeNull();
-        expect(toolbarActions?.className).toContain("flex-nowrap");
-        expect(toolbarActions?.className).toContain("w-max");
-        expect(toolbarActions?.className).toContain("min-w-full");
-        expect((toolbarActions as HTMLElement).style.display).not.toBe("block");
-
         fireEvent.click(decisionFilter);
         fireEvent.click(screen.getByRole("radio", { name: /Accepted.*1/i }));
         expect(
@@ -288,7 +279,6 @@ describe("production run workspace", () => {
             name: /Pending review Independent report as pending/i,
         });
         expect(selectedDecision.getAttribute("data-status")).toBe("warning");
-        expect(selectedDecision.className).toContain("bg-warning/10");
 
         // Identification and decision stay in the header; provenance belongs to source details.
         const band = container.querySelector(

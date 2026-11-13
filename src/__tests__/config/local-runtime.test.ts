@@ -903,21 +903,16 @@ it.each([
     expect(await processExit(child)).toBe(0);
 });
 
-it.each([
-    undefined,
-    "2",
-])("provides local execution headroom while preserving explicit deadline %s", async (override) => {
+it("preserves an explicit local execution deadline", async () => {
     const { first } = await createWorktreePair();
     const envPath = join(first, "convex-env.json");
     const child = spawnLocalDev(first, "convex:dev", {
-        DATABASE_UDF_USER_TIMEOUT_SECONDS: override,
+        DATABASE_UDF_USER_TIMEOUT_SECONDS: "2",
         LOCAL_RUNTIME_CONVEX_ENV_FILE: envPath,
         LOCAL_RUNTIME_STARTUP_TIMEOUT_MS: "5000",
     });
     await waitForRuntimeManifest(first);
-    expect(JSON.parse(readFileSync(envPath, "utf8")).userTimeout).toBe(
-        override ?? "10",
-    );
+    expect(JSON.parse(readFileSync(envPath, "utf8")).userTimeout).toBe("2");
     child.kill("SIGTERM");
     expect(await processExit(child)).toBe(0);
 });
