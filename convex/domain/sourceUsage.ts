@@ -715,6 +715,7 @@ export async function materializeDocumentaryEvidence(
     request: Doc<"agentOperationRequests">,
     data: SourcesPreparation,
     selections: readonly Infer<typeof documentaryEvidenceSelectionValidator>[],
+    path = "evidence",
 ): Promise<Infer<typeof documentaryQuoteValidator>[]> {
     if (
         !selections.length ||
@@ -722,19 +723,39 @@ export async function materializeDocumentaryEvidence(
     )
         throw executionError("qualification_invalid");
     const evidence = [];
-    for (const selection of selections) {
+    for (const [index, selection] of selections.entries()) {
         const read = await reads.request(selection.readRequestId);
         const material = admittedDocumentaryReading(read, request, data);
+        if (!material)
+            throw executionError("documentary_quote_invalid", [
+                {
+                    path: `${path}[${index}].readRequestId`,
+                    expected:
+                        "A successful adopted search or contextual read in this run and execution scope.",
+                },
+            ]);
         if (
-            !material ||
             !Number.isSafeInteger(selection.passageOrder) ||
             selection.passageOrder < 0
         )
-            throw executionError("documentary_quote_invalid");
+            throw executionError("documentary_quote_invalid", [
+                {
+                    path: `${path}[${index}].passageOrder`,
+                    expected:
+                        "A nonnegative integer passageOrder from the selected reading.",
+                },
+            ]);
         const passage = material.passages.find(
             (p) => p.passageOrder === selection.passageOrder,
         );
-        if (!passage) throw executionError("documentary_quote_invalid");
+        if (!passage)
+            throw executionError("documentary_quote_invalid", [
+                {
+                    path: `${path}[${index}].passageOrder`,
+                    expected:
+                        "A passageOrder actually returned by the selected adopted readRequestId; use its returned passages or search/read again.",
+                },
+            ]);
         evidence.push({
             captureId: material.captureId,
             passageOrder: selection.passageOrder,

@@ -5,9 +5,90 @@ import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     recordDocumentaryRead,
     seedCapturedSources,
+    seedObservedSources,
 } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => vi.unstubAllEnvs());
+
+test.each([
+    "mission",
+    "native",
+] as const)("%s qualification locates the unreturned passage in a multi-contribution batch without adopting any contribution", async (caller) => {
+    const f = await seedObservedSources();
+    const readRequestId =
+        caller === "mission" ? f.readRequestId : f.nativeReadRequestId;
+    const contribution = {
+        needIds: ["common-context"],
+        statement: "Attributed context.",
+        attribution: "Publisher",
+        period: "undated",
+        modality: "description",
+        kind: "context" as const,
+        evidence: [{ readRequestId, passageOrder: f.passage.order }],
+    };
+    const input = {
+        kind: "submit_documentary_qualification" as const,
+        sourceId: f.sourceId,
+        captureId: f.captureId,
+        expectedTaskId: null,
+        changes: [
+            { contribution },
+            {
+                contribution: {
+                    ...contribution,
+                    statement: "Another context claim.",
+                    evidence: [
+                        ...contribution.evidence,
+                        { readRequestId, passageOrder: 999 },
+                    ],
+                },
+            },
+        ],
+    };
+    const requestId =
+        caller === "mission"
+            ? await f.t.mutation(internal.execution.operations.enqueue, {
+                  missionId: f.missionId,
+                  expectedGeneration: 4,
+                  cause: "diagnose-passage",
+                  input,
+              })
+            : await f.t.mutation(internal.execution.operations.enqueueNative, {
+                  runId: f.runId,
+                  expectedGeneration: 4,
+                  cause: "diagnose-passage",
+                  input,
+              });
+    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    expect(outcome).toMatchObject({
+        kind: "unavailable",
+        code: "documentary_quote_invalid",
+        validation: {
+            path: "changes[1].contribution.evidence[1].passageOrder",
+            expected:
+                "A passageOrder actually returned by the selected adopted readRequestId; use its returned passages or search/read again.",
+        },
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission,
+    ).toMatchObject({ controls: 0, qualifications: [] });
+    expect(
+        JSON.parse(
+            modelOperationOutcome(getAgentDefinition("sources_v1"), outcome),
+        ).validation.path,
+    ).toBe("changes[1].contribution.evidence[1].passageOrder");
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("aiTaskResults")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .take(2),
+        ),
+    ).toEqual([]);
+});
 
 test.each([
     "mission",

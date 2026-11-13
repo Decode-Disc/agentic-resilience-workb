@@ -340,7 +340,7 @@ export const reserve = internalMutation({
             const materialized = {
                 ...input,
                 changes: await Promise.all(
-                    input.changes.map(async (change) => ({
+                    input.changes.map(async (change, index) => ({
                         ...change,
                         contribution: {
                             ...change.contribution,
@@ -349,6 +349,7 @@ export const reserve = internalMutation({
                                 request,
                                 data,
                                 change.contribution.evidence,
+                                `changes[${index}].contribution.evidence`,
                             ),
                         },
                     })),
@@ -757,7 +758,7 @@ export const retainControl = internalMutation({
             {
                 ...input,
                 changes: await Promise.all(
-                    input.changes.map(async (change) => ({
+                    input.changes.map(async (change, index) => ({
                         ...change,
                         contribution: {
                             ...change.contribution,
@@ -766,6 +767,7 @@ export const retainControl = internalMutation({
                                 request,
                                 data,
                                 change.contribution.evidence,
+                                `changes[${index}].contribution.evidence`,
                             ),
                         },
                     })),
