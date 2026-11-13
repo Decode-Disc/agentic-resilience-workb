@@ -37,7 +37,17 @@ const identityKeys = [
     "model",
     "attemptKey",
 ] as const;
-const receiptKeys = ["input", "output", "costMicros", "accounting"] as const;
+const receiptKeys = [
+    "input",
+    "output",
+    "costMicros",
+    "accounting",
+    "cacheRead",
+    "cacheWrite",
+    "costUsd",
+    "costBasis",
+    "pricingHash",
+] as const;
 function sameFields<T>(left: T, right: T, keys: readonly (keyof T)[]) {
     return keys.every((key) => left[key] === right[key]);
 }

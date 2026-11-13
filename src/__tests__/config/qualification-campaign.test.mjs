@@ -6,7 +6,9 @@ import {
     campaignManifestSchema,
 } from "../../../convex/qualificationCampaignPolicy.ts";
 import {
+    qualificationReviewApiAnalysis,
     qualificationReviewCodexCredential,
+    qualificationReviewPayload,
     qualificationReviewReport,
     qualificationReviewResponse,
     qualificationReviewRuntime,
@@ -21,6 +23,44 @@ beforeEach((t) => {
             delete process.env.WORKBENCH_REVIEW_REASONING;
         else process.env.WORKBENCH_REVIEW_REASONING = previous;
     });
+});
+
+test("overflowing API pricing returns a validation refusal rather than throwing", () => {
+    const analysis = qualificationReviewApiAnalysis();
+    analysis.pricing.cost.output = Number.MAX_VALUE;
+    assert.equal(analysisMandateSchema.safeParse(analysis).success, false);
+});
+
+test("subscription authority cannot carry implicit API pricing metadata", () => {
+    const subscription = {
+        scope: "evidence_review",
+        accounting: "native_subscription",
+        routes: [{ provider: "openai-codex", model: "gpt-6.1-sol" }],
+        perLot: { requests: 2 },
+        total: { requests: 2 },
+        timeoutMs: 10000,
+        pricing: qualificationReviewApiAnalysis().pricing,
+    };
+    assert.equal(analysisMandateSchema.safeParse(subscription).success, false);
+});
+
+test("native API authority funds full capacity including cache writes and pricing tiers", () => {
+    for (const [model, quote] of [
+        ["gpt-4o-mini", 29031],
+        ["gpt-6.1-sol", 3280000],
+    ]) {
+        const analysis = qualificationReviewApiAnalysis(model);
+        analysis.maxRequestCostMicros = quote;
+        analysis.perLot.costMicros = analysis.total.costMicros = quote * 2;
+        assert.equal(analysisMandateSchema.safeParse(analysis).success, true);
+        assert.equal(
+            analysisMandateSchema.safeParse({
+                ...analysis,
+                maxRequestCostMicros: quote - 1,
+            }).success,
+            false,
+        );
+    }
 });
 
 test("new analysis mandates require independent finite allowances and leave old mandates unchanged", () => {
@@ -2299,7 +2339,13 @@ for (const changedEvidence of [false, true])
             }),
             (context) => {
                 assert.match(
-                    JSON.stringify(context.messages.at(-1)),
+                    JSON.stringify(
+                        context.messages.findLast(
+                            (message) =>
+                                message.role === "toolResult" &&
+                                message.toolName === "ls",
+                        ),
+                    ),
                     /published\.json/,
                 );
                 return ai.fauxAssistantMessage(
@@ -2313,7 +2359,13 @@ for (const changedEvidence of [false, true])
                 );
             },
             (context) => {
-                const result = JSON.stringify(context.messages.at(-1));
+                const result = JSON.stringify(
+                    context.messages.findLast(
+                        (message) =>
+                            message.role === "toolResult" &&
+                            message.toolName === "read",
+                    ),
+                );
                 assert.match(result, /captured evidence/);
                 assert.match(result, /nextOffset/);
                 if (changedEvidence)
@@ -2463,6 +2515,336 @@ test("a rejected assessment retains a developer report while reconciliation is b
         JSON.parse(readFileSync(join(root, "campaign-result.json"), "utf8")),
         mechanical,
     );
+});
+
+for (const settlementLost of [false, true])
+    test(`Pi publishes provisional findings before request exhaustion without accepting an assessment (settlementLost=${settlementLost})`, async (t) => {
+        const { runPiCampaignReview } = await import(
+            "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+        );
+        const { rmSync } = await import("node:fs");
+        const root = mkdtempSync(
+            join(tmpdir(), "campaign-provisional-report-"),
+        );
+        t.after(() => rmSync(root, { recursive: true, force: true }));
+        writeFileSync(
+            join(root, "campaign-lot.json"),
+            JSON.stringify({
+                manifest: makeManifest(),
+                candidateHash: "b".repeat(64),
+                fingerprints: {},
+            }),
+        );
+        const template = campaignReviewTemplate(root);
+        const runtime = await qualificationReviewRuntime();
+        let requests = 0;
+        let settlements = 0;
+        const text =
+            "# Provisional findings\n\nThe captured examination was interrupted. Inspect its original authority before changing model settings. This is not a completed assessment.\n";
+        const result = await runPiCampaignReview({
+            root,
+            reportRoot: root,
+            template,
+            runtime,
+            model: runtime.getModel("openai", "gpt-4o-mini"),
+            transport: {
+                kind: "mock-openai",
+                fetch: () => async () => {
+                    requests++;
+                    return qualificationReviewResponse("", 1, {
+                        name: "write",
+                        arguments: {
+                            path: "automated-review-report.md",
+                            content: text,
+                        },
+                    });
+                },
+            },
+            limits: { maxOutputTokens: 1000, timeoutMs: 10000 },
+            reserve: async (attempt) =>
+                assert(attempt <= 1, "Analysis allowance exhausted"),
+            settle: async () => {
+                settlements++;
+                if (settlementLost)
+                    throw new Error("Settlement acknowledgement lost");
+            },
+        });
+        assert.equal(result.status, "pending");
+        assert.equal(
+            result.reason,
+            settlementLost
+                ? "analysis_settlement_unconfirmed"
+                : "analysis_reservation_unavailable",
+        );
+        assert.equal(requests, 1);
+        assert.equal(settlements, 1);
+        assert.equal(
+            existsSync(join(root, "automated-review-report.md")),
+            true,
+            "Known provisional findings must survive exhaustion without another model request",
+        );
+        assert.equal(
+            readFileSync(join(root, "automated-review-report.md"), "utf8"),
+            text,
+        );
+        const report = JSON.parse(
+            readFileSync(join(root, "automated-review-report.json"), "utf8"),
+        );
+        assert.equal(report.complete, false);
+        assert.equal(report.assessment, "pending");
+        assert.equal(
+            existsSync(join(root, "automated-review-result.json")),
+            false,
+        );
+        assert.equal(
+            existsSync(join(root, "automated-review-assessment.json")),
+            false,
+        );
+    });
+
+test("Pi receives its original remaining request authority on every investigation call", async (t) => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const { configurableCampaign } = await import(
+        "../setup/qualification-v2.ts"
+    );
+    const { rmSync } = await import("node:fs");
+    const root = mkdtempSync(join(tmpdir(), "campaign-review-authority-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const manifest = {
+        ...configurableCampaign(),
+        version: 3,
+        batteryHash: "a".repeat(64),
+        analysis: {
+            scope: "evidence_review",
+            accounting: "native_subscription",
+            routes: [{ provider: "openai-codex", model: "gpt-6.1-sol" }],
+            perLot: { requests: 2 },
+            total: { requests: 2 },
+            timeoutMs: 10000,
+        },
+    };
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest,
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    writeFileSync(
+        join(root, "published.json"),
+        "Retained fixture observation.",
+    );
+    const runtime = await qualificationReviewRuntime("openai-codex");
+    process.env.WORKBENCH_REVIEW_REASONING = "high";
+    const payloads = [];
+    let captureError;
+    const result = await runPiCampaignReview({
+        root,
+        reportRoot: root,
+        template: campaignReviewTemplate(root),
+        runtime,
+        model: runtime.getModel("openai-codex", "gpt-6.1-sol"),
+        transport: {
+            kind: "mock-openai",
+            fetch: () => async (_url, init) => {
+                try {
+                    payloads.push(await qualificationReviewPayload(init));
+                } catch (error) {
+                    captureError = error;
+                    throw error;
+                }
+                return qualificationReviewResponse("", payloads.length, {
+                    name: "read",
+                    arguments: { path: "published.json" },
+                });
+            },
+        },
+        limits: { timeoutMs: 10000 },
+        reserve: async (attempt) => assert(attempt <= 2, "Allowance exhausted"),
+        settle: async () => {},
+    });
+    assert.equal(result.status, "pending");
+    if (captureError) throw captureError;
+    assert.equal(payloads.length, 2, JSON.stringify(result));
+    for (let index = 0; index < payloads.length; index++) {
+        const text = JSON.stringify(payloads[index]);
+        assert(
+            text.includes(`Review request ${index + 1}.`),
+            "The actual request ordinal must reach the provider",
+        );
+        assert(
+            text.includes(
+                `Remaining calls under the original lot ceiling: ${1 - index}.`,
+            ),
+            "The remaining original allowance must reach the provider",
+        );
+        assert(text.includes("Absolute analysis deadline:"));
+    }
+});
+
+test("native report writes preserve revisions outside frozen evidence and refuse other paths", async (t) => {
+    const { basename, dirname } = await import("node:path");
+    const { fileURLToPath, pathToFileURL } = await import("node:url");
+    const { mkdirSync, readdirSync, rmSync } = await import("node:fs");
+    const sdk = dirname(
+        fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent")),
+    );
+    const ai = await import(
+        pathToFileURL(join(sdk, "../../pi-ai/dist/index.js")).href
+    );
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "campaign-report-scope-"));
+    const reportRoot = join(tmpdir(), `${basename(root)}-reports`);
+    const escaped = join(tmpdir(), `${basename(root)}-escaped.md`);
+    mkdirSync(reportRoot);
+    t.after(() => {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(reportRoot, { recursive: true, force: true });
+        rmSync(escaped, { force: true });
+    });
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    writeFileSync(join(root, "published.json"), "Original frozen evidence.");
+    const template = campaignReviewTemplate(root);
+    const runtime = await qualificationReviewRuntime();
+    const faux = ai.fauxProvider();
+    runtime.registerNativeProvider(faux.provider);
+    const drafts = [
+        "# Findings\n\nFirst source-supported suspect.",
+        "# Findings\n\nUpdated finding with a discriminating check.",
+    ];
+    faux.setResponses([
+        ai.fauxAssistantMessage(
+            [
+                {
+                    ...ai.fauxToolCall("write", {
+                        path: "published.json",
+                        content: "Overwritten",
+                    }),
+                    id: "deny-evidence",
+                },
+                {
+                    ...ai.fauxToolCall("write", {
+                        path: escaped,
+                        content: "Escaped",
+                    }),
+                    id: "deny-escape",
+                },
+                ...drafts.map((content, index) => ({
+                    ...ai.fauxToolCall("write", {
+                        path: "automated-review-report.md",
+                        content,
+                    }),
+                    id: `draft-${index}`,
+                })),
+            ],
+            { stopReason: "toolUse" },
+        ),
+    ]);
+    const result = await runPiCampaignReview({
+        root,
+        reportRoot,
+        template,
+        runtime,
+        model: faux.getModel(),
+        transport: "mock",
+        limits: { timeoutMs: 10000 },
+        reserve: async (attempt) => assert(attempt <= 1),
+        settle: async () => {},
+    });
+    assert.equal(result.status, "pending");
+    assert.equal(faux.state.callCount, 1);
+    assert.equal(
+        readFileSync(join(root, "published.json"), "utf8"),
+        "Original frozen evidence.",
+    );
+    assert.equal(existsSync(join(root, "automated-review-report.md")), false);
+    assert.equal(existsSync(escaped), false);
+    assert.equal(
+        readFileSync(join(reportRoot, "automated-review-report.md"), "utf8"),
+        drafts[1],
+    );
+    const revisions = readdirSync(reportRoot)
+        .filter((name) => /^automated-review-report-.*\.md$/.test(name))
+        .map((name) => readFileSync(join(reportRoot, name), "utf8"));
+    assert.deepEqual(new Set(revisions), new Set(drafts));
+    assert.equal(
+        campaignReviewTemplate(root).evidenceHash,
+        template.evidenceHash,
+    );
+    assert.equal(existsSync(join(root, "automated-review-result.json")), false);
+});
+
+test("retained investigator v1 keeps its read-only request contract and original deadline", async (t) => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const { rmSync } = await import("node:fs");
+    const root = mkdtempSync(join(tmpdir(), "campaign-legacy-investigator-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    writeFileSync(
+        join(root, "campaign-lot.json"),
+        JSON.stringify({
+            manifest: makeManifest(),
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    writeFileSync(join(root, "published.json"), "Retained observation.");
+    const template = campaignReviewTemplate(root);
+    const runtime = await qualificationReviewRuntime();
+    let requests = 0;
+    const payloads = [];
+    const options = {
+        root,
+        reportRoot: root,
+        template,
+        runtime,
+        model: runtime.getModel("openai", "gpt-4o-mini"),
+        transport: {
+            kind: "mock-openai",
+            fetch: () => async (_url, init) => {
+                payloads.push(await qualificationReviewPayload(init));
+                requests++;
+                return qualificationReviewResponse("", 1);
+            },
+        },
+        limits: { maxOutputTokens: 1000, timeoutMs: 10000 },
+        reserve: async () => {
+            throw new Error("Not dispatched");
+        },
+        settle: async () => {},
+    };
+    assert.equal((await runPiCampaignReview(options)).status, "pending");
+    const path = join(root, "automated-review-mission.json");
+    const pin = JSON.parse(readFileSync(path, "utf8"));
+    pin.protocol = "investigator_v1";
+    pin.mission =
+        "Investigate the frozen evidence with read-only tools and return a final developer handoff.";
+    pin.missionHash = sha256(pin.mission);
+    const retained = JSON.stringify(pin);
+    writeFileSync(path, retained);
+    const result = await runPiCampaignReview({
+        ...options,
+        reserve: async (attempt) => assert(attempt <= 1),
+    });
+    assert.equal(result.status, "pending");
+    assert.equal(requests, 1);
+    const wire = JSON.stringify(payloads[0]);
+    assert.match(wire, /"name":"read"/);
+    assert.doesNotMatch(wire, /"name":"write"|Review request/);
+    assert.equal(readFileSync(path, "utf8"), retained);
 });
 
 test("a length-limited diagnostic remains available without accepting assessment", async () => {
@@ -2847,7 +3229,94 @@ test("Pi corrects assessment format in its existing session without losing the o
     );
 });
 
-async function reviewerReasoningFixture() {
+test("Pi corrects annotated evidence filenames without losing its diagnostic or repeating workflow effects", async () => {
+    const { runPiCampaignReview } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+    );
+    const { qualificationReviewPayload } = await import(
+        "../setup/qualification-review.ts"
+    );
+    const f = await reviewerReasoningFixture("openai");
+    const review = structuredClone(f.review);
+    review.cases[0].evidence = ["published.json: record 32"];
+    const invalid = qualificationReviewReport(review);
+    let transportFailure;
+    f.options.transport.fetch = () => async (_input, init) => {
+        try {
+            const body = await qualificationReviewPayload(init);
+            f.requests.push(body);
+            assert(
+                f.requests.length <= 2,
+                "Only the original review and its correction are authorized",
+            );
+            if (f.requests.length === 2) {
+                assert.match(
+                    JSON.stringify(body.input),
+                    /Invalid review evidence reference/,
+                );
+                assert.match(
+                    JSON.stringify(body.input),
+                    /published\.json: record 32/,
+                );
+                review.cases[0].evidence = ["published.json"];
+            }
+            return qualificationReviewResponse(
+                qualificationReviewReport(review),
+                f.requests.length,
+                null,
+            );
+        } catch (error) {
+            transportFailure = error;
+            throw error;
+        }
+    };
+    const result = await runPiCampaignReview(f.options);
+    if (transportFailure) throw transportFailure;
+    assert.equal(
+        result.status,
+        "completed",
+        JSON.stringify({ result, requests: f.requests.length }),
+    );
+    assert.deepEqual(result.review.cases[0].evidence, ["published.json"]);
+    assert.equal(f.requests.length, 2);
+    assert.deepEqual(f.reservations, [1, 2]);
+    assert.deepEqual(f.settlements, [1, 2]);
+    assert.equal(
+        readFileSync(
+            join(f.options.root, "automated-review-report-1.md"),
+            "utf8",
+        ),
+        invalid,
+    );
+});
+
+for (const damage of ["changed", "missing"]) {
+    test(`Pi never treats ${damage} indexed evidence as correctable model formatting`, async () => {
+        const { runPiCampaignReview } = await import(
+            "../../../scripts/evaluations/workbench-browser/campaign-review.ts"
+        );
+        const f = await reviewerReasoningFixture("openai");
+        f.options.transport.fetch = () => async () => {
+            f.requests.push("dispatched");
+            const path = join(f.options.root, "published.json");
+            if (damage === "changed") writeFileSync(path, "Altered evidence");
+            else unlinkSync(path);
+            return qualificationReviewResponse(
+                qualificationReviewReport(f.review),
+                1,
+                null,
+            );
+        };
+        await assert.rejects(
+            () => runPiCampaignReview(f.options),
+            damage === "changed" ? /Stale campaign evidence/ : /ENOENT/,
+        );
+        assert.equal(f.requests.length, 1);
+        assert.deepEqual(f.settlements, [1]);
+    });
+}
+
+async function reviewerReasoningFixture(provider = "openai-codex") {
     const root = mkdtempSync(join(tmpdir(), "campaign-reasoning-"));
     writeFileSync(
         join(root, "campaign-lot.json"),
@@ -2862,11 +3331,12 @@ async function reviewerReasoningFixture() {
     const review = structuredClone(template);
     review.cases[0].finding = "Saved framing matches the inspected evidence.";
     review.cases[0].evidence = ["published.json"];
-    const runtime = await qualificationReviewRuntime("openai-codex");
+    const runtime = await qualificationReviewRuntime(provider);
     const requests = [];
     const reservations = [];
     const settlements = [];
     return {
+        review,
         requests,
         reservations,
         settlements,
@@ -2875,7 +3345,10 @@ async function reviewerReasoningFixture() {
             reportRoot: root,
             template,
             runtime,
-            model: runtime.getModel("openai-codex", "gpt-6.1-sol"),
+            model: runtime.getModel(
+                provider,
+                provider === "openai" ? "gpt-4o-mini" : "gpt-6.1-sol",
+            ),
             transport: {
                 kind: "mock-openai",
                 fetch: () => async (_input, init) => {
@@ -2894,6 +3367,264 @@ async function reviewerReasoningFixture() {
             settle: async (attempt) => settlements.push(attempt),
         },
     };
+}
+
+test("fresh preparation refuses a subscription draft when a shared API key is configured", async (t) => {
+    const previous = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    t.after(() => {
+        if (previous === undefined) delete process.env.OPENAI_API_KEY;
+        else process.env.OPENAI_API_KEY = previous;
+    });
+    const { configurableCampaign } = await import(
+        "../setup/qualification-v2.ts"
+    );
+    const runtime = await qualificationReviewRuntime("openai-codex");
+    await withReviewerReasoningProject(
+        async () => {
+            const root = mkdtempSync(
+                join(tmpdir(), "reviewer-api-preparation-"),
+            );
+            const input = join(root, "input.json");
+            writeFileSync(
+                input,
+                JSON.stringify({
+                    ...configurableCampaign(),
+                    version: 3,
+                    analysis: {
+                        scope: "evidence_review",
+                        accounting: "native_subscription",
+                        routes: [
+                            { provider: "openai-codex", model: "gpt-6.1-sol" },
+                        ],
+                        perLot: { requests: 2 },
+                        total: { requests: 2 },
+                        timeoutMs: 10000,
+                    },
+                }),
+            );
+            await assert.rejects(
+                runCampaign("prepare", root, { manifest: input }, undefined, {
+                    modelRuntime: runtime,
+                }),
+                /OpenAI API.*preferred/,
+            );
+            assert.equal(existsSync(join(root, "campaign.json")), false);
+            assert.equal(process.env.OPENAI_API_KEY, undefined);
+        },
+        {
+            linked: true,
+            shared: "high\nOPENAI_API_KEY=sk-synthetic-shared-api-key\nUNRELATED_PRIVATE_SETTING=fixture-never-loaded",
+        },
+    );
+});
+
+for (const condition of [
+    "shared",
+    "process",
+    "native",
+    "subscription",
+    "empty",
+    "unreadable",
+    "malformed",
+    "legacy-accounting",
+    "pricing-drift",
+    "unknown-model",
+    "future-pricing",
+    "native-auth-error",
+    "native-stored-empty",
+    "native-stored-unresolved",
+    "native-runtime-empty",
+]) {
+    test(`fresh preparation resolves native credentials and pricing (${condition})`, async (t) => {
+        const previous = process.env.OPENAI_API_KEY;
+        const unresolved = process.env.UNSET_REVIEW_API_PROBE;
+        delete process.env.OPENAI_API_KEY;
+        delete process.env.UNSET_REVIEW_API_PROBE;
+        if (condition === "process")
+            process.env.OPENAI_API_KEY = "sk-synthetic-process-key";
+        t.after(() => {
+            if (previous === undefined) delete process.env.OPENAI_API_KEY;
+            else process.env.OPENAI_API_KEY = previous;
+            if (unresolved === undefined)
+                delete process.env.UNSET_REVIEW_API_PROBE;
+            else process.env.UNSET_REVIEW_API_PROBE = unresolved;
+        });
+        const { configurableCampaign } = await import(
+            "../setup/qualification-v2.ts"
+        );
+        const nativeUnusable = [
+            "native-stored-empty",
+            "native-stored-unresolved",
+            "native-runtime-empty",
+        ].includes(condition);
+        if (nativeUnusable) {
+            const network = t.mock.method(globalThis, "fetch", async () => {
+                throw new Error(
+                    "Unexpected network during credential preparation",
+                );
+            });
+            t.after(() => assert.equal(network.mock.callCount(), 0));
+        }
+        const subscription =
+            nativeUnusable ||
+            ["subscription", "empty", "unreadable", "malformed"].includes(
+                condition,
+            );
+        const runtime = await qualificationReviewRuntime(
+            condition === "native" ? "both" : "openai-codex",
+            condition === "native-stored-empty"
+                ? ""
+                : condition === "native-stored-unresolved"
+                  ? "$UNSET_REVIEW_API_PROBE"
+                  : undefined,
+        );
+        if (condition === "native-runtime-empty")
+            await runtime.setRuntimeApiKey("openai", "");
+        if (condition === "native-auth-error")
+            runtime.setRuntimeApiKey = async () => {
+                throw new Error(
+                    "Synthetic SDK credential failure: sk-synthetic-shared-api-key",
+                );
+            };
+        await withReviewerReasoningProject(
+            async (project) => {
+                if (condition === "unreadable") {
+                    const { rmSync } = await import("node:fs");
+                    rmSync(join(project, ".env.local"));
+                    mkdirSync(join(project, ".env.local"));
+                }
+                if (condition === "malformed")
+                    writeFileSync(
+                        join(project, ".env.local"),
+                        "OPENAI_API_KEY\n",
+                    );
+                const analysis = subscription
+                    ? {
+                          scope: "evidence_review",
+                          accounting: "native_subscription",
+                          routes: [
+                              {
+                                  provider: "openai-codex",
+                                  model: "gpt-6.1-sol",
+                              },
+                          ],
+                          perLot: { requests: 2 },
+                          total: { requests: 2 },
+                          timeoutMs: 10000,
+                      }
+                    : qualificationReviewApiAnalysis();
+                if (condition === "legacy-accounting") {
+                    delete analysis.accounting;
+                    delete analysis.pricing;
+                    analysis.maxInputTokens = 32000;
+                }
+                if (condition === "pricing-drift")
+                    analysis.pricing.cost.output = 0.5;
+                if (condition === "future-pricing")
+                    analysis.pricing.verifiedAt = Date.now() + 60000;
+                if (condition === "unknown-model")
+                    analysis.routes[0].model = analysis.pricing.model =
+                        "missing-native-model";
+                const root = mkdtempSync(
+                    join(tmpdir(), "reviewer-preparation-"),
+                );
+                const input = join(root, "input.json");
+                writeFileSync(
+                    input,
+                    JSON.stringify({
+                        ...configurableCampaign(),
+                        version: 3,
+                        analysis,
+                    }),
+                );
+                const prepare = () =>
+                    runCampaign(
+                        "prepare",
+                        root,
+                        { manifest: input },
+                        undefined,
+                        { modelRuntime: runtime },
+                    );
+                const error = {
+                    empty: /API key is empty/,
+                    unreadable: /Cannot read shared reviewer/,
+                    malformed: /Malformed.*OPENAI_API_KEY/,
+                    "legacy-accounting": /explicit api_cost/,
+                    "pricing-drift": /pricing.*changed/i,
+                    "unknown-model": /model is unavailable/,
+                    "future-pricing": /pricing.*future/i,
+                    "native-auth-error":
+                        /Cannot configure Pi reviewer API credentials/,
+                    "native-stored-empty":
+                        /Configured native OpenAI API credentials cannot be resolved/,
+                    "native-stored-unresolved":
+                        /Configured native OpenAI API credentials cannot be resolved/,
+                    "native-runtime-empty":
+                        /Configured native OpenAI API credentials cannot be resolved/,
+                }[condition];
+                if (error) {
+                    await assert.rejects(prepare, (failure) => {
+                        assert.match(failure.message, error);
+                        if (condition === "native-auth-error")
+                            assert.equal(failure.cause, undefined);
+                        return true;
+                    });
+                    assert.equal(
+                        existsSync(join(root, "campaign.json")),
+                        false,
+                    );
+                    return;
+                }
+                await prepare();
+                const recorded = readFileSync(
+                    join(root, "campaign.json"),
+                    "utf8",
+                );
+                const saved = JSON.parse(recorded).manifest;
+                assert.equal(
+                    saved.analysis.routes[0].provider,
+                    subscription ? "openai-codex" : "openai",
+                );
+                assert.equal(
+                    saved.analysis.accounting,
+                    subscription ? "native_subscription" : "api_cost",
+                );
+                assert.equal(recorded.includes("sk-synthetic"), false);
+                assert.equal(recorded.includes("fixture-never-loaded"), false);
+                assert.equal(process.env.UNRELATED_PRIVATE_SETTING, undefined);
+                assert.equal(
+                    process.env.OPENAI_API_KEY,
+                    condition === "process"
+                        ? "sk-synthetic-process-key"
+                        : undefined,
+                );
+                if (!subscription) {
+                    const auth = JSON.stringify(
+                        await runtime.getAuth("openai"),
+                    );
+                    assert.equal(
+                        auth.includes(
+                            condition === "process"
+                                ? "sk-synthetic-process-key"
+                                : condition === "native"
+                                  ? "sk-synthetic-offline-qualification-key"
+                                  : "sk-synthetic-shared-api-key",
+                        ),
+                        true,
+                    );
+                }
+            },
+            {
+                linked: true,
+                shared:
+                    nativeUnusable ||
+                    ["subscription", "native"].includes(condition)
+                        ? "off"
+                        : `off\nOPENAI_API_KEY=${condition === "empty" || condition === "process" ? "" : "sk-synthetic-shared-api-key"}\nUNRELATED_PRIVATE_SETTING=fixture-never-loaded`,
+            },
+        );
+    });
 }
 
 async function withReviewerReasoningProject(
@@ -3273,8 +4004,10 @@ for (const provider of ["openai", "openai-codex"])
                         assert.match(serialized, /reconciled/);
                         assert.doesNotMatch(
                             serialized,
-                            /"name":"(?:bash|write|edit)"/,
+                            /"name":"(?:bash|edit)"/,
                         );
+                        assert.match(serialized, /"name":"write"/);
+                        assert.match(serialized, /automated-review-report\.md/);
                     } else {
                         assert.match(serialized, /code\/owner\.ts/);
                         assert.match(serialized, /reportedCostFinal = false/);

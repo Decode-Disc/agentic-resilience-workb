@@ -171,6 +171,12 @@ test("closing an unsettled lot preserves its initial failure and publishes a val
         join(directory, "reconciliation.json"),
         JSON.stringify({ reconciled: false, usage: manifest.perLot }),
     );
+    writeFileSync(
+        join(directory, "prepared.json"),
+        JSON.stringify({
+            cases: [{ id: "claims", runId: "run", fixtureKey: "fixture" }],
+        }),
+    );
     const first = campaignReviewTemplate(directory);
     writeFileSync(
         join(directory, "review-template.json"),
@@ -208,6 +214,7 @@ test("closing an unsettled lot preserves its initial failure and publishes a val
         };
     });
     let closed = false;
+    let contextClosed = false;
     const paths: string[] = [];
     vi.stubGlobal(
         "fetch",
@@ -265,7 +272,51 @@ test("closing an unsettled lot preserves its initial failure and publishes a val
                     value = null;
                     break;
                 case "runWorkspace:closeBrowserTestContext":
+                    contextClosed = true;
                     value = { done: true, cursor: null, cancelled: 0 };
+                    break;
+                case "execution/fixtures:qualificationSnapshot":
+                    value = {
+                        run: {
+                            executionStatus: contextClosed ? "idle" : "running",
+                        },
+                        preparation: {
+                            status: contextClosed ? "partial" : "started",
+                        },
+                        accounting: { pending: contextClosed ? 0 : 1 },
+                    };
+                    break;
+                case "execution/fixtures:inspectQualificationPage":
+                    value = {
+                        page:
+                            request.args[0].kind === "receipts"
+                                ? [
+                                      {
+                                          status: contextClosed
+                                              ? "failed"
+                                              : "started",
+                                          billing: {
+                                              state: contextClosed
+                                                  ? "confirmed"
+                                                  : "pending",
+                                          },
+                                          reportedCost: contextClosed
+                                              ? 0
+                                              : null,
+                                      },
+                                  ]
+                                : [],
+                        isDone: true,
+                        continueCursor: "",
+                    };
+                    break;
+                case "execution/fixtures:inspectSourcesInvocations":
+                    value = {
+                        page: [],
+                        payloads: [],
+                        isDone: true,
+                        continueCursor: "",
+                    };
                     break;
                 default:
                     throw new Error(
@@ -300,6 +351,44 @@ test("closing an unsettled lot preserves its initial failure and publishes a val
     expect(campaignReviewTemplate(directory)).toEqual(latest);
     expect(flags.size).toBe(0);
     expect(paths).not.toContain("qualificationCampaigns:admit");
+    const result = JSON.parse(
+        readFileSync(join(directory, "campaign-result.json"), "utf8"),
+    );
+    expect(typeof result.cleanupObservation).toBe("string");
+    const retained = join(directory, result.cleanupObservation);
+    expect(
+        JSON.parse(
+            readFileSync(join(retained, "claims/snapshot.json"), "utf8"),
+        ),
+    ).toMatchObject({
+        preparation: { status: "partial" },
+        accounting: { pending: 0 },
+    });
+    expect(
+        JSON.parse(
+            readFileSync(join(retained, "claims/receipts-1.json"), "utf8"),
+        ).page,
+    ).toEqual([
+        { status: "failed", billing: { state: "confirmed" }, reportedCost: 0 },
+    ]);
+    expect(
+        JSON.parse(readFileSync(join(retained, "inspection.json"), "utf8")),
+    ).toMatchObject({
+        startedAt: expect.any(Number),
+        completedAt: expect.any(Number),
+    });
+    const index = JSON.parse(
+        readFileSync(
+            join(directory, `evidence-index-${latest.evidenceHash}.json`),
+            "utf8",
+        ),
+    );
+    expect(
+        Object.hasOwn(
+            index,
+            `${result.cleanupObservation}/claims/snapshot.json`,
+        ),
+    ).toBe(true);
 });
 
 afterEach(() => {

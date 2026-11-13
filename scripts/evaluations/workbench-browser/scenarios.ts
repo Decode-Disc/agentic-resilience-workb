@@ -162,14 +162,18 @@ export async function prepareCampaignScenarios(
 export async function inspectCampaignScenarios(
     client: ConvexHttpClient,
     root: string,
+    destination = root,
 ) {
+    const startedAt = Date.now();
+    mkdirSync(destination, { recursive: true, mode: 0o700 });
+    save(destination, "inspection", { startedAt, completedAt: null });
     for (const c of prepared(root).cases) {
         const args = { runId: c.runId, fixtureKey: c.fixtureKey };
-        const directory = join(root, c.id);
+        const directory = join(destination, c.id);
         mkdirSync(directory, { recursive: true, mode: 0o700 });
         save(
             directory,
-            "snapshot",
+            "snapshot-before-inspection",
             await client.query(
                 ref(internal.execution.fixtures.qualificationSnapshot),
                 args,
@@ -294,7 +298,16 @@ export async function inspectCampaignScenarios(
             assert(page.continueCursor !== cursor);
             cursor = page.continueCursor;
         } while (cursor);
+        save(
+            directory,
+            "snapshot",
+            await client.query(
+                ref(internal.execution.fixtures.qualificationSnapshot),
+                args,
+            ),
+        );
     }
+    save(destination, "inspection", { startedAt, completedAt: Date.now() });
 }
 
 /** Finite action interpreter. Configuration supplies domain actions and text, never executable code or selectors. */
@@ -383,78 +396,101 @@ export async function runCampaignScenarios(
                 | "paused"
                 | "running",
         ) => {
-            await expect
-                .poll(
-                    async () => {
-                        assert(!interrupted(), "Campaign interrupted");
-                        const s = await inspect();
-                        if (
-                            state !== "conversation_settled" &&
-                            ["failed", "cancelled"].includes(
-                                s.run.executionStatus,
-                            )
-                        )
-                            throw new Error(
-                                `Research ${s.run.executionStatus} before ${state} (phase: ${s.run.lifecycleState})`,
-                            );
-                        if (
-                            (state === "conversation_settled" ||
-                                state === "sources_prepared") &&
-                            s.conversation?.activeTurnId &&
-                            s.mission?.status === "blocked" &&
-                            !s.mission.piActiveWriter
-                        )
-                            throw new Error(
-                                `Conversation blocked before native settlement: ${s.mission.blockCode ?? "mission_blocked"}`,
-                            );
-                        if (
-                            state === "sources_prepared" &&
-                            scenario.initialFixture?.id ===
-                                "sources_correction" &&
-                            s.run.lifecycleState !== "sources_prepared" &&
-                            s.sourcesMission &&
-                            ["completed", "blocked"].includes(
-                                s.sourcesMission.status,
-                            )
-                        ) {
-                            await client.mutation(
-                                ref(
-                                    internal.qualificationInitialFixtureSetup
-                                        .finish,
-                                ),
-                                {
-                                    runId: c.runId,
-                                    fixtureKey: c.fixtureKey,
-                                    scenarioId: c.id,
-                                },
-                            );
-                            return false;
-                        }
-                        if (state === "conversation_settled") return settled(s);
-                        if (state === "sources_prepared")
-                            return (
-                                settled(s) &&
-                                s.run.lifecycleState === "sources_prepared" &&
-                                s.run.executionStatus === "idle" &&
-                                !!s.sourcesMission &&
-                                [
-                                    "completed",
-                                    "blocked",
-                                    "failed",
-                                    "cancelled",
-                                ].includes(s.sourcesMission.status)
-                            );
-                        return s.run.executionStatus === state;
-                    },
-                    {
-                        timeout:
-                            manifest.mode === "deterministic"
-                                ? TOOLING_POLICY.deterministicObservationTimeoutMs
-                                : TOOLING_POLICY.liveObservationTimeoutMs,
-                        intervals: [...TOOLING_POLICY.observationIntervalsMs],
-                    },
+            let deadlineAt =
+                manifest.mode === "deterministic"
+                    ? Math.min(
+                          manifest.expiresAt,
+                          Date.now() +
+                              TOOLING_POLICY.deterministicObservationTimeoutMs,
+                      )
+                    : manifest.expiresAt;
+            let contextExpiresAt: number | undefined;
+            const ready = async () => {
+                assert(!interrupted(), "Campaign interrupted");
+                const s = await inspect();
+                contextExpiresAt = s.contextExpiresAt;
+                if (
+                    state !== "conversation_settled" &&
+                    ["failed", "cancelled"].includes(s.run.executionStatus)
                 )
-                .toBe(true);
+                    throw new Error(
+                        `Research ${s.run.executionStatus} before ${state} (phase: ${s.run.lifecycleState})`,
+                    );
+                if (
+                    (state === "conversation_settled" ||
+                        state === "sources_prepared") &&
+                    s.conversation?.activeTurnId &&
+                    s.mission?.status === "blocked" &&
+                    !s.mission.piActiveWriter
+                )
+                    throw new Error(
+                        `Conversation blocked before native settlement: ${s.mission.blockCode ?? "mission_blocked"}`,
+                    );
+                if (
+                    state === "sources_prepared" &&
+                    scenario.initialFixture?.id === "sources_correction" &&
+                    s.run.lifecycleState !== "sources_prepared" &&
+                    s.sourcesMission &&
+                    ["completed", "blocked"].includes(s.sourcesMission.status)
+                ) {
+                    await client.mutation(
+                        ref(internal.qualificationInitialFixtureSetup.finish),
+                        {
+                            runId: c.runId,
+                            fixtureKey: c.fixtureKey,
+                            scenarioId: c.id,
+                        },
+                    );
+                    return false;
+                }
+                if (
+                    state === "sources_prepared" &&
+                    s.run.lifecycleState !== "sources_prepared" &&
+                    s.run.executionStatus === "paused" &&
+                    s.sourcesMission?.status === "blocked" &&
+                    !s.sourcesMission.piActiveWriter &&
+                    s.sourcesMission.deadlineAt <= Date.now()
+                )
+                    throw new Error(
+                        `Sources blocked before sources_prepared: ${s.sourcesMission.blockCode ?? "mission_blocked"}`,
+                    );
+                if (state === "conversation_settled") return settled(s);
+                if (state === "sources_prepared")
+                    return (
+                        settled(s) &&
+                        s.run.lifecycleState === "sources_prepared" &&
+                        s.run.executionStatus === "idle" &&
+                        !!s.sourcesMission &&
+                        [
+                            "completed",
+                            "blocked",
+                            "failed",
+                            "cancelled",
+                        ].includes(s.sourcesMission.status)
+                    );
+                return s.run.executionStatus === state;
+            };
+            const intervals = TOOLING_POLICY.observationIntervalsMs.values();
+            let interval: number = TOOLING_POLICY.observationIntervalsMs[0];
+            while (!(await ready())) {
+                if (manifest.mode === "live") {
+                    assert(
+                        typeof contextExpiresAt === "number" &&
+                            Number.isFinite(contextExpiresAt),
+                        "Qualification observation authority unavailable",
+                    );
+                    deadlineAt = Math.min(deadlineAt, contextExpiresAt);
+                }
+                const remainingMs = deadlineAt - Date.now();
+                assert(
+                    remainingMs > 0,
+                    `Qualification observation authority expired before ${state}`,
+                );
+                interval = intervals.next().value ?? interval;
+                await new Promise((resolve) =>
+                    setTimeout(resolve, Math.min(interval, remainingMs)),
+                );
+            }
         };
         const release = () => {
             if (controlKey)

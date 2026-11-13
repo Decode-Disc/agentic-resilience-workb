@@ -25,6 +25,7 @@ import {
     SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
     SOURCE_PREPARATION_DEADLINE_MS,
 } from "@convex/resourcePolicy";
+import { readCampaignResearchDeadline } from "@convex/runWorkspace";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { type Infer, v } from "convex/values";
@@ -330,7 +331,8 @@ export async function startReviewPreparation(
     }
     const deadlineAt = slotUnavailable
         ? undefined
-        : now + SOURCE_PREPARATION_DEADLINE_MS;
+        : ((await readCampaignResearchDeadline(ctx, run)) ??
+          now + SOURCE_PREPARATION_DEADLINE_MS);
     const budget = await readPreparationBudget(
         ctx.db,
         run,
@@ -1537,7 +1539,8 @@ export const claimForDiscovery = internalMutation({
             previous?.kind === "preparation"
                 ? (previous.deadlineAt ??
                   previous.createdAt + SOURCE_PREPARATION_DEADLINE_MS)
-                : now + SOURCE_PREPARATION_DEADLINE_MS;
+                : ((await readCampaignResearchDeadline(ctx, run)) ??
+                  now + SOURCE_PREPARATION_DEADLINE_MS);
         const preparationId = await ctx.db.insert(
             "sourceSelectionProposalRebuilds",
             {

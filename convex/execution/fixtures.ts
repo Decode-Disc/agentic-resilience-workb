@@ -85,7 +85,7 @@ async function readLocalFixtureRun(
         !run.reservationKey?.endsWith(`:${args.fixtureKey}`)
     )
         throw new Error("Local simulation scope required");
-    return { run, visitor };
+    return { run, visitor, context };
 }
 
 export async function requireLocalFixtureRun(
@@ -1607,6 +1607,7 @@ export const inspectSourcesTextFragments = internalQuery({
 /** Small polling snapshot: no transcript scan or sample-dependent ceiling. */
 export const qualificationSnapshot = internalQuery({
     returns: v.object({
+        contextExpiresAt: v.number(),
         accounting: v.union(schema.doc("qualificationUsage"), v.null()),
         run: schema.doc("researchRuns"),
         conversation: v.union(schema.doc("agentConversations"), v.null()),
@@ -1622,7 +1623,7 @@ export const qualificationSnapshot = internalQuery({
     }),
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
     handler: async (ctx, args) => {
-        const { run } = await readLocalFixtureRun(ctx, args);
+        const { run, context } = await readLocalFixtureRun(ctx, args);
         const conversation = await ctx.db
             .query("agentConversations")
             .withIndex("by_run", (q) => q.eq("runId", run._id))
@@ -1655,6 +1656,7 @@ export const qualificationSnapshot = internalQuery({
                   .unique()
             : null;
         return {
+            contextExpiresAt: context.expiresAt,
             accounting: run.browserTestContextId
                 ? await readQualificationUsage(
                       ctx,

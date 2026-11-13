@@ -7,7 +7,10 @@ import {
     EXECUTION_WINDOW_MS,
     RESOURCE_POLICY_VERSION,
 } from "@convex/resourcePolicy";
-import { localBrowserFixturesEnabled } from "@convex/runWorkspace";
+import {
+    localBrowserFixturesEnabled,
+    readCampaignResearchDeadline,
+} from "@convex/runWorkspace";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { vEventId } from "@convex-dev/workflow";
@@ -151,7 +154,8 @@ export const start = internalMutation({
                 ? run.executionHarnessDeadlineAt
                 : undefined) ??
                 Math.min(
-                    now + EXECUTION_WINDOW_MS,
+                    (await readCampaignResearchDeadline(ctx, run)) ??
+                        now + EXECUTION_WINDOW_MS,
                     executionScope === "research"
                         ? (preparation?.deadlineAt ?? Infinity)
                         : Infinity,

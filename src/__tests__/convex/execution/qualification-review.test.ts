@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+    existsSync,
     mkdirSync,
     mkdtempSync,
     readFileSync,
@@ -10,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { internal } from "@convex/_generated/api";
 import {
+    type AnalysisReceipt,
     campaignManifestSchema,
     emptyCampaignLimits,
 } from "@convex/qualificationCampaignPolicy";
@@ -26,6 +28,7 @@ import type { Value } from "convex/values";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import {
+    qualificationReviewApiAnalysis,
     qualificationReviewPayload,
     qualificationReviewReport,
     qualificationReviewResponse,
@@ -40,8 +43,73 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+const apiUsageCases = new Map<
+    string,
+    { usage: unknown; receipt?: Partial<AnalysisReceipt> }
+>([
+    ["api_usage_missing_input", { usage: { output_tokens: 100 } }],
+    [
+        "api_usage_negative_input",
+        { usage: { input_tokens: -1, output_tokens: 100 } },
+    ],
+    ["api_usage_missing_output", { usage: { input_tokens: 100 } }],
+    [
+        "api_usage_cache_overflow",
+        {
+            usage: {
+                input_tokens: 100,
+                output_tokens: 100,
+                input_tokens_details: {
+                    cached_tokens: 80,
+                    cache_write_tokens: 21,
+                },
+            },
+        },
+    ],
+    [
+        "api_usage_zero_input",
+        {
+            usage: { input_tokens: 0, output_tokens: 100 },
+            receipt: { input: 0, output: 100, costMicros: 60 },
+        },
+    ],
+    [
+        "api_usage_zero_output",
+        {
+            usage: { input_tokens: 100, output_tokens: 0 },
+            receipt: { input: 100, output: 0, costMicros: 15 },
+        },
+    ],
+    [
+        "api_usage_all_cached",
+        {
+            usage: {
+                input_tokens: 100,
+                output_tokens: 100,
+                input_tokens_details: { cached_tokens: 100 },
+            },
+            receipt: { input: 0, cacheRead: 100, output: 100, costMicros: 68 },
+        },
+    ],
+]);
+
 for (const { subscription, compaction, fault } of [
     { subscription: false, compaction: false, fault: "none" },
+    { subscription: false, compaction: false, fault: "api" },
+    { subscription: false, compaction: true, fault: "api" },
+    { subscription: false, compaction: false, fault: "api_high" },
+    { subscription: false, compaction: false, fault: "api_command" },
+    ...[
+        "api_401",
+        "api_429",
+        "api_usage",
+        "api_price",
+        "api_settlement",
+        "api_unknown",
+        ...apiUsageCases.keys(),
+    ].map(
+        (fault) => ({ subscription: false, compaction: false, fault }) as const,
+    ),
     { subscription: true, compaction: false, fault: "none" },
     { subscription: true, compaction: true, fault: "none" },
     { subscription: true, compaction: true, fault: "denied" },
@@ -49,7 +117,12 @@ for (const { subscription, compaction, fault } of [
     { subscription: true, compaction: true, fault: "settlement_ack" },
 ] as const)
     test(`Pi review reserves real campaign allowances before HTTP and command adopts only after reconciliation (subscription=${subscription}, compaction=${compaction}, fault=${fault})`, async () => {
-        const allowance = fault === "denied" ? 8 : compaction ? 12 : 2;
+        const api = fault.startsWith("api");
+        const usageCase = apiUsageCases.get(fault);
+        const high = fault === "api_high";
+        const requestReservation = high ? 4000000 : 100000;
+        const allowance =
+            fault === "denied" ? 8 : compaction ? 12 : api ? 3 : 2;
         const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
         const { preflightId } = await createAdmittedPreflight(t);
         await t.run(async (ctx) => {
@@ -59,7 +132,10 @@ for (const { subscription, compaction, fault } of [
             assert(visitor);
             await ctx.db.patch(visitor.invitationId, { slotKey: "analyst-4" });
         });
-        vi.stubEnv("WORKBENCH_REVIEW_REASONING", subscription ? "high" : "off");
+        vi.stubEnv(
+            "WORKBENCH_REVIEW_REASONING",
+            subscription || high ? "high" : "off",
+        );
         vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
         vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
         const manifest = campaignManifestSchema.parse({
@@ -69,32 +145,55 @@ for (const { subscription, compaction, fault } of [
             batteryHash: "a".repeat(64),
             perLot: emptyCampaignLimits(),
             total: emptyCampaignLimits(),
-            analysis: {
-                scope: "evidence_review",
-                routes: [
-                    {
-                        provider: subscription ? "openai-codex" : "openai",
-                        model: subscription ? "gpt-6.1-sol" : "gpt-4o-mini",
-                    },
-                ],
-                ...(subscription
-                    ? {
-                          accounting: "native_subscription",
-                          perLot: { requests: allowance },
-                          total: { requests: allowance },
-                      }
-                    : {
-                          maxRequestCostMicros: 100000,
-                          perLot: { requests: 2, costMicros: 200000 },
-                          total: { requests: 2, costMicros: 200000 },
-                          maxOutputTokens: 1000,
-                      }),
-                ...(compaction
-                    ? {}
-                    : { maxInputTokens: subscription ? 512 : 32000 }),
-                timeoutMs: compaction ? 60000 : 10000,
-            },
+            analysis: api
+                ? {
+                      ...qualificationReviewApiAnalysis(
+                          high ? "gpt-6.1-sol" : "gpt-4o-mini",
+                      ),
+                      perLot: {
+                          requests: allowance,
+                          costMicros: allowance * requestReservation,
+                      },
+                      total: {
+                          requests: allowance,
+                          costMicros: allowance * requestReservation,
+                      },
+                      timeoutMs: compaction ? 60000 : 10000,
+                  }
+                : {
+                      scope: "evidence_review",
+                      routes: [
+                          {
+                              provider: subscription
+                                  ? "openai-codex"
+                                  : "openai",
+                              model: subscription
+                                  ? "gpt-6.1-sol"
+                                  : "gpt-4o-mini",
+                          },
+                      ],
+                      ...(subscription
+                          ? {
+                                accounting: "native_subscription",
+                                perLot: { requests: allowance },
+                                total: { requests: allowance },
+                            }
+                          : {
+                                maxRequestCostMicros: 100000,
+                                perLot: { requests: 2, costMicros: 200000 },
+                                total: { requests: 2, costMicros: 200000 },
+                                maxOutputTokens: 1000,
+                            }),
+                      ...(compaction
+                          ? {}
+                          : { maxInputTokens: subscription ? 512 : 32000 }),
+                      timeoutMs: compaction ? 60000 : 10000,
+                  },
         });
+        if (fault === "api_price") {
+            assert(manifest.version === 3 && manifest.analysis.pricing);
+            manifest.analysis.pricing.cost.output = 0.7;
+        }
         const campaignId = await t.mutation(
             internal.qualificationCampaigns.authorize,
             { manifest },
@@ -154,6 +253,18 @@ for (const { subscription, compaction, fault } of [
         let lastPurpose: string | undefined,
             lostAcknowledgement = false;
         vi.spyOn(client, "mutation").mockImplementation(async (...args) => {
+            if (
+                fault === "api_settlement" &&
+                requests === 2 &&
+                !lostAcknowledgement &&
+                getFunctionName(args[0]) ===
+                    getFunctionName(
+                        internal.qualificationCampaigns.settleAnalysis,
+                    )
+            ) {
+                lostAcknowledgement = true;
+                throw new Error("Synthetic settlement failed before commit");
+            }
             const result = await t.mutation(
                 makeFunctionReference<"mutation", Record<string, Value>, Value>(
                     getFunctionName(args[0]),
@@ -201,19 +312,81 @@ for (const { subscription, compaction, fault } of [
                 init?: RequestInit,
                 phase?: string,
             ) => {
+                if (api) {
+                    const started = readFileSync(
+                        join(lotRoot, "progress.jsonl"),
+                        "utf8",
+                    )
+                        .trim()
+                        .split("\n")
+                        .map((line) => JSON.parse(line))
+                        .filter((entry) => entry.event === "analysis_started")
+                        .at(-1);
+                    assert(started);
+                    phase = started.purpose;
+                    expect(String(_input)).toContain("api.openai.com");
+                    expect(
+                        new Headers(init?.headers).get("authorization"),
+                    ).toBe("Bearer sk-synthetic-offline-qualification-key");
+                }
                 lastPurpose = phase;
                 requests++;
                 const lot = await t.run((ctx) => ctx.db.get(lotId));
                 expect(lot?.analysisAllocated).toEqual({
                     requests,
-                    costMicros: subscription ? 0 : requests * 100000,
+                    costMicros: subscription
+                        ? 0
+                        : requests * requestReservation,
                 });
                 const body = await qualificationReviewPayload(init);
-                if (subscription)
+                if (api) {
+                    expect(body.service_tier).toBe("default");
+                    expect(JSON.stringify(body)).not.toContain("sk-synthetic");
+                    if (fault === "api_401" || fault === "api_429")
+                        return new Response(
+                            JSON.stringify({
+                                error: {
+                                    message: "Synthetic provider rejection",
+                                },
+                            }),
+                            {
+                                status: fault === "api_401" ? 401 : 429,
+                                headers: { "content-type": "application/json" },
+                            },
+                        );
+                    if (fault === "api_unknown")
+                        throw new Error("Synthetic connection lost");
+                    if (usageCase)
+                        return qualificationReviewResponse(
+                            qualificationReviewReport(review),
+                            requests,
+                            null,
+                            usageCase.usage,
+                        );
+                    if (fault === "api_usage")
+                        return qualificationReviewResponse(
+                            draft,
+                            requests,
+                            null,
+                            {
+                                input_tokens: 0,
+                                output_tokens: 0,
+                                input_tokens_details: { cached_tokens: 0 },
+                            },
+                        );
+                }
+                if (high) {
+                    expect(body.reasoning).toMatchObject({ effort: "medium" });
+                    assert(Array.isArray(body.input));
+                    expect(body.input.at(-1)).toEqual({
+                        type: "configuration_update",
+                        reasoning: { effort: "high" },
+                    });
+                } else if (subscription)
                     expect(body.reasoning).toMatchObject({ effort: "high" });
                 emittedOutputs.push(body.max_output_tokens);
                 expect(body.max_output_tokens).toBe(
-                    subscription ? undefined : 1000,
+                    subscription ? undefined : high ? 128000 : 1000,
                 );
                 largestInputBytes = Math.max(
                     largestInputBytes,
@@ -245,8 +418,8 @@ for (const { subscription, compaction, fault } of [
                         });
                     if (investigations === 8) {
                         const model = modelRuntime.getModel(
-                            "openai-codex",
-                            "gpt-6.1-sol",
+                            subscription ? "openai-codex" : "openai",
+                            subscription ? "gpt-6.1-sol" : "gpt-4o-mini",
                         );
                         assert(model);
                         const input = model.contextWindow - 1000;
@@ -264,9 +437,9 @@ for (const { subscription, compaction, fault } of [
                     }
                     expect(summaries).toBeGreaterThan(0);
                     expect(JSON.stringify(body.input)).toContain(checkpoint);
-                    expect(String(body.instructions)).toContain(
-                        template.evidenceHash,
-                    );
+                    expect(
+                        JSON.stringify(body.instructions ?? body.input),
+                    ).toContain(template.evidenceHash);
                     expect(
                         readFileSync(
                             join(lotRoot, "automated-review-report.md"),
@@ -278,9 +451,34 @@ for (const { subscription, compaction, fault } of [
                     expect(JSON.stringify(body.input)).toContain(
                         "Synthetic evidence fixture",
                     );
+                if (api && !compaction && requests === 2)
+                    return qualificationReviewResponse(
+                        "",
+                        requests,
+                        {
+                            name: "write",
+                            arguments: {
+                                path: "automated-review-report.md",
+                                content: draft,
+                            },
+                        },
+                        {
+                            input_tokens: 100,
+                            output_tokens: 100,
+                            input_tokens_details: { cached_tokens: 20 },
+                            output_tokens_details: { reasoning_tokens: 40 },
+                        },
+                    );
                 return qualificationReviewResponse(
                     qualificationReviewReport(review),
                     requests,
+                    undefined,
+                    {
+                        input_tokens: 100,
+                        output_tokens: 100,
+                        input_tokens_details: { cached_tokens: api ? 20 : 0 },
+                        output_tokens_details: { reasoning_tokens: 40 },
+                    },
                 );
             },
         };
@@ -288,8 +486,20 @@ for (const { subscription, compaction, fault } of [
             "@evaluations/workbench-browser/campaign-review"
         );
         const modelRuntime = await qualificationReviewRuntime(
-            subscription ? "openai-codex" : "openai",
+            subscription ? "openai-codex" : api ? "both" : "openai",
         );
+        let httpError: unknown;
+        if (api)
+            vi.spyOn(globalThis, "fetch").mockImplementation(
+                async (input, init) => {
+                    try {
+                        return await transport.fetch(input, init);
+                    } catch (error) {
+                        httpError = error;
+                        throw error;
+                    }
+                },
+            );
         const stageOptions = {
             root: lotRoot,
             evidenceHash: template.evidenceHash,
@@ -304,13 +514,188 @@ for (const { subscription, compaction, fault } of [
                     lotId,
                     client,
                     modelRuntime,
-                    transport,
+                    ...(api ? {} : { transport }),
                 }),
             assess: async () =>
                 assert.fail("No assessment before reconciliation"),
         } satisfies Parameters<typeof runCampaignReviewStage>[0];
+        if (fault === "api_command") {
+            await t.mutation(internal.qualificationCampaigns.reconcile, {
+                lotId,
+                cleanupCompleted: true,
+            });
+            let archived = 0;
+            const boundaries = {
+                modelRuntime,
+                lock: () => acquireCampaignLock(join(root, "fixture.lock")),
+                connect: async () => ({
+                    client,
+                    origins: {
+                        convex: "http://127.0.0.1:3210",
+                        site: "http://127.0.0.1:3211",
+                    },
+                }),
+                archive: () => {
+                    archived++;
+                },
+            };
+            const exitCode = process.exitCode;
+            try {
+                await runCampaign("run", root, {}, undefined, boundaries);
+                if (httpError) throw httpError;
+                expect((await t.run((ctx) => ctx.db.get(lotId)))?.status).toBe(
+                    "finished",
+                );
+                expect(
+                    existsSync(
+                        join(
+                            lotRoot,
+                            `automated-review-evidence-${template.evidenceHash}`,
+                        ),
+                    ),
+                ).toBe(true);
+                expect(
+                    JSON.parse(
+                        readFileSync(
+                            join(lotRoot, "automated-review-result.json"),
+                            "utf8",
+                        ),
+                    ),
+                ).toMatchObject({ evidenceHash: template.evidenceHash });
+                expect(
+                    JSON.parse(
+                        readFileSync(
+                            join(lotRoot, "automated-review-assessment.json"),
+                            "utf8",
+                        ),
+                    ),
+                ).toMatchObject({ verdict: "passed" });
+                const completed = requests;
+                expect(completed).toBe(3);
+                await runCampaign("close", root, {}, undefined, boundaries);
+                expect(requests).toBe(completed);
+                expect(archived).toBe(1);
+                expect(
+                    vi
+                        .mocked(client.mutation)
+                        .mock.calls.filter(
+                            ([ref]) =>
+                                getFunctionName(ref) ===
+                                getFunctionName(
+                                    internal.qualificationCampaigns.assess,
+                                ),
+                        ),
+                ).toHaveLength(1);
+                expect(
+                    (await t.run((ctx) => ctx.db.get(campaignId)))?.status,
+                ).toBe("closed");
+            } finally {
+                process.exitCode = exitCode;
+            }
+            return;
+        }
         let stage = await runCampaignReviewStage(stageOptions);
-        if (fault !== "none") {
+        if (httpError && fault !== "api_unknown") throw httpError;
+        if (usageCase?.receipt) {
+            expect(stage.status).toBe("awaiting_reconciliation");
+            expect(requests).toBe(1);
+            const [attempt] = await t.run((ctx) =>
+                ctx.db.query("qualificationAnalysisAttempts").collect(),
+            );
+            expect(attempt).toMatchObject({
+                status: "settled",
+                receipt: { costBasis: "sdk_estimate", ...usageCase.receipt },
+            });
+            return;
+        }
+        if (api && fault !== "api" && fault !== "api_high") {
+            expect(stage).toMatchObject({
+                status: "pending",
+                reason:
+                    fault === "api_price"
+                        ? "model_pricing_changed"
+                        : fault === "api_401"
+                          ? "provider_authentication_failed"
+                          : fault === "api_429"
+                            ? "provider_rate_limited"
+                            : fault === "api_usage" ||
+                                usageCase !== undefined ||
+                                fault === "api_settlement"
+                              ? "analysis_settlement_unconfirmed"
+                              : "unknown_dispatch_outcome",
+            });
+            const before = requests;
+            expect(before).toBe(
+                fault === "api_price" ? 0 : fault === "api_settlement" ? 2 : 1,
+            );
+            let attempts = await t.run((ctx) =>
+                ctx.db.query("qualificationAnalysisAttempts").collect(),
+            );
+            expect(attempts).toHaveLength(before);
+            if (usageCase) {
+                expect(
+                    vi
+                        .mocked(client.mutation)
+                        .mock.calls.filter(
+                            ([ref]) =>
+                                getFunctionName(ref) ===
+                                getFunctionName(
+                                    internal.qualificationCampaigns
+                                        .settleAnalysis,
+                                ),
+                        ),
+                ).toHaveLength(0);
+                expect(
+                    existsSync(join(lotRoot, "automated-review-result.json")),
+                ).toBe(false);
+                expect(
+                    readFileSync(
+                        join(lotRoot, "automated-review-report.md"),
+                        "utf8",
+                    ),
+                ).toContain("Synthetic diagnostic handoff");
+            }
+            expect(
+                attempts.filter((attempt) => attempt.status === "reserved"),
+            ).toHaveLength(fault === "api_price" ? 0 : 1);
+            if (fault === "api_settlement") {
+                expect(
+                    readFileSync(
+                        join(lotRoot, "automated-review-report.md"),
+                        "utf8",
+                    ),
+                ).toBe(draft);
+                const pinPath = join(lotRoot, "automated-review-mission.json");
+                const pin = JSON.parse(readFileSync(pinPath, "utf8"));
+                pin.deadlineAt = Date.now() - 1;
+                writeFileSync(pinPath, JSON.stringify(pin));
+                await modelRuntime.removeRuntimeApiKey("openai");
+                vi.stubEnv("OPENAI_API_KEY", "");
+            }
+            stage = await runCampaignReviewStage(stageOptions);
+            expect(stage.status).toBe("pending");
+            expect(requests).toBe(before);
+            attempts = await t.run((ctx) =>
+                ctx.db.query("qualificationAnalysisAttempts").collect(),
+            );
+            if (fault === "api_settlement") {
+                expect(
+                    attempts.every(
+                        (attempt) =>
+                            attempt.status === "settled" &&
+                            attempt.receipt?.costBasis === "sdk_estimate",
+                    ),
+                ).toBe(true);
+                expect(stage).toMatchObject({
+                    reason: "provider_login_required",
+                });
+            }
+            expect((await t.run((ctx) => ctx.db.get(lotId)))?.status).toBe(
+                "closing",
+            );
+            return;
+        }
+        if (fault !== "none" && fault !== "api" && fault !== "api_high") {
             expect(stage).toMatchObject({
                 status: "pending",
                 reason:
@@ -353,7 +738,8 @@ for (const { subscription, compaction, fault } of [
             expect(lostAcknowledgement).toBe(true);
         }
         if (compaction) {
-            expect(summaries).toBe(2);
+            if (api) expect(summaries).toBeGreaterThan(0);
+            else expect(summaries).toBe(2);
             expect(investigations).toBe(9);
             expect(largestInputBytes).toBeGreaterThan(256 * 1024);
         }
@@ -392,7 +778,7 @@ for (const { subscription, compaction, fault } of [
                 ),
             ),
         ).toMatchObject({
-            protocol: "investigator_v1",
+            protocol: "investigator_v2",
             resourcePolicy: "authority_native_v1",
             evidenceHash: template.evidenceHash,
             mission: expect.stringContaining("source-supported"),
@@ -458,22 +844,41 @@ for (const { subscription, compaction, fault } of [
                     )
                     .take(allowance + 1),
             );
+            const analysisAllocated = {
+                requests: completedRequests,
+                costMicros: subscription
+                    ? 0
+                    : completedRequests * requestReservation,
+            };
             expect(lot).toMatchObject({
                 status: "finished",
                 verdict: "passed",
-                analysisAllocated: {
-                    requests: completedRequests,
-                    costMicros: subscription ? 0 : 200000,
-                },
+                analysisAllocated,
             });
             expect(campaign).toMatchObject({
                 status: "closed",
-                analysisAllocated: {
-                    requests: completedRequests,
-                    costMicros: subscription ? 0 : 200000,
-                },
+                analysisAllocated,
             });
             expect(attempts).toHaveLength(completedRequests);
+            if (api && !compaction)
+                for (const attempt of attempts) {
+                    expect(attempt).toMatchObject({
+                        status: "settled",
+                        costMicros: high ? 1162 : 74,
+                        receipt: {
+                            accounting: "api_cost",
+                            costBasis: "sdk_estimate",
+                            input: 80,
+                            output: 100,
+                            cacheRead: 20,
+                            cacheWrite: 0,
+                        },
+                    });
+                    expect(attempt.receipt?.costUsd).toBeCloseTo(
+                        high ? 0.001162 : 0.0000735,
+                        12,
+                    );
+                }
             expect(
                 attempts.every(
                     (attempt) =>
@@ -489,7 +894,10 @@ for (const { subscription, compaction, fault } of [
                                       ),
                                   ) &&
                               attempt.receipt.output === 100
-                            : attempt.costMicros === 0),
+                            : api
+                              ? (attempt.costMicros ?? 0) > 0 &&
+                                attempt.receipt?.costBasis === "sdk_estimate"
+                              : attempt.costMicros === 0),
                 ),
             ).toBe(true);
             expect(requests).toBe(completedRequests);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { parseEnv } from "node:util";
 import {
     createAgentSession,
@@ -9,6 +9,7 @@ import {
     createGrepToolDefinition,
     createLsToolDefinition,
     createReadToolDefinition,
+    createWriteToolDefinition,
     defineTool,
     ModelRuntime,
     type ResourceLoader,
@@ -25,6 +26,7 @@ import { z } from "zod";
 import { internal } from "../../../convex/_generated/api.js";
 import type { Id } from "../../../convex/_generated/dataModel";
 import {
+    analysisPricingAuthority,
     analysisReceiptSchema,
     type CampaignManifest,
     campaignManifestSchema,
@@ -40,6 +42,7 @@ import {
     QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
 } from "../../../convex/resourcePolicy.ts";
 import {
+    CAMPAIGN_REVIEW_REPORT_PATH,
     CampaignReviewFormatError,
     type campaignReviewTemplate,
     campaignReviewVerdicts,
@@ -79,9 +82,10 @@ function readReviewJson<S extends z.ZodType>(
     }
 }
 
-function configuredReviewerReasoning(): string {
-    if (process.env.WORKBENCH_REVIEW_REASONING !== undefined)
-        return process.env.WORKBENCH_REVIEW_REASONING;
+function reviewerSetting(
+    name: "WORKBENCH_REVIEW_REASONING" | "OPENAI_API_KEY",
+): string | undefined {
+    if (process.env[name] !== undefined) return process.env[name];
     const git = spawnSync("git", ["worktree", "list", "--porcelain", "-z"], {
         encoding: "utf8",
         timeout: GIT_METADATA_TIMEOUT_MS,
@@ -110,13 +114,158 @@ function configuredReviewerReasoning(): string {
             "code" in error &&
             error.code === "ENOENT"
         )
-            return "high";
-        throw new Error("Cannot read shared reviewer reasoning configuration", {
-            cause: error,
-        });
+            return undefined;
+        throw new Error(
+            `Cannot read shared reviewer ${name === "OPENAI_API_KEY" ? "API" : "reasoning"} configuration`,
+            {
+                cause: error,
+            },
+        );
     }
-    return parseEnv(content).WORKBENCH_REVIEW_REASONING ?? "high";
+    const value = parseEnv(content)[name];
+    if (
+        value === undefined &&
+        new RegExp(`^\\s*(?:export\\s+)?${name}(?:\\s|=|$)`, "m").test(content)
+    )
+        throw new Error(`Malformed shared reviewer setting ${name}`);
+    return value;
 }
+
+async function reviewerRuntime(
+    runtime: ModelRuntime | undefined,
+    provider?: string,
+) {
+    const selected =
+        runtime ??
+        (await ModelRuntime.create({
+            allowModelNetwork: false,
+            refreshOnCreate: false,
+        }));
+    if (provider === undefined || provider === "openai") {
+        const key = reviewerSetting("OPENAI_API_KEY");
+        if (key !== undefined) {
+            assert(key.trim(), "Configured OpenAI API key is empty");
+            try {
+                await selected.setRuntimeApiKey("openai", key);
+            } catch {
+                throw new Error("Cannot configure Pi reviewer API credentials");
+            }
+        }
+    }
+    return selected;
+}
+
+/** Resolve fresh route preference before immutable authorization; existing mandates never pass here. */
+export async function prepareCampaignReviewer(
+    manifest: Extract<CampaignManifest, { version: 3 }>,
+    runtime?: ModelRuntime,
+) {
+    const selected = await reviewerRuntime(runtime);
+    const api = await selected.checkAuth("openai");
+    if (api?.type !== "api_key") {
+        const stored = (await selected.listCredentials()).some(
+            (credential) =>
+                credential.providerId === "openai" &&
+                credential.type === "api_key",
+        );
+        assert(
+            !stored &&
+                selected.getProviderAuthStatus("openai").source !== "runtime",
+            "Configured native OpenAI API credentials cannot be resolved",
+        );
+    }
+    const preferred = api?.type === "api_key" ? "openai" : "openai-codex";
+    const route = manifest.analysis.routes[0];
+    assert(
+        route?.provider === preferred,
+        preferred === "openai"
+            ? "OpenAI API is preferred when an API key is configured; prepare an openai model and API allowance"
+            : "No OpenAI API key configured; prepare an openai-codex subscription mandate",
+    );
+    const authentication = await selected.checkAuth(preferred);
+    assert(
+        authentication &&
+            (preferred !== "openai-codex" || authentication.type === "oauth"),
+        `Sign in through Pi with /login ${preferred}`,
+    );
+    const model = selected.getModel(preferred, route.model);
+    assert(model, "Reviewer model is unavailable in the selected Pi provider");
+    assert(
+        manifest.analysis.accounting ===
+            (preferred === "openai" ? "api_cost" : "native_subscription"),
+        preferred === "openai"
+            ? "Fresh API review requires explicit api_cost authority"
+            : "Fresh subscription review requires native_subscription accounting",
+    );
+    if (preferred === "openai")
+        verifiedPricingHash(model, manifest.analysis.pricing);
+}
+
+function verifiedPricingHash(
+    model: Model | undefined,
+    pricing: Extract<CampaignManifest, { version: 3 }>["analysis"]["pricing"],
+) {
+    assert(model && pricing, "Reviewer model pricing is unavailable");
+    assert(
+        pricing.verifiedAt <= Date.now(),
+        "Reviewer pricing verification cannot be in the future",
+    );
+    assert(
+        model.provider === pricing.provider &&
+            model.id === pricing.model &&
+            model.api === pricing.api &&
+            model.contextWindow === pricing.contextWindow &&
+            model.maxTokens === pricing.maxTokens,
+        "Reviewer model pricing or capacity changed",
+    );
+    assert.deepEqual(
+        model.cost,
+        pricing.cost,
+        "Reviewer model pricing changed",
+    );
+    return sha256(analysisPricingAuthority(pricing).identity);
+}
+
+const apiTokenCounter = z.number().int().nonnegative().safe();
+// Validate provider counters before Pi normalizes absent/negative values; Pi still calculates cost.
+const apiUsageEventSchema = z.object({
+    type: z.enum(["response.completed", "response.incomplete"]),
+    response: z.object({
+        usage: z
+            .object({
+                input_tokens: apiTokenCounter,
+                output_tokens: apiTokenCounter,
+                total_tokens: apiTokenCounter.optional(),
+                input_tokens_details: z
+                    .object({
+                        cached_tokens: apiTokenCounter.optional(),
+                        cache_write_tokens: apiTokenCounter.optional(),
+                    })
+                    .nullish(),
+                output_tokens_details: z
+                    .object({ reasoning_tokens: apiTokenCounter.optional() })
+                    .nullish(),
+            })
+            .superRefine((usage, ctx) => {
+                const cached =
+                    (usage.input_tokens_details?.cached_tokens ?? 0) +
+                    (usage.input_tokens_details?.cache_write_tokens ?? 0);
+                if (
+                    !Number.isSafeInteger(cached) ||
+                    cached > usage.input_tokens ||
+                    (usage.total_tokens !== undefined &&
+                        usage.total_tokens !==
+                            usage.input_tokens + usage.output_tokens) ||
+                    (usage.output_tokens_details?.reasoning_tokens ?? 0) >
+                        usage.output_tokens
+                )
+                    ctx.addIssue({
+                        code: "custom",
+                        message: "Inconsistent native API usage counters",
+                    });
+            }),
+    }),
+});
 
 const responseRecord = z
     .object({
@@ -128,7 +277,7 @@ const responseRecord = z
     })
     .strict();
 
-/** Connects Pi review to campaign authority and durable per-request accounting. API-paid transport remains gated. */
+/** Connects native Pi review to immutable campaign authority, observations and per-request accounting. */
 export async function runAccountableCampaignReview(options: {
     root: string;
     evidenceRoot: string;
@@ -153,6 +302,7 @@ export async function runAccountableCampaignReview(options: {
             reason: "subscription_guarantee_unverified",
         };
     const subscription = manifest.analysis.accounting === "native_subscription";
+    const apiCost = manifest.analysis.accounting === "api_cost";
     const mandateHash = sha256(JSON.stringify(manifest));
     const protocolPath = join(root, "protocol.json");
     const protocol = existsSync(protocolPath)
@@ -196,7 +346,7 @@ export async function runAccountableCampaignReview(options: {
         await client.mutation(settleRef, {
             lotId: options.lotId,
             attemptKey: bound.attemptKey,
-            ...(subscription
+            ...(subscription || apiCost
                 ? { receipt }
                 : { costMicros: receipt.costMicros }),
         });
@@ -245,10 +395,12 @@ export async function runAccountableCampaignReview(options: {
         };
     const runtime =
         options.modelRuntime ??
-        (await ModelRuntime.create({
-            allowModelNetwork: false,
-            refreshOnCreate: false,
-        }));
+        (apiCost
+            ? await reviewerRuntime(undefined, route.provider)
+            : await ModelRuntime.create({
+                  allowModelNetwork: false,
+                  refreshOnCreate: false,
+              }));
     const authentication = await runtime.checkAuth(route.provider);
     if (!authentication)
         return {
@@ -261,7 +413,12 @@ export async function runAccountableCampaignReview(options: {
             status: "pending" as const,
             reason: "provider_subscription_login_required",
         };
-    if (!options.transport && !subscription)
+    if (apiCost && authentication.type !== "api_key")
+        return {
+            status: "pending" as const,
+            reason: "provider_api_key_required",
+        };
+    if (!options.transport && !subscription && !apiCost)
         return {
             status: "pending" as const,
             reason: "live_transport_unqualified",
@@ -278,6 +435,7 @@ export async function runAccountableCampaignReview(options: {
         (manifest.analysis.maxOutputTokens ?? model.maxTokens) >
             model.maxTokens ||
         (!subscription &&
+            !apiCost &&
             (manifest.analysis.maxInputTokens === undefined ||
                 manifest.analysis.maxInputTokens +
                     (manifest.analysis.maxOutputTokens ?? model.maxTokens) >
@@ -287,18 +445,57 @@ export async function runAccountableCampaignReview(options: {
             status: "pending" as const,
             reason: "model_bounds_unqualified",
         };
+    let pricingHash: string | undefined;
+    if (apiCost) {
+        try {
+            pricingHash = verifiedPricingHash(model, manifest.analysis.pricing);
+        } catch {
+            return {
+                status: "pending" as const,
+                reason: "model_pricing_changed",
+            };
+        }
+    }
     const reserveRef = makeFunctionReference<
         "mutation",
         FunctionArgs<typeof internal.qualificationCampaigns.reserveAnalysis>,
         null
     >(getFunctionName(internal.qualificationCampaigns.reserveAnalysis));
-    return runPiCampaignReview({
+    let responseStatus: number | undefined;
+    const usageEvidence = new Map<number, string | null>();
+    const result = await runPiCampaignReview({
         root: options.evidenceRoot,
         reportRoot: root,
         template,
         runtime,
         model,
         limits: manifest.analysis,
+        ...(apiCost
+            ? {
+                  serviceTier: "default" as const,
+                  onProviderStreamEvent: (attempt: number, event: unknown) => {
+                      if (
+                          !event ||
+                          typeof event !== "object" ||
+                          !("type" in event) ||
+                          !apiUsageEventSchema.shape.type.safeParse(event.type)
+                              .success
+                      )
+                          return;
+                      const parsed = apiUsageEventSchema.safeParse(event);
+                      const fingerprint = parsed.success
+                          ? sha256(JSON.stringify(parsed.data))
+                          : null;
+                      const previous = usageEvidence.get(attempt);
+                      usageEvidence.set(
+                          attempt,
+                          previous === undefined || previous === fingerprint
+                              ? fingerprint
+                              : null,
+                      );
+                  },
+              }
+            : {}),
         transport: {
             kind: "metered-openai",
             fetch: (attempt, purpose) => async (input, init) => {
@@ -313,6 +510,7 @@ export async function runAccountableCampaignReview(options: {
                         requestHash,
                         "Retained analysis request changed",
                     );
+                    responseStatus = record.status;
                     return new Response(record.body, {
                         status: record.status,
                         headers: { "content-type": record.contentType },
@@ -364,6 +562,7 @@ export async function runAccountableCampaignReview(options: {
                     mode: 0o600,
                     flush: true,
                 });
+                responseStatus = record.status;
                 return new Response(record.body, {
                     status: record.status,
                     headers: { "content-type": record.contentType },
@@ -371,6 +570,15 @@ export async function runAccountableCampaignReview(options: {
             },
         },
         reserve: async (attempt, purpose) => {
+            if (apiCost)
+                assert.equal(
+                    verifiedPricingHash(
+                        runtime.getModel(route.provider, route.model),
+                        manifest.analysis.pricing,
+                    ),
+                    pricingHash,
+                    "Analysis pricing changed",
+                );
             const bound = identity(attempt);
             const previous = journal
                 .analysisAttempts()
@@ -423,6 +631,20 @@ export async function runAccountableCampaignReview(options: {
                     usage.output >= 0,
                 "Invalid analysis usage",
             );
+            if (apiCost) {
+                assert(
+                    usageEvidence.get(attempt),
+                    "Native API usage incomplete or invalid",
+                );
+                assert(
+                    usage.input +
+                        usage.output +
+                        usage.cacheRead +
+                        usage.cacheWrite >
+                        0,
+                    "Native API usage unavailable",
+                );
+            }
             const bound = identity(attempt);
             // Only the injected mock has a known zero charge; native subscriptions retain usage without dollar settlement.
             const receipt = analysisReceiptSchema.parse({
@@ -430,13 +652,36 @@ export async function runAccountableCampaignReview(options: {
                 output: usage.output,
                 ...(subscription
                     ? { accounting: "native_subscription" }
-                    : { costMicros: 0 }),
+                    : apiCost
+                      ? {
+                            accounting: "api_cost",
+                            cacheRead: usage.cacheRead,
+                            cacheWrite: usage.cacheWrite,
+                            costUsd: usage.cost.total,
+                            costMicros: Math.ceil(usage.cost.total * 1_000_000),
+                            costBasis:
+                                usage.cost.totalFromProvider === true
+                                    ? "provider_reported"
+                                    : "sdk_estimate",
+                            pricingHash,
+                        }
+                      : { costMicros: 0 }),
                 observationHash: sha256(readFileSync(responsePath(attempt))),
             });
             journal.finishAnalysis(bound, receipt);
             await settleReceipt(bound, receipt);
         },
     });
+    if (
+        result.status === "pending" &&
+        result.reason === "unknown_dispatch_outcome"
+    ) {
+        if (responseStatus === 401)
+            return { ...result, reason: "provider_authentication_failed" };
+        if (responseStatus === 429)
+            return { ...result, reason: "provider_rate_limited" };
+    }
+    return result;
 }
 
 /** Runs Pi with only frozen evidence and a metered model stream. */
@@ -463,6 +708,11 @@ export async function runPiCampaignReview(options: {
         attempt: number,
         purpose: AnalysisCallPurpose,
     ) => Promise<unknown>;
+    serviceTier?: "default";
+    onProviderStreamEvent?: (
+        attempt: number,
+        event: unknown,
+    ) => void | Promise<void>;
     settle: (
         attempt: number,
         usage: {
@@ -553,7 +803,7 @@ export async function runPiCampaignReview(options: {
     };
     const missionSchema = z
         .object({
-            protocol: z.literal("investigator_v1"),
+            protocol: z.enum(["investigator_v1", "investigator_v2"]),
             resourcePolicy: z.string().optional(),
             deadlineAt: z.number().int().positive().safe().optional(),
             model: modelPinSchema.optional(),
@@ -631,7 +881,13 @@ export async function runPiCampaignReview(options: {
     if (authority.kind === "blocked")
         return { status: "pending" as const, reason: authority.code };
     const requestedReasoning =
-        retained?.reasoning?.requested ?? configuredReviewerReasoning();
+        retained?.reasoning?.requested ??
+        reviewerSetting("WORKBENCH_REVIEW_REASONING") ??
+        "high";
+    const protocol = retained?.protocol ?? "investigator_v2";
+    let calls = 0;
+    let failure: string | undefined;
+    let reportError: Error | undefined;
     const loader: ResourceLoader = {
         getExtensions: () => ({
             extensions: [],
@@ -781,13 +1037,84 @@ export async function runPiCampaignReview(options: {
             };
         },
     });
+    const reportRoot = options.reportRoot;
+    const reportDefinitions =
+        reportRoot && protocol === "investigator_v2"
+            ? [
+                  createWriteToolDefinition(root, {
+                      operations: {
+                          mkdir: async (directory) => {
+                              assert.equal(
+                                  directory,
+                                  resolve(root),
+                                  "Reviewer may write only automated-review-report.md",
+                              );
+                          },
+                          writeFile: async (path, content) => {
+                              assert.equal(
+                                  path,
+                                  resolve(root, CAMPAIGN_REVIEW_REPORT_PATH),
+                                  "Reviewer may write only automated-review-report.md",
+                              );
+                              assert(
+                                  content.trim() &&
+                                      Buffer.byteLength(content) <=
+                                          REVIEW_REPORT_MAX_BYTES,
+                                  "A nonempty bounded developer report is required",
+                              );
+                              try {
+                                  retainCampaignReviewReport(
+                                      reportRoot,
+                                      template,
+                                      content,
+                                      calls,
+                                      { provisional: true },
+                                  );
+                              } catch (error) {
+                                  reportError =
+                                      error instanceof Error
+                                          ? error
+                                          : new Error(
+                                                "Diagnostic report persistence failed",
+                                                { cause: error },
+                                            );
+                                  throw reportError;
+                              }
+                          },
+                      },
+                  }),
+              ]
+            : [];
+    const reportTools = reportDefinitions.map((tool) =>
+        defineTool({
+            ...tool,
+            parameters: {
+                ...tool.parameters,
+                properties: {
+                    ...tool.parameters.properties,
+                    path: {
+                        ...tool.parameters.properties.path,
+                        const: CAMPAIGN_REVIEW_REPORT_PATH,
+                        description:
+                            "The only writable path: the provisional developer handoff",
+                    },
+                },
+            },
+            description:
+                "Publish or update provisional developer findings at automated-review-report.md. The runner retains immutable revisions outside frozen evidence; publication does not submit or accept an assessment. No other file can be written.",
+            promptSnippet: "Publish provisional developer findings",
+            promptGuidelines: [
+                "Save useful findings before continuing investigation; keep uncertainty explicit. Only automated-review-report.md is writable.",
+            ],
+        }),
+    );
     const { session } = await createAgentSession({
         cwd: root,
         modelRuntime: runtime,
         model,
         thinkingLevel: "high",
-        tools: ["read", "ls", "grep"],
-        customTools: [read, list, grep],
+        tools: ["read", "ls", "grep", ...reportTools.map((tool) => tool.name)],
+        customTools: [read, list, grep, ...reportTools],
         resourceLoader: loader,
         sessionManager: SessionManager.inMemory(root),
         settingsManager: SettingsManager.inMemory({
@@ -821,7 +1148,7 @@ export async function runPiCampaignReview(options: {
         if (pinPath && !retained)
             writeFileSync(
                 pinPath,
-                `${JSON.stringify({ protocol: "investigator_v1", resourcePolicy: RESOURCE_POLICY_VERSION, deadlineAt, model: modelPin, mission, missionHash: sha256(mission), context, candidateHash: template.candidateHash, batteryHash: template.batteryHash, evidenceHash: template.evidenceHash, reasoning: { requested: requestedReasoning, effective: session.thinkingLevel } }, null, 2)}\n`,
+                `${JSON.stringify({ protocol, resourcePolicy: RESOURCE_POLICY_VERSION, deadlineAt, model: modelPin, mission, missionHash: sha256(mission), context, candidateHash: template.candidateHash, batteryHash: template.batteryHash, evidenceHash: template.evidenceHash, reasoning: { requested: requestedReasoning, effective: session.thinkingLevel } }, null, 2)}\n`,
                 { flag: "wx", mode: 0o600, flush: true },
             );
         await session.bindExtensions({});
@@ -829,13 +1156,12 @@ export async function runPiCampaignReview(options: {
         session.dispose();
         throw error;
     }
-    let calls = 0;
-    let failure: string | undefined;
     let settled = false;
-    let reportError: Error | undefined;
     let compacting = false;
+    let pendingSettlement: Promise<void> | undefined;
     const original = session.agent.streamFunction;
     session.agent.streamFunction = async (selected, context, streamOptions) => {
+        await pendingSettlement;
         if (failure || reportError) throw reportError ?? new Error(failure);
         const admitted = resolveGenerationAuthority(
             { resourcePolicy: RESOURCE_POLICY_VERSION, deadlineAt },
@@ -863,8 +1189,67 @@ export async function runPiCampaignReview(options: {
             failure = dispatchAuthority.code;
             throw new Error(failure);
         }
-        const response = await original(selected, context, {
+        const requestLimit =
+            captured.manifest.version === 3
+                ? captured.manifest.analysis.perLot.requests
+                : undefined;
+        const requestContext =
+            protocol === "investigator_v2" && purpose === "investigation"
+                ? {
+                      ...context,
+                      messages: [
+                          ...context.messages,
+                          {
+                              role: "system" as const,
+                              content: `Review request ${attempt}. ${
+                                  requestLimit === undefined
+                                      ? "No request ceiling was supplied in the captured mandate."
+                                      : `Remaining calls under the original lot ceiling: ${Math.max(0, requestLimit - attempt)}.`
+                              } Absolute analysis deadline: ${new Date(deadlineAt).toISOString()}. Cumulative campaign accounting can refuse earlier; this information never grants more authority. Publish useful provisional findings before further investigation rather than waiting for assessment completion.`,
+                              // The original pin and ordinal replay without a changing wall-clock value.
+                              timestamp: 0,
+                          },
+                      ],
+                  }
+                : context;
+        const response = await original(selected, requestContext, {
             ...streamOptions,
+            // Pi1.5.0 SimpleStreamOptions drops serviceTier; its native payload hook pins billing without replacing serialization.
+            ...(options.serviceTier
+                ? {
+                      onPayload: async (payload: unknown, model: Model) => {
+                          const prepared =
+                              (await streamOptions?.onPayload?.(
+                                  payload,
+                                  model,
+                              )) ?? payload;
+                          assert(
+                              prepared &&
+                                  typeof prepared === "object" &&
+                                  !Array.isArray(prepared),
+                              "Invalid native review payload",
+                          );
+                          return {
+                              ...prepared,
+                              service_tier: options.serviceTier,
+                          };
+                      },
+                  }
+                : {}),
+            ...(options.onProviderStreamEvent
+                ? {
+                      onProviderStreamEvent: async (
+                          event: unknown,
+                          model: Model,
+                      ) => {
+                          await streamOptions?.onProviderStreamEvent?.(
+                              event,
+                              model,
+                          );
+                          await options.onProviderStreamEvent?.(attempt, event);
+                      },
+                  }
+                : {}),
             ...(limits.maxOutputTokens === undefined
                 ? {}
                 : {
@@ -928,12 +1313,21 @@ export async function runPiCampaignReview(options: {
                                       { cause: error },
                                   );
                     }
-                    try {
-                        await options.settle(attempt, message.usage);
-                    } catch (error) {
-                        failure = "analysis_settlement_unconfirmed";
-                        throw error;
-                    }
+                    const publishBeforeSettlement =
+                        protocol === "investigator_v2" &&
+                        purpose === "investigation" &&
+                        message.stopReason === "toolUse";
+                    const settlement = (async () => {
+                        try {
+                            await options.settle(attempt, message.usage);
+                        } catch (error) {
+                            failure = "analysis_settlement_unconfirmed";
+                            if (!publishBeforeSettlement) throw error;
+                        }
+                    })();
+                    // Local evidence reads/report publication can finish; no next model call escapes settlement.
+                    if (publishBeforeSettlement) pendingSettlement = settlement;
+                    else await settlement;
                 }
                 return message;
             })());
@@ -974,6 +1368,7 @@ export async function runPiCampaignReview(options: {
     try {
         for (;;) {
             await session.prompt(prompt);
+            await pendingSettlement;
             if (reportError) throw reportError;
             const final = session.messages.at(-1);
             if (
@@ -1035,6 +1430,7 @@ export async function runPiCampaignReview(options: {
             }
         }
     } finally {
+        await pendingSettlement;
         clearTimeout(timeout);
         session.dispose();
     }

@@ -6,6 +6,7 @@ export function configurableCampaign() {
             "Compare declared model configurations through independently configured Sources scenarios",
         capability: "sources",
         mode: "live",
+        researchDurationMs: 15 * 60_000,
         configurations: ["first", "second"].map((id) => ({
             id,
             purpose: "quality",

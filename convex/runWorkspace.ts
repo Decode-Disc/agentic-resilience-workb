@@ -174,18 +174,27 @@ async function readQualificationScope(ctx: QueryCtx, run: Doc<"researchRuns">) {
         ? await ctx.db.get(context.campaignLotId)
         : null;
     const campaign = lot ? await ctx.db.get(lot.campaignId) : null;
+    const durationMs =
+        campaign && campaign.manifest.version !== 1
+            ? campaign.manifest.researchDurationMs
+            : undefined;
+    const researchDeadlineAt =
+        grant.sourcesLot && run.researchStartedAt !== undefined
+            ? run.researchStartedAt +
+              (durationMs ?? SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS)
+            : undefined;
+    const deadlineAt = Math.min(
+        context.expiresAt,
+        context.campaignLotId ? (campaign?.manifest.expiresAt ?? 0) : Infinity,
+        researchDeadlineAt ?? Infinity,
+    );
     return {
         context,
-        deadlineAt: Math.min(
-            context.expiresAt,
-            context.campaignLotId
-                ? (campaign?.manifest.expiresAt ?? 0)
-                : Infinity,
-            grant.sourcesLot && run.researchStartedAt !== undefined
-                ? run.researchStartedAt +
-                      SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS
-                : Infinity,
-        ),
+        deadlineAt,
+        campaignResearchDeadlineAt:
+            durationMs !== undefined && researchDeadlineAt !== undefined
+                ? deadlineAt
+                : undefined,
     };
 }
 
@@ -195,6 +204,14 @@ export async function readWorkbenchQualificationDeadline(
     run: Doc<"researchRuns">,
 ) {
     return (await readQualificationScope(ctx, run))?.deadlineAt;
+}
+
+/** Original explicit campaign bound, including expiry; absence preserves legacy clocks. This does not authorize I/O. */
+export async function readCampaignResearchDeadline(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+) {
+    return (await readQualificationScope(ctx, run))?.campaignResearchDeadlineAt;
 }
 
 /** A fixture remains unpaid unless its active local context explicitly authorizes this framing dossier. */

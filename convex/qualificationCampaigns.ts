@@ -15,6 +15,7 @@ import { preparationFailureClass } from "./domain/sourcePreparationAuthority";
 import { resolveReasoningPreference } from "./integrations/modelRouting";
 import { readResponseControlPolicy } from "./modelConfiguration";
 import {
+    analysisPricingAuthority,
     analysisProviderSchema,
     analysisReceiptSchema,
     campaignConfiguration,
@@ -22,6 +23,7 @@ import {
     campaignLimitsSchema,
     campaignManifestSchema,
     emptyCampaignLimits,
+    newCampaignManifestSchema,
 } from "./qualificationCampaignPolicy";
 import {
     MAX_SOURCES_QUALIFICATION_RECEIPTS,
@@ -79,6 +81,7 @@ export const authorize = internalMutation({
                 throw new Error("Campaign closed or expired");
             return previous._id;
         }
+        newCampaignManifestSchema.parse(manifest);
         if (manifest.expiresAt <= Date.now())
             throw new Error("Campaign expired");
         const configurationHashes: { id: string; hash: string }[] = [];
@@ -485,24 +488,49 @@ export const settleAnalysis = internalMutation({
             )
             .unique();
         if (!attempt) throw new Error("Invalid analysis settlement");
-        if (
-            campaign.manifest.version === 3 &&
-            campaign.manifest.analysis.accounting === "native_subscription"
-        ) {
+        const analysis =
+            campaign.manifest.version === 3
+                ? campaign.manifest.analysis
+                : undefined;
+        if (analysis?.accounting !== undefined) {
+            const api = analysis.accounting === "api_cost";
+            const invalid = api
+                ? "Invalid native API analysis settlement"
+                : "Invalid analysis settlement";
             const parsed = analysisReceiptSchema.safeParse(args.receipt);
             if (
                 args.costMicros !== undefined ||
                 !parsed.success ||
-                parsed.data.accounting !== "native_subscription"
+                parsed.data.accounting !== analysis.accounting
             )
-                throw new Error("Invalid analysis settlement");
+                throw new Error(invalid);
             const receipt = parsed.data;
+            if (
+                api &&
+                (!analysis.pricing ||
+                    receipt.pricingHash !==
+                        sha256Hex(
+                            analysisPricingAuthority(analysis.pricing).identity,
+                        ))
+            )
+                throw new Error(invalid);
             if (attempt.status === "settled") {
                 if (hash(attempt.receipt) !== hash(receipt))
                     throw new Error("Analysis settlement conflict");
                 return null;
             }
-            await ctx.db.patch(attempt._id, { status: "settled", receipt });
+            if (
+                api &&
+                (attempt.reservationMicros === undefined ||
+                    receipt.costMicros === undefined ||
+                    receipt.costMicros > attempt.reservationMicros)
+            )
+                throw new Error("Analysis reservation overrun");
+            await ctx.db.patch(attempt._id, {
+                status: "settled",
+                receipt,
+                ...(api ? { costMicros: receipt.costMicros } : {}),
+            });
             return null;
         }
         if (

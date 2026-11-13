@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { Id } from "@convex/_generated/dataModel";
+import { sha256Hex } from "@convex/domain/sourcePassages";
 import {
     type CampaignManifest,
     campaignManifestSchema,
@@ -14,6 +15,7 @@ import {
     type Value,
 } from "convex/values";
 import { afterEach, expect, test, vi } from "vitest";
+import { qualificationReviewApiAnalysis } from "@/__tests__/setup/qualification-review";
 import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
@@ -125,6 +127,121 @@ test("a historical campaign cannot dispatch more analysis but can settle an alre
         }),
     ]);
 });
+
+for (const basis of ["sdk_estimate", "provider_reported"] as const)
+    test(`native API settlements bind pricing and provenance without releasing authority (${basis})`, async () => {
+        const { t } = await seedWorkbench(true);
+        const m = campaignManifestSchema.parse({
+            ...configurableCampaign(),
+            version: 3,
+            mode: "deterministic",
+            batteryHash: "a".repeat(64),
+            perLot: emptyCampaignLimits(),
+            total: emptyCampaignLimits(),
+            analysis: qualificationReviewApiAnalysis(),
+        });
+        assert(m.version === 3);
+        const campaignId = await t.mutation(authorize, { manifest: m });
+        const lotId = await t.mutation(admit, {
+            campaignId,
+            key: "native-api",
+            candidateHash: "b".repeat(64),
+            changedPaths: [],
+        });
+        await t.mutation(internal.qualificationCampaigns.beginCleanup, {
+            lotId,
+        });
+        const reserve = {
+            lotId,
+            attemptKey: "first",
+            evidenceHash: "c".repeat(64),
+            provider: "openai" as const,
+            model: "gpt-4o-mini",
+            reservationMicros: 100000,
+        };
+        const raced = await Promise.allSettled([
+            t.mutation(
+                internal.qualificationCampaigns.reserveAnalysis,
+                reserve,
+            ),
+            t.mutation(internal.qualificationCampaigns.reserveAnalysis, {
+                ...reserve,
+                attemptKey: "concurrent",
+            }),
+        ]);
+        expect(raced.map((result) => result.status).sort()).toEqual([
+            "fulfilled",
+            "rejected",
+        ]);
+        const [attempt] = await t.run((ctx) =>
+            ctx.db.query("qualificationAnalysisAttempts").collect(),
+        );
+        assert(attempt);
+        const receipt = {
+            accounting: "api_cost" as const,
+            input: 100,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            costBasis: basis,
+            costUsd: basis === "provider_reported" ? 0 : 0.000015,
+            costMicros: basis === "provider_reported" ? 0 : 15,
+            pricingHash: sha256Hex(JSON.stringify(m.analysis.pricing)),
+            observationHash: "d".repeat(64),
+        };
+        const settle = { lotId, attemptKey: attempt.attemptKey, receipt };
+        await expect(
+            t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+                ...settle,
+                receipt: { ...receipt, pricingHash: "e".repeat(64) },
+            }),
+        ).rejects.toThrow("Invalid native API analysis settlement");
+        await expect(
+            t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+                ...settle,
+                receipt: { ...receipt, costUsd: 0.100001, costMicros: 100001 },
+            }),
+        ).rejects.toThrow("Analysis reservation overrun");
+        await t.mutation(
+            internal.qualificationCampaigns.settleAnalysis,
+            settle,
+        );
+        await t.mutation(
+            internal.qualificationCampaigns.settleAnalysis,
+            settle,
+        );
+        await expect(
+            t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+                ...settle,
+                receipt: {
+                    ...receipt,
+                    costBasis:
+                        basis === "sdk_estimate"
+                            ? "provider_reported"
+                            : "sdk_estimate",
+                },
+            }),
+        ).rejects.toThrow("Analysis settlement conflict");
+        await t.run((ctx) =>
+            ctx.db.patch(campaignId, { resourcePolicy: undefined }),
+        );
+        await t.mutation(
+            internal.qualificationCampaigns.settleAnalysis,
+            settle,
+        );
+        const saved = await t.run((ctx) => ctx.db.get(attempt._id));
+        expect(saved).toMatchObject({
+            status: "settled",
+            costMicros: receipt.costMicros,
+            receipt,
+        });
+        expect(
+            (await t.run((ctx) => ctx.db.get(campaignId)))?.analysisAllocated,
+        ).toEqual({ requests: 1, costMicros: 100000 });
+        expect(
+            (await t.run((ctx) => ctx.db.get(lotId)))?.analysisAllocated,
+        ).toEqual({ requests: 1, costMicros: 100000 });
+    });
 
 for (const provider of ["openai", "openai-codex"] as const)
     test(`analysis attempts reserve separately without unknown replay (${provider})`, async () => {

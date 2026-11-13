@@ -40,7 +40,12 @@ test("resuming an unfinished scenario preserves its identity and refuses another
     }
 });
 
-for (const accounting of ["api_cost", "native_subscription"])
+for (const accounting of [
+    "legacy_numeric",
+    "legacy_api",
+    "api_cost",
+    "native_subscription",
+])
     test(`analysis attempts retain ${accounting} intent and receipt across recovery without redispatch`, () => {
         const root = mkdtempSync(
             join(tmpdir(), "qualification-review-journal-"),
@@ -69,7 +74,20 @@ for (const accounting of ["api_cost", "native_subscription"])
             output: 3,
             ...(accounting === "native_subscription"
                 ? { accounting }
-                : { costMicros: 15 }),
+                : accounting === "api_cost"
+                  ? {
+                        accounting,
+                        costMicros: 15,
+                        costUsd: 0.000015,
+                        costBasis: "sdk_estimate",
+                        pricingHash: "e".repeat(64),
+                        cacheRead: 5,
+                        cacheWrite: 0,
+                        observationHash: "f".repeat(64),
+                    }
+                  : accounting === "legacy_api"
+                    ? { accounting: "api_cost", costMicros: 15 }
+                    : { costMicros: 15 }),
         };
         reopened.finishAnalysis(identity, receipt);
         reopened.finishAnalysis(identity, receipt);
@@ -91,6 +109,21 @@ for (const accounting of ["api_cost", "native_subscription"])
         );
         const finished = openQualificationJournal(root, protocol);
         assert.deepEqual(finished.analysisAttempts()[0].receipt, receipt);
+        if (accounting === "api_cost")
+            for (const change of [
+                { costBasis: "provider_reported" },
+                { pricingHash: "a".repeat(64) },
+                { cacheRead: 6 },
+                { cacheWrite: 1 },
+            ])
+                assert.throws(
+                    () =>
+                        finished.finishAnalysis(identity, {
+                            ...receipt,
+                            ...change,
+                        }),
+                    /conflict/i,
+                );
         if (accounting === "native_subscription")
             assert.throws(
                 () =>

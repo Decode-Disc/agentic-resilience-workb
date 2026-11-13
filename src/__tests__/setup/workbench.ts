@@ -15,7 +15,11 @@ import { installModel } from "./model-configuration";
 import { createAdmittedPreflight } from "./research-launch";
 
 /** A real admitted framing dossier, with scheduled execution controlled by each test. */
-export async function seedWorkbench(local = false, route?: ModelRoute) {
+export async function seedWorkbench(
+    local = false,
+    route?: ModelRoute,
+    contextDurationMs = 60000,
+) {
     vi.useFakeTimers();
     const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
     agentTest.register(t);
@@ -43,7 +47,7 @@ export async function seedWorkbench(local = false, route?: ModelRoute) {
             {
                 slotKey: "analyst-4",
                 contextKey: "native-workbench",
-                durationMs: 60000,
+                durationMs: contextDurationMs,
             },
         );
         await t.run((ctx) =>

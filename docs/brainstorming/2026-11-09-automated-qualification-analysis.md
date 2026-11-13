@@ -6,6 +6,8 @@ Supersession, 2026-11-10: the approved first-pass investigator extends the deliv
 
 Supersession, 2026-11-11: the approved resource refactor uses one authored policy, remaining immutable analysis authority and metered native Pi compaction. It replaces the reviewer byte-as-token input proxy and guessed generation cutoffs, not historical grants or evidence. The [current resource contract](../../context/TECH.md#locked-resource-limits) owns these obligations. Offline mechanics do not establish fresh reviewer quality or authorize another live lot.
 
+Update, 2026-11-12: new `investigator_v2` pins can publish provisional developer findings through a canonical report-only Pi writer while investigation continues. The runner retains immutable revisions independently of assessment, with remaining original call/deadline context; old read-only pins retain their request contract. This replaces terminal-response-only handoff delivery, not the evidence or financial gates. The [current technical contract](../../context/TECH.md#qualification-campaigns) owns the delivered mechanism. Deterministic regressions do not establish fresh diagnostic quality or renew any historical mandate.
+
 ## Purpose and current boundary
 
 Reduce the time between a qualification lot and an actionable assessment while keeping execution integrity, model usefulness and unsupported conclusions distinguishable. A reviewer should identify what the evidence establishes, what failed or remains unfinished, and what requires further investigation. A truthful inconclusive result is useful; a plausible explanation without supporting evidence is not a demonstrated cause.
@@ -37,6 +39,8 @@ Update, 2026-11-09: the user subsequently selected Pi coding-agent 1.5.0 after a
 Update, 2026-11-10: the user approved native subscription accounting for new Codex mandates while retaining API-key dollar controls. Its command integration passed the [running-backend no-provider verification](../verification/2026-11-10-pi-subscription-campaign-backend.md); full live campaign qualification remains separate. The technical contract owns this later policy, not the historical API-only wording above.
 
 Subsequent verification, 2026-11-10: a separately approved [live Codex reviewer campaign](../verification/2026-11-10-pi-subscription-live-review.md) completed on the labelled framing fixture. This qualifies that execution path, not general analytical quality, API-paid billing or Go fallback. Earlier status statements and alternatives below retain their original historical meaning.
+
+Implementation update, 2026-11-12: the [current qualification contract](../../context/TECH.md#qualification-campaigns) now defines API-key-first preparation through Pi, explicit native API price/capacity grants and provenance-labelled SDK cost observations. Historical routes, receipts and archives retain their original meaning. Offline verification of these mechanisms does not establish live API billing accuracy, diagnostic quality or Go eligibility.
 
 The engine remains undecided between Pi and OpenCode. OpenCode documents [Pi support for Go](https://opencode.ai/docs/console/harnesses/pi/), so choosing the Go provider does not require choosing the OpenCode SDK. The application already uses Pi components, but that does not establish that its installed packages include the coding-agent SDK needed for this independent analysis. OpenCode documents an [embedded SDK](https://opencode.ai/docs/build/sdk/); no comparative runtime or quality measurement was made for this task.
 

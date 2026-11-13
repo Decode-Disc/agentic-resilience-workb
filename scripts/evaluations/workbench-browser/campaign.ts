@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import {
     closeSync,
@@ -32,6 +33,7 @@ import {
     type CampaignManifest,
     campaignConfiguration,
     campaignManifestSchema,
+    newCampaignManifestSchema,
 } from "../../../convex/qualificationCampaignPolicy.ts";
 import { initialFixtureContent } from "../../../convex/qualificationInitialFixtures.ts";
 import {
@@ -755,18 +757,22 @@ export function validateCampaignReview(
         if (item.evidence.length === 0)
             throw new CampaignReviewFormatError("Evidence references required");
         for (const path of item.evidence) {
-            assert(
-                typeof path === "string" &&
-                    !relative(root, resolve(root, path)).startsWith("..") &&
-                    existsSync(resolve(root, path)),
-                "Invalid review evidence reference",
-            );
             if (evidenceIndex) {
+                if (!Object.hasOwn(evidenceIndex, path))
+                    throw new CampaignReviewFormatError(
+                        "Invalid review evidence reference: use an exact indexed relative filename; put passage or record locators in the finding, not the filename",
+                    );
                 readIndexedEvidence(
                     root,
                     evidenceIndex,
                     path,
                     Number.MAX_SAFE_INTEGER,
+                );
+            } else {
+                assert(
+                    !relative(root, resolve(root, path)).startsWith("..") &&
+                        existsSync(resolve(root, path)),
+                    "Invalid review evidence reference",
                 );
             }
         }
@@ -781,8 +787,10 @@ export function validateCampaignReview(
     return review as typeof input;
 }
 
+export const CAMPAIGN_REVIEW_REPORT_PATH = "automated-review-report.md";
+
 const campaignReportSchema = z.object({
-    path: z.literal("automated-review-report.md"),
+    path: z.literal(CAMPAIGN_REVIEW_REPORT_PATH),
     candidateHash: z.string(),
     batteryHash: z.string(),
     evidenceHash: z.string(),
@@ -800,7 +808,7 @@ export function retainCampaignReviewReport(
     template: ReturnType<typeof campaignReviewTemplate>,
     text: string,
     attempt: number,
-    options: { complete?: boolean } = {},
+    options: { complete?: boolean; provisional?: boolean } = {},
 ) {
     assert(
         Number.isSafeInteger(attempt) &&
@@ -808,7 +816,13 @@ export function retainCampaignReviewReport(
             Buffer.byteLength(text) <= REVIEW_REPORT_MAX_BYTES,
         "Invalid review report",
     );
-    const retained = join(root, `automated-review-report-${attempt}.md`);
+    const reportHash = sha256(text);
+    const retained = join(
+        root,
+        options.provisional
+            ? `automated-review-report-${attempt}-${reportHash}.md`
+            : `automated-review-report-${attempt}.md`,
+    );
     if (existsSync(retained))
         assert.equal(
             readFileSync(retained, "utf8"),
@@ -818,13 +832,13 @@ export function retainCampaignReviewReport(
     else
         writeFileSync(retained, text, { flag: "wx", mode: 0o600, flush: true });
     const report = {
-        path: "automated-review-report.md" as const,
+        path: CAMPAIGN_REVIEW_REPORT_PATH,
         candidateHash: template.candidateHash,
         batteryHash: template.batteryHash,
         evidenceHash: template.evidenceHash,
-        reportHash: sha256(text),
+        reportHash,
         attempt,
-        complete: options.complete !== false,
+        complete: !options.provisional && options.complete !== false,
         summary: text.trim().startsWith("{")
             ? "Structured diagnostic output retained; assessment pending."
             : (
@@ -1389,7 +1403,13 @@ async function executeCampaign(
                 batteryHash: sha256(JSON.stringify(values.scenarios)),
             };
         }
-        const manifest = campaignManifestSchema.parse(resolvedInput);
+        const manifest = newCampaignManifestSchema.parse(resolvedInput);
+        if (manifest.version === 3) {
+            const { prepareCampaignReviewer } = await import(
+                "./campaign-review.ts"
+            );
+            await prepareCampaignReviewer(manifest, boundaries.modelRuntime);
+        }
         if (manifest.version !== 1) {
             for (const scenario of manifest.scenarios)
                 if (scenario.initialFixture)
@@ -1557,7 +1577,8 @@ async function executeCampaign(
             !existsSync(retainedPath) &&
             !(
                 manifest.version === 3 &&
-                manifest.analysis.accounting === "native_subscription"
+                (manifest.analysis.accounting === "native_subscription" ||
+                    manifest.analysis.accounting === "api_cost")
             )
         ) {
             const pending = await review(lotRoot);
@@ -1974,6 +1995,7 @@ async function executeCampaign(
     let cleanupCompleted = false;
     let failure: unknown;
     let evidenceCaptureFailed = false;
+    let cleanupObservation: string | undefined;
     let interrupted = false;
     const onSignal = () => {
         interrupted = true;
@@ -2304,7 +2326,15 @@ async function executeCampaign(
         if (lotRoot && existsSync(join(lotRoot, "prepared.json"))) {
             try {
                 if (manifest.version !== 1)
-                    await inspectCampaignScenarios(client, lotRoot);
+                    await inspectCampaignScenarios(
+                        client,
+                        lotRoot,
+                        join(
+                            lotRoot,
+                            "observations",
+                            `before-cleanup-${randomUUID()}`,
+                        ),
+                    );
                 else await sourcesQualificationPhase("inspect", lotRoot);
             } catch {
                 completed = false;
@@ -2330,6 +2360,27 @@ async function executeCampaign(
                 }
             } catch {
                 diagnostics.push("context_cleanup_failed");
+            }
+        }
+        if (
+            lotRoot &&
+            manifest.version !== 1 &&
+            existsSync(join(lotRoot, "prepared.json"))
+        ) {
+            const observation = join(
+                "observations",
+                `after-cleanup-${randomUUID()}`,
+            );
+            try {
+                await inspectCampaignScenarios(
+                    client,
+                    lotRoot,
+                    join(lotRoot, observation),
+                );
+                cleanupObservation = observation;
+            } catch {
+                completed = false;
+                evidenceCaptureFailed = true;
             }
         }
         if (
@@ -2420,6 +2471,7 @@ async function executeCampaign(
                     ? (read(resultPath) as {
                           completed: boolean;
                           evidenceCaptureFailed?: boolean;
+                          cleanupObservation?: string;
                           failure: string | null;
                           diagnostics: string[];
                       })
@@ -2427,6 +2479,8 @@ async function executeCampaign(
             save(lotRoot, "campaign-result", {
                 completed: previous?.completed ?? completed,
                 cleanupCompleted,
+                cleanupObservation:
+                    cleanupObservation ?? previous?.cleanupObservation,
                 evidenceCaptureFailed:
                     previous?.evidenceCaptureFailed || evidenceCaptureFailed,
                 failure: previous

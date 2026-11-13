@@ -12,17 +12,65 @@ export function qualificationReviewCodexCredential() {
     };
 }
 
+/** Frozen SDK1.5.0 API pricing fixture, not a live tariff recommendation. */
+export function qualificationReviewApiAnalysis(
+    model: "gpt-4o-mini" | "gpt-6.1-sol" = "gpt-4o-mini",
+) {
+    const high = model === "gpt-6.1-sol";
+    return {
+        scope: "evidence_review" as const,
+        accounting: "api_cost" as const,
+        routes: [{ provider: "openai" as const, model }],
+        perLot: { requests: 2, costMicros: high ? 8000000 : 200000 },
+        total: { requests: 2, costMicros: high ? 8000000 : 200000 },
+        maxRequestCostMicros: high ? 4000000 : 100000,
+        ...(high ? {} : { maxOutputTokens: 1000 }),
+        timeoutMs: 10000,
+        pricing: {
+            provider: "openai" as const,
+            model,
+            api: "openai-responses" as const,
+            contextWindow: high ? 272000 : 128000,
+            maxTokens: high ? 128000 : 16384,
+            cost: high
+                ? {
+                      input: 2,
+                      output: 10,
+                      cacheRead: 0.1,
+                      cacheWrite: 2.5,
+                      tiers: [
+                          {
+                              inputTokensAbove: 272000,
+                              input: 4,
+                              output: 15,
+                              cacheRead: 0.2,
+                              cacheWrite: 5,
+                          },
+                      ],
+                  }
+                : { input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0 },
+            serviceTier: "default" as const,
+            sourceUrl: "https://openai.com/api/pricing/",
+            verifiedAt: Date.now(),
+        },
+    };
+}
+
 /** Test-only native runtime with synthetic credentials and no user configuration or model-network access. */
 export async function qualificationReviewRuntime(
-    provider: "openai" | "openai-codex" = "openai",
+    provider: "openai" | "openai-codex" | "both" = "openai",
+    storedApiKey?: string,
 ) {
     const { ModelRuntime } = await import("@earendil-works/pi-coding-agent");
     const root = mkdtempSync(join(tmpdir(), "pi-review-auth-fixture-"));
-    if (provider === "openai-codex")
+    if (provider !== "openai")
         writeFileSync(
             join(root, "auth.json"),
             JSON.stringify({
                 "openai-codex": qualificationReviewCodexCredential(),
+                ...(storedApiKey === undefined
+                    ? {}
+                    : { openai: { type: "api_key", key: storedApiKey } }),
             }),
         );
     const runtime = await ModelRuntime.create({
@@ -31,7 +79,7 @@ export async function qualificationReviewRuntime(
         allowModelNetwork: false,
         refreshOnCreate: false,
     });
-    if (provider === "openai")
+    if (provider !== "openai-codex")
         await runtime.setRuntimeApiKey(
             "openai",
             "sk-synthetic-offline-qualification-key",
@@ -60,7 +108,7 @@ export function qualificationReviewResponse(
     reviewJson: string,
     turn: number,
     consultation?: { name: string; arguments: Record<string, unknown> } | null,
-    usage = {
+    usage: unknown = {
         input_tokens: 100,
         output_tokens: 100,
         input_tokens_details: { cached_tokens: 0 },

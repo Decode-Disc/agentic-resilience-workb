@@ -7,6 +7,25 @@ import { runCampaign } from "../../../scripts/evaluations/workbench-browser/camp
 
 import { configurableCampaign } from "../setup/qualification-v2.ts";
 
+test("new Sources preparation requires explicit research authority without changing historical parsing", async () => {
+    const root = mkdtempSync(
+        join(tmpdir(), "qualification-research-authority-"),
+    );
+    const input = join(root, "input.json");
+    const legacy = { ...configurableCampaign(), batteryHash: "a".repeat(64) };
+    delete legacy.researchDurationMs;
+    assert.equal(
+        campaignManifestSchema.parse(legacy).researchDurationMs,
+        undefined,
+    );
+    writeFileSync(input, JSON.stringify(legacy));
+    await assert.rejects(
+        runCampaign("prepare", root, { manifest: input }),
+        /Explicit researchDurationMs/,
+    );
+    assert.equal(existsSync(join(root, "campaign.json")), false);
+});
+
 test("prepare retains the explicit campaign context duration", async () => {
     const root = mkdtempSync(join(tmpdir(), "qualification-duration-"));
     const input = join(root, "input.json");
@@ -1070,6 +1089,7 @@ for (const workerCompletes of [false, true])
                 reads++;
                 const done = workerCompletes && reads >= 6;
                 return {
+                    contextExpiresAt: manifest.expiresAt,
                     nativeSettled: !submitted || done,
                     conversation: {
                         activeTurnId: submitted && !done ? "turn" : null,
