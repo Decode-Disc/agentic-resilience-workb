@@ -1,4 +1,3 @@
-import { DossierSwitcherExample } from "./dossier-switcher-example";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,8 +17,6 @@ import {
     Handoff,
     HypothesisNode,
     InventoryDock,
-    InventorySheet,
-    InventoryUse,
     MechanismDiagram,
     MechanismNode,
     MechanismRelations,
@@ -31,9 +28,10 @@ import {
     SourcingLane,
     WorkCard,
 } from "@/components/workbench-ui";
-import { matrixUseLabels } from "@/components/workbench-ui/evidence-matrix";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import { cn } from "@/lib/utils";
+import { ComposerExample } from "./composer-example";
+import { DossierSwitcherExample } from "./dossier-switcher-example";
 import {
     distribution,
     matrixQuestions,
@@ -41,7 +39,7 @@ import {
     readerContributions,
     readerPages,
 } from "./fixture-data";
-import { ComposerExample } from "./composer-example";
+import { IllustrativeInventorySheet } from "./inventory-sheet-fixture";
 import { OverlayLayersExample } from "./overlay-layers-example";
 
 function notify(message: string) {
@@ -446,124 +444,16 @@ function InventoryDockExample() {
 }
 function InventorySheetExample() {
     const [open, setOpen] = useState(false);
-    const [query, setQuery] = useState("");
-    const [filter, setFilter] = useState("all");
-    const [recent, setRecent] = useState(true);
-    const [assertion, setAssertion] = useState("A-014");
-    const [question, setQuestion] = useState("Q1");
-    const filteredRows = matrixRows
-        .filter(
-            (row) =>
-                (filter === "all" || row.kind === filter) &&
-                `${row.id} ${row.text} ${row.meta}`
-                    .toLowerCase()
-                    .includes(query.toLowerCase()),
-        )
-        .sort((a, b) =>
-            recent ? b.changedAt - a.changedAt : a.id.localeCompare(b.id),
-        );
-    const selectedRow = filteredRows.find((row) => row.id === assertion);
-    const selectedUses = matrixQuestions.flatMap((q) => {
-        const use = selectedRow?.uses[q.id];
-        return use ? [{ question: q, use }] : [];
-    });
     return (
-        <InventorySheet
+        <IllustrativeInventorySheet
             open={open}
             onOpenChange={setOpen}
-            total={126}
             trigger={
                 <LinearDialogTrigger render={<Button />}>
                     Open inventory
                 </LinearDialogTrigger>
             }
-            query={query}
-            onQueryChange={setQuery}
-            selectedFilter={filter}
-            onFilterChange={setFilter}
-            filters={[
-                { id: "all", label: "All", count: 126 },
-                { id: "fact", label: "Fact", kind: "fact", count: 64 },
-                {
-                    id: "inference",
-                    label: "Inference",
-                    kind: "inference",
-                    count: 31,
-                },
-                {
-                    id: "counter",
-                    label: "Counter",
-                    kind: "counter",
-                    count: 8,
-                },
-            ]}
-            recentFirst={recent}
-            onRecentFirstChange={setRecent}
-            footer={
-                selectedRow && (
-                    <>
-                        <span
-                            className="wb-label"
-                            style={{
-                                color: "var(--accent-foreground)",
-                                flexShrink: 0,
-                            }}>
-                            {selectedRow.id} · {selectedUses.length} uses
-                        </span>
-                        <span className="inventory-example-uses">
-                            {selectedUses.map(({ question: q, use }) => (
-                                <InventoryUse
-                                    key={q.id}
-                                    question={q.label}
-                                    selected={question === q.id}
-                                    onSelect={() => setQuestion(q.id)}>
-                                    {matrixUseLabels[use]} · {q.title}
-                                </InventoryUse>
-                            ))}
-                        </span>
-                    </>
-                )
-            }>
-            {filteredRows.length ? (
-                <div className="inventory-example-matrix">
-                    <EvidenceMatrix
-                        questions={matrixQuestions}
-                        rows={filteredRows}
-                        introduction={
-                            <span className="wb-meta">
-                                {recent
-                                    ? "Sorted by recent change"
-                                    : "Sorted by assertion"}
-                            </span>
-                        }
-                        selectedQuestion={question}
-                        selectedAssertion={selectedRow?.id}
-                        onSelectQuestion={setQuestion}
-                        onSelectUse={(a, q) => {
-                            setAssertion(a);
-                            setQuestion(q);
-                        }}
-                        onChallengeUse={(a, q) =>
-                            notify(
-                                `Illustrative action: challenge ${a} for ${q}`,
-                            )
-                        }
-                        onOpenPassage={(a) =>
-                            notify(`Illustrative action: open passage for ${a}`)
-                        }
-                        onOpenQuestionReasoning={(q) =>
-                            notify(
-                                `Illustrative action: inspect ${q} reasoning`,
-                            )
-                        }
-                    />
-                </div>
-            ) : (
-                <p style={{ padding: 24 }}>
-                    No assertions match these filters.
-                </p>
-            )}
-        </InventorySheet>
+        />
     );
 }
 function EvidenceMatrixExample() {

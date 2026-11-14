@@ -1,0 +1,455 @@
+.outcome {
+    flex-shrink: 0;
+    border-radius: 20px;
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+.outcomeText {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.outcomeLabel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 600;
+}
+.primaryAction {
+    height: 40px;
+    border-radius: 11px;
+    padding: 0 16px;
+    gap: 8px;
+    font-size: 14px;
+    box-shadow: inset 0 1px 0 color-mix(in oklab, white 20%, transparent);
+}
+.stages {
+    display: grid;
+    grid-template-columns:
+        minmax(0, 1fr) 28px minmax(0, 1fr) 28px
+        minmax(0, 1fr);
+    align-items: stretch;
+}
+.stageArrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted-foreground);
+}
+.readingSummary {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.readingLegend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+.readingLegend b {
+    color: var(--foreground);
+    font-weight: 500;
+}
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+.badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.handoff {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--accent);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--accent-foreground);
+}
+.summaries {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 20px;
+}
+.panel {
+    border-radius: 24px;
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+.panelHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding-bottom: 6px;
+}
+.panelHead h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+.limitations {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.search {
+    width: 320px;
+    max-width: 100%;
+    height: 40px;
+    border-radius: 12px;
+}
+.search input {
+    font-size: 14px;
+}
+.filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+}
+.segment {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 12px;
+    background: color-mix(in oklab, var(--foreground) 6%, transparent);
+    max-width: 100%;
+    overflow-x: auto;
+}
+.filter {
+    all: unset;
+    flex-shrink: 0;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 32px;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.filter:hover {
+    color: var(--foreground);
+}
+.filter:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+}
+.filter[data-pressed] {
+    background: var(--card);
+    color: var(--foreground);
+    box-shadow: 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.viewSwitch {
+    align-self: flex-start;
+}
+.filterTrigger {
+    height: 34px;
+    border-radius: 11px;
+    gap: 6px;
+    padding: 0 10px 0 12px;
+    font-size: 13px;
+    font-weight: 500;
+}
+.filterTrigger[data-active] {
+    border-color: color-mix(in oklab, var(--brand-purple) 45%, transparent);
+    background: color-mix(in oklab, var(--brand-purple) 7%, var(--card));
+}
+.filterValue {
+    color: var(--accent-foreground);
+}
+.filterValue::before {
+    content: "·";
+    margin-right: 6px;
+    color: var(--muted-foreground);
+}
+.filterMenu {
+    min-width: 180px;
+}
+.activeFilters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: -8px;
+}
+.activeFilter {
+    all: unset;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 8px 0 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 500;
+    background: color-mix(in oklab, var(--brand-purple) 9%, var(--card));
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--brand-purple) 28%, transparent);
+    cursor: pointer;
+}
+.activeFilter:hover {
+    background: color-mix(in oklab, var(--brand-purple) 14%, var(--card));
+}
+.activeFilter:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+}
+.activeFilterName {
+    color: var(--muted-foreground);
+    font-weight: 400;
+}
+.clearFilters {
+    height: 28px;
+    padding: 0 4px;
+    font-size: 12.5px;
+}
+.detailsLink {
+    gap: 4px;
+    height: 28px;
+    padding: 0 8px;
+    font-size: 12.5px;
+    color: var(--muted-foreground);
+}
+.summaryColumn {
+    width: 100%;
+}
+.compactCoverage {
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px 14px;
+    font-size: 14px;
+}
+.compactCoverage li {
+    display: contents;
+}
+.missing {
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13.5px;
+    line-height: 19px;
+}
+.missing li {
+    display: flex;
+    gap: 8px;
+}
+.missing b {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 19px;
+}
+.process {
+    border-radius: 22px;
+    padding: 16px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.processLine {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+.processLabel {
+    flex-shrink: 0;
+}
+.flow {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    font-size: 13px;
+    color: var(--muted-foreground);
+}
+.flowStep {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    min-height: 40px;
+}
+.flowStep b {
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    color: var(--foreground);
+    font-variant-numeric: tabular-nums;
+    margin-right: 2px;
+}
+.processToggle {
+    flex-shrink: 0;
+    height: 32px;
+    border-radius: 999px;
+    font-size: 13px;
+}
+.generalLimits {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted-foreground);
+}
+.generalLimits li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.process .stages {
+    padding: 8px 0 12px;
+}
+.preparationNote {
+    margin: 0;
+}
+.pages {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    margin-top: -10px;
+    padding: 0 8px;
+}
+.pageControls {
+    margin: 0;
+    width: auto;
+}
+.compactList {
+    width: 100%;
+    max-width: 720px;
+}
+.drawer {
+    background: transparent;
+    border: 0;
+    max-width: 760px;
+    margin-inline: auto;
+}
+.drawerBody {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: inherit;
+    background: var(--background);
+    color: var(--foreground);
+}
+.drawerClose {
+    flex-shrink: 0;
+    margin: -4px -4px -4px 0;
+    border-radius: 999px;
+}
+.count {
+    margin-left: auto;
+}
+.readerActions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.readerPrimary {
+    height: 42px;
+    border-radius: 12px;
+    font-size: 14px;
+    box-shadow: inset 0 1px 0 color-mix(in oklab, white 20%, transparent);
+}
+.readerSecondary {
+    height: 38px;
+    border-radius: 12px;
+    font-size: 13.5px;
+}
+.matrixLink {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 0;
+    height: auto;
+}
+@media (max-width: 1100px) {
+    .stages {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+    }
+    .stageArrow {
+        display: none;
+    }
+    .summaries {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .processLine {
+        flex-wrap: wrap;
+    }
+    .flow {
+        flex-basis: 100%;
+        order: 1;
+    }
+    .processToggle {
+        margin-left: auto;
+    }
+}
+@media (max-width: 760px) {
+    .outcome {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: space-between;
+    }
+    .search {
+        width: 100%;
+    }
+    .count {
+        margin-left: 0;
+        flex-basis: 100%;
+    }
+    .panelHead {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    .compactCoverage {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+    .compactCoverage li > :nth-child(3) {
+        display: none;
+    }
+    .flow .stageArrow {
+        display: none;
+    }
+}

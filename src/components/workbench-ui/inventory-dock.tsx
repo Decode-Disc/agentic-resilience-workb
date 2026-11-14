@@ -3,6 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+    ClassDistributionBar,
+    distributionColors,
+} from "./class-distribution-bar";
+import {
     ClaimGlyph,
     type ClaimTone,
     claimLabels,
@@ -17,13 +21,6 @@ export interface InventoryDockProps {
     changes?: readonly { id: string; status: ReactNode; text: string }[];
     onOpen: () => void;
 }
-const colors: Record<ClaimTone, string> = {
-    fact: "var(--evidence-fact)",
-    inference: "var(--evidence-inference)",
-    hypothesis: "var(--evidence-hypothesis)",
-    unknown: "color-mix(in oklab,var(--foreground) 25%,transparent)",
-    counter: "var(--counter-evidence)",
-};
 export function InventoryDock({
     expanded = false,
     total,
@@ -53,21 +50,11 @@ export function InventoryDock({
             </Badge>
         ) : null;
     const bar = (
-        <span
-            style={{
-                display: "flex",
-                height: expanded ? 7 : 5,
-                borderRadius: 4,
-                overflow: "hidden",
-                gap: 2,
-            }}>
-            {distribution.map((d) => (
-                <span
-                    key={d.kind}
-                    style={{ flex: d.count, background: colors[d.kind] }}
-                />
-            ))}
-        </span>
+        <ClassDistributionBar
+            segments={distribution}
+            height={expanded ? 7 : 5}
+            radius={4}
+        />
     );
     const icon = (
         <span
@@ -133,7 +120,7 @@ export function InventoryDock({
                                         color:
                                             d.kind === "unknown"
                                                 ? "var(--evidence-unknown)"
-                                                : colors[d.kind],
+                                                : distributionColors[d.kind],
                                     }}>
                                     <ClaimGlyph kind={d.kind} />
                                 </span>

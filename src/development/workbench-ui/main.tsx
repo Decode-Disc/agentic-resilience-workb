@@ -1,32 +1,58 @@
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
-import Icon from "@/components/icon";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { GalleryTheme } from "./gallery-theme";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import Icon from "@/components/icon";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { GalleryTheme } from "./gallery-theme";
 import "./preview-controls.css";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import "@/styles.css";
 import "./gallery.css";
 import { ChatCompositionMocks } from "./chat-composition-mocks";
 import { examples } from "./examples";
+import {
+    SourcesScreenPreview,
+    sourcesScreenNames,
+} from "./sources-screen-examples";
 import { StartScreenPreview, startScreenNames } from "./start-screen-examples";
 
 const params = new URLSearchParams(location.search);
 
-const requestedScreen =
-    params.get("layout") === "start"
-        ? (startScreenNames.find((name) => name === params.get("screen")) ??
-          "composer")
+/** Workflow previews that share the screen toolbar and browser history. */
+const screenLayouts = {
+    start: {
+        title: "START screens",
+        navigationLabel: "Start screen previews",
+        names: startScreenNames,
+    },
+    sources: {
+        title: "Sources screens",
+        navigationLabel: "Sources screen previews",
+        names: sourcesScreenNames,
+    },
+} as const;
+type ScreenLayout = keyof typeof screenLayouts;
+const isScreenLayout = (value: string | null): value is ScreenLayout =>
+    value === "start" || value === "sources";
+const resolveScreen = (layout: string | null, screen: string | null) =>
+    isScreenLayout(layout)
+        ? ((screenLayouts[layout].names as readonly string[]).find(
+              (name) => name === screen,
+          ) ?? screenLayouts[layout].names[0])
         : undefined;
+
+const requestedScreen = resolveScreen(
+    params.get("layout"),
+    params.get("screen"),
+);
 const groups = {
     "Chat & composer": ["Composer", "RequestItem"],
     "Research & evidence": [
@@ -68,14 +94,14 @@ function Gallery() {
     const [category, setCategory] = useState("All");
     const [viewport, setViewport] = useState("responsive");
     const [activeScreen, setActiveScreen] = useState(requestedScreen);
-    const navigateToScreen = (screen: (typeof startScreenNames)[number]) => {
+    const navigateToScreen = (target: ScreenLayout, screen: string) => {
         const url = new URL(location.href);
-        url.searchParams.set("layout", "start");
+        url.searchParams.set("layout", target);
         url.searchParams.delete("component");
         url.searchParams.set("screen", screen);
         history.pushState(null, "", url);
         setActiveScreen(screen);
-        setLayout("start");
+        setLayout(target);
     };
     useEffect(() => {
         const restore = () => {
@@ -83,11 +109,7 @@ function Gallery() {
             setRequested(restored.get("component"));
             setLayout(restored.get("layout"));
             setActiveScreen(
-                restored.get("layout") === "start"
-                    ? (startScreenNames.find(
-                          (name) => name === restored.get("screen"),
-                      ) ?? "composer")
-                    : undefined,
+                resolveScreen(restored.get("layout"), restored.get("screen")),
             );
         };
         window.addEventListener("popstate", restore);
@@ -100,6 +122,13 @@ function Gallery() {
         return () =>
             window.removeEventListener("workbench-example-action", listener);
     }, []);
+    const openProgress = () => {
+        const url = new URL(location.href);
+        url.searchParams.delete("layout");
+        url.searchParams.delete("screen");
+        url.searchParams.set("component", "ProgressTimeline");
+        location.assign(url.href);
+    };
     const href = (values: Record<string, string>) => {
         const target = new URLSearchParams({ ...values, theme });
         return `?${target}`;
@@ -115,8 +144,8 @@ function Gallery() {
                     <DropdownMenuTrigger
                         render={<Button variant="secondary" size="sm" />}
                         aria-label="Example navigation">
-                        {layout === "start"
-                            ? "START screens"
+                        {isScreenLayout(layout)
+                            ? screenLayouts[layout].title
                             : layout === "chat-mocks"
                               ? "Design references"
                               : "All examples"}
@@ -143,6 +172,20 @@ function Gallery() {
                                 layout === "start" ? "page" : undefined
                             }>
                             START screens
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            render={
+                                <a
+                                    href={href({
+                                        layout: "sources",
+                                        screen: "preparation",
+                                    })}
+                                />
+                            }
+                            aria-current={
+                                layout === "sources" ? "page" : undefined
+                            }>
+                            Sources screens
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             render={<a href={href({ layout: "chat-mocks" })} />}
@@ -177,16 +220,23 @@ function Gallery() {
                 <ChatCompositionMocks theme={theme} />
             </>
         );
-    if (activeScreen)
+    if (activeScreen && isScreenLayout(layout)) {
+        const screens = screenLayouts[layout];
+        const startScreen = startScreenNames.find(
+            (name) => name === activeScreen,
+        );
+        const sourcesScreen = sourcesScreenNames.find(
+            (name) => name === activeScreen,
+        );
         return (
             <>
                 {header}
                 <header className="start-screen-toolbar">
-                    <h1>START screens</h1>
+                    <h1>{screens.title}</h1>
                     <nav
                         className="preview-control-group"
-                        aria-label="Start screen previews">
-                        {startScreenNames.map((name) => (
+                        aria-label={screens.navigationLabel}>
+                        {screens.names.map((name) => (
                             <a
                                 key={name}
                                 className={buttonVariants({
@@ -196,7 +246,7 @@ function Gallery() {
                                             : "ghost",
                                     size: "sm",
                                 })}
-                                href={`?layout=start&screen=${name}&theme=${theme}`}
+                                href={`?layout=${layout}&screen=${name}&theme=${theme}`}
                                 onClick={(event) => {
                                     if (
                                         event.button !== 0 ||
@@ -207,7 +257,7 @@ function Gallery() {
                                     )
                                         return;
                                     event.preventDefault();
-                                    navigateToScreen(name);
+                                    navigateToScreen(layout, name);
                                 }}
                                 aria-current={
                                     name === activeScreen ? "page" : undefined
@@ -218,21 +268,29 @@ function Gallery() {
                     </nav>
                     <div id="start-preview-controls" />
                 </header>
-                <StartScreenPreview
-                    name={activeScreen}
-                    theme={theme}
-                    onStatus={setAction}
-                    onNavigate={navigateToScreen}
-                    onOpenProgress={() => {
-                        const url = new URL(location.href);
-                        url.searchParams.delete("layout");
-                        url.searchParams.delete("screen");
-                        url.searchParams.set("component", "ProgressTimeline");
-                        location.assign(url.href);
-                    }}
-                />
+                {layout === "start" && startScreen ? (
+                    <StartScreenPreview
+                        name={startScreen}
+                        theme={theme}
+                        onStatus={setAction}
+                        onNavigate={(screen) =>
+                            navigateToScreen("start", screen)
+                        }
+                        onOpenProgress={openProgress}
+                    />
+                ) : layout === "sources" && sourcesScreen ? (
+                    <SourcesScreenPreview
+                        name={sourcesScreen}
+                        theme={theme}
+                        onNavigate={(screen) =>
+                            navigateToScreen("sources", screen)
+                        }
+                        onOpenProgress={openProgress}
+                    />
+                ) : null}
             </>
         );
+    }
     const selected =
         requested && requested in examples
             ? (requested as keyof typeof examples)
@@ -316,6 +374,18 @@ function Gallery() {
                         <span>
                             Compose a request, refine the framing and follow
                             documentary preparation.
+                        </span>
+                    </a>
+                    <a
+                        className="gallery-screen-entry"
+                        href={href({
+                            layout: "sources",
+                            screen: "preparation",
+                        })}>
+                        <strong>Sources screens</strong>
+                        <span>
+                            Review the prepared material, inspect every source
+                            and read what each document contributes.
                         </span>
                     </a>
                     <div className="gallery-filters">

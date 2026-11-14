@@ -216,7 +216,9 @@ export const readerContributions: ReaderContribution[] = [
     {
         id: "a14",
         kind: "fact",
-        meta: "p. 8 ¶3 · Q1 Q2 Q3",
+        meta: "p. 8 ¶3",
+        questions: ["Q1", "Q2", "Q3"],
+        target: { pageId: "p8", passageId: "p3" },
         status: (
             <Badge tone="ink">
                 <WorkbenchIcon name="check" size={11} strokeWidth={2.4} />
@@ -228,7 +230,9 @@ export const readerContributions: ReaderContribution[] = [
     {
         id: "a31",
         kind: "fact",
-        meta: "p. 8 ¶4 · Q1",
+        meta: "p. 8 ¶4",
+        questions: ["Q1"],
+        target: { pageId: "p8", passageId: "p4" },
         status: (
             <Badge tone="counter">
                 <ClaimGlyph kind="counter" />
@@ -242,7 +246,9 @@ export const readerContributions: ReaderContribution[] = [
         id: "projection",
         kind: "hypothesis",
         label: "Projection",
-        meta: "p. 8 ¶5 · Q2",
+        meta: "p. 8 ¶5",
+        questions: ["Q2"],
+        target: { pageId: "p8", passageId: "p5" },
         status: <Badge tone="ink">Restricted</Badge>,
         text: "Expected growth of network participation.",
         note: "A forecast, never used as an observed outcome.",

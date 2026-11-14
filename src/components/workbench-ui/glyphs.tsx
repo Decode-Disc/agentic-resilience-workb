@@ -321,6 +321,17 @@ const nodes = {
             },
         ],
     ],
+    external: [
+        [
+            "path",
+            {
+                d: "M9 5h10v10M19 5L8 16",
+                key: "0",
+                strokeLinecap: "round",
+                strokeLinejoin: "round",
+            },
+        ],
+    ],
 } as const;
 
 /** The reference stroke paths, rendered through the project's icon boundary. */
@@ -360,19 +371,51 @@ export const claimLabels: Record<ClaimTone, string> = {
     counter: "Counter-evidence",
 };
 
-/** Geometry conveys the presentation class independently of color. */
+const claimCountLabels: Record<ClaimTone, [string, string]> = {
+    fact: ["fact", "facts"],
+    inference: ["inference", "inferences"],
+    hypothesis: ["hypothesis", "hypotheses"],
+    unknown: ["unknown", "unknowns"],
+    counter: ["counter-evidence", "counter-evidence"],
+};
+
+/** Counted claim class in running text, such as "4 inferences". */
+export function claimCountLabel(kind: ClaimTone, count: number) {
+    return `${count} ${claimCountLabels[kind][count === 1 ? 0 : 1]}`;
+}
+
+/** Claim-class colors; Badge tones use the same theme tokens. */
+export const claimColors: Record<ClaimTone, string> = {
+    fact: "var(--evidence-fact)",
+    inference: "var(--evidence-inference)",
+    hypothesis: "var(--evidence-hypothesis)",
+    unknown: "var(--evidence-unknown)",
+    counter: "var(--counter-evidence)",
+};
+
+/**
+ * Geometry conveys the presentation class independently of color. Inside a
+ * badge it inherits the badge color; standalone uses pass `colored`.
+ */
 export function ClaimGlyph({
     kind,
     size = kind === "fact" ? 8 : 9,
+    colored = false,
 }: {
     kind: ClaimTone;
     size?: number;
+    colored?: boolean;
 }) {
     return (
         <svg
             width={size}
             height={size}
-            style={{ width: size, height: size }}
+            style={{
+                width: size,
+                height: size,
+                flexShrink: 0,
+                color: colored ? claimColors[kind] : undefined,
+            }}
             viewBox="0 0 10 10"
             aria-hidden="true">
             {kind === "fact" ? (
@@ -412,5 +455,115 @@ export function EvidenceBadge({
             <ClaimGlyph kind={kind} />
             {children ?? claimLabels[kind]}
         </Badge>
+    );
+}
+
+export type ReadingState = "full" | "partial" | "unavailable";
+export const readingLabels: Record<ReadingState, string> = {
+    full: "Full reading",
+    partial: "Partial reading",
+    unavailable: "Unavailable",
+};
+
+/** Preparation-progress rule: violet only for completed reading, a contrasting neutral for partial work, a quiet neutral otherwise. */
+export const readingColors: Record<ReadingState, string> = {
+    full: "var(--brand-purple)",
+    partial:
+        "repeating-linear-gradient(90deg, var(--foreground) 0 3px, color-mix(in oklab, var(--foreground) 18%, transparent) 3px 5px)",
+    unavailable: "color-mix(in oklab, var(--foreground) 12%, transparent)",
+};
+const readingGlyphColors: Record<ReadingState, string> = {
+    full: "var(--brand-purple)",
+    partial: "var(--foreground)",
+    unavailable: "var(--muted-foreground)",
+};
+
+/** Reading availability by geometry: filled, half-filled or a dashed ring. */
+export function ReadingGlyph({
+    state,
+    size = 14,
+}: {
+    state: ReadingState;
+    size?: number;
+}) {
+    return (
+        <svg
+            width={size}
+            height={size}
+            style={{
+                width: size,
+                height: size,
+                flexShrink: 0,
+                color: readingGlyphColors[state],
+            }}
+            viewBox="0 0 24 24"
+            aria-hidden="true">
+            {state === "full" ? (
+                <circle cx="12" cy="12" r="8" fill="currentColor" />
+            ) : state === "partial" ? (
+                <>
+                    <circle
+                        cx="12"
+                        cy="12"
+                        r="7.25"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                    />
+                    <path
+                        d="M12 4.75a7.25 7.25 0 0 1 0 14.5z"
+                        fill="currentColor"
+                    />
+                </>
+            ) : (
+                <circle
+                    cx="12"
+                    cy="12"
+                    r="8"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeDasharray="3 3"
+                />
+            )}
+        </svg>
+    );
+}
+
+/** Proportional reading coverage across full, partial and unavailable captures. */
+export function ReadingBar({
+    counts,
+    height = 8,
+    width,
+}: {
+    counts: Record<ReadingState, number>;
+    height?: number;
+    width?: CSSProperties["width"];
+}) {
+    return (
+        <span
+            aria-hidden="true"
+            style={{
+                display: "flex",
+                gap: 2,
+                height,
+                width,
+                borderRadius: height / 2,
+                overflow: "hidden",
+                flexShrink: 0,
+            }}>
+            {(["full", "partial", "unavailable"] as const).map(
+                (state) =>
+                    counts[state] > 0 && (
+                        <span
+                            key={state}
+                            style={{
+                                flex: counts[state],
+                                background: readingColors[state],
+                            }}
+                        />
+                    ),
+            )}
+        </span>
     );
 }

@@ -1,0 +1,117 @@
+.frame {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 20px 48px 112px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+}
+.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    min-width: 0;
+}
+.trail ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--muted-foreground);
+}
+.trail li {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.trail button {
+    all: unset;
+    cursor: pointer;
+    border-radius: 3px;
+}
+.trail button:hover {
+    color: var(--foreground);
+}
+.trail button:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+}
+.trail [aria-current="page"] {
+    font-weight: 500;
+    color: var(--foreground);
+}
+.heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 16px 40px;
+}
+.titles {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+.eyebrow {
+    color: var(--accent-foreground);
+}
+.title {
+    margin: 0;
+    font-size: 34px;
+    line-height: 38px;
+    font-weight: 500;
+    letter-spacing: -0.045em;
+}
+.frame.prominent {
+    gap: 24px;
+}
+.prominent .titles {
+    gap: 10px;
+}
+.prominent .title {
+    font-size: 38px;
+    line-height: 42px;
+}
+.description {
+    margin: 0;
+    max-width: 680px;
+    font-size: 15px;
+    line-height: 22px;
+    color: var(--muted-foreground);
+}
+.dock {
+    position: fixed;
+    right: 48px;
+    bottom: 28px;
+    z-index: 20;
+}
+@media (max-width: 760px) {
+    .frame {
+        padding: 16px 16px 120px;
+        gap: 16px;
+    }
+    .title,
+    .prominent .title {
+        font-size: 28px;
+        line-height: 32px;
+    }
+    .dock {
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+    }
+    .dock > * {
+        width: 100%;
+    }
+}

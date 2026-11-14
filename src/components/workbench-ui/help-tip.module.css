@@ -1,0 +1,15 @@
+.tip {
+    width: auto;
+    max-width: min(280px, calc(100vw - 32px));
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--popover);
+    color: var(--foreground);
+    font-size: 12.5px;
+    line-height: 1.45;
+    box-shadow:
+        0 0 0 1px var(--chip-edge),
+        0 16px 32px -16px
+        color-mix(in oklab, var(--foreground) 40%, transparent);
+}

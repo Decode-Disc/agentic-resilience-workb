@@ -170,6 +170,29 @@
     font-weight: 500;
     color: var(--muted-foreground);
 }
+/* Larger document tags for source lists and the source matrix. */
+.wb-doc.wb-doc-md {
+    width: 26px;
+    height: 32px;
+    font-size: 7.5px;
+}
+.wb-doc.wb-doc-lg {
+    width: 34px;
+    height: 40px;
+    padding-bottom: 5px;
+    border-radius: 7px;
+    font-size: 8.5px;
+    letter-spacing: 0.04em;
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
+        0 4px 10px -6px color-mix(in oklab, var(--foreground) 35%, transparent);
+}
+/* A document that could not be captured keeps a dashed outline. */
+.wb-doc.wb-doc-missing {
+    background: transparent;
+    box-shadow: none;
+    outline: 1px dashed color-mix(in oklab, var(--foreground) 30%, transparent);
+}
 
 .wb-live {
     animation: var(--animate-workbench-live);
