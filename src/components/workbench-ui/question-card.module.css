@@ -1,125 +1,106 @@
-.grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    max-width: 900px;
+@reference "../../styles.css";
+
+.card {
+    @apply flex h-auto flex-col items-stretch justify-normal gap-[16px] rounded-3xl px-[26px] py-[24px] text-left whitespace-normal text-inherit no-underline;
+    border: 0;
+    @apply bg-transparent;
+    font: inherit;
 }
-.qcard {
-    border-radius: var(--radius-3xl);
-    padding: 24px 26px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    color: inherit;
-    text-decoration: none;
+.testing {
+    --wb-panel-angle: 170deg;
 }
-.qw {
-    flex-shrink: 0;
-    width: 38px;
-    height: 38px;
-    border-radius: var(--radius-tile);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    font-weight: 500;
-    background: var(--primary);
-    color: var(--primary-foreground);
-}
-.steps {
-    display: flex;
-    gap: 4px;
-    margin-left: auto;
-}
-.s {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    width: 56px;
-    font-size: 11px;
-    color: var(--muted-foreground);
-}
-.s i {
-    display: block;
-    width: 100%;
-    height: 4px;
-    border-radius: 2px;
-    background: color-mix(in oklab, var(--foreground) 12%, transparent);
-}
-.s-done i {
-    background: var(--foreground);
-}
-.s-now {
-    color: var(--accent-foreground);
-    font-weight: 500;
-}
-.s-now i {
-    background: var(--brand-purple);
-}
-.reading {
-    font-size: 20px;
-    line-height: 27px;
-    font-weight: 500;
-    letter-spacing: -0.025em;
-}
-.bal {
-    display: flex;
-    height: 8px;
-    border-radius: 4px;
-    overflow: hidden;
-    gap: 2px;
-}
-.leg {
-    display: flex;
-    gap: 16px;
-    font-size: 12.5px;
-    color: var(--muted-foreground);
-}
-.leg b {
-    color: var(--foreground);
-    font-weight: 500;
-}
-.foot {
-    margin-top: auto;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding-top: 14px;
-    border-top: 1px solid var(--divider);
-    font-size: 13px;
-}
-.ask {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 12px 14px;
-    border-radius: var(--radius-item);
-    background: var(--card);
-    box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
-}
-.focalbg {
-    background: linear-gradient(
-        170deg,
-        var(--tint-violet),
-        var(--surface-glass) 55%
-    );
-}
-.waitbg {
+.waiting {
     background: linear-gradient(
         170deg,
         var(--tint-review),
         var(--surface-glass) 55%
     );
 }
-.qcard {
-    border: 0;
-    text-align: left;
-    white-space: normal;
-    align-items: stretch;
-    font: inherit;
+.header {
+    @apply flex items-center gap-[12px];
 }
-button.qcard {
-    height: auto;
-    justify-content: initial;
+.questionId {
+    @apply inline-flex size-[38px] shrink-0 items-center justify-center rounded-tile bg-primary font-mono text-[12.5px] font-medium text-primary-foreground;
+}
+.waiting .questionId {
+    @apply bg-tint-review text-review-foreground;
+}
+.liveDot {
+    @apply inline-block size-[7px] bg-brand-purple rounded-[50%];
+}
+.reviewDot {
+    @apply size-[7px];
+}
+.steps {
+    @apply ml-auto flex gap-[4px];
+}
+.step {
+    @apply flex w-[56px] flex-col gap-[5px] text-[11px] text-muted-foreground;
+}
+.step i {
+    @apply block h-[4px] w-full rounded-[2px] bg-foreground/12 bg-none;
+}
+.completedStep i {
+    @apply bg-foreground;
+}
+.currentStep {
+    @apply font-medium text-accent-foreground;
+}
+.currentStep i {
+    @apply bg-brand-purple;
+}
+.waiting .currentStep {
+    @apply text-review-foreground;
+}
+.waiting .currentStep i {
+    @apply bg-review;
+}
+.body {
+    @apply flex flex-col gap-[6px];
+}
+.question {
+    @apply text-[14px] text-muted-foreground;
+}
+.reading {
+    @apply text-[20px] leading-[27px] font-medium tracking-[-0.025em];
+}
+.waiting .reading {
+    @apply text-muted-foreground;
+}
+.balance {
+    @apply flex flex-col gap-[8px];
+}
+.balanceBar {
+    @apply flex h-[8px] gap-[2px] overflow-hidden rounded-[4px];
+}
+.support {
+    @apply bg-foreground;
+}
+.opposition {
+    @apply bg-counter-evidence;
+}
+.context {
+    @apply bg-foreground/18 bg-none;
+}
+.legend {
+    @apply flex gap-[16px] text-[12.5px] text-muted-foreground;
+}
+.legend b {
+    @apply font-medium text-foreground;
+}
+.request {
+    @apply flex flex-col gap-[6px] rounded-[var(--radius-item)] bg-card px-[14px] py-[12px];
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+.requestText {
+    @apply text-[14px] font-medium;
+}
+.footer {
+    @apply mt-auto flex items-center gap-[10px] border-t border-divider pt-[14px] text-[13px];
+}
+.next {
+    @apply flex-1 text-muted-foreground;
+}
+.action {
+    @apply font-medium text-accent-foreground;
 }

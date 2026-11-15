@@ -1,29 +1,12 @@
-.grid {
-    display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
-    gap: 14px;
+@reference "../../styles.css";
+.description {
+    @apply text-[13.5px] leading-[20px] text-muted-foreground;
 }
-.d {
-    font-size: 13.5px;
-    line-height: 20px;
-    color: var(--muted-foreground);
-}
-.ft {
-    margin-top: auto;
-    padding-top: 14px;
+.footer {
+    @apply mt-auto pt-[14px];
     border-top: 1px dashed
         color-mix(in oklab, var(--foreground) 12%, transparent);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
-}
-.hd {
-    padding: 14px 24px;
-    border-bottom: 1px solid var(--divider);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    @apply flex flex-col gap-[8px] items-start;
 }
 .hatch {
     background: repeating-linear-gradient(
@@ -31,4 +14,58 @@
         transparent 0 10px,
         color-mix(in oklab, var(--foreground) 2.5%, transparent) 10px 11px
     );
+}
+
+.pendingCard {
+    @apply rounded-(--radius-2xl) flex flex-col;
+}
+
+.pendingHeader {
+    @apply py-[14px] px-[22px];
+    border-bottom: 1px dashed
+        color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+
+.pendingBody {
+    @apply py-[24px] px-[22px] flex flex-col gap-[14px] flex-[1];
+}
+
+.pendingIcon {
+    border: 1.5px dashed var(--edge-dashed);
+    @apply text-muted-foreground;
+}
+
+.heading {
+    @apply flex flex-col gap-[6px];
+}
+
+.pendingTitle {
+    @apply text-[17px] tracking-[-.02em] text-muted-foreground;
+}
+
+.pendingActions {
+    @apply mt-auto flex flex-col gap-[8px] items-start;
+}
+
+.conclusionCard {
+    @apply p-[24px] flex flex-col gap-[14px];
+}
+
+.conclusionTitle {
+    @apply text-[17px] tracking-[-.02em];
+}
+
+.supportedIcon {
+    @apply bg-primary bg-none text-primary-foreground;
+    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.22);
+}
+.conflictIcon {
+    @apply bg-tint-counter bg-none text-counter-evidence;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--counter-evidence) 24%, transparent);
+}
+.unestablishedIcon {
+    @apply bg-tint-unknown bg-none text-evidence-unknown;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 12%, transparent);
 }

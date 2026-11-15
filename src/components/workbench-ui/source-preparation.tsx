@@ -40,7 +40,7 @@ export function PreparationStageCard({
                 styles.stage,
                 className,
             )}>
-            <span className={styles.head}>
+            <span className={styles.header}>
                 <span className={styles.step} aria-hidden="true">
                     {step}
                 </span>

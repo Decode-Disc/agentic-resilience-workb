@@ -33,16 +33,12 @@ export function InventoryDock({
         newCount > 0 ? (
             <Badge
                 tone="accent"
-                style={
-                    expanded
-                        ? undefined
-                        : { marginLeft: "auto", padding: "1px 6px" }
-                }>
+                className={expanded ? undefined : styles.compactBadge}>
                 <svg
                     width="5"
                     height="5"
                     viewBox="0 0 10 10"
-                    style={{ width: 5, height: 5 }}
+                    className={styles.statusDot}
                     aria-hidden="true">
                     <circle cx="5" cy="5" r="5" fill="var(--brand-purple)" />
                 </svg>
@@ -58,12 +54,10 @@ export function InventoryDock({
     );
     const icon = (
         <span
-            className={styles.ico}
-            style={
-                expanded
-                    ? { marginLeft: "auto", width: 30, height: 30 }
-                    : undefined
-            }>
+            className={cn(
+                styles.icon,
+                expanded ? styles.expandedTrigger : undefined,
+            )}>
             <WorkbenchIcon
                 name="expand"
                 size={expanded ? 14 : 15}
@@ -74,47 +68,28 @@ export function InventoryDock({
     return (
         <Button
             aria-label="Open inventory"
-            className={cn("wb-float", expanded ? styles.exp : styles.cmp)}
+            className={cn(
+                "wb-float",
+                expanded ? styles.expanded : styles.compact,
+            )}
             onClick={onOpen}>
             {expanded ? (
                 <>
-                    <span
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                        }}>
+                    <span className={styles.header}>
                         <span className="wb-label">Inventory</span>
                         {fresh}
                         {icon}
                     </span>
-                    <span
-                        style={{
-                            display: "flex",
-                            alignItems: "baseline",
-                            gap: 8,
-                        }}>
-                        <b
-                            style={{
-                                fontSize: 36,
-                                lineHeight: "36px",
-                                fontWeight: 500,
-                                letterSpacing: "-.045em",
-                            }}>
-                            {total}
-                        </b>
-                        <span
-                            style={{
-                                fontSize: 13,
-                                color: "var(--muted-foreground)",
-                            }}>
+                    <span className={styles.total}>
+                        <b className={styles.totalValue}>{total}</b>
+                        <span className={styles.totalLabel}>
                             controlled assertions
                         </span>
                     </span>
                     {bar}
-                    <span className={styles.lgs}>
+                    <span className={styles.legend}>
                         {distribution.map((d) => (
-                            <span key={d.kind} className={styles.lg}>
+                            <span key={d.kind} className={styles.legendItem}>
                                 <span
                                     style={{
                                         color:
@@ -133,16 +108,9 @@ export function InventoryDock({
                         ))}
                     </span>
                     {changes.length > 0 && (
-                        <span
-                            className="wb-divider"
-                            style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 7,
-                                paddingTop: 12,
-                            }}>
+                        <span className={cn("wb-divider", styles.changes)}>
                             {changes.map((c) => (
-                                <span className={styles.chg} key={c.id}>
+                                <span className={styles.change} key={c.id}>
                                     {c.status}
                                     {c.text}
                                 </span>
@@ -152,37 +120,14 @@ export function InventoryDock({
                 </>
             ) : (
                 <>
-                    <span
-                        style={{
-                            flex: 1,
-                            minWidth: 0,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 7,
-                        }}>
-                        <span
-                            style={{
-                                display: "flex",
-                                alignItems: "baseline",
-                                gap: 8,
-                            }}>
+                    <span className={styles.changeText}>
+                        <span className={styles.total}>
                             <span
-                                className="wb-label"
-                                style={{ fontSize: 10.5 }}>
+                                className={cn("wb-label", styles.changeLabel)}>
                                 Inventory
                             </span>
-                            <b
-                                style={{
-                                    fontSize: 16,
-                                    letterSpacing: "-.02em",
-                                }}>
-                                {total}
-                            </b>
-                            <span
-                                style={{
-                                    fontSize: 12,
-                                    color: "var(--muted-foreground)",
-                                }}>
+                            <b className={styles.changeTitle}>{total}</b>
+                            <span className={styles.changeDetail}>
                                 assertions
                             </span>
                             {fresh}

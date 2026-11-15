@@ -68,18 +68,9 @@ export interface ReaderObservedLink {
     meta: ReactNode;
 }
 const highlights = {
-    selected: {
-        background: "color-mix(in oklab,var(--brand-purple) 14%,transparent)",
-        boxShadow: "0 2px 0 var(--brand-purple)",
-        padding: "1px 2px",
-    },
-    conflict: {
-        background:
-            "color-mix(in oklab,var(--counter-evidence) 11%,transparent)",
-        boxShadow: "0 2px 0 var(--counter-evidence)",
-        padding: "1px 2px",
-    },
-    projection: { borderBottom: "2px dotted var(--evidence-hypothesis)" },
+    selected: styles.selectedHighlight,
+    conflict: styles.conflictHighlight,
+    projection: styles.projectionHighlight,
 };
 type ReaderTab = "document" | "contributions";
 const allQuestions = "all";
@@ -161,28 +152,26 @@ export function SourceReader({
     };
 
     const header = (
-        <div className={styles.hd}>
-            <span className={styles.hdTitle}>
-                <span className={styles.hdTitleRow}>
-                    <b style={{ fontSize: 18, letterSpacing: "-.02em" }}>
-                        {title}
-                    </b>
+        <div className={styles.header}>
+            <span className={styles.headerTitle}>
+                <span className={styles.headerTitleRow}>
+                    <b className={styles.title}>{title}</b>
                     {dismiss}
                 </span>
                 <span className="wb-meta">{meta}</span>
             </span>
             <Button
-                className={styles.ib}
+                className={styles.iconButton}
                 aria-label="Previous passage"
                 onClick={() => move(index - 1)}
                 disabled={index === 0}>
                 <WorkbenchIcon name="back" size={14} />
             </Button>
-            <span className="wb-meta" style={{ color: "var(--foreground)" }}>
+            <span className={cn("wb-meta", styles.headingText)}>
                 {pagePosition ?? page?.label}
             </span>
             <Button
-                className={styles.ib}
+                className={styles.iconButton}
                 aria-label="Next passage"
                 onClick={() => move(index + 1)}
                 disabled={index >= pages.length - 1}>
@@ -212,12 +201,7 @@ export function SourceReader({
         <div className={styles.desk}>
             {page ? (
                 <article className={styles.page}>
-                    <span
-                        className="wb-meta"
-                        style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                        }}>
+                    <span className={cn("wb-meta", styles.pageNavigation)}>
                         <span>{page.section}</span>
                         <span>{page.label}</span>
                     </span>
@@ -238,17 +222,15 @@ export function SourceReader({
                         return (
                             <p
                                 key={p.id}
-                                className={styles.para}
+                                className={cn(
+                                    styles.passage,
+                                    p.quiet ? styles.quietPassage : undefined,
+                                )}
                                 data-passage-id={p.id}
                                 data-passage-active={
                                     (active?.target?.pageId === page.id &&
                                         active.target.passageId === p.id) ||
                                     undefined
-                                }
-                                style={
-                                    p.quiet
-                                        ? { color: "var(--muted-foreground)" }
-                                        : undefined
                                 }>
                                 {p.kind && (
                                     <span className={styles.mark}>
@@ -271,7 +253,7 @@ export function SourceReader({
                                     </span>
                                 )}
                                 <span
-                                    style={
+                                    className={
                                         p.highlight
                                             ? highlights[p.highlight]
                                             : undefined
@@ -295,12 +277,10 @@ export function SourceReader({
         <>
             {layout === "columns" && (
                 <span className={styles.sideHead}>
-                    <span
-                        className="wb-label"
-                        style={{ color: "var(--accent-foreground)" }}>
+                    <span className={cn("wb-label", styles.accentLabel)}>
                         {"// What this document gives"}
                     </span>
-                    <b style={{ fontSize: 16, letterSpacing: "-.02em" }}>
+                    <b className={styles.contributionTitle}>
                         {contributionLabel}
                     </b>
                 </span>
@@ -339,11 +319,15 @@ export function SourceReader({
             {shown.map((c) => {
                 const body = (
                     <>
-                        <span className={styles.contribHead}>
+                        <span className={styles.contributionHeader}>
                             <EvidenceBadge kind={c.kind}>
                                 {c.label}
                             </EvidenceBadge>
-                            <span className="wb-meta" style={{ flex: 1 }}>
+                            <span
+                                className={cn(
+                                    "wb-meta",
+                                    styles.flexibleContent,
+                                )}>
                                 {c.meta}
                                 {c.questions?.length
                                     ? ` · ${c.questions.join(" ")}`
@@ -351,13 +335,17 @@ export function SourceReader({
                             </span>
                             {c.status}
                         </span>
-                        <span className={styles.contribText}>{c.text}</span>
+                        <span className={styles.contributionText}>
+                            {c.text}
+                        </span>
                         {c.note && (
-                            <span className={styles.contribNote}>{c.note}</span>
+                            <span className={styles.contributionNote}>
+                                {c.note}
+                            </span>
                         )}
                         {c.target && (
                             <span
-                                className={styles.contribGo}
+                                className={styles.contributionAction}
                                 aria-hidden="true">
                                 Show in document
                                 <WorkbenchIcon name="chevron" size={12} />
@@ -369,7 +357,10 @@ export function SourceReader({
                     <button
                         key={c.id}
                         type="button"
-                        className={cn(styles.contrib, styles.contribLink)}
+                        className={cn(
+                            styles.contributions,
+                            styles.contributionLink,
+                        )}
                         data-contribution-id={c.id}
                         aria-current={c.id === activeId ? "true" : undefined}
                         onClick={() => openPassage(c)}>
@@ -378,7 +369,7 @@ export function SourceReader({
                 ) : (
                     <div
                         key={c.id}
-                        className={styles.contrib}
+                        className={styles.contributions}
                         data-contribution-id={c.id}>
                         {body}
                     </div>
@@ -401,7 +392,9 @@ export function SourceReader({
                                     size={14}
                                     strokeWidth={link.captured ? 2.2 : 1.6}
                                 />
-                                <span style={{ flex: 1 }}>{link.label}</span>
+                                <span className={styles.flexibleContent}>
+                                    {link.label}
+                                </span>
                                 <span className="wb-meta">{link.meta}</span>
                             </li>
                         ))}

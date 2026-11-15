@@ -267,7 +267,7 @@ function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
                 {view === "compose" ? (
                     <motion.div
                         key="compose"
-                        className="min-w-0"
+                        className={cn("min-w-0", styles.viewOrigin)}
                         initial={
                             reduceMotion ? false : { opacity: 0, scale: 0.97 }
                         }
@@ -286,8 +286,7 @@ function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
                         }
                         transition={
                             reduceMotion ? { duration: 0 } : viewEnterTransition
-                        }
-                        style={{ transformOrigin: "50% 45%" }}>
+                        }>
                         <ResearchComposerView
                             id="research-angle"
                             textareaRef={angleRef}
@@ -465,7 +464,7 @@ function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
                 ) : resolution ? (
                     <motion.div
                         key="confirm"
-                        className="w-full"
+                        className={cn("w-full", styles.viewOrigin)}
                         initial={
                             reduceMotion ? false : { opacity: 0, scale: 0.96 }
                         }
@@ -484,8 +483,7 @@ function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
                         }
                         transition={
                             reduceMotion ? { duration: 0 } : viewEnterTransition
-                        }
-                        style={{ transformOrigin: "50% 45%" }}>
+                        }>
                         <LoadErrorBoundary
                             title="Workspace access unavailable"
                             description="We couldn’t verify your workspace access."

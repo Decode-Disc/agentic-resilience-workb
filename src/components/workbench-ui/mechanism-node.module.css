@@ -1,16 +1,7 @@
+@reference "../../styles.css";
+
 .node {
-    position: relative;
-    box-sizing: border-box;
-    width: 200px;
-    min-height: 96px;
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border-radius: var(--radius-lg);
-    font-size: 15px;
-    line-height: 20px;
-    background: var(--card);
+    @apply relative box-border w-[200px] min-h-[96px] py-[12px] px-[16px] flex items-center gap-[12px] rounded-(--radius-lg) text-[15px] leading-[20px] bg-card bg-none;
 }
 .participant {
     box-shadow:
@@ -20,15 +11,13 @@
         color-mix(in oklab, var(--foreground) 35%, transparent);
 }
 .label {
-    font-size: 10px;
-    line-height: inherit;
+    @apply text-[10px] leading-[inherit];
 }
 .title {
-    font-weight: 500;
+    @apply font-medium;
 }
 .detail {
-    font-size: 12px;
-    opacity: 0.7;
+    @apply text-[12px] opacity-[0.7];
 }
 .actor {
     box-shadow:
@@ -38,11 +27,7 @@
         color-mix(in oklab, var(--brand-purple) 60%, transparent);
 }
 .observed {
-    width: 260px;
-    min-height: 112px;
-    padding: 16px 20px;
-    background: var(--primary);
-    color: var(--primary-foreground);
+    @apply w-[260px] min-h-[112px] py-[16px] px-[20px] bg-primary bg-none text-primary-foreground;
     box-shadow:
         inset 0 1px 0 color-mix(in oklab, white 22%, transparent),
         0 0 0 1px color-mix(in oklab, var(--brand-purple) 50%, transparent),
@@ -51,22 +36,17 @@
         color-mix(in oklab, var(--brand-purple) 75%, transparent);
 }
 .observed .label {
-    color: inherit;
-    opacity: 0.7;
+    @apply text-inherit opacity-[0.7];
 }
 .observed .title {
-    font-size: 19px;
-    line-height: 26px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    @apply text-[19px] leading-[26px] font-semibold tracking-[-0.02em];
 }
 .unknown,
 .threat {
-    width: 240px;
-    min-height: 80px;
+    @apply w-[240px] min-h-[80px];
 }
 .unknown {
-    background: color-mix(in oklab, var(--card) 60%, transparent);
+    @apply bg-card/60 bg-none;
     box-shadow: none;
     border: 1.5px dashed color-mix(in oklab, var(--foreground) 32%, transparent);
 }
@@ -78,7 +58,7 @@
         color-mix(in oklab, var(--counter-evidence) 55%, transparent);
 }
 .threat .label {
-    color: var(--counter-evidence);
+    @apply text-counter-evidence;
 }
 .contested {
     background: color-mix(in oklab, var(--review) 10%, var(--card));
@@ -86,15 +66,18 @@
     border: 1.5px dashed var(--review-foreground);
 }
 .contested .label {
-    color: var(--review-foreground);
+    @apply text-review-foreground;
 }
 .outside {
-    background: transparent;
+    @apply bg-transparent bg-none;
     box-shadow: none;
     border: 1.5px dashed color-mix(in oklab, var(--foreground) 20%, transparent);
-    color: var(--muted-foreground);
+    @apply text-muted-foreground;
 }
 .outside .title {
-    font-size: 14px;
-    font-weight: 400;
+    @apply text-[14px] font-normal;
+}
+
+.relation {
+    @apply absolute [stroke-linecap:round] [stroke-linejoin:round] fill-none overflow-visible;
 }

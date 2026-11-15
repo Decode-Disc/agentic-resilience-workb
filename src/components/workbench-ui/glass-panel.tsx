@@ -12,11 +12,11 @@ export function GlassPanel({
         <div
             {...props}
             className={cn(
-                styles.p,
+                styles.panel,
                 emphasis === "unfinished"
-                    ? ["wb-dashed", styles.hatch]
+                    ? "wb-dashed wb-panel-unfinished"
                     : "wb-glass",
-                emphasis === "focal" && ["wb-focal", styles.focalbg],
+                emphasis === "focal" && "wb-focal wb-panel-focal",
                 emphasis === "waiting" && "wb-waits",
                 className,
             )}

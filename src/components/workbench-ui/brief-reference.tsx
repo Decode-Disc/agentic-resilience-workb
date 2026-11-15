@@ -16,14 +16,18 @@ export function BriefReference({
     return (
         <button
             type="button"
-            className={kind === "mechanism" ? styles.mref : styles.eref}
+            className={
+                kind === "mechanism"
+                    ? styles.mechanismReference
+                    : styles.evidenceReference
+            }
             onClick={onActivate}>
             {active && kind === "mechanism" ? (
                 <svg
                     width="5"
                     height="5"
                     viewBox="0 0 10 10"
-                    style={{ width: 5, height: 5 }}
+                    className={styles.statusDot}
                     aria-hidden="true">
                     <circle cx="5" cy="5" r="5" fill="var(--brand-purple)" />
                 </svg>
@@ -42,7 +46,7 @@ export function BriefSection({
     children: ReactNode;
 }) {
     return (
-        <section className={styles.sec}>
+        <section className={styles.section}>
             <span className="wb-label">{label}</span>
             <h2>{title}</h2>
             <p>{children}</p>
@@ -61,7 +65,7 @@ export function BriefMarginNote({
     return (
         <aside className={cn(styles.note, "wb-raised")}>
             <span className="wb-label">{label}</span>
-            <span style={{ fontSize: 13, lineHeight: "19px" }}>{children}</span>
+            <span className={styles.referenceText}>{children}</span>
             {status}
         </aside>
     );

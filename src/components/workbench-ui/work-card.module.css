@@ -1,168 +1,173 @@
-.grid {
-    display: grid;
-    grid-template-columns: 300px 300px;
-    gap: 16px;
-    align-items: start;
-}
-.col {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-.wc {
-    border-radius: var(--radius-2xl);
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    color: inherit;
+@reference "../../styles.css";
+.card {
+    @apply rounded-(--radius-2xl) p-[20px] flex flex-col gap-[14px] text-inherit;
     text-decoration: none;
 }
-.hd {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+.header {
+    @apply flex justify-between items-center;
 }
 .stack {
-    position: relative;
-    height: 104px;
-    display: block;
+    @apply relative h-[104px] block;
 }
 .sheet {
-    position: absolute;
-    width: 150px;
-    height: 88px;
-    border-radius: 10px;
-    background: var(--card);
+    @apply absolute w-[150px] h-[88px] rounded-[10px] bg-card bg-none;
     box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
 }
-.ln {
-    display: block;
-    height: 5px;
-    border-radius: 3px;
-    background: color-mix(in oklab, var(--foreground) 10%, transparent);
+.documentLine {
+    @apply block h-[5px] rounded-[3px] bg-foreground/10 bg-none;
 }
-.li {
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    font-size: 13px;
-    line-height: 18px;
-    color: var(--muted-foreground);
-}
-.focalbg {
-    background: linear-gradient(
-        180deg,
-        var(--tint-violet),
-        var(--surface-glass) 55%
-    );
-}
-.sec {
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-    padding: 12px;
-    border-radius: var(--radius-lg);
-    background: color-mix(in oklab, var(--foreground) 3%, transparent);
+.section {
+    @apply flex flex-col gap-[9px] p-[12px] rounded-(--radius-lg) bg-foreground/3 bg-none;
 }
 .synthesis {
-    min-height: 536px;
-    border-radius: 22px;
+    @apply min-h-[536px] rounded-[22px];
     border: 1.5px dashed color-mix(in oklab, var(--foreground) 22%, transparent);
-    color: var(--muted-foreground);
+    @apply text-muted-foreground;
 }
 .diagram {
-    gap: 8px;
+    @apply gap-[8px];
 }
 .diagramPreview {
-    position: relative;
-    height: 196px;
-    display: block;
-    opacity: 0.6;
+    @apply relative h-[196px] block opacity-[0.6];
 }
 .diagramPreview > span {
-    position: absolute;
-    display: block;
+    @apply absolute block;
 }
 .outerOrbit,
 .innerOrbit,
 .core {
-    left: 50%;
-    top: 50%;
+    @apply left-[50%] top-[50%];
 }
 .outerOrbit {
-    box-sizing: content-box;
-    width: 176px;
-    height: 176px;
-    margin: -88px 0 0 -88px;
-    border-radius: 50%;
+    @apply box-content w-[176px] h-[176px] -mt-[88px] mr-0 mb-0 -ml-[88px] rounded-[50%];
     border: 1px dashed currentColor;
 }
 .innerOrbit {
-    box-sizing: content-box;
-    width: 96px;
-    height: 96px;
-    margin: -48px 0 0 -48px;
-    border-radius: 50%;
+    @apply box-content w-[96px] h-[96px] -mt-[48px] mr-0 mb-0 -ml-[48px] rounded-[50%];
     border: 1px solid color-mix(in oklab, currentColor 50%, transparent);
 }
 .core {
-    margin: -16px 0 0 -35px;
-    width: 70px;
-    height: 32px;
-    border-radius: 9px;
-    background: color-mix(in oklab, var(--foreground) 16%, transparent);
+    @apply -mt-[16px] mr-0 mb-0 -ml-[35px] w-[70px] h-[32px] rounded-[9px] bg-foreground/16 bg-none;
 }
 .leftNode,
 .rightNode {
-    top: 82px;
-    width: 52px;
-    height: 28px;
-    border-radius: 8px;
+    @apply top-[82px] w-[52px] h-[28px] rounded-[8px];
     border: 1px solid currentColor;
 }
 .leftNode {
-    left: 4px;
+    @apply left-[4px];
 }
 .rightNode {
-    right: 4px;
+    @apply right-[4px];
 }
 .topNode,
 .bottomNode {
-    left: 50%;
-    width: 56px;
-    height: 24px;
-    margin-left: -28px;
-    border-radius: 8px;
+    @apply left-[50%] w-[56px] h-[24px] ml-[-28px] rounded-[8px];
     border: 1px solid currentColor;
 }
 .topNode {
-    top: 2px;
-    border-style: dashed;
+    @apply top-[2px] border-dashed;
 }
 .bottomNode {
-    bottom: 2px;
+    @apply bottom-[2px];
 }
 .brief {
-    flex: 1;
+    @apply flex-[1];
 }
 .briefLine {
-    display: block;
-    height: 7px;
-    border-radius: 4px;
-    background: color-mix(in oklab, var(--foreground) 9%, transparent);
+    @apply block h-[7px] rounded-[4px] bg-foreground/9 bg-none;
 }
 .briefLine:nth-child(2) {
-    background: color-mix(in oklab, var(--foreground) 12%, transparent);
+    @apply bg-foreground/12 bg-none;
 }
-button.wc {
+button.card {
     border: 0;
-    text-align: left;
-    white-space: normal;
-    align-items: stretch;
+    @apply text-left whitespace-normal items-stretch;
     font: inherit;
 }
-button.wc {
-    height: auto;
-    justify-content: initial;
+button.card {
+    @apply h-auto justify-normal;
+}
+
+.backSheet {
+    @apply left-[36px] top-[0];
+    transform: rotate(5deg);
+}
+
+.middleSheet {
+    @apply left-[18px] top-[8px];
+    transform: rotate(-3deg);
+}
+
+.frontSheet {
+    @apply left-[0] top-[16px] w-[170px] py-[12px] px-[14px] flex flex-col gap-[6px];
+    box-shadow: var(--shadow-raised);
+}
+
+.documentLabel {
+    @apply text-[10.5px];
+}
+
+.longLine {
+    @apply w-[120px];
+}
+
+.shortLine {
+    @apply w-[96px];
+}
+
+.accentLine {
+    @apply w-[108px] bg-brand-purple/30 bg-none;
+}
+
+.documentCount {
+    @apply absolute right-[0] top-[30px] flex flex-col items-end;
+}
+
+.documentCountValue {
+    @apply text-[30px] leading-[32px] font-medium tracking-[-.04em];
+}
+
+.description {
+    @apply text-[13.5px] leading-[19px] text-muted-foreground;
+}
+
+.accentLabel {
+    @apply text-accent-foreground;
+}
+
+.liveDot {
+    @apply w-[7px] h-[7px] rounded-[50%] bg-brand-purple bg-none inline-block;
+}
+
+.investigationBody {
+    @apply flex flex-col gap-[10px];
+}
+
+.investigationFooter {
+    @apply pt-[10px];
+}
+
+.lockedDescription {
+    @apply text-[13.5px] leading-[19px];
+}
+
+.sectionLabel {
+    @apply text-[10px];
+}
+
+.briefHeadingLine {
+    @apply w-[92%];
+}
+
+.briefShortLine {
+    @apply w-[78%];
+}
+
+.briefParagraphLine {
+    @apply w-[86%] mt-[6px];
+}
+
+.briefLastLine {
+    @apply w-[60%];
 }

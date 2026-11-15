@@ -31,7 +31,7 @@ export function ProgressTimeline({
     const current = steps.findIndex((s) => s.state === "current");
     return (
         <div className={styles.wrap}>
-            <div className={cn("wb-glass", styles.stp)}>
+            <div className={cn("wb-glass", styles.timeline)}>
                 <span className={styles.track} />
                 <span
                     className={styles.fill}
@@ -46,7 +46,7 @@ export function ProgressTimeline({
                     }}>
                     {steps.map((s) => (
                         <span
-                            className={styles.st}
+                            className={styles.step}
                             key={s.id}
                             aria-current={
                                 s.state === "current" ? "step" : undefined
@@ -71,71 +71,52 @@ export function ProgressTimeline({
                                 ) : null}
                             </span>
                             <span
-                                className={styles.sl}
-                                style={
+                                className={cn(
+                                    styles.stepLabel,
                                     s.state === "current"
-                                        ? {
-                                              fontWeight: 600,
-                                              color: "var(--accent-foreground)",
-                                          }
+                                        ? styles.currentLabel
                                         : s.state === "upcoming"
-                                          ? {
-                                                color: "var(--muted-foreground)",
-                                                fontWeight: 400,
-                                            }
-                                          : undefined
-                                }>
+                                          ? styles.upcomingLabel
+                                          : undefined,
+                                )}>
                                 {s.label}
                             </span>
                         </span>
                     ))}
                 </div>
             </div>
-            <section className={cn("wb-glass wb-focal", styles.inq)}>
-                <div className={styles.hd}>
-                    <span
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                        }}>
-                        <b style={{ fontSize: 17, letterSpacing: "-.02em" }}>
-                            {title}
-                        </b>
+            <section className={cn("wb-glass wb-focal", styles.inquiries)}>
+                <div className={styles.header}>
+                    <span className={styles.heading}>
+                        <b className={styles.title}>{title}</b>
                         {status}
                     </span>
                     <span className="wb-meta">{legend}</span>
                 </div>
                 {rows.map((r) => (
-                    <div key={r.id} className={cn(styles.q, "wb-divider")}>
+                    <div
+                        key={r.id}
+                        className={cn(styles.question, "wb-divider")}>
                         <span
-                            className={styles.qw}
-                            style={
+                            className={cn(
+                                styles.questionId,
                                 r.current
-                                    ? {
-                                          background: "var(--accent)",
-                                          color: "var(--accent-foreground)",
-                                      }
-                                    : {
-                                          background: "var(--foreground)",
-                                          color: "var(--card)",
-                                      }
-                            }>
+                                    ? styles.currentQuestion
+                                    : styles.defaultQuestion,
+                            )}>
                             {r.id}
                         </span>
-                        <span
-                            style={{
-                                flex: 1,
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 7,
-                            }}>
-                            <span style={{ fontSize: 14.5, fontWeight: 500 }}>
+                        <span className={styles.questionText}>
+                            <span className={styles.questionLabel}>
                                 {r.label}
                             </span>
                             <span
-                                className={styles.bal}
-                                style={r.balance ? undefined : { width: 160 }}>
+                                className={cn(
+                                    styles.balance,
+                                    r.balance
+                                        ? undefined
+                                        : styles.pendingBalance,
+                                )}>
                                 {r.balance ? (
                                     r.balance.map((n, i) => (
                                         <span
@@ -146,20 +127,13 @@ export function ProgressTimeline({
                                                     "context",
                                                 ][i]
                                             }
-                                            style={{
-                                                flex: n,
-                                                background: [
-                                                    "var(--foreground)",
-                                                    "var(--counter-evidence)",
-                                                    "color-mix(in oklab,var(--foreground) 18%,transparent)",
-                                                ][i],
-                                            }}
+                                            className={styles.balanceSegment}
+                                            style={{ flex: n }}
                                         />
                                     ))
                                 ) : (
                                     <span
-                                        style={{ flex: 1 }}
-                                        className="wb-sweep"
+                                        className={cn("wb-sweep", styles.sweep)}
                                     />
                                 )}
                             </span>

@@ -46,9 +46,9 @@ export function OutcomeCard({ kind, title, children, next }: OutcomeCardProps) {
             className={cn(
                 unfinished ? "wb-dashed" : "wb-glass",
                 kind === "pending" && "wb-waits",
-                styles.o,
+                styles.outcome,
             )}>
-            <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span className={styles.header}>
                 <span className={cn("wb-well", styles.well)}>
                     {treatment.icon ? (
                         <WorkbenchIcon
@@ -61,20 +61,15 @@ export function OutcomeCard({ kind, title, children, next }: OutcomeCardProps) {
                             width="14"
                             height="14"
                             viewBox="0 0 10 10"
-                            style={{ width: 14, height: 14 }}
+                            className={styles.outcomeGlyph}
                             aria-hidden="true">
                             <circle cx="5" cy="5" r="5" fill="currentColor" />
                         </svg>
                     )}
                 </span>
-                <b
-                    style={{
-                        fontSize: 15,
-                    }}>
-                    {title}
-                </b>
+                <b className={styles.title}>{title}</b>
             </span>
-            <span className={styles.d}>{children}</span>
+            <span className={styles.description}>{children}</span>
             <span className={typeof next === "string" ? "wb-meta" : undefined}>
                 {next}
             </span>

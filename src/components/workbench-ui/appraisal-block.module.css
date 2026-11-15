@@ -1,103 +1,107 @@
-.art {
+@reference "../../styles.css";
+
+.appraisal {
     --appraisal-padding: 30px;
-    max-width: 760px;
-    border-radius: var(--radius-3xl);
-    padding: 28px 30px;
-    display: flex;
-    flex-direction: column;
-    gap: 22px;
+    @apply max-w-[760px] rounded-(--radius-3xl) py-[28px] px-[30px] flex flex-col gap-[22px];
 }
 .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
+    @apply flex justify-between items-center flex-wrap gap-[10px];
 }
-.interp {
-    padding: 20px 22px;
-    border-radius: var(--radius-xl);
-    background: var(--tint-violet);
+.interpretationPanel {
+    @apply py-[20px] px-[22px] rounded-(--radius-xl) bg-tint-violet bg-none;
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--brand-purple) 22%, transparent);
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
+    @apply flex flex-col gap-[14px];
 }
 .bars {
-    display: flex;
-    gap: 4px;
+    @apply flex gap-[4px];
 }
 .bars i {
-    width: 28px;
-    height: 6px;
-    border-radius: 3px;
-    background: color-mix(in oklab, var(--brand-purple) 20%, transparent);
+    @apply w-[28px] h-[6px] rounded-[3px] bg-brand-purple/20 bg-none;
 }
-.bars i.on {
-    background: var(--brand-purple);
+.bars i.activeBar {
+    @apply bg-brand-purple bg-none;
 }
 .row {
-    display: flex;
-    gap: 16px;
-    align-items: flex-start;
-    padding: 14px 0;
+    @apply flex gap-[16px] items-start py-[14px] px-0;
     border-top: 1px solid var(--divider);
 }
-.txt {
-    font-size: 14.5px;
-    line-height: 21px;
+.evidenceTextGroup {
+    @apply text-[14.5px] leading-[21px];
 }
-.unk {
-    border-radius: var(--radius-xl);
-    padding: 16px 18px;
+.unknown {
+    @apply rounded-(--radius-xl) py-[16px] px-[18px];
     border: 1.5px dashed color-mix(in oklab, var(--foreground) 22%, transparent);
-    display: flex;
-    align-items: center;
-    gap: 14px;
+    @apply flex items-center gap-[14px];
 }
-.q {
-    flex-shrink: 0;
-    width: 38px;
-    height: 38px;
-    border-radius: var(--radius-full);
+.unknownText {
+    @apply shrink-0 w-[38px] h-[38px] rounded-(--radius-full);
     border: 1.5px dashed color-mix(in oklab, var(--foreground) 35%, transparent);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--muted-foreground);
-    font-size: 17px;
-    font-weight: 500;
+    @apply inline-flex items-center justify-center text-muted-foreground text-[17px] font-medium;
 }
 .footer {
     margin: 2px calc(-1 * var(--appraisal-padding)) -28px;
-    padding: 20px var(--appraisal-padding);
+    @apply py-[20px] px-(--appraisal-padding);
     border-top: 1px solid var(--divider);
     border-radius: 0 0 var(--radius-3xl) var(--radius-3xl);
-    background: var(--fill-quiet);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 20px;
+    @apply bg-fill-quiet bg-none flex items-center justify-between flex-wrap gap-[20px];
 }
 .control {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
+    @apply flex flex-col items-start gap-[6px];
 }
 .actions {
-    display: flex;
-    gap: 10px;
+    @apply flex gap-[10px];
 }
 @media (max-width: 640px) {
-    .art {
+    .appraisal {
         --appraisal-padding: 20px;
-        padding-inline: var(--appraisal-padding);
+        @apply px-(--appraisal-padding);
     }
     .actions {
-        width: 100%;
-        flex-direction: column;
+        @apply w-[100%] flex-col;
     }
+}
+
+.accentLabel {
+    @apply text-accent-foreground;
+}
+
+.statusDot {
+    @apply w-[7px] h-[7px];
+}
+
+.interpretation {
+    @apply text-[19px] leading-[28px] font-medium tracking-[-.015em];
+}
+
+.confidence {
+    @apply flex items-center gap-[14px] flex-wrap;
+}
+
+.confidenceDetail {
+    @apply text-[13px] text-muted-foreground;
+}
+
+.sectionLabel {
+    @apply block pb-[6px];
+}
+
+.evidenceText {
+    @apply flex-[1] flex flex-col gap-[5px];
+}
+
+.claimGlyph {
+    @apply w-[8px] h-[8px];
+}
+
+.controlText {
+    @apply flex-[1] flex flex-col gap-[3px];
+}
+
+.controlTitle {
+    @apply text-[16px] leading-[22px] font-medium;
+}
+
+.controlStatus {
+    @apply text-right;
 }

@@ -35,7 +35,7 @@ export function SourceReaderList({
 }) {
     return (
         <nav aria-label={title} className={cn("wb-glass", styles.list)}>
-            <span className={styles.head}>
+            <span className={styles.header}>
                 <h2>{title}</h2>
                 {summary && <span className="wb-meta">{summary}</span>}
             </span>

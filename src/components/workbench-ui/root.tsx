@@ -1,6 +1,5 @@
 import { type ComponentProps, createContext, useContext } from "react";
 import { cn } from "@/lib/utils";
-import "./styles.css";
 
 const Theme = createContext<"light" | "dark" | undefined>(undefined);
 

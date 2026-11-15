@@ -5,22 +5,9 @@ import { EvidenceBadge, WorkbenchIcon } from "./glyphs";
 import styles from "./hypothesis-node.module.css";
 
 const treatments = {
-    holds: {
-        background:
-            "linear-gradient(160deg,color-mix(in oklab,var(--brand-purple) 14%,var(--card)),var(--card) 70%)",
-        boxShadow:
-            "inset 0 1px 0 color-mix(in oklab,var(--popover) 90%,transparent),0 0 0 2px var(--brand-purple),0 24px 50px -22px color-mix(in oklab,var(--brand-purple) 65%,transparent)",
-    },
-    open: {
-        background: "color-mix(in oklab,var(--review) 9%,var(--card))",
-        border: "1.5px dashed var(--review-foreground)",
-    },
-    "set-aside": {
-        background: "var(--surface-glass)",
-        boxShadow:
-            "0 0 0 1px color-mix(in oklab,var(--foreground) 12%,transparent)",
-        color: "var(--muted-foreground)",
-    },
+    holds: styles.held,
+    open: styles.open,
+    "set-aside": styles.setAside,
 };
 export interface HypothesisNodeProps {
     state: keyof typeof treatments;
@@ -33,14 +20,10 @@ export function HypothesisNode({
     detail,
 }: HypothesisNodeProps) {
     return (
-        <div className={styles.hyp} style={treatments[state]}>
+        <div className={cn(styles.hypothesis, treatments[state])}>
             <span>
                 {state === "holds" ? (
-                    <Badge
-                        style={{
-                            color: "var(--primary-foreground)",
-                            background: "var(--brand-purple)",
-                        }}>
+                    <Badge className={styles.waitingIcon}>
                         <WorkbenchIcon
                             name="check"
                             size={11}
@@ -54,7 +37,7 @@ export function HypothesisNode({
                             width="7"
                             height="7"
                             viewBox="0 0 10 10"
-                            style={{ width: 7, height: 7 }}
+                            className={styles.statusDot}
                             aria-hidden="true">
                             <circle cx="5" cy="5" r="5" fill="var(--review)" />
                         </svg>
@@ -72,24 +55,13 @@ export function HypothesisNode({
                 )}
             </span>
             <b
-                style={
-                    state === "holds"
-                        ? undefined
-                        : {
-                              fontWeight: 500,
-                              ...(state === "set-aside"
-                                  ? {
-                                        color: "var(--foreground)",
-                                        textDecoration: "line-through",
-                                        textDecorationColor:
-                                            "color-mix(in oklab,var(--foreground) 35%,transparent)",
-                                    }
-                                  : {}),
-                          }
-                }>
+                className={cn(
+                    state !== "holds" && styles.inactiveTitle,
+                    state === "set-aside" && styles.struckTitle,
+                )}>
                 {children}
             </b>
-            <span className={styles.sub}>{detail}</span>
+            <span className={styles.description}>{detail}</span>
         </div>
     );
 }
@@ -103,17 +75,13 @@ export function EvidenceLeaf({
     const unknown = relation === "decides";
     return (
         <div
-            className={cn(styles.leaf, !unknown && "wb-raised")}
-            style={
+            className={cn(
+                styles.leaf,
+                !unknown && "wb-raised",
                 unknown
-                    ? { border: "1.5px dashed var(--edge-dashed)" }
-                    : relation === "against"
-                      ? {
-                            boxShadow:
-                                "0 0 0 1px color-mix(in oklab,var(--counter-evidence) 35%,transparent),var(--shadow-raised)",
-                        }
-                      : undefined
-            }>
+                    ? styles.unknownLeaf
+                    : relation === "against" && styles.opposingLeaf,
+            )}>
             <span>
                 {unknown ? (
                     <Badge tone="dashed">Unknown</Badge>
@@ -124,19 +92,19 @@ export function EvidenceLeaf({
                     </EvidenceBadge>
                 )}{" "}
                 <span
-                    className={styles.role}
-                    style={{
-                        color: unknown
-                            ? "var(--muted-foreground)"
+                    className={cn(
+                        styles.role,
+                        unknown
+                            ? styles.unknownRole
                             : relation === "for"
-                              ? "var(--evidence-fact)"
-                              : "var(--counter-evidence)",
-                    }}>
+                              ? styles.supportingRole
+                              : styles.opposingRole,
+                    )}>
                     {relation}
                 </span>
             </span>
             {unknown ? (
-                <span style={{ fontWeight: 500 }}>{children}</span>
+                <span className={styles.inactiveTitle}>{children}</span>
             ) : (
                 children
             )}

@@ -31,10 +31,10 @@ export function WorkCard(props: WorkCardProps) {
         return (
             <Button
                 onClick={onOpen}
-                className={cn("wb-glass", styles.wc, className)}
+                className={cn("wb-glass", styles.card, className)}
                 style={style}>
-                <span className={cn(styles.hd)}>
-                    <span className={cn("wb-label")}>Sources</span>
+                <span className={styles.header}>
+                    <span className="wb-label">Sources</span>
                     <Badge tone="ink">
                         <WorkbenchIcon
                             name="check"
@@ -44,81 +44,38 @@ export function WorkCard(props: WorkCardProps) {
                         Prepared
                     </Badge>
                 </span>
-                <span className={cn(styles.stack)}>
+                <span className={styles.stack}>
+                    <span className={cn(styles.sheet, styles.backSheet)}></span>
                     <span
-                        className={cn(styles.sheet)}
-                        style={{
-                            left: "36px",
-                            top: "0",
-                            transform: "rotate(5deg)",
-                        }}></span>
-                    <span
-                        className={cn(styles.sheet)}
-                        style={{
-                            left: "18px",
-                            top: "8px",
-                            transform: "rotate(-3deg)",
-                        }}></span>
-                    <span
-                        className={cn(styles.sheet)}
-                        style={{
-                            left: "0",
-                            top: "16px",
-                            width: "170px",
-                            padding: "12px 14px",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "6px",
-                            boxShadow: "var(--shadow-raised)",
-                        }}>
-                        <span
-                            className={cn("wb-meta")}
-                            style={{ fontSize: "10.5px" }}>
+                        className={cn(styles.sheet, styles.middleSheet)}></span>
+                    <span className={cn(styles.sheet, styles.frontSheet)}>
+                        <span className={cn("wb-meta", styles.documentLabel)}>
                             {documentLabel}
                         </span>
                         <span
-                            className={cn(styles.ln)}
-                            style={{ width: "120px" }}></span>
+                            className={cn(
+                                styles.documentLine,
+                                styles.longLine,
+                            )}></span>
                         <span
-                            className={cn(styles.ln)}
-                            style={{ width: "96px" }}></span>
+                            className={cn(
+                                styles.documentLine,
+                                styles.shortLine,
+                            )}></span>
                         <span
-                            className={cn(styles.ln)}
-                            style={{
-                                width: "108px",
-                                background:
-                                    "color-mix(in oklab,var(--brand-purple) 30%,transparent)",
-                            }}></span>
+                            className={cn(
+                                styles.documentLine,
+                                styles.accentLine,
+                            )}></span>
                     </span>
-                    <span
-                        style={{
-                            position: "absolute",
-                            right: "0",
-                            top: "30px",
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "flex-end",
-                        }}>
-                        <b
-                            style={{
-                                fontSize: "30px",
-                                lineHeight: "32px",
-                                fontWeight: "500",
-                                letterSpacing: "-.04em",
-                            }}>
+                    <span className={styles.documentCount}>
+                        <b className={styles.documentCountValue}>
                             {documentCount}
                         </b>
-                        <span className={cn("wb-meta")}>documents</span>
+                        <span className="wb-meta">documents</span>
                     </span>
                 </span>
-                <span
-                    style={{
-                        fontSize: 13.5,
-                        lineHeight: "19px",
-                        color: "var(--muted-foreground)",
-                    }}>
-                    {children}
-                </span>
+                <span className={styles.description}>{children}</span>
             </Button>
         );
     }
@@ -130,41 +87,27 @@ export function WorkCard(props: WorkCardProps) {
                 className={cn(
                     "wb-glass",
                     "wb-focal",
-                    styles.focalbg,
-                    styles.wc,
+                    "wb-panel-focal",
+                    styles.card,
                     className,
                 )}
                 style={style}>
-                <span className={cn(styles.hd)}>
-                    <span
-                        className={cn("wb-label")}
-                        style={{ color: "var(--accent-foreground)" }}>
+                <span className={styles.header}>
+                    <span className={cn("wb-label", styles.accentLabel)}>
                         Investigation
                     </span>
                     <Badge tone="inference">
-                        <span
-                            className={cn("wb-live")}
-                            style={{
-                                width: "7px",
-                                height: "7px",
-                                borderRadius: "50%",
-                                background: "var(--brand-purple)",
-                                display: "inline-block",
-                            }}></span>
+                        <span className={cn("wb-live", styles.liveDot)}></span>
                         {status}
                     </Badge>
                 </span>
+                <span className={styles.investigationBody}>{children}</span>
                 <span
-                    style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 10,
-                    }}>
-                    {children}
-                </span>
-                <span
-                    className={cn("wb-meta", "wb-divider")}
-                    style={{ paddingTop: "10px" }}>
+                    className={cn(
+                        "wb-meta",
+                        "wb-divider",
+                        styles.investigationFooter,
+                    )}>
                     {footer}
                 </span>
             </Button>
@@ -173,24 +116,18 @@ export function WorkCard(props: WorkCardProps) {
     return (
         <div
             aria-disabled="true"
-            className={cn(styles.wc, styles.synthesis, className)}
+            className={cn(styles.card, styles.synthesis, className)}
             style={style}>
-            <span className={cn(styles.hd)}>
-                <span className={cn("wb-label")}>Synthesis</span>
+            <span className={styles.header}>
+                <span className="wb-label">Synthesis</span>
                 <Badge tone="dashed">
                     <WorkbenchIcon name="lock" size={11} strokeWidth={2} />
                     Locked
                 </Badge>
             </span>
-            <span
-                style={{
-                    fontSize: "13.5px",
-                    lineHeight: "19px",
-                }}>
-                {children}
-            </span>
-            <span className={cn(styles.sec, styles.diagram)}>
-                <span className={cn("wb-label")} style={{ fontSize: "10px" }}>
+            <span className={styles.lockedDescription}>{children}</span>
+            <span className={cn(styles.section, styles.diagram)}>
+                <span className={cn("wb-label", styles.sectionLabel)}>
                     Diagram
                 </span>
                 <span className={styles.diagramPreview} aria-hidden="true">
@@ -203,29 +140,25 @@ export function WorkCard(props: WorkCardProps) {
                     <span className={styles.bottomNode} />
                 </span>
             </span>
-            <span className={cn(styles.sec, styles.brief)}>
-                <span className={cn("wb-label")} style={{ fontSize: "10px" }}>
+            <span className={cn(styles.section, styles.brief)}>
+                <span className={cn("wb-label", styles.sectionLabel)}>
                     Brief
                 </span>
                 <span
-                    className={styles.briefLine}
-                    style={{ width: "92%" }}
+                    className={cn(styles.briefLine, styles.briefHeadingLine)}
                     aria-hidden="true"
                 />
                 <span className={styles.briefLine} aria-hidden="true" />
                 <span
-                    className={styles.briefLine}
-                    style={{ width: "78%" }}
+                    className={cn(styles.briefLine, styles.briefShortLine)}
                     aria-hidden="true"
                 />
                 <span
-                    className={styles.briefLine}
-                    style={{ width: "86%", marginTop: 6 }}
+                    className={cn(styles.briefLine, styles.briefParagraphLine)}
                     aria-hidden="true"
                 />
                 <span
-                    className={styles.briefLine}
-                    style={{ width: "60%" }}
+                    className={cn(styles.briefLine, styles.briefLastLine)}
                     aria-hidden="true"
                 />
             </span>

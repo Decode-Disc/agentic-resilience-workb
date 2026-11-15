@@ -1,32 +1,19 @@
+@reference "../../styles.css";
+
 .box {
-    min-width: min-content;
-    border-radius: var(--radius-2xl);
-    overflow: hidden;
+    @apply min-w-min rounded-(--radius-2xl) overflow-hidden;
 }
 .grid {
-    display: grid;
-    column-gap: 8px;
+    @apply grid gap-x-[8px];
 }
 .axes {
-    padding: 16px 20px 0 24px;
-    align-items: center;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1.5;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted-foreground);
+    @apply pt-[16px] pr-[20px] pb-0 pl-[24px] items-center font-mono text-[11px] leading-[1.5] tracking-[0.12em] uppercase text-muted-foreground;
 }
 .questionAxis {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 0 8px;
-    color: var(--brand-purple);
+    @apply flex items-center gap-[10px] py-0 px-[8px] text-brand-purple;
 }
 .axisLine {
-    flex: 1;
-    height: 1px;
+    @apply flex-[1] h-[1px];
     background: linear-gradient(
         90deg,
         color-mix(in oklab, var(--brand-purple) 40%, transparent),
@@ -34,44 +21,26 @@
     );
 }
 .box .sourceHeading {
-    text-align: right;
+    @apply text-right;
 }
-.head .sourceIntro {
+.header .sourceIntro {
     align-self: end;
-    padding-bottom: 4px;
-    font-size: 13px;
-    line-height: 18px;
-    color: var(--muted-foreground);
-    text-align: right;
+    @apply pb-[4px] text-[13px] leading-[18px] text-muted-foreground text-right;
 }
-.head {
-    padding: 14px 20px 12px 24px;
+.header {
+    @apply pt-[14px] pr-[20px] pb-[12px] pl-[24px];
 }
 .qcard {
-    position: relative;
-    isolation: isolate;
+    @apply relative isolate;
     transition: none;
-    margin: 0 2px;
-    padding: 12px 12px 14px;
-    border-radius: var(--radius-lg);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    background: var(--surface-glass);
+    @apply my-0 mx-[2px] pt-[12px] px-[12px] pb-[14px] rounded-(--radius-lg) flex flex-col gap-[8px] bg-surface-glass bg-none;
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--foreground) 8%, transparent);
-    font-size: 12.5px;
-    line-height: 16px;
-    font-weight: 500;
+    @apply text-[12.5px] leading-[16px] font-medium;
 }
 .qcard::before {
     content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    pointer-events: none;
-    opacity: var(--question-selection, 0);
+    @apply absolute inset-0 z-[-1] rounded-[inherit] pointer-events-none opacity-[var(--question-selection,_0)];
     background: linear-gradient(
         180deg,
         color-mix(in oklab, var(--brand-purple) 14%, var(--card)),
@@ -83,91 +52,52 @@
         0 12px 24px -14px
         color-mix(in oklab, var(--brand-purple) 60%, transparent);
 }
-.qw {
-    width: 28px;
-    height: 28px;
-    border-radius: 9px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 500;
-    background: var(--tint-ink);
+.questionId {
+    @apply w-[28px] h-[28px] rounded-[9px] inline-flex items-center justify-center font-mono text-[11px] font-medium bg-tint-ink bg-none;
 }
-.sel .qw {
-    background: var(--primary);
-    color: var(--primary-foreground);
+.selectedQuestion .questionId {
+    @apply bg-primary bg-none text-primary-foreground;
 }
 .supportDot,
 .contextDot {
-    display: inline-block;
-    flex: none;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: currentColor;
+    @apply inline-block flex-none w-[7px] h-[7px] rounded-[50%] bg-current bg-none;
 }
 .contextDot {
-    background: transparent;
+    @apply bg-transparent bg-none;
     box-shadow: inset 0 0 0 1.5px currentColor;
 }
 .source {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 7px;
-    padding-left: 6px;
-    font-size: 12.5px;
-    line-height: 18px;
+    @apply flex items-center justify-end gap-[7px] pl-[6px] text-[12.5px] leading-[18px];
 }
 .source[data-source-status="verified"] {
-    color: var(--evidence-fact);
+    @apply text-evidence-fact;
 }
 .source[data-source-status="disputed"] {
-    color: var(--counter-evidence);
+    @apply text-counter-evidence;
 }
 .source[data-source-status="unestablished"] {
-    color: var(--evidence-unknown);
+    @apply text-evidence-unknown;
 }
 .source[data-source-status="unchecked"] {
-    color: var(--muted-foreground);
+    @apply text-muted-foreground;
 }
 .row {
-    position: relative;
-    isolation: isolate;
-    padding: 0 20px 0 24px;
+    @apply relative isolate pt-0 pr-[20px] pb-0 pl-[24px];
     border-top: 1px solid var(--divider);
 }
-.ev {
-    padding: 14px 8px 14px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+.evidence {
+    @apply pt-[14px] pr-[8px] pb-[14px] pl-0 flex flex-col gap-[6px];
 }
 .cell {
-    position: relative;
-    isolation: isolate;
-    display: flex;
-    align-items: center;
-    padding: 0 6px;
+    @apply relative isolate flex items-center py-0 px-[6px];
 }
 .cell::before {
     content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    opacity: var(--column-selection, 0);
-    background: color-mix(in oklab, var(--brand-purple) 7%, transparent);
+    @apply absolute inset-0 z-[-1] pointer-events-none opacity-[var(--column-selection,_0)] bg-brand-purple/7 bg-none;
 }
 .row::before {
     content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    opacity: var(--row-selection, 0);
+    @apply absolute inset-0 z-[-1] pointer-events-none opacity-[var(--row-selection,_0)];
     background: linear-gradient(
         90deg,
         color-mix(in oklab, var(--brand-purple) 10%, transparent),
@@ -177,24 +107,16 @@
         inset 0 1px 0 color-mix(in oklab, var(--brand-purple) 30%, transparent),
         inset 0 -1px 0 color-mix(in oklab, var(--brand-purple) 30%, transparent);
 }
-.selectedRow .meta {
-    color: var(--accent-foreground);
+.selectedRow .metadata {
+    @apply text-accent-foreground;
 }
 .use {
-    position: relative;
+    @apply relative;
     transition: none;
-    flex: 1;
-    height: 42px;
-    border-radius: var(--radius-tile);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    font-size: 12.5px;
-    font-weight: 500;
+    @apply flex-[1] h-[42px] rounded-(--radius-tile) flex items-center justify-center gap-[7px] text-[12.5px] font-medium;
 }
 .use[data-use="supports"] {
-    color: var(--card);
+    @apply text-card;
     background: linear-gradient(
         180deg,
         color-mix(in oklab, var(--foreground) 80%, var(--card)),
@@ -205,18 +127,17 @@
         0 8px 16px -10px color-mix(in oklab, var(--foreground) 80%, transparent);
 }
 .use[data-use="opposes"] {
-    color: var(--counter-evidence);
+    @apply text-counter-evidence;
     background: color-mix(in oklab, var(--counter-evidence) 12%, var(--card));
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--counter-evidence) 32%, transparent);
 }
 .use[data-use="context"] {
-    color: var(--muted-foreground);
-    background: var(--surface-float);
+    @apply text-muted-foreground bg-surface-float bg-none;
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--foreground) 14%, transparent);
 }
-.u-n {
+.useCount {
     background: repeating-linear-gradient(
         135deg,
         transparent 0 6px,
@@ -225,56 +146,63 @@
 }
 .use::after {
     content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    opacity: var(--use-selection, 0);
+    @apply absolute inset-0 rounded-[inherit] pointer-events-none opacity-[var(--use-selection,_0)];
     box-shadow:
         inset 0 1px 0 color-mix(in oklab, white 18%, transparent),
         0 0 0 3px color-mix(in oklab, var(--brand-purple) 35%, transparent),
         0 10px 22px -8px
         color-mix(in oklab, var(--brand-purple) 70%, transparent);
 }
-.sr {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
+.sourceResult {
+    @apply absolute w-[1px] h-[1px] overflow-hidden;
     clip: rect(0 0 0 0);
 }
 button.qcard {
     width: calc(100% - 4px);
     border: 0;
-    align-items: flex-start;
-    text-align: left;
-    white-space: normal;
+    @apply items-start text-left whitespace-normal;
 }
 button.use {
     border: 0;
-    padding: 0;
+    @apply p-[0];
 }
 
 .box,
 .box thead,
 .box tbody {
-    display: block;
-    width: 100%;
+    @apply block w-[100%];
 }
 .box th,
 .box td {
-    font-weight: inherit;
-    text-align: left;
+    @apply [font-weight:inherit] text-left;
     border: 0;
 }
-.head th {
-    padding: 0;
+.header th {
+    @apply p-[0];
 }
 button.qcard {
-    height: auto;
-    justify-content: initial;
-    color: var(--foreground);
+    @apply h-auto justify-normal text-foreground;
 }
-.head .qcard {
-    height: 100%;
+.header .qcard {
+    @apply h-[100%];
+}
+
+.introduction {
+    @apply flex flex-col gap-[6px] justify-end;
+}
+
+.accentLabel {
+    @apply text-accent-foreground;
+}
+
+.introductionTitle {
+    @apply text-[18px] leading-[22px] font-medium tracking-[-.03em];
+}
+
+.evidenceHeading {
+    @apply flex gap-[8px] items-center;
+}
+
+.evidenceText {
+    @apply text-[14px] leading-[20px];
 }

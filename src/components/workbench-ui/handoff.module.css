@@ -1,25 +1,13 @@
+@reference "../../styles.css";
+
 .card {
-    width: 560px;
-    border-radius: var(--radius-3xl);
-    padding: 26px 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    background: var(--surface-float);
+    @apply w-[560px] rounded-(--radius-3xl) py-[26px] px-[28px] flex flex-col gap-[18px] bg-surface-float bg-none;
     -webkit-backdrop-filter: blur(var(--blur-glass));
     backdrop-filter: blur(var(--blur-glass));
     box-shadow: var(--shadow-focal);
 }
-.ok {
-    flex-shrink: 0;
-    width: 38px;
-    height: 38px;
-    border-radius: var(--radius-tile);
-    background: var(--foreground);
-    color: var(--card);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+.icon {
+    @apply shrink-0 w-[38px] h-[38px] rounded-(--radius-tile) bg-foreground bg-none text-card inline-flex items-center justify-center;
 }
 .ring {
     animation: ds-count 3s linear forwards;
@@ -37,16 +25,57 @@
         animation: none;
     }
 }
-.btn {
-    height: 38px;
-    padding: 0 12px;
-    border-radius: var(--radius-tile);
+.button {
+    @apply h-[38px] py-0 px-[12px] rounded-(--radius-tile);
     border: 0;
     font: inherit;
-    font-size: 13.5px;
-    font-weight: 500;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
+    @apply text-[13.5px] font-medium cursor-pointer inline-flex items-center;
     text-decoration: none;
+}
+
+.header {
+    @apply flex items-center gap-[12px];
+}
+
+.heading {
+    @apply flex-[1] flex flex-col gap-[2px];
+}
+
+.title {
+    @apply text-[17px];
+}
+
+.description {
+    @apply text-[13px] text-muted-foreground;
+}
+
+.actions {
+    @apply flex items-center gap-[16px] pt-[16px];
+}
+
+.countdown {
+    @apply relative shrink-0 w-[44px] h-[44px] inline-flex items-center justify-center;
+}
+
+.countdownTrack {
+    @apply absolute inset-0;
+    transform: rotate(-90deg);
+}
+
+.countdownValue {
+    @apply text-[16px];
+}
+
+.countdownLabel {
+    @apply text-[15px];
+}
+
+.stayAction {
+    @apply bg-transparent bg-none text-foreground;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+
+.continueAction {
+    @apply py-0 px-[14px] bg-primary bg-none text-primary-foreground;
 }

@@ -98,31 +98,18 @@ export function EvidenceMatrix({
                         Source
                     </th>
                 </tr>
-                <tr className={cn(styles.grid, styles.head)} style={grid}>
-                    <th
-                        scope="col"
-                        style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 6,
-                            justifyContent: "flex-end",
-                        }}>
+                <tr className={cn(styles.grid, styles.header)} style={grid}>
+                    <th scope="col" className={styles.introduction}>
                         {introduction ?? (
                             <>
                                 <span
-                                    className="wb-label"
-                                    style={{
-                                        color: "var(--accent-foreground)",
-                                    }}>
+                                    className={cn(
+                                        "wb-label",
+                                        styles.accentLabel,
+                                    )}>
                                     {"// Inventory"}
                                 </span>
-                                <span
-                                    style={{
-                                        fontSize: 18,
-                                        lineHeight: "22px",
-                                        fontWeight: 500,
-                                        letterSpacing: "-.03em",
-                                    }}>
+                                <span className={styles.introductionTitle}>
                                     Which evidence bears on which question
                                 </span>
                             </>
@@ -146,12 +133,15 @@ export function EvidenceMatrix({
                                     }
                                     className={cn(
                                         styles.qcard,
-                                        q.id === selectedQuestion && styles.sel,
+                                        q.id === selectedQuestion &&
+                                            styles.selectedQuestion,
                                     )}
                                     onClick={() => onSelectQuestion(q.id)}
                                     aria-label={`${q.label} ${q.title}`}
                                     aria-pressed={q.id === selectedQuestion}>
-                                    <span className={styles.qw}>{q.label}</span>
+                                    <span className={styles.questionId}>
+                                        {q.label}
+                                    </span>
                                     {q.title}
                                 </Button>
                             ) : (
@@ -164,9 +154,12 @@ export function EvidenceMatrix({
                                     transition={selectionTransition}
                                     className={cn(
                                         styles.qcard,
-                                        q.id === selectedQuestion && styles.sel,
+                                        q.id === selectedQuestion &&
+                                            styles.selectedQuestion,
                                     )}>
-                                    <span className={styles.qw}>{q.label}</span>
+                                    <span className={styles.questionId}>
+                                        {q.label}
+                                    </span>
                                     {q.title}
                                 </motion.span>
                             )}
@@ -199,31 +192,25 @@ export function EvidenceMatrix({
                                     styles.selectedRow,
                             )}
                             style={grid}>
-                            <th scope="row" className={styles.ev}>
-                                <span
-                                    style={{
-                                        display: "flex",
-                                        gap: 8,
-                                        alignItems: "center",
-                                    }}>
+                            <th scope="row" className={styles.evidence}>
+                                <span className={styles.evidenceHeading}>
                                     <EvidenceBadge kind={r.kind}>
                                         {r.kind === "counter"
                                             ? "Counter"
                                             : undefined}
                                     </EvidenceBadge>
                                     <span
-                                        className={cn("wb-meta", styles.meta)}>
+                                        className={cn(
+                                            "wb-meta",
+                                            styles.metadata,
+                                        )}>
                                         {r.id}
                                         {r.id === selectedAssertion
                                             ? " · selected"
                                             : ""}
                                     </span>
                                 </span>
-                                <span
-                                    style={{
-                                        fontSize: 14,
-                                        lineHeight: "20px",
-                                    }}>
+                                <span className={styles.evidenceText}>
                                     {r.text}
                                 </span>
                                 <span className="wb-meta">{r.meta}</span>
@@ -339,9 +326,12 @@ export function EvidenceMatrix({
                                             <span
                                                 className={cn(
                                                     styles.use,
-                                                    styles["u-n"],
+                                                    styles.useCount,
                                                 )}>
-                                                <span className={styles.sr}>
+                                                <span
+                                                    className={
+                                                        styles.sourceResult
+                                                    }>
                                                     Not used
                                                 </span>
                                             </span>

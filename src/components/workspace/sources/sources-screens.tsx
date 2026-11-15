@@ -3,13 +3,7 @@ import {
     Cancel01Icon,
     Search01Icon,
 } from "@hugeicons/core-free-icons";
-import {
-    type CSSProperties,
-    type ReactNode,
-    useEffect,
-    useRef,
-    useState,
-} from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import Icon from "@/components/icon";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Badge } from "@/components/ui/badge";
@@ -971,14 +965,7 @@ export function SourcesReaderScreen({
                         <DrawerContent
                             aria-label={document.title}
                             finalFocus={opener}
-                            className={styles.drawer}
-                            style={
-                                {
-                                    "--drawer-height": "calc(100dvh - 2.5rem)",
-                                    "--drawer-content-max-height":
-                                        "calc(100dvh - 2.5rem)",
-                                } as CSSProperties
-                            }>
+                            className={styles.drawer}>
                             <WorkbenchUiRoot className={styles.drawerBody}>
                                 <SourceReader
                                     key={selectedId}

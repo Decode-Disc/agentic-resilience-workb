@@ -1,106 +1,113 @@
+@reference "../../styles.css";
+
 .wrap {
-    display: grid;
-    gap: 14px;
-    max-width: 760px;
+    @apply grid gap-[14px] max-w-[760px];
 }
-.stp {
-    border-radius: var(--radius-xl);
-    padding: 18px 26px 16px;
-    position: relative;
+.timeline {
+    @apply rounded-(--radius-xl) pt-[18px] px-[26px] pb-[16px] relative;
 }
 .track,
 .fill {
-    position: absolute;
+    @apply absolute;
     left: calc(26px + 10%);
-    top: 33px;
-    height: 3px;
-    border-radius: 2px;
+    @apply top-[33px] h-[3px] rounded-[2px];
 }
 .track {
     right: calc(26px + 10%);
-    background: color-mix(in oklab, var(--foreground) 9%, transparent);
+    @apply bg-foreground/9 bg-none;
 }
 .fill {
     width: calc((100% - 52px) * 0.4);
     background: linear-gradient(90deg, var(--foreground), var(--brand-purple));
 }
 .steps {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    text-align: center;
+    @apply relative grid grid-cols-5 text-center;
 }
-.st {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
+.step {
+    @apply flex flex-col items-center gap-[8px];
 }
-.sl {
-    font-size: 13px;
-    font-weight: 500;
+.stepLabel {
+    @apply text-[13px] font-medium;
 }
 .dot {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-full);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    @apply w-[32px] h-[32px] rounded-(--radius-full) inline-flex items-center justify-center;
 }
 .done {
-    background: var(--foreground);
-    color: var(--card);
+    @apply bg-foreground bg-none text-card;
 }
 .now {
-    background: var(--card);
+    @apply bg-card bg-none;
     border: 2px solid var(--brand-purple);
 }
 .now i {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--brand-purple);
+    @apply w-[10px] h-[10px] rounded-[50%] bg-brand-purple bg-none;
 }
 .todo {
-    background: var(--card);
+    @apply bg-card bg-none;
     border: 1.5px solid color-mix(in oklab, var(--foreground) 18%, transparent);
 }
-.inq {
-    border-radius: var(--radius-2xl);
-    padding: 20px 26px;
-    display: flex;
-    flex-direction: column;
+.inquiries {
+    @apply rounded-(--radius-2xl) py-[20px] px-[26px] flex flex-col;
 }
-.hd {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 10px;
+.header {
+    @apply flex justify-between items-center pb-[10px];
 }
-.q {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 12px 0;
+.question {
+    @apply flex items-center gap-[14px] py-[12px] px-0;
 }
-.qw {
-    flex-shrink: 0;
-    width: 34px;
-    height: 34px;
-    border-radius: var(--radius-tile);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    font-weight: 500;
+.questionId {
+    @apply shrink-0 w-[34px] h-[34px] rounded-(--radius-tile) inline-flex items-center justify-center font-mono text-[12px] font-medium;
 }
-.bal {
-    display: flex;
-    height: 5px;
-    width: 240px;
-    border-radius: 3px;
-    overflow: hidden;
-    gap: 2px;
+.balance {
+    @apply flex h-[5px] w-[240px] rounded-[3px] overflow-hidden gap-[2px];
+}
+
+.currentLabel {
+    @apply font-semibold text-accent-foreground;
+}
+
+.upcomingLabel {
+    @apply text-muted-foreground font-normal;
+}
+
+.heading {
+    @apply flex items-center gap-[10px];
+}
+
+.title {
+    @apply text-[17px] tracking-[-.02em];
+}
+
+.currentQuestion {
+    @apply bg-accent bg-none text-accent-foreground;
+}
+
+.defaultQuestion {
+    @apply bg-foreground bg-none text-card;
+}
+
+.questionText {
+    @apply flex-[1] flex flex-col gap-[7px];
+}
+
+.questionLabel {
+    @apply text-[14.5px] font-medium;
+}
+
+.pendingBalance {
+    @apply w-[160px];
+}
+
+.sweep {
+    @apply flex-[1];
+}
+
+.balanceSegment:nth-child(1) {
+    @apply bg-foreground bg-none;
+}
+.balanceSegment:nth-child(2) {
+    @apply bg-counter-evidence bg-none;
+}
+.balanceSegment:nth-child(3) {
+    @apply bg-foreground/18 bg-none;
 }

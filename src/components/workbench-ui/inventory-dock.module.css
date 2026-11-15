@@ -1,75 +1,86 @@
-.grid {
-    display: flex;
-    gap: 24px;
-    align-items: flex-end;
-    flex-wrap: wrap;
-}
-.cmp {
-    width: var(--dock-width);
-    padding: 10px 10px 10px 16px;
-    border-radius: var(--radius-xl);
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    color: var(--foreground);
+@reference "../../styles.css";
+.compact {
+    @apply w-(--dock-width) pt-[10px] pr-[10px] pb-[10px] pl-[16px] rounded-(--radius-xl) flex items-center gap-[14px] text-foreground;
     text-decoration: none;
 }
-.exp {
-    width: var(--side-column);
-    padding: 18px;
-    border-radius: var(--radius-2xl);
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    color: var(--foreground);
+.expanded {
+    @apply w-(--side-column) p-[18px] rounded-(--radius-2xl) flex flex-col gap-[14px] text-foreground;
     text-decoration: none;
 }
-.lgs {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px 14px;
-    font-size: 12px;
-    color: var(--muted-foreground);
+.legend {
+    @apply grid grid-cols-2 gap-y-[5px] gap-x-[14px] text-[12px] text-muted-foreground;
 }
-.lg {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+.legendItem {
+    @apply flex items-center gap-[6px];
 }
-.lg b {
-    margin-left: auto;
-    color: var(--foreground);
-    font-weight: 500;
+.legendItem b {
+    @apply ml-auto text-foreground font-medium;
 }
-.ico {
-    flex-shrink: 0;
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-tile);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--fill-quiet);
+.icon {
+    @apply shrink-0 w-[36px] h-[36px] rounded-(--radius-tile) inline-flex items-center justify-center bg-fill-quiet bg-none;
 }
-.chg {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12.5px;
+.change {
+    @apply flex items-center gap-[8px] text-[12.5px];
 }
-.exp,
-.cmp {
+.expanded,
+.compact {
     border: 0;
-    text-align: left;
-    white-space: normal;
+    @apply text-left whitespace-normal;
     font: inherit;
-    background: var(--surface-float);
+    @apply bg-surface-float bg-none;
 }
-.exp {
-    align-items: stretch;
+.expanded {
+    @apply items-stretch;
 }
-.exp,
-.cmp {
-    height: auto;
-    justify-content: initial;
+.expanded,
+.compact {
+    @apply h-auto justify-normal;
+}
+
+.compactBadge {
+    @apply ml-auto py-[1px] px-[6px];
+}
+
+.statusDot {
+    @apply w-[5px] h-[5px];
+}
+
+.expandedTrigger {
+    @apply ml-auto w-[30px] h-[30px];
+}
+
+.header {
+    @apply flex items-center gap-[8px];
+}
+
+.total {
+    @apply flex items-baseline gap-[8px];
+}
+
+.totalValue {
+    @apply text-[36px] leading-[36px] font-medium tracking-[-.045em];
+}
+
+.totalLabel {
+    @apply text-[13px] text-muted-foreground;
+}
+
+.changes {
+    @apply flex flex-col gap-[7px] pt-[12px];
+}
+
+.changeText {
+    @apply flex-[1] min-w-[0] flex flex-col gap-[7px];
+}
+
+.changeLabel {
+    @apply text-[10.5px];
+}
+
+.changeTitle {
+    @apply text-[16px] tracking-[-.02em];
+}
+
+.changeDetail {
+    @apply text-[12px] text-muted-foreground;
 }

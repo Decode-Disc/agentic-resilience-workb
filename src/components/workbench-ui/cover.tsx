@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import lightMark from "@/assets/logos/logo.png";
 import darkMark from "@/assets/logos/logo-bgdark.png";
@@ -29,34 +30,22 @@ export function Cover({
         <div className={styles.cover}>
             <div className={styles.left}>
                 <img
-                    className={styles.mark}
-                    style={{ display: "var(--wb-mark-light-display)" }}
+                    className={cn(styles.mark, styles.lightMark)}
                     src={lightMark}
                     alt=""
                 />
                 <img
-                    className={styles.mark}
-                    style={{
-                        display: "var(--wb-mark-dark-display)",
-                        borderRadius: 12,
-                    }}
+                    className={cn(styles.mark, styles.darkMark)}
                     src={darkMark}
                     alt=""
                 />
                 <Chip>{section}</Chip>
                 <h1>{title}</h1>
-                <span className={styles.sub}>{subtitle}</span>
+                <span className={styles.subtitle}>{subtitle}</span>
             </div>
             <div className={styles.card}>
-                <span
-                    style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                    }}>
-                    <span
-                        className="wb-label"
-                        style={{ color: "var(--accent-foreground)" }}>
+                <span className={styles.cardHeader}>
+                    <span className={cn("wb-label", styles.accentLabel)}>
                         {appraisalLabel}
                     </span>
                     {status ?? (
@@ -65,7 +54,7 @@ export function Cover({
                                 width="7"
                                 height="7"
                                 viewBox="0 0 10 10"
-                                style={{ width: 7, height: 7 }}
+                                className={styles.statusDot}
                                 aria-hidden="true">
                                 <circle
                                     cx="5"
@@ -79,18 +68,12 @@ export function Cover({
                     )}
                 </span>
                 <span className={styles.reading}>{reading}</span>
-                <span className={styles.bal}>
+                <span className={styles.balance}>
                     {balance.map((value, i) => (
                         <span
                             key={["support", "oppose", "context"][i]}
-                            style={{
-                                flex: value,
-                                background: [
-                                    "var(--foreground)",
-                                    "var(--counter-evidence)",
-                                    "color-mix(in oklab,var(--foreground) 18%,transparent)",
-                                ][i],
-                            }}
+                            className={styles.balanceSegment}
+                            style={{ flex: value }}
                         />
                     ))}
                 </span>

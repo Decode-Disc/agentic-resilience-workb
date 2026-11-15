@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { WorkbenchIcon } from "./glyphs";
 import styles from "./sourcing-lane.module.css";
 export interface SourcingDocument {
@@ -27,33 +28,14 @@ export function SourcingLane({
 }: SourcingLaneProps) {
     const running = active;
     return (
-        <div
-            className={styles.lane}
-            style={
-                running
-                    ? {
-                          background:
-                              "color-mix(in oklab,var(--brand-purple) 6%,transparent)",
-                          boxShadow:
-                              "inset 0 0 0 1px color-mix(in oklab,var(--brand-purple) 22%,transparent)",
-                      }
-                    : undefined
-            }>
+        <div className={cn(styles.lane, running ? styles.running : undefined)}>
             <span
-                className={styles.lh}
-                style={
-                    running ? { color: "var(--accent-foreground)" } : undefined
-                }>
+                className={cn(
+                    styles.header,
+                    running ? styles.runningHeader : undefined,
+                )}>
                 {running ? (
-                    <span
-                        className="wb-live"
-                        style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            background: "var(--brand-purple)",
-                        }}
-                    />
+                    <span className={cn("wb-live", styles.liveDot)} />
                 ) : (
                     <WorkbenchIcon
                         name={
@@ -71,41 +53,27 @@ export function SourcingLane({
                 <span className="wb-meta">{count}</span>
             </span>
             {!documents.length && emptyMessage && (
-                <p className="wb-meta" style={{ padding: 4 }}>
-                    {emptyMessage}
-                </p>
+                <p className={cn("wb-meta", styles.metadata)}>{emptyMessage}</p>
             )}
             {documents.map((d) => (
                 <span
                     key={d.id}
-                    className={styles.sc}
-                    style={
-                        d.fresh
-                            ? {
-                                  boxShadow:
-                                      "0 0 0 1px color-mix(in oklab,var(--brand-purple) 35%,transparent),var(--shadow-raised)",
-                              }
-                            : undefined
-                    }>
+                    className={cn(
+                        styles.source,
+                        d.fresh ? styles.freshDocument : undefined,
+                    )}>
                     <span className="wb-doc">{d.format}</span>
-                    <span className={styles.ct}>
+                    <span className={styles.sourceText}>
                         <b>{d.title}</b>
                         <span className="wb-meta">{d.meta}</span>
                     </span>
                     {running && (
-                        <span
-                            className="wb-sweep"
-                            style={{
-                                position: "absolute",
-                                inset: 0,
-                                display: "block",
-                            }}
-                        />
+                        <span className={cn("wb-sweep", styles.captureSweep)} />
                     )}
                 </span>
             ))}
             {remainingLabel && (
-                <span className="wb-meta" style={{ padding: 4 }}>
+                <span className={cn("wb-meta", styles.metadata)}>
                     {remainingLabel}
                 </span>
             )}

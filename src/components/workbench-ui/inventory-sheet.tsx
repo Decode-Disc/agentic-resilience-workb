@@ -59,9 +59,9 @@ export function InventorySheet({
                 container={portalContainer}
                 render={<WorkbenchUiRoot />}
                 overlayClassName={styles.dim}
+                className={styles.portalPosition}
                 style={{
                     position: portalContainer ? "absolute" : "fixed",
-                    inset: 0,
                     zIndex: portalContainer ? undefined : 50,
                 }}>
                 <DialogContent
@@ -69,28 +69,12 @@ export function InventorySheet({
                     className={styles.sheet}
                     aria-describedby={undefined}>
                     <div className={styles.top}>
-                        <span
-                            className={styles.heading}
-                            style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 6,
-                            }}>
+                        <span className={cn(styles.heading, styles.heading)}>
                             <span
-                                className="wb-label"
-                                style={{
-                                    color: "var(--accent-foreground)",
-                                }}>
+                                className={cn("wb-label", styles.accentLabel)}>
                                 {`// Inventory · ${total} controlled assertions`}
                             </span>
-                            <DialogTitle
-                                style={{
-                                    fontSize: 22,
-                                    lineHeight: "26px",
-                                    fontWeight: 500,
-                                    letterSpacing: "-.035em",
-                                    margin: 0,
-                                }}>
+                            <DialogTitle className={styles.title}>
                                 Which evidence bears on which question
                             </DialogTitle>
                         </span>
@@ -109,7 +93,7 @@ export function InventorySheet({
                             />
                         </label>
                         <DialogClose
-                            render={<Button className={styles.coll} />}>
+                            render={<Button className={styles.collapse} />}>
                             <WorkbenchIcon
                                 name="collapse"
                                 size={14}
@@ -120,16 +104,15 @@ export function InventorySheet({
                     </div>
                     <div className={styles.bar}>
                         <fieldset
-                            className={styles.seg}
-                            aria-label="Assertion class"
-                            style={{ margin: 0, border: 0 }}>
+                            className={cn(styles.filters, styles.filterGroup)}
+                            aria-label="Assertion class">
                             {filters.map((f) => (
                                 <Button
                                     key={f.id}
                                     className={cn(
-                                        styles.flt,
+                                        styles.filter,
                                         selectedFilter === f.id &&
-                                            styles["flt-on"],
+                                            styles.activeFilter,
                                     )}
                                     aria-pressed={selectedFilter === f.id}
                                     onClick={() => onFilterChange(f.id)}>
@@ -138,33 +121,20 @@ export function InventorySheet({
                                 </Button>
                             ))}
                         </fieldset>
-                        <label
-                            style={{
-                                marginLeft: "auto",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 8,
-                                fontSize: 13,
-                                fontWeight: 500,
-                            }}>
+                        <label className={styles.sort}>
                             <input
                                 type="checkbox"
                                 checked={recentFirst}
                                 onChange={(e) =>
                                     onRecentFirstChange(e.target.checked)
                                 }
-                                style={{
-                                    width: 16,
-                                    height: 16,
-                                    margin: 0,
-                                    accentColor: "var(--brand-purple)",
-                                }}
+                                className={styles.sortInput}
                             />
                             Changed recently first
                         </label>
                     </div>
                     <div className={styles.content}>{children}</div>
-                    {footer && <div className={styles.foot}>{footer}</div>}
+                    {footer && <div className={styles.footer}>{footer}</div>}
                 </DialogContent>
             </DialogContainer>
         </LinearDialog>
@@ -183,26 +153,16 @@ export function InventoryUse({
 }) {
     return (
         <Button
-            className={styles.use}
-            onClick={onSelect}
-            style={
-                selected
-                    ? {
-                          boxShadow:
-                              "0 0 0 1px color-mix(in oklab,var(--brand-purple) 35%,transparent)",
-                      }
-                    : undefined
-            }>
+            className={cn(
+                styles.use,
+                selected ? styles.selectedUse : undefined,
+            )}
+            onClick={onSelect}>
             <span
-                className={styles.qw}
-                style={
-                    selected
-                        ? {
-                              background: "var(--primary)",
-                              color: "var(--primary-foreground)",
-                          }
-                        : undefined
-                }>
+                className={cn(
+                    styles.questionId,
+                    selected ? styles.selectedQuestionId : undefined,
+                )}>
                 {question}
             </span>
             {children}

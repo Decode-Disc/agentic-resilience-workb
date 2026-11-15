@@ -350,7 +350,7 @@ export function StartResearchScreen({
                     <ResizableHandle
                         withHandle
                         disabled={compact}
-                        style={compact ? { display: "none" } : undefined}
+                        className={compact ? styles.compactHandle : undefined}
                         aria-label="Resize conversation and progress"
                     />
                     <ResizablePanel

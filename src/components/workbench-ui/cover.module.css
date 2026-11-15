@@ -1,14 +1,7 @@
+@reference "../../styles.css";
+
 .cover {
-    position: relative;
-    width: 960px;
-    height: 336px;
-    overflow: hidden;
-    box-sizing: border-box;
-    padding: 40px 48px;
-    display: flex;
-    gap: 40px;
-    align-items: center;
-    background-color: var(--background);
+    @apply relative w-[960px] h-[336px] overflow-hidden box-border py-[40px] px-[48px] flex gap-[40px] items-center bg-background;
     background-image:
         radial-gradient(
             ellipse 36% 46% at 74% 50%,
@@ -23,48 +16,19 @@
         var(--grid-pitch) var(--grid-pitch);
 }
 .left {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    align-items: flex-start;
+    @apply flex-[1] flex flex-col gap-[18px] items-start;
 }
 .mark {
-    width: 52px;
-    height: 52px;
-    display: block;
-}
-.mark-dark {
-    display: none;
-    border-radius: 12px;
-}
-[data-theme="dark"] .mark-light {
-    display: none;
-}
-[data-theme="dark"] .mark-dark {
-    display: block;
+    @apply w-[52px] h-[52px] block;
 }
 .cover h1 {
-    margin: 0;
-    font-size: 40px;
-    line-height: 44px;
-    font-weight: 500;
-    letter-spacing: -0.04em;
+    @apply m-[0] text-[40px] leading-[44px] font-medium tracking-[-0.04em];
 }
-.sub {
-    font-size: 15px;
-    line-height: 22px;
-    color: var(--muted-foreground);
-    max-width: 400px;
+.subtitle {
+    @apply text-[15px] leading-[22px] text-muted-foreground max-w-[400px];
 }
 .card {
-    width: 360px;
-    box-sizing: border-box;
-    border-radius: var(--radius-3xl);
-    padding: 22px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
+    @apply w-[360px] box-border rounded-(--radius-3xl) py-[22px] px-[24px] flex flex-col gap-[14px];
     background: linear-gradient(
         170deg,
         var(--tint-violet),
@@ -75,20 +39,42 @@
     box-shadow: var(--shadow-focal);
 }
 .reading {
-    font-size: 18px;
-    line-height: 25px;
-    font-weight: 500;
-    letter-spacing: -0.02em;
+    @apply text-[18px] leading-[25px] font-medium tracking-[-0.02em];
 }
 .row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    @apply flex flex-wrap gap-[8px];
 }
-.bal {
-    display: flex;
-    height: 7px;
-    border-radius: 4px;
-    overflow: hidden;
-    gap: 2px;
+.balance {
+    @apply flex h-[7px] rounded-[4px] overflow-hidden gap-[2px];
+}
+
+.lightMark {
+    display: var(--wb-mark-light-display);
+}
+
+.darkMark {
+    display: var(--wb-mark-dark-display);
+    @apply rounded-[12px];
+}
+
+.cardHeader {
+    @apply flex justify-between items-center;
+}
+
+.accentLabel {
+    @apply text-accent-foreground;
+}
+
+.statusDot {
+    @apply w-[7px] h-[7px];
+}
+
+.balanceSegment:nth-child(1) {
+    @apply bg-foreground bg-none;
+}
+.balanceSegment:nth-child(2) {
+    @apply bg-counter-evidence bg-none;
+}
+.balanceSegment:nth-child(3) {
+    @apply bg-foreground/18 bg-none;
 }

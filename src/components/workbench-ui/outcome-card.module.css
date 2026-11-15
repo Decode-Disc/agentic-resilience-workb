@@ -1,76 +1,55 @@
-.grid {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
-    gap: 14px;
-}
-.col {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-.two {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-}
-.o {
+@reference "../../styles.css";
+.outcome {
     --outcome-color: var(--brand-purple);
-    border-radius: var(--radius-xl);
-    padding: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    @apply rounded-(--radius-xl) p-[18px] flex flex-col gap-[12px];
     background: color-mix(in oklab, var(--outcome-color) 7%, var(--card));
 }
-.o[data-outcome="insufficiency"] {
+.outcome[data-outcome="insufficiency"] {
     --outcome-color: var(--outcome-insufficiency);
 }
-.o[data-outcome="limited"] {
+.outcome[data-outcome="limited"] {
     --outcome-color: var(--outcome-limited);
 }
-.o[data-outcome="non-establishment"] {
+.outcome[data-outcome="non-establishment"] {
     --outcome-color: var(--outcome-non-establishment);
 }
-.o[data-outcome="pending"] {
+.outcome[data-outcome="pending"] {
     --outcome-color: var(--review-foreground);
 }
-.o[data-outcome="no-retained"] {
+.outcome[data-outcome="no-retained"] {
     --outcome-color: var(--outcome-no-retained);
 }
-.o[data-outcome="unfinished"] {
+.outcome[data-outcome="unfinished"] {
     --outcome-color: var(--outcome-unfinished);
 }
-.o[data-outcome="interruption"] {
+.outcome[data-outcome="interruption"] {
     --outcome-color: var(--outcome-interruption);
 }
-.o[data-outcome="unfinished"],
-.o[data-outcome="interruption"] {
+.outcome[data-outcome="unfinished"],
+.outcome[data-outcome="interruption"] {
     border-color: color-mix(in oklab, var(--outcome-color) 65%, transparent);
 }
 .well {
-    color: var(--outcome-color);
+    @apply text-(color:--outcome-color);
     background: color-mix(in oklab, var(--outcome-color) 14%, var(--card));
 }
-.o[data-outcome="unfinished"] .well,
-.o[data-outcome="interruption"] .well {
+.outcome[data-outcome="unfinished"] .well,
+.outcome[data-outcome="interruption"] .well {
     border: 1.5px dashed currentColor;
 }
-.d {
-    font-size: 13px;
-    line-height: 19px;
+.description {
+    @apply text-[13px] leading-[19px];
     color: color-mix(in oklab, var(--foreground) 80%, var(--outcome-color));
 }
-.fam {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+
+.header {
+    @apply flex items-center gap-[12px];
 }
-@media (max-width: 640px) {
-    .grid,
-    .two {
-        grid-template-columns: 1fr;
-    }
-    .grid {
-        gap: 24px;
-    }
+
+.outcomeGlyph {
+    @apply w-[14px] h-[14px];
+}
+
+.title {
+    @apply text-[15px];
 }

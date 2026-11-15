@@ -1,201 +1,122 @@
+@reference "../../styles.css";
+
 .wrap {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
-    gap: 16px;
-    max-width: 1000px;
+    @apply grid grid-cols-[minmax(0,_1fr)_300px] gap-[16px] max-w-[1000px];
 }
 .main {
-    border-radius: var(--radius-2xl);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    @apply rounded-(--radius-2xl) overflow-hidden flex flex-col;
 }
-.hd {
-    padding: 18px 22px 16px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
+.header {
+    @apply pt-[18px] px-[22px] pb-[16px] flex items-center gap-[14px];
     border-bottom: 1px solid var(--divider);
 }
-.hdTitle {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
+.headerTitle {
+    @apply flex-[1] flex flex-col gap-[4px] min-w-[0];
 }
-.hdTitleRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+.headerTitleRow {
+    @apply flex items-center justify-between gap-[12px];
 }
-.ib {
-    width: 32px;
-    height: 32px;
-    border-radius: 9px;
+.iconButton {
+    @apply w-[32px] h-[32px] rounded-[9px];
     border: 0;
-    background: transparent;
+    @apply bg-transparent bg-none;
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--foreground) 14%, transparent);
-    color: var(--foreground);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
+    @apply text-foreground inline-flex items-center justify-center cursor-pointer;
 }
 .desk {
-    padding: 24px 24px 0;
-    background: color-mix(in oklab, var(--foreground) 3%, transparent);
+    @apply pt-[24px] px-[24px] pb-0 bg-foreground/3 bg-none;
 }
 .page {
-    position: relative;
-    margin-left: 130px;
-    max-width: 440px;
-    padding: 28px 32px 36px;
-    background: var(--card);
+    @apply relative ml-[130px] max-w-[440px] pt-[28px] px-[32px] pb-[36px] bg-card bg-none;
     border-radius: 6px 6px 0 0;
     box-shadow:
         0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent),
         0 20px 40px -24px
         color-mix(in oklab, var(--foreground) 35%, transparent);
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    @apply flex flex-col gap-[16px];
 }
-.para {
-    position: relative;
-    margin: 0;
-    font-size: 15.5px;
-    line-height: 27px;
+.passage {
+    @apply relative m-[0] text-[15.5px] leading-[27px];
 }
 .mark {
-    position: absolute;
-    left: -162px;
-    top: 3px;
-    width: 124px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
-    text-align: right;
+    @apply absolute left-[-162px] top-[3px] w-[124px] flex flex-col items-end gap-[4px] text-right;
 }
 .side {
-    border-radius: var(--radius-2xl);
-    padding: 20px 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    @apply rounded-(--radius-2xl) py-[20px] px-[22px] flex flex-col gap-[6px];
 }
-.contrib {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 14px 0;
+.contributions {
+    @apply flex flex-col gap-[8px] py-[14px] px-0;
     border-top: 1px solid var(--divider);
 }
-.contribLink {
+.contributionLink {
     all: unset;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin: 0 -10px;
-    padding: 14px 10px;
+    @apply box-border flex flex-col gap-[8px] my-0 -mx-[10px] py-[14px] px-[10px];
     border-top: 1px solid var(--divider);
-    border-radius: 12px;
-    cursor: pointer;
+    @apply rounded-[12px] cursor-pointer;
     transition:
         background-color 0.15s ease-out,
         box-shadow 0.15s ease-out;
 }
-.contribLink:hover {
-    background: color-mix(in oklab, var(--foreground) 3.5%, transparent);
+.contributionLink:hover {
+    @apply bg-foreground/[3.5%] bg-none;
 }
-.contribLink:focus-visible {
+.contributionLink:focus-visible {
     outline: 2px solid var(--ring);
-    outline-offset: -2px;
+    @apply -outline-offset-[2px];
 }
-.contribLink[aria-current="true"] {
-    background: color-mix(in oklab, var(--brand-purple) 8%, transparent);
+.contributionLink[aria-current="true"] {
+    @apply bg-brand-purple/8 bg-none;
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--brand-purple) 30%, transparent);
 }
-.contribHead {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px 8px;
+.contributionHeader {
+    @apply flex items-center flex-wrap gap-y-[6px] gap-x-[8px];
 }
-.contribText {
-    font-size: 13.5px;
-    line-height: 19px;
+.contributionText {
+    @apply text-[13.5px] leading-[19px];
 }
-.contribNote {
-    font-size: 12.5px;
-    line-height: 17px;
-    color: var(--muted-foreground);
+.contributionNote {
+    @apply text-[12.5px] leading-[17px] text-muted-foreground;
 }
-.contribGo {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12.5px;
-    font-weight: 500;
-    color: var(--accent-foreground);
-    opacity: 0;
+.contributionAction {
+    @apply inline-flex items-center gap-[4px] text-[12.5px] font-medium text-accent-foreground opacity-0;
     transition: opacity 0.15s ease-out;
 }
-.contribLink:hover .contribGo,
-.contribLink:focus-visible .contribGo,
-.contribLink[aria-current="true"] .contribGo {
-    opacity: 1;
+.contributionLink:hover .contributionAction,
+.contributionLink:focus-visible .contributionAction,
+.contributionLink[aria-current="true"] .contributionAction {
+    @apply opacity-[1];
 }
 @media (hover: none) {
-    .contribGo {
-        opacity: 1;
+    .contributionAction {
+        @apply opacity-[1];
     }
 }
 .sideHead {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding-bottom: 8px;
+    @apply flex flex-col gap-[4px] pb-[8px];
 }
 .questions {
-    margin: 0;
+    @apply m-[0];
     border: 0;
-    min-width: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding-bottom: 6px;
+    @apply min-w-[0] flex flex-wrap gap-[6px] pb-[6px];
 }
 .question {
     all: unset;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 999px;
-    font-size: 12.5px;
-    font-weight: 500;
-    color: var(--muted-foreground);
+    @apply inline-flex items-center gap-[6px] h-[28px] py-0 px-[10px] rounded-[999px] text-[12.5px] font-medium text-muted-foreground;
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--foreground) 12%, transparent);
-    cursor: pointer;
+    @apply cursor-pointer;
 }
 .question:hover {
-    color: var(--foreground);
+    @apply text-foreground;
 }
 .question:focus-visible {
     outline: 2px solid var(--ring);
-    outline-offset: 1px;
+    @apply outline-offset-[1px];
 }
 .question[aria-pressed="true"] {
-    color: var(--foreground);
-    background: var(--card);
+    @apply text-foreground bg-card bg-none;
     box-shadow:
         inset 0 0 0 1px
         color-mix(in oklab, var(--brand-purple) 45%, transparent),
@@ -203,27 +124,23 @@
         color-mix(in oklab, var(--brand-purple) 50%, transparent);
 }
 .questionCount {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--muted-foreground);
+    @apply font-mono text-[11px] text-muted-foreground;
 }
 .markLink {
     all: unset;
-    display: inline-flex;
-    border-radius: 6px;
-    cursor: pointer;
+    @apply inline-flex rounded-[6px] cursor-pointer;
 }
 .markLink:hover {
     filter: brightness(0.96);
 }
 .markLink:focus-visible {
     outline: 2px solid var(--ring);
-    outline-offset: 2px;
+    @apply outline-offset-[2px];
 }
-.para[data-passage-active] {
-    border-radius: 6px;
+.passage[data-passage-active] {
+    @apply rounded-[6px];
     outline: 2px solid color-mix(in oklab, var(--brand-purple) 50%, transparent);
-    outline-offset: 6px;
+    @apply outline-offset-[6px];
     animation: passage-arrive 0.9s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes passage-arrive {
@@ -233,141 +150,92 @@
     }
 }
 @media (prefers-reduced-motion: reduce) {
-    .para[data-passage-active] {
+    .passage[data-passage-active] {
         animation: none;
     }
 }
-.para {
-    scroll-margin: 96px;
+.passage {
+    @apply scroll-m-[96px];
 }
 .noPassages {
-    margin: 0;
-    padding: 12px 0;
-    font-size: 13.5px;
-    color: var(--muted-foreground);
+    @apply m-[0] py-[12px] px-0 text-[13.5px] text-muted-foreground;
 }
 .tabbed {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    min-height: 0;
+    @apply flex flex-col h-[100%] min-h-[0];
 }
-.tabbed .hd {
+.tabbed .header {
     border-bottom: 0;
-    padding: 14px 16px 12px 20px;
+    @apply pt-[14px] pr-[16px] pb-[12px] pl-[20px];
 }
 .tabs {
-    flex: 1;
-    min-height: 0;
-    gap: 0;
+    @apply flex-[1] min-h-[0] gap-[0];
 }
 .tabList {
-    margin: 0 20px 12px;
+    @apply mt-0 mx-[20px] mb-[12px];
     width: calc(100% - 40px);
 }
 .tabList > * {
-    flex: 1;
+    @apply flex-[1];
 }
 .tabScroll {
-    flex: 1;
-    min-height: 0;
+    @apply flex-[1] min-h-[0];
 }
 .tabViewport {
-    height: 100%;
-    overscroll-behavior: contain;
+    @apply h-[100%] overscroll-contain;
 }
 .tabbed .desk {
-    padding: 4px 16px 28px;
-    background: transparent;
+    @apply pt-[4px] px-[16px] pb-[28px] bg-transparent bg-none;
 }
 .tabbed .page {
-    margin-inline: auto;
-    max-width: 620px;
-    min-height: 0;
-    padding: 28px 28px 36px;
+    @apply mx-auto max-w-[620px] min-h-[0] pt-[28px] px-[28px] pb-[36px];
 }
 .tabbed .mark {
-    position: static;
-    width: auto;
-    flex-direction: row;
-    align-items: center;
-    margin-bottom: 6px;
-    text-align: left;
+    @apply static w-auto flex-row items-center mb-[6px] text-left;
 }
 .tabbedSide {
-    padding: 0 20px 24px;
-}
-.tabbedSide .sideBody {
-    max-width: 620px;
-    margin-inline: auto;
+    @apply pt-0 px-[20px] pb-[24px];
 }
 .tabActions {
-    flex-shrink: 0;
+    @apply shrink-0;
     padding: 14px 20px calc(16px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--divider);
-    background: var(--background);
+    @apply bg-background bg-none;
 }
 .tabActions > * {
-    max-width: 620px;
-    margin-inline: auto;
+    @apply max-w-[620px] mx-auto;
 }
 .sideBody {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    @apply flex flex-col gap-[10px];
+}
+.tabbedSide .sideBody {
+    @apply max-w-[620px] mx-auto;
 }
 .heading {
-    margin: 0;
-    font-size: 19px;
-    line-height: 24px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    @apply m-[0] text-[19px] leading-[24px] font-semibold tracking-[-0.02em];
 }
 .original {
-    height: 32px;
-    border-radius: 9px;
-    gap: 6px;
-    font-size: 13px;
+    @apply h-[32px] rounded-[9px] gap-[6px] text-[13px];
 }
 .links {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 12px;
+    @apply flex flex-col gap-[8px] pt-[12px];
     border-top: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent);
 }
 .links ul {
-    margin: 0;
-    padding: 0;
+    @apply m-[0] p-[0];
     list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    @apply flex flex-col gap-[8px];
 }
 .links li {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    color: var(--muted-foreground);
+    @apply flex items-center gap-[10px] text-[13px] text-muted-foreground;
 }
 .links li[data-captured] {
-    color: var(--foreground);
+    @apply text-foreground;
 }
 .actions {
-    margin-top: auto;
-    padding-top: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    @apply mt-auto pt-[12px] flex flex-col gap-[8px];
 }
 .fade {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 90px;
-    pointer-events: none;
+    @apply absolute left-[0] right-[0] bottom-[0] h-[90px] pointer-events-none;
     background: linear-gradient(
         180deg,
         transparent,
@@ -377,66 +245,90 @@
 
 /* Workspace geometry from the Sources reader reference. */
 .workspace {
-    grid-template-columns: 260px minmax(0, 1fr) 380px;
-    gap: 18px;
-    max-width: none;
+    @apply grid-cols-[260px_minmax(0,_1fr)_380px] gap-[18px] max-w-none;
 }
 .workspace .main {
-    border-radius: 22px;
+    @apply rounded-[22px];
 }
 .workspace .desk {
-    position: relative;
-    flex: 1;
-    padding: 26px 26px 0;
-    overflow: hidden;
+    @apply relative flex-[1] pt-[26px] px-[26px] pb-0 overflow-hidden;
 }
 .workspace .page {
-    margin-left: 150px;
-    max-width: 520px;
-    min-height: 640px;
-    padding: 34px 40px 60px;
-    gap: 18px;
+    @apply ml-[150px] max-w-[520px] min-h-[640px] pt-[34px] px-[40px] pb-[60px] gap-[18px];
 }
 .workspace .mark {
-    left: -142px;
-    width: 120px;
+    @apply left-[-142px] w-[120px];
 }
 .workspace .side {
-    border-radius: 22px;
-    gap: 14px;
+    @apply rounded-[22px] gap-[14px];
 }
 @media (max-width: 1180px) {
     .workspace {
-        grid-template-columns: minmax(0, 1fr);
+        @apply grid-cols-[minmax(0,_1fr)];
     }
 }
 @media (max-width: 760px) {
     .wrap {
-        grid-template-columns: minmax(0, 1fr);
+        @apply grid-cols-[minmax(0,_1fr)];
     }
-    .hd {
-        flex-wrap: wrap;
+    .header {
+        @apply flex-wrap;
     }
-    .hdTitle {
-        flex-basis: 100%;
+    .headerTitle {
+        @apply basis-[100%];
     }
     .desk,
     .workspace .desk {
-        padding: 16px 12px 0;
+        @apply pt-[16px] px-[12px] pb-0;
     }
     .page,
     .workspace .page {
-        margin-left: 0;
-        min-height: 0;
-        padding: 24px 20px 40px;
+        @apply ml-[0] min-h-[0] pt-[24px] px-[20px] pb-[40px];
     }
     .mark,
     .workspace .mark {
-        position: static;
-        width: auto;
-        flex-direction: row;
-        align-items: center;
-        margin-bottom: 6px;
-        text-align: left;
+        @apply static w-auto flex-row items-center mb-[6px] text-left;
     }
+}
+
+.title {
+    @apply text-[18px] tracking-[-.02em];
+}
+
+.headingText {
+    @apply text-foreground;
+}
+
+.pageNavigation {
+    @apply flex justify-between;
+}
+
+.quietPassage {
+    @apply text-muted-foreground;
+}
+
+.accentLabel {
+    @apply text-accent-foreground;
+}
+
+.contributionTitle {
+    @apply text-[16px] tracking-[-.02em];
+}
+
+.flexibleContent {
+    @apply flex-[1];
+}
+
+.selectedHighlight {
+    @apply bg-brand-purple/14 bg-none;
+    box-shadow: 0 2px 0 var(--brand-purple);
+    @apply py-[1px] px-[2px];
+}
+.conflictHighlight {
+    @apply bg-counter-evidence/11 bg-none;
+    box-shadow: 0 2px 0 var(--counter-evidence);
+    @apply py-[1px] px-[2px];
+}
+.projectionHighlight {
+    border-bottom: 2px dotted var(--evidence-hypothesis);
 }

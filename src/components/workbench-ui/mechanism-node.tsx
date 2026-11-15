@@ -76,8 +76,8 @@ export function MechanismRelations({
                 viewBox={`0 0 ${viewport.width} ${viewport.height}`}
                 preserveAspectRatio="none"
                 aria-hidden="true"
+                className={styles.relation}
                 style={{
-                    position: "absolute",
                     left: viewport.x,
                     top: viewport.y,
                     width: viewport.width,
@@ -86,10 +86,6 @@ export function MechanismRelations({
                     strokeWidth: r.strokeWidth ?? (r.uncertain ? 1.5 : 2),
                     strokeDasharray:
                         r.strokeDasharray ?? (r.uncertain ? "5 4" : undefined),
-                    strokeLinecap: "round",
-                    strokeLinejoin: "round",
-                    fill: "none",
-                    overflow: "visible",
                     filter: r.filter,
                 }}>
                 <defs>

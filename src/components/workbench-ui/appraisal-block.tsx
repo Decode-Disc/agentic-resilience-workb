@@ -28,11 +28,9 @@ export function AppraisalBlock({
     onRetain,
 }: AppraisalBlockProps) {
     return (
-        <article className={cn("wb-glass", "wb-focal", styles.art)}>
+        <article className={cn("wb-glass", "wb-focal", styles.appraisal)}>
             <div className={styles.header}>
-                <span
-                    className={cn("wb-label")}
-                    style={{ color: "var(--accent-foreground)" }}>
+                <span className={cn("wb-label", styles.accentLabel)}>
                     {label}
                 </span>
                 <Badge tone="review">
@@ -40,7 +38,7 @@ export function AppraisalBlock({
                         width="7"
                         height="7"
                         viewBox="0 0 10 10"
-                        style={{ width: 7, height: 7 }}
+                        className={styles.statusDot}
                         aria-hidden="true">
                         <circle
                             cx="5"
@@ -51,29 +49,13 @@ export function AppraisalBlock({
                     Proposed · for review
                 </Badge>
             </div>
-            <div className={cn(styles.interp)}>
-                <span
-                    className={cn("wb-label")}
-                    style={{ color: "var(--accent-foreground)" }}>
+            <div className={styles.interpretationPanel}>
+                <span className={cn("wb-label", styles.accentLabel)}>
                     Interpretation
                 </span>
-                <span
-                    style={{
-                        fontSize: "19px",
-                        lineHeight: "28px",
-                        fontWeight: "500",
-                        letterSpacing: "-.015em",
-                    }}>
-                    {interpretation}
-                </span>
-                <span
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "14px",
-                        flexWrap: "wrap",
-                    }}>
-                    <span className={cn("wb-label")}>Confidence</span>
+                <span className={styles.interpretation}>{interpretation}</span>
+                <span className={styles.confidence}>
+                    <span className="wb-label">Confidence</span>
                     <span
                         className={styles.bars}
                         role="img"
@@ -83,44 +65,34 @@ export function AppraisalBlock({
                                 key={level}
                                 className={
                                     level <= confidence.level
-                                        ? styles.on
+                                        ? styles.activeBar
                                         : undefined
                                 }
                             />
                         ))}
                     </span>
-                    <span
-                        style={{
-                            fontSize: "13px",
-                            color: "var(--muted-foreground)",
-                        }}>
+                    <span className={styles.confidenceDetail}>
                         {confidence.label}
                     </span>
                 </span>
             </div>
             <div>
-                <span
-                    className={cn("wb-label")}
-                    style={{ display: "block", paddingBottom: "6px" }}>
+                <span className={cn("wb-label", styles.sectionLabel)}>
                     Supports
                 </span>
-                <div className={cn(styles.row)}>
-                    <span
-                        style={{
-                            flex: "1",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "5px",
-                        }}>
-                        <span className={cn(styles.txt)}>{support.text}</span>
-                        <span className={cn("wb-meta")}>{support.meta}</span>
+                <div className={styles.row}>
+                    <span className={styles.evidenceText}>
+                        <span className={styles.evidenceTextGroup}>
+                            {support.text}
+                        </span>
+                        <span className="wb-meta">{support.meta}</span>
                     </span>
                     <Badge tone="fact">
                         <svg
                             width="7"
                             height="7"
                             viewBox="0 0 10 10"
-                            style={{ width: 7, height: 7 }}
+                            className={styles.statusDot}
                             aria-hidden="true">
                             <rect
                                 width="10"
@@ -133,28 +105,22 @@ export function AppraisalBlock({
                 </div>
             </div>
             <div>
-                <span
-                    className={cn("wb-label")}
-                    style={{ display: "block", paddingBottom: "6px" }}>
+                <span className={cn("wb-label", styles.sectionLabel)}>
                     Objections
                 </span>
-                <div className={cn(styles.row)}>
-                    <span
-                        style={{
-                            flex: "1",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "5px",
-                        }}>
-                        <span className={cn(styles.txt)}>{objection.text}</span>
-                        <span className={cn("wb-meta")}>{objection.meta}</span>
+                <div className={styles.row}>
+                    <span className={styles.evidenceText}>
+                        <span className={styles.evidenceTextGroup}>
+                            {objection.text}
+                        </span>
+                        <span className="wb-meta">{objection.meta}</span>
                     </span>
                     <Badge tone="counter">
                         <svg
                             width="8"
                             height="8"
                             viewBox="0 0 10 10"
-                            style={{ width: 8, height: 8 }}
+                            className={styles.claimGlyph}
                             aria-hidden="true">
                             <rect
                                 y="3.5"
@@ -167,26 +133,15 @@ export function AppraisalBlock({
                     </Badge>
                 </div>
             </div>
-            <div className={cn(styles.unk)}>
-                <span className={cn(styles.q)}>?</span>
-                <span
-                    style={{
-                        flex: "1",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "3px",
-                    }}>
-                    <span className={cn("wb-label")}>Decisive unknown</span>
-                    <span
-                        style={{
-                            fontSize: "16px",
-                            lineHeight: "22px",
-                            fontWeight: "500",
-                        }}>
+            <div className={styles.unknown}>
+                <span className={styles.unknownText}>?</span>
+                <span className={styles.controlText}>
+                    <span className="wb-label">Decisive unknown</span>
+                    <span className={styles.controlTitle}>
                         {decisiveUnknown}
                     </span>
                 </span>
-                <span className={cn("wb-meta")} style={{ textAlign: "right" }}>
+                <span className={cn("wb-meta", styles.controlStatus)}>
                     would move
                     <br />
                     confidence most
@@ -202,7 +157,7 @@ export function AppraisalBlock({
                         />
                         Control · Supported
                     </Badge>
-                    <span className={cn("wb-meta")}>{controlDetail}</span>
+                    <span className="wb-meta">{controlDetail}</span>
                 </div>
                 <div className={styles.actions}>
                     <Button variant="outline" size="lg" onClick={onCorrect}>

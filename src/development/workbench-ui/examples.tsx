@@ -48,26 +48,14 @@ function notify(message: string) {
     );
 }
 
-import BriefReferenceStyles from "@/components/workbench-ui/brief-reference.module.css";
-import ChipStyles from "@/components/workbench-ui/chip.module.css";
-import ControlConclusionStyles from "@/components/workbench-ui/control-conclusion.module.css";
-import GlassPanelStyles from "@/components/workbench-ui/glass-panel.module.css";
-import HypothesisNodeStyles from "@/components/workbench-ui/hypothesis-node.module.css";
-import InventoryDockStyles from "@/components/workbench-ui/inventory-dock.module.css";
-import OutcomeCardStyles from "@/components/workbench-ui/outcome-card.module.css";
-import QuestionCardStyles from "@/components/workbench-ui/question-card.module.css";
-import RequestItemStyles from "@/components/workbench-ui/request-item.module.css";
-import SourcingLaneStyles from "@/components/workbench-ui/sourcing-lane.module.css";
-import WorkCardStyles from "@/components/workbench-ui/work-card.module.css";
 import BadgeStyles from "./badge-example.module.css";
 import ButtonStyles from "./button-example.module.css";
 import MechanismNodeStyles from "./mechanism-example.module.css";
 
 function ChipExample() {
-    const styles = ChipStyles;
     return (
-        <div className={styles.wrap}>
-            <div className={styles.row}>
+        <div className="grid gap-[14px]">
+            <div className="flex flex-wrap items-center gap-[10px]">
                 {[
                     "// 01 · States",
                     "// Investigation · review",
@@ -76,7 +64,7 @@ function ChipExample() {
                     <Chip key={t}>{t}</Chip>
                 ))}
             </div>
-            <div className={styles.row}>
+            <div className="flex flex-wrap items-center gap-[10px]">
                 <Chip kind="curated">Curated</Chip>
                 <Chip kind="illustrative">Illustrative</Chip>
                 <Chip>Showcase</Chip>
@@ -87,18 +75,17 @@ function ChipExample() {
     );
 }
 function GlassPanelExample() {
-    const styles = GlassPanelStyles;
     return (
-        <div className={styles.grid}>
+        <div className="grid grid-cols-4 gap-[14px]">
             <GlassPanel emphasis="ordinary">
                 <span className="wb-label">Sources</span>
-                <span className={styles.t}>Glass panel</span>
-                <span className={styles.d}>
+                <span className="text-[15px] font-semibold">Glass panel</span>
+                <span className="text-[13px] leading-[19px] text-muted-foreground">
                     Ordinary working surface. Rows inside are split by divider
                     hairlines.
                 </span>
                 <span
-                    className={cn("wb-meta", "wb-divider")}
+                    className="wb-meta wb-divider"
                     style={{ marginTop: "auto", paddingTop: 10 }}>
                     surface-glass · shadow-glass
                 </span>
@@ -109,24 +96,26 @@ function GlassPanelExample() {
                     style={{ color: "var(--accent-foreground)" }}>
                     Investigation
                 </span>
-                <span className={styles.t}>Focal</span>
-                <span className={styles.d}>
+                <span className="text-[15px] font-semibold">Focal</span>
+                <span className="text-[13px] leading-[19px] text-muted-foreground">
                     The one surface running now or awaiting a decision now.
                 </span>
                 <span
-                    className={cn("wb-meta", "wb-divider")}
+                    className="wb-meta wb-divider"
                     style={{ marginTop: "auto", paddingTop: 10 }}>
                     shadow-focal · one per screen
                 </span>
             </GlassPanel>
             <GlassPanel emphasis="waiting">
                 <span className="wb-label">Waits for you</span>
-                <span className={styles.t}>Pending judgment</span>
-                <span className={styles.d}>
+                <span className="text-[15px] font-semibold">
+                    Pending judgment
+                </span>
+                <span className="text-[13px] leading-[19px] text-muted-foreground">
                     A targeted decision is open. Only dependent delivery waits.
                 </span>
                 <span
-                    className={cn("wb-meta", "wb-divider")}
+                    className="wb-meta wb-divider"
                     style={{ marginTop: "auto", paddingTop: 10 }}>
                     shadow-review
                 </span>
@@ -134,11 +123,11 @@ function GlassPanelExample() {
             <GlassPanel emphasis="unfinished">
                 <span className="wb-label">Execution</span>
                 <span
-                    className={styles.t}
+                    className="text-[15px] font-semibold"
                     style={{ color: "var(--muted-foreground)" }}>
                     Unfinished work
                 </span>
-                <span className={styles.d}>
+                <span className="text-[13px] leading-[19px] text-muted-foreground">
                     Assigned, not performed. Never relabelled as an unknown.
                 </span>
                 <span
@@ -202,9 +191,8 @@ function FramingControlsExample() {
     );
 }
 function SourcingLaneExample() {
-    const styles = SourcingLaneStyles;
     return (
-        <div className={styles.grid}>
+        <div className="grid max-w-[900px] grid-cols-3 gap-[14px]">
             <SourcingLane
                 state="found"
                 label="Found"
@@ -330,10 +318,9 @@ function ProgressTimelineExample() {
     );
 }
 function WorkCardExample() {
-    const styles = WorkCardStyles;
     return (
-        <div className={styles.grid}>
-            <div className={styles.col}>
+        <div className="grid grid-cols-[300px_300px] items-start gap-[16px]">
+            <div className="flex flex-col gap-[16px]">
                 <WorkCard
                     kind="sources"
                     documentLabel="10-K · FY2025"
@@ -352,7 +339,7 @@ function WorkCardExample() {
                     onOpen={() => notify("Investigation")}>
                     {" "}
                     <span
-                        className={cn(styles.li)}
+                        className="flex items-start gap-[10px] text-[13px] leading-[18px] text-muted-foreground"
                         style={{ color: "var(--foreground)" }}>
                         <span
                             style={{
@@ -365,7 +352,7 @@ function WorkCardExample() {
                             }}></span>
                         Testing whether integrations hold beyond contract terms
                     </span>
-                    <span className={cn(styles.li)}>
+                    <span className="flex items-start gap-[10px] text-[13px] leading-[18px] text-muted-foreground">
                         <span
                             style={{
                                 marginTop: "1px",
@@ -384,7 +371,7 @@ function WorkCardExample() {
                         </span>
                         A-027 admitted as inference
                     </span>
-                    <span className={cn(styles.li)}>
+                    <span className="flex items-start gap-[10px] text-[13px] leading-[18px] text-muted-foreground">
                         <span style={{ color: "var(--counter-evidence)" }}>
                             <svg
                                 width="7"
@@ -411,9 +398,8 @@ function WorkCardExample() {
     );
 }
 function InventoryDockExample() {
-    const styles = InventoryDockStyles;
     return (
-        <div className={styles.grid}>
+        <div className="flex flex-wrap items-end gap-[24px]">
             <InventoryDock
                 expanded
                 total={126}
@@ -499,9 +485,8 @@ function SourceReaderExample() {
     );
 }
 function QuestionCardExample() {
-    const styles = QuestionCardStyles;
     return (
-        <div className={styles.grid}>
+        <div className="grid max-w-[900px] grid-cols-2 gap-[16px]">
             <QuestionCard
                 id="Q2"
                 state="testing"
@@ -526,10 +511,9 @@ function QuestionCardExample() {
     );
 }
 function HypothesisNodeExample() {
-    const styles = HypothesisNodeStyles;
     return (
-        <div className={styles.wrap}>
-            <div className={styles.row}>
+        <div className="grid gap-[18px]">
+            <div className="flex flex-wrap items-stretch gap-[16px]">
                 <HypothesisNode
                     state="holds"
                     detail="Best supported · confidence moderate">
@@ -546,7 +530,7 @@ function HypothesisNodeExample() {
                     CCC is a replaceable module
                 </HypothesisNode>
             </div>
-            <div className={styles.row}>
+            <div className="flex flex-wrap items-stretch gap-[16px]">
                 <EvidenceLeaf relation="for">
                     10-K: insurer-configurable workflows
                 </EvidenceLeaf>
@@ -561,10 +545,9 @@ function HypothesisNodeExample() {
     );
 }
 function RequestItemExample() {
-    const styles = RequestItemStyles;
     return (
-        <div className={cn("wb-glass", styles.list)}>
-            <span className={styles.grp}>
+        <div className="wb-glass flex max-w-[620px] flex-col gap-[6px] rounded-2xl p-[10px]">
+            <span className="flex items-center gap-[8px] p-[12px_8px_4px]">
                 <span className="wb-label">Waits for you</span>
                 <span className="wb-meta" style={{ marginLeft: "auto" }}>
                     1
@@ -576,7 +559,7 @@ function RequestItemExample() {
                 detail="Requested by Synthesis · v2 waits for your judgment, v1 stays retained."
                 onOpen={() => notify("Review")}
             />
-            <span className={styles.grp}>
+            <span className="flex items-center gap-[8px] p-[12px_8px_4px]">
                 <span className="wb-label">Asked of Sources</span>
                 <span className="wb-meta" style={{ marginLeft: "auto" }}>
                     3
@@ -628,9 +611,8 @@ function AppraisalBlockExample() {
     );
 }
 function ControlConclusionExample() {
-    const styles = ControlConclusionStyles;
     return (
-        <div className={styles.grid}>
+        <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-[14px]">
             <div
                 className="wb-glass"
                 style={{
@@ -639,7 +621,7 @@ function ControlConclusionExample() {
                     display: "flex",
                     flexDirection: "column",
                 }}>
-                <div className={styles.hd}>
+                <div className="flex items-center justify-between border-b border-divider p-[14px_24px]">
                     <span className="wb-label">
                         Conclusions about the material
                     </span>
@@ -691,23 +673,22 @@ function ControlConclusionExample() {
     );
 }
 function OutcomeCardExample() {
-    const styles = OutcomeCardStyles;
     return (
-        <div className={cn(styles.grid)}>
-            <div className={cn(styles.col)}>
-                <span className={cn(styles.fam)}>
+        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-[14px] [@media(max-width:640px)]:grid-cols-1 [@media(max-width:640px)]:gap-[24px]">
+            <div className="flex flex-col gap-[10px]">
+                <span className="flex items-center gap-[10px]">
                     <span
                         style={{
                             width: "22px",
                             borderTop: "2px solid var(--foreground)",
                         }}></span>
                     <span
-                        className={cn("wb-label")}
+                        className="wb-label"
                         style={{ color: "var(--foreground)" }}>
                         Analytical results
                     </span>
                 </span>
-                <div className={cn(styles.two)}>
+                <div className="grid grid-cols-2 gap-[10px] [@media(max-width:640px)]:grid-cols-1">
                     <OutcomeCard
                         kind="appraisal"
                         title="Reasoned appraisal"
@@ -737,8 +718,8 @@ function OutcomeCardExample() {
                     </OutcomeCard>
                 </div>
             </div>
-            <div className={cn(styles.col)}>
-                <span className={cn(styles.fam)}>
+            <div className="flex flex-col gap-[10px]">
+                <span className="flex items-center gap-[10px]">
                     <span
                         style={{
                             width: "10px",
@@ -747,7 +728,7 @@ function OutcomeCardExample() {
                             background: "var(--review)",
                         }}></span>
                     <span
-                        className={cn("wb-label")}
+                        className="wb-label"
                         style={{ color: "var(--foreground)" }}>
                         Waits for you
                     </span>
@@ -765,14 +746,14 @@ function OutcomeCardExample() {
                     Synthesis cannot start. Return to review.
                 </OutcomeCard>
             </div>
-            <div className={cn(styles.col)}>
-                <span className={cn(styles.fam)}>
+            <div className="flex flex-col gap-[10px]">
+                <span className="flex items-center gap-[10px]">
                     <span
                         style={{
                             width: "22px",
                             borderTop: "2px dashed var(--muted-foreground)",
                         }}></span>
-                    <span className={cn("wb-label")}>Work not done</span>
+                    <span className="wb-label">Work not done</span>
                 </span>
                 <OutcomeCard
                     kind="unfinished"
@@ -969,9 +950,8 @@ function MechanismNodeExample() {
     );
 }
 function BriefReferenceExample() {
-    const styles = BriefReferenceStyles;
     return (
-        <div className={styles.wrap}>
+        <div className="grid max-w-[860px] grid-cols-[minmax(0,1fr)_240px] gap-[28px]">
             <BriefSection
                 label="2 · The observed role"
                 title="CCC coordinates the claim; it does not decide it">
@@ -1176,7 +1156,7 @@ function BadgeExample() {
                 </Badge>
                 <Badge tone="inference">
                     <span
-                        className={cn("wb-live")}
+                        className="wb-live"
                         style={{
                             width: "7px",
                             height: "7px",

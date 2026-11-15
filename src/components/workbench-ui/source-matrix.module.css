@@ -1,44 +1,37 @@
+@reference "../../styles.css";
+
 .panel {
-    border-radius: 26px;
-    overflow: hidden;
+    @apply rounded-[26px] overflow-hidden;
 }
 .scroll {
-    overflow-x: auto;
+    @apply overflow-x-auto;
 }
 .table {
     width: max(100%, 1100px);
-    table-layout: fixed;
-    border-collapse: separate;
-    border-spacing: 0;
-    font-size: 13px;
-    text-align: left;
+    @apply table-fixed border-separate border-spacing-0 text-[13px] text-left;
 }
 .table th,
 .table td {
-    padding: 12px 7px;
-    vertical-align: middle;
+    @apply py-[12px] px-[7px] align-middle;
 }
 .table th:first-child,
 .table td:first-child {
-    padding-left: 24px;
+    @apply pl-[24px];
 }
 .table th:last-child,
 .table td:last-child {
-    padding-right: 24px;
+    @apply pr-[24px];
 }
 .group th {
-    padding-top: 14px;
-    padding-bottom: 0;
-    font-weight: inherit;
+    @apply pt-[14px] pb-[0] [font-weight:inherit];
 }
 .groupLabel {
-    display: block;
-    padding-bottom: 8px;
+    @apply block pb-[8px];
     border-bottom: 1px solid
         color-mix(in oklab, var(--foreground) 12%, transparent);
 }
 .group th[data-use] .groupLabel {
-    color: var(--accent-foreground);
+    @apply text-accent-foreground;
     border-bottom-color: color-mix(
         in oklab,
         var(--brand-purple) 40%,
@@ -46,20 +39,16 @@
     );
 }
 .columns th {
-    padding-top: 10px;
-    padding-bottom: 10px;
-    font-size: 12.5px;
-    font-weight: 400;
-    color: var(--muted-foreground);
+    @apply pt-[10px] pb-[10px] text-[12.5px] font-normal text-muted-foreground;
 }
 .row {
-    cursor: pointer;
+    @apply cursor-pointer;
 }
 .row td {
     border-top: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
 }
 .row:hover td {
-    background: color-mix(in oklab, var(--foreground) 2.5%, transparent);
+    @apply bg-foreground/[2.5%] bg-none;
 }
 .row[data-current] {
     background: linear-gradient(
@@ -69,146 +58,99 @@
     );
 }
 .row[data-current] td {
-    background: none;
-    border-top-color: color-mix(in oklab, var(--brand-purple) 30%, transparent);
+    @apply bg-none bg-transparent border-t-brand-purple/30;
     border-bottom: 1px solid
         color-mix(in oklab, var(--brand-purple) 30%, transparent);
 }
 .row[data-current] + .row td {
-    border-top-color: transparent;
+    @apply border-t-transparent;
 }
 .source {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    min-width: 0;
+    @apply flex items-center gap-[12px] min-w-[0];
 }
 .sourceText {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
+    @apply flex flex-col gap-[2px] min-w-[0];
 }
 .title {
     all: unset;
-    font-size: 14px;
-    font-weight: 500;
-    line-height: 1.4;
-    color: var(--foreground);
-    cursor: pointer;
-    overflow-wrap: anywhere;
+    @apply text-[14px] font-medium leading-[1.4] text-foreground cursor-pointer wrap-anywhere;
 }
 .title:focus-visible {
     outline: 2px solid var(--ring);
-    outline-offset: 2px;
-    border-radius: 2px;
+    @apply outline-offset-[2px] rounded-[2px];
 }
 .row[data-quiet] .title {
-    color: var(--muted-foreground);
+    @apply text-muted-foreground;
 }
 .doc {
-    flex-shrink: 0;
+    @apply shrink-0;
 }
 .row[data-quiet] .doc:not([data-missing]) {
-    opacity: 0.6;
+    @apply opacity-[0.6];
 }
 .small {
-    font-size: 12.5px;
-    line-height: 17px;
-    color: var(--muted-foreground);
+    @apply text-[12.5px] leading-[17px] text-muted-foreground;
 }
 .reading {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    @apply flex items-center gap-[8px] text-[13px];
 }
 .reading[data-state="unavailable"] {
-    color: var(--muted-foreground);
+    @apply text-muted-foreground;
 }
 .contributions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    @apply flex items-center gap-[10px];
 }
 .count {
-    width: 22px;
-    flex-shrink: 0;
-    font-size: 14px;
-    font-weight: 500;
+    @apply w-[22px] shrink-0 text-[14px] font-medium;
 }
 .count[data-empty] {
-    color: var(--muted-foreground);
+    @apply text-muted-foreground;
 }
 .legend {
-    padding: 12px 24px;
+    @apply py-[12px] px-[24px];
     border-top: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
-    background: color-mix(in oklab, var(--foreground) 2.5%, transparent);
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 18px;
-    font-size: 12.5px;
-    color: var(--muted-foreground);
+    @apply bg-foreground/[2.5%] bg-none flex flex-wrap items-center gap-y-[8px] gap-x-[18px] text-[12.5px] text-muted-foreground;
 }
 .legendItem {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    @apply inline-flex items-center gap-[6px];
 }
 .legendNote {
-    margin-left: auto;
+    @apply ml-auto;
 }
 .empty {
-    padding: 32px 24px;
+    @apply py-[32px] px-[24px];
 }
 .columnHead {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
+    @apply inline-flex items-center gap-[4px];
 }
 .help {
     all: unset;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 6px;
-    color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+    @apply inline-flex items-center justify-center w-[20px] h-[20px] rounded-[6px] text-muted-foreground/70;
     cursor: help;
 }
 .help:hover,
 .help:focus-visible {
-    color: var(--foreground);
-    background: color-mix(in oklab, var(--foreground) 6%, transparent);
+    @apply text-foreground bg-foreground/6 bg-none;
 }
 .help:focus-visible {
     outline: 2px solid var(--ring);
-    outline-offset: 1px;
+    @apply outline-offset-[1px];
 }
 .relationship {
-    color: var(--foreground);
-    opacity: 0.78;
+    @apply text-foreground opacity-[0.78];
 }
 .barTrigger {
     all: unset;
-    display: inline-flex;
-    padding: 8px 0;
-    border-radius: 4px;
+    @apply inline-flex py-[8px] px-0 rounded-[4px];
     cursor: help;
 }
 .barTrigger:focus-visible {
     outline: 2px solid var(--ring);
-    outline-offset: 2px;
+    @apply outline-offset-[2px];
 }
 .breakdown {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    @apply flex flex-col gap-[4px];
 }
 .breakdown > span {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+    @apply inline-flex items-center gap-[8px];
 }

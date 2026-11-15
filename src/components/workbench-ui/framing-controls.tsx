@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import styles from "./framing-controls.module.css";
@@ -34,8 +35,8 @@ export function FramingControls({
 }: FramingControlsProps) {
     return (
         <div className={styles.wrap}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <span className="wb-label" style={{ paddingLeft: 4 }}>
+            <div className={styles.suggestions}>
+                <span className={cn("wb-label", styles.suggestionLabel)}>
                     Try an angle
                 </span>
                 {angles.map((a) => (
@@ -48,24 +49,20 @@ export function FramingControls({
                     </Button>
                 ))}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div className={styles.request}>
                 {userTurn && <span className={styles.user}>{userTurn}</span>}
-                <span className={styles.who}>
-                    <span
-                        className="wb-slash"
-                        style={{ letterSpacing: "-.08em" }}>
+                <span className={styles.identity}>
+                    <span className={cn("wb-slash", styles.signature)}>
                         {"//"}
                     </span>
                     Workbench
                 </span>
-                <span style={{ fontSize: 14.5, lineHeight: "21px" }}>
-                    {children}
-                </span>
+                <span className={styles.requestText}>{children}</span>
                 <span className={styles.row}>
                     {options.map((o) => (
                         <Button
                             key={o.id}
-                            className={styles.opt}
+                            className={styles.option}
                             aria-pressed={selected.includes(o.id)}
                             onClick={() => onOption(o.id)}>
                             {selected.includes(o.id) && (
@@ -88,7 +85,7 @@ export function FramingControls({
                             {r.label}
                         </Button>
                     ))}
-                    <span style={{ flex: 1 }} />
+                    <span className={styles.replyInput} />
                     <Button variant="launch" onClick={onStart}>
                         {startLabel}
                         <WorkbenchIcon name="chevron" />

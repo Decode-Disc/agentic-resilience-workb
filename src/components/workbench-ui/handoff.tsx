@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,56 +44,24 @@ export function Handoff({
     }, [durationMs, stayed, finish]);
     return (
         <div role="status" className={styles.card}>
-            <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span className={styles.ok}>
+            <span className={styles.header}>
+                <span className={styles.icon}>
                     <WorkbenchIcon name="check" size={16} strokeWidth={2.4} />
                 </span>
-                <span
-                    style={{
-                        flex: 1,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 2,
-                    }}>
-                    <b style={{ fontSize: 17 }}>Sources ready</b>
-                    <span
-                        style={{
-                            fontSize: 13,
-                            color: "var(--muted-foreground)",
-                        }}>
-                        {summary}
-                    </span>
+                <span className={styles.heading}>
+                    <b className={styles.title}>Sources ready</b>
+                    <span className={styles.description}>{summary}</span>
                 </span>
                 {gaps ? <Badge tone="review">{gaps}</Badge> : null}
             </span>
-            <span
-                className="wb-divider"
-                style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 16,
-                    paddingTop: 16,
-                }}>
-                <span
-                    style={{
-                        position: "relative",
-                        flexShrink: 0,
-                        width: 44,
-                        height: 44,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                    }}>
+            <span className={cn("wb-divider", styles.actions)}>
+                <span className={styles.countdown}>
                     <svg
                         width="44"
                         height="44"
                         viewBox="0 0 44 44"
                         aria-hidden="true"
-                        style={{
-                            position: "absolute",
-                            inset: 0,
-                            transform: "rotate(-90deg)",
-                        }}>
+                        className={styles.countdownTrack}>
                         <circle
                             cx="22"
                             cy="22"
@@ -115,51 +84,30 @@ export function Handoff({
                             style={{ animationDuration: `${durationMs}ms` }}
                         />
                     </svg>
-                    <b style={{ fontSize: 16 }}>
+                    <b className={styles.countdownValue}>
                         {stayed ? "—" : Math.ceil(remaining / 1000)}
                     </b>
                 </span>
-                <span
-                    style={{
-                        flex: 1,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 2,
-                    }}>
-                    <b style={{ fontSize: 15 }}>
+                <span className={styles.heading}>
+                    <b className={styles.countdownLabel}>
                         {stayed ? "Staying here" : "Opening Progress…"}
                     </b>
-                    <span
-                        style={{
-                            fontSize: 13,
-                            color: "var(--muted-foreground)",
-                        }}>
+                    <span className={styles.description}>
                         Investigation continues there.
                     </span>
                 </span>
                 <Button
-                    className={styles.btn}
+                    className={cn(styles.button, styles.stayAction)}
                     disabled={stayed}
                     onClick={() => {
                         setStayed(true);
                         onStay?.();
-                    }}
-                    style={{
-                        background: "transparent",
-                        color: "var(--foreground)",
-                        boxShadow:
-                            "inset 0 0 0 1px color-mix(in oklab,var(--foreground) 16%,transparent)",
                     }}>
                     Stay here
                 </Button>
                 <Button
-                    className={styles.btn}
-                    onClick={finish}
-                    style={{
-                        padding: "0 14px",
-                        background: "var(--primary)",
-                        color: "var(--primary-foreground)",
-                    }}>
+                    className={cn(styles.button, styles.continueAction)}
+                    onClick={finish}>
                     Go now
                 </Button>
             </span>
