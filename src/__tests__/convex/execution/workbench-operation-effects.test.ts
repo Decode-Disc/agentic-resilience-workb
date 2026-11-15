@@ -6,10 +6,14 @@ import {
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
-import { afterEach, assert, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
 import type { seedWorkbench } from "@/__tests__/setup/workbench";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
+
+// Research starts run through the Sources mission; there is no corpus-approval fallback.
+beforeEach(() => activateSourcesMission());
 
 const modules = import.meta.glob("/convex/**/*.ts");
 afterEach(() => {

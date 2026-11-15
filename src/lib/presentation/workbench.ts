@@ -69,6 +69,8 @@ export function workbenchTurn(work: Work): ConversationTurnSnapshot {
     };
 }
 export function workbenchFailureCopy(code?: string) {
+    if (code === "definition_version_conflict")
+        return "This conversation was started with an earlier version of the Workbench and cannot continue. Its messages remain readable. Start a new dossier to keep working with the Workbench.";
     if (code === "native_settlement_incomplete")
         return "This conversation requires recovery before another response can begin. Your messages and recorded work remain available. You can continue editing the research program directly.";
     if (code === "pi_storage_capacity" || code === "pi_commit_capacity")

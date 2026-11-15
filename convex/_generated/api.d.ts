@@ -55,6 +55,7 @@ import type * as domain_savedMaterialOperations from "../domain/savedMaterialOpe
 import type * as domain_savedMaterialSimulation from "../domain/savedMaterialSimulation.js";
 import type * as domain_showcaseManifest from "../domain/showcaseManifest.js";
 import type * as domain_sourceCandidateCapacity from "../domain/sourceCandidateCapacity.js";
+import type * as domain_sourceCaptureState from "../domain/sourceCaptureState.js";
 import type * as domain_sourceComparison from "../domain/sourceComparison.js";
 import type * as domain_sourceComparisonContext from "../domain/sourceComparisonContext.js";
 import type * as domain_sourceDiscoveryRecovery from "../domain/sourceDiscoveryRecovery.js";
@@ -79,6 +80,7 @@ import type * as domain_workbenchContext from "../domain/workbenchContext.js";
 import type * as domain_workbenchContracts from "../domain/workbenchContracts.js";
 import type * as domain_workbenchInstructions from "../domain/workbenchInstructions.js";
 import type * as domain_workbenchResponseControlContracts from "../domain/workbenchResponseControlContracts.js";
+import type * as dossierPurge from "../dossierPurge.js";
 import type * as e2eFixtures from "../e2eFixtures.js";
 import type * as evidenceActions from "../evidenceActions.js";
 import type * as evidenceArtifacts from "../evidenceArtifacts.js";
@@ -191,6 +193,7 @@ import type * as sources from "../sources.js";
 import type * as sourcesMission from "../sourcesMission.js";
 import type * as sourcesMissionActions from "../sourcesMissionActions.js";
 import type * as sourcesSimulation from "../sourcesSimulation.js";
+import type * as sourcesWorkspace from "../sourcesWorkspace.js";
 import type * as visitors from "../visitors.js";
 import type * as workbench from "../workbench.js";
 import type * as workflow from "../workflow.js";
@@ -250,6 +253,7 @@ declare const fullApi: ApiFromModules<{
   "domain/savedMaterialSimulation": typeof domain_savedMaterialSimulation;
   "domain/showcaseManifest": typeof domain_showcaseManifest;
   "domain/sourceCandidateCapacity": typeof domain_sourceCandidateCapacity;
+  "domain/sourceCaptureState": typeof domain_sourceCaptureState;
   "domain/sourceComparison": typeof domain_sourceComparison;
   "domain/sourceComparisonContext": typeof domain_sourceComparisonContext;
   "domain/sourceDiscoveryRecovery": typeof domain_sourceDiscoveryRecovery;
@@ -274,6 +278,7 @@ declare const fullApi: ApiFromModules<{
   "domain/workbenchContracts": typeof domain_workbenchContracts;
   "domain/workbenchInstructions": typeof domain_workbenchInstructions;
   "domain/workbenchResponseControlContracts": typeof domain_workbenchResponseControlContracts;
+  dossierPurge: typeof dossierPurge;
   e2eFixtures: typeof e2eFixtures;
   evidenceActions: typeof evidenceActions;
   evidenceArtifacts: typeof evidenceArtifacts;
@@ -386,6 +391,7 @@ declare const fullApi: ApiFromModules<{
   sourcesMission: typeof sourcesMission;
   sourcesMissionActions: typeof sourcesMissionActions;
   sourcesSimulation: typeof sourcesSimulation;
+  sourcesWorkspace: typeof sourcesWorkspace;
   visitors: typeof visitors;
   workbench: typeof workbench;
   workflow: typeof workflow;

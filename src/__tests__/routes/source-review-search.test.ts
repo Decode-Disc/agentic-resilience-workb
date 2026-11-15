@@ -1,34 +1,18 @@
 import { expect, test } from "vitest";
 import { Route } from "@/routes/workspace/_protected/$runId";
 
-test("retains a coverage review destination in validated source search parameters", () => {
+test("links into the retired candidate review open the source matrix", () => {
     const validate = Route.options.validateSearch;
     if (typeof validate !== "function")
         throw new Error("Expected route search validator");
-    expect(
-        validate({
-            section: "sources",
-            view: "inspect",
-            coverage: "official_commercial_terms",
-        }),
-    ).toEqual({
-        section: "sources",
-        view: "inspect",
-        coverage: "official_commercial_terms",
-    });
-});
-
-test("drops malformed and irrelevant source review parameters", () => {
-    const validate = Route.options.validateSearch;
-    if (typeof validate !== "function")
-        throw new Error("Expected route search validator");
-    expect(
-        validate({
-            section: "sources",
-            view: "inspect",
-            coverage: "made_up_role",
-        }),
-    ).toEqual({ section: "sources", view: "inspect" });
+    for (const view of ["inspect", "adjust"])
+        expect(
+            validate({
+                section: "sources",
+                view,
+                coverage: "official_commercial_terms",
+            }),
+        ).toEqual({ section: "sources", sourcesView: "matrix" });
     expect(
         validate({
             section: "sources",
@@ -43,13 +27,6 @@ test("drops malformed and irrelevant source review parameters", () => {
             coverage: "official_commercial_terms",
         }),
     ).toEqual({ section: "progress", inventory: 1 });
-    expect(
-        validate({
-            section: "sources",
-            view: "adjust",
-            coverage: "official_commercial_terms",
-        }),
-    ).toEqual({ section: "sources", view: "adjust" });
 });
 
 test.each([
@@ -64,21 +41,21 @@ test.each([
     expect(validate({ section })).toEqual(destination);
 });
 
-test("keeps inventory above the current source review and validates sub-sections", () => {
+test("keeps inventory above the current Sources location and validates sub-sections", () => {
     const validate = Route.options.validateSearch;
     if (typeof validate !== "function")
         throw new Error("Expected route search validator");
     expect(
         validate({
             section: "sources",
-            view: "inspect",
-            coverage: "official_commercial_terms",
+            sourcesView: "reader",
+            source: "source-1",
             inventory: "1",
         }),
     ).toEqual({
         section: "sources",
-        view: "inspect",
-        coverage: "official_commercial_terms",
+        sourcesView: "reader",
+        source: "source-1",
         inventory: 1,
     });
     expect(

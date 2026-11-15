@@ -128,3 +128,15 @@ test("an unresolved conversation closure explains the retained work without prom
         /native_settlement|Send another message|writer|session/,
     );
 });
+
+test("a conversation from an earlier Workbench version points to a new dossier instead of a futile resend", async () => {
+    const { workbenchFailureCopy } = await import(
+        "@/lib/presentation/workbench"
+    );
+    const copy = workbenchFailureCopy("definition_version_conflict");
+    expect(copy).toContain("earlier version");
+    expect(copy).toContain("new dossier");
+    expect(copy).not.toMatch(
+        /Send another message|definition_version|conflict/,
+    );
+});

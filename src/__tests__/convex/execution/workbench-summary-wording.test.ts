@@ -1,10 +1,14 @@
 import { api, internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { researchStateSummary } from "@convex/execution/researchControl";
-import { afterEach, assert, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
 import { seedPiHistory } from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
+
+// Research starts run through the Sources mission; there is no corpus-approval fallback.
+beforeEach(() => activateSourcesMission());
 
 afterEach(() => {
     vi.clearAllTimers();

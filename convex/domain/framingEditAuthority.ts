@@ -8,6 +8,7 @@ import {
     MAX_FRAMING_AUTHORITY_REVISIONS as MAX_AUTHORITY_REVISIONS,
 } from "@convex/resourcePolicy";
 import { sourcesQualificationEnabled } from "@convex/sourcesSimulation";
+import { activatedSourcesEnvelope } from "./sources";
 import { stableStringify } from "./sourcePassages";
 import {
     explicitFramingPreservation,
@@ -155,10 +156,11 @@ export async function researchStartBlock(
         return "framing_fixed";
     if (!framing?.content.scope.trim() || !framing.content.questions.length)
         return "framing_invalid";
-    if (
-        !(await sourcesQualificationEnabled(ctx, run)) &&
-        visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR
-    )
+    const qualification = await sourcesQualificationEnabled(ctx, run);
+    if (!qualification && visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR)
         return "analysis_limit_reached";
+    // Documentary preparation runs only through the Sources mission; there is no corpus-approval fallback.
+    if (!qualification && !activatedSourcesEnvelope())
+        return "sources_configuration_unavailable";
     return researchSlotBlock(ctx, visitor._id);
 }

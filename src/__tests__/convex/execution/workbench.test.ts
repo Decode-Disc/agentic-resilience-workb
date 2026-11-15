@@ -2,9 +2,13 @@ import { api, internal } from "@convex/_generated/api";
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
+
+// Research starts run through the Sources mission; there is no corpus-approval fallback.
+beforeEach(() => activateSourcesMission());
 
 const modules = import.meta.glob("/convex/**/*.ts");
 afterEach(() => {
@@ -270,7 +274,8 @@ test("Workbench retains an analyst's documentary request separately from its eve
     expect(instructions[0]).toMatchObject({
         messageId,
         interpretedNeed: "Independent assessment of switching constraints",
-        status: "limited",
+        // Sources receives the request; treatment is recorded separately when it settles.
+        status: "waiting",
     });
 });
 

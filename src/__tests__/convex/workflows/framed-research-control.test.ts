@@ -5,6 +5,7 @@ import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 import workflowTest from "./workflow-test-register.js";
 
@@ -13,9 +14,10 @@ afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
 });
-test("the durable framed workflow drains SEC revalidation, waits for Resume, then retains the evidence checkpoint", async () => {
+test("the durable framed workflow drains SEC revalidation, waits for Resume, then continues into Sources preparation", async () => {
     vi.useFakeTimers();
     vi.stubEnv("SEC_USER_AGENT", "Workbench test@example.com");
+    activateSourcesMission();
     const t = convexTest(schema, modules);
     agentTest.register(t);
     workflowTest.register(t);
@@ -78,10 +80,10 @@ test("the durable framed workflow drains SEC revalidation, waits for Resume, the
         expectedGeneration: 2,
     });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
+    // Resume continues into Sources preparation on the next generation; the earlier SEC response is not requested again.
     expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
-        executionStatus: "paused",
-        pauseReason: "evidence_sufficiency_review",
-        lifecycleState: "awaiting_evidence_sufficiency_review",
+        sourcesProtocol: "sources_mission_v1",
+        lifecycleState: "discovering_sources",
         executionGeneration: 3,
     });
     expect(request).toHaveBeenCalledOnce();

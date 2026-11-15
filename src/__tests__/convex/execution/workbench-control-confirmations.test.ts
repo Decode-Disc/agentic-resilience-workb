@@ -1,9 +1,13 @@
 import { api, internal } from "@convex/_generated/api";
-import { afterEach, assert, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
 import {
     seedWorkbench,
     workbenchAdmissionInput,
 } from "@/__tests__/setup/workbench";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
+
+// Research starts run through the Sources mission; there is no corpus-approval fallback.
+beforeEach(() => activateSourcesMission());
 
 test.each([
     null,
@@ -37,6 +41,8 @@ test.each([
         expectedGeneration: 1,
     });
     await t.mutation(internal.execution.researchControl.checkpoint, { runId });
+    // Coverage routing remains the contract of historical dossiers prepared without the Sources mission.
+    await t.run((ctx) => ctx.db.patch(runId, { sourcesProtocol: undefined }));
     const active = await t.mutation(
         internal.execution.conversations.startTurn,
         {

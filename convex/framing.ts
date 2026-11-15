@@ -14,7 +14,7 @@ import {
 import { MAX_RESEARCH_PLAN_QUESTIONS } from "@convex/domain/researchPlan";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationConcurrency } from "@convex/domain/sourcePreparationAuthority";
-import { sourcesEnvelope } from "@convex/domain/sources";
+import { activatedSourcesEnvelope } from "@convex/domain/sources";
 import { coveragePresetValidator } from "@convex/domain/validators";
 import {
     requireDossierAuthority,
@@ -144,11 +144,10 @@ export const startResearch = mutation({
         const startBlock = await researchStartBlock(ctx, run, framing, visitor);
         if (startBlock) throw executionError(startBlock);
         const qualifiedEnvelope = await sourcesQualificationEnvelope(ctx, run);
-        const sourcesMissionEnvelope = qualifiedEnvelope
-            ? qualifiedEnvelope
-            : process.env.SOURCES_MISSION_ENABLED === "true"
-              ? sourcesEnvelope()
-              : undefined;
+        const sourcesMissionEnvelope =
+            qualifiedEnvelope ?? activatedSourcesEnvelope();
+        if (!sourcesMissionEnvelope)
+            throw executionError("sources_configuration_unavailable");
         const prepareSources = sourcePreparationEnabled();
         if (prepareSources) readPreparationConcurrency();
         const workflowId = await workflow.start(
@@ -168,12 +167,8 @@ export const startResearch = mutation({
         );
         await ctx.db.patch(run._id, {
             fixedFramingRevisionId: framing._id,
-            ...(sourcesMissionEnvelope
-                ? {
-                      sourcesProtocol: "sources_mission_v1" as const,
-                      sourcesEnvelope: sourcesMissionEnvelope,
-                  }
-                : {}),
+            sourcesProtocol: "sources_mission_v1",
+            sourcesEnvelope: sourcesMissionEnvelope,
             agentExecutionVersion: 3,
             researchStartedAt: Date.now(),
             researchStartRequestKey: args.requestKey,

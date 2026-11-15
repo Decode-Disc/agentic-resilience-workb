@@ -25,7 +25,7 @@ Changes can preserve the code's behavior while losing the intended analyst exper
 - For an existing surface, identify what is preserved and what the request changes. Compare the running surface with the accepted reference, including interactions, disclosures, mobile behavior, and failure states. Preserve unaffected affordances without turning every installed behavior into a future requirement. Apply the repository's surface classification for substantial changes and explain conflicts before choosing a new composition.
 - Recheck the underlying behavior when feedback changes the diagnosis or recommendation.
 
-Consult [TECH.md](../../../context/TECH.md) for the transition when current guards differ from the target. In particular, source-set approval belongs to the compatibility path described in [PRODUCT.md](../../../PRODUCT.md); do not carry that stop into a new target view by default. A UI edit cannot remove an enforced prerequisite before its replacement is implemented and verified.
+Consult [TECH.md](../../../context/TECH.md) for the transition when current guards differ from the target. Source-set approval was retired with the corpus-review interface; Sources preparation follows the mission contract in [PRODUCT.md](../../../PRODUCT.md), so do not reintroduce that stop. A UI edit cannot remove an enforced prerequisite before its replacement is implemented and verified.
 
 ## Find the existing owners
 

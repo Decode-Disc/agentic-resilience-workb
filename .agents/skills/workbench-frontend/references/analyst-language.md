@@ -36,7 +36,7 @@ Research progress, evidence and judgments can coexist on the same view. Keep the
 | Documentary coverage | Is a useful contribution established, limited, absent after inspection, or not yet assessed? Does the data actually distinguish these cases? |
 | Provenance, family, and document kind | Does the label identify author, host, filing venue, category, or document form? Which of those facts are independently established? |
 | Counts | What objects are counted, from which scope, and under what qualification? Do the label and destination use that same population? |
-| Human decisions | Which object and version did the analyst review, retain, correct or defer? Does a positive color imply a decision that has not occurred? Source-set approval applies only on the existing compatibility path. |
+| Human decisions | Which object and version did the analyst review, retain, correct or defer? Does a positive color imply a decision that has not occurred? |
 
 For example, several included regulatory candidates do not automatically mean several annual reports have been read and found useful. Check the actual matching population before naming a counter or linking its drill-down.
 

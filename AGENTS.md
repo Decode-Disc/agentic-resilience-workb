@@ -29,6 +29,7 @@ Read `PRODUCT.md` before product planning or implementation, relevant sections o
 | `docs/research/**` | history | - | Dated research and benchmark interpretation. |
 | `docs/showcases/**` | history | - | Showcase selection rationale and research material. |
 | `docs/examples/**` | history | - | Illustrative references. |
+| `archive/**` | history | - | Retired code kept verbatim outside the build; not current obligations or reusable owners. |
 | `docs/verification/**` | evidence | - | Dated verification reports; raw artifacts are immutable. |
 | `scripts/evaluations/source-selection/*.md` | evidence | - | Evaluation usage and dated judgments, not product acceptance. |
 | `scripts/evaluations/source-selection/fixtures/*/README.md` | evidence | - | Fixture provenance and evaluation boundaries. |

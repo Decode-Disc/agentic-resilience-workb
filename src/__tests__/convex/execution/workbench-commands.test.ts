@@ -5,8 +5,12 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { getFunctionName } from "convex/server";
-import { afterEach, assert, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
+
+// Research starts run through the Sources mission; there is no corpus-approval fallback.
+beforeEach(() => activateSourcesMission());
 
 afterEach(() => {
     vi.useRealTimers();

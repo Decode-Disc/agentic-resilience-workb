@@ -63,6 +63,16 @@ export function sourcesEnvelope() {
     return value;
 }
 
+/** Ordinary starts require explicit Sources activation; a disabled flag or invalid envelope blocks them instead of falling back. */
+export function activatedSourcesEnvelope() {
+    if (process.env.SOURCES_MISSION_ENABLED !== "true") return undefined;
+    try {
+        return sourcesEnvelope();
+    } catch {
+        return undefined;
+    }
+}
+
 export async function requireSourcesPreparation(
     ctx: Pick<QueryCtx, "db">,
     preparationId: Id<"sourceSelectionProposalRebuilds">,

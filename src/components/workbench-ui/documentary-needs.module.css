@@ -30,6 +30,9 @@
 .lensLine b {
     @apply font-mono text-[12px] font-medium text-accent-foreground;
 }
+.lens[hidden] {
+    @apply hidden;
+}
 .hint {
     @apply text-[13px] text-muted-foreground;
 }
@@ -153,6 +156,15 @@
 }
 .mark[data-outcome="unfinished"] {
     border: 1.5px dashed var(--muted-foreground);
+}
+/* Half filled: material is arriving, the outcome is not settled yet. */
+.mark[data-outcome="in_progress"] {
+    background: linear-gradient(
+        90deg,
+        var(--brand-purple) 50%,
+        transparent 50%
+    );
+    box-shadow: inset 0 0 0 1.5px var(--brand-purple);
 }
 .cell[data-lens] .mark {
     scale: 1.25;

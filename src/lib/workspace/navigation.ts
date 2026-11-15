@@ -1,6 +1,3 @@
-import { SOURCE_COVERAGE_ROLES } from "@convex/domain/sourceSelectionPolicy";
-import type { SourceReviewNavigation } from "@/components/workspace/source-proposal-review";
-
 export type WorkspaceSection =
     | "progress"
     | "sources"
@@ -19,8 +16,15 @@ export type WorkspaceSearch = {
     detail?: "timeline" | "framing";
     subsection?: WorkspaceSubsection;
     inventory?: 1;
-    view?: Exclude<SourceReviewNavigation["view"], "overview">;
-    coverage?: SourceReviewNavigation["coverage"];
+    /** Sources screen; absent means the preparation overview. */
+    sourcesView?: "matrix" | "reader";
+    /** The source open in the reader. */
+    source?: string;
+    /** Matrix search and filters, restored on refresh and history. */
+    q?: string;
+    kind?: string;
+    reading?: string;
+    use?: string;
 };
 
 export const workspaceSections: ReadonlyArray<{
@@ -86,16 +90,16 @@ export function workspaceSearch(
         search.inventory === "1"
     )
         result.inventory = 1;
-    if (
-        section === "sources" &&
-        (search.view === "inspect" || search.view === "adjust")
-    ) {
-        result.view = search.view;
-        if (search.view === "inspect") {
-            const coverage = SOURCE_COVERAGE_ROLES.find(
-                (role) => role === search.coverage,
-            );
-            if (coverage) result.coverage = coverage;
+    if (section === "sources") {
+        if (search.sourcesView === "matrix" || search.sourcesView === "reader")
+            result.sourcesView = search.sourcesView;
+        // Links into the retired candidate inspection open the source matrix.
+        else if (search.view === "inspect" || search.view === "adjust")
+            result.sourcesView = "matrix";
+        for (const key of ["source", "q", "kind", "reading", "use"] as const) {
+            const value = search[key];
+            if (typeof value === "string" && value.length > 0)
+                result[key] = value;
         }
     }
     return result;

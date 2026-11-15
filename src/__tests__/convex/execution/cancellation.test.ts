@@ -342,3 +342,32 @@ test("browser context teardown paginates runs without nesting mission pagination
         await t.run((ctx) => workflow.status(ctx, missionWorkflowId as never)),
     ).toMatchObject({ type: "canceled" });
 }, 60_000);
+
+test("cancelling a dossier whose workflow already ended does not fail on the finished workflow", async () => {
+    vi.useFakeTimers();
+    const { t, userId, args } = await seedInspectedEvidence();
+    workflowTest.register(t);
+    await t.run(async (ctx) => {
+        const run = await ctx.db.get(args.runId);
+        if (!run) throw new Error("Missing run");
+        const workflowId = await workflow.start(
+            ctx,
+            internal.researchWorkflow.run,
+            {
+                runId: args.runId,
+                executionGeneration: run.executionGeneration,
+            },
+        );
+        await workflow.cancel(ctx, workflowId);
+        await ctx.db.patch(args.runId, {
+            workflowId,
+            executionStatus: "paused",
+        });
+    });
+    await t
+        .withIdentity({ subject: `${userId}|cancel-ended` })
+        .mutation(api.workflowControls.cancel, { runId: args.runId });
+    expect(await t.run((ctx) => ctx.db.get(args.runId))).toMatchObject({
+        executionStatus: "cancelled",
+    });
+});

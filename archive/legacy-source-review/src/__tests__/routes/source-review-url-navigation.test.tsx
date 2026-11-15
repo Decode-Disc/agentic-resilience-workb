@@ -63,6 +63,8 @@ beforeEach(() => {
             : media;
     });
     convexReactHarness.reset();
+    // Corpus-approval dossiers have no Sources mission projection.
+    convexReactHarness.query(api.sourcesWorkspace.overview).returns(null);
     convexReactHarness
         .mutation(api.sourcePreparation.startForReview)
         .uses(vi.fn());

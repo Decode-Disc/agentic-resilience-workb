@@ -37,7 +37,12 @@ export interface SourceMatrixRow {
     /** Absent when no contribution could be assessed. */
     contributions?: {
         count: number;
-        segments?: readonly { kind: ClaimTone; count: number }[];
+        /** `label` replaces the claim-class wording with a counted phrase, such as "2 forecasts". */
+        segments?: readonly {
+            kind: ClaimTone;
+            count: number;
+            label?: string;
+        }[];
         note?: string;
     };
     restriction?: string;
@@ -60,6 +65,8 @@ export interface SourceMatrixProps {
     empty?: ReactNode;
     /** Closes the panel, typically with pagination; stays inside the frame so it is not lost under its shadow. */
     footer?: ReactNode;
+    /** Replaces the claim-class wording of the contributions column help and legend. */
+    contributionTerms?: { help: string; legend: string };
 }
 
 const columns = [
@@ -109,6 +116,7 @@ export function SourceMatrix({
     note,
     empty,
     footer,
+    contributionTerms,
 }: SourceMatrixProps) {
     const helpId = useId();
     const { hiddenColumns, scrolled, scrollRef, onScroll } =
@@ -157,35 +165,42 @@ export function SourceMatrix({
                             ))}
                         </tr>
                         <tr className={styles.columns}>
-                            {columns.map(([label, , help]) => (
-                                <th key={label} scope="col">
-                                    <span className={styles.columnHead}>
-                                        {label}
-                                        <HelpTip
-                                            trigger={
-                                                <button
-                                                    type="button"
-                                                    className={styles.help}
-                                                    aria-label={`About ${label}`}
-                                                    aria-describedby={`${helpId}-${label}`}>
-                                                    <Icon
-                                                        iconNode={
-                                                            InformationCircleIcon
-                                                        }
-                                                        size={13}
-                                                    />
-                                                </button>
-                                            }>
-                                            {help}
-                                        </HelpTip>
-                                        <span
-                                            id={`${helpId}-${label}`}
-                                            className="sr-only">
-                                            {help}
+                            {columns.map(([label, , defaultHelp]) => {
+                                const help =
+                                    label === "Contributions" &&
+                                    contributionTerms
+                                        ? contributionTerms.help
+                                        : defaultHelp;
+                                return (
+                                    <th key={label} scope="col">
+                                        <span className={styles.columnHead}>
+                                            {label}
+                                            <HelpTip
+                                                trigger={
+                                                    <button
+                                                        type="button"
+                                                        className={styles.help}
+                                                        aria-label={`About ${label}`}
+                                                        aria-describedby={`${helpId}-${label}`}>
+                                                        <Icon
+                                                            iconNode={
+                                                                InformationCircleIcon
+                                                            }
+                                                            size={13}
+                                                        />
+                                                    </button>
+                                                }>
+                                                {help}
+                                            </HelpTip>
+                                            <span
+                                                id={`${helpId}-${label}`}
+                                                className="sr-only">
+                                                {help}
+                                            </span>
                                         </span>
-                                    </span>
-                                </th>
-                            ))}
+                                    </th>
+                                );
+                            })}
                         </tr>
                     </thead>
                     <tbody
@@ -316,7 +331,8 @@ export function SourceMatrix({
                             { kind: "counter", count: 1 },
                         ]}
                     />
-                    contributions by claim class
+                    {contributionTerms?.legend ??
+                        "contributions by claim class"}
                 </span>
                 {note && <span className={styles.legendNote}>{note}</span>}
             </div>
@@ -353,6 +369,14 @@ function useHorizontalScroll() {
     };
 }
 
+function segmentLabel(
+    segment: NonNullable<
+        NonNullable<SourceMatrixRow["contributions"]>["segments"]
+    >[number],
+) {
+    return segment.label ?? claimCountLabel(segment.kind, segment.count);
+}
+
 function Contributions({
     value,
     scale,
@@ -370,7 +394,7 @@ function Contributions({
         `${value.count} contributions`,
         value.segments
             ?.filter((segment) => segment.count > 0)
-            .map((segment) => claimCountLabel(segment.kind, segment.count))
+            .map(segmentLabel)
             .join(", "),
     ]
         .filter(Boolean)
@@ -398,9 +422,9 @@ function Contributions({
                     }>
                     <span className={styles.breakdown}>
                         {value.segments.map((segment) => (
-                            <span key={segment.kind}>
+                            <span key={segment.label ?? segment.kind}>
                                 <ClaimGlyph kind={segment.kind} colored />
-                                {claimCountLabel(segment.kind, segment.count)}
+                                {segmentLabel(segment)}
                             </span>
                         ))}
                     </span>

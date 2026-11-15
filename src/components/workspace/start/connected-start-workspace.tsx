@@ -37,6 +37,10 @@ import {
     workbenchTurn,
 } from "@/lib/presentation/workbench";
 import {
+    clearWorkbenchDraft,
+    peekWorkbenchDraft,
+} from "@/lib/workspace/workbench-draft";
+import {
     FramingProposal,
     StartFramingScreen,
     StartResearchScreen,
@@ -65,10 +69,11 @@ type StartWorkspaceProps = {
     runId: Id<"researchRuns">;
     detail?: "timeline" | "framing";
     progress?: ReactNode;
-    checkpoint?: ReactNode;
 };
-function useStartDraft() {
-    const [draft, setDraft] = useState("");
+function useStartDraft(runId: Id<"researchRuns">) {
+    // A follow-up prepared on another screen starts the draft; the analyst still sends it.
+    const [draft, setDraft] = useState(() => peekWorkbenchDraft(runId) ?? "");
+    useEffect(() => clearWorkbenchDraft(runId), [runId]);
     const [edit, setEdit] = useState<Edit | null>(null);
     const launchKey = useRef(crypto.randomUUID());
     const delivery = useRef<{ text: string; mode: string; key: string } | null>(
@@ -89,7 +94,7 @@ export function ConnectedStartWorkspace(props: StartWorkspaceProps) {
     );
 }
 function StartWorkspaceSession(props: StartWorkspaceProps) {
-    const drafts = useStartDraft();
+    const drafts = useStartDraft(props.runId);
     return (
         <LoadErrorBoundary
             title="Research conversation unavailable"
@@ -103,7 +108,6 @@ function StartWorkspaceQuery({
     runId,
     detail,
     progress,
-    checkpoint,
     drafts,
 }: StartWorkspaceProps & { drafts: ReturnType<typeof useStartDraft> }) {
     const snapshot = useQuery(api.workbench.snapshot, { runId });
@@ -124,7 +128,6 @@ function StartWorkspaceQuery({
             snapshot={snapshot}
             detail={detail}
             progress={progress}
-            checkpoint={checkpoint}
             drafts={drafts}
         />
     );
@@ -133,13 +136,11 @@ function StartWorkspaceContent({
     snapshot,
     detail,
     progress,
-    checkpoint,
     drafts,
 }: {
     snapshot: Snapshot;
     detail?: "timeline" | "framing";
     progress?: ReactNode;
-    checkpoint?: ReactNode;
     drafts: ReturnType<typeof useStartDraft>;
 }) {
     const { run, company, framing } = snapshot;
@@ -688,7 +689,9 @@ function StartWorkspaceContent({
                 state?.queuePaused &&
                 state.queuedCount &&
                 state.admissionFailure?.code !== "context_capacity" &&
-                state.admissionFailure?.code !== "native_settlement_incomplete"
+                state.admissionFailure?.code !==
+                    "native_settlement_incomplete" &&
+                state.admissionFailure?.code !== "definition_version_conflict"
                     ? () => control(resume({ runId }))
                     : undefined
             }
@@ -787,9 +790,15 @@ function StartWorkspaceContent({
                 expectedRevision: framing.revision,
                 requestKey: launchKey.current,
             });
-        } catch {
+        } catch (caught) {
             setError(
-                "Research could not start. Review the latest program and your available analysis capacity, then try again.",
+                caught instanceof ConvexError &&
+                    typeof caught.data === "object" &&
+                    caught.data &&
+                    "code" in caught.data &&
+                    caught.data.code === "sources_configuration_unavailable"
+                    ? "Documentary preparation is not available in this workspace yet, so research cannot start. Your research program is saved."
+                    : "Research could not start. Review the latest program and your available analysis capacity, then try again.",
             );
         } finally {
             setSaving(false);
@@ -991,28 +1000,7 @@ function StartWorkspaceContent({
                                     Start another analysis
                                 </Button>
                             </div>
-                        ) : (
-                            (checkpoint ??
-                            (run.lifecycleState === "awaiting_source_review" ? (
-                                <div className="p-4">
-                                    <p>
-                                        Review the retained sources and their
-                                        limitations before continuing.
-                                    </p>
-                                    <Button
-                                        variant="launch"
-                                        onClick={() =>
-                                            void navigate({
-                                                to: "/workspace/$runId",
-                                                params: { runId },
-                                                search: { section: "sources" },
-                                            })
-                                        }>
-                                        Review sources
-                                    </Button>
-                                </div>
-                            ) : undefined))
-                        )
+                        ) : undefined
                     }
                 />
             )}

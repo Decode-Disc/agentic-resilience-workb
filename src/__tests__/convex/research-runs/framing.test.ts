@@ -7,10 +7,14 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+});
 const transition = makeFunctionReference<"mutation">("researchRuns:transition");
 
 test("company confirmation retains a framing dossier without consuming an analysis or launching research", async () => {
@@ -59,6 +63,7 @@ test("company confirmation retains a framing dossier without consuming an analys
 });
 
 test("framing edits use revisions and explicit research start consumes one analysis in the same dossier", async () => {
+    activateSourcesMission();
     const t = convexTest(schema, modules);
     agentTest.register(t);
     workflowTest.register(t);
@@ -210,6 +215,57 @@ test("an incomplete framing draft can be saved without authorizing research", as
         lifecycleState: "framing",
         executionStatus: "idle",
     });
+});
+
+test("research cannot start on a corpus-approval fallback when Sources is not activated", async () => {
+    vi.stubEnv("SOURCES_MISSION_ENABLED", "false");
+    try {
+        const t = convexTest(schema, modules);
+        agentTest.register(t);
+        workflowTest.register(t);
+        const { userId, preflightId } = await createAdmittedPreflight(t);
+        const analyst = t.withIdentity({ subject: userId });
+        const { runId } = await analyst.mutation(api.framing.confirmCompany, {
+            preflightId,
+            idempotencyKey: "inactive-sources",
+            coveragePreset: "balanced",
+        });
+        await analyst.mutation(api.framing.save, {
+            runId,
+            expectedRevision: 1,
+            requestKey: "inactive-brief",
+            content: {
+                scope: "Photo-led auto claims",
+                questions: [
+                    {
+                        id: "control",
+                        text: "Who controls coordination?",
+                        rationale: "Document coordination",
+                        shortLabel: "Control",
+                    },
+                ],
+            },
+        });
+        await expect(
+            analyst.mutation(api.framing.startResearch, {
+                runId,
+                expectedRevision: 2,
+                requestKey: "inactive-start",
+            }),
+        ).rejects.toThrow("sources_configuration_unavailable");
+        const run = await t.run((ctx) => ctx.db.get(runId));
+        expect(run).toMatchObject({
+            lifecycleState: "framing",
+            executionStatus: "idle",
+        });
+        expect(run?.workflowId).toBeUndefined();
+        expect(run?.researchStartedAt).toBeUndefined();
+        expect(
+            await t.run((ctx) => ctx.db.query("visitors").first()),
+        ).toMatchObject({ analysesReserved: 0 });
+    } finally {
+        vi.unstubAllEnvs();
+    }
 });
 
 test("new Sources research pins its protocol while repeated Start consumes no second analysis", async () => {

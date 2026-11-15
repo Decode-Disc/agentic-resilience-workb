@@ -46,6 +46,7 @@ import {
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import {
     SourceMatrix,
+    type SourceMatrixProps,
     type SourceMatrixRow,
 } from "@/components/workbench-ui/source-matrix";
 import {
@@ -88,7 +89,8 @@ export interface SourcesPreparationView {
     outcome: { label: string; settled: boolean };
     collect: {
         candidates: number;
-        reused: number;
+        /** Omitted when the preparation does not record reuse. */
+        reused?: number;
         families: readonly {
             id: string;
             label: string;
@@ -98,7 +100,8 @@ export interface SourcesPreparationView {
     };
     reading: {
         captured: number;
-        passages: number;
+        /** Omitted when located passages are not counted. */
+        passages?: number;
         full: number;
         partial: number;
         unavailable: number;
@@ -146,10 +149,16 @@ export function SourcesPreparationScreen({
     frame,
     view,
     onInspectSources,
+    actions,
+    notices,
 }: {
     frame: SourcesScreenFrame;
     view: SourcesPreparationView;
     onInspectSources: () => void;
+    /** Consumer decisions placed after "Inspect sources", such as a checkpoint approval. */
+    actions?: ReactNode;
+    /** Recovery, failed-search or availability notices shown above the needs. */
+    notices?: ReactNode;
 }) {
     const [runOpen, setRunOpen] = useState(false);
     const runTrigger = useRef<HTMLButtonElement>(null);
@@ -222,9 +231,11 @@ export function SourcesPreparationScreen({
                                 strokeWidth={2}
                             />
                         </Button>
+                        {actions}
                     </span>
                 </div>
             }>
+            {notices}
             <DocumentaryNeeds questions={view.questions} needs={view.needs} />
             <PreparationRun
                 view={view}
@@ -322,12 +333,16 @@ function PreparationStages({ view }: { view: SourcesPreparationView }) {
                         value: collect.candidates,
                         label: "candidates",
                     },
-                    {
-                        id: "reused",
-                        value: collect.reused,
-                        label: "reused",
-                        quiet: true,
-                    },
+                    ...(collect.reused === undefined
+                        ? []
+                        : [
+                              {
+                                  id: "reused",
+                                  value: collect.reused,
+                                  label: "reused",
+                                  quiet: true,
+                              },
+                          ]),
                 ]}
                 footnote={collect.note}>
                 <PreparationRows>
@@ -367,12 +382,16 @@ function PreparationStages({ view }: { view: SourcesPreparationView }) {
                         value: reading.captured,
                         label: "captured",
                     },
-                    {
-                        id: "passages",
-                        value: reading.passages,
-                        label: "passages located",
-                        quiet: true,
-                    },
+                    ...(reading.passages === undefined
+                        ? []
+                        : [
+                              {
+                                  id: "passages",
+                                  value: reading.passages,
+                                  label: "passages located",
+                                  quiet: true,
+                              },
+                          ]),
                 ]}
                 footnote={reading.note}>
                 <span className={styles.readingSummary}>
@@ -487,6 +506,9 @@ export function SourcesMatrixScreen({
     onClearFilters,
     onOpenSource,
     pageSize = 10,
+    headingActions,
+    notices,
+    contributionTerms,
 }: {
     frame: SourcesScreenFrame;
     trail: readonly SourcesTrailStep[];
@@ -500,6 +522,10 @@ export function SourcesMatrixScreen({
     onClearFilters: () => void;
     onOpenSource: (id: string) => void;
     pageSize?: number;
+    /** Placed beside the search, such as adding a source link. */
+    headingActions?: ReactNode;
+    notices?: ReactNode;
+    contributionTerms?: SourceMatrixProps["contributionTerms"];
 }) {
     const { page, pageCount, pageItems, setPage } = usePagination({
         items: rows,
@@ -528,19 +554,25 @@ export function SourcesMatrixScreen({
             eyebrow="Source matrix"
             title="Every source, what was read, what it gives"
             headingAside={
-                <InputGroup className={styles.search}>
-                    <InputGroupAddon>
-                        <Icon iconNode={Search01Icon} size={15} />
-                    </InputGroupAddon>
-                    <InputGroupInput
-                        type="search"
-                        aria-label="Search sources"
-                        placeholder="Search sources or passages"
-                        value={query}
-                        onChange={(event) => onQueryChange(event.target.value)}
-                    />
-                </InputGroup>
+                <span className={styles.matrixActions}>
+                    {headingActions}
+                    <InputGroup className={styles.search}>
+                        <InputGroupAddon>
+                            <Icon iconNode={Search01Icon} size={15} />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            type="search"
+                            aria-label="Search sources"
+                            placeholder="Search sources or passages"
+                            value={query}
+                            onChange={(event) =>
+                                onQueryChange(event.target.value)
+                            }
+                        />
+                    </InputGroup>
+                </span>
             }>
+            {notices}
             <div className={styles.filters}>
                 {filters.map((filter) => {
                     const [unfiltered] = filter.options;
@@ -630,6 +662,7 @@ export function SourcesMatrixScreen({
                 rows={pageItems}
                 currentId={currentId}
                 onOpen={onOpenSource}
+                contributionTerms={contributionTerms}
                 contributionScale={18}
                 note="Included, read, contributing and usable are four separate facts."
                 empty={
@@ -687,6 +720,8 @@ export function SourcesReaderScreen({
     document,
     onRequestCheck,
     onChallengeSelection,
+    decision,
+    notices,
 }: {
     frame: SourcesScreenFrame;
     trail: readonly SourcesTrailStep[];
@@ -703,6 +738,10 @@ export function SourcesReaderScreen({
     document: Omit<SourceReaderProps, "navigation" | "actions" | "layout">;
     onRequestCheck?: () => void;
     onChallengeSelection?: () => void;
+    /** Consumer-owned decision controls for the open source, such as include or remove. */
+    decision?: ReactNode;
+    /** Shown above the reader, such as a preview-only or unavailable-reading notice. */
+    notices?: ReactNode;
 }) {
     const split = useMediaQuery(splitReaderQuery);
     const compact = useMediaQuery(compactReaderQuery);
@@ -735,8 +774,9 @@ export function SourcesReaderScreen({
             }
         />
     );
-    const actions = (onRequestCheck || onChallengeSelection) && (
+    const actions = (onRequestCheck || onChallengeSelection || decision) && (
         <span className={styles.readerActions}>
+            {decision}
             {onRequestCheck && (
                 <Button
                     className={styles.readerPrimary}
@@ -760,6 +800,7 @@ export function SourcesReaderScreen({
             trail={trail}
             titleHidden
             title={document.title}>
+            {notices}
             {compact ? (
                 <>
                     <div className={styles.compactList}>{list}</div>

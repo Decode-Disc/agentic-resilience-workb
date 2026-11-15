@@ -6,8 +6,8 @@ import styles from "./documentary-needs.module.css";
 import { HelpTip } from "./help-tip";
 import { listTransition, markerTransition } from "./motion";
 
-/** Where documentary work on a need ended; never a judgment on the questions it serves. */
-export type NeedOutcome = "prepared" | "gap" | "unfinished";
+/** Where documentary work on a need stands; never a judgment on the questions it serves. */
+export type NeedOutcome = "in_progress" | "prepared" | "gap" | "unfinished";
 
 export interface DocumentaryNeed {
     id: string;
@@ -32,11 +32,17 @@ export interface NeedQuestion {
 }
 
 const outcomes: Record<NeedOutcome, { label: string; legend: string }> = {
+    in_progress: { label: "In progress", legend: "Work under way" },
     prepared: { label: "Prepared", legend: "Prepared material" },
     gap: { label: "Gap", legend: "Searched, nothing usable" },
     unfinished: { label: "Unfinished", legend: "Work not completed" },
 };
-const outcomeOrder: readonly NeedOutcome[] = ["prepared", "gap", "unfinished"];
+const outcomeOrder: readonly NeedOutcome[] = [
+    "in_progress",
+    "prepared",
+    "gap",
+    "unfinished",
+];
 
 function needCount(relied: readonly DocumentaryNeed[]) {
     return [
@@ -107,6 +113,11 @@ function NeedOutcomeSummary({ need }: { need: DocumentaryNeed }) {
     if (need.outcome === "gap") return <Badge tone="review">Gap</Badge>;
     if (need.outcome === "unfinished")
         return <Badge tone="dashed">Unfinished</Badge>;
+    if (need.outcome === "in_progress" && !need.contributions)
+        return <Badge tone="accent">In progress</Badge>;
+    const progress = need.outcome === "in_progress" && (
+        <Badge tone="accent">In progress</Badge>
+    );
     const counts = [
         need.documents !== undefined && `${need.documents} documents`,
         need.contributions !== undefined &&
@@ -118,6 +129,7 @@ function NeedOutcomeSummary({ need }: { need: DocumentaryNeed }) {
                 <span className="wb-meta">{counts.join(" · ")}</span>
             )}
             {need.flag}
+            {progress}
         </span>
     );
 }
@@ -163,7 +175,10 @@ export function DocumentaryNeeds({
                 <div className={styles.head}>
                     <h2 id={headingId}>{title}</h2>
                     {/* Every caption shares one grid cell, so the table never shifts under a pointer. */}
-                    <p role="status" className={styles.lens}>
+                    <p
+                        role="status"
+                        className={styles.lens}
+                        hidden={questions.length === 0}>
                         <span
                             className={styles.lensLine}
                             data-active={!focused || undefined}
@@ -289,7 +304,8 @@ export function DocumentaryNeeds({
                                         </span>
                                     )}
                                 </th>
-                                {need.questions.length === 0 ? (
+                                {questions.length === 0 ? null : need.questions
+                                      .length === 0 ? (
                                     <td
                                         colSpan={questions.length}
                                         className={styles.context}>
@@ -328,12 +344,18 @@ export function DocumentaryNeeds({
                     </tbody>
                 </table>
                 <div className={styles.legend}>
-                    {outcomeOrder.map((outcome) => (
-                        <span key={outcome} className={styles.legendItem}>
-                            <NeedMark outcome={outcome} />
-                            {outcomes[outcome].legend}
-                        </span>
-                    ))}
+                    {outcomeOrder
+                        .filter(
+                            (outcome) =>
+                                outcome !== "in_progress" ||
+                                needs.some((need) => need.outcome === outcome),
+                        )
+                        .map((outcome) => (
+                            <span key={outcome} className={styles.legendItem}>
+                                <NeedMark outcome={outcome} />
+                                {outcomes[outcome].legend}
+                            </span>
+                        ))}
                 </div>
             </section>
         </MotionConfig>

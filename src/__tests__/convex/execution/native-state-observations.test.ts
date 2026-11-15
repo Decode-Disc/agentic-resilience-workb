@@ -25,13 +25,17 @@ import {
     Harness,
 } from "@earendil-works/pi-durable";
 import { getFunctionName } from "convex/server";
-import { afterEach, assert, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
+
+// Research starts run through the Sources mission; there is no corpus-approval fallback.
+beforeEach(() => activateSourcesMission());
 
 afterEach(() => {
     vi.useRealTimers();

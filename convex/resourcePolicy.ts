@@ -285,6 +285,13 @@ export const SOURCES_HANDOFF_READ_CAPACITY = {
 
 export const SOURCES_MAX_EVIDENCE_REFERENCES = 8;
 
+/** Analyst reader excerpts: cited passages with one neighbour each side, or the opening of an unqualified capture. The original stays one link away. */
+export const SOURCES_READER_CONTEXT_PASSAGES = 1;
+export const SOURCES_READER_OPENING_PASSAGES = 12;
+
+/** Records removed per dossier-purge transaction; a byte-safe batch under Convex write limits, not a purge allowance. */
+export const DOSSIER_PURGE_BATCH = 100;
+
 export const SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS = 15;
 
 export const MAX_EXA_DISCOVERY_ATTEMPTS = 2;

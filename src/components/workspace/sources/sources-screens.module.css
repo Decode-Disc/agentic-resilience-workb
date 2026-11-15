@@ -44,6 +44,9 @@
 .handoff {
     @apply mt-auto flex items-center gap-[10px] py-[10px] px-[12px] rounded-[12px] bg-accent bg-none text-[13px] leading-[18px] text-accent-foreground;
 }
+.matrixActions {
+    @apply flex flex-wrap items-center gap-[10px] max-w-[100%];
+}
 .search {
     @apply w-[320px] max-w-[100%] h-[40px] rounded-[12px];
 }

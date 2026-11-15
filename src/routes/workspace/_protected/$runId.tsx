@@ -18,8 +18,18 @@ export const Route = createFileRoute("/workspace/_protected/$runId")({
 
 function RunRoute() {
     const { runId } = Route.useParams();
-    const { section, subsection, inventory, view, coverage, detail } =
-        Route.useSearch();
+    const {
+        section,
+        subsection,
+        inventory,
+        detail,
+        sourcesView,
+        source,
+        q,
+        kind,
+        reading,
+        use,
+    } = Route.useSearch();
     const navigate = Route.useNavigate();
     const router = useRouter();
     const inventoryOriginIndex = useRef<number | null>(null);
@@ -53,24 +63,12 @@ function RunRoute() {
                     resetScroll: false,
                 });
             }}
-            sourceReviewNavigation={{ view: view ?? "overview", coverage }}
-            onSourceReviewNavigate={(destination) =>
+            sourcesSearch={{ sourcesView, source, q, kind, reading, use }}
+            onSourcesSearchChange={(patch, replace) =>
                 void navigate({
-                    to: "/workspace/$runId",
-                    params: { runId },
-                    search: (previous) => ({
-                        ...previous,
-                        section: "sources",
-                        view:
-                            destination.view === "overview"
-                                ? undefined
-                                : destination.view,
-                        coverage:
-                            destination.view === "inspect"
-                                ? destination.coverage
-                                : undefined,
-                    }),
-                    resetScroll: false,
+                    search: (previous) => ({ ...previous, ...patch }),
+                    replace,
+                    resetScroll: !replace,
                 })
             }
         />

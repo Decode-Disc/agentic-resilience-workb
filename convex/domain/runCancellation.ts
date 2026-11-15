@@ -5,6 +5,13 @@ import { recordResearchObservation } from "@convex/execution/researchControl";
 import { workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 
+/** A workflow that already completed, failed or was cancelled has nothing left to stop. */
+async function cancelWorkflowInProgress(ctx: MutationCtx, workflowId: string) {
+    const status = await workflow.status(ctx, workflowId as WorkflowId);
+    if (status.type === "inProgress")
+        await workflow.cancel(ctx, workflowId as WorkflowId);
+}
+
 /** Fences all late callbacks before cancelling either durable execution. */
 export async function cancelRunExecution(
     ctx: MutationCtx,
@@ -44,8 +51,7 @@ export async function cancelRunExecution(
             workflowId: undefined,
         });
     }
-    if (run.workflowId)
-        await workflow.cancel(ctx, run.workflowId as WorkflowId);
+    if (run.workflowId) await cancelWorkflowInProgress(ctx, run.workflowId);
     if (
         preparation?.kind === "preparation" &&
         preparation.executionGeneration === run.executionGeneration &&
@@ -53,7 +59,7 @@ export async function cancelRunExecution(
         preparation.workflowId &&
         preparation.workflowId !== run.workflowId
     ) {
-        await workflow.cancel(ctx, preparation.workflowId as WorkflowId);
+        await cancelWorkflowInProgress(ctx, preparation.workflowId);
     }
     await ctx.db.insert("runEvents", {
         runId: run._id,

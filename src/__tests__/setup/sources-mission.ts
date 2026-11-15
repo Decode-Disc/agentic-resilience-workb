@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
@@ -76,6 +77,12 @@ export const sourcesTestEnvelope = {
     acquisitions: 10,
     controls: 20,
 };
+
+/** Ordinary starts require explicit Sources activation; tests that start research opt in here. Pair with `vi.unstubAllEnvs()`. */
+export function activateSourcesMission(envelope = sourcesTestEnvelope) {
+    vi.stubEnv("SOURCES_MISSION_ENABLED", "true");
+    vi.stubEnv("SOURCES_MISSION_ENVELOPE", JSON.stringify(envelope));
+}
 
 /** Real mission/capture fixtures share the public operation path; no provider is called. */
 export async function seedCapturedSources(options: { text?: string } = {}) {

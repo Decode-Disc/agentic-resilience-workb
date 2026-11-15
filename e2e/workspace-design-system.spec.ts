@@ -108,17 +108,20 @@ test("workspace navigation and inventory preserve context on desktop and mobile"
         await expect(inventory).toBeVisible();
         await page.keyboard.press("Escape");
         await expect(inventory).toBeHidden();
-        await expect(page).toHaveURL(
-            new RegExp(
-                `section=sources&view=inspect&coverage=official_commercial_terms$`,
-            ),
-        );
-        await page.goto(`/workspace/${source.runId}?section=sources`);
+        // Closing the inventory keeps the Sources location; retired inspection links open the matrix.
+        await expect(page).toHaveURL(/section=sources/);
+        await expect(page).not.toHaveURL(/inventory=1/);
         await expect(
-            page.getByRole("heading", { name: "Proposed corpus", exact: true }),
+            page.getByRole("heading", {
+                name: "Sources view unavailable for this dossier",
+            }),
         ).toBeVisible();
+        await page.goto(`/workspace/${source.runId}?section=sources`);
+        // A dossier prepared by the retired corpus review explains why its sources are not shown.
         await expect(
-            page.getByRole("region", { name: "Selected source reading" }),
+            page.getByRole("heading", {
+                name: "Sources view unavailable for this dossier",
+            }),
         ).toBeVisible();
         for (const theme of ["light", "dark"]) {
             await page.evaluate(
