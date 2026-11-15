@@ -1,16 +1,24 @@
 @reference "../../../styles.css";
 
 .outcome {
-    @apply shrink-0 rounded-[20px] py-[16px] px-[18px] flex items-center gap-[18px];
+    @apply shrink-0 rounded-[20px] py-[12px] pr-[14px] pl-[18px] flex items-center flex-wrap gap-y-[12px] gap-x-[16px];
 }
 .outcomeText {
-    @apply flex flex-col gap-[6px];
+    @apply flex flex-col justify-center gap-[3px] min-h-[40px] pr-[16px] border-r border-divider;
+}
+.outcomeText > [class~="wb-label"] {
+    @apply leading-none;
 }
 .outcomeLabel {
-    @apply flex items-center gap-[8px] text-[16px] font-semibold;
+    @apply flex items-center gap-[7px] text-[15px] leading-[20px] font-semibold whitespace-nowrap;
 }
 .outcomeActions {
     @apply flex items-center flex-wrap gap-[8px];
+}
+@media (max-width: 560px) {
+    .outcomeText {
+        @apply basis-full pr-[0] pb-[8px] min-h-[0] border-r-0 border-b border-divider;
+    }
 }
 .secondaryAction {
     @apply h-[40px] rounded-[11px] py-0 px-[14px] gap-[6px] text-[14px];

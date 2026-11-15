@@ -181,7 +181,7 @@ test("launched context starts closed and retains the analyst's choice during wor
     await expect(context).toHaveAttribute("aria-expanded", "false");
 });
 
-test("conversation stays on the right and retains its draft across resizing", async ({
+test("conversation stays on the left and retains its draft across resizing", async ({
     page,
 }) => {
     const errors: string[] = [];
@@ -202,16 +202,14 @@ test("conversation stays on the right and retains its draft across resizing", as
         .getByRole("region", { name: "Documentary progress" })
         .boundingBox();
     expect(
-        before &&
-            progressBounds &&
-            before.x >= progressBounds.x + progressBounds.width,
+        before && progressBounds && before.x + before.width <= progressBounds.x,
     ).toBe(true);
     const separator = page.getByRole("separator", {
         name: "Resize conversation and progress",
         exact: true,
     });
     await separator.focus();
-    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowRight");
     await expect
         .poll(async () => (await conversation.boundingBox())?.width ?? 0)
         .toBeGreaterThan(before?.width ?? 0);
@@ -222,7 +220,7 @@ test("conversation stays on the right and retains its draft across resizing", as
         handle.y + handle.height / 2,
     );
     await page.mouse.down();
-    await page.mouse.move(handle.x + 120, handle.y + handle.height / 2, {
+    await page.mouse.move(handle.x - 120, handle.y + handle.height / 2, {
         steps: 5,
     });
     await page.mouse.up();

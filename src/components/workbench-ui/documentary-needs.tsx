@@ -46,7 +46,7 @@ const outcomeOrder: readonly NeedOutcome[] = [
 
 function needCount(relied: readonly DocumentaryNeed[]) {
     return [
-        `${relied.length} documentary needs`,
+        `${relied.length} documentary ${relied.length === 1 ? "need" : "needs"}`,
         ...outcomeOrder.flatMap((outcome) => {
             const count = relied.filter(
                 (need) => need.outcome === outcome,
@@ -156,6 +156,12 @@ export function DocumentaryNeeds({
     const focused = questions.find((question) => question.id === focus);
     const serves = (need: DocumentaryNeed, id = focus) =>
         id !== undefined && need.questions.includes(id);
+    const relied = focused
+        ? needs.filter((need) => serves(need, focused.id))
+        : [];
+    const repeatsNeed =
+        focused !== undefined &&
+        relied.some((need) => need.label.trim() === focused.question.trim());
     // A pinned question brings its needs forward; a hover or focus preview only highlights.
     const ordered = lens
         ? [
@@ -174,38 +180,28 @@ export function DocumentaryNeeds({
                 }}>
                 <div className={styles.head}>
                     <h2 id={headingId}>{title}</h2>
-                    {/* Every caption shares one grid cell, so the table never shifts under a pointer. */}
                     <p
                         role="status"
                         className={styles.lens}
                         hidden={questions.length === 0}>
-                        <span
-                            className={styles.lensLine}
-                            data-active={!focused || undefined}
-                            aria-hidden={focused ? true : undefined}>
-                            <span className={styles.hint}>
-                                Select a question to see the needs it relies on.
-                            </span>
-                        </span>
-                        {questions.map((question) => {
-                            const active = focused?.id === question.id;
-                            const relied = needs.filter((need) =>
-                                serves(need, question.id),
-                            );
-                            return (
-                                <span
-                                    key={question.id}
-                                    className={styles.lensLine}
-                                    data-active={active || undefined}
-                                    aria-hidden={active ? undefined : true}>
-                                    <b>{question.label}</b>
-                                    <span>{question.question}</span>
-                                    <span className="wb-meta">
-                                        {needCount(relied)}
-                                    </span>
+                        {!focused ? (
+                            <span className={styles.lensLine} data-active>
+                                <span className={styles.hint}>
+                                    Select a question to see the needs it relies
+                                    on.
                                 </span>
-                            );
-                        })}
+                            </span>
+                        ) : (
+                            <span className={styles.lensLine} data-active>
+                                <b>{focused.label}</b>
+                                {!repeatsNeed && (
+                                    <span>{focused.question}</span>
+                                )}
+                                <span className="wb-meta">
+                                    {needCount(relied)}
+                                </span>
+                            </span>
+                        )}
                     </p>
                 </div>
                 <table className={styles.table} aria-labelledby={headingId}>

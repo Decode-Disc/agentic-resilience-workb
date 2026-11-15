@@ -3,6 +3,11 @@
 .frame {
     @apply relative box-border w-[100%] max-w-[1440px] my-0 mx-auto pt-[20px] px-[48px] pb-[112px] flex flex-col gap-[20px] min-w-[0];
 }
+main .frame {
+    max-width: none;
+    padding-inline: 0;
+    padding-top: 0;
+}
 .top {
     @apply flex items-center justify-between flex-wrap gap-y-[12px] gap-x-[24px] min-w-[0];
 }

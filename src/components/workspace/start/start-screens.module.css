@@ -145,6 +145,9 @@
     container: research-progress / inline-size;
     @apply p-[24px] h-[100%] min-h-[0] overflow-y-auto min-w-[0] relative flex flex-col gap-[22px];
 }
+[data-workbench-layout="viewport"] .progress {
+    @apply pl-[24px] pr-[0];
+}
 .progress > .summaryPanel {
     @apply min-h-[0] p-[0] gap-[0];
 }
@@ -157,6 +160,10 @@
 .lanes,
 .completed {
     @apply grid grid-cols-3 gap-[14px] flex-[0_0_auto];
+}
+.lanes > :only-child,
+.completed > :only-child {
+    @apply col-span-full;
 }
 .progress > * {
     @apply shrink-0;
@@ -260,13 +267,16 @@
     @apply flex justify-between gap-[8px] text-[12.5px] text-muted-foreground;
 }
 .sourceHeading {
-    @apply flex items-end gap-[24px];
+    @apply flex items-start justify-between gap-x-[24px] gap-y-[14px];
 }
-.sourceHeading > div:first-child {
+.sourceTitles {
     @apply flex-[1] flex flex-col gap-[8px] min-w-[0];
 }
 .sourceHeading h1 {
-    @apply text-[36px] leading-[40px] font-medium tracking-[-0.045em] m-[0];
+    @apply text-[34px] leading-[38px] font-medium tracking-[-0.045em] m-[0] text-balance;
+}
+.sourceDescription {
+    @apply m-[0] max-w-[64ch] text-[14.5px] leading-[22px] text-muted-foreground;
 }
 .sourceLabel {
     @apply flex items-center gap-[10px];
@@ -277,10 +287,13 @@
     @apply w-[10px] h-[10px] rounded-[50%] bg-brand-purple bg-none;
 }
 .openProgress {
-    @apply flex flex-col items-end gap-[8px];
+    @apply flex flex-col items-end gap-[8px] shrink-0 pt-[4px];
+}
+.sourceActions {
+    @apply flex flex-wrap items-center justify-end gap-[8px];
 }
 .openProgress button {
-    @apply text-[14.5px] h-[44px] py-0 px-[18px];
+    @apply text-[14px] h-[40px] py-0 px-[16px];
 }
 .openProgress > span {
     @apply text-[12.5px] text-muted-foreground;
@@ -332,7 +345,10 @@
     }
 }
 .research[data-compact="true"] .progress {
-    padding: 24px 16px calc(84px + env(safe-area-inset-bottom));
+    padding: 20px 16px calc(84px + env(safe-area-inset-bottom));
+}
+[data-workbench-layout="viewport"] .research[data-compact="true"] .progress {
+    padding-inline: 0;
 }
 .research[data-compact="true"] .handoff {
     @apply static;
@@ -351,13 +367,16 @@
         @apply basis-[100%];
     }
     .sourceHeading {
-        @apply items-start flex-col gap-[14px];
+        @apply items-start flex-col gap-[12px];
     }
     .sourceHeading h1 {
         @apply text-[28px] leading-[34px] tracking-[-0.03em];
     }
     .openProgress {
-        @apply items-start;
+        @apply items-start pt-[0] w-[100%];
+    }
+    .sourceActions {
+        @apply justify-start;
     }
     .counts {
         @apply gap-[26px];
@@ -367,6 +386,20 @@
     }
     .stageLabels {
         @apply flex-wrap;
+    }
+}
+@container research-progress (max-width: 26rem) {
+    .sourceHeading h1 {
+        @apply text-[24px] leading-[30px];
+    }
+    .counts {
+        @apply w-[100%] justify-between gap-[16px];
+    }
+    .counts b {
+        @apply text-[28px] leading-[32px];
+    }
+    .sourceActions {
+        @apply w-[100%];
     }
 }
 

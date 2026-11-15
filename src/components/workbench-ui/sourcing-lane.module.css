@@ -1,6 +1,6 @@
 @reference "../../styles.css";
 .lane {
-    @apply rounded-(--radius-2xl) p-[14px] flex flex-col gap-[8px] bg-foreground/[3.5%] bg-none;
+    @apply rounded-(--radius-2xl) p-[14px] flex flex-col gap-[8px] min-w-[0] bg-foreground/[3.5%] bg-none;
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--foreground) 6%, transparent);
 }

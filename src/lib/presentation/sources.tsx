@@ -1,23 +1,23 @@
 import type { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
+import { Badge } from "@/components/ui/badge";
 import type { DocumentaryNeed } from "@/components/workbench-ui/documentary-needs";
 import {
     ClaimGlyph,
     type ClaimTone,
     WorkbenchIcon,
 } from "@/components/workbench-ui/glyphs";
+import type { SourceMatrixRow } from "@/components/workbench-ui/source-matrix";
 import type {
     ReaderContribution,
     ReaderObservedLink,
     ReaderPage,
 } from "@/components/workbench-ui/source-reader";
 import type { SourceReaderListItem } from "@/components/workbench-ui/source-reader-list";
-import type { SourceMatrixRow } from "@/components/workbench-ui/source-matrix";
 import type {
     SourcesMatrixFilter,
     SourcesPreparationView,
 } from "@/components/workspace/sources/sources-screens";
-import { Badge } from "@/components/ui/badge";
 import { sourceDocumentKindLabel } from "@/lib/presentation/research-copy";
 import { sourceMissionPresentation } from "@/lib/presentation/workbench";
 
@@ -403,7 +403,7 @@ export function sourcesPreparationView(
         missionStatus: overview.missionStatus,
     });
     const labels = questionLabels(overview);
-    const settled = state === "completed" || state === "interrupted";
+    const settled = state === "completed";
     const limited =
         overview.materialOutcome === "partial" ||
         overview.materialOutcome === "blocked";
@@ -550,11 +550,23 @@ export function sourcesPreparationView(
                       .join(" · ")
                 : undefined,
         },
-        questions: overview.questions.map((question, index) => ({
-            id: question.id,
-            label: labels.get(question.id) ?? `Q${index + 1}`,
-            question: question.text,
-        })),
+        questions: overview.questions.map((question, index) => {
+            const label = labels.get(question.id) ?? `Q${index + 1}`;
+            const repeatedInNeed = overview.needs.some(
+                (need) =>
+                    need.questionIds.includes(question.id) &&
+                    need.information.trim() === question.text.trim(),
+            );
+            const short = question.shortLabel.trim();
+            return {
+                id: question.id,
+                label,
+                question:
+                    repeatedInNeed && short && short !== label
+                        ? short
+                        : question.text,
+            };
+        }),
         needs: overview.needs.map(
             (need): DocumentaryNeed => ({
                 id: need.id,

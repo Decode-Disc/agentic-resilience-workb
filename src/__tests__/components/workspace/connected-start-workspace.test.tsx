@@ -776,7 +776,7 @@ test.each([
     else expect(second?.requestKey).toBe(first?.requestKey);
 });
 
-test("a launched dossier offers the workspace sections and names its progress page", () => {
+test("a launched dossier keeps the research viewport free of segment-scroll and offers workspace sections on the timeline detail view", () => {
     convexReactHarness.query(api.workbench.snapshot).returns({
         ...readySnapshot,
         run: {
@@ -786,7 +786,24 @@ test("a launched dossier offers the workspace sections and names its progress pa
             executionStatus: "running",
         },
     });
-    render(<ConnectedStartWorkspace runId={runId} />);
+    const { rerender } = render(<ConnectedStartWorkspace runId={runId} />);
+    expect(
+        screen.queryByRole("navigation", {
+            name: "Research workspace sections",
+        }),
+    ).toBeNull();
+    expect(
+        screen.getAllByRole("button", { name: /View progress/ }).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Open Progress/i })).toBeNull();
+
+    rerender(
+        <ConnectedStartWorkspace
+            runId={runId}
+            detail="timeline"
+            progress={<p>Timeline entries</p>}
+        />,
+    );
     const sections = screen.getByRole("navigation", {
         name: "Research workspace sections",
     });
@@ -798,10 +815,6 @@ test("a launched dossier offers the workspace sections and names its progress pa
     expect(
         within(sections).getByRole("link", { name: "Sources" }),
     ).toBeTruthy();
-    expect(
-        screen.getAllByRole("button", { name: /View progress/ }).length,
-    ).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /Open Progress/i })).toBeNull();
 });
 
 test("framing before launch keeps its screen without workspace sections", () => {

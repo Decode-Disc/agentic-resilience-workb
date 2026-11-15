@@ -8,6 +8,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { ConvexError } from "convex/values";
+import { MotionConfig, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ConversationHistory } from "@/components/chat/conversation-history";
 import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
@@ -120,6 +121,93 @@ function StartWorkspaceSession(props: StartWorkspaceProps) {
         </LoadErrorBoundary>
     );
 }
+/** Layout-accurate skeleton for the Research split viewport and the Progress timeline detail view. */
+export function StartWorkspaceSkeleton({
+    detail,
+    ariaLabel = "Loading research conversation",
+}: {
+    detail?: "timeline" | "framing";
+    ariaLabel?: string;
+}) {
+    if (detail === "timeline")
+        return (
+            <div
+                role="status"
+                aria-label={ariaLabel}
+                aria-busy="true"
+                className="min-w-0 space-y-6 pb-28 pt-2 sm:pb-36">
+                <Skeleton className="h-9 w-72 max-w-full rounded-xl" />
+                <div className="space-y-3">
+                    <Skeleton className="h-8 w-36 rounded-lg" />
+                    <Skeleton className="h-8 w-32 rounded-lg" />
+                </div>
+                <div className="space-y-4">
+                    <Skeleton className="h-28 w-full rounded-2xl" />
+                    <Skeleton className="h-44 w-full rounded-2xl" />
+                    <Skeleton className="h-36 w-full rounded-2xl" />
+                </div>
+            </div>
+        );
+    return (
+        <div
+            role="status"
+            aria-label={ariaLabel}
+            aria-busy="true"
+            className="flex h-full min-h-0 flex-1 overflow-hidden">
+            <div className="hidden min-h-0 w-[40%] min-w-[22rem] flex-col gap-4 border-r border-divider bg-card/35 px-4 py-3 md:flex">
+                <div className="flex items-center justify-between border-b border-divider pb-3">
+                    <Skeleton className="h-6 w-36 rounded-md" />
+                    <Skeleton className="h-7 w-28 rounded-full" />
+                </div>
+                <div className="flex flex-1 flex-col gap-4 pt-2">
+                    <Skeleton className="h-16 w-4/5 rounded-2xl" />
+                    <Skeleton className="h-24 w-11/12 rounded-2xl" />
+                    <Skeleton className="h-14 w-2/3 self-end rounded-2xl" />
+                </div>
+                <Skeleton className="mt-auto h-24 w-full rounded-2xl" />
+            </div>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 py-6 md:pl-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+                        <Skeleton className="h-3.5 w-28 rounded" />
+                        <Skeleton className="h-9 w-80 max-w-full rounded-lg" />
+                        <Skeleton className="h-4 w-96 max-w-full rounded" />
+                    </div>
+                    <Skeleton className="h-10 w-36 shrink-0 rounded-full" />
+                </div>
+                <div className="flex flex-wrap items-center gap-8 rounded-2xl border border-divider bg-card/55 px-5 py-4">
+                    <div className="flex gap-8">
+                        <div className="space-y-1.5">
+                            <Skeleton className="h-10 w-12 rounded-md" />
+                            <Skeleton className="h-3 w-12 rounded" />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Skeleton className="h-10 w-12 rounded-md" />
+                            <Skeleton className="h-3 w-16 rounded" />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Skeleton className="h-10 w-12 rounded-md" />
+                            <Skeleton className="h-3 w-16 rounded" />
+                        </div>
+                    </div>
+                    <div className="min-w-[12rem] flex-1 space-y-2.5">
+                        <Skeleton className="h-2 w-full rounded-full" />
+                        <div className="flex justify-between gap-2">
+                            <Skeleton className="h-3 w-14 rounded" />
+                            <Skeleton className="h-3 w-24 rounded" />
+                            <Skeleton className="h-3 w-16 rounded" />
+                        </div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
+                    <Skeleton className="h-64 w-full rounded-2xl" />
+                    <Skeleton className="h-64 w-full rounded-2xl" />
+                    <Skeleton className="h-64 w-full rounded-2xl" />
+                </div>
+            </div>
+        </div>
+    );
+}
 function StartWorkspaceQuery({
     runId,
     detail,
@@ -128,16 +216,7 @@ function StartWorkspaceQuery({
 }: StartWorkspaceProps & { drafts: ReturnType<typeof useStartDraft> }) {
     const snapshot = useQuery(api.workbench.snapshot, { runId });
     if (snapshot === undefined)
-        return (
-            <div
-                role="status"
-                aria-label="Loading research conversation"
-                className="flex min-h-0 flex-1 flex-col gap-6 p-6">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-24 w-3/4" />
-                <Skeleton className="mt-auto h-64 w-full" />
-            </div>
-        );
+        return <StartWorkspaceSkeleton detail={detail} />;
     return (
         <StartWorkspaceContent
             key={runId}
@@ -855,198 +934,214 @@ function StartWorkspaceContent({
     const sections = <WorkspaceNavigation runId={runId} section="progress" />;
     if (detail === "timeline")
         return (
-            <div className="min-w-0 pb-28 pt-2 sm:pb-36">
-                {sections}
-                <header className="mb-5 flex flex-col items-start gap-3">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                            void navigate({
-                                to: "/workspace/$runId",
-                                params: { runId },
-                                search: { section: "progress" },
-                            })
-                        }>
-                        <Icon iconNode={ArrowLeft01Icon} size={16} />
-                        Back to research
-                    </Button>
-                    <h1 className="text-section text-2xl">Progress</h1>
-                </header>
-                {progress}
-            </div>
+            <MotionConfig reducedMotion="user">
+                <motion.div
+                    key="timeline"
+                    initial={{ opacity: 0, x: 18 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                    className="min-w-0 pb-28 pt-2 sm:pb-36">
+                    {sections}
+                    <header className="mb-5 flex flex-col items-start gap-3">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                                void navigate({
+                                    to: "/workspace/$runId",
+                                    params: { runId },
+                                    search: { section: "progress" },
+                                })
+                            }>
+                            <Icon iconNode={ArrowLeft01Icon} size={16} />
+                            Back to research
+                        </Button>
+                        <h1 className="text-section text-2xl">Progress</h1>
+                    </header>
+                    {progress}
+                </motion.div>
+            </MotionConfig>
         );
     return (
-        <WorkbenchUiRoot className="flex h-full min-h-0 flex-1 flex-col">
-            {launched && <div className="shrink-0 px-4 pt-3">{sections}</div>}
-            {inspecting ? (
-                <StartFramingScreen
-                    runtime={conversation.runtime}
-                    context={context}
-                    conversation={log}
-                    action={program}
-                    actionLabel={
-                        launched ? "Research program" : "Pending action"
-                    }
-                />
-            ) : (
-                <StartResearchScreen
-                    runtime={conversation.runtime}
-                    context={context}
-                    conversation={log}
-                    conversationComposer={composer}
-                    heading={
-                        <>
-                            <StartSourcesHeader
-                                running={sourceState === "running"}
-                                label={
-                                    sourceState === "running"
-                                        ? "// Sources · live"
-                                        : sourceState === "paused"
-                                          ? "// Sources · paused"
-                                          : "// Sources"
-                                }
-                                title={sourcePresentation.title}
-                                onOpenProgress={() =>
-                                    void navigate({
-                                        to: "/workspace/$runId",
-                                        params: { runId },
-                                        search: {
-                                            section: "progress",
-                                            detail: "timeline",
-                                        },
-                                    })
-                                }
-                            />
-                            {researchControls}
-                            {(sourceState === "completed" ||
-                                sourceState === "interrupted") && (
-                                <p
-                                    className="text-sm text-muted-foreground"
-                                    role="status">
-                                    {sourcePresentation.detail}
-                                </p>
-                            )}
-                        </>
-                    }
-                    summary={
-                        <StartSourceCounts
-                            counts={[
-                                {
-                                    value: snapshot.sources.length,
-                                    label: "found",
-                                },
-                                {
-                                    value: snapshot.sources.filter(
-                                        (s) => s.state === "capturing",
-                                    ).length,
-                                    label:
-                                        sourceState === "running"
-                                            ? "capturing"
-                                            : "waiting",
-                                    highlight: sourceState === "running",
-                                },
-                                { value: captured, label: "captured" },
-                            ]}
+        <MotionConfig reducedMotion="user">
+            <motion.div
+                key={inspecting ? "framing" : "research"}
+                initial={{ opacity: 0, x: -14 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="flex h-full min-h-0 flex-1 flex-col">
+                <WorkbenchUiRoot className="flex h-full min-h-0 flex-1 flex-col">
+                    {inspecting ? (
+                        <StartFramingScreen
+                            runtime={conversation.runtime}
+                            context={context}
+                            conversation={log}
+                            action={program}
+                            actionLabel={
+                                launched ? "Research program" : "Pending action"
+                            }
                         />
-                    }
-                    lanes={
-                        snapshot.sources.length ? (
-                            (["found", "capturing", "captured"] as const).map(
-                                (stage) => {
-                                    const docs = snapshot.sources.filter(
-                                        (s) => s.state === stage,
-                                    );
-                                    return (
-                                        <SourcingLane
-                                            key={stage}
-                                            state={stage}
-                                            active={
-                                                stage === "capturing" &&
-                                                sourceState === "running"
-                                            }
-                                            label={
-                                                stage === "found"
-                                                    ? "Found"
-                                                    : stage === "capturing"
-                                                      ? sourceState ===
-                                                        "running"
-                                                          ? "Capturing"
-                                                          : "Waiting"
-                                                      : "Captured"
-                                            }
-                                            count={docs.length}
-                                            documents={docs
-                                                .slice(0, 4)
-                                                .map((s) => ({
-                                                    id: s.id,
-                                                    title: s.title,
-                                                    format: s.format,
-                                                    meta: s.unavailable
-                                                        ? "Reading unavailable"
-                                                        : "",
-                                                }))}
-                                            remainingLabel={
-                                                docs.length > 4
-                                                    ? `+${docs.length - 4} more`
-                                                    : undefined
-                                            }
-                                            emptyMessage="No documents at this stage."
-                                        />
-                                    );
-                                },
-                            )
-                        ) : (
-                            <Empty>
-                                <EmptyHeader>
-                                    <EmptyTitle>
-                                        {insufficient
-                                            ? "No documentary preparation completed"
-                                            : "Preparing source discovery"}
-                                    </EmptyTitle>
-                                    <EmptyDescription>
-                                        {insufficient
-                                            ? "Research ended before documentary preparation could proceed."
-                                            : "Documents will appear as they are found."}
-                                    </EmptyDescription>
-                                </EmptyHeader>
-                            </Empty>
-                        )
-                    }
-                    notice={
-                        insufficient ? (
-                            <div className="p-4">
-                                <p>
-                                    There is not enough public evidence to
-                                    continue this research.
-                                </p>
-                                <Button
-                                    variant="launch"
-                                    onClick={() =>
+                    ) : (
+                        <StartResearchScreen
+                            runtime={conversation.runtime}
+                            context={context}
+                            conversation={log}
+                            conversationComposer={composer}
+                            heading={
+                                <StartSourcesHeader
+                                    running={sourceState === "running"}
+                                    label={
+                                        sourceState === "running"
+                                            ? "// Sources · live"
+                                            : sourceState === "paused"
+                                              ? "// Sources · paused"
+                                              : "// Sources"
+                                    }
+                                    title={sourcePresentation.title}
+                                    description={
+                                        sourceState === "completed" ||
+                                        sourceState === "interrupted"
+                                            ? sourcePresentation.detail
+                                            : undefined
+                                    }
+                                    actions={researchControls}
+                                    onOpenProgress={() =>
                                         void navigate({
-                                            to: "/workspace/start",
+                                            to: "/workspace/$runId",
+                                            params: { runId },
+                                            search: {
+                                                section: "progress",
+                                                detail: "timeline",
+                                            },
                                         })
-                                    }>
-                                    Start another analysis
-                                </Button>
-                            </div>
-                        ) : undefined
-                    }
-                />
-            )}
-            {launched && inspecting && (
-                <Button
-                    variant="ghost"
-                    onClick={() =>
-                        void navigate({
-                            to: "/workspace/$runId",
-                            params: { runId },
-                            search: { section: "progress" },
-                        })
-                    }>
-                    Back to preparation
-                </Button>
-            )}
-        </WorkbenchUiRoot>
+                                    }
+                                />
+                            }
+                            summary={
+                                <StartSourceCounts
+                                    counts={[
+                                        {
+                                            value: snapshot.sources.length,
+                                            label: "found",
+                                        },
+                                        {
+                                            value: snapshot.sources.filter(
+                                                (s) => s.state === "capturing",
+                                            ).length,
+                                            label:
+                                                sourceState === "running"
+                                                    ? "capturing"
+                                                    : "waiting",
+                                            highlight:
+                                                sourceState === "running",
+                                        },
+                                        { value: captured, label: "captured" },
+                                    ]}
+                                />
+                            }
+                            lanes={
+                                snapshot.sources.length ? (
+                                    (
+                                        [
+                                            "found",
+                                            "capturing",
+                                            "captured",
+                                        ] as const
+                                    ).map((stage) => {
+                                        const docs = snapshot.sources.filter(
+                                            (s) => s.state === stage,
+                                        );
+                                        return (
+                                            <SourcingLane
+                                                key={stage}
+                                                state={stage}
+                                                active={
+                                                    stage === "capturing" &&
+                                                    sourceState === "running"
+                                                }
+                                                label={
+                                                    stage === "found"
+                                                        ? "Found"
+                                                        : stage === "capturing"
+                                                          ? sourceState ===
+                                                            "running"
+                                                              ? "Capturing"
+                                                              : "Waiting"
+                                                          : "Captured"
+                                                }
+                                                count={docs.length}
+                                                documents={docs
+                                                    .slice(0, 4)
+                                                    .map((s) => ({
+                                                        id: s.id,
+                                                        title: s.title,
+                                                        format: s.format,
+                                                        meta: s.unavailable
+                                                            ? "Reading unavailable"
+                                                            : "",
+                                                    }))}
+                                                remainingLabel={
+                                                    docs.length > 4
+                                                        ? `+${docs.length - 4} more`
+                                                        : undefined
+                                                }
+                                                emptyMessage="No documents at this stage."
+                                            />
+                                        );
+                                    })
+                                ) : (
+                                    <Empty>
+                                        <EmptyHeader>
+                                            <EmptyTitle>
+                                                {insufficient
+                                                    ? "No documentary preparation completed"
+                                                    : "Preparing source discovery"}
+                                            </EmptyTitle>
+                                            <EmptyDescription>
+                                                {insufficient
+                                                    ? "Research ended before documentary preparation could proceed."
+                                                    : "Documents will appear as they are found."}
+                                            </EmptyDescription>
+                                        </EmptyHeader>
+                                    </Empty>
+                                )
+                            }
+                            notice={
+                                insufficient ? (
+                                    <div className="p-4">
+                                        <p>
+                                            There is not enough public evidence
+                                            to continue this research.
+                                        </p>
+                                        <Button
+                                            variant="launch"
+                                            onClick={() =>
+                                                void navigate({
+                                                    to: "/workspace/start",
+                                                })
+                                            }>
+                                            Start another analysis
+                                        </Button>
+                                    </div>
+                                ) : undefined
+                            }
+                        />
+                    )}
+                    {launched && inspecting && (
+                        <Button
+                            variant="ghost"
+                            onClick={() =>
+                                void navigate({
+                                    to: "/workspace/$runId",
+                                    params: { runId },
+                                    search: { section: "progress" },
+                                })
+                            }>
+                            Back to preparation
+                        </Button>
+                    )}
+                </WorkbenchUiRoot>
+            </motion.div>
+        </MotionConfig>
     );
 }

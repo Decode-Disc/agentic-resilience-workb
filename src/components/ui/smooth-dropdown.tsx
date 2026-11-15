@@ -45,6 +45,8 @@ export interface SmoothDropdownProps {
     footer?: ReactNode;
     openPosition?: "bottom" | "top";
     openFrom?: "left" | "right";
+    align?: "start" | "center" | "end";
+    alignOffset?: number;
     portalContainer?: Element | DocumentFragment | null;
     className?: string;
     menuClassName?: string;
@@ -85,6 +87,8 @@ export function SmoothDropdwon({
     footer,
     openPosition = "bottom",
     openFrom = "left",
+    align,
+    alignOffset = 0,
     portalContainer = null,
     className,
     menuClassName,
@@ -206,8 +210,22 @@ export function SmoothDropdwon({
     }, [isOpen, isControlled]);
 
     const openHeight = Math.max(closedHeight, Math.ceil(contentHeight));
-    const opensToLeft = openFrom === "right";
+    const resolvedAlign = align ?? (openFrom === "right" ? "end" : "start");
+    const opensToLeft = resolvedAlign === "end";
+    const isCentered = resolvedAlign === "center";
     const isPortalled = portalContainer !== null;
+
+    const effectiveOpenWidth = (() => {
+        if (!containerRef.current) return openWidth;
+        const rect = containerRef.current.getBoundingClientRect();
+        const available = isCentered
+            ? window.innerWidth - 16
+            : opensToLeft
+              ? rect.right - alignOffset
+              : window.innerWidth - rect.left - alignOffset;
+        return Math.min(openWidth, Math.floor(available));
+    })();
+    const itemClosedOffset = opensToLeft ? 8 : -8;
 
     useEffect(() => {
         if (!isPortalled || !isOpen || !containerRef.current) {
@@ -221,13 +239,35 @@ export function SmoothDropdwon({
                 return;
             }
 
+            const horizontalStyle: CSSProperties = isCentered
+                ? {
+                      left: Math.max(
+                          8,
+                          Math.min(
+                              rect.left +
+                                  rect.width / 2 -
+                                  effectiveOpenWidth / 2 +
+                                  alignOffset,
+                              window.innerWidth - effectiveOpenWidth - 8,
+                          ),
+                      ),
+                  }
+                : opensToLeft
+                  ? {
+                        right: Math.max(
+                            0,
+                            window.innerWidth - rect.right - alignOffset,
+                        ),
+                    }
+                  : {
+                        left: Math.max(0, rect.left + alignOffset),
+                    };
+
             setPortalStyle({
                 ...(openPosition === "top"
                     ? { bottom: Math.max(0, window.innerHeight - rect.bottom) }
                     : { top: Math.max(0, rect.top) }),
-                ...(opensToLeft
-                    ? { right: Math.max(0, window.innerWidth - rect.right) }
-                    : { left: Math.max(0, rect.left) }),
+                ...horizontalStyle,
             });
         };
 
@@ -240,17 +280,15 @@ export function SmoothDropdwon({
             window.removeEventListener("resize", updatePortalPosition);
             window.removeEventListener("scroll", updatePortalPosition, true);
         };
-    }, [isOpen, isPortalled, openPosition, opensToLeft]);
-
-    const effectiveOpenWidth = (() => {
-        if (!containerRef.current) return openWidth;
-        const rect = containerRef.current.getBoundingClientRect();
-        const available = opensToLeft
-            ? rect.right
-            : window.innerWidth - rect.left;
-        return Math.min(openWidth, Math.floor(available));
-    })();
-    const itemClosedOffset = opensToLeft ? 8 : -8;
+    }, [
+        alignOffset,
+        effectiveOpenWidth,
+        isCentered,
+        isOpen,
+        isPortalled,
+        openPosition,
+        opensToLeft,
+    ]);
 
     const renderItemIcon = (icon: PlatformIcon | ReactNode | undefined) => {
         if (!icon) {
@@ -271,16 +309,24 @@ export function SmoothDropdwon({
 
     const menuOriginClass =
         openPosition === "top"
-            ? opensToLeft
-                ? "origin-bottom-right"
-                : "origin-bottom-left"
-            : opensToLeft
-              ? "origin-top-right"
-              : "origin-top-left";
+            ? isCentered
+                ? "origin-bottom"
+                : opensToLeft
+                  ? "origin-bottom-right"
+                  : "origin-bottom-left"
+            : isCentered
+              ? "origin-top"
+              : opensToLeft
+                ? "origin-top-right"
+                : "origin-top-left";
 
     const menuPositionClass = cn(
         "absolute cursor-pointer overflow-hidden border border-border bg-popover shadow-lg",
-        opensToLeft ? "right-0" : "left-0",
+        isCentered
+            ? "left-1/2 -translate-x-1/2"
+            : opensToLeft
+              ? "right-0"
+              : "left-0",
         openPosition === "top" ? "bottom-0" : "top-0",
         menuOriginClass,
     );
@@ -483,7 +529,8 @@ export function SmoothDropdwon({
             layout
             initial={false}
             data-testid="smooth-dropdown-menu"
-            data-open-from={openFrom}
+            data-align={resolvedAlign}
+            data-open-from={opensToLeft ? "right" : "left"}
             data-open-position={openPosition}
             data-portalled={isPortalled && isOpen ? "true" : "false"}
             animate={{

@@ -255,13 +255,13 @@ export function StartResearchScreen({
     const conversationId = `${id}-conversation`;
     const progressId = `${id}-progress`;
     const desktopLayout = useRef<Layout>({
-        [progressId]: 60,
         [conversationId]: 40,
+        [progressId]: 60,
     });
     useLayoutEffect(() => {
         group.current?.setLayout(
             compact
-                ? { [progressId]: 100, [conversationId]: 0 }
+                ? { [conversationId]: 0, [progressId]: 100 }
                 : desktopLayout.current,
         );
     }, [compact, conversationId, progressId]);
@@ -310,6 +310,23 @@ export function StartResearchScreen({
                     }}
                     className={styles.researchPanels}>
                     <ResizablePanel
+                        id={conversationId}
+                        minSize={compact ? 0 : "22rem"}
+                        maxSize={compact ? 0 : "100%"}
+                        className={styles.researchPane}
+                        style={{
+                            display: compact ? "none" : undefined,
+                            overflow: "hidden",
+                        }}>
+                        {!compact && conversationPane}
+                    </ResizablePanel>
+                    <ResizableHandle
+                        withHandle
+                        disabled={compact}
+                        className={compact ? styles.compactHandle : undefined}
+                        aria-label="Resize conversation and progress"
+                    />
+                    <ResizablePanel
                         id={progressId}
                         minSize={compact ? 0 : "26rem"}
                         className={styles.researchPane}
@@ -330,9 +347,11 @@ export function StartResearchScreen({
                                             : styles.summaryOverview
                                     }>
                                     {summary}
-                                    <div className={styles.stages}>
-                                        {stages}
-                                    </div>
+                                    {stages && (
+                                        <div className={styles.stages}>
+                                            {stages}
+                                        </div>
+                                    )}
                                 </div>
                                 {limitations}
                             </GlassPanel>
@@ -346,23 +365,6 @@ export function StartResearchScreen({
                                 <div className={styles.handoff}>{handoff}</div>
                             )}
                         </section>
-                    </ResizablePanel>
-                    <ResizableHandle
-                        withHandle
-                        disabled={compact}
-                        className={compact ? styles.compactHandle : undefined}
-                        aria-label="Resize conversation and progress"
-                    />
-                    <ResizablePanel
-                        id={conversationId}
-                        minSize={compact ? 0 : "22rem"}
-                        maxSize={compact ? 0 : "100%"}
-                        className={styles.researchPane}
-                        style={{
-                            display: compact ? "none" : undefined,
-                            overflow: "hidden",
-                        }}>
-                        {!compact && conversationPane}
                     </ResizablePanel>
                 </ResizablePanelGroup>
                 {compact && (
@@ -898,12 +900,18 @@ export function StartSourceStages({
 export function StartSourcesHeader({
     label,
     title,
+    description,
+    actions,
     onOpenProgress,
     detail,
     running = false,
 }: {
     label: string;
     title: string;
+    /** Status summary or explanation shown directly under the title. */
+    description?: ReactNode;
+    /** Secondary controls (such as pause, resume or restart) grouped with the progress action. */
+    actions?: ReactNode;
     /** Opens the dossier's activity log, the recorded timeline of research steps. */
     onOpenProgress?: () => void;
     detail?: string;
@@ -911,7 +919,7 @@ export function StartSourcesHeader({
 }) {
     return (
         <div className={styles.sourceHeading}>
-            <div>
+            <div className={styles.sourceTitles}>
                 <span className={styles.sourceLabel}>
                     {running && (
                         <span className={styles.liveDot} aria-hidden="true" />
@@ -919,13 +927,27 @@ export function StartSourcesHeader({
                     {label}
                 </span>
                 <h1>{title}</h1>
+                {description && (
+                    <p className={styles.sourceDescription} role="status">
+                        {description}
+                    </p>
+                )}
             </div>
-            {onOpenProgress && (
+            {(actions || onOpenProgress || detail) && (
                 <div className={styles.openProgress}>
-                    <Button variant="launch" onClick={onOpenProgress}>
-                        View progress
-                        <WorkbenchIcon name="chevron" size={14} />
-                    </Button>
+                    {(actions || onOpenProgress) && (
+                        <div className={styles.sourceActions}>
+                            {actions}
+                            {onOpenProgress && (
+                                <Button
+                                    variant="launch"
+                                    onClick={onOpenProgress}>
+                                    View progress
+                                    <WorkbenchIcon name="chevron" size={14} />
+                                </Button>
+                            )}
+                        </div>
+                    )}
                     {detail && <span>{detail}</span>}
                 </div>
             )}

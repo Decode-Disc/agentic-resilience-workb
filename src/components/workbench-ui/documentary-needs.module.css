@@ -5,20 +5,18 @@
     container-type: inline-size;
 }
 .head {
-    @apply flex items-start justify-between flex-wrap gap-y-[8px] gap-x-[24px] pb-[6px];
+    @apply flex items-baseline justify-between flex-wrap gap-y-[6px] gap-x-[24px] pb-[6px];
 }
 .head h2 {
     @apply m-[0] text-[16px] font-semibold tracking-[-0.02em] leading-[24px];
 }
 .lens {
-    @apply m-[0] flex-[1] min-w-[0] grid justify-items-end;
+    @apply m-[0] flex-[1] min-w-[0] flex justify-end;
 }
 .lensLine {
-    grid-area: 1 / 1;
-    @apply invisible inline-flex flex-wrap items-baseline justify-end gap-y-[2px] gap-x-[8px] text-right text-[13.5px];
+    @apply inline-flex flex-wrap items-baseline justify-end gap-y-[2px] gap-x-[8px] text-right text-[13.5px] leading-[20px];
 }
 .lensLine[data-active] {
-    @apply visible;
     animation: lens-in 0.24s var(--wb-ease-arrive);
 }
 @keyframes lens-in {

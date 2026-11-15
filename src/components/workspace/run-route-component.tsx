@@ -16,8 +16,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EvidenceInventory } from "@/components/workspace/evidence-inventory";
 import { RunProgress } from "@/components/workspace/run-progress";
 import { ConnectedSources } from "@/components/workspace/sources/connected-sources";
-import { ConnectedStartWorkspace } from "@/components/workspace/start/connected-start-workspace";
+import {
+    ConnectedStartWorkspace,
+    StartWorkspaceSkeleton,
+} from "@/components/workspace/start/connected-start-workspace";
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
+import { sourceMissionState } from "@/lib/presentation/workbench";
 import {
     type WorkspaceSearch,
     type WorkspaceSection,
@@ -25,7 +29,6 @@ import {
     workspaceSections,
 } from "@/lib/workspace/navigation";
 import { stashWorkbenchDraft } from "@/lib/workspace/workbench-draft";
-import { sourceMissionState } from "@/lib/presentation/workbench";
 
 type SourcesSearch = Pick<
     WorkspaceSearch,
@@ -93,7 +96,25 @@ export function RunRouteComponent({
     const events = useQuery(api.researchRuns.listMyEvents, { runId });
     const [localInventoryOpen, setLocalInventoryOpen] = useState(false);
 
-    if (run === undefined || events === undefined) {
+    const needsEvents =
+        section !== "progress" ||
+        detail === "timeline" ||
+        (run !== undefined && run !== null && run.startMode !== "framed");
+
+    if (run === undefined || (needsEvents && events === undefined)) {
+        if (section === "progress")
+            return (
+                <div
+                    data-workbench-layout={
+                        detail === "timeline" ? "document" : "viewport"
+                    }
+                    className="flex min-h-0 flex-1 flex-col">
+                    <StartWorkspaceSkeleton
+                        detail={detail}
+                        ariaLabel="Loading research workspace"
+                    />
+                </div>
+            );
         return (
             <div
                 role="status"
@@ -102,24 +123,10 @@ export function RunRouteComponent({
                 aria-busy="true">
                 <Skeleton className="h-10 w-full max-w-md" />
                 <Skeleton className="h-8 w-64 max-w-full" />
-                {section === "progress" ? (
-                    <div className="grid items-start gap-5 xl:grid-cols-[var(--side-column)_minmax(0,1fr)_var(--side-column)]">
-                        <div className="hidden space-y-4 xl:block">
-                            <Skeleton className="h-64 rounded-2xl" />
-                            <Skeleton className="h-40 rounded-2xl" />
-                        </div>
-                        <div className="space-y-5">
-                            <Skeleton className="h-32 rounded-xl" />
-                            <Skeleton className="h-80 rounded-2xl" />
-                        </div>
-                        <Skeleton className="hidden h-96 rounded-2xl xl:block" />
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        <Skeleton className="h-24 rounded-xl" />
-                        <Skeleton className="h-80 rounded-xl" />
-                    </div>
-                )}
+                <div className="space-y-4">
+                    <Skeleton className="h-24 rounded-xl" />
+                    <Skeleton className="h-80 rounded-xl" />
+                </div>
             </div>
         );
     }
@@ -151,11 +158,13 @@ export function RunRouteComponent({
                 runId={runId}
                 detail={detail}
                 progress={
-                    <RunProgress
-                        run={run}
-                        events={events}
-                        onOpenSources={openSources}
-                    />
+                    events ? (
+                        <RunProgress
+                            run={run}
+                            events={events}
+                            onOpenSources={openSources}
+                        />
+                    ) : undefined
                 }
             />
         );
@@ -197,7 +206,7 @@ export function RunRouteComponent({
                 {section === "progress" ? (
                     <RunProgress
                         run={run}
-                        events={events}
+                        events={events ?? []}
                         onOpenSources={openSources}
                     />
                 ) : section === "sources" ? (
