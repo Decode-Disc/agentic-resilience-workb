@@ -44,7 +44,7 @@ export function WorkspaceNavigation({
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 pb-5">
             <nav
                 aria-label="Research workspace sections"
-                className="max-w-full overflow-x-auto p-0.5">
+                className="segment-scroll">
                 <div className="segment-track">
                     {workspaceSections.map((item) =>
                         item.unavailable ? (
@@ -111,7 +111,7 @@ export function WorkspaceNavigation({
                             ? "Investigation sections"
                             : "Synthesis sections"
                     }
-                    className="max-w-full overflow-x-auto p-0.5">
+                    className="segment-scroll">
                     <div className="segment-track">
                         {subTabs.map(([key, label]) => (
                             <span

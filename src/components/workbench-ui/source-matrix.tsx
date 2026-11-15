@@ -1,5 +1,12 @@
 import { InformationCircleIcon } from "@hugeicons/core-free-icons";
-import { type ReactNode, useId } from "react";
+import {
+    type CSSProperties,
+    type ReactNode,
+    useCallback,
+    useId,
+    useRef,
+    useState,
+} from "react";
 import Icon from "@/components/icon";
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +19,7 @@ import {
     claimCountLabel,
     ReadingGlyph,
     type ReadingState,
+    WorkbenchIcon,
 } from "./glyphs";
 import { HelpTip } from "./help-tip";
 import styles from "./source-matrix.module.css";
@@ -50,6 +58,8 @@ export interface SourceMatrixProps {
     contributionScale?: number;
     note?: ReactNode;
     empty?: ReactNode;
+    /** Closes the panel, typically with pagination; stays inside the frame so it is not lost under its shadow. */
+    footer?: ReactNode;
 }
 
 const columns = [
@@ -98,11 +108,22 @@ export function SourceMatrix({
     ),
     note,
     empty,
+    footer,
 }: SourceMatrixProps) {
     const helpId = useId();
+    const { hiddenColumns, scrolled, scrollRef, onScroll } =
+        useHorizontalScroll();
+    // Rows that replace the first set (a page turn or a filter) arrive; the first set appears at once.
+    const rowsKey = rows.map((row) => row.id).join("|");
+    const firstRowsKey = useRef(rowsKey);
     return (
         <div className={cn("wb-glass wb-focal", styles.panel)}>
-            <div className={styles.scroll}>
+            <div
+                className={styles.scroll}
+                ref={scrollRef}
+                onScroll={onScroll}
+                data-more={hiddenColumns || undefined}
+                data-scrolled={scrolled || undefined}>
                 <table className={styles.table}>
                     <caption className="sr-only">{caption}</caption>
                     <colgroup>
@@ -167,11 +188,16 @@ export function SourceMatrix({
                             ))}
                         </tr>
                     </thead>
-                    <tbody>
-                        {rows.map((row) => (
+                    <tbody
+                        key={rowsKey}
+                        data-arriving={
+                            rowsKey !== firstRowsKey.current || undefined
+                        }>
+                        {rows.map((row, position) => (
                             <tr
                                 key={row.id}
                                 className={styles.row}
+                                style={{ "--row": position } as CSSProperties}
                                 data-current={row.id === currentId || undefined}
                                 data-quiet={
                                     row.quiet || row.missing || undefined
@@ -206,7 +232,11 @@ export function SourceMatrix({
                                                 }}>
                                                 {row.title}
                                             </button>
-                                            <span className="wb-meta">
+                                            <span
+                                                className={cn(
+                                                    "wb-meta",
+                                                    styles.meta,
+                                                )}>
                                                 <span
                                                     className={
                                                         styles.relationship
@@ -254,6 +284,12 @@ export function SourceMatrix({
                     </tbody>
                 </table>
             </div>
+            {hiddenColumns && rows.length > 0 && (
+                <p className={styles.scrollHint} aria-hidden="true">
+                    Scroll sideways for every column
+                    <WorkbenchIcon name="chevron" size={12} strokeWidth={2} />
+                </p>
+            )}
             {rows.length === 0 && empty && (
                 <div className={styles.empty}>{empty}</div>
             )}
@@ -284,8 +320,37 @@ export function SourceMatrix({
                 </span>
                 {note && <span className={styles.legendNote}>{note}</span>}
             </div>
+            {footer && <div className={styles.footer}>{footer}</div>}
         </div>
     );
+}
+
+/** Tracks whether the table has scrolled and whether columns remain beyond its right edge. */
+function useHorizontalScroll() {
+    const [hiddenColumns, setHiddenColumns] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
+    const measure = useCallback((element: HTMLElement) => {
+        setHiddenColumns(
+            element.scrollLeft + element.clientWidth < element.scrollWidth - 1,
+        );
+        setScrolled(element.scrollLeft > 0);
+    }, []);
+    const scrollRef = useCallback(
+        (element: HTMLDivElement | null) => {
+            if (!element) return;
+            const observer = new ResizeObserver(() => measure(element));
+            observer.observe(element);
+            return () => observer.disconnect();
+        },
+        [measure],
+    );
+    return {
+        hiddenColumns,
+        scrolled,
+        scrollRef,
+        onScroll: (event: { currentTarget: HTMLElement }) =>
+            measure(event.currentTarget),
+    };
 }
 
 function Contributions({

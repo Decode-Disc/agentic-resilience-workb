@@ -22,7 +22,7 @@
 }
 .item {
     all: unset;
-    @apply box-border w-[100%] flex items-center gap-[10px] py-[8px] px-[10px] rounded-[12px] text-foreground cursor-pointer;
+    @apply relative isolate box-border w-[100%] flex items-center gap-[10px] py-[8px] px-[10px] rounded-[12px] text-foreground cursor-pointer;
 }
 .item:hover {
     @apply bg-foreground/4 bg-none;
@@ -31,8 +31,9 @@
     outline: 2px solid var(--ring);
     @apply outline-offset-[2px];
 }
-.item[aria-current="true"] {
-    @apply bg-card bg-none;
+/* Glides between items when the selection changes, so the eye follows the new source. */
+.marker {
+    @apply absolute inset-0 -z-[1] rounded-[inherit] bg-card bg-none;
     box-shadow:
         0 0 0 1px color-mix(in oklab, var(--brand-purple) 35%, transparent),
         0 8px 18px -12px

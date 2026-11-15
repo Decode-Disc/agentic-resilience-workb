@@ -106,6 +106,18 @@
         color-mix(in oklab, var(--brand-purple) 28%, transparent);
     @apply cursor-pointer;
 }
+/* A newly applied filter appears in place rather than shifting the row abruptly. */
+@media (prefers-reduced-motion: no-preference) {
+    .activeFilter {
+        transition:
+            opacity 0.18s var(--wb-ease-arrive),
+            scale 0.18s var(--wb-ease-arrive);
+        @starting-style {
+            opacity: 0;
+            scale: 0.92;
+        }
+    }
+}
 .activeFilter:hover {
     background: color-mix(in oklab, var(--brand-purple) 14%, var(--card));
 }
@@ -126,7 +138,7 @@
     @apply w-[100%];
 }
 .compactCoverage {
-    @apply mt-[6px] mx-0 mb-0 p-[0];
+    @apply mt-[6px] mx-0 mb-0 p-[0] max-w-[760px];
     list-style: none;
     @apply grid grid-cols-[auto_minmax(0,_1fr)_auto_auto] items-center gap-y-[10px] gap-x-[14px] text-[14px];
 }
@@ -179,14 +191,21 @@
 .preparationNote {
     @apply m-[0];
 }
-.pages {
-    @apply flex items-center justify-between flex-wrap gap-y-[10px] gap-x-[16px] mt-[-10px] py-0 px-[8px];
-}
 .pageControls {
     @apply m-[0] w-auto;
 }
 .compactList {
-    @apply w-[100%] max-w-[720px];
+    @apply w-[100%];
+}
+.split {
+    @apply grid grid-cols-[260px_minmax(0,_1fr)] items-start gap-[18px];
+}
+.split > :first-child {
+    @apply sticky top-[20px];
+}
+/* Grows with the document so the page, not a nested area, scrolls it. */
+.splitDocument {
+    @apply rounded-[22px] overflow-hidden;
 }
 .drawer {
     --drawer-height: calc(100dvh - 2.5rem);
@@ -217,6 +236,12 @@
 .matrixLink {
     @apply text-[13px] font-medium p-[0] h-auto;
 }
+/* Once the outcome no longer fits beside the title, it spans the content width instead of floating at half width. */
+@media (max-width: 1279px) {
+    .outcome {
+        @apply w-[100%] justify-between;
+    }
+}
 @media (max-width: 1100px) {
     .stages {
         @apply grid-cols-[minmax(0,_1fr)] gap-[16px];
@@ -237,7 +262,7 @@
 }
 @media (max-width: 760px) {
     .outcome {
-        @apply w-[100%] flex-wrap justify-between;
+        @apply flex-wrap;
     }
     .search {
         @apply w-[100%];

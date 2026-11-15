@@ -275,6 +275,40 @@ test("narrow reader lists sources and opens the document in a drawer", async ({
     expect(errors).toEqual([]);
 });
 
+test("medium reader keeps the list beside the document without a drawer", async ({
+    page,
+}) => {
+    const errors = consoleErrors(page);
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await page.goto("/?layout=sources&screen=reader&theme=light");
+    const list = page.getByRole("navigation", { name: "Sources", exact: true });
+    await list.getByRole("button", { name: /Q2 2025 earnings call/ }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const documentTab = page.getByRole("tab", { name: "Document" });
+    await expect(documentTab).toHaveAttribute("aria-selected", "true");
+    await expect(
+        page.getByText("Our platform recommends where each claim"),
+    ).toBeVisible();
+    const [listBox, tabBox] = await Promise.all([
+        list.boundingBox(),
+        documentTab.boundingBox(),
+    ]);
+    if (!listBox || !tabBox) throw new Error("Reader panes missing");
+    // The document opens beside the list rather than below or over it.
+    expect(tabBox.x).toBeGreaterThan(listBox.x + listBox.width);
+
+    await page.getByRole("tab", { name: /What it gives/ }).click();
+    await expect(
+        page.getByRole("region", { name: "What this document gives" }),
+    ).toBeVisible();
+    expect(
+        await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+    ).toBe(true);
+    expect(errors).toEqual([]);
+});
+
 test("inventory dock restores focus and unconnected actions say so", async ({
     page,
 }) => {

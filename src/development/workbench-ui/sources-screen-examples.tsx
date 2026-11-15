@@ -54,7 +54,7 @@ function PreviewSectionNavigation({
     return (
         <nav
             aria-label="Research workspace sections"
-            className="max-w-full overflow-x-auto p-0.5">
+            className="segment-scroll">
             <div className="segment-track">
                 <button
                     type="button"

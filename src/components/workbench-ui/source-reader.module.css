@@ -3,6 +3,10 @@
 .wrap {
     @apply grid grid-cols-[minmax(0,_1fr)_300px] gap-[16px] max-w-[1000px];
 }
+/* The document's two panels sit directly in the reader grid. */
+.document {
+    @apply contents;
+}
 .main {
     @apply rounded-(--radius-2xl) overflow-hidden flex flex-col;
 }
@@ -43,7 +47,7 @@
     @apply absolute left-[-162px] top-[3px] w-[124px] flex flex-col items-end gap-[4px] text-right;
 }
 .side {
-    @apply rounded-(--radius-2xl) py-[20px] px-[22px] flex flex-col gap-[6px];
+    @apply relative rounded-(--radius-2xl) py-[20px] px-[22px] flex flex-col gap-[6px];
 }
 .contributions {
     @apply flex flex-col gap-[8px] py-[14px] px-0;
@@ -103,7 +107,7 @@
 }
 .question {
     all: unset;
-    @apply inline-flex items-center gap-[6px] h-[28px] py-0 px-[10px] rounded-[999px] text-[12.5px] font-medium text-muted-foreground;
+    @apply relative isolate inline-flex items-center gap-[6px] h-[28px] py-0 px-[10px] rounded-[999px] text-[12.5px] font-medium text-muted-foreground;
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--foreground) 12%, transparent);
     @apply cursor-pointer;
@@ -116,7 +120,11 @@
     @apply outline-offset-[1px];
 }
 .question[aria-pressed="true"] {
-    @apply text-foreground bg-card bg-none;
+    @apply text-foreground;
+}
+/* Glides to the chosen question while the list below re-forms. */
+.questionMarker {
+    @apply absolute inset-0 -z-[1] rounded-[inherit] bg-card bg-none;
     box-shadow:
         inset 0 0 0 1px
         color-mix(in oklab, var(--brand-purple) 45%, transparent),
@@ -163,9 +171,13 @@
 .tabbed {
     @apply flex flex-col h-[100%] min-h-[0];
 }
+/* Tabs serve narrow containers: the title takes its own line above the page controls. */
 .tabbed .header {
     border-bottom: 0;
-    @apply pt-[14px] pr-[16px] pb-[12px] pl-[20px];
+    @apply flex-wrap pt-[14px] pr-[16px] pb-[12px] pl-[20px];
+}
+.tabbed .headerTitle {
+    @apply basis-[100%];
 }
 .tabs {
     @apply flex-[1] min-h-[0] gap-[0];
@@ -199,13 +211,12 @@
     @apply shrink-0;
     padding: 14px 20px calc(16px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--divider);
-    @apply bg-background bg-none;
 }
 .tabActions > * {
     @apply max-w-[620px] mx-auto;
 }
 .sideBody {
-    @apply flex flex-col gap-[10px];
+    @apply relative flex flex-col gap-[10px];
 }
 .tabbedSide .sideBody {
     @apply max-w-[620px] mx-auto;
@@ -331,4 +342,63 @@
 }
 .projectionHighlight {
     border-bottom: 2px dotted var(--evidence-hypothesis);
+}
+
+/* A newly selected source settles into place: its title, page and contributions arrive in reading order. */
+@keyframes reader-arrive {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+        filter: blur(3px);
+    }
+}
+.wrap[data-arriving] .headerTitle,
+.tabbed[data-arriving] .headerTitle,
+.wrap[data-arriving] .page:not([data-turn]),
+.tabbed[data-arriving] .page:not([data-turn]),
+.wrap[data-arriving] .side,
+.tabbed[data-arriving] .sideBody {
+    animation: reader-arrive 0.34s var(--wb-ease-arrive) both;
+}
+.wrap[data-arriving] .page:not([data-turn]),
+.tabbed[data-arriving] .page:not([data-turn]) {
+    animation-delay: 40ms;
+}
+.wrap[data-arriving] .side {
+    animation-delay: 80ms;
+}
+/* Page turns slide in from the side the reader moved toward. */
+@keyframes page-from-next {
+    from {
+        opacity: 0.35;
+        transform: translateX(14px);
+    }
+}
+@keyframes page-from-previous {
+    from {
+        opacity: 0.35;
+        transform: translateX(-14px);
+    }
+}
+.page[data-turn="next"] {
+    animation: page-from-next 0.26s var(--wb-ease-arrive);
+}
+.page[data-turn="previous"] {
+    animation: page-from-previous 0.26s var(--wb-ease-arrive);
+}
+@keyframes reader-fade {
+    from {
+        opacity: 0;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .wrap[data-arriving] .headerTitle,
+    .tabbed[data-arriving] .headerTitle,
+    .wrap[data-arriving] .page:not([data-turn]),
+    .tabbed[data-arriving] .page:not([data-turn]),
+    .wrap[data-arriving] .side,
+    .tabbed[data-arriving] .sideBody,
+    .page[data-turn] {
+        animation: reader-fade 0.16s ease-out both;
+    }
 }

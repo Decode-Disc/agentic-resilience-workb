@@ -48,6 +48,7 @@ export function ProgressTimeline({
                         <span
                             className={styles.step}
                             key={s.id}
+                            data-state={s.state}
                             aria-current={
                                 s.state === "current" ? "step" : undefined
                             }>

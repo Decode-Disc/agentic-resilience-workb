@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,6 +10,12 @@ import {
     EvidenceBadge,
     WorkbenchIcon,
 } from "./glyphs";
+import {
+    listExitTransition,
+    listTransition,
+    markerTransition,
+    maxStagger,
+} from "./motion";
 import styles from "./source-reader.module.css";
 export interface ReaderPassage {
     id: string;
@@ -59,6 +66,10 @@ export interface SourceReaderProps {
     layout?: "columns" | "tabs";
     /** A close action placed on the title line, for overlays. */
     dismiss?: ReactNode;
+    /** Plays the arrival of a newly selected source; leave unset for the source a screen opens on. */
+    arriving?: boolean;
+    /** Identifies the document; a new value resets its page, filter and highlight while the source list stays mounted. */
+    sourceId?: string;
 }
 /** A link destination seen in the document; `captured` distinguishes a read capture from a label only. */
 export interface ReaderObservedLink {
@@ -76,7 +87,29 @@ type ReaderTab = "document" | "contributions";
 const allQuestions = "all";
 
 /** Displays supplied excerpts and annotations; it never fabricates pagination or claims. */
-export function SourceReader({
+export function SourceReader(props: SourceReaderProps) {
+    const {
+        navigation,
+        layout = "columns",
+        arriving = false,
+        sourceId,
+    } = props;
+    if (layout === "tabs")
+        return <ReaderDocument key={sourceId} {...props} layout="tabs" />;
+    return (
+        <MotionConfig reducedMotion="user">
+            <div
+                className={cn(styles.wrap, navigation && styles.workspace)}
+                data-arriving={arriving || undefined}>
+                {navigation}
+                <ReaderDocument key={sourceId} {...props} layout="columns" />
+            </div>
+        </MotionConfig>
+    );
+}
+
+/** The document and its contributions; remounted per source so its reading state starts afresh. */
+function ReaderDocument({
     title,
     meta,
     pages,
@@ -91,8 +124,12 @@ export function SourceReader({
     actions,
     layout = "columns",
     dismiss,
+    arriving = false,
 }: SourceReaderProps) {
+    const markerId = useId();
     const [index, setIndex] = useState(initialPage);
+    /** Direction of the last page turn; absent until the reader changes page. */
+    const [turn, setTurn] = useState<"next" | "previous">();
     const [activeId, setActiveId] = useState<string>();
     const [question, setQuestion] = useState(allQuestions);
     const [tab, setTab] = useState<ReaderTab>("document");
@@ -129,6 +166,7 @@ export function SourceReader({
 
     const move = (next: number) => {
         if (!pages[next]) return;
+        setTurn(next > index ? "next" : "previous");
         setIndex(next);
         setActiveId(undefined);
         onPageChange?.(pages[next].id);
@@ -138,7 +176,10 @@ export function SourceReader({
         if (!target) return;
         const next = pages.findIndex((item) => item.id === target.pageId);
         if (next < 0) return;
-        if (next !== index) onPageChange?.(target.pageId);
+        if (next !== index) {
+            onPageChange?.(target.pageId);
+            setTurn(next > index ? "next" : "previous");
+        }
         setIndex(next);
         setActiveId(contribution.id);
         setTab("document");
@@ -200,7 +241,7 @@ export function SourceReader({
     const desk = (
         <div className={styles.desk}>
             {page ? (
-                <article className={styles.page}>
+                <article key={page.id} className={styles.page} data-turn={turn}>
                     <span className={cn("wb-meta", styles.pageNavigation)}>
                         <span>{page.section}</span>
                         <span>{page.label}</span>
@@ -302,6 +343,14 @@ export function SourceReader({
                                 className={styles.question}
                                 aria-pressed={question === id}
                                 onClick={() => setQuestion(id)}>
+                                {question === id && (
+                                    <motion.span
+                                        layoutId={markerId}
+                                        className={styles.questionMarker}
+                                        transition={markerTransition}
+                                        aria-hidden="true"
+                                    />
+                                )}
                                 {id === allQuestions ? "All" : id}
                                 <span className={styles.questionCount}>
                                     {count}
@@ -316,65 +365,85 @@ export function SourceReader({
                     No contribution was assessed in this document.
                 </p>
             )}
-            {shown.map((c) => {
-                const body = (
-                    <>
-                        <span className={styles.contributionHeader}>
-                            <EvidenceBadge kind={c.kind}>
-                                {c.label}
-                            </EvidenceBadge>
-                            <span
-                                className={cn(
-                                    "wb-meta",
-                                    styles.flexibleContent,
-                                )}>
-                                {c.meta}
-                                {c.questions?.length
-                                    ? ` · ${c.questions.join(" ")}`
-                                    : ""}
+            <AnimatePresence mode="popLayout" initial={false}>
+                {shown.map((c, position) => {
+                    const motionProps = {
+                        layout: "position" as const,
+                        initial: { opacity: 0, y: 6 },
+                        animate: {
+                            opacity: 1,
+                            y: 0,
+                            transition: {
+                                ...listTransition,
+                                delay: Math.min(position * 0.03, maxStagger),
+                            },
+                        },
+                        exit: { opacity: 0, transition: listExitTransition },
+                        transition: listTransition,
+                    };
+                    const body = (
+                        <>
+                            <span className={styles.contributionHeader}>
+                                <EvidenceBadge kind={c.kind}>
+                                    {c.label}
+                                </EvidenceBadge>
+                                <span
+                                    className={cn(
+                                        "wb-meta",
+                                        styles.flexibleContent,
+                                    )}>
+                                    {c.meta}
+                                    {c.questions?.length
+                                        ? ` · ${c.questions.join(" ")}`
+                                        : ""}
+                                </span>
+                                {c.status}
                             </span>
-                            {c.status}
-                        </span>
-                        <span className={styles.contributionText}>
-                            {c.text}
-                        </span>
-                        {c.note && (
-                            <span className={styles.contributionNote}>
-                                {c.note}
+                            <span className={styles.contributionText}>
+                                {c.text}
                             </span>
-                        )}
-                        {c.target && (
-                            <span
-                                className={styles.contributionAction}
-                                aria-hidden="true">
-                                Show in document
-                                <WorkbenchIcon name="chevron" size={12} />
-                            </span>
-                        )}
-                    </>
-                );
-                return c.target ? (
-                    <button
-                        key={c.id}
-                        type="button"
-                        className={cn(
-                            styles.contributions,
-                            styles.contributionLink,
-                        )}
-                        data-contribution-id={c.id}
-                        aria-current={c.id === activeId ? "true" : undefined}
-                        onClick={() => openPassage(c)}>
-                        {body}
-                    </button>
-                ) : (
-                    <div
-                        key={c.id}
-                        className={styles.contributions}
-                        data-contribution-id={c.id}>
-                        {body}
-                    </div>
-                );
-            })}
+                            {c.note && (
+                                <span className={styles.contributionNote}>
+                                    {c.note}
+                                </span>
+                            )}
+                            {c.target && (
+                                <span
+                                    className={styles.contributionAction}
+                                    aria-hidden="true">
+                                    Show in document
+                                    <WorkbenchIcon name="chevron" size={12} />
+                                </span>
+                            )}
+                        </>
+                    );
+                    return c.target ? (
+                        <motion.button
+                            key={c.id}
+                            {...motionProps}
+                            type="button"
+                            className={cn(
+                                styles.contributions,
+                                styles.contributionLink,
+                            )}
+                            data-contribution-id={c.id}
+                            aria-current={
+                                c.id === activeId ? "true" : undefined
+                            }
+                            onClick={() => openPassage(c)}>
+                            {body}
+                        </motion.button>
+                    ) : (
+                        <motion.div
+                            key={c.id}
+                            {...motionProps}
+                            className={styles.contributions}
+                            data-contribution-id={c.id}>
+                            {body}
+                        </motion.div>
+                    );
+                })}
+            </AnimatePresence>
             {observedLinks.length > 0 && (
                 <div className={styles.links}>
                     <span className="wb-label">Links observed</span>
@@ -409,48 +478,50 @@ export function SourceReader({
 
     if (layout === "tabs") {
         return (
-            <div ref={root} className={styles.tabbed}>
-                {header}
-                <Tabs
-                    value={tab}
-                    onValueChange={(value) => setTab(value as ReaderTab)}
-                    className={styles.tabs}>
-                    <TabsList className={styles.tabList}>
-                        <TabsTrigger value="document">Document</TabsTrigger>
-                        <TabsTrigger value="contributions">
-                            What it gives ({contributions.length})
-                        </TabsTrigger>
-                    </TabsList>
-                    <ScrollArea
-                        className={styles.tabScroll}
-                        viewportClassName={styles.tabViewport}>
-                        <TabsContent value="document">{desk}</TabsContent>
-                        <TabsContent
-                            value="contributions"
-                            className={styles.tabbedSide}>
-                            <section
-                                aria-label="What this document gives"
-                                className={styles.sideBody}>
-                                <span className="wb-meta">
-                                    {contributionLabel}
-                                </span>
-                                {gives}
-                            </section>
-                        </TabsContent>
-                    </ScrollArea>
-                    {actions && tab === "contributions" && (
-                        <div className={styles.tabActions}>{actions}</div>
-                    )}
-                </Tabs>
-            </div>
+            <MotionConfig reducedMotion="user">
+                <div
+                    ref={root}
+                    className={styles.tabbed}
+                    data-arriving={arriving || undefined}>
+                    {header}
+                    <Tabs
+                        value={tab}
+                        onValueChange={(value) => setTab(value as ReaderTab)}
+                        className={styles.tabs}>
+                        <TabsList className={styles.tabList}>
+                            <TabsTrigger value="document">Document</TabsTrigger>
+                            <TabsTrigger value="contributions">
+                                What it gives ({contributions.length})
+                            </TabsTrigger>
+                        </TabsList>
+                        <ScrollArea
+                            className={styles.tabScroll}
+                            viewportClassName={styles.tabViewport}>
+                            <TabsContent value="document">{desk}</TabsContent>
+                            <TabsContent
+                                value="contributions"
+                                className={styles.tabbedSide}>
+                                <section
+                                    aria-label="What this document gives"
+                                    className={styles.sideBody}>
+                                    <span className="wb-meta">
+                                        {contributionLabel}
+                                    </span>
+                                    {gives}
+                                </section>
+                            </TabsContent>
+                        </ScrollArea>
+                        {actions && tab === "contributions" && (
+                            <div className={styles.tabActions}>{actions}</div>
+                        )}
+                    </Tabs>
+                </div>
+            </MotionConfig>
         );
     }
 
     return (
-        <div
-            ref={root}
-            className={cn(styles.wrap, navigation && styles.workspace)}>
-            {navigation}
+        <div ref={root} className={styles.document}>
             <section className={cn("wb-glass", styles.main)}>
                 {header}
                 {desk}

@@ -109,6 +109,56 @@
     box-shadow: inset 0 0 0 1px var(--chip-edge);
 }
 
+/* Frame for a segment track wider than its space: the pill stays whole while
+ * its sections scroll inside it, and the clipped edge fades so the remaining
+ * sections stay discoverable. Browsers without scroll-driven animations keep
+ * plain scrolling. */
+@property --segment-fade-start {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+}
+@property --segment-fade-end {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+}
+@keyframes segment-scroll-fade {
+    from {
+        --segment-fade-start: 0px;
+        --segment-fade-end: 28px;
+    }
+    12%,
+    88% {
+        --segment-fade-start: 28px;
+        --segment-fade-end: 28px;
+    }
+    to {
+        --segment-fade-start: 28px;
+        --segment-fade-end: 0px;
+    }
+}
+@utility segment-scroll {
+    @apply flex w-fit max-w-full bg-fill-quiet;
+    border-radius: calc(var(--radius-tile) + 2px);
+    & > .segment-track {
+        @apply min-w-0 overflow-x-auto bg-transparent;
+        scrollbar-width: none;
+        mask-image: linear-gradient(
+            90deg,
+            transparent,
+            #000 var(--segment-fade-start),
+            #000 calc(100% - var(--segment-fade-end)),
+            transparent
+        );
+        animation: segment-scroll-fade linear both;
+        animation-timeline: scroll(self inline);
+    }
+    & > .segment-track::-webkit-scrollbar {
+        display: none;
+    }
+}
+
 @utility segment-track {
     @apply flex w-fit max-w-full items-center gap-1 bg-fill-quiet p-1;
     border-radius: calc(var(--radius-tile) + 2px);

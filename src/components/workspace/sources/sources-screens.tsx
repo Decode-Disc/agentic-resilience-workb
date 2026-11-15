@@ -851,27 +851,31 @@ export function SourcesMatrixScreen({
                         </EmptyContent>
                     </Empty>
                 }
+                footer={
+                    rows.length > pageSize && (
+                        <>
+                            <span className="wb-meta">
+                                {firstShown}–{lastShown} of {rows.length}
+                            </span>
+                            <PaginationControls
+                                page={page}
+                                pageCount={pageCount}
+                                onPageChange={setPage}
+                                ariaLabel="Source matrix pages"
+                                className={styles.pageControls}
+                            />
+                        </>
+                    )
+                }
             />
-            {rows.length > pageSize && (
-                <div className={styles.pages}>
-                    <span className="wb-meta">
-                        {firstShown}–{lastShown} of {rows.length}
-                    </span>
-                    <PaginationControls
-                        page={page}
-                        pageCount={pageCount}
-                        onPageChange={setPage}
-                        ariaLabel="Source matrix pages"
-                        className={styles.pageControls}
-                    />
-                </div>
-            )}
         </SourcesWorkspaceFrame>
     );
 }
 
-/** Below this width the reader's three columns no longer fit; sources open in a drawer instead. */
-const compactReaderQuery = "(max-width: 1180px)";
+/** Below this width the reader's three columns no longer fit; the document and its contributions share tabs beside the list. */
+const splitReaderQuery = "(max-width: 1279px)";
+/** Below this width the list takes the screen and each source opens in a drawer. */
+const compactReaderQuery = "(max-width: 767px)";
 
 /** One source in its reader, with the selected-source list and follow-up actions. */
 export function SourcesReaderScreen({
@@ -903,14 +907,18 @@ export function SourcesReaderScreen({
     onRequestCheck?: () => void;
     onChallengeSelection?: () => void;
 }) {
+    const split = useMediaQuery(splitReaderQuery);
     const compact = useMediaQuery(compactReaderQuery);
     const [drawerOpen, setDrawerOpen] = useState(false);
+    /** The source the screen opened on appears at once; later selections arrive. */
+    const [arriving, setArriving] = useState(false);
     const opener = useRef<HTMLElement | null>(null);
     const list = (
         <SourceReaderList
             groups={sources}
             selectedId={selectedId}
             onSelect={(id) => {
+                if (id !== selectedId) setArriving(true);
                 onSelectSource(id);
                 if (!compact) return;
                 opener.current =
@@ -968,7 +976,7 @@ export function SourcesReaderScreen({
                             className={styles.drawer}>
                             <WorkbenchUiRoot className={styles.drawerBody}>
                                 <SourceReader
-                                    key={selectedId}
+                                    sourceId={selectedId}
                                     {...document}
                                     layout="tabs"
                                     actions={actions}
@@ -995,10 +1003,24 @@ export function SourcesReaderScreen({
                         </DrawerContent>
                     </Drawer>
                 </>
+            ) : split ? (
+                <div className={styles.split}>
+                    {list}
+                    <div className={cn("wb-glass", styles.splitDocument)}>
+                        <SourceReader
+                            sourceId={selectedId}
+                            {...document}
+                            arriving={arriving}
+                            layout="tabs"
+                            actions={actions}
+                        />
+                    </div>
+                </div>
             ) : (
                 <SourceReader
-                    key={selectedId}
+                    sourceId={selectedId}
                     {...document}
+                    arriving={arriving}
                     navigation={list}
                     actions={actions}
                 />

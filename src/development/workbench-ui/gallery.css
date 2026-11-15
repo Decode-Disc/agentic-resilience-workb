@@ -43,6 +43,7 @@ body {
 .gallery-scene[data-component="Composer"],
 .gallery-scene[data-component="AppraisalBlock"],
 .gallery-scene[data-component="OutcomeCard"],
+.gallery-scene[data-component="ProgressTimeline"],
 .gallery-scene[data-component="InventorySheet"] {
     width: 100%;
     max-width: 1040px;

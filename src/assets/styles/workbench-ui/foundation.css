@@ -1,5 +1,7 @@
 /* Reference materials shared only by the question-led component library. */
 .wb-ui {
+    /* Confident deceleration for arrivals; Motion uses the same curve from motion.ts. */
+    --wb-ease-arrive: cubic-bezier(0.16, 1, 0.3, 1);
     @apply font-sans text-[16px] leading-[normal] tracking-[normal] text-foreground;
     -webkit-font-smoothing: antialiased;
     @apply box-border;
