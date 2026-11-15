@@ -8,6 +8,8 @@ The next correction should address the research conversation dock's stacking ord
 
 Sources preparation remains unqualified for useful controlled output: the capture is retained and relevant, but no contribution was submitted for mandatory documentary control. Preserve the strict completion refusal. The model's operation choice and final proposal are task failures on this case, not evidence of a rejected qualification call or a missing tool. The incomplete browser path cannot establish follow-up answer quality or general model reliability.
 
+Styling ownership note — 2026-11-14: the corrected presentation refactor retains [START's component stylesheet](../../src/components/workspace/start/start-screens.module.css), using Tailwind `@apply` alongside native integration rules. The [START composition](../../src/components/workspace/start/start-screens.tsx) selects its named classes. This changes neither this dated qualification result nor the later [send-correction qualification](2026-11-04-sources-only-models-qualification.md).
+
 ## Conditions and scope
 
 The user explicitly authorized one new local CCC + Adobe lot with `openai/gpt-oss-120b`, low effort, automatic OpenRouter routing and Jev disabled. The cumulative envelope was 40 model attempts, four Exa searches, twelve captures and USD 2, with no automatic second lot. Mandatory authority, evidence, accounting and closed status controls remained enabled.
@@ -26,7 +28,7 @@ Six prerequisite gates passed before provider dispatch: frontend/backend types, 
 
 The UI cause was isolated without additional provider work. A disposable browser fixture loaded the unchanged production conversation and screen styles and deliberately overlapped the corresponding elements. Hit testing selected the mission button with mission `z-index: 1` and dock `auto`. Changing only the fixture dock to `z-index: 2` selected Send. This confirms the stacking mechanism under the already-recorded overlap; it is not a complete protected-screen replay or an implemented repair. The original page had closed on failure, so a full UI repair and protected regression remain pending.
 
-The affected owners are [the research composer dock](../../src/components/workspace/start/start-screens.module.css#L756), [the collapsed activity trigger](../../src/components/chat/workbench-conversation.css#L353) and [the conversation composition](../../src/components/workspace/start/start-screens.tsx#L206). Fix the screen consumer rather than imposing a global primitive default. The Sources refusal remains owned by [domain completion](../../convex/domain/sources.ts#L617).
+The affected owners are the historical research composer dock (`git show 916e7fdaa8160c8def22585ff3afb1d4cac335dc:src/components/workspace/start/start-screens.module.css`, lines 757–764), [the collapsed activity trigger](../../src/components/chat/workbench-conversation.css#L353) and [the conversation composition](../../src/components/workspace/start/start-screens.tsx#L206). Fix the screen consumer rather than imposing a global primitive default. The Sources refusal remains owned by [domain completion](../../convex/domain/sources.ts#L617).
 
 ## What was actually achieved
 

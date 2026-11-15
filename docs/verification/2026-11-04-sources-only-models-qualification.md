@@ -16,6 +16,8 @@ The local paid grant in `schema.ts` now optionally pins a separate Sources model
 
 Two unpaid preflight stages are retained separately. The first exposed the remaining same-model transport check before dispatch and was closed without provider calls. The second failed its type gate on a stale unused import before fixture setup. After removing that import, the final six-gate preflight passed. Neither stage is pooled into the paid results.
 
+Styling ownership note — 2026-11-14: [START's component stylesheet](../../src/components/workspace/start/start-screens.module.css) retains the dock's geometry, stacking and cross-component integration rules, with Tailwind `@apply` for suitable declarations. The [START composition](../../src/components/workspace/start/start-screens.tsx) selects its named classes. Original styles remain available through `git show 916e7fdaa8160c8def22585ff3afb1d4cac335dc:src/components/workspace/start/start-screens.module.css`. This refactor does not extend the dated qualification above.
+
 ## Observed results
 
 | Case | Generator calls | Searches | Captures | Controlled documents / contributions | Sources outcome | Follow-up |

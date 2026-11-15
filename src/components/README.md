@@ -60,7 +60,7 @@ The consumer supplies the same externally owned state to the runtime and present
 
 ## START compositions
 
-Most exports below live in [start-screens.tsx](workspace/start/start-screens.tsx). Its [CSS module](workspace/start/start-screens.module.css) owns screen geometry; the components receive state and actions.
+Most exports below live in [start-screens.tsx](workspace/start/start-screens.tsx). The components receive state and actions; [DESIGN.md](../../DESIGN.md#components) defines their styling ownership.
 
 | Need | Component or module | What the consumer supplies |
 | --- | --- | --- |

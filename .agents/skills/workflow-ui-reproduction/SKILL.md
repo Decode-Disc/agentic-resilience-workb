@@ -61,6 +61,8 @@ Reuse an adequate composer or picker. Extract its pure presentation only when ne
 
 Keep reusable analytical components in their existing library and workflow compositions with their workflow. Inspect `WorkbenchUiRoot` and portal styling before adopting library materials; do not spread scoped reference styles into global application defaults.
 
+Reproduce rendered appearance and interactions, not the export's selectors or stylesheet architecture. Resolve styling ownership through `DESIGN.md`: keep local layout, named parts, states and responsive rules in the component's CSS Module, express suitable declarations with Tailwind `@apply`, and keep JSX class selection concise. Reuse shared materials and retain native CSS wherever it is clearer or needed for fidelity. Preserve exact units, responsive operators and effective cascade behavior rather than snapping values to a convenient scale. Compare with the agreed visual baseline, including approved application refinements, rather than treating exported structure as authority.
+
 Expose content, relevant presentation state and callbacks. Keep fixtures separate from reusable components. Avoid backend calls, inferred domain decisions, speculative configuration and wrappers that merely forward another component’s API.
 
 Proceed when each changed responsibility has one owner and an actual consumer.
