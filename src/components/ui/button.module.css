@@ -1,0 +1,18 @@
+@reference "../../styles.css";
+
+/* Do not predeclare a cascade layer here: this module can load before the Tailwind entry. */
+:where(.unstyled) {
+    border: 0;
+}
+
+/* These fixed fills retain the reference controls' non-fading hover treatment. */
+.solid {
+    border: 0;
+    @apply bg-primary bg-none text-primary-foreground;
+}
+.quiet {
+    @apply bg-fill-quiet bg-none;
+}
+.compact {
+    @apply h-[32px] py-0 px-[12px] rounded-[9px] text-[13px] font-medium gap-1.5;
+}

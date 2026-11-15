@@ -3,7 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "./assets/styles/base-preset.css";
 @import "./assets/styles/themes/evidence-workbench.css";
-@import "./components/workbench-ui/styles.css";
+@import "./assets/styles/workbench-ui/index.css";
 
 @source "./components";
 @source inline("z-{20..100}");

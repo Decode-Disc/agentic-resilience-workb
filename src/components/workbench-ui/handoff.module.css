@@ -27,9 +27,7 @@
 }
 .button {
     @apply h-[38px] py-0 px-[12px] rounded-(--radius-tile);
-    border: 0;
-    font: inherit;
-    @apply text-[13.5px] font-medium cursor-pointer inline-flex items-center;
+    @apply text-[13.5px] font-medium cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap;
     text-decoration: none;
 }
 
@@ -77,5 +75,5 @@
 }
 
 .continueAction {
-    @apply py-0 px-[14px] bg-primary bg-none text-primary-foreground;
+    @apply py-0 px-[14px];
 }

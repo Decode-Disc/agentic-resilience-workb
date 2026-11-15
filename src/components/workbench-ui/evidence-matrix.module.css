@@ -111,31 +111,7 @@
     @apply text-accent-foreground;
 }
 .use {
-    @apply relative;
-    transition: none;
-    @apply flex-[1] h-[42px] rounded-(--radius-tile) flex items-center justify-center gap-[7px] text-[12.5px] font-medium;
-}
-.use[data-use="supports"] {
-    @apply text-card;
-    background: linear-gradient(
-        180deg,
-        color-mix(in oklab, var(--foreground) 80%, var(--card)),
-        var(--foreground)
-    );
-    box-shadow:
-        inset 0 1px 0 oklch(1 0 0 / 0.18),
-        0 8px 16px -10px color-mix(in oklab, var(--foreground) 80%, transparent);
-}
-.use[data-use="opposes"] {
-    @apply text-counter-evidence;
-    background: color-mix(in oklab, var(--counter-evidence) 12%, var(--card));
-    box-shadow: inset 0 0 0 1px
-        color-mix(in oklab, var(--counter-evidence) 32%, transparent);
-}
-.use[data-use="context"] {
-    @apply text-muted-foreground bg-surface-float bg-none;
-    box-shadow: inset 0 0 0 1px
-        color-mix(in oklab, var(--foreground) 14%, transparent);
+    @apply flex-[1] h-[42px] rounded-(--radius-tile) gap-[7px] text-[12.5px] whitespace-nowrap;
 }
 .useCount {
     background: repeating-linear-gradient(
@@ -159,12 +135,7 @@
 }
 button.qcard {
     width: calc(100% - 4px);
-    border: 0;
-    @apply items-start text-left whitespace-normal;
-}
-button.use {
-    border: 0;
-    @apply p-[0];
+    @apply items-start text-foreground;
 }
 
 .box,
@@ -179,9 +150,6 @@ button.use {
 }
 .header th {
     @apply p-[0];
-}
-button.qcard {
-    @apply h-auto justify-normal text-foreground;
 }
 .header .qcard {
     @apply h-[100%];

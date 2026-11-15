@@ -1,6 +1,6 @@
 @reference "../../styles.css";
 .item {
-    @apply flex gap-[12px] items-start p-[14px] rounded-(--radius-lg);
+    @apply flex gap-[12px] items-start p-[14px] rounded-(--radius-lg) bg-transparent bg-none;
     text-decoration: none;
     @apply text-inherit;
 }
@@ -14,24 +14,11 @@
     @apply text-[12.5px] leading-[17px] text-muted-foreground;
 }
 .reviewAction {
-    @apply shrink-0 self-center h-[32px] py-0 px-[12px] rounded-[9px] bg-primary bg-none text-primary-foreground text-[13px] font-medium;
-    text-decoration: none;
-    @apply inline-flex items-center;
-}
-.item {
-    border: 0;
-    @apply text-left whitespace-normal;
-    font: inherit;
-    @apply bg-transparent bg-none;
-}
-.reviewAction {
-    border: 0;
-}
-button.item {
-    @apply h-auto justify-normal;
+    @apply shrink-0 self-center;
 }
 
 .review {
+    border: 0;
     background: color-mix(in oklab, var(--review) 10%, var(--card));
     box-shadow: 0 0 0 1px color-mix(in oklab, var(--review) 50%, transparent);
 }
@@ -59,10 +46,6 @@ button.item {
 
 .status {
     @apply self-center;
-}
-
-.liveDot {
-    @apply w-[7px] h-[7px] rounded-[50%] bg-brand-purple bg-none inline-block;
 }
 
 .unavailableIcon {

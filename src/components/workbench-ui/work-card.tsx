@@ -30,6 +30,7 @@ export function WorkCard(props: WorkCardProps) {
         const { onOpen, documentLabel, documentCount } = props;
         return (
             <Button
+                variant="unstyled"
                 onClick={onOpen}
                 className={cn("wb-glass", styles.card, className)}
                 style={style}>
@@ -83,6 +84,7 @@ export function WorkCard(props: WorkCardProps) {
         const { onOpen, status, footer } = props;
         return (
             <Button
+                variant="unstyled"
                 onClick={onOpen}
                 className={cn(
                     "wb-glass",
@@ -97,7 +99,7 @@ export function WorkCard(props: WorkCardProps) {
                         Investigation
                     </span>
                     <Badge tone="inference">
-                        <span className={cn("wb-live", styles.liveDot)}></span>
+                        <span className="wb-live wb-live-dot"></span>
                         {status}
                     </Badge>
                 </span>

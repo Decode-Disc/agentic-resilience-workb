@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { MatrixUse } from "./evidence-matrix";
-import matrixStyles from "./evidence-matrix.module.css";
+import useStyles from "./evidence-use.module.css";
 import styles from "./evidence-use-popover.module.css";
 import {
     ClaimGlyph,
@@ -76,7 +76,7 @@ export function EvidenceUsePopover({
                         {assertionId} → {questionLabel}
                     </PopoverTitle>
                     <span
-                        className={cn(matrixStyles.use, styles.useTag)}
+                        className={cn(useStyles.treatment, styles.useTag)}
                         data-use={use}>
                         {use === "supports" && (
                             <WorkbenchIcon
@@ -91,7 +91,7 @@ export function EvidenceUsePopover({
                     <PopoverPrimitive.Close
                         render={
                             <Button
-                                variant="ghost"
+                                variant="quiet"
                                 size="icon-xs"
                                 className={styles.close}
                                 aria-label="Close use details"
@@ -145,6 +145,7 @@ export function EvidenceUsePopover({
                             {onChallenge && (
                                 <Button
                                     variant="ghost"
+                                    size="compact"
                                     className={styles.challenge}
                                     onClick={onChallenge}>
                                     Challenge this use
@@ -153,6 +154,7 @@ export function EvidenceUsePopover({
                             {onOpenPassage && (
                                 <Button
                                     variant="outline"
+                                    size="compact"
                                     className={styles.action}
                                     onClick={onOpenPassage}>
                                     Open passage
@@ -160,6 +162,7 @@ export function EvidenceUsePopover({
                             )}
                             {onOpenReasoning && (
                                 <Button
+                                    size="compact"
                                     className={styles.action}
                                     onClick={onOpenReasoning}>
                                     See {questionLabel} reasoning

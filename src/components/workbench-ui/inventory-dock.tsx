@@ -67,6 +67,7 @@ export function InventoryDock({
     );
     return (
         <Button
+            variant="unstyled"
             aria-label="Open inventory"
             className={cn(
                 "wb-float",

@@ -24,17 +24,10 @@
 }
 .expanded,
 .compact {
-    border: 0;
-    @apply text-left whitespace-normal;
-    font: inherit;
     @apply bg-surface-float bg-none;
 }
 .expanded {
     @apply items-stretch;
-}
-.expanded,
-.compact {
-    @apply h-auto justify-normal;
 }
 
 .compactBadge {

@@ -41,7 +41,7 @@
     @apply flex-[0_0_auto] h-[24px] py-0 px-[9px] rounded-[7px] gap-[5px] text-[11.5px];
 }
 .close {
-    @apply ml-auto w-[26px] h-[26px] rounded-[8px] p-[0] bg-fill-quiet bg-none text-muted-foreground;
+    @apply ml-auto w-[26px] h-[26px] rounded-[8px] p-[0] text-muted-foreground;
 }
 .body {
     @apply flex flex-col gap-[12px] min-h-[0] overflow-y-auto;
@@ -79,7 +79,7 @@
 }
 .action,
 .challenge {
-    @apply h-[32px] py-0 px-[12px] rounded-[9px] text-[12.5px];
+    @apply text-[12.5px];
 }
 .challenge {
     @apply mr-auto p-[0] text-muted-foreground;

@@ -1,10 +1,7 @@
 @reference "../../styles.css";
 
 .card {
-    @apply flex h-auto flex-col items-stretch justify-normal gap-[16px] rounded-3xl px-[26px] py-[24px] text-left whitespace-normal text-inherit no-underline;
-    border: 0;
-    @apply bg-transparent;
-    font: inherit;
+    @apply flex flex-col items-stretch gap-[16px] rounded-3xl px-[26px] py-[24px];
 }
 .testing {
     --wb-panel-angle: 170deg;
@@ -24,9 +21,6 @@
 }
 .waiting .questionId {
     @apply bg-tint-review text-review-foreground;
-}
-.liveDot {
-    @apply inline-block size-[7px] bg-brand-purple rounded-[50%];
 }
 .reviewDot {
     @apply size-[7px];

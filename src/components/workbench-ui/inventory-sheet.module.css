@@ -4,6 +4,7 @@
     @apply absolute inset-0 bg-foreground/22 bg-none;
 }
 .sheet {
+    outline: none;
     @apply absolute left-[60px] right-[24px] top-[28px] bottom-[0];
     border-radius: var(--radius-3xl) var(--radius-3xl) 0 0;
     @apply overflow-hidden flex flex-col bg-card/94 bg-none;
@@ -23,7 +24,7 @@
     );
 }
 .heading {
-    @apply flex-[1];
+    @apply flex-[1] flex flex-col gap-[6px];
 }
 .field {
     @apply flex items-center gap-[10px] w-[220px] h-[36px] py-0 px-[12px] rounded-(--radius-tile) bg-card bg-none;
@@ -31,7 +32,8 @@
     @apply text-muted-foreground text-[13px];
 }
 .collapse {
-    @apply h-[36px] py-0 px-[12px] rounded-(--radius-tile) bg-fill-quiet bg-none inline-flex items-center gap-[8px] text-[13px] font-medium text-foreground;
+    @apply h-[36px] py-0 px-[12px] rounded-(--radius-tile) inline-flex items-center gap-[8px] text-[13px] font-medium text-foreground text-left whitespace-normal;
+    border: 0;
     text-decoration: none;
 }
 .bar {
@@ -41,11 +43,7 @@
     @apply flex items-center gap-[2px] p-[3px] rounded-(--radius-tile) bg-fill-quiet bg-none;
 }
 .filter {
-    @apply inline-flex items-center gap-[7px] h-[30px] py-0 px-[11px] rounded-[9px];
-    border: 0;
-    @apply bg-transparent bg-none;
-    font: inherit;
-    @apply text-[13px] font-medium text-muted-foreground cursor-pointer;
+    @apply inline-flex items-center justify-center gap-[7px] h-[30px] py-0 px-[11px] rounded-[9px] text-[13px] font-medium text-muted-foreground cursor-pointer whitespace-nowrap;
 }
 .filter b {
     @apply font-medium text-foreground;
@@ -62,13 +60,10 @@
 .use {
     @apply flex items-center gap-[8px] py-[8px] px-[10px] rounded-(--radius-tile) bg-card bg-none;
     box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
-    @apply text-[12.5px] leading-[17px];
+    @apply text-[12.5px] leading-[17px] justify-start text-foreground font-normal;
 }
 .questionId {
     @apply shrink-0 w-[26px] h-[26px] rounded-[8px] inline-flex items-center justify-center font-mono text-[10.5px] font-medium bg-tint-ink bg-none;
-}
-.sheet {
-    outline: none;
 }
 .content {
     @apply flex-[1] min-h-[0] overflow-auto;
@@ -76,7 +71,7 @@
     @apply flex flex-col;
 }
 .field input {
-    @apply w-[100%] min-w-[0] bg-transparent bg-none;
+    @apply flex-[1] w-[0] min-w-[0] bg-transparent bg-none;
     border: 0;
     outline: 0;
     font: inherit;
@@ -89,23 +84,6 @@
 }
 .field input::placeholder {
     @apply text-muted-foreground opacity-[1];
-}
-.collapse,
-.use {
-    border: 0;
-    @apply text-left whitespace-normal;
-}
-.use {
-    @apply justify-start h-auto;
-}
-.field input {
-    @apply flex-[1] w-[0];
-}
-button.use {
-    @apply text-foreground;
-}
-button.use {
-    @apply font-normal;
 }
 @media (max-width: 640px) {
     .sheet {
@@ -141,10 +119,6 @@ button.use {
 
 .portalPosition {
     @apply inset-0;
-}
-
-.heading {
-    @apply flex flex-col gap-[6px];
 }
 
 .accentLabel {

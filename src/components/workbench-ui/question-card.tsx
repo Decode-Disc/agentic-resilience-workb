@@ -28,6 +28,7 @@ export function QuestionCard({
 }: QuestionCardProps) {
     return state === "testing" ? (
         <Button
+            variant="unstyled"
             onClick={onOpen}
             className={cn(
                 "wb-glass wb-focal wb-panel-focal",
@@ -37,7 +38,7 @@ export function QuestionCard({
             <span className={styles.header}>
                 <span className={styles.questionId}>{id}</span>
                 <Badge tone="inference">
-                    <span className={cn("wb-live", styles.liveDot)} />
+                    <span className="wb-live wb-live-dot" />
                     Testing
                 </Badge>
                 <span className={styles.steps}>
@@ -93,6 +94,7 @@ export function QuestionCard({
         </Button>
     ) : (
         <Button
+            variant="unstyled"
             onClick={onOpen}
             className={cn("wb-glass wb-waits", styles.card, styles.waiting)}>
             <span className={styles.header}>

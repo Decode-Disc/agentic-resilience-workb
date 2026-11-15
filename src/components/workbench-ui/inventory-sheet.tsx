@@ -93,7 +93,12 @@ export function InventorySheet({
                             />
                         </label>
                         <DialogClose
-                            render={<Button className={styles.collapse} />}>
+                            render={
+                                <Button
+                                    variant="quiet"
+                                    className={styles.collapse}
+                                />
+                            }>
                             <WorkbenchIcon
                                 name="collapse"
                                 size={14}
@@ -108,6 +113,7 @@ export function InventorySheet({
                             aria-label="Assertion class">
                             {filters.map((f) => (
                                 <Button
+                                    variant="unstyled"
                                     key={f.id}
                                     className={cn(
                                         styles.filter,
@@ -153,6 +159,7 @@ export function InventoryUse({
 }) {
     return (
         <Button
+            variant="unstyled"
             className={cn(
                 styles.use,
                 selected ? styles.selectedUse : undefined,

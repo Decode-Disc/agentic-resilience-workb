@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import styles from "./evidence-matrix.module.css";
+import useStyles from "./evidence-use.module.css";
 import {
     EvidenceUsePopover,
     type MatrixPassage,
@@ -119,6 +120,7 @@ export function EvidenceMatrix({
                         <th scope="col" key={q.id}>
                             {onSelectQuestion ? (
                                 <Button
+                                    variant="unstyled"
                                     render={
                                         <motion.button
                                             initial={false}
@@ -268,6 +270,7 @@ export function EvidenceMatrix({
                                                 }
                                                 trigger={
                                                     <Button
+                                                        variant="unstyled"
                                                         render={
                                                             <motion.button
                                                                 initial={false}
@@ -285,7 +288,10 @@ export function EvidenceMatrix({
                                                                 }
                                                             />
                                                         }
-                                                        className={styles.use}
+                                                        className={cn(
+                                                            useStyles.treatment,
+                                                            styles.use,
+                                                        )}
                                                         aria-label={`${r.id} · ${q.label} · ${label}`}
                                                         data-use={use}
                                                         aria-pressed={
@@ -325,6 +331,7 @@ export function EvidenceMatrix({
                                         ) : (
                                             <span
                                                 className={cn(
+                                                    useStyles.treatment,
                                                     styles.use,
                                                     styles.useCount,
                                                 )}>

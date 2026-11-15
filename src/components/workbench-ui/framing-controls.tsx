@@ -41,6 +41,7 @@ export function FramingControls({
                 </span>
                 {angles.map((a) => (
                     <Button
+                        variant="unstyled"
                         key={a.id}
                         className={styles.angle}
                         onClick={() => onAngle(a.id)}>
@@ -61,7 +62,9 @@ export function FramingControls({
                 <span className={styles.row}>
                     {options.map((o) => (
                         <Button
+                            variant="unstyled"
                             key={o.id}
+                            size="compact"
                             className={styles.option}
                             aria-pressed={selected.includes(o.id)}
                             onClick={() => onOption(o.id)}>
@@ -79,6 +82,7 @@ export function FramingControls({
                 <span className={styles.row}>
                     {replies.map((r) => (
                         <Button
+                            variant="unstyled"
                             key={r.id}
                             className={styles.reply}
                             onClick={() => onReply(r.id)}>

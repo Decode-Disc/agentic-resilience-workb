@@ -25,12 +25,19 @@ export function RequestItem({
                 <span className={styles.title}>{title}</span>
                 <span className={styles.description}>{detail}</span>
             </span>
-            <Button onClick={onOpen} className={styles.reviewAction}>
+            <Button
+                variant="solid"
+                size="compact"
+                onClick={onOpen}
+                className={styles.reviewAction}>
                 Review
             </Button>
         </div>
     ) : state === "searching" ? (
-        <Button onClick={onOpen} className={cn(styles.item, styles.searching)}>
+        <Button
+            variant="unstyled"
+            onClick={onOpen}
+            className={cn(styles.item, styles.searching)}>
             <span className={cn(styles.icon, styles.searchIcon)}>
                 <WorkbenchIcon name="search" size={16} strokeWidth={1.8} />
             </span>
@@ -39,12 +46,12 @@ export function RequestItem({
                 <span className={styles.description}>{detail}</span>
             </span>
             <Badge tone="inference" className={styles.status}>
-                <span className={cn("wb-live", styles.liveDot)}></span>
+                <span className="wb-live wb-live-dot"></span>
                 Searching
             </Badge>
         </Button>
     ) : (
-        <Button onClick={onOpen} className={styles.item}>
+        <Button variant="unstyled" onClick={onOpen} className={styles.item}>
             <span className={cn(styles.icon, styles.unavailableIcon)}>
                 <WorkbenchIcon name="search" size={16} strokeWidth={1.8} />
             </span>

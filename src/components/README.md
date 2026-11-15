@@ -81,7 +81,7 @@ The connected dossier consumer keeps persisted history and its current draft whi
 
 ## Question-led Workbench presentation
 
-[workbench-ui/index.ts](workbench-ui/index.ts) is the library export surface. [WorkbenchUiRoot](workbench-ui/root.tsx) scopes its [materials](workbench-ui/styles.css) and carries the selected theme into supported portals. These components consume supplied presentation data and callbacks; their presence in the library does not establish connected workflow delivery.
+[workbench-ui/index.ts](workbench-ui/index.ts) is the library export surface. [WorkbenchUiRoot](workbench-ui/root.tsx) scopes its [materials](../assets/styles/workbench-ui/index.css) and carries the selected theme into supported portals. These components consume supplied presentation data and callbacks; their presence in the library does not establish connected workflow delivery.
 
 | Need | Component | Integration detail |
 | --- | --- | --- |

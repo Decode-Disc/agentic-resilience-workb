@@ -97,6 +97,7 @@ export function Handoff({
                     </span>
                 </span>
                 <Button
+                    variant="unstyled"
                     className={cn(styles.button, styles.stayAction)}
                     disabled={stayed}
                     onClick={() => {
@@ -106,6 +107,8 @@ export function Handoff({
                     Stay here
                 </Button>
                 <Button
+                    variant="solid"
+                    size="unstyled"
                     className={cn(styles.button, styles.continueAction)}
                     onClick={finish}>
                     Go now
