@@ -1,8 +1,5 @@
-import { usePreviewModelSelector } from "./preview-model-selector";
-import type { ComponentProps } from "react";
-import { ComposerToolsMenu } from "@/components/composer/tools-menu";
-import { ComposerToolbar } from "@/components/composer/composer";
 import { ArrowRight01Icon, Attachment01Icon } from "@hugeicons/core-free-icons";
+import type { ComponentProps } from "react";
 import {
     type ReactNode,
     useEffect,
@@ -15,6 +12,8 @@ import type { ConversationAgents } from "@/components/chat/conversation-agent";
 import { ConversationHistory } from "@/components/chat/conversation-history";
 import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
+import { ComposerToolbar } from "@/components/composer/composer";
+import { ComposerToolsMenu } from "@/components/composer/tools-menu";
 import Icon from "@/components/icon";
 import {
     Popover,
@@ -22,6 +21,7 @@ import {
     PopoverTitle,
     PopoverTrigger,
 } from "@/components/ui/popover";
+import { usePreviewModelSelector } from "./preview-model-selector";
 import "./preview-controls.css";
 import {
     ConversationComposer,
@@ -924,7 +924,7 @@ function ResearchExample({
                               ? "Documentary preparation stopped"
                               : "Collecting the documentary material"
                     }
-                    onOpenActivity={onOpenProgress}
+                    onOpenProgress={onOpenProgress}
                     detail={
                         done
                             ? "Ready when you are"

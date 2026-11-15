@@ -466,7 +466,7 @@ function StartWorkspaceContent({
                                       },
                                   })
                               }>
-                              Activity log
+                              View progress
                               <Icon iconNode={ArrowRight01Icon} size={16} />
                           </Button>
                       </>
@@ -871,7 +871,7 @@ function StartWorkspaceContent({
                         <Icon iconNode={ArrowLeft01Icon} size={16} />
                         Back to research
                     </Button>
-                    <h1 className="text-section text-2xl">Activity log</h1>
+                    <h1 className="text-section text-2xl">Progress</h1>
                 </header>
                 {progress}
             </div>
@@ -907,7 +907,7 @@ function StartWorkspaceContent({
                                           : "// Sources"
                                 }
                                 title={sourcePresentation.title}
-                                onOpenActivity={() =>
+                                onOpenProgress={() =>
                                     void navigate({
                                         to: "/workspace/$runId",
                                         params: { runId },

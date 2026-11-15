@@ -73,7 +73,7 @@ describe("production run workspace", () => {
                 .getByRole("link", { name: "Sources" })
                 .getAttribute("aria-current"),
         ).toBe("page");
-        expect(screen.getByRole("link", { name: "Progress" })).toBeTruthy();
+        expect(screen.getByRole("link", { name: "Research" })).toBeTruthy();
         for (const label of ["Investigation", "Synthesis"]) {
             const tab = screen.getByRole("button", { name: label });
             expect(tab.getAttribute("aria-disabled")).toBe("true");

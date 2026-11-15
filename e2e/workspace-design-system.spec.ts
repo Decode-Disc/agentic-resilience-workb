@@ -39,7 +39,7 @@ test("workspace navigation and inventory preserve context on desktop and mobile"
             name: "Research workspace sections",
         });
         await expect(
-            navigation.getByRole("link", { name: "Progress", exact: true }),
+            navigation.getByRole("link", { name: "Research", exact: true }),
         ).toHaveAttribute("aria-current", "page");
         for (const name of ["Investigation", "Synthesis"])
             await expect(

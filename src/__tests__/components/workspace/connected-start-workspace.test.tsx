@@ -776,7 +776,7 @@ test.each([
     else expect(second?.requestKey).toBe(first?.requestKey);
 });
 
-test("a launched dossier offers the workspace sections and names its timeline the activity log", () => {
+test("a launched dossier offers the workspace sections and names its progress page", () => {
     convexReactHarness.query(api.workbench.snapshot).returns({
         ...readySnapshot,
         run: {
@@ -792,14 +792,14 @@ test("a launched dossier offers the workspace sections and names its timeline th
     });
     expect(
         within(sections)
-            .getByRole("link", { name: /Progress/ })
+            .getByRole("link", { name: /Research/ })
             .getAttribute("aria-current"),
     ).toBe("page");
     expect(
         within(sections).getByRole("link", { name: "Sources" }),
     ).toBeTruthy();
     expect(
-        screen.getAllByRole("button", { name: /Activity log/ }).length,
+        screen.getAllByRole("button", { name: /View progress/ }).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /Open Progress/i })).toBeNull();
 });

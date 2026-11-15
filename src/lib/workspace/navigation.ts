@@ -32,7 +32,7 @@ export const workspaceSections: ReadonlyArray<{
     label: string;
     unavailable?: string;
 }> = [
-    { key: "progress", label: "Progress" },
+    { key: "progress", label: "Research" },
     { key: "sources", label: "Sources" },
     {
         key: "investigation",

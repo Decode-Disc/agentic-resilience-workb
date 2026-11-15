@@ -1214,7 +1214,7 @@ function WorkspaceNavigationExample() {
                 flexWrap: "wrap",
             }}>
             <nav className="segment-track" aria-label="Workspace">
-                {["Progress", "Sources", "Investigation", "Synthesis"].map(
+                {["Research", "Sources", "Investigation", "Synthesis"].map(
                     (label) => (
                         <button
                             key={label}

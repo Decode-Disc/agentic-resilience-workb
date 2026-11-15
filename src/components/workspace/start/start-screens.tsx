@@ -898,14 +898,14 @@ export function StartSourceStages({
 export function StartSourcesHeader({
     label,
     title,
-    onOpenActivity,
+    onOpenProgress,
     detail,
     running = false,
 }: {
     label: string;
     title: string;
     /** Opens the dossier's activity log, the recorded timeline of research steps. */
-    onOpenActivity?: () => void;
+    onOpenProgress?: () => void;
     detail?: string;
     running?: boolean;
 }) {
@@ -920,10 +920,10 @@ export function StartSourcesHeader({
                 </span>
                 <h1>{title}</h1>
             </div>
-            {onOpenActivity && (
+            {onOpenProgress && (
                 <div className={styles.openProgress}>
-                    <Button variant="launch" onClick={onOpenActivity}>
-                        Activity log
+                    <Button variant="launch" onClick={onOpenProgress}>
+                        View progress
                         <WorkbenchIcon name="chevron" size={14} />
                     </Button>
                     {detail && <span>{detail}</span>}
