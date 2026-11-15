@@ -68,6 +68,28 @@
         "Locates the relevant reference and existing owners before identifying an implementation gap.",
         "Uses observed differences and user decisions rather than proposing a new design or unnecessary infrastructure."
       ]
+    },
+    {
+      "id": 5,
+      "name": "export-css-does-not-select-runtime-ownership",
+      "prompt": "An approved workflow export depicts a request row, compact Review action and an analytical-use tag. Its stylesheet repeats complete button resets per widget and combines every style globally. Plan the presentation conversion using the existing Workbench library. Explain ownership before translating CSS; do not edit, start services, run providers or claim rendered fidelity from source inspection alone.",
+      "files": [
+        "../../../DESIGN.md",
+        "../../../src/components/workbench-ui/request-item.tsx",
+        "../../../src/components/workbench-ui/request-item.module.css",
+        "../../../src/components/ui/button.tsx",
+        "../../../src/components/ui/button.module.css",
+        "../../../src/assets/styles/workbench-ui/index.css",
+        "../../../src/components/workbench-ui/evidence-use.module.css"
+      ],
+      "expected_output": "A read-only conversion plan that preserves the approved appearance while assigning local parts and shared treatments to their existing runtime owners, with unverified visual comparison explicit.",
+      "expectations": [
+        "Uses the linked frontend style-ownership procedure rather than treating export selectors and its global stylesheet as the target architecture.",
+        "Inspects and reuses existing request and Button APIs, avoiding cloned per-widget control resets or a forwarding WorkbenchButton.",
+        "Keeps local named parts and responsive rules in a colocated CSS Module using suitable Tailwind @apply, without long JSX utility lists or a new monolithic stylesheet.",
+        "Reuses the shared material family and evidence-use treatment rather than borrowing a consumer's private CSS; distinguishes matching values from genuinely shared responsibility.",
+        "Preserves authored units and cascade/state behavior and requires real reference/implementation comparison before claiming fidelity."
+      ]
     }
   ]
 }

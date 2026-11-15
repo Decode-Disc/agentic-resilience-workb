@@ -35,9 +35,11 @@ Read only the local reference matching the task:
 
 | Concern | Reference |
 | --- | --- |
-| Controls, feedback, badges, motion, or shared presentation | [Components and ownership](references/components-and-ownership.md) |
+| Styling, controls, feedback, badges, motion, or shared presentation | [Components and ownership](references/components-and-ownership.md) |
 | Labels, counts, evidence states, action wording, or redundant metadata | [Analyst language and meaning](references/analyst-language.md) |
 | Async work, recovery, approval, navigation, or verification scope | [Workflow and verification](references/workflow-and-verification.md) |
+
+For styling changes, use the [style ownership procedure](references/components-and-ownership.md#maintain-style-ownership) before general-purpose implementation examples: a utility-first example does not select this project's stylesheet architecture or justify normalizing approved measurements.
 
 Inspect the real owner's API, a relevant caller, and existing tests before adding logic. For substantial work, summarize **analyst need → owner and callers → scoped change → observable check** in the conversation; a small correction needs no separate artifact. Extend the owner when the same rule must change together. Keep a consumer's geometry or placement in that consumer.
 

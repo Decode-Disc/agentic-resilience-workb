@@ -61,7 +61,7 @@ Reuse an adequate composer or picker. Extract its pure presentation only when ne
 
 Keep reusable analytical components in their existing library and workflow compositions with their workflow. Inspect `WorkbenchUiRoot` and portal styling before adopting library materials; do not spread scoped reference styles into global application defaults.
 
-Reproduce rendered appearance and interactions, not the export's selectors or stylesheet architecture. Resolve styling ownership through `DESIGN.md`: keep local layout, named parts, states and responsive rules in the component's CSS Module, express suitable declarations with Tailwind `@apply`, and keep JSX class selection concise. Reuse shared materials and retain native CSS wherever it is clearer or needed for fidelity. Preserve exact units, responsive operators and effective cascade behavior rather than snapping values to a convenient scale. Compare with the agreed visual baseline, including approved application refinements, rather than treating exported structure as authority.
+Reproduce rendered appearance and interactions, not the export's selectors or stylesheet architecture. Before translating CSS, map reference parts through the [style ownership procedure](../workbench-frontend/references/components-and-ownership.md#maintain-style-ownership), using `DESIGN.md` for style allocation. Compare with the agreed visual baseline, including approved application refinements, rather than treating exported structure as authority.
 
 Expose content, relevant presentation state and callbacks. Keep fixtures separate from reusable components. Avoid backend calls, inferred domain decisions, speculative configuration and wrappers that merely forward another component’s API.
 
@@ -125,5 +125,7 @@ Personally inspect the rendered reference and implementation. Compare the same r
 Exercise the changed controls. Check keyboard access, focus, dismissal, navigation, console errors, wrapping and scrolling. Add realistic long content and extra rows; a composer or dock must not cover actions when the content grows.
 
 Use temporary captures and executable browser observations to resolve differences. Do not stop after inspecting source code, running types or viewing only the implementation.
+
+Before accepting fidelity, perform the linked style-ownership review as well: a visually identical copy of a shared control's rules still creates a separate maintenance path.
 
 Report the implemented foundation, preview entry points, verified states, actual checks and remaining unconnected operations. Distinguish gallery behavior from connected workflow delivery. Do not claim protected-runtime or backend completion from fixture interactions.

@@ -407,6 +407,65 @@
         "Preserves deferred snapshot loading and selection boundaries, distinguishes component tests from a protected admin browser journey, and respects the read-only scope."
       ],
       "expected_output": "A bounded reuse proposal identifying existing owners, justified exceptions and focused verification while preserving the approved composition and data-loading behavior."
+    },
+    {
+      "id": 22,
+      "name": "component-owned-tailwind-and-shared-recipes",
+      "prompt": "Plan a question-led request panel with a clickable card/row, a compact Review action and an analytical-use tag also displayed in a popover. Inspect the existing library and specify which current APIs and CSS owners to reuse, and where new local layout belongs. Read-only: do not implement, start services or run providers.",
+      "files": [
+        "../../../DESIGN.md",
+        "../../../src/components/ui/button.tsx",
+        "../../../src/components/ui/button.module.css",
+        "../../../src/assets/styles/workbench-ui/index.css",
+        "../../../src/components/workbench-ui/request-item.tsx",
+        "../../../src/components/workbench-ui/request-item.module.css",
+        "../../../src/components/workbench-ui/evidence-use.module.css",
+        "../../../src/components/workbench-ui/evidence-use-popover.tsx"
+      ],
+      "expectations": [
+        "Inspects installed Button recipes and the request-row composition before prescribing another control or copying reset/focus/fill/size rules.",
+        "Identifies the existing unstyled composition mode and adequate action recipes, preserving consumer geometry and primitive interaction/override contracts.",
+        "Keeps new named parts, local states and responsive geometry in the owning CSS Module with suitable Tailwind @apply and concise JSX classes, not a wholesale JSX utility conversion.",
+        "Reuses the existing shared evidence-use treatment and shared material family rather than importing private matrix CSS or defining a parallel tag palette."
+      ],
+      "expected_output": "A concrete ownership map using installed APIs, colocated local styling and existing shared recipes, with no production edits."
+    },
+    {
+      "id": 23,
+      "name": "local-footer-versus-coincidental-style-duplication",
+      "prompt": "I only want to adjust the InventorySheet footer on narrow screens, but some WorkCard spacing looks similar. Should we move both CSS Modules into the shared style folder and normalize Button defaults while we are there? Inspect the actual owners and propose the smallest correction; do not edit.",
+      "files": [
+        "../../../DESIGN.md",
+        "../../../src/components/workbench-ui/inventory-sheet.tsx",
+        "../../../src/components/workbench-ui/inventory-sheet.module.css",
+        "../../../src/components/workbench-ui/work-card.module.css",
+        "../../../src/components/ui/button.tsx"
+      ],
+      "expectations": [
+        "Verifies the claimed similarity and distinguishes shared treatment knowledge from coincidentally equal geometry.",
+        "Keeps a footer-only requirement with its consumer instead of moving unrelated local Modules or changing global Button defaults.",
+        "Preserves authored units and responsive operators rather than normalizing dimensions to a convenient scale.",
+        "Selects relevant before/after narrow-screen browser checks without manufacturing CSS-class tests or claiming unrun verification."
+      ],
+      "expected_output": "A bounded local proposal that challenges unjustified consolidation and preserves genuine shared ownership."
+    },
+    {
+      "id": 24,
+      "name": "raw-button-recipe-versus-component-merging",
+      "prompt": "During a Button styling cleanup, can we use cn inside buttonVariants to merge all classes consistently with Button? Inspect the actual helper, rendered component and at least one caller outside WorkbenchUiRoot. Explain whether this preserves the existing public composition contract. Read-only; do not refactor or run providers.",
+      "files": [
+        "../../../src/components/ui/button.tsx",
+        "../../../src/components/ui/calendar.tsx",
+        "../../../src/components/workspace/source-context-panel.tsx",
+        "../../../src/lib/utils.ts"
+      ],
+      "expectations": [
+        "Traces the installed exported helper and the component's separate outer merge, rather than treating their composition policies as interchangeable.",
+        "Examines a real outside-scope recipe caller and conflicting utility overrides before proposing a merge-policy change.",
+        "Identifies the raw concatenation contract and does not move Tailwind merging into the helper solely for consistency.",
+        "Proposes real rendered helper-consumer characterization separately from Button component verification and reports any unrun runtime check."
+      ],
+      "expected_output": "A source-grounded compatibility assessment preserving raw recipe composition and the component's existing merge boundary."
     }
   ]
 }
