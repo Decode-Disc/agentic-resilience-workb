@@ -3,7 +3,7 @@ import {
     Cancel01Icon,
     Search01Icon,
 } from "@hugeicons/core-free-icons";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import Icon from "@/components/icon";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +33,11 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+    type DocumentaryNeed,
+    DocumentaryNeeds,
+    type NeedQuestion,
+} from "@/components/workbench-ui/documentary-needs";
 import {
     ClaimGlyph,
     ReadingBar,
@@ -45,14 +49,9 @@ import {
     type SourceMatrixRow,
 } from "@/components/workbench-ui/source-matrix";
 import {
-    AttachedLimitation,
-    CoverageBar,
     PreparationRows,
     PreparationStageCard,
     PreparationStageRow,
-    PreparationSummary,
-    PreparationSummaryStep,
-    QuestionCoverageRow,
 } from "@/components/workbench-ui/source-preparation";
 import {
     SourceReader,
@@ -78,16 +77,12 @@ export interface SourcesScreenFrame {
 }
 
 export type DiscoveryOutcome = "found" | "none" | "unavailable";
-export type LimitationCause =
-    | "missing-content"
-    | "partial-reading"
-    | "failed-preparation";
 
 /** Presentation figures for one preparation; the consumer derives them from persisted work. */
 export interface SourcesPreparationView {
     eyebrow: string;
     title: string;
-    /** One readable conclusion supplied by the consumer. */
+    /** What was prepared and what happens next, supplied by the consumer; never a verdict on the questions. */
     summary: string;
     description?: string;
     outcome: { label: string; settled: boolean };
@@ -125,26 +120,9 @@ export interface SourcesPreparationView {
         }[];
         handoff?: string;
     };
-    coverage: readonly {
-        id: string;
-        label: string;
-        question: string;
-        contributing: number;
-        opposing: number;
-        covered: boolean;
-    }[];
-    limitations: readonly {
-        id: string;
-        cause: LimitationCause;
-        /** The affected question; absent when the limit is not specific to one. */
-        questionId?: string;
-        scope: string;
-        text: string;
-    }[];
+    questions: readonly NeedQuestion[];
+    needs: readonly DocumentaryNeed[];
 }
-
-/** `summary` leads with the conclusion; `questions` puts coverage first with the full preparation on demand. */
-export type SourcesPreparationMode = "summary" | "questions";
 
 const discoveryMeta: Record<DiscoveryOutcome, string> = {
     found: "found",
@@ -161,55 +139,44 @@ const roleBadges = {
     ),
     excluded: <Badge tone="unknown">Excluded</Badge>,
 };
-const roleLabels = {
-    primary: "Primary",
-    opposing: "Opposing",
-    excluded: "Excluded",
-};
-/** One presentation per limitation cause: disclosed gaps in review tone, failed work in destructive tone. */
-const limitationPresentation: Record<
-    LimitationCause,
-    { label: string; tone: "review" | "destructive" }
-> = {
-    "missing-content": { label: "Missing content", tone: "review" },
-    "partial-reading": { label: "Partial reading", tone: "review" },
-    "failed-preparation": { label: "Failed preparation", tone: "destructive" },
-};
-function LimitationBadge({ cause }: { cause: LimitationCause }) {
-    const { label, tone } = limitationPresentation[cause];
-    return <Badge tone={tone}>{label}</Badge>;
-}
 const check = <WorkbenchIcon name="check" size={11} strokeWidth={2.4} />;
 
-function coverageStatus(covered: boolean) {
-    return covered ? (
-        <Badge tone="ink">
-            {check}
-            Covered
-        </Badge>
-    ) : (
-        <Badge tone="review">Gap disclosed</Badge>
-    );
-}
-
-/** Initial preparation: a readable summary by default, coverage by question with the full preparation on demand. */
+/** Initial preparation: documentary needs against the questions they serve, with how preparation ran on demand. */
 export function SourcesPreparationScreen({
     frame,
     view,
-    mode,
-    onModeChange,
     onInspectSources,
 }: {
     frame: SourcesScreenFrame;
     view: SourcesPreparationView;
-    mode: SourcesPreparationMode;
-    onModeChange: (mode: SourcesPreparationMode) => void;
     onInspectSources: () => void;
 }) {
-    const [detailsOpen, setDetailsOpen] = useState(false);
-    const showDetails = () => {
-        setDetailsOpen(true);
-        onModeChange("questions");
+    const [runOpen, setRunOpen] = useState(false);
+    const runTrigger = useRef<HTMLButtonElement>(null);
+    // The run sits below the needs; this brings it into view with focus, then opens it.
+    const showRun = () => {
+        const trigger = runTrigger.current;
+        if (!trigger) return;
+        trigger.focus({ preventScroll: true });
+        const reduced = window.matchMedia(
+            "(prefers-reduced-motion: reduce)",
+        ).matches;
+        if (reduced || Math.abs(trigger.getBoundingClientRect().top) < 2) {
+            trigger.scrollIntoView({ block: "start" });
+            setRunOpen(true);
+            return;
+        }
+        // Opening animates the panel's height, which cancels a smooth scroll in progress.
+        let opened = false;
+        const open = () => {
+            if (opened) return;
+            opened = true;
+            document.removeEventListener("scrollend", open, true);
+            setRunOpen(true);
+        };
+        document.addEventListener("scrollend", open, true);
+        window.setTimeout(open, 700);
+        trigger.scrollIntoView({ block: "start", behavior: "smooth" });
     };
     return (
         <SourcesWorkspaceFrame
@@ -235,279 +202,109 @@ export function SourcesPreparationScreen({
                             {view.outcome.label}
                         </span>
                     </span>
-                    <Button
-                        className={styles.primaryAction}
-                        size="lg"
-                        onClick={onInspectSources}>
-                        Inspect sources
-                        <WorkbenchIcon
-                            name="chevron"
-                            size={14}
-                            strokeWidth={2}
-                        />
-                    </Button>
-                </div>
-            }>
-            <ToggleGroup
-                aria-label="Preparation view"
-                className={cn(styles.segment, styles.viewSwitch)}
-                spacing={0}
-                value={[mode]}
-                onValueChange={(next) => {
-                    const option = next.find((value) => value !== mode);
-                    if (option === "summary" || option === "questions")
-                        onModeChange(option);
-                }}>
-                <ToggleGroupItem value="summary" className={styles.filter}>
-                    Summary
-                </ToggleGroupItem>
-                <ToggleGroupItem value="questions" className={styles.filter}>
-                    By question
-                </ToggleGroupItem>
-            </ToggleGroup>
-            {mode === "summary" ? (
-                <PreparationSummaryView
-                    view={view}
-                    onShowDetails={showDetails}
-                />
-            ) : (
-                <PreparationByQuestion
-                    view={view}
-                    detailsOpen={detailsOpen}
-                    onDetailsOpenChange={setDetailsOpen}
-                />
-            )}
-        </SourcesWorkspaceFrame>
-    );
-}
-
-function PreparationSummaryView({
-    view,
-    onShowDetails,
-}: {
-    view: SourcesPreparationView;
-    onShowDetails: () => void;
-}) {
-    const { collect, reading, organize } = view;
-    const questionLabel = (id?: string) =>
-        view.coverage.find((row) => row.id === id)?.label;
-    const details = (label: string) => (
-        <Button
-            variant="ghost"
-            size="sm"
-            className={styles.detailsLink}
-            aria-label={label}
-            onClick={onShowDetails}>
-            Details
-            <WorkbenchIcon name="chevron" size={12} strokeWidth={2} />
-        </Button>
-    );
-    return (
-        <div className={styles.summaryColumn}>
-            <PreparationSummary>
-                <PreparationSummaryStep
-                    marker="1"
-                    title={`${collect.candidates} sources found, ${reading.captured} read`}
-                    description={`${reading.full} full readings, ${reading.partial} partial, ${reading.unavailable} unavailable.${collect.note ? ` ${collect.note}.` : ""}`}
-                    action={details("Details on how sources were read")}>
-                    <ReadingBar
-                        width="min(300px, 100%)"
-                        height={6}
-                        counts={{
-                            full: reading.full,
-                            partial: reading.partial,
-                            unavailable: reading.unavailable,
-                        }}
-                    />
-                </PreparationSummaryStep>
-                <PreparationSummaryStep
-                    marker="2"
-                    title={`${organize.selected} selected, ${organize.context} kept as context`}
-                    description={organize.uses
-                        .map((use) => `${roleLabels[use.role]}: ${use.text}.`)
-                        .join(" ")}
-                    action={details("Details on the selection")}
-                />
-                <PreparationSummaryStep marker="3" title="Coverage by question">
-                    <ul className={styles.compactCoverage}>
-                        {view.coverage.map((row) => (
-                            <li key={row.id}>
-                                <span className="wb-meta">{row.label}</span>
-                                <span>{row.question}</span>
-                                <span className="wb-meta">
-                                    {row.contributing} · {row.opposing} opposing
-                                </span>
-                                {coverageStatus(row.covered)}
-                            </li>
-                        ))}
-                    </ul>
-                </PreparationSummaryStep>
-                {view.limitations.length > 0 && (
-                    <PreparationSummaryStep
-                        marker={
+                    <span className={styles.outcomeActions}>
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            className={styles.secondaryAction}
+                            onClick={showRun}>
+                            How it ran
+                            <Icon iconNode={ArrowDown01Icon} size={14} />
+                        </Button>
+                        <Button
+                            className={styles.primaryAction}
+                            size="lg"
+                            onClick={onInspectSources}>
+                            Inspect sources
                             <WorkbenchIcon
-                                name="unestablished"
-                                size={15}
+                                name="chevron"
+                                size={14}
                                 strokeWidth={2}
                             />
-                        }
-                        tone="attention"
-                        title="What is missing">
-                        <ul className={styles.missing}>
-                            {view.limitations.map((limitation) => {
-                                const label = questionLabel(
-                                    limitation.questionId,
-                                );
-                                return (
-                                    <li key={limitation.id}>
-                                        {label && <b>{label}</b>}
-                                        {limitation.text}
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </PreparationSummaryStep>
-                )}
-            </PreparationSummary>
-        </div>
-    );
-}
-
-function PreparationByQuestion({
-    view,
-    detailsOpen,
-    onDetailsOpenChange,
-}: {
-    view: SourcesPreparationView;
-    detailsOpen: boolean;
-    onDetailsOpenChange: (open: boolean) => void;
-}) {
-    const { collect, reading, organize } = view;
-    const scale = Math.max(1, ...view.coverage.map((row) => row.contributing));
-    const general = view.limitations.filter(
-        (limitation) => !limitation.questionId,
-    );
-    return (
-        <>
-            <section
-                className={cn("wb-glass wb-focal", styles.panel)}
-                aria-labelledby="sources-coverage-heading">
-                <span className={styles.panelHead}>
-                    <h2 id="sources-coverage-heading">Coverage by question</h2>
-                    <span className="wb-meta">
-                        sources contributing · of which opposing
+                        </Button>
                     </span>
-                </span>
-                <PreparationRows>
-                    {view.coverage.map((row) => (
-                        <QuestionCoverageRow
-                            key={row.id}
-                            size="prominent"
-                            label={row.label}
-                            question={row.question}
-                            bar={
-                                <CoverageBar
-                                    contributing={row.contributing}
-                                    opposing={row.opposing}
-                                    scale={scale}
-                                />
-                            }
-                            meta={`${row.contributing} · ${row.opposing} opposing`}
-                            status={coverageStatus(row.covered)}>
-                            {view.limitations
-                                .filter(
-                                    (limitation) =>
-                                        limitation.questionId === row.id,
-                                )
-                                .map((limitation) => (
-                                    <AttachedLimitation
-                                        key={limitation.id}
-                                        tone={
-                                            limitationPresentation[
-                                                limitation.cause
-                                            ].tone
-                                        }
-                                        cause={
-                                            limitationPresentation[
-                                                limitation.cause
-                                            ].label
-                                        }>
-                                        {limitation.text}
-                                    </AttachedLimitation>
-                                ))}
-                        </QuestionCoverageRow>
-                    ))}
-                </PreparationRows>
-            </section>
-            <Collapsible
-                open={detailsOpen}
-                onOpenChange={onDetailsOpenChange}
-                className={cn("wb-glass", styles.process)}>
-                <div className={styles.processLine}>
-                    <span className={cn("wb-label", styles.processLabel)}>
-                        How it was prepared
-                    </span>
-                    <span className={styles.flow}>
-                        <span className={styles.flowStep}>
-                            <span>
-                                <b>{collect.candidates}</b> collected
-                            </span>
-                        </span>
-                        <StageArrow />
-                        <span className={styles.flowStep}>
-                            <span>
-                                <b>{reading.captured}</b> read · {reading.full}{" "}
-                                full, {reading.partial} partial,{" "}
-                                {reading.unavailable} unavailable
-                            </span>
-                            <ReadingBar
-                                height={5}
-                                counts={{
-                                    full: reading.full,
-                                    partial: reading.partial,
-                                    unavailable: reading.unavailable,
-                                }}
-                            />
-                        </span>
-                        <StageArrow />
-                        <span className={styles.flowStep}>
-                            <span>
-                                <b>{organize.selected}</b> selected ·{" "}
-                                {organize.context} kept as context
-                            </span>
-                        </span>
-                    </span>
-                    <CollapsibleTrigger
-                        render={
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className={styles.processToggle}
-                            />
-                        }>
-                        {detailsOpen ? "Hide details" : "Show details"}
-                    </CollapsibleTrigger>
                 </div>
-                {general.length > 0 && (
-                    <ul className={styles.generalLimits}>
-                        {general.map((limitation) => (
-                            <li key={limitation.id}>
-                                <LimitationBadge cause={limitation.cause} />
-                                {limitation.text}
-                            </li>
-                        ))}
-                    </ul>
-                )}
-                <CollapsibleContent>
-                    <PreparationStages view={view} />
-                </CollapsibleContent>
-            </Collapsible>
+            }>
+            <DocumentaryNeeds questions={view.questions} needs={view.needs} />
+            <PreparationRun
+                view={view}
+                open={runOpen}
+                onOpenChange={setRunOpen}
+                triggerRef={runTrigger}
+            />
             {view.description && (
                 <p className={cn("wb-meta", styles.preparationNote)}>
                     {view.description}
                 </p>
             )}
-        </>
+        </SourcesWorkspaceFrame>
+    );
+}
+
+/** How Sources collected, read and organized the material; secondary to the needs, open on demand. */
+function PreparationRun({
+    view,
+    open,
+    onOpenChange,
+    triggerRef,
+}: {
+    view: SourcesPreparationView;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    triggerRef: Ref<HTMLButtonElement>;
+}) {
+    const { collect, reading, organize } = view;
+    return (
+        <Collapsible
+            open={open}
+            onOpenChange={onOpenChange}
+            className={cn("wb-glass", styles.process)}>
+            <CollapsibleTrigger
+                ref={triggerRef}
+                render={
+                    <Button variant="unstyled" className={styles.processLine} />
+                }>
+                <span className={cn("wb-label", styles.processLabel)}>
+                    How preparation ran
+                </span>
+                <span className={styles.flow}>
+                    <span className={styles.flowStep}>
+                        <span>
+                            <b>{collect.candidates}</b> collected
+                        </span>
+                    </span>
+                    <StageArrow />
+                    <span className={styles.flowStep}>
+                        <span>
+                            <b>{reading.captured}</b> read · {reading.full}{" "}
+                            full, {reading.partial} partial,{" "}
+                            {reading.unavailable} unavailable
+                        </span>
+                        <ReadingBar
+                            height={5}
+                            counts={{
+                                full: reading.full,
+                                partial: reading.partial,
+                                unavailable: reading.unavailable,
+                            }}
+                        />
+                    </span>
+                    <StageArrow />
+                    <span className={styles.flowStep}>
+                        <span>
+                            <b>{organize.selected}</b> retained ·{" "}
+                            {organize.context} kept as context
+                        </span>
+                    </span>
+                </span>
+                <span className={styles.processChevron} aria-hidden="true">
+                    <WorkbenchIcon name="chevron" size={14} strokeWidth={2} />
+                </span>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+                <PreparationStages view={view} />
+            </CollapsibleContent>
+        </Collapsible>
     );
 }
 

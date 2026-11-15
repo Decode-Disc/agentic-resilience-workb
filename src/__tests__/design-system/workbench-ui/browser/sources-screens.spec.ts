@@ -52,42 +52,78 @@ test("preparation leads to the matrix and a selected source in the reader", asyn
     expect(errors).toEqual([]);
 });
 
-test("preparation opens on the summary and switches to coverage by question", async ({
+test("preparation maps documentary needs to the questions they serve", async ({
     page,
 }) => {
+    const errors = consoleErrors(page);
     await page.goto("/?layout=sources&screen=preparation&theme=light");
-    const views = page.getByRole("group", { name: "Preparation view" });
+    const needs = page.getByRole("table", { name: "Documentary needs" });
     await expect(
-        views.getByRole("button", { name: "Summary" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    await expect(
-        page.getByText("29 sources are ready for the investigation."),
+        needs.getByRole("rowheader", {
+            name: /Switching terms between platforms/,
+        }),
     ).toBeVisible();
+    // Sources prepares material; it does not judge whether a question is answered.
+    await expect(page.getByText("Covered", { exact: true })).toHaveCount(0);
     await expect(
-        page.getByRole("heading", { name: "Collect sources" }),
+        page.getByRole("group", { name: "Preparation view" }),
     ).toHaveCount(0);
 
-    await page
-        .getByRole("button", { name: "Details on how sources were read" })
-        .click();
-    await expect(
-        views.getByRole("button", { name: "By question" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    const q3 = page.getByRole("listitem").filter({
-        hasText: "Could core platforms replace it?",
-    });
-    await expect(q3).toContainText(
-        "No public document states switching terms between platforms.",
+    const q3 = needs.getByRole("button", { name: /^Q3/ });
+    await q3.click();
+    await expect(q3).toHaveAttribute("aria-pressed", "true");
+    const lens = page.getByRole("status").filter({ hasText: "Q3" });
+    await expect(lens).toContainText("Could core platforms replace it?");
+    await expect(lens).toContainText("3 documentary needs");
+    // The needs Q3 relies on come first.
+    const firstRows = needs.locator("tbody tr").locator("th");
+    await expect(firstRows.nth(0)).toContainText(
+        /Switching terms|investor-day|Third-party access/,
     );
+    await expect(firstRows.nth(2)).toContainText(
+        /Switching terms|investor-day|Third-party access/,
+    );
+    await q3.click();
+    await expect(q3).toHaveAttribute("aria-pressed", "false");
+    await expect(firstRows.nth(0)).toContainText("Where the platform sits");
+
+    await page.getByRole("button", { name: /How preparation ran/ }).click();
     await expect(
         page.getByRole("heading", { name: "Collect sources" }),
     ).toBeVisible();
+    expect(errors).toEqual([]);
+});
 
-    await page.getByRole("button", { name: "Inspect sources" }).click();
-    await page.goBack();
+test("the outcome jumps straight to how preparation ran", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/?layout=sources&screen=preparation&theme=light");
+    await page.getByRole("button", { name: "How it ran" }).click();
+    const disclosure = page.getByRole("button", {
+        name: /How preparation ran/,
+    });
+    await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    await expect(disclosure).toBeFocused();
+    await expect(disclosure).toBeInViewport();
     await expect(
-        views.getByRole("button", { name: "By question" }),
-    ).toHaveAttribute("aria-pressed", "true");
+        page.getByRole("heading", { name: "Collect sources" }),
+    ).toBeVisible();
+});
+
+test("preparation needs stay readable on a phone", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?layout=sources&screen=preparation&theme=dark");
+    const needs = page.getByRole("table", { name: "Documentary needs" });
+    await needs.getByRole("button", { name: /^Q4/ }).click();
+    await expect(
+        page
+            .getByRole("status")
+            .filter({ hasText: "Could an agent bypass it?" }),
+    ).toBeVisible();
+    expect(
+        await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+    ).toBe(true);
 });
 
 test("matrix filter menus, removable filters and the empty state stay coherent", async ({
@@ -181,6 +217,20 @@ test.describe("on a touch screen", () => {
         await expect(
             page.getByRole("dialog").filter({ hasText: "12 facts" }),
         ).toBeVisible();
+    });
+
+    test("needs map marks explain themselves with a tap", async ({ page }) => {
+        await page.goto("/?layout=sources&screen=preparation&theme=light");
+        await page
+            .getByRole("button", {
+                name: "Serves Q3: Searched, nothing usable",
+            })
+            .tap();
+        await expect(
+            page.getByRole("dialog").filter({
+                hasText: "Switching terms between platforms",
+            }),
+        ).toContainText("Could core platforms replace it?");
     });
 
     test("the source drawer closes from its header", async ({ page }) => {

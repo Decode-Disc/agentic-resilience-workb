@@ -9,6 +9,12 @@
 .outcomeLabel {
     @apply flex items-center gap-[8px] text-[16px] font-semibold;
 }
+.outcomeActions {
+    @apply flex items-center flex-wrap gap-[8px];
+}
+.secondaryAction {
+    @apply h-[40px] rounded-[11px] py-0 px-[14px] gap-[6px] text-[14px];
+}
 .primaryAction {
     @apply h-[40px] rounded-[11px] py-0 px-[16px] gap-[8px] text-[14px];
     box-shadow: inset 0 1px 0 color-mix(in oklab, white 20%, transparent);
@@ -38,15 +44,6 @@
 .handoff {
     @apply mt-auto flex items-center gap-[10px] py-[10px] px-[12px] rounded-[12px] bg-accent bg-none text-[13px] leading-[18px] text-accent-foreground;
 }
-.panel {
-    @apply rounded-[24px] py-[20px] px-[22px] flex flex-col gap-[6px] min-w-[0];
-}
-.panelHead {
-    @apply flex justify-between items-baseline gap-[12px] pb-[6px];
-}
-.panelHead h2 {
-    @apply m-[0] text-[16px] font-semibold tracking-[-0.02em];
-}
 .search {
     @apply w-[320px] max-w-[100%] h-[40px] rounded-[12px];
 }
@@ -55,28 +52,6 @@
 }
 .filters {
     @apply flex items-center flex-wrap gap-y-[10px] gap-x-[14px];
-}
-.segment {
-    @apply flex items-center gap-[2px] p-[3px] rounded-[12px] bg-foreground/6 bg-none max-w-[100%] overflow-x-auto;
-}
-.filter {
-    all: unset;
-    @apply shrink-0 h-[32px] py-0 px-[12px] rounded-[10px] text-[13px] font-medium leading-[32px] text-muted-foreground cursor-pointer whitespace-nowrap;
-}
-.filter:hover {
-    @apply text-foreground;
-}
-.filter:focus-visible {
-    outline: 2px solid var(--ring);
-    @apply outline-offset-[1px];
-}
-.filter[data-pressed] {
-    @apply bg-card bg-none text-foreground;
-    box-shadow: 0 0 0 1px
-        color-mix(in oklab, var(--foreground) 10%, transparent);
-}
-.viewSwitch {
-    @apply self-start;
 }
 .filterTrigger {
     @apply h-[34px] rounded-[11px] gap-[6px] pt-0 pr-[10px] pb-0 pl-[12px] text-[13px] font-medium;
@@ -131,36 +106,23 @@
 .clearFilters {
     @apply h-[28px] py-0 px-[4px] text-[12.5px];
 }
-.detailsLink {
-    @apply gap-[4px] h-[28px] py-0 px-[8px] text-[12.5px] text-muted-foreground;
-}
-.summaryColumn {
-    @apply w-[100%];
-}
-.compactCoverage {
-    @apply mt-[6px] mx-0 mb-0 p-[0] max-w-[760px];
-    list-style: none;
-    @apply grid grid-cols-[auto_minmax(0,_1fr)_auto_auto] items-center gap-y-[10px] gap-x-[14px] text-[14px];
-}
-.compactCoverage li {
-    @apply contents;
-}
-.missing {
-    @apply mt-[4px] mx-0 mb-0 p-[0];
-    list-style: none;
-    @apply flex flex-col gap-[6px] text-[13.5px] leading-[19px];
-}
-.missing li {
-    @apply flex gap-[8px];
-}
-.missing b {
-    @apply shrink-0 font-mono text-[12px] font-medium leading-[19px];
-}
 .process {
     @apply rounded-[22px] py-[16px] px-[22px] flex flex-col gap-[12px];
 }
 .processLine {
-    @apply flex items-center gap-[18px];
+    @apply flex w-[100%] items-center gap-[18px] rounded-[14px] -my-[4px] py-[4px] cursor-pointer;
+}
+.processChevron {
+    @apply shrink-0 ml-auto inline-flex size-[28px] items-center justify-center rounded-[999px] text-muted-foreground;
+    transition:
+        rotate 0.22s var(--wb-ease-arrive),
+        background-color 0.15s ease-out;
+}
+.processLine:hover .processChevron {
+    @apply bg-foreground/6 bg-none text-foreground;
+}
+.processLine[data-panel-open] .processChevron {
+    rotate: 90deg;
 }
 .processLabel {
     @apply shrink-0;
@@ -173,17 +135,6 @@
 }
 .flowStep b {
     @apply text-[20px] font-medium tracking-[-0.03em] text-foreground tabular-nums mr-[2px];
-}
-.processToggle {
-    @apply shrink-0 h-[32px] rounded-[999px] text-[13px];
-}
-.generalLimits {
-    @apply m-[0] p-[0];
-    list-style: none;
-    @apply flex flex-col gap-[6px] text-[13px] text-muted-foreground;
-}
-.generalLimits li {
-    @apply flex items-center gap-[10px];
 }
 .process .stages {
     @apply pt-[8px] px-0 pb-[12px];
@@ -256,9 +207,6 @@
         @apply basis-[100%];
         order: 1;
     }
-    .processToggle {
-        @apply ml-auto;
-    }
 }
 @media (max-width: 760px) {
     .outcome {
@@ -269,15 +217,6 @@
     }
     .count {
         @apply ml-[0] basis-[100%];
-    }
-    .panelHead {
-        @apply flex-col items-start gap-[4px];
-    }
-    .compactCoverage {
-        @apply grid-cols-[auto_minmax(0,_1fr)_auto];
-    }
-    .compactCoverage li > :nth-child(3) {
-        @apply hidden;
     }
     .flow .stageArrow {
         @apply hidden;

@@ -4,6 +4,7 @@ export * from "./chip";
 export * from "./class-distribution-bar";
 export * from "./control-conclusion";
 export * from "./cover";
+export * from "./documentary-needs";
 export * from "./evidence-matrix";
 export * from "./evidence-use-popover";
 export * from "./framing-controls";

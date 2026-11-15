@@ -7,7 +7,6 @@ import {
 } from "@/components/workbench-ui";
 import {
     SourcesMatrixScreen,
-    type SourcesPreparationMode,
     SourcesPreparationScreen,
     SourcesReaderScreen,
     type SourcesScreenFrame,
@@ -114,8 +113,6 @@ export function SourcesScreenPreview({
     const [filters, setFilters] =
         useState<MatrixFilterValues>(defaultMatrixFilters);
     const [inventoryOpen, setInventoryOpen] = useState(false);
-    const [preparationMode, setPreparationMode] =
-        useState<SourcesPreparationMode>("summary");
     const dockFocus = useRef<HTMLElement | null>(null);
     const source =
         illustrativeSources.find((item) => item.id === selectedId) ??
@@ -168,8 +165,6 @@ export function SourcesScreenPreview({
                     <SourcesPreparationScreen
                         frame={frame}
                         view={preparationView}
-                        mode={preparationMode}
-                        onModeChange={setPreparationMode}
                         onInspectSources={() => onNavigate("matrix")}
                     />
                 ) : name === "matrix" ? (
