@@ -90,6 +90,66 @@ export function workbenchFailureCopy(code?: string) {
     return "This response could not finish. Your messages and recorded work remain available. Send another message to continue.";
 }
 
+const plural = (count: number, noun: string) =>
+    `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+/**
+ * The research program's limits as the analyst reads them, from the server's Start admission. Start is offered
+ * only when the server would accept it; each refusal names what the analyst can do next.
+ */
+export function researchProgramReadiness(
+    researchStart: FunctionReturnType<
+        typeof api.workbench.snapshot
+    >["researchStart"],
+    questionCount: number,
+) {
+    const capacity = researchStart.questionCapacity ?? undefined;
+    return {
+        questionLimit: capacity,
+        addUnavailable:
+            capacity !== undefined && questionCount >= capacity
+                ? questionCapacityCopy(capacity)
+                : undefined,
+        startUnavailable: researchStartRefusalCopy(
+            researchStart.block,
+            capacity === undefined
+                ? undefined
+                : { capacity, excess: questionCount - capacity },
+        ),
+    };
+}
+
+/** Why a new question cannot be added; shared by the disabled control and a refused save. */
+export function questionCapacityCopy(capacity: number) {
+    return `Documentary preparation can take on ${plural(capacity, "research question")} in this workspace. Edit an existing question instead.`;
+}
+
+/** Why Start cannot proceed, for the disabled control and for a refusal that raced it. Undefined when Start is available or no longer applies. */
+export function researchStartRefusalCopy(
+    code: string | null | undefined,
+    capacity?: { capacity: number; excess: number },
+) {
+    if (
+        !code ||
+        code === "research_already_started" ||
+        code === "framing_fixed"
+    )
+        return undefined;
+    if (code === "framing_invalid")
+        return "Add a research scope and at least one research question to start.";
+    if (code === "sources_need_capacity")
+        return capacity && capacity.excess > 0
+            ? `Remove ${plural(capacity.excess, "question")} to start. Documentary preparation can take on ${plural(capacity.capacity, "research question")} in this workspace. Your research program is saved.`
+            : "This program has more questions than documentary preparation can take on in this workspace. Remove a question to start. Your research program is saved.";
+    if (code === "sources_configuration_unavailable")
+        return "Documentary preparation is not available in this workspace yet, so research cannot start. Your research program is saved.";
+    if (code === "analysis_limit_reached")
+        return "Every analysis available to this workspace has been used, so research cannot start. Your research program is saved.";
+    if (code === "execution_slot_unavailable")
+        return "Another of your analyses is still running. Start this one when it finishes. Your research program is saved.";
+    return "Research cannot start right now. Review the latest program, then try again. Your research program is saved.";
+}
+
 /** Sources retains its own completed work when later analytical work starts or fails. */
 export function sourceMissionState(
     run: Pick<

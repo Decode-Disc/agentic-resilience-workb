@@ -169,3 +169,31 @@ test.each([
         /claim_generation_unavailable|EXA_API_KEY|evidenceExecution|extracting_evidence/,
     );
 });
+
+test("a run that failed before Sources prepared material is reported as stopped, not still preparing", () => {
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        startMode: "framed",
+        sourcesProtocol: "sources_mission_v1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "discovering_sources",
+        executionStatus: "failed",
+        providerFailures: [],
+        updatedAt: 2,
+    });
+    render(<RunRouteComponent runId={"run-1" as never} section="sources" />);
+    expect(
+        screen.getByRole("heading", {
+            name: "Documentary preparation stopped",
+        }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Preparing documentary sources/)).toBeNull();
+    expect(
+        screen.queryByText(/discovering_sources|failed|sources_need_capacity/),
+    ).toBeNull();
+});

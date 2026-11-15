@@ -7,7 +7,10 @@ import {
     readResearchControlReadiness,
     researchStateSummary,
 } from "@convex/execution/researchControl";
-import { researchStartBlock } from "./framingEditAuthority";
+import {
+    researchQuestionCapacity,
+    researchStartBlock,
+} from "./framingEditAuthority";
 import { requireSavedMaterialScope } from "./savedMaterialInspection";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
@@ -121,6 +124,7 @@ export async function readWorkbenchFacts(
                   ...framing.content,
                   origin: framing.origin,
                   fixed: !!run.fixedFramingRevisionId,
+                  questionCapacity: await researchQuestionCapacity(ctx, run),
               }
             : null,
         research: {

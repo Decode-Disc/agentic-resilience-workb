@@ -435,12 +435,16 @@
     @apply hidden;
 }
 .framingLaunch {
-    @apply flex flex-row items-center justify-between gap-[10px] py-[8px] px-[12px] bg-transparent bg-none;
+    @apply flex flex-row flex-wrap items-center justify-between gap-[10px] py-[8px] px-[12px] bg-transparent bg-none;
     border: 0;
     @apply rounded-none;
 }
 .framingLaunch p {
     @apply max-w-[52ch] text-[10px] leading-[15px] text-muted-foreground;
+}
+/* A program limit is read before acting, so it takes its own row above the controls at every width. */
+.framingLaunch .framingLimitNote {
+    @apply order-first basis-full max-w-none text-[11px] leading-[16px];
 }
 .composerSuggestions {
     @apply pt-[5px] px-[12px] pb-0 text-[11px] text-muted-foreground;

@@ -16,6 +16,7 @@ import {
 import { getDocumentSize, type Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { readResearchContext } from "./researchContext";
+import { MAX_RESEARCH_PLAN_QUESTIONS } from "./researchPlan";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import {
     assertPreparationExecutionFence,
@@ -138,6 +139,37 @@ export function sourcesResourceStatus(data: SourcesPreparation) {
     };
 }
 
+/** One need for common context and one per framed question; Start checks the same list against the envelope. */
+export function initialDocumentaryNeeds(
+    scope: string | undefined,
+    questions: readonly { id: string; text: string }[],
+) {
+    return [
+        {
+            id: "common-context",
+            version: 1,
+            information: `Document the company and studied activity within this scope: ${scope ?? "company context"}`,
+            questionIds: [] as string[],
+            commonContext: true,
+        },
+        ...questions.map((question) => ({
+            id: `question:${question.id}`,
+            version: 1,
+            information: question.text,
+            questionIds: [question.id],
+            commonContext: false,
+        })),
+    ];
+}
+
+/** Framed questions the envelope can prepare beside the shared needs, within the research plan's own question bound. */
+export function documentaryQuestionCapacity(envelope: { maxNeeds: number }) {
+    return Math.min(
+        envelope.maxNeeds - initialDocumentaryNeeds(undefined, []).length,
+        MAX_RESEARCH_PLAN_QUESTIONS,
+    );
+}
+
 /** The system constructs the shared brief once; conversation is never its storage authority. */
 export async function initializeSources(
     ctx: MutationCtx,
@@ -152,22 +184,10 @@ export async function initializeSources(
         throw executionError("sources_scope_invalid");
     if (preparation.sourcesMission) return preparation.sourcesMission;
     const research = await readResearchContext(ctx, run);
-    const needs = [
-        {
-            id: "common-context",
-            version: 1,
-            information: `Document the company and studied activity within this scope: ${research.scope ?? run.researchAngle ?? "company context"}`,
-            questionIds: [] as string[],
-            commonContext: true,
-        },
-        ...(research.framing?.content.questions ?? []).map((question) => ({
-            id: `question:${question.id}`,
-            version: 1,
-            information: question.text,
-            questionIds: [question.id],
-            commonContext: false,
-        })),
-    ];
+    const needs = initialDocumentaryNeeds(
+        research.scope ?? run.researchAngle,
+        research.framing?.content.questions ?? [],
+    );
     if (needs.length > envelope.maxNeeds)
         throw executionError("sources_need_capacity");
     const data: SourcesPreparation = {

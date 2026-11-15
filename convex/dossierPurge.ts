@@ -44,6 +44,19 @@ async function releaseStorage(ctx: MutationCtx, storageId?: Id<"_storage">) {
     if (!capture && !lease && !version) await ctx.storage.delete(storageId);
 }
 
+/** Removes a batch of a Pi session's commits, then the session itself once it has none. */
+async function dropSession(ctx: MutationCtx, sessionId: Id<"piSessions">) {
+    const commits = await ctx.db
+        .query("piCommits")
+        .withIndex("by_session_and_sequence", (q) =>
+            q.eq("sessionId", sessionId),
+        )
+        .take(DOSSIER_PURGE_BATCH);
+    if (commits.length) await drop(ctx, commits);
+    else await ctx.db.delete(sessionId);
+    return true;
+}
+
 /** Ordered children-first steps; each deletes at most one batch for one dossier. */
 const steps: Record<
     string,
@@ -277,41 +290,24 @@ const steps: Record<
             .query("agentMissions")
             .withIndex("by_run_and_status", (q) => q.eq("runId", runId))
             .take(DOSSIER_PURGE_BATCH)) {
-            for (const session of await ctx.db
+            const session = await ctx.db
                 .query("piSessions")
                 .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
-                .take(DOSSIER_PURGE_BATCH)) {
-                const commits = await ctx.db
-                    .query("piCommits")
-                    .withIndex("by_session_and_sequence", (q) =>
-                        q.eq("sessionId", session._id),
-                    )
-                    .take(DOSSIER_PURGE_BATCH);
-                if (commits.length) return drop(ctx, commits).then(() => true);
-                await ctx.db.delete(session._id);
-                return true;
-            }
+                .first();
+            if (session) return dropSession(ctx, session._id);
         }
         for (const conversation of await ctx.db
             .query("agentConversations")
             .withIndex("by_run", (q) => q.eq("runId", runId))
-            .take(DOSSIER_PURGE_BATCH))
-            for (const session of await ctx.db
+            .take(DOSSIER_PURGE_BATCH)) {
+            const session = await ctx.db
                 .query("piSessions")
                 .withIndex("by_conversation", (q) =>
                     q.eq("conversationId", conversation._id),
                 )
-                .take(DOSSIER_PURGE_BATCH)) {
-                const commits = await ctx.db
-                    .query("piCommits")
-                    .withIndex("by_session_and_sequence", (q) =>
-                        q.eq("sessionId", session._id),
-                    )
-                    .take(DOSSIER_PURGE_BATCH);
-                if (commits.length) return drop(ctx, commits).then(() => true);
-                await ctx.db.delete(session._id);
-                return true;
-            }
+                .first();
+            if (session) return dropSession(ctx, session._id);
+        }
         return false;
     },
     agentInvocationPayloads: async (ctx, runId) => {

@@ -151,18 +151,24 @@ function readingState(reading: SourcesRow["reading"]) {
         : ("unavailable" as const);
 }
 
+/** One wording for inclusion; Context is a retained source whose usable contributions are context only. */
+const membershipLabels: Record<SourcesRow["membership"], string> = {
+    retained: "Retained",
+    excluded: "Excluded",
+    not_retained: "Not retained",
+    pending: "Pending",
+};
+
 function membershipBadge(row: SourcesRow) {
-    if (row.membership === "retained")
-        return row.contextOnly ? (
-            <Badge tone="ink">Context</Badge>
-        ) : (
-            <Badge tone="accent">Retained</Badge>
-        );
-    if (row.membership === "excluded")
-        return <Badge tone="unknown">Excluded</Badge>;
-    if (row.membership === "not_retained")
-        return <Badge tone="unknown">Not retained</Badge>;
-    return <Badge tone="dashed">Pending</Badge>;
+    if (row.membership === "retained" && row.contextOnly)
+        return <Badge tone="ink">Context</Badge>;
+    const tone =
+        row.membership === "retained"
+            ? "accent"
+            : row.membership === "pending"
+              ? "dashed"
+              : "unknown";
+    return <Badge tone={tone}>{membershipLabels[row.membership]}</Badge>;
 }
 
 function controlBadge(tally: NonNullable<SourcesRow["contributions"]>) {
@@ -751,5 +757,5 @@ export function sourceFollowUpDraft(
 ) {
     return kind === "check"
         ? `Please run a targeted documentary check on "${row.title}" (${row.url}). What I want verified: `
-        : `I want to challenge the selection of "${row.title}" (${row.url}), currently ${row.membership === "retained" ? "retained" : row.membership === "excluded" ? "excluded" : row.membership === "not_retained" ? "not retained" : "pending"}. My reason: `;
+        : `I want to challenge the selection of "${row.title}" (${row.url}), currently ${membershipLabels[row.membership].toLowerCase()}. My reason: `;
 }

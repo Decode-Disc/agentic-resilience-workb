@@ -21,6 +21,22 @@ vi.mock(
 vi.mock("@tanstack/react-router", async (original) => ({
     ...(await original<typeof import("@tanstack/react-router")>()),
     useNavigate: () => vi.fn(),
+    // Launched dossiers show the section navigation; its links need no router here.
+    Link: ({
+        children,
+        to,
+        params: _params,
+        search: _search,
+        ...props
+    }: React.ComponentProps<"a"> & {
+        to: string;
+        params?: unknown;
+        search?: unknown;
+    }) => (
+        <a href={to} {...props}>
+            {children}
+        </a>
+    ),
 }));
 const save = vi.fn(),
     start = vi.fn(),
@@ -60,6 +76,7 @@ const readySnapshot = {
             ],
         },
     },
+    researchStart: { block: null, questionCapacity: 3 },
     researchControlAvailable: true,
     availableCommands: ["/pause", "/resume"],
     activeWork: null,
@@ -369,6 +386,96 @@ test("Start research commits the visible revision", async () => {
     );
 });
 
+const programQuestion = (id: string) => ({
+    id,
+    shortLabel: id,
+    text: `What constrains ${id}?`,
+    rationale: "Economic control.",
+});
+function frameProgram(
+    questions: string[],
+    researchStart: { block: string | null; questionCapacity: number | null },
+) {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        framing: {
+            ...readySnapshot.framing,
+            content: {
+                ...readySnapshot.framing.content,
+                questions: questions.map(programQuestion),
+            },
+        },
+        researchStart,
+    });
+}
+
+test("a program at documentary capacity shows its limit and cannot grow, while Start stays available", () => {
+    frameProgram(["switching", "pricing", "renewals"], {
+        block: null,
+        questionCapacity: 3,
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    expect(screen.getByText("3 of 3 questions")).toBeTruthy();
+    const add = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Add research question",
+    });
+    expect(add.disabled).toBe(true);
+    expect(
+        screen.getByText(
+            "Documentary preparation can take on 3 research questions in this workspace. Edit an existing question instead.",
+        ),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole<HTMLButtonElement>("button", {
+            name: "Start research",
+        }).disabled,
+    ).toBe(false);
+});
+
+test.each([
+    {
+        block: "sources_need_capacity",
+        questions: ["switching", "pricing", "renewals"],
+        capacity: 1,
+        copy: "Remove 2 questions to start. Documentary preparation can take on 1 research question in this workspace. Your research program is saved.",
+    },
+    {
+        block: "sources_configuration_unavailable",
+        questions: ["switching"],
+        capacity: null,
+        copy: "Documentary preparation is not available in this workspace yet, so research cannot start. Your research program is saved.",
+    },
+    {
+        block: "analysis_limit_reached",
+        questions: ["switching"],
+        capacity: 3,
+        copy: "Every analysis available to this workspace has been used, so research cannot start. Your research program is saved.",
+    },
+    {
+        block: "execution_slot_unavailable",
+        questions: ["switching"],
+        capacity: 3,
+        copy: "Another of your analyses is still running. Start this one when it finishes. Your research program is saved.",
+    },
+])("Start is unavailable before any attempt when $block, with the next step", ({
+    block,
+    questions,
+    capacity,
+    copy,
+}) => {
+    frameProgram(questions, { block, questionCapacity: capacity });
+    const view = render(<ConnectedStartWorkspace runId={runId} />);
+    const startButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Start research",
+    });
+    expect(startButton.disabled).toBe(true);
+    expect(screen.getByText(copy)).toBeTruthy();
+    fireEvent.click(startButton);
+    expect(start).not.toHaveBeenCalled();
+    expect(screen.queryByText("Action unavailable")).toBeNull();
+    expect(view.container.textContent).not.toContain(block);
+});
+
 test("research pause has a distinct control from stopping the conversation", async () => {
     const existing = convexReactHarness.query(api.workbench.snapshot);
     existing.returns({
@@ -382,6 +489,10 @@ test("research pause has a distinct control from stopping the conversation", asy
         },
         company: { legalName: "Example Technology", ticker: "EX" },
         framing: null,
+        researchStart: {
+            block: "research_already_started",
+            questionCapacity: null,
+        },
         researchControlAvailable: true,
         availableCommands: ["/pause"],
         activeWork: null,
@@ -663,4 +774,41 @@ test.each([
         second = setModel.mock.calls[1]?.[0];
     if (confirmed) expect(second?.requestKey).not.toBe(first?.requestKey);
     else expect(second?.requestKey).toBe(first?.requestKey);
+});
+
+test("a launched dossier offers the workspace sections and names its timeline the activity log", () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+        },
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const sections = screen.getByRole("navigation", {
+        name: "Research workspace sections",
+    });
+    expect(
+        within(sections)
+            .getByRole("link", { name: /Progress/ })
+            .getAttribute("aria-current"),
+    ).toBe("page");
+    expect(
+        within(sections).getByRole("link", { name: "Sources" }),
+    ).toBeTruthy();
+    expect(
+        screen.getAllByRole("button", { name: /Activity log/ }).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Open Progress/i })).toBeNull();
+});
+
+test("framing before launch keeps its screen without workspace sections", () => {
+    render(<ConnectedStartWorkspace runId={runId} />);
+    expect(
+        screen.queryByRole("navigation", {
+            name: "Research workspace sections",
+        }),
+    ).toBeNull();
 });

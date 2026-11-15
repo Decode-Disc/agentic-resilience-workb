@@ -25,34 +25,45 @@ import {
     workspaceSections,
 } from "@/lib/workspace/navigation";
 import { stashWorkbenchDraft } from "@/lib/workspace/workbench-draft";
+import { sourceMissionState } from "@/lib/presentation/workbench";
 
 type SourcesSearch = Pick<
     WorkspaceSearch,
     "sourcesView" | "source" | "q" | "kind" | "reading" | "use"
 >;
 
-/** Sources content before the mission records preparation, or for dossiers prepared by the retired corpus review. */
-function sourcesFallbackCopy(lifecycleState: string) {
-    if (lifecycleState === "framing")
+/** Sources content before the mission records preparation, or for dossiers prepared by the retired corpus review. Follows the shared Sources mission state. */
+function sourcesFallbackCopy(
+    run: Parameters<typeof sourceMissionState>[0] & {
+        sourcesProtocol?: "sources_mission_v1";
+    },
+) {
+    if (run.lifecycleState === "framing")
         return {
             title: "Sources has not started",
             description:
                 "Documentary preparation starts when you start the research.",
         };
-    if (
-        lifecycleState === "draft" ||
-        lifecycleState === "checking_public_evidence" ||
-        lifecycleState === "discovering_sources"
-    )
+    if (!run.sourcesProtocol)
         return {
-            title: "Preparing documentary sources",
+            title: "Sources view unavailable for this dossier",
+            description:
+                "This dossier was prepared with a source review that is no longer available. Start a new analysis to use the current Sources view.",
+        };
+    const state = sourceMissionState(run, null);
+    if (state === "running" || state === "waiting" || state === "paused")
+        return {
+            title:
+                state === "paused"
+                    ? "Documentary preparation paused"
+                    : "Preparing documentary sources",
             description:
                 "Sources is gathering public documents. Its preparation appears here as soon as discovery returns.",
         };
     return {
-        title: "Sources view unavailable for this dossier",
+        title: "Documentary preparation stopped",
         description:
-            "This dossier was prepared with a source review that is no longer available. Start a new analysis to use the current Sources view.",
+            "Research stopped before Sources could prepare any material, so there is nothing to inspect here. Start a new analysis to try again.",
     };
 }
 
@@ -164,7 +175,7 @@ export function RunRouteComponent({
             expanded={section === "progress"}
         />
     );
-    const fallback = sourcesFallbackCopy(run.lifecycleState);
+    const fallback = sourcesFallbackCopy(run);
     const generic = (
         <div className="min-w-0 pb-28 pt-2 sm:pb-36">
             {navigation}

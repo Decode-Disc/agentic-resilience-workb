@@ -7,7 +7,10 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
-import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
+import {
+    activateSourcesMission,
+    sourcesTestEnvelope,
+} from "@/__tests__/setup/sources-mission";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 beforeEach(() => vi.useFakeTimers());
@@ -266,6 +269,110 @@ test("research cannot start on a corpus-approval fallback when Sources is not ac
     } finally {
         vi.unstubAllEnvs();
     }
+});
+
+const capacityQuestion = (id: string) => ({
+    id,
+    text: `Question ${id}?`,
+    rationale: "Document it",
+    shortLabel: id,
+});
+
+async function framingDossier(key: string) {
+    const t = convexTest(schema, modules);
+    agentTest.register(t);
+    workflowTest.register(t);
+    const { userId, preflightId } = await createAdmittedPreflight(t);
+    const analyst = t.withIdentity({ subject: userId });
+    const { runId } = await analyst.mutation(api.framing.confirmCompany, {
+        preflightId,
+        idempotencyKey: key,
+        coveragePreset: "balanced",
+    });
+    const save = (
+        expectedRevision: number,
+        requestKey: string,
+        ids: string[],
+    ) =>
+        analyst.mutation(api.framing.save, {
+            runId,
+            expectedRevision,
+            requestKey,
+            content: {
+                scope: "Claims coordination",
+                questions: ids.map(capacityQuestion),
+            },
+        });
+    return { t, analyst, runId, save };
+}
+
+test("the research program cannot grow beyond the questions documentary preparation can take on", async () => {
+    // One need covers the common context, so three needs leave room for two framed questions.
+    activateSourcesMission({ ...sourcesTestEnvelope, maxNeeds: 3 });
+    const { analyst, runId, save } = await framingDossier("question-capacity");
+    expect(await save(1, "two-questions", ["a", "b"])).toBe(2);
+    await expect(save(2, "three-questions", ["a", "b", "c"])).rejects.toThrow(
+        "framing_question_capacity",
+    );
+    expect(
+        await analyst.query(api.workbench.snapshot, { runId }),
+    ).toMatchObject({
+        framing: { revision: 2 },
+        researchStart: { block: null, questionCapacity: 2 },
+    });
+});
+
+test("a program left over capacity by a configuration change stays repairable and Start explains the block before any attempt", async () => {
+    activateSourcesMission({ ...sourcesTestEnvelope, maxNeeds: 4 });
+    const { t, analyst, runId, save } = await framingDossier("over-capacity");
+    expect(await save(1, "three-questions", ["a", "b", "c"])).toBe(2);
+    activateSourcesMission({ ...sourcesTestEnvelope, maxNeeds: 2 });
+    expect(
+        await analyst.query(api.workbench.snapshot, { runId }),
+    ).toMatchObject({
+        researchStart: {
+            block: "sources_need_capacity",
+            questionCapacity: 1,
+        },
+    });
+    expect(await save(2, "reordered", ["c", "b", "a"])).toBe(3);
+    await expect(save(3, "grown", ["a", "b", "c", "d"])).rejects.toThrow(
+        "framing_question_capacity",
+    );
+    await expect(
+        analyst.mutation(api.framing.startResearch, {
+            runId,
+            expectedRevision: 3,
+            requestKey: "over-capacity-start",
+        }),
+    ).rejects.toThrow("sources_need_capacity");
+    expect(await save(3, "reduced", ["b"])).toBe(4);
+    expect(
+        await analyst.query(api.workbench.snapshot, { runId }),
+    ).toMatchObject({
+        researchStart: { block: null, questionCapacity: 1 },
+    });
+    const run = await t.run((ctx) => ctx.db.get(runId));
+    expect(run).toMatchObject({
+        lifecycleState: "framing",
+        executionStatus: "idle",
+    });
+    expect(
+        await t.run((ctx) => ctx.db.query("visitors").first()),
+    ).toMatchObject({ analysesReserved: 0 });
+});
+
+test("Start availability reports an inactive documentary preparation before any attempt", async () => {
+    const { analyst, runId, save } = await framingDossier("inactive-readiness");
+    await save(1, "one-question", ["a"]);
+    expect(
+        await analyst.query(api.workbench.snapshot, { runId }),
+    ).toMatchObject({
+        researchStart: {
+            block: "sources_configuration_unavailable",
+            questionCapacity: null,
+        },
+    });
 });
 
 test("new Sources research pins its protocol while repeated Start consumes no second analysis", async () => {

@@ -9,6 +9,7 @@ import {
 import { framingContentValidator } from "@convex/domain/framingContracts";
 import {
     requireFramingEditAuthority,
+    researchQuestionCapacity,
     researchStartBlock,
 } from "@convex/domain/framingEditAuthority";
 import { MAX_RESEARCH_PLAN_QUESTIONS } from "@convex/domain/researchPlan";
@@ -270,6 +271,17 @@ async function saveFraming(
         : null;
     if (!current || current.revision !== args.expectedRevision)
         throw executionError("framing_version_conflict");
+    // Only growth is refused, so a draft left over capacity by a configuration change can still be reworded or reduced.
+    if (content.questions.length > current.content.questions.length) {
+        const capacity = await researchQuestionCapacity(ctx, run);
+        if (capacity !== null && content.questions.length > capacity)
+            throw executionError("framing_question_capacity", [
+                {
+                    path: "content.questions",
+                    expected: `At most ${capacity} research question${capacity === 1 ? "" : "s"}; documentary preparation cannot take on more in this workspace.`,
+                },
+            ]);
+    }
     const revision = current.revision + 1;
     const id = await ctx.db.insert("framingRevisions", {
         runId: run._id,

@@ -345,6 +345,8 @@ export const workbenchDefinition: AgentDefinition & {
             code === "explicit_research_intent_required"
         )
             return "This message does not authorize that operation. No change was applied. Re-read the actual analyst request and choose an authorized operation; documentary instructions can be registered with transmit_source_request while research is paused. Clarify only if the analyst's actual request is ambiguous, not to obtain permission for an action they did not request.";
+        if (code === "framing_question_capacity")
+            return "The research program already holds as many questions as documentary preparation can take on (framing.questionCapacity). No change was applied. Refine or replace an existing question instead of adding one, and tell the analyst about the limit when their request needs more questions.";
         if (code === "framing_fixed")
             return "Research has started and framing is fixed. Explain the limitation instead of editing the fixed research program.";
         return undefined;

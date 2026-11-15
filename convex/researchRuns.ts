@@ -353,6 +353,7 @@ async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
         lifecycleState: run.lifecycleState,
         executionStatus: run.executionStatus,
         startMode: run.startMode,
+        sourcesProtocol: run.sourcesProtocol,
         pauseReason: run.pauseReason,
         coveragePreset: run.coveragePreset,
         researchAngle: run.researchAngle,
@@ -385,6 +386,8 @@ export const getMine = query({
 
 const runProjectionValidator = v.object({
     startMode: v.optional(v.literal("framed")),
+    sourcesProtocol:
+        schema.tables.researchRuns.validator.fields.sourcesProtocol,
     runId: v.id("researchRuns"),
     company: v.union(companySnapshotValidator, v.null()),
     lifecycleState: researchRunLifecycleValidator,

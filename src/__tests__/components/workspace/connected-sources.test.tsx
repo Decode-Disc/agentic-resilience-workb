@@ -165,6 +165,7 @@ const reading: Reading = {
 const run: ComponentProps<typeof ConnectedSources>["run"] = {
     runId,
     startMode: "framed",
+    sourcesProtocol: "sources_mission_v1",
     company: null,
     lifecycleState: "discovering_sources",
     executionStatus: "running",

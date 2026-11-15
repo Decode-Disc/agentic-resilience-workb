@@ -3,6 +3,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { isResumableResearchPause } from "@convex/domain/transitions";
 import { HISTORY_PAGE_SIZE } from "@convex/resourcePolicy";
+import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
@@ -18,6 +19,7 @@ import {
 } from "@/components/chat/workbench-conversation";
 import { WorkbenchModelSelector } from "@/components/composer/model-picker";
 import type { ResearchControlCommand } from "@/components/composer/slash-commands";
+import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,8 +32,12 @@ import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { SourcingLane } from "@/components/workbench-ui/sourcing-lane";
+import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
 import { useResponsive } from "@/hooks/use-responsive";
 import {
+    questionCapacityCopy,
+    researchProgramReadiness,
+    researchStartRefusalCopy,
     sourceMissionPresentation,
     workbenchFailureCopy,
     workbenchTurn,
@@ -64,6 +70,16 @@ const agents = {
     workbench: { id: "workbench", name: "Workbench Agent" },
     sources: { id: "sources", name: "Sources" },
 };
+
+/** The typed code a Convex operation refused with, if any. */
+function convexErrorCode(error: unknown) {
+    return error instanceof ConvexError &&
+        typeof error.data === "object" &&
+        error.data &&
+        "code" in error.data
+        ? error.data.code
+        : undefined;
+}
 
 type StartWorkspaceProps = {
     runId: Id<"researchRuns">;
@@ -188,6 +204,10 @@ function StartWorkspaceContent({
     const insufficient =
         run.completionOutcome === "insufficient_public_evidence";
     const launched = !!run.fixedFramingRevisionId;
+    const readiness = researchProgramReadiness(
+        snapshot.researchStart,
+        framing?.content.questions.length ?? 0,
+    );
     const inspecting = !launched || detail === "framing";
     const running =
         !!state?.activeTurn &&
@@ -247,13 +267,7 @@ function StartWorkspaceContent({
             modelDelivery.current = null;
             setModelPickerOpen(false);
         } catch (error) {
-            if (
-                error instanceof ConvexError &&
-                typeof error.data === "object" &&
-                error.data &&
-                "code" in error.data &&
-                error.data.code === "model_configuration_conflict"
-            )
+            if (convexErrorCode(error) === "model_configuration_conflict")
                 modelDelivery.current = null;
             setError(
                 "The model settings could not be confirmed. Check the selection and try again.",
@@ -297,8 +311,12 @@ function StartWorkspaceContent({
                 setEdit(null);
                 queueMicrotask(() => trigger.current?.focus());
             } catch (cause) {
+                const code = convexErrorCode(cause);
                 setError(
-                    "The research program could not be saved. If it changed, cancel this edit and review the latest version before trying again.",
+                    code === "framing_question_capacity" &&
+                        readiness.questionLimit
+                        ? questionCapacityCopy(readiness.questionLimit)
+                        : "The research program could not be saved. If it changed, cancel this edit and review the latest version before trying again.",
                 );
                 throw cause;
             } finally {
@@ -436,7 +454,7 @@ function StartWorkspaceContent({
                       <>
                           <p>{sourcePresentation.detail}</p>
                           <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
                               onClick={() =>
                                   void navigate({
@@ -448,7 +466,8 @@ function StartWorkspaceContent({
                                       },
                                   })
                               }>
-                              Open progress
+                              Activity log
+                              <Icon iconNode={ArrowRight01Icon} size={16} />
                           </Button>
                       </>
                   ),
@@ -791,14 +810,10 @@ function StartWorkspaceContent({
                 requestKey: launchKey.current,
             });
         } catch (caught) {
+            // The disabled Start already explains known blocks; this covers a change that raced the click.
             setError(
-                caught instanceof ConvexError &&
-                    typeof caught.data === "object" &&
-                    caught.data &&
-                    "code" in caught.data &&
-                    caught.data.code === "sources_configuration_unavailable"
-                    ? "Documentary preparation is not available in this workspace yet, so research cannot start. Your research program is saved."
-                    : "Research could not start. Review the latest program and your available analysis capacity, then try again.",
+                researchStartRefusalCopy(convexErrorCode(caught)) ??
+                    "Research could not start. Review the latest program, then try again.",
             );
         } finally {
             setSaving(false);
@@ -822,6 +837,13 @@ function StartWorkspaceContent({
                 !framing.content.questions.length ||
                 running
             }
+            questionLimit={!launched ? readiness.questionLimit : undefined}
+            addUnavailableReason={
+                !launched ? readiness.addUnavailable : undefined
+            }
+            startUnavailableReason={
+                !launched ? readiness.startUnavailable : undefined
+            }
             onEditRequest={
                 !launched ? (q) => beginEdit("question", q.id) : undefined
             }
@@ -830,25 +852,33 @@ function StartWorkspaceContent({
             error={undefined}
         />
     );
+    const sections = <WorkspaceNavigation runId={runId} section="progress" />;
     if (detail === "timeline")
         return (
-            <div className="py-4">
-                <Button
-                    variant="ghost"
-                    onClick={() =>
-                        void navigate({
-                            to: "/workspace/$runId",
-                            params: { runId },
-                            search: { section: "progress" },
-                        })
-                    }>
-                    Back to research
-                </Button>
+            <div className="min-w-0 pb-28 pt-2 sm:pb-36">
+                {sections}
+                <header className="mb-5 flex flex-col items-start gap-3">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                            void navigate({
+                                to: "/workspace/$runId",
+                                params: { runId },
+                                search: { section: "progress" },
+                            })
+                        }>
+                        <Icon iconNode={ArrowLeft01Icon} size={16} />
+                        Back to research
+                    </Button>
+                    <h1 className="text-section text-2xl">Activity log</h1>
+                </header>
                 {progress}
             </div>
         );
     return (
         <WorkbenchUiRoot className="flex h-full min-h-0 flex-1 flex-col">
+            {launched && <div className="shrink-0 px-4 pt-3">{sections}</div>}
             {inspecting ? (
                 <StartFramingScreen
                     runtime={conversation.runtime}
@@ -877,7 +907,7 @@ function StartWorkspaceContent({
                                           : "// Sources"
                                 }
                                 title={sourcePresentation.title}
-                                onOpenProgress={() =>
+                                onOpenActivity={() =>
                                     void navigate({
                                         to: "/workspace/$runId",
                                         params: { runId },

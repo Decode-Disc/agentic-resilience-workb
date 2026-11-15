@@ -7,6 +7,10 @@ import {
     query,
 } from "@convex/_generated/server";
 import { mergeRunCompanyMetadata } from "@convex/domain/companyMetadata";
+import {
+    researchQuestionCapacity,
+    researchStartBlock,
+} from "@convex/domain/framingEditAuthority";
 import { sourceCaptureState } from "@convex/domain/sourceCaptureState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { readSourcesMission } from "@convex/domain/sources";
@@ -428,6 +432,11 @@ export const snapshot = query({
         availableCommands: v.array(workbenchCommand),
         company: v.union(companySnapshotValidator, v.null()),
         framing: v.union(schema.doc("framingRevisions"), v.null()),
+        /** The Start admission's current verdict, so Start is never offered only to be refused. */
+        researchStart: v.object({
+            block: v.union(v.string(), v.null()),
+            questionCapacity: v.union(v.number(), v.null()),
+        }),
         instructions: v.array(
             v.object({
                 id: v.id("workbenchInstructions"),
@@ -459,7 +468,7 @@ export const snapshot = query({
         ),
     }),
     handler: async (ctx, { runId }) => {
-        const { run } = await requireWorkspaceRun(ctx, runId);
+        const { run, visitor } = await requireWorkspaceRun(ctx, runId);
         const framing = run.currentFramingRevisionId
             ? await ctx.db.get(run.currentFramingRevisionId)
             : null;
@@ -540,6 +549,10 @@ export const snapshot = query({
                     : [],
             company: company ?? null,
             framing,
+            researchStart: {
+                block: await researchStartBlock(ctx, run, framing, visitor),
+                questionCapacity: await researchQuestionCapacity(ctx, run),
+            },
             instructions,
             activeWork: turn ? await readTurn(ctx, turn) : null,
             preparation: preparation

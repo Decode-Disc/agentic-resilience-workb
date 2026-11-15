@@ -7,9 +7,15 @@ import {
     MAX_ANALYSES_PER_VISITOR,
     MAX_FRAMING_AUTHORITY_REVISIONS as MAX_AUTHORITY_REVISIONS,
 } from "@convex/resourcePolicy";
-import { sourcesQualificationEnabled } from "@convex/sourcesSimulation";
-import { activatedSourcesEnvelope } from "./sources";
+import {
+    sourcesQualificationEnabled,
+    sourcesQualificationEnvelope,
+} from "@convex/sourcesSimulation";
 import { stableStringify } from "./sourcePassages";
+import {
+    activatedSourcesEnvelope,
+    documentaryQuestionCapacity,
+} from "./sources";
 import {
     explicitFramingPreservation,
     explicitResearchCommand,
@@ -159,8 +165,26 @@ export async function researchStartBlock(
     const qualification = await sourcesQualificationEnabled(ctx, run);
     if (!qualification && visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR)
         return "analysis_limit_reached";
-    // Documentary preparation runs only through the Sources mission; there is no corpus-approval fallback.
-    if (!qualification && !activatedSourcesEnvelope())
-        return "sources_configuration_unavailable";
+    const capacity = await researchQuestionCapacity(ctx, run);
+    if (capacity === null) return "sources_configuration_unavailable";
+    if (framing.content.questions.length > capacity)
+        return "sources_need_capacity";
     return researchSlotBlock(ctx, visitor._id);
+}
+
+/**
+ * Research questions the envelope a Start would pin can prepare, while framing is open. Null otherwise or while documentary
+ * preparation is unavailable: research runs only through the Sources mission, with no corpus-approval fallback.
+ */
+export async function researchQuestionCapacity(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+) {
+    if (run.lifecycleState !== "framing" || run.fixedFramingRevisionId)
+        return null;
+    const envelope =
+        (await sourcesQualificationEnvelope(ctx, run)) ??
+        activatedSourcesEnvelope();
+    const capacity = envelope ? documentaryQuestionCapacity(envelope) : 0;
+    return capacity > 0 ? capacity : null;
 }

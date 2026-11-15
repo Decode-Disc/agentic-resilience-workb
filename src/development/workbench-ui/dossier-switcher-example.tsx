@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 type Dossier = ComponentProps<typeof DossierSwitcherView>["results"][number];
 const dossiers: Dossier[] = [0, 1, 2].map((i) => ({
     startMode: undefined,
+    sourcesProtocol: undefined,
     coveragePreset: undefined,
     researchAngle: undefined,
     activeCorpusRevisionId: undefined,

@@ -14,7 +14,7 @@ test("START completed material stays readable until explicit navigation", async 
     await page.clock.runFor(5000);
     await expect(page).toHaveURL(/layout=start&screen=handoff/);
     const progress = page.getByRole("button", {
-        name: "Open Progress",
+        name: "Activity log",
         exact: true,
     });
     await expect(progress).toBeVisible();
@@ -197,7 +197,7 @@ test("START View framing navigates from source collection to its framing screen"
     ).toHaveCount(0);
     await page.goBack();
     await page
-        .getByRole("button", { name: "Open Progress", exact: true })
+        .getByRole("button", { name: "Activity log", exact: true })
         .click();
     await expect(page).toHaveURL(/component=ProgressTimeline/);
 });

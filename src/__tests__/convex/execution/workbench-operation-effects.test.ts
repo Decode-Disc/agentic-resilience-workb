@@ -1,4 +1,5 @@
 import { api, internal } from "@convex/_generated/api";
+import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import {
     getAgentDefinition,
     registeredAgentDefinitions,
@@ -6,11 +7,14 @@ import {
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
-import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
+import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
+import {
+    activateSourcesMission,
+    sourcesTestEnvelope,
+} from "@/__tests__/setup/sources-mission";
 import type { seedWorkbench } from "@/__tests__/setup/workbench";
-import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 
 // Research starts run through the Sources mission; there is no corpus-approval fallback.
 beforeEach(() => activateSourcesMission());
@@ -96,6 +100,80 @@ test.each([
         outcome: { kind: "success" },
         adoptedAt: expect.any(Number),
     });
+});
+
+test("a Workbench proposal beyond documentary capacity is refused with guidance and leaves the program unchanged", async () => {
+    vi.useFakeTimers();
+    // Two needs: the common context and one framed question.
+    activateSourcesMission({ ...sourcesTestEnvelope, maxNeeds: 2 });
+    const t = convexTest(schema, modules);
+    agentTest.register(t);
+    workflowTest.register(t);
+    const { userId, preflightId } = await createAdmittedPreflight(t),
+        client = t.withIdentity({ subject: userId });
+    const { runId } = await client.mutation(api.framing.confirmCompany, {
+        preflightId,
+        idempotencyKey: "framing-capacity",
+        coveragePreset: "balanced",
+    });
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    if (!active) throw new Error("Expected Workbench turn");
+    const facts = await t.run(async (ctx) => {
+        const run = await ctx.db.get(runId);
+        assert(run);
+        return readWorkbenchFacts(ctx, run);
+    });
+    assert(facts.kind === "ready");
+    expect(facts.context.framing).toMatchObject({ questionCapacity: 1 });
+    const question = (id: string) => ({
+        id,
+        text: `Who controls ${id}?`,
+        shortLabel: id,
+        rationale: "Economic control.",
+    });
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "fixture",
+        input: {
+            kind: "adjust_framing",
+            messageId: await activeMessage(t, active.turnId),
+            expectedRevision: 1,
+            content: {
+                scope: "Accepted claims",
+                questions: [question("payments"), question("pricing")],
+            },
+        },
+    });
+    const before = await client.query(api.framing.get, { runId });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toEqual({
+        kind: "refused",
+        code: "framing_question_capacity",
+        validation: {
+            path: "content.questions",
+            expected:
+                "At most 1 research question; documentary preparation cannot take on more in this workspace.",
+        },
+    });
+    expect(await client.query(api.framing.get, { runId })).toEqual(before);
+    expect(
+        getAgentDefinition("workbench_v1").operationDiagnostic?.(
+            "framing_question_capacity",
+        ),
+    ).toContain("Refine or replace");
 });
 
 test("a committed research Resume is adopted as success", async () => {

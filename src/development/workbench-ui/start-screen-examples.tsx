@@ -924,7 +924,7 @@ function ResearchExample({
                               ? "Documentary preparation stopped"
                               : "Collecting the documentary material"
                     }
-                    onOpenProgress={onOpenProgress}
+                    onOpenActivity={onOpenProgress}
                     detail={
                         done
                             ? "Ready when you are"

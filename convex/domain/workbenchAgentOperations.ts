@@ -1,6 +1,9 @@
 import { internal } from "@convex/_generated/api";
 import type { OperationOutcome } from "@convex/execution/agentDefinition";
-import { executionFailureCode } from "@convex/execution/errors";
+import {
+    executionFailureCode,
+    executionFailureValidation,
+} from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationReuseIdentity } from "@convex/execution/missionData";
 import { operationResultValidator } from "@convex/execution/operationResults";
@@ -28,6 +31,7 @@ function recoverableWorkbenchRefusal(
     error: unknown,
 ): Extract<OperationOutcome, { kind: "refused" }> | undefined {
     const code = executionFailureCode(error);
+    const validation = executionFailureValidation(error);
     return code &&
         [
             "stale_instructions",
@@ -37,6 +41,7 @@ function recoverableWorkbenchRefusal(
             "framing_analyst_conflict",
             "framing_authority_unavailable",
             "framing_authority_capacity",
+            "framing_question_capacity",
             "explicit_research_intent_required",
             "instruction_not_authorized",
             "instruction_capacity",
@@ -44,7 +49,11 @@ function recoverableWorkbenchRefusal(
             "version_conflict",
             "human_prerequisite_required",
         ].includes(code)
-        ? { kind: "refused", code }
+        ? {
+              kind: "refused",
+              code,
+              ...(validation ? { validation } : {}),
+          }
         : undefined;
 }
 

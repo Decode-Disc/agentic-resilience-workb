@@ -506,10 +506,19 @@ export function FramingProposal({
     onStart,
     pending = false,
     startDisabled = false,
+    questionLimit,
+    addUnavailableReason,
+    startUnavailableReason,
     error,
 }: {
     collapsible?: boolean;
     startDisabled?: boolean;
+    /** Most questions the program can hold; shown beside the count. */
+    questionLimit?: number;
+    /** Disables adding a question and explains why. */
+    addUnavailableReason?: string;
+    /** Disables Start before any attempt and states the next step. */
+    startUnavailableReason?: string;
     title?: string;
     introduction?: ReactNode;
     scope?: string;
@@ -528,6 +537,8 @@ export function FramingProposal({
 }) {
     const summaryRef = useRef<HTMLElement>(null);
     const topicsRef = useRef<HTMLFieldSetElement>(null);
+    const limitNoteId = useId();
+    const limitNote = startUnavailableReason ?? addUnavailableReason;
     const previousClarification = useRef(Boolean(clarification));
     useEffect(() => {
         if (previousClarification.current && !clarification)
@@ -737,8 +748,13 @@ export function FramingProposal({
                             variant="ghost"
                             size="sm"
                             aria-label="Add research question"
-                            title="Add research question"
-                            disabled={busy}
+                            title={
+                                addUnavailableReason ?? "Add research question"
+                            }
+                            aria-describedby={
+                                addUnavailableReason ? limitNoteId : undefined
+                            }
+                            disabled={busy || Boolean(addUnavailableReason)}
                             onClick={onAddRequest}>
                             <Icon iconNode={PlusSignIcon} size={16} />
                             <span
@@ -750,11 +766,26 @@ export function FramingProposal({
                         </Button>
                     )}
                 </div>
-                <p className="sr-only">Research starts only when you choose.</p>
+                {limitNote ? (
+                    <p id={limitNoteId} className={styles.framingLimitNote}>
+                        {limitNote}
+                    </p>
+                ) : (
+                    <p className="sr-only">
+                        Research starts only when you choose.
+                    </p>
+                )}
                 {onStart && (
                     <Button
                         variant="launch"
-                        disabled={busy || startDisabled}
+                        aria-describedby={
+                            startUnavailableReason ? limitNoteId : undefined
+                        }
+                        disabled={
+                            busy ||
+                            startDisabled ||
+                            Boolean(startUnavailableReason)
+                        }
                         onClick={onStart}>
                         Start research
                         <Icon iconNode={ArrowRight01Icon} size={17} />
@@ -779,7 +810,9 @@ export function FramingProposal({
                             ? "Research boundary"
                             : emptyProgram
                               ? "No questions yet"
-                              : `${questions.length} questions`
+                              : questionLimit
+                                ? `${questions.length} of ${questionLimit} questions`
+                                : `${questions.length} questions`
                     }
                     headerAction={
                         emptyProgram && onAddRequest ? (
@@ -865,13 +898,14 @@ export function StartSourceStages({
 export function StartSourcesHeader({
     label,
     title,
-    onOpenProgress,
+    onOpenActivity,
     detail,
     running = false,
 }: {
     label: string;
     title: string;
-    onOpenProgress?: () => void;
+    /** Opens the dossier's activity log, the recorded timeline of research steps. */
+    onOpenActivity?: () => void;
     detail?: string;
     running?: boolean;
 }) {
@@ -886,10 +920,10 @@ export function StartSourcesHeader({
                 </span>
                 <h1>{title}</h1>
             </div>
-            {onOpenProgress && (
+            {onOpenActivity && (
                 <div className={styles.openProgress}>
-                    <Button variant="launch" onClick={onOpenProgress}>
-                        Open Progress
+                    <Button variant="launch" onClick={onOpenActivity}>
+                        Activity log
                         <WorkbenchIcon name="chevron" size={14} />
                     </Button>
                     {detail && <span>{detail}</span>}
