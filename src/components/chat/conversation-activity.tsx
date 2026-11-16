@@ -2,19 +2,18 @@ import {
     ArrowRight01Icon,
     Cancel01Icon,
     Loading03Icon,
+    PauseIcon,
     Tick02Icon,
 } from "@hugeicons/core-free-icons";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
     type ReactNode,
+    useEffect,
     useId,
     useLayoutEffect,
     useRef,
     useState,
 } from "react";
-import {
-    ConversationActivityList,
-    ConversationActivityVisibility,
-} from "./conversation-activity-list";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,8 +21,13 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+    ConversationActivityList,
+    ConversationActivityVisibility,
+} from "./conversation-activity-list";
 
 import "./workbench-conversation.css";
+import styles from "./conversation-activity.module.css";
 
 export type ConversationWorkItem = {
     id: string;
@@ -47,6 +51,92 @@ export const workStateLabels = {
     blocked: "Unavailable",
 } as const;
 
+/** Uses supplied execution state; only visible, running work has a looping indicator. */
+export function ConversationWorkMark({
+    state,
+}: {
+    state: ConversationWorkItem["state"];
+}) {
+    const element = useRef<HTMLSpanElement>(null);
+    const previous = useRef(state);
+    const changed = previous.current !== state;
+    const reducedMotion = useReducedMotion();
+    useEffect(() => {
+        previous.current = state;
+    }, [state]);
+    useEffect(() => {
+        const mark = element.current;
+        if (!mark || state !== "running") return;
+        let visible = false;
+        const update = () =>
+            mark.style.setProperty(
+                "--work-animation-state",
+                visible && !document.hidden ? "running" : "paused",
+            );
+        const observer = new IntersectionObserver(([entry]) => {
+            visible = entry?.isIntersecting ?? false;
+            update();
+        });
+        observer.observe(mark);
+        document.addEventListener("visibilitychange", update);
+        update();
+        return () => {
+            observer.disconnect();
+            document.removeEventListener("visibilitychange", update);
+        };
+    }, [state]);
+    return (
+        <span
+            ref={element}
+            className={styles.mark}
+            data-state={state}
+            data-changed={changed}
+            aria-hidden="true">
+            <AnimatePresence initial={false} mode="popLayout">
+                <motion.span
+                    key={state}
+                    initial={reducedMotion ? false : { opacity: 0, scale: 0.7 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.16 }}>
+                    <Icon
+                        iconNode={
+                            state === "running"
+                                ? Loading03Icon
+                                : state === "completed"
+                                  ? Tick02Icon
+                                  : state === "waiting" || state === "paused"
+                                    ? PauseIcon
+                                    : Cancel01Icon
+                        }
+                        size={16}
+                    />
+                </motion.span>
+            </AnimatePresence>
+        </span>
+    );
+}
+
+/** Shared visible status and accessible announcement for a turn or independent mission. */
+export function ConversationWorkStatus({
+    state,
+    label,
+}: {
+    state: ConversationWorkItem["state"];
+    label: string;
+}) {
+    return (
+        <span
+            className={styles.status}
+            data-state={state}
+            role="status"
+            aria-label={label}>
+            <ConversationWorkMark state={state} />
+            {workStateLabels[state]}
+        </span>
+    );
+}
+
 /** Compact useful work in an assistant turn, with supporting detail disclosed in place. */
 export function ConversationActivity({
     title,
@@ -64,26 +154,22 @@ export function ConversationActivity({
     const id = useId();
     const row = (
         <>
-            <Icon
-                iconNode={
-                    state === "running"
-                        ? Loading03Icon
-                        : state === "completed"
-                          ? Tick02Icon
-                          : Cancel01Icon
-                }
-                size={15}
-                className={
-                    state === "running" ? "chat-working-icon" : undefined
-                }
-            />
-            <span>
-                <span data-slot="activity-title">{title}</span>
+            <ConversationWorkMark state={state} />
+            <span className={styles.description}>
+                <span data-slot="activity-title" className={styles.title}>
+                    {title}
+                </span>
                 {!compact && (
-                    <span data-slot="activity-summary">{summary}</span>
+                    <span
+                        data-slot="activity-summary"
+                        className={styles.summary}>
+                        {summary}
+                    </span>
                 )}
             </span>
-            <span data-slot="activity-state">{workStateLabels[state]}</span>
+            <span data-slot="activity-state" className={styles.state}>
+                {workStateLabels[state]}
+            </span>
             {(children || compact) && (
                 <Icon iconNode={ArrowRight01Icon} size={12} />
             )}
@@ -91,24 +177,34 @@ export function ConversationActivity({
     );
     return children || compact ? (
         <Collapsible
+            className={styles.activity}
             data-message-id={id}
             data-slot="conversation-activity"
             data-state={state}>
             <CollapsibleTrigger
-                render={<Button variant="ghost" />}
+                render={
+                    <Button
+                        variant="unstyled"
+                        size="unstyled"
+                        className={styles.row}
+                    />
+                }
                 aria-label={`Inspect ${title}`}>
                 {row}
             </CollapsibleTrigger>
             <CollapsibleContent>
-                <div data-slot="activity-detail">
+                <div data-slot="activity-detail" className={styles.detail}>
                     {compact && <p className="chat-work-result">{summary}</p>}
                     {children}
                 </div>
             </CollapsibleContent>
         </Collapsible>
     ) : (
-        <div data-slot="conversation-activity" data-state={state}>
-            <div className="chat-activity-row">{row}</div>
+        <div
+            data-slot="conversation-activity"
+            data-state={state}
+            className={styles.activity}>
+            <div className={styles.row}>{row}</div>
         </div>
     );
 }
@@ -122,7 +218,7 @@ export function ConversationActivityGroup({
     activities,
     content,
     triggerLabel,
-    runningHeader,
+    statusLabel,
     titleContent,
 }: {
     id: string;
@@ -132,7 +228,7 @@ export function ConversationActivityGroup({
     activities: readonly ConversationWorkItem[];
     content?: ReactNode | ((open: boolean) => ReactNode);
     triggerLabel?: string;
-    runningHeader?: ReactNode;
+    statusLabel?: string;
     /** Optional title material; the text title remains the accessible group identity. */
     titleContent?: ReactNode;
 }) {
@@ -153,9 +249,10 @@ export function ConversationActivityGroup({
             .reverse()
             .find((activity) => activity.state === "running") ??
         activities.at(-1);
-    if (!activities.length && !runningHeader && !content) return null;
+    if (!activities.length && !titleContent && !content) return null;
     return (
         <Collapsible
+            className={styles.group}
             open={open}
             onOpenChange={setExpanded}
             role="region"
@@ -173,30 +270,36 @@ export function ConversationActivityGroup({
             }}>
             <CollapsibleTrigger
                 ref={trigger}
-                render={<Button variant="ghost" />}
+                render={
+                    <Button
+                        variant="unstyled"
+                        size="unstyled"
+                        className={styles.groupTrigger}
+                    />
+                }
                 aria-label={triggerLabel ?? `Inspect ${title.toLowerCase()}`}>
                 <Icon iconNode={ArrowRight01Icon} size={13} />
-                {running && runningHeader ? (
-                    runningHeader
-                ) : (
-                    <span className="chat-work-description">
-                        <strong>{titleContent ?? title}</strong>
-                        <span>{summary}</span>
-                    </span>
-                )}
-                {state === "interrupted" && (
-                    <span className="chat-work-limit">Interrupted</span>
-                )}
+                <span className={styles.groupDescription}>
+                    <strong className={styles.groupTitle}>
+                        {titleContent ?? title}
+                    </strong>
+                    <span className={styles.groupSummary}>{summary}</span>
+                </span>
+                <ConversationWorkStatus
+                    state={state}
+                    label={statusLabel ?? `${title} status`}
+                />
             </CollapsibleTrigger>
             {!open && active && latest && (
-                <div className="chat-work-latest">
+                <fieldset className={styles.latest}>
+                    <legend className="sr-only">Latest operation</legend>
                     <ConversationActivity {...latest} compact>
                         {latest.details}
                     </ConversationActivity>
-                </div>
+                </fieldset>
             )}
             <CollapsibleContent keepMounted>
-                <div className="chat-work-entries">
+                <div className={styles.entries}>
                     <ConversationActivityVisibility value={open}>
                         {(typeof content === "function"
                             ? content(open)

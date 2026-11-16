@@ -19,7 +19,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
                 failures.push(event.message),
             );
         });
-        await page.goto("/?component=AgentActivity&theme=dark");
+        await page.goto("/?component=ActivityReader&theme=dark");
         const sources = page.getByRole("region", {
             name: "Sources Agent · Documentary preparation",
             exact: true,
@@ -33,8 +33,8 @@ for (const width of [1440, 1024, 768, 390, 320]) {
         ).toBeHidden();
         const heading = await trigger.boundingBox();
         const latest = await sources
-            .getByRole("button", {
-                name: "Inspect Inspect documentary material 200",
+            .getByRole("group", { name: "Latest operation" })
+            .getByText("Inspect documentary material 200", {
                 exact: true,
             })
             .boundingBox();
@@ -184,7 +184,9 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     });
 }
 
-async function visibleActivity(reader: Locator) {
+async function visibleActivity(
+    reader: Locator,
+): Promise<{ label: string; offset: number }> {
     const inspect = () =>
         reader.getByRole("button").evaluateAll((buttons) => {
             const viewport = buttons[0]
@@ -203,9 +205,19 @@ async function visibleActivity(reader: Locator) {
                   }
                 : null;
         });
-    await expect.poll(inspect).not.toBeNull();
-    const anchor = await inspect();
-    if (!anchor) throw new Error("No activity is visible in the reader");
+    let anchor: Awaited<ReturnType<typeof inspect>> = null;
+    await expect
+        .poll(async () => {
+            const next = await inspect();
+            const settled =
+                next !== null &&
+                anchor?.label === next.label &&
+                Math.abs(anchor.offset - next.offset) < 0.5;
+            anchor = next;
+            return settled;
+        })
+        .toBe(true);
+    if (!anchor) throw new Error("No stable activity is visible in the reader");
     return anchor;
 }
 async function relativeTop(activity: Locator, reader: Locator) {

@@ -17,7 +17,6 @@ import {
     Cancel01Icon,
     CommandIcon,
     File01Icon,
-    Loading03Icon,
     Task01Icon,
     Tick02Icon,
 } from "@hugeicons/core-free-icons";
@@ -35,6 +34,7 @@ import remarkGfm from "remark-gfm";
 import { AgentIdentity } from "@/components/chat/agent-identity";
 import {
     type ConversationWorkItem,
+    ConversationWorkMark,
     workStateLabels,
 } from "@/components/chat/conversation-activity";
 import {
@@ -874,21 +874,7 @@ function ContextWorkItems({
         <ul>
             {items.map((item) => (
                 <li key={item.id} data-state={item.state}>
-                    <Icon
-                        iconNode={
-                            item.state === "running"
-                                ? Loading03Icon
-                                : item.state === "completed"
-                                  ? Tick02Icon
-                                  : Cancel01Icon
-                        }
-                        size={16}
-                        className={
-                            item.state === "running"
-                                ? "chat-working-icon"
-                                : undefined
-                        }
-                    />
+                    <ConversationWorkMark state={item.state} />
                     <div>
                         <strong>{item.title}</strong>
                         <span>{item.summary}</span>

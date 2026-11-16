@@ -1,0 +1,217 @@
+@keyframes work-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@keyframes work-check {
+    from {
+        stroke-dashoffset: 30;
+    }
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+.activity {
+    position: relative;
+    min-width: 0;
+    padding-bottom: 18px;
+    overflow-wrap: anywhere;
+}
+.row {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+    gap: 12px;
+    padding: 2px 0;
+    text-align: left;
+    color: var(--muted-foreground);
+    font-weight: 400;
+    border-radius: 4px;
+}
+.row > svg {
+    flex: none;
+    margin-top: 4px;
+}
+.mark {
+    position: relative;
+    display: grid;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    color: var(--muted-foreground);
+}
+.mark > span {
+    display: grid;
+    grid-area: 1 / 1;
+}
+.mark[data-state="running"] {
+    color: var(--brand-purple);
+}
+.mark[data-state="running"] svg {
+    animation: work-spin 1.2s linear infinite;
+    animation-play-state: var(--work-animation-state, paused);
+}
+.mark[data-state="completed"][data-changed="true"] path {
+    stroke-dasharray: 30;
+    animation: work-check 380ms ease-out both;
+}
+.description {
+    flex: 1;
+    min-width: 0;
+}
+.title {
+    display: block;
+    color: var(--foreground);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 21px;
+}
+.summary {
+    display: block;
+    margin-top: 3px;
+    max-width: 65ch;
+    font-size: 12px;
+    line-height: 19px;
+}
+.state {
+    flex: none;
+    font-size: 10px;
+    line-height: 21px;
+    color: var(--muted-foreground);
+}
+.detail {
+    margin: 4px 0 0 28px;
+    font-size: 12px;
+    line-height: 19px;
+    color: var(--muted-foreground);
+}
+.status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    font-size: 11px;
+    line-height: 18px;
+}
+.status .mark {
+    margin: 0;
+}
+.status[data-state="interrupted"],
+.status[data-state="blocked"],
+.mark[data-state="interrupted"],
+.mark[data-state="blocked"] {
+    color: var(--destructive-text);
+}
+@keyframes work-retained {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+.group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    margin-bottom: 8px;
+}
+.group > * {
+    grid-column: 1;
+}
+.group:has(> button[aria-expanded="false"]) > :not(.latest) {
+    grid-row: 1;
+}
+.groupTrigger[aria-expanded="false"] {
+    z-index: 1;
+    align-self: start;
+    animation: work-retained 180ms ease-out both;
+}
+.latest {
+    min-width: 0;
+    margin: 0;
+    border: 0;
+    padding: 0 0 0 20px;
+}
+.entries {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 0;
+}
+.group[data-state="completed"] .entries,
+.group[data-state="interrupted"] .entries,
+.group[data-state="blocked"] .entries {
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+}
+
+.groupTrigger {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 0;
+    border-radius: 4px;
+    color: var(--muted-foreground);
+    text-align: left;
+}
+.groupTrigger > svg {
+    flex: none;
+    margin-top: 3px;
+    transition: transform 160ms ease-out;
+}
+.groupTrigger[aria-expanded="true"] > svg {
+    transform: rotate(90deg);
+}
+.groupTrigger > .status {
+    margin-top: 1px;
+}
+.groupDescription {
+    flex: 1;
+    min-width: 0;
+}
+.groupTitle {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px 10px;
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 500;
+    color: var(--foreground);
+}
+.groupSummary {
+    display: block;
+    font-size: 11px;
+    line-height: 18px;
+    margin-top: 2px;
+}
+@media (max-width: 480px) {
+    .row {
+        gap: 8px;
+    }
+    .detail {
+        margin-left: 24px;
+    }
+    .groupTrigger {
+        flex-wrap: wrap;
+    }
+    .groupTrigger > .status {
+        margin-left: auto;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .mark[data-state="running"] svg,
+    .mark[data-state="completed"][data-changed="true"] path {
+        animation: none;
+    }
+    .groupTrigger > svg {
+        transition: none;
+    }
+    .groupTrigger[aria-expanded="false"] {
+        animation: none;
+    }
+}

@@ -31,6 +31,7 @@ import {
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import { cn } from "@/lib/utils";
 import { AgentActivityExample } from "./agent-activity-example";
+import { AgentActivityHistoryExample } from "./agent-activity-history-example";
 import { ComposerExample } from "./composer-example";
 import { DossierSwitcherExample } from "./dossier-switcher-example";
 import {
@@ -1262,6 +1263,7 @@ export const examples = {
     DossierSwitcher: DossierSwitcherExample,
     Composer: ComposerExample,
     AgentActivity: AgentActivityExample,
+    ActivityReader: AgentActivityHistoryExample,
     OverlayLayers: OverlayLayersExample,
     Chip: ChipExample,
     GlassPanel: GlassPanelExample,

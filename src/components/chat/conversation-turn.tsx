@@ -1,9 +1,12 @@
 import { Fragment, type ReactNode } from "react";
+import { AgentIdentity } from "@/components/chat/agent-identity";
 import {
     ConversationActivity,
     ConversationActivityGroup,
     type ConversationWorkItem,
+    ConversationWorkStatus,
 } from "@/components/chat/conversation-activity";
+import type { ConversationAgent } from "@/components/chat/conversation-agent";
 import { ConversationActivityList } from "./conversation-activity-list";
 export type ConversationTurnSnapshot = {
     id: string;
@@ -21,9 +24,11 @@ export type ConversationTurnSnapshot = {
 export function ConversationTurn({
     turn,
     renderMessage,
+    agent,
 }: {
     turn: ConversationTurnSnapshot;
     renderMessage: (id: string, presentation?: "work-note") => ReactNode;
+    agent?: ConversationAgent;
 }) {
     const running =
         turn.state === "running" ||
@@ -95,6 +100,12 @@ export function ConversationTurn({
                                 : `${activities.length} ${activities.length === 1 ? "operation" : "operations"}`
                         }
                         triggerLabel="Inspect work for this turn"
+                        titleContent={
+                            agent ? <AgentIdentity agent={agent} /> : undefined
+                        }
+                        statusLabel={
+                            agent ? `${agent.name} response status` : undefined
+                        }
                         activities={activities}
                         content={(open) => (
                             <>
@@ -118,19 +129,27 @@ export function ConversationTurn({
             )}
             {turn.entries.length === 0 &&
                 !turn.workDetails &&
-                turn.state !== "interrupted" && (
+                turn.state !== "interrupted" &&
+                (turn.state === "running" ? (
+                    <ConversationWorkStatus
+                        state={turn.state}
+                        label={
+                            agent
+                                ? `${agent.name} response status`
+                                : "Response status"
+                        }
+                    />
+                ) : (
                     <p role="status">
-                        {turn.state === "running"
-                            ? "Working…"
-                            : turn.state === "blocked"
-                              ? "Response unavailable. Recorded work remains available."
-                              : turn.state === "paused"
-                                ? "Response paused. Recorded work remains available."
-                                : turn.state === "waiting"
-                                  ? "Waiting for work to continue."
-                                  : "Response completed."}
+                        {turn.state === "blocked"
+                            ? "Response unavailable. Recorded work remains available."
+                            : turn.state === "paused"
+                              ? "Response paused. Recorded work remains available."
+                              : turn.state === "waiting"
+                                ? "Waiting for work to continue."
+                                : "Response completed."}
                     </p>
-                )}
+                ))}
             {turn.state === "interrupted" && answerEntries.length === 0 && (
                 <p role="status">
                     Response interrupted. Recorded work remains available.

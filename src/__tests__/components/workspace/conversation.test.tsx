@@ -51,18 +51,22 @@ it("restarts illustrative work while preserving the completed mission in convers
             name: "Finish illustrative work",
         }).disabled,
     ).toBe(false);
-    expect(
-        within(screen.getByRole("log")).getByRole("button", {
-            name: "Inspect Sources Agent mission: Documentary preparation",
-        }),
-    ).toBeTruthy();
+    expect(screen.getByRole("log").contains(retained)).toBe(true);
     expect(
         within(screen.getByRole("log")).getAllByRole("region", {
             name: "Sources Agent · Documentary preparation",
         }),
     ).toHaveLength(2);
+    const latest = within(screen.getByRole("log")).getByRole("group", {
+        name: "Latest operation",
+    });
+    fireEvent.click(
+        within(latest).getByRole("button", {
+            name: "Inspect Find company reporting",
+        }),
+    );
     expect(
-        within(screen.getByRole("log")).getByText(
+        within(latest).getByText(
             "Looking for filings and earnings material about claims coordination.",
         ),
     ).toBeTruthy();

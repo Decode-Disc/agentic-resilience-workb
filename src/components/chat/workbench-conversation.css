@@ -128,69 +128,8 @@
     outline: 2px solid var(--ring);
     outline-offset: -3px;
 }
-[data-slot="conversation-activity"] {
-    margin: 2px 0;
-    min-width: 0;
-}
-[data-slot="conversation-activity"] > button,
-.chat-activity-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    width: 100%;
-    height: auto;
-    padding: 5px 0;
-    text-align: left;
-    white-space: normal;
-    border: 0;
-    background: transparent;
-    font-weight: 400;
-    color: var(--muted-foreground);
-}
 [data-slot="conversation-reference"] > svg {
     flex-shrink: 0;
-    color: var(--muted-foreground);
-}
-[data-slot="conversation-activity"] > button > svg,
-.chat-activity-row > svg {
-    margin-top: 3px;
-    flex-shrink: 0;
-}
-.chat-activity-row > span:first-of-type,
-[data-slot="conversation-activity"] > button > span:first-of-type {
-    flex: 1;
-    min-width: 0;
-}
-[data-slot="activity-title"] {
-    display: block;
-    font-size: 12.5px;
-    line-height: 18px;
-    color: var(--foreground);
-}
-[data-slot="activity-summary"] {
-    display: block;
-    font-size: 12px;
-    line-height: 18px;
-    margin-top: 2px;
-}
-[data-slot="activity-state"] {
-    flex-shrink: 0;
-    font-size: 10px;
-    line-height: 18px;
-}
-[data-slot="conversation-activity"][data-state="running"]
-    [data-slot="activity-state"] {
-    color: var(--brand-purple);
-}
-[data-slot="conversation-activity"][data-state="interrupted"]
-    [data-slot="activity-state"],
-.chat-work-limit {
-    color: var(--destructive-text);
-}
-[data-slot="activity-detail"] {
-    margin: 4px 0 12px 22px;
-    font-size: 12px;
-    line-height: 18px;
     color: var(--muted-foreground);
 }
 [data-slot="conversation-assistant-turn"] {
@@ -348,91 +287,6 @@
     }
 }
 
-[data-slot="conversation-work-group"] {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    min-width: 0;
-    margin: 0 0 8px;
-}
-[data-slot="conversation-work-group"] > * {
-    grid-column: 1;
-}
-[data-slot="conversation-work-group"]:has(> button:not([data-panel-open]))
-    > :not(.chat-work-latest) {
-    grid-row: 1;
-}
-[data-slot="conversation-work-group"] > button:not([data-panel-open]) {
-    z-index: 1;
-    align-self: start;
-    animation: chat-work-retained 180ms ease-out 50ms both;
-}
-@keyframes chat-work-retained {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-@media (prefers-reduced-motion: reduce) {
-    [data-slot="conversation-work-group"] > button:not([data-panel-open]) {
-        animation: none;
-    }
-}
-[data-slot="conversation-work-group"] > button {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    width: 100%;
-    height: auto;
-    padding: 5px 0;
-    border: 0;
-    background: transparent;
-    white-space: normal;
-    text-align: left;
-}
-.chat-work-description {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 3px 8px;
-}
-.chat-work-description strong {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px;
-    font-size: 12px;
-    line-height: 19px;
-    font-weight: 400;
-    color: var(--muted-foreground);
-}
-.chat-work-description > span {
-    font-size: 11px;
-    line-height: 17px;
-    color: var(--muted-foreground);
-}
-[data-slot="conversation-work-group"] > button > svg {
-    flex-shrink: 0;
-    color: var(--muted-foreground);
-}
-[data-slot="conversation-work-group"]
-    > button[data-panel-open]
-    > svg:first-child {
-    transform: rotate(90deg);
-}
-.chat-work-entries {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 4px 0;
-}
-.chat-work-limit {
-    flex-shrink: 0;
-    font-size: 11px;
-}
 [data-slot="conversation-jump-to-latest"] {
     width: max-content;
     height: 22px;
@@ -743,21 +597,6 @@
         min-height: 44px;
     }
 }
-@keyframes chat-working {
-    to {
-        transform: rotate(360deg);
-    }
-}
-.chat-working-icon {
-    color: var(--brand-purple);
-    animation: chat-working 1.2s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-    .chat-working-icon {
-        animation: none;
-    }
-}
-
 .chat-question-navigation {
     display: flex;
     align-items: center;
@@ -878,31 +717,6 @@
     padding-inline: 16px;
 }
 
-.chat-mission-heading {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 14px 0 8px;
-    font-size: 12.5px;
-    line-height: 18px;
-}
-.chat-mission-heading > strong {
-    flex: 1;
-    min-width: 0;
-    font-weight: 500;
-}
-.chat-mission-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    color: var(--brand-purple);
-    white-space: nowrap;
-    font-size: 11px;
-}
-.chat-mission-duration {
-    color: var(--muted-foreground);
-    font-size: 11px;
-}
 .chat-mission-interruption {
     margin: 6px 0;
     font-size: 12px;
@@ -971,32 +785,6 @@
     line-height: 18px;
     color: var(--muted-foreground);
     overflow-wrap: anywhere;
-}
-[data-slot="conversation-work-group"][data-state="completed"]
-    .chat-work-entries,
-[data-slot="conversation-work-group"][data-state="interrupted"]
-    .chat-work-entries {
-    margin-top: 4px;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    gap: 2px;
-}
-[data-slot="conversation-work-group"]:not([data-state="running"])
-    [data-slot="conversation-activity"] {
-    margin: 0;
-}
-[data-slot="conversation-work-group"]:not([data-state="running"])
-    [data-slot="conversation-activity"]
-    > button {
-    align-items: center;
-    padding: 4px 0;
-}
-[data-slot="conversation-work-group"]:not([data-state="running"])
-    [data-slot="conversation-activity"]
-    > button
-    > svg {
-    margin-top: 0;
 }
 .chat-work-result {
     margin: 0 0 6px;
@@ -1236,12 +1024,27 @@
 .chat-activity-item {
     padding-bottom: 4px;
 }
-.chat-work-latest {
-    padding: 0 0 4px 20px;
+
+.chat-activity-items
+    > [data-slot="conversation-activity"]:not(:last-child)::before,
+.chat-activity-item:not([data-last="true"])
+    > [data-slot="conversation-activity"]::before {
+    content: "";
+    position: absolute;
+    left: 7.5px;
+    top: 26px;
+    bottom: 3px;
+    width: 1px;
+    background: var(--border);
+    pointer-events: none;
 }
-[data-slot="conversation-work-group"] > button .chat-mission-heading {
-    flex: 1;
-    min-width: 0;
-    flex-wrap: wrap;
-    margin: 4px 0;
+.chat-activity-item:not([data-last="true"])
+    > [data-slot="conversation-activity"][data-state="completed"]::before {
+    background: color-mix(in oklab, var(--foreground) 24%, transparent);
+}
+
+.chat-mission-duration {
+    color: var(--muted-foreground);
+    font-size: 11px;
+    font-weight: 400;
 }

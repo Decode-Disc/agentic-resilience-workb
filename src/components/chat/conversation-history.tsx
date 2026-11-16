@@ -83,6 +83,7 @@ export function ConversationHistory({
                         <ConversationTurn
                             key={`turn:${id}`}
                             turn={turn}
+                            agent={agents[turn.agentId ?? "workbench"]}
                             renderMessage={() => null}
                         />
                     ) : (
@@ -119,6 +120,7 @@ export function ConversationHistory({
                     <ConversationTurn
                         key={turn.id}
                         turn={turn}
+                        agent={agents[turn.agentId ?? "workbench"]}
                         renderMessage={(id, presentation) =>
                             initialSegments.get(turn.id)?.has(id) ? (
                                 <ConversationMessages
@@ -152,6 +154,7 @@ export function ConversationHistory({
                     <ConversationTurn
                         key={turn.id}
                         turn={turn}
+                        agent={agents[turn.agentId ?? "workbench"]}
                         renderMessage={() => null}
                     />
                 ))}

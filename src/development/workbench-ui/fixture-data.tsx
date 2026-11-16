@@ -1,3 +1,4 @@
+import type { ConversationWorkItem } from "@/components/chat/conversation-activity";
 import { Badge } from "@/components/ui/badge";
 import type {
     InventoryDockProps,
@@ -254,3 +255,23 @@ export const readerContributions: ReaderContribution[] = [
         note: "A forecast, never used as an observed outcome.",
     },
 ];
+
+/** Shared illustrative work records for the activity study and long-history reader. */
+export function illustrativeActivity(index: number): ConversationWorkItem {
+    return {
+        id: `activity-${index}`,
+        title: `Inspect documentary material ${index}`,
+        state: "completed",
+        summary:
+            index % 3 === 0
+                ? "Retained reporting and integration documentation. The available material describes workflow participation; control and substitutability remain open questions."
+                : "Retained material; its analytical use remains to be assessed.",
+        details: (
+            <p>
+                Illustrative retained passage for material {index}. This longer
+                detail exercises the activity reader without implying that any
+                source was retrieved or verified.
+            </p>
+        ),
+    };
+}

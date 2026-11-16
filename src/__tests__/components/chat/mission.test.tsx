@@ -190,9 +190,15 @@ it("refreshes a running duration and fixes it at the supplied completion time", 
                 }}
             />,
         );
-        expect(screen.getByText(/Worked for 3s/)).toBeTruthy();
+        expect(
+            screen.getByRole("timer", { name: "Sources Agent work duration" })
+                .textContent,
+        ).toBe("3s");
         act(() => vi.advanceTimersByTime(10000));
-        expect(screen.getByText(/Worked for 3s/)).toBeTruthy();
+        expect(
+            screen.getByRole("timer", { name: "Sources Agent work duration" })
+                .textContent,
+        ).toBe("3s");
     } finally {
         vi.useRealTimers();
     }

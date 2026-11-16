@@ -1,13 +1,11 @@
-import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { AgentIdentity } from "@/components/chat/agent-identity";
 import {
     ConversationActivityGroup,
     type ConversationWorkItem,
-    workStateLabels,
+    ConversationWorkMark,
 } from "@/components/chat/conversation-activity";
 import type { ConversationAgent } from "@/components/chat/conversation-agent";
-import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import type { ConversationAgents } from "./conversation-agent";
 
@@ -59,7 +57,6 @@ export function ConversationMission({
     const count =
         mission.summary ??
         `${mission.operations.length} ${mission.operations.length === 1 ? "operation" : "operations"}`;
-    const stateLabel = workStateLabels[mission.state];
     return (
         <section
             data-slot="conversation-mission"
@@ -72,41 +69,24 @@ export function ConversationMission({
                 title={`${agent.name} · ${mission.title}`}
                 titleContent={
                     <>
-                        <AgentIdentity agent={agent} /> · {mission.title}
+                        <AgentIdentity agent={agent} />{" "}
+                        <span>{mission.title}</span>
+                        {duration && (
+                            <time
+                                role="timer"
+                                className="chat-mission-duration"
+                                dateTime={`PT${elapsed}S`}
+                                aria-label={`${agent.name} work duration`}>
+                                {duration}
+                            </time>
+                        )}
                     </>
                 }
-                summary={[
-                    mission.state === "completed" ? "Completed" : undefined,
-                    duration ? `Worked for ${duration}` : undefined,
-                    count,
-                ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                summary={count}
                 triggerLabel={`Inspect ${agent.name} mission: ${mission.title}`}
                 activities={mission.operations}
                 content={mission.details}
-                runningHeader={
-                    <div className="chat-mission-heading">
-                        <AgentIdentity agent={agent} />
-                        <strong>{mission.title}</strong>
-                        <span
-                            className="chat-mission-status"
-                            role="status"
-                            aria-label={`${agent.name} mission status`}>
-                            <Icon
-                                iconNode={Loading03Icon}
-                                size={14}
-                                className="chat-working-icon"
-                            />
-                            {stateLabel}
-                        </span>
-                        {duration && (
-                            <span className="chat-mission-duration">
-                                {duration}
-                            </span>
-                        )}
-                    </div>
-                }
+                statusLabel={`${agent.name} mission status`}
             />
             {mission.state === "interrupted" && (
                 <p role="status" className="chat-mission-interruption">
@@ -194,11 +174,7 @@ export function ConversationWorkReturn({
                                 target?.scrollIntoView({ block: "nearest" });
                                 target?.focus({ preventScroll: true });
                             }}>
-                            <Icon
-                                iconNode={Loading03Icon}
-                                size={14}
-                                className="chat-working-icon"
-                            />
+                            <ConversationWorkMark state={m.state} />
                             {agent ? (
                                 <AgentIdentity agent={agent} />
                             ) : (

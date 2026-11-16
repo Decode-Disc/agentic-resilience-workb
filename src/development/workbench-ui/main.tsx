@@ -54,7 +54,12 @@ const requestedScreen = resolveScreen(
     params.get("screen"),
 );
 const groups = {
-    "Chat & composer": ["Composer", "RequestItem", "AgentActivity"],
+    "Chat & composer": [
+        "Composer",
+        "RequestItem",
+        "AgentActivity",
+        "ActivityReader",
+    ],
     "Research & evidence": [
         "FramingControls",
         "SourcingLane",

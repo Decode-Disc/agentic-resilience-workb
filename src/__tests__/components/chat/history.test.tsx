@@ -82,7 +82,7 @@ it("keeps a later completion after the analyst's intervening message", () => {
 });
 
 it("renders retained commentary as an activity note without message actions, keeping the answer outside the work details", () => {
-    const { container } = render(<InterleavedHistory />);
+    render(<InterleavedHistory />);
     const trigger = screen.getByRole("button", {
         name: "Inspect work for this turn",
     });
@@ -94,17 +94,16 @@ it("renders retained commentary as an activity note without message actions, kee
     expect(
         within(note).queryByRole("group", { name: "Message actions" }),
     ).toBeNull();
-    const details = container.querySelector(".chat-work-entries");
+    const panelId = trigger.getAttribute("aria-controls");
+    const details = panelId ? document.getElementById(panelId) : null;
+    if (!details)
+        throw new Error("The work disclosure has no controlled panel");
     expect(details?.contains(note)).toBe(true);
-    expect(
-        within(details as HTMLElement).queryByText("Candidates recorded."),
-    ).toBeNull();
+    expect(within(details).queryByText("Candidates recorded.")).toBeNull();
     fireEvent.click(
         screen.getByRole("button", { name: "Inspect Find company reporting" }),
     );
-    expect(
-        within(details as HTMLElement).getByText("Candidates recorded."),
-    ).toBeTruthy();
+    expect(within(details).getByText("Candidates recorded.")).toBeTruthy();
     expect(
         details?.contains(screen.getByText("The candidate list is ready.")),
     ).toBe(false);
@@ -209,7 +208,7 @@ it("keeps a newly admitted turn visible before its first operation or public mes
             renderMessage={() => null}
         />,
     );
-    expect(screen.getByRole("status").textContent).toBe("Working…");
+    expect(screen.getByRole("status").textContent).toBe("Working");
 });
 it("shows a blocked turn without implying ongoing generation", () => {
     render(

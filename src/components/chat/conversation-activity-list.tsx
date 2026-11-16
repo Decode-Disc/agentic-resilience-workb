@@ -127,6 +127,7 @@ export function ConversationActivityList({
                           <div
                               key={item.key}
                               data-index={item.index}
+                              data-last={item.index === entries.length - 1}
                               ref={virtualizer.measureElement}
                               onFocusCapture={() =>
                                   setFocusedKey(

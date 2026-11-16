@@ -1,6 +1,15 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it } from "vitest";
 import {
+    SOURCES_AGENT,
+    WORKBENCH_AGENT,
+} from "@/components/chat/conversation-agent";
+import { ConversationMission } from "@/components/chat/conversation-mission";
+import {
+    ConversationTurn,
+    type ConversationTurnSnapshot,
+} from "@/components/chat/conversation-turn";
+import {
     ConversationActivityGroup,
     type ConversationWorkItem,
 } from "@/components/chat/workbench-conversation";
@@ -19,7 +28,7 @@ const reporting: ConversationWorkItem = {
     summary: "Looking for filings related to claims coordination.",
 };
 
-it("keeps work continuous until the turn ends, then folds retained operations and preserves their details", () => {
+it("discloses work on demand, then folds the finished group while preserving retained details", () => {
     const { rerender } = render(
         <div>
             <ConversationActivityGroup
@@ -31,11 +40,14 @@ it("keeps work continuous until the turn ends, then folds retained operations an
             />
         </div>,
     );
+    const liveGroup = screen.getByRole("button", {
+        name: "Inspect source preparation",
+    });
+    expect(liveGroup.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(liveGroup);
+    expect(liveGroup.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText(reference.summary)).toBeTruthy();
     expect(screen.getByText(reporting.summary)).toBeTruthy();
-    expect(
-        screen.queryByRole("button", { name: "Inspect source preparation" }),
-    ).toBeNull();
     const retainedReference = screen.getByRole("button", {
         name: "Inspect Check supplied reference",
     });
@@ -68,9 +80,7 @@ it("keeps work continuous until the turn ends, then folds retained operations an
     expect(
         screen.getByRole("link", { name: "Inspect reference context" }),
     ).toBe(link);
-    expect(
-        screen.queryByRole("button", { name: "Inspect source preparation" }),
-    ).toBeNull();
+    expect(liveGroup.getAttribute("aria-expanded")).toBe("true");
 
     rerender(
         <div>
@@ -137,4 +147,118 @@ it("keeps interrupted work distinct from a successful outcome and omits groups w
             "Reporting search stopped; reference context is retained.",
         ),
     ).toBeTruthy();
+});
+
+it("keeps each agent's supplied execution state readable independently of other running work", () => {
+    const renderMissions = (state: ConversationWorkItem["state"]) => (
+        <>
+            <ConversationMission
+                agent={SOURCES_AGENT}
+                mission={{
+                    id: "sources",
+                    agentId: "sources",
+                    title: "Documentary preparation",
+                    state,
+                    operations: [{ ...reporting, state }],
+                }}
+            />
+            <ConversationMission
+                agent={WORKBENCH_AGENT}
+                mission={{
+                    id: "workbench",
+                    agentId: "workbench",
+                    title: "Explain the dossier",
+                    state: "running",
+                    operations: [],
+                }}
+            />
+        </>
+    );
+    const view = render(renderMissions("running"));
+    const cases = [
+        ["running", "Working"],
+        ["waiting", "Waiting"],
+        ["paused", "Paused"],
+        ["blocked", "Unavailable"],
+        ["interrupted", "Interrupted"],
+        ["completed", "Complete"],
+    ] as const;
+    for (const [state, label] of cases) {
+        view.rerender(renderMissions(state));
+        expect(
+            screen.getByRole("status", { name: "Sources Agent mission status" })
+                .textContent,
+        ).toBe(label);
+        expect(
+            screen.getByRole("status", {
+                name: "Workbench Agent mission status",
+            }).textContent,
+        ).toBe("Working");
+        expect(
+            screen
+                .getByRole("button", {
+                    name: "Inspect Sources Agent mission: Documentary preparation",
+                })
+                .getAttribute("aria-expanded"),
+        ).toBe("false");
+    }
+});
+
+it("attributes conversational activity to its supplied agent and leaves the answer outside folded work", () => {
+    const agent = { id: "specialist", name: "Dossier specialist" };
+    const turn: ConversationTurnSnapshot = {
+        id: "specialist-turn",
+        agentId: agent.id,
+        state: "running",
+        entries: [
+            { kind: "operation", operation: reporting },
+            { kind: "message", id: "answer", phase: "answer" },
+        ],
+    };
+    const view = render(
+        <ConversationTurn
+            agent={agent}
+            turn={{ ...turn, entries: [] }}
+            renderMessage={() => null}
+        />,
+    );
+    expect(
+        screen.getByRole("status", {
+            name: "Dossier specialist response status",
+        }).textContent,
+    ).toBe("Working");
+    view.rerender(
+        <ConversationTurn
+            agent={agent}
+            turn={turn}
+            renderMessage={() => (
+                <p>The material leaves workflow control unresolved.</p>
+            )}
+        />,
+    );
+    const group = screen.getByRole("button", {
+        name: "Inspect work for this turn",
+    });
+    expect(group.textContent).toContain("Dossier specialist");
+    expect(
+        screen.getByRole("status", {
+            name: "Dossier specialist response status",
+        }).textContent,
+    ).toBe("Working");
+    fireEvent.click(group);
+    view.rerender(
+        <ConversationTurn
+            agent={agent}
+            turn={{ ...turn, state: "completed" }}
+            renderMessage={() => (
+                <p>The material leaves workflow control unresolved.</p>
+            )}
+        />,
+    );
+    expect(group.getAttribute("aria-expanded")).toBe("false");
+    expect(
+        screen
+            .getByText("The material leaves workflow control unresolved.")
+            .closest('[data-slot="conversation-work-group"]'),
+    ).toBeNull();
 });
