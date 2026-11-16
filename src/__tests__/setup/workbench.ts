@@ -13,6 +13,7 @@ import { assert, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "./model-configuration";
 import { createAdmittedPreflight } from "./research-launch";
+import { SOURCES_TEST_WINDOW_MINUTES } from "./sources-mission";
 
 /** A real admitted framing dossier, with scheduled execution controlled by each test. */
 export async function seedWorkbench(
@@ -32,6 +33,10 @@ export async function seedWorkbench(
         coveragePreset: "balanced",
     });
     if (local) {
+        vi.stubEnv(
+            "SOURCES_PREPARATION_WINDOW_MINUTES",
+            String(SOURCES_TEST_WINDOW_MINUTES),
+        );
         vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
         vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
         const run = await t.run((ctx) => ctx.db.get(runId));

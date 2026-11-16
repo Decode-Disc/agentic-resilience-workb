@@ -50,6 +50,9 @@ test("administration exposes model setup separately from per-agent assignments",
         .action(api.modelConfigurationActions.prepare)
         .uses(vi.fn());
     convexReactHarness
+        .action(api.modelConfigurationActions.refreshProfiles)
+        .uses(vi.fn());
+    convexReactHarness
         .mutation(api.modelConfiguration.updateAvailability)
         .uses(vi.fn());
     convexReactHarness

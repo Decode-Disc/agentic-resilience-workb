@@ -5,10 +5,10 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { sourcePreparationExecutionPlanValidator } from "./domain/sourcePreparationAuthority";
 import { SOURCE_QUALIFICATION_VERSION } from "./domain/sourceQualification";
+import { sourcePreparationWindowMs } from "./resourceLimits";
 import {
     EVALUATION_IO_POLICY,
     MAX_HISTORICAL_SOURCE_CANDIDATES,
-    SOURCE_PREPARATION_DEADLINE_MS,
 } from "./resourcePolicy";
 import { assertLocalFixture } from "./retrievalEvaluation";
 import schema from "./schema";
@@ -508,9 +508,10 @@ export const start = internalMutation({
                 modelLimits: { work: actualSources, incidents: actualSources },
             });
         }
+        const windowMs = sourcePreparationWindowMs();
         await ctx.db.patch(p._id, {
-            deadlineAt: now + SOURCE_PREPARATION_DEADLINE_MS,
-            leaseExpiresAt: now + SOURCE_PREPARATION_DEADLINE_MS,
+            deadlineAt: now + windowMs,
+            leaseExpiresAt: now + windowMs,
         });
         const handle = await workflow.start(
             ctx,

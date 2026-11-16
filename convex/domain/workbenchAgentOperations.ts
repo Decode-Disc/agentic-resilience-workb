@@ -19,6 +19,8 @@ import {
     controlResearchInput,
     nativeAdjustFramingInput,
     nativeSourceRequestInput,
+    requestApprovalInput,
+    requestApprovalResultValidator,
     sourceRequestInput,
     workbenchInstructionTransmissionStatus,
 } from "./workbenchContracts";
@@ -128,6 +130,7 @@ const instructionBehavior: Pick<
         if (
             !mission ||
             (input.kind !== "control_research" &&
+                input.kind !== "request_approval" &&
                 input.kind !== "transmit_source_request")
         )
             return { kind: "unavailable", code: "operation_not_allowed" };
@@ -164,7 +167,10 @@ const instructionBehavior: Pick<
             )
                 return { kind: "unavailable", code: "version_conflict" };
             const ownPauseSettled =
-                input.action === "pause" &&
+                ((input.kind === "control_research" &&
+                    input.action === "pause") ||
+                    (input.kind === "request_approval" &&
+                        input.action === "pause_research")) &&
                 run.executionGeneration === effectPin.generation + 1 &&
                 run.executionStatus === "paused" &&
                 run.pauseReason === "analyst";
@@ -346,6 +352,16 @@ export const workbenchOperations: Record<string, AgentOperationDefinition> = {
         ),
         description:
             "Pause or resume research only on an explicit, unambiguous analyst request in the supplied message. A pause request lets admitted work finish before suspension; never claim an effective pause before its persisted state confirms it.",
+    },
+    request_approval: {
+        ...instructionBehavior,
+        version: 1,
+        inputValidator: requestApprovalInput,
+        resultValidator: operationResultValidator(
+            requestApprovalResultValidator,
+        ),
+        description:
+            "Ask the person to approve a research action you inferred from their message. Nothing changes until they approve, unless the action is already allowed for this dossier. An exact pause or resume command applies immediately. If a request covering the same action is already pending, it is shown again.",
     },
     transmit_source_request: transmitSourceRequest,
 };

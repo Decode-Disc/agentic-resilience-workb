@@ -34,3 +34,20 @@ test("a conversation from an earlier Workbench version points to a new dossier i
         /Send another message|definition_version|conflict/,
     );
 });
+
+test("an unavailable Workbench model is explained without assuming the dossier is still being framed", async () => {
+    const { workbenchFailureCopy } = await import(
+        "@/lib/presentation/workbench"
+    );
+    for (const code of [
+        "missing_authorized_route",
+        "configuration_unavailable",
+        "paid_work_disabled",
+    ]) {
+        const copy = workbenchFailureCopy(code);
+        expect(copy).toBe(
+            "The Workbench Agent cannot respond right now. Your dossier and messages are saved; send your message again later.",
+        );
+        expect(copy).not.toMatch(/framing|route|configuration|paid/i);
+    }
+});

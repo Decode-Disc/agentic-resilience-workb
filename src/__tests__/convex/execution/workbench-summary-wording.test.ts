@@ -34,6 +34,16 @@ test.each([
     ).toBe(summary);
 });
 
+test("the sources_time_limit summary starts by naming the Sources Agent", () => {
+    expect(
+        researchStateSummary({
+            lifecycleState: "discovering_sources",
+            executionStatus: "paused",
+            pauseReason: "sources_time_limit",
+        }),
+    ).toMatch(/^The Sources Agent reached its time limit\./);
+});
+
 test("post-preparation guidance preserves current state without an unstarted-research example", async () => {
     const { t, runId } = await seedWorkbench(true);
     const active = await t.mutation(

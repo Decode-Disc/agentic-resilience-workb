@@ -13,11 +13,13 @@ import {
 import {
     controlledSourcesContributions,
     readSourcesMission,
+    sourcesPreparationPhase,
 } from "@convex/domain/sources";
 import {
     documentaryContributionValidator,
     documentaryFindingValidator,
 } from "@convex/domain/sourcesContracts";
+import { isResumableResearchPause } from "@convex/domain/transitions";
 import { missionStatusValidator } from "@convex/execution/executionProtocol";
 import { sourceDossierCandidateLimit } from "@convex/resourceLimits";
 import {
@@ -38,6 +40,7 @@ const permittedUse = documentaryFindingValidator.fields.permittedUse;
 /** Where documentary work on one need stands; never a verdict on the questions it serves. */
 export const needOutcomeValidator = v.union(
     v.literal("in_progress"),
+    v.literal("on_hold"),
     v.literal("prepared"),
     v.literal("gap"),
     v.literal("unfinished"),
@@ -405,6 +408,14 @@ export const overview = query({
         if (!context) return null;
         const { run, preparation, data, controlled } = context;
         const mission = await readSourcesMission(ctx, run);
+        const phase = sourcesPreparationPhase(run, preparation, mission);
+        // Needs without a handed-off result are on hold only while research can still resume.
+        const unsettledOutcome =
+            phase === "collecting"
+                ? ("in_progress" as const)
+                : isResumableResearchPause(run)
+                  ? ("on_hold" as const)
+                  : ("unfinished" as const);
         const framingId =
             run.fixedFramingRevisionId ?? run.currentFramingRevisionId;
         const framing = framingId ? await ctx.db.get(framingId) : null;
@@ -434,7 +445,7 @@ export const overview = query({
                 information: need.information,
                 questionIds: need.commonContext ? [] : need.questionIds,
                 outcome: !outcome
-                    ? ("in_progress" as const)
+                    ? unsettledOutcome
                     : outcome.unfinished.length
                       ? ("unfinished" as const)
                       : outcome.contributions.length

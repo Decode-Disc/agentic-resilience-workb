@@ -6,20 +6,21 @@ import {
     mutation,
     type QueryCtx,
 } from "@convex/_generated/server";
+import { agentName } from "@convex/domain/agentIdentities";
+import { sourcesContinuationAvailable } from "@convex/domain/sources";
 import {
     isResumableResearchPause,
     supportsResearchControl,
 } from "@convex/domain/transitions";
-import {
-    PERSISTENCE_PAGE_SIZE,
-    SOURCE_PREPARATION_DEADLINE_MS,
-} from "@convex/resourcePolicy";
+import { sourcePreparationWindowMs } from "@convex/resourceLimits";
+import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import { researchResumed, workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { getAgentDefinition, getRegisteredOperation } from "./agentCatalog";
+import { raiseSystemApproval } from "./approvals";
 import {
     executionFailureCode,
     recordMissionEvent,
@@ -247,21 +248,36 @@ export async function suspendResearchAtTimeLimit(
     }
     if (!(await definition.continuationAfterDeadline(ctx, mission)))
         return false;
+    if (!active) {
+        await ctx.db.patch(mission._id, { blockCode: "execution_time_limit" });
+        await recordMissionEvent(ctx, mission, {
+            kind: "mission_blocked",
+            cause: "execution_deadline",
+            code: "execution_time_limit",
+        });
+        return true;
+    }
+    if (run.researchPauseRequested) {
+        await ctx.db.patch(mission._id, { blockCode: "execution_time_limit" });
+        await recordMissionEvent(ctx, mission, {
+            kind: "mission_blocked",
+            cause: "execution_deadline",
+            code: "execution_time_limit",
+        });
+        await applyRequestedResearchPause(ctx, run);
+        return true;
+    }
     await ctx.db.patch(mission._id, { blockCode: "execution_time_limit" });
     await recordMissionEvent(ctx, mission, {
         kind: "mission_blocked",
         cause: "execution_deadline",
         code: "execution_time_limit",
     });
-    if (!active) return true;
-    if (run.researchPauseRequested) {
-        await applyRequestedResearchPause(ctx, run);
-        return true;
-    }
+    const executionGeneration = run.executionGeneration + 1;
     await ctx.db.patch(run._id, {
         executionStatus: "paused",
         pauseReason: "sources_time_limit",
-        executionGeneration: run.executionGeneration + 1,
+        executionGeneration,
         researchPauseRequested: false,
         researchControlRevision: (run.researchControlRevision ?? 0) + 1,
         updatedAt: Date.now(),
@@ -275,7 +291,22 @@ export async function suspendResearchAtTimeLimit(
         occurredAt: Date.now(),
     });
     await recordResearchObservation(ctx, run._id, "research_time_limit");
+    const pausedRun = await ctx.db.get(run._id);
+    if (!pausedRun) throw executionError("run_unavailable");
+    await raiseSourcesTimeLimitDecision(ctx, pausedRun);
     return true;
+}
+
+/** Raises the time-limit decision for a run paused at its Sources time limit; a standing permission may apply it at once. */
+export async function raiseSourcesTimeLimitDecision(
+    ctx: MutationCtx,
+    run: Doc<"researchRuns">,
+) {
+    return raiseSystemApproval(ctx, {
+        run,
+        action: "continue_sources_preparation",
+        alternative: "settle_sources_preparation",
+    });
 }
 
 export const pause = mutation({
@@ -291,7 +322,16 @@ export const resume = mutation({
     args: { runId: v.id("researchRuns"), expectedGeneration: v.number() },
     returns: v.number(),
     handler: async (ctx, args) => {
-        await requireWorkspaceRun(ctx, args.runId);
+        const { run } = await requireWorkspaceRun(ctx, args.runId);
+        // At its time limit, preparation continues or hands over only through the decision's approval request.
+        if (
+            run.executionStatus === "paused" &&
+            run.pauseReason === "sources_time_limit"
+        )
+            throw executionError(
+                (await readResearchControlReadiness(ctx, run, "resume"))
+                    .block ?? "sources_time_limit_decision",
+            );
         return resumeResearch(ctx, args);
     },
 });
@@ -413,11 +453,21 @@ export const checkpoint = internalMutation({
         }
         if (
             run.pauseReason === "sources_time_limit" &&
-            run.sourcePreparationId &&
-            (await ctx.db.get(run.sourcePreparationId))
-                ?.settlementRequestedAt !== undefined
-        )
-            return { waiting: false, generation: run.executionGeneration };
+            run.sourcePreparationId
+        ) {
+            const currentPreparation =
+                preparation ?? (await ctx.db.get(run.sourcePreparationId));
+            if (
+                currentPreparation &&
+                (currentPreparation.settlementRequestedAt !== undefined ||
+                    !(await sourcesContinuationAvailable(
+                        ctx,
+                        run,
+                        currentPreparation,
+                    )))
+            )
+                return { waiting: false, generation: run.executionGeneration };
+        }
         if (isResumableResearchPause(run))
             return { waiting: true, generation: run.executionGeneration };
         if (run.executionStatus !== "running")
@@ -527,10 +577,23 @@ export async function readResearchControlReadiness(
             .query("paidWorkControls")
             .withIndex("by_key", (q) => q.eq("key", "global"))
             .unique();
+        let windowBlock: string | null = null;
+        try {
+            sourcePreparationWindowMs();
+        } catch (error) {
+            if (
+                executionFailureCode(error) !==
+                "sources_configuration_unavailable"
+            )
+                throw error;
+            windowBlock = "sources_configuration_unavailable";
+        }
         return {
             block:
                 slotBlock ??
-                (paidWork?.enabled === false ? "paid_work_disabled" : null),
+                (paidWork?.enabled === false
+                    ? "paid_work_disabled"
+                    : windowBlock),
             transition: "renew_window",
         };
     }
@@ -619,7 +682,7 @@ export async function resumeResearch(
     const generation = run.executionGeneration + 1;
     const renewedDeadlineAt =
         readiness.transition === "renew_window"
-            ? Date.now() + SOURCE_PREPARATION_DEADLINE_MS
+            ? Date.now() + sourcePreparationWindowMs()
             : undefined;
     if (renewedDeadlineAt !== undefined && run.sourcePreparationId)
         await ctx.db.patch(run.sourcePreparationId, {
@@ -709,7 +772,7 @@ export function researchStateSummary(
     if (run.pauseReason === "execution_interrupted")
         return "Research was interrupted. Retained work remains available. Resume research to continue.";
     if (run.pauseReason === "sources_time_limit")
-        return "Sources reached its time limit. Material read so far remains inspectable. Continue preparation to use the remaining capacity, or use what's prepared to hand it off with its limits.";
+        return `The ${agentName("sources")} reached its time limit. Material read so far remains inspectable. Continue preparation to use the remaining capacity, or use what's prepared to hand it off with its limits.`;
     if (run.pauseReason && run.pauseReason !== "analyst")
         return "Research is waiting for an analyst decision. Complete the pending review to continue.";
     if (run.executionStatus === "paused") return "Research is paused.";

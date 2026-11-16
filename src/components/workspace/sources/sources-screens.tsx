@@ -149,12 +149,15 @@ export function SourcesPreparationScreen({
     frame,
     view,
     onInspectSources,
+    inspectEmphasis = "primary",
     actions,
     notices,
 }: {
     frame: SourcesScreenFrame;
     view: SourcesPreparationView;
     onInspectSources: () => void;
+    /** Demotes "Inspect sources" when an urgent decision sits beside it. */
+    inspectEmphasis?: "primary" | "secondary";
     /** Consumer decisions placed after "Inspect sources", such as a checkpoint approval. */
     actions?: ReactNode;
     /** Recovery, failed-search or availability notices shown above the needs. */
@@ -221,7 +224,16 @@ export function SourcesPreparationScreen({
                             <Icon iconNode={ArrowDown01Icon} size={14} />
                         </Button>
                         <Button
-                            className={styles.primaryAction}
+                            variant={
+                                inspectEmphasis === "secondary"
+                                    ? "outline"
+                                    : undefined
+                            }
+                            className={
+                                inspectEmphasis === "secondary"
+                                    ? styles.secondaryAction
+                                    : styles.primaryAction
+                            }
                             size="lg"
                             onClick={onInspectSources}>
                             Inspect sources

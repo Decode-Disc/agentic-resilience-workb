@@ -79,7 +79,7 @@ const readySnapshot = {
     researchStart: { block: null, questionCapacity: 3 },
     researchControlAvailable: true,
     sourcesPhase: "collecting",
-    sourcesContinueBlock: null,
+    sourcesDecisionRequestId: null,
     availableCommands: ["/pause", "/resume"],
     activeWork: null,
     preparation: null,
@@ -131,6 +131,12 @@ beforeEach(() => {
         .mutation(api.execution.researchControl.resume)
         .uses(resumeResearch);
     convexReactHarness.mutation(api.framing.startResearch).uses(start);
+    convexReactHarness.query(api.execution.approvals.listGrants).returns([]);
+    convexReactHarness.query(api.execution.approvals.get).returns(undefined);
+    convexReactHarness.mutation(api.execution.approvals.decide).uses(vi.fn());
+    convexReactHarness
+        .mutation(api.execution.approvals.revokeGrant)
+        .uses(vi.fn());
     for (const ref of [
         api.execution.conversations.submit,
         api.execution.conversations.removeQueued,
@@ -618,7 +624,7 @@ test("research pause has a distinct control from stopping the conversation", asy
         },
         researchControlAvailable: true,
         sourcesPhase: "collecting",
-        sourcesContinueBlock: null,
+        sourcesDecisionRequestId: null,
         availableCommands: ["/pause"],
         activeWork: null,
         preparation: null,
@@ -1170,7 +1176,10 @@ test("offers a return to offscreen active Sources work and removes it on complet
     }
 });
 
-const timeLimitSnapshot = (continueBlock: string | null = null) => ({
+const approvalRequestId = "approval-time-limit-1" as Id<"approvalRequests">;
+const timeLimitSnapshot = (
+    requestId: Id<"approvalRequests"> | null = approvalRequestId,
+) => ({
     ...readySnapshot,
     run: {
         ...readySnapshot.run,
@@ -1181,53 +1190,128 @@ const timeLimitSnapshot = (continueBlock: string | null = null) => ({
         executionGeneration: 5,
     },
     sourcesPhase: "time_limit",
-    sourcesContinueBlock: continueBlock,
+    sourcesDecisionRequestId: requestId,
+});
+const timeLimitView = (
+    overrides: Partial<{
+        status: "pending" | "approved" | "denied" | "superseded";
+        block: string | null;
+        grantActive: boolean;
+        decision: {
+            choice: "once" | "always" | "alternative" | "deny";
+            via: "card" | "grant" | "command";
+            decidedBy: { type: "system" };
+            decidedAt: number;
+            outcome:
+                | { kind: "applied"; action: "continue_sources_preparation" }
+                | { kind: "none" };
+        } | null;
+    }> = {},
+) => ({
+    id: approvalRequestId,
+    runId,
+    action: "continue_sources_preparation" as const,
+    alternative: "settle_sources_preparation" as const,
+    requestedBy: { type: "system" as const },
+    status: "pending" as const,
+    block: null,
+    decision: null,
+    grantActive: false,
+    createdAt: 1,
+    ...overrides,
 });
 const timeLimitRaw =
-    /sources_time_limit|time_limit|execution_slot_unavailable|paid_work_disabled|stale_execution/;
+    /sources_time_limit|time_limit|execution_slot_unavailable|paid_work_disabled|stale_execution|approval_already_decided|continue_sources_preparation|settle_sources_preparation/;
 
-test("a Sources time limit offers continuing or using what is prepared, with the analyst deciding", async () => {
-    const settle = vi.fn().mockResolvedValue(null);
-    convexReactHarness.mutation(api.sourcesMission.settle).uses(settle);
+test("a notice in the conversation renders its approval card", () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+        },
+        sourcesPhase: "collecting",
+    });
+    convexReactHarness.paginatedQuery(api.workbench.history).returns({
+        results: [
+            {
+                _id: "notice-1" as Id<"agentMessageDeliveries">,
+                runId,
+                requestKey: `approval-notice:${approvalRequestId}`,
+                role: "assistant",
+                delivery: "notice",
+                status: "processed",
+                createdAt: 10,
+                approvalRequestId,
+                text: "The Sources Agent reached its time limit. Choose whether to continue preparation or use what's prepared.",
+                work: null,
+            },
+        ],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    });
+    convexReactHarness
+        .query(api.execution.approvals.get)
+        .returns(timeLimitView());
+    render(<ConnectedStartWorkspace runId={runId} />);
+    expect(
+        screen.getByRole("group", {
+            name: "The Sources Agent reached its time limit",
+        }),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Use what's prepared" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Continue once" })).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Always continue" }),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(timeLimitRaw);
+});
+
+test("Continue once decides through approvals with the request id", async () => {
+    const decide = vi.fn().mockResolvedValue(timeLimitView());
+    convexReactHarness.mutation(api.execution.approvals.decide).uses(decide);
+    convexReactHarness
+        .query(api.execution.approvals.get)
+        .returns(timeLimitView());
     convexReactHarness
         .query(api.workbench.snapshot)
         .returns(timeLimitSnapshot());
     render(<ConnectedStartWorkspace runId={runId} />);
-    expect(screen.getByText("Preparation reached its time limit")).toBeTruthy();
+    expect(
+        screen.getByRole("group", {
+            name: "The Sources Agent reached its time limit",
+        }),
+    ).toBeTruthy();
     expect(
         screen.queryByRole("button", { name: "Resume research" }),
     ).toBeNull();
-    fireEvent.click(
-        screen.getByRole("button", { name: "Continue preparation" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue once" }));
     await waitFor(() =>
-        expect(resumeResearch).toHaveBeenCalledWith({
-            runId,
-            expectedGeneration: 5,
+        expect(decide).toHaveBeenCalledWith({
+            requestId: approvalRequestId,
+            choice: "once",
         }),
-    );
-    fireEvent.click(
-        screen.getByRole("button", { name: "Use what's prepared" }),
-    );
-    await waitFor(() =>
-        expect(settle).toHaveBeenCalledWith({ runId, expectedGeneration: 5 }),
     );
     expect(document.body.textContent).not.toMatch(timeLimitRaw);
 });
 
 test("Continue preparation is disabled with its reason before any attempt, while settling stays available", () => {
     convexReactHarness
-        .mutation(api.sourcesMission.settle)
-        .uses(vi.fn().mockResolvedValue(null));
+        .query(api.execution.approvals.get)
+        .returns(timeLimitView({ block: "execution_slot_unavailable" }));
     convexReactHarness
         .query(api.workbench.snapshot)
-        .returns(timeLimitSnapshot("execution_slot_unavailable"));
+        .returns(timeLimitSnapshot());
     render(<ConnectedStartWorkspace runId={runId} />);
-    const proceed = screen.getByRole("button", {
-        name: "Continue preparation",
-    });
-    expect(proceed).toHaveProperty("disabled", true);
-    expect(proceed.getAttribute("aria-describedby")).toBeTruthy();
+    const once = screen.getByRole("button", { name: "Continue once" });
+    const always = screen.getByRole("button", { name: "Always continue" });
+    expect(once).toHaveProperty("disabled", true);
+    expect(always).toHaveProperty("disabled", true);
+    expect(once.getAttribute("aria-describedby")).toBeTruthy();
     expect(
         screen.getByText(
             "Another of your analyses is running. Continue when it finishes, or use what's prepared now.",
@@ -1239,16 +1323,19 @@ test("Continue preparation is disabled with its reason before any attempt, while
     expect(document.body.textContent).not.toMatch(timeLimitRaw);
 });
 
-test("a decision already taken elsewhere is explained without raw codes", async () => {
+test("a refused decision shows that it was already decided", async () => {
     convexReactHarness
-        .mutation(api.sourcesMission.settle)
+        .mutation(api.execution.approvals.decide)
         .uses(
             vi
                 .fn()
                 .mockRejectedValue(
-                    new ConvexError({ code: "stale_execution" }),
+                    new ConvexError({ code: "approval_already_decided" }),
                 ),
         );
+    convexReactHarness
+        .query(api.execution.approvals.get)
+        .returns(timeLimitView());
     convexReactHarness
         .query(api.workbench.snapshot)
         .returns(timeLimitSnapshot());
@@ -1262,4 +1349,90 @@ test("a decision already taken elsewhere is explained without raw codes", async 
         ),
     ).toBeTruthy();
     expect(document.body.textContent).not.toMatch(timeLimitRaw);
+});
+
+test("allowed actions can be revoked from the Commands picker", async () => {
+    const revokeGrant = vi.fn().mockResolvedValue(null);
+    convexReactHarness
+        .mutation(api.execution.approvals.revokeGrant)
+        .uses(revokeGrant);
+    convexReactHarness
+        .query(api.execution.approvals.listGrants)
+        .returns([{ action: "continue_sources_preparation", grantedAt: 1 }]);
+    render(<ConnectedStartWorkspace runId={runId} />);
+    fireEvent.click(screen.getByRole("button", { name: "Composer tools" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Commands" }));
+    const group = await screen.findByText("Allowed actions");
+    expect(group).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", {
+            name: /Continue preparation automatically/,
+        }),
+    );
+    await waitFor(() =>
+        expect(revokeGrant).toHaveBeenCalledWith({
+            runId,
+            action: "continue_sources_preparation",
+        }),
+    );
+});
+
+test("a card decided with Always offers Stop allowing while its grant is active", async () => {
+    const revokeGrant = vi.fn().mockResolvedValue(null);
+    convexReactHarness
+        .mutation(api.execution.approvals.revokeGrant)
+        .uses(revokeGrant);
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+        },
+        sourcesPhase: "collecting",
+    });
+    convexReactHarness.paginatedQuery(api.workbench.history).returns({
+        results: [
+            {
+                _id: "notice-1" as Id<"agentMessageDeliveries">,
+                runId,
+                requestKey: `approval-notice:${approvalRequestId}`,
+                role: "assistant",
+                delivery: "notice",
+                status: "processed",
+                createdAt: 10,
+                approvalRequestId,
+                text: "The Sources Agent reached its time limit.",
+                work: null,
+            },
+        ],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    });
+    convexReactHarness.query(api.execution.approvals.get).returns(
+        timeLimitView({
+            status: "approved",
+            grantActive: true,
+            decision: {
+                choice: "always",
+                via: "card",
+                decidedBy: { type: "system" },
+                decidedAt: 2,
+                outcome: {
+                    kind: "applied",
+                    action: "continue_sources_preparation",
+                },
+            },
+        }),
+    );
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const stopAllowing = screen.getByRole("button", { name: "Stop allowing" });
+    fireEvent.click(stopAllowing);
+    await waitFor(() =>
+        expect(revokeGrant).toHaveBeenCalledWith({
+            runId,
+            action: "continue_sources_preparation",
+        }),
+    );
 });

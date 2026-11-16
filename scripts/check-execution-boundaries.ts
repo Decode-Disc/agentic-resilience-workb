@@ -19,6 +19,8 @@ const TABLE_OWNERS: Record<string, readonly string[]> = {
     agentInvocationPayloads: ["journal"],
     retainedTexts: ["retainedText"],
     retainedTextFragments: ["retainedText"],
+    approvalRequests: ["approvals"],
+    approvalGrants: ["approvals"],
 };
 // These are the existing driver/transaction boundaries, not an exemption for all execution modules.
 const FUNCTION_OWNERS: Record<string, readonly string[]> = {

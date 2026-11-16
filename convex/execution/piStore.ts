@@ -266,13 +266,18 @@ export const pendingControlInputs = internalQuery({
             .paginate(lease.paginationOpts);
         const entries = [];
         for (const message of page.page) {
-            const confirmation = message.controlCommand
-                ? await ctx.db.get(message.controlCommand.confirmationMessageId)
+            if (message.controlCommand && message.approvalDecision)
+                throw executionError("native_control_unavailable");
+            const confirmationId =
+                message.controlCommand?.confirmationMessageId ??
+                message.approvalDecision?.confirmationMessageId;
+            const confirmation = confirmationId
+                ? await ctx.db.get(confirmationId)
                 : null;
             if (
                 message.conversationId !== conversation._id ||
                 message.role !== "user" ||
-                !message.controlCommand ||
+                (!message.controlCommand && !message.approvalDecision) ||
                 !confirmation ||
                 confirmation.conversationId !== conversation._id ||
                 confirmation.role !== "assistant"
@@ -283,7 +288,13 @@ export const pendingControlInputs = internalQuery({
                 conversation.storageRef,
                 [message.storageMessageRef, confirmation.storageMessageRef],
             );
-            if (command !== message.controlCommand.name || text === undefined)
+            if (
+                command === undefined ||
+                text === undefined ||
+                (message.controlCommand
+                    ? command !== message.controlCommand.name
+                    : !command?.trim())
+            )
                 throw executionError("native_control_unavailable");
             entries.push({
                 messageId: message._id,
@@ -313,7 +324,8 @@ export const recordControlInputs = internalMutation({
         for (const id of args.messageIds) {
             const message = await ctx.db.get(id);
             if (
-                !message?.controlCommand ||
+                !message ||
+                (!message.controlCommand && !message.approvalDecision) ||
                 message.conversationId !== session.conversationId ||
                 !message.nativeControlStatus
             )

@@ -4,6 +4,8 @@
 
 Accepted on 2026-11-15 (design) and implemented on 2026-11-16. Current obligations live in [PRODUCT](../../PRODUCT.md#source-preparation-and-corpus-review) and the [Sources technical contract](../../context/TECH.md#sources-mission-and-prepared-material).
 
+Superseded in part on 2026-11-16 by [ADR-028](028-ask-for-approval-through-general-requests-and-dossier-grants.md): the time-limit decision is an approval request and grants may continue automatically. The window now comes from the required deployment setting; eligible failed dossiers have an internal recovery path. The historical alternatives and failure disposition below describe the earlier implementation.
+
 ## Date
 
 2026-11-16

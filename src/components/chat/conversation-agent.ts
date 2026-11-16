@@ -1,4 +1,8 @@
 import {
+    AGENT_IDENTITIES,
+    type AgentIdentityId,
+} from "@convex/domain/agentIdentities";
+import {
     AiChat02Icon,
     AiSearch02Icon,
     FileSearchIcon,
@@ -15,27 +19,24 @@ export type ConversationAgent = {
 export type ConversationAgents = Readonly<Record<string, ConversationAgent>>;
 
 export const WORKBENCH_AGENT = {
-    id: "workbench",
-    name: "Workbench Agent",
+    ...AGENT_IDENTITIES.workbench,
     icon: AiChat02Icon,
 } satisfies ConversationAgent;
 export const SOURCES_AGENT = {
-    id: "sources",
-    name: "Sources Agent",
+    ...AGENT_IDENTITIES.sources,
     icon: FileSearchIcon,
 } satisfies ConversationAgent;
 
-export const DEFAULT_CONVERSATION_AGENTS: ConversationAgents = {
+export const DEFAULT_CONVERSATION_AGENTS: ConversationAgents &
+    Readonly<Record<AgentIdentityId, ConversationAgent>> = {
     [WORKBENCH_AGENT.id]: WORKBENCH_AGENT,
-    sources: SOURCES_AGENT,
+    [SOURCES_AGENT.id]: SOURCES_AGENT,
     investigation: {
-        id: "investigation",
-        name: "Investigation Agent",
+        ...AGENT_IDENTITIES.investigation,
         icon: AiSearch02Icon,
     },
     synthesis: {
-        id: "synthesis",
-        name: "Synthesis Agent",
+        ...AGENT_IDENTITIES.synthesis,
         icon: WorkflowSquare01Icon,
     },
 };

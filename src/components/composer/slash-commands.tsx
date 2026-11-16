@@ -3,29 +3,33 @@ import {
     unstable_useSlashCommandAdapter,
     useAuiState,
 } from "@assistant-ui/react";
-import type { api } from "@convex/_generated/api";
-import type { FunctionArgs } from "convex/server";
+import type { workbenchCommand } from "@convex/domain/workbenchContracts";
 import {
     PauseIcon,
     PlayIcon,
     Settings02Icon,
 } from "@hugeicons/core-free-icons";
-import { cn } from "@/lib/utils";
-import { uiLayerClasses } from "@/lib/ui-layers";
+import type { Infer } from "convex/values";
+import { type RefObject, useId, useRef } from "react";
 import Icon from "@/components/icon";
-import { useRef, type RefObject } from "react";
+import { Button } from "@/components/ui/button";
 import {
     Combobox,
     ComboboxContent,
-    ComboboxInput,
-    ComboboxList,
-    ComboboxItem,
     ComboboxEmpty,
+    ComboboxInput,
+    ComboboxItem,
+    ComboboxList,
 } from "@/components/ui/combobox";
+import { uiLayerClasses } from "@/lib/ui-layers";
+import { cn } from "@/lib/utils";
 
-export type ResearchControlCommand = FunctionArgs<
-    typeof api.workbench.command
->["command"];
+export type ResearchControlCommand = Infer<typeof workbenchCommand>;
+export type ComposerApprovalGrant = {
+    id: string;
+    label: string;
+    onRevoke: () => void;
+};
 export const COMPOSER_COMMANDS = [
     { token: "/pause", label: "Pause research", icon: PauseIcon },
     { token: "/resume", label: "Resume research", icon: PlayIcon },
@@ -43,14 +47,17 @@ function commandChoices(available?: readonly ComposerCommand[]) {
 export function ConversationCommandPicker({
     anchor,
     availableCommands,
+    grants,
     onClose,
     onExecute,
 }: {
     anchor: RefObject<HTMLDivElement | null>;
     availableCommands?: readonly ComposerCommand[];
+    grants?: readonly ComposerApprovalGrant[];
     onClose: () => void;
     onExecute: (command: ComposerCommand) => void;
 }) {
+    const grantsHeadingId = useId();
     return (
         <Combobox<(typeof COMPOSER_COMMANDS)[number]>
             items={commandChoices(availableCommands)}
@@ -94,6 +101,33 @@ export function ConversationCommandPicker({
                         </ComboboxItem>
                     )}
                 </ComboboxList>
+                {grants && grants.length > 0 && (
+                    <fieldset
+                        aria-labelledby={grantsHeadingId}
+                        className="m-0 mt-1 border-0 border-t border-border p-0 px-1 pt-1.5 pb-1">
+                        <p
+                            id={grantsHeadingId}
+                            className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                            Allowed actions
+                        </p>
+                        <div className="flex flex-col gap-0.5">
+                            {grants.map((grant) => (
+                                <Button
+                                    key={grant.id}
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-auto w-full justify-between px-2 py-1.5 text-left font-normal"
+                                    onClick={() => grant.onRevoke()}>
+                                    <span>{grant.label}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                        Stop allowing
+                                    </span>
+                                </Button>
+                            ))}
+                        </div>
+                    </fieldset>
+                )}
             </ComboboxContent>
         </Combobox>
     );

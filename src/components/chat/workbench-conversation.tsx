@@ -5,6 +5,7 @@ import {
     MessagePrimitive,
     type ThreadMessageLike,
     ThreadPrimitive,
+    type ToolCallMessagePartProps,
     unstable_useTriggerPopoverRootContext,
     useAui,
     useAuiState,
@@ -23,8 +24,10 @@ import {
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import {
     type CSSProperties,
+    createContext,
     type ReactNode,
     type Ref,
+    useContext,
     useEffect,
     useLayoutEffect,
     useRef,
@@ -65,6 +68,7 @@ import {
 } from "@/components/composer/conversation-actions";
 import {
     COMPOSER_COMMANDS,
+    type ComposerApprovalGrant,
     type ComposerCommand,
     ConversationCommandPicker,
     ConversationSlashCommands,
@@ -271,6 +275,7 @@ function ConversationComposerContent({
     modelSelector,
     controlsOpen = false,
     availableCommands,
+    grants,
 }: {
     inputRef?: Ref<HTMLTextAreaElement>;
     onResumeQueue?: () => void;
@@ -279,6 +284,7 @@ function ConversationComposerContent({
     modelSelector?: ReactNode;
     controlsOpen?: boolean;
     availableCommands?: readonly ComposerCommand[];
+    grants?: readonly ComposerApprovalGrant[];
     label: string;
     placeholder?: string;
     compact?: boolean;
@@ -390,6 +396,7 @@ function ConversationComposerContent({
                 <ConversationCommandPicker
                     anchor={root}
                     availableCommands={availableCommands}
+                    grants={grants}
                     onClose={() => setCommandsOpen(false)}
                     onExecute={(command) => {
                         setCommandsOpen(false);
@@ -616,6 +623,43 @@ function ConversationComposerContent({
     );
 }
 
+type ApprovalRenderer = (requestId: string) => ReactNode;
+const ConversationApprovalContext = createContext<ApprovalRenderer | undefined>(
+    undefined,
+);
+
+/** Supplies the host's connected approval card renderer to all transcript messages in scope. */
+export function ConversationApprovalProvider({
+    renderApproval,
+    children,
+}: {
+    renderApproval?: ApprovalRenderer;
+    children: ReactNode;
+}) {
+    return (
+        <ConversationApprovalContext.Provider value={renderApproval}>
+            {children}
+        </ConversationApprovalContext.Provider>
+    );
+}
+
+function ConversationApprovalPart(
+    props: ToolCallMessagePartProps<{ requestId?: unknown }>,
+) {
+    const renderApproval = useContext(ConversationApprovalContext);
+    const requestId =
+        typeof props.args?.requestId === "string"
+            ? props.args.requestId
+            : undefined;
+    if (!renderApproval || !requestId) return null;
+    return <div className="mt-2.5">{renderApproval(requestId)}</div>;
+}
+
+const CONVERSATION_PART_COMPONENTS = {
+    Text: ConversationMarkdown,
+    tools: { by_name: { approval: ConversationApprovalPart } },
+};
+
 function ConversationMessage({
     authorName,
     agents,
@@ -671,7 +715,7 @@ function ConversationMessage({
                 }>
                 {attributionError}
                 <MessagePrimitive.Parts
-                    components={{ Text: ConversationMarkdown }}
+                    components={CONVERSATION_PART_COMPONENTS}
                 />
             </MessagePrimitive.Root>
         );
@@ -697,7 +741,7 @@ function ConversationMessage({
                 )}
                 <MessageContent>
                     <MessagePrimitive.Parts
-                        components={{ Text: ConversationMarkdown }}
+                        components={CONVERSATION_PART_COMPONENTS}
                     />
                 </MessageContent>
                 {role === "assistant" && coherence && (
@@ -740,14 +784,18 @@ export function ConversationMessages({
     authorName = WORKBENCH_AGENT_NAME,
     agents = DEFAULT_CONVERSATION_AGENTS,
     presentation,
+    renderApproval,
 }: {
     presentation?: "work-note";
     ids?: readonly string[];
     /** Identity of the assistant whose messages the caller selects. */
     authorName?: string;
     agents?: ConversationAgents;
+    renderApproval?: ApprovalRenderer;
 }) {
-    return (
+    const inheritedRenderApproval = useContext(ConversationApprovalContext);
+    const activeRenderApproval = renderApproval ?? inheritedRenderApproval;
+    const messages = (
         <ThreadPrimitive.Messages>
             {({ message }) =>
                 !ids || ids.includes(message.id) ? (
@@ -759,6 +807,13 @@ export function ConversationMessages({
                 ) : null
             }
         </ThreadPrimitive.Messages>
+    );
+    return activeRenderApproval !== inheritedRenderApproval ? (
+        <ConversationApprovalProvider renderApproval={activeRenderApproval}>
+            {messages}
+        </ConversationApprovalProvider>
+    ) : (
+        messages
     );
 }
 

@@ -3,6 +3,8 @@ import {
     ADMIN_BACKFILL_PAGE_MAX_ITEMS,
     ADMIN_JOURNAL_PAGE_MAX_ITEMS,
     ADMIN_RECENT_EVENT_LIMIT as RECENT_EVENT_LIMIT,
+    MAX_AUDIT_REASON_CHARS,
+    MIN_AUDIT_REASON_CHARS,
 } from "@convex/resourcePolicy";
 import type { WorkflowId } from "@convex-dev/workflow";
 import {
@@ -205,9 +207,12 @@ export const setPaidWorkEnabled = mutation({
     handler: async (ctx, args) => {
         const admin = await requireAdmin(ctx);
         const reason = args.reason.trim();
-        if (reason.length < 12 || reason.length > 500) {
+        if (
+            reason.length < MIN_AUDIT_REASON_CHARS ||
+            reason.length > MAX_AUDIT_REASON_CHARS
+        ) {
             throw new Error(
-                "Paid work changes require a reason of 12 to 500 characters",
+                `Paid work changes require a reason of ${MIN_AUDIT_REASON_CHARS} to ${MAX_AUDIT_REASON_CHARS} characters`,
             );
         }
         const existing = await ctx.db

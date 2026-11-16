@@ -89,17 +89,22 @@ test("Sources locations survive the URL only within the Sources section", () => 
     ).toEqual({ section: "sources" });
 });
 
-test.each([
+const allSourcesPhases = [
     "collecting",
     "waiting",
     "paused",
     "time_limit",
     "completed",
     "completed_with_limits",
+    "ended_without_material",
     "interrupted",
     "failed",
     "insufficient_evidence",
-] as const)("the %s Sources phase reads as analyst copy", (phase) => {
+] as const;
+
+test.each(
+    allSourcesPhases,
+)("the %s Sources phase reads as analyst copy", (phase) => {
     const copy = sourcesPhasePresentation(phase);
     for (const text of [copy.label, copy.outcome, copy.title, copy.detail])
         expect(text).not.toMatch(/_|sources_prepared|execution|mission/i);
@@ -109,4 +114,30 @@ test.each([
         expect(copy.detail).toMatch(
             /Continue preparation.*use what's prepared/,
         );
+});
+
+test("Sources copy names the agent and never shows raw codes", () => {
+    for (const phase of allSourcesPhases) {
+        const copy = sourcesPhasePresentation(phase);
+        for (const text of [
+            copy.label,
+            copy.outcome,
+            copy.title,
+            copy.detail,
+        ]) {
+            expect(text).not.toMatch(
+                /^Sources (is|used|handed|stopped|continues|reached)/,
+            );
+            expect(text).not.toMatch(/_[a-z]/);
+        }
+    }
+    expect(sourcesPhasePresentation("time_limit").title).toBe(
+        "The Sources Agent reached its time limit",
+    );
+    expect(sourcesPhasePresentation("ended_without_material")).toMatchObject({
+        workState: "blocked",
+        label: "No material",
+        outcome: "No material",
+        title: "No usable material prepared",
+    });
 });

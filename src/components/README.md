@@ -46,6 +46,8 @@ The consumer supplies the same externally owned state to the runtime and present
 | Show a pending artifact | [ConversationPendingPanel](chat/workbench-conversation.tsx) | Foldable pending content with launch/action footer and composer attachment. A summary-only state accepts a header action when there is no body to inspect. Keeps unfinished content mounted outside the transcript. |
 | Show header context and references | [ConversationHeader, ConversationContext, ConversationReference](chat/workbench-conversation.tsx) | Header identity and floating Plan/Outputs/Sources/Work inspection. The consumer supplies content and can control open state across screen changes. |
 | Ask for contextual input | [AgentQuestion family](chat/agent-question.tsx) | Choice and written-answer UI, validation and keyboard interaction. Persistence, branching and the consequence of an answer belong to its consumer. |
+| Request and confirm an approval decision | [ApprovalCard](chat/approval-card.tsx) | Neutral approval request and receipt card (`role="group"`, disabled-reason descriptions, keyboard Tab order and receipt focus handoff). Contains no action-specific copy or Convex wiring. |
+| Connect a Convex approval request | [ConnectedApprovalCard](workspace/approvals/connected-approval-card.tsx) | Queries `api.execution.approvals.get`, submits choices and revokes standing grants for one `Id<"approvalRequests">`, translating request status and block codes through [approvals presentation](../lib/presentation/approvals.ts). |
 
 ### State ownership
 

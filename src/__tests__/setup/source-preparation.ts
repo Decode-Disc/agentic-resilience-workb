@@ -13,7 +13,9 @@ import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { defineSchema } from "convex/server";
 import { convexTest } from "convex-test";
+import { vi } from "vitest";
 import { installModel } from "./model-configuration";
+import { SOURCES_TEST_WINDOW_MINUTES } from "./sources-mission";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
@@ -21,6 +23,10 @@ const modules = import.meta.glob("/convex/**/*.ts");
 export async function seedSourcePreparation(
     options: { legacyRunPurposes?: boolean; models?: boolean } = {},
 ) {
+    vi.stubEnv(
+        "SOURCES_PREPARATION_WINDOW_MINUTES",
+        String(SOURCES_TEST_WINDOW_MINUTES),
+    );
     const t = convexTest(
         options.legacyRunPurposes
             ? defineSchema(schema.tables, { schemaValidation: false })

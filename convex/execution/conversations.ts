@@ -103,6 +103,7 @@ async function event(
                 "response_stopped",
                 "queue_resumed",
                 "research_control_command",
+                "approval_decision",
             ].includes(kind) && run?.ownerVisitorId
                 ? { type: "visitor", visitorId: run.ownerVisitorId }
                 : { type: "system" }),
@@ -135,31 +136,78 @@ export function requireConversationRequestKey(requestKey: string) {
         throw executionError("message_capacity");
 }
 
-/** Persists a server-owned control receipt without admitting a response or changing its queue. */
+type ControlCommandFields = NonNullable<
+    Doc<"agentMessageDeliveries">["controlCommand"]
+>;
+
+export type ControlExchangeInput =
+    | {
+          kind: "command";
+          name: ControlCommandFields["name"];
+          expectedGeneration: number;
+          outcome: ControlCommandFields["outcome"];
+      }
+    | {
+          kind: "approval";
+          requestId: Id<"approvalRequests">;
+          text: string;
+      };
+
+const APPROVAL_RECEIPT_KEY_PREFIX = "approval-reply:";
+
+/** An approval decision's confirmation stays in the model's history but is not shown: the approval card is the visible receipt. */
+export function isApprovalReceiptMessage(
+    message: Doc<"agentMessageDeliveries">,
+) {
+    return (
+        message.approvalDecision !== undefined ||
+        message.requestKey.startsWith(APPROVAL_RECEIPT_KEY_PREFIX)
+    );
+}
+
+/** Persists a server-owned control or approval receipt without admitting a response or changing its queue. */
 export async function recordControlExchange(
     ctx: MutationCtx,
     conversation: Doc<"agentConversations">,
     args: {
         requestKey: string;
         contentHash: string;
-        name: NonNullable<
-            Doc<"agentMessageDeliveries">["controlCommand"]
-        >["name"];
-        expectedGeneration: number;
-        outcome: NonNullable<
-            Doc<"agentMessageDeliveries">["controlCommand"]
-        >["outcome"];
+        exchange: ControlExchangeInput;
         text: string;
         nativeInputSequence?: number;
     },
 ) {
+    const existing = await ctx.db
+        .query("agentMessageDeliveries")
+        .withIndex("by_run_and_key", (q) =>
+            q.eq("runId", conversation.runId).eq("requestKey", args.requestKey),
+        )
+        .unique();
+    if (existing) {
+        if (existing.contentHash !== args.contentHash)
+            throw executionError("message_identity_conflict");
+        const confirmationMessageId =
+            existing.controlCommand?.confirmationMessageId ??
+            existing.approvalDecision?.confirmationMessageId;
+        if (!confirmationMessageId)
+            throw executionError("conversation_message_unavailable");
+        return {
+            messageId: existing._id,
+            confirmationMessageId,
+            text: args.text,
+        };
+    }
     const createdAt = Date.now();
     const publicationRevision = await advancePublication(ctx, conversation._id);
+    const userText =
+        args.exchange.kind === "command"
+            ? args.exchange.name
+            : args.exchange.text;
     const storageMessageRef = await saveConversationMessage(
         ctx,
         conversation.storageRef,
         "user",
-        args.name,
+        userText,
     );
     const messageId = await ctx.db.insert("agentMessageDeliveries", {
         runId: conversation.runId,
@@ -184,7 +232,7 @@ export async function recordControlExchange(
         {
             runId: conversation.runId,
             conversationId: conversation._id,
-            requestKey: `control-reply:${messageId}`,
+            requestKey: `${args.exchange.kind === "approval" ? APPROVAL_RECEIPT_KEY_PREFIX : "control-reply:"}${messageId}`,
             contentHash: sha256Hex(args.text),
             storageMessageRef: confirmationRef,
             role: "assistant",
@@ -195,12 +243,21 @@ export async function recordControlExchange(
         },
     );
     await ctx.db.patch(messageId, {
-        controlCommand: {
-            name: args.name,
-            expectedGeneration: args.expectedGeneration,
-            outcome: args.outcome,
-            confirmationMessageId,
-        },
+        ...(args.exchange.kind === "command"
+            ? {
+                  controlCommand: {
+                      name: args.exchange.name,
+                      expectedGeneration: args.exchange.expectedGeneration,
+                      outcome: args.exchange.outcome,
+                      confirmationMessageId,
+                  },
+              }
+            : {
+                  approvalDecision: {
+                      requestId: args.exchange.requestId,
+                      confirmationMessageId,
+                  },
+              }),
         nativeControlStatus: "pending",
         nativeInputSequence:
             args.nativeInputSequence ??
@@ -209,16 +266,53 @@ export async function recordControlExchange(
     await event(
         ctx,
         conversation.runId,
-        "research_control_command",
+        args.exchange.kind === "command"
+            ? "research_control_command"
+            : "approval_decision",
         undefined,
         messageId,
     );
     return {
         messageId,
         confirmationMessageId,
-        outcome: args.outcome,
         text: args.text,
     };
+}
+
+/** Posts an idempotent display-only approval notice without syncing it to native history. */
+export async function recordApprovalNotice(
+    ctx: MutationCtx,
+    conversation: Doc<"agentConversations">,
+    args: { requestId: Id<"approvalRequests">; text: string },
+): Promise<Id<"agentMessageDeliveries">> {
+    const requestKey = `approval-notice:${args.requestId}`;
+    const existing = await ctx.db
+        .query("agentMessageDeliveries")
+        .withIndex("by_run_and_key", (q) =>
+            q.eq("runId", conversation.runId).eq("requestKey", requestKey),
+        )
+        .unique();
+    if (existing) return existing._id;
+    const publicationRevision = await advancePublication(ctx, conversation._id);
+    const storageMessageRef = await saveConversationMessage(
+        ctx,
+        conversation.storageRef,
+        "assistant",
+        args.text,
+    );
+    return ctx.db.insert("agentMessageDeliveries", {
+        runId: conversation.runId,
+        conversationId: conversation._id,
+        requestKey,
+        contentHash: sha256Hex(args.text),
+        storageMessageRef,
+        role: "assistant",
+        delivery: "notice",
+        status: "processed",
+        approvalRequestId: args.requestId,
+        publicationRevision,
+        createdAt: Date.now(),
+    });
 }
 
 const messageInput = v.object({

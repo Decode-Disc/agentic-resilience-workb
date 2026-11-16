@@ -181,7 +181,7 @@ const run: ComponentProps<typeof ConnectedSources>["run"] = {
     canStartNewCorpusRevision: false,
     executionGeneration: 4,
     sourcesPhase: "collecting",
-    sourcesContinueBlock: null,
+    sourcesDecisionRequestId: null,
 };
 
 function renderSources(
@@ -213,6 +213,10 @@ beforeEach(() => {
     convexReactHarness.query(api.sourcesWorkspace.overview).returns(overview);
     convexReactHarness.query(api.sourcesWorkspace.listSources).returns(rows);
     convexReactHarness.query(api.sourcesWorkspace.getSource).returns(reading);
+    convexReactHarness.mutation(api.execution.approvals.decide).uses(vi.fn());
+    convexReactHarness
+        .mutation(api.execution.approvals.revokeGrant)
+        .uses(vi.fn());
 });
 
 test("dossiers on the corpus-approval path keep their existing review", () => {
@@ -231,7 +235,7 @@ test("preparation under way shows unsettled needs without backend vocabulary", (
     ).toBeTruthy();
     expect(
         screen.getByText(
-            "Sources is collecting and reading material for 2 documentary needs. Outcomes settle when it hands off.",
+            "The Sources Agent is collecting and reading material for 2 documentary needs. Outcomes settle when it hands off.",
         ),
     ).toBeTruthy();
     expect(screen.getAllByText("In progress").length).toBeGreaterThan(0);
@@ -316,12 +320,22 @@ test("without a Workbench conversation the reader offers no follow-up it cannot 
     ).toBeNull();
 });
 
-test("the Preparation screen carries the time-limit decision beside the material read so far", async () => {
-    const settle = vi.fn().mockResolvedValue(null);
-    convexReactHarness.mutation(api.sourcesMission.settle).uses(settle);
-    convexReactHarness
-        .mutation(api.execution.researchControl.resume)
-        .uses(vi.fn().mockResolvedValue(6));
+test("the time-limit card replaces the old decision buttons on the Sources page", async () => {
+    const requestId = "approval-sources-1" as Id<"approvalRequests">;
+    const decide = vi.fn().mockResolvedValue(null);
+    convexReactHarness.query(api.execution.approvals.get).returns({
+        id: requestId,
+        runId,
+        action: "continue_sources_preparation",
+        alternative: "settle_sources_preparation",
+        requestedBy: { type: "system" },
+        status: "pending",
+        block: null,
+        decision: null,
+        grantActive: false,
+        createdAt: 1,
+    });
+    convexReactHarness.mutation(api.execution.approvals.decide).uses(decide);
     renderSources({
         run: {
             ...run,
@@ -329,19 +343,35 @@ test("the Preparation screen carries the time-limit decision beside the material
             pauseReason: "sources_time_limit",
             executionGeneration: 5,
             sourcesPhase: "time_limit",
+            sourcesDecisionRequestId: requestId,
         },
     });
     expect(
         screen.getByRole("heading", {
-            name: "Preparation reached its time limit",
+            name: "The Sources Agent reached its time limit",
         }),
     ).toBeTruthy();
     expect(screen.getAllByText("Decision needed").length).toBeGreaterThan(0);
+    expect(
+        screen.getByRole("group", {
+            name: "The Sources Agent reached its time limit",
+        }),
+    ).toBeTruthy();
+    expect(
+        screen.queryByRole("button", { name: "Continue preparation" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Continue once" })).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Always continue" }),
+    ).toBeTruthy();
     fireEvent.click(
         screen.getByRole("button", { name: "Use what's prepared" }),
     );
     await vi.waitFor(() =>
-        expect(settle).toHaveBeenCalledWith({ runId, expectedGeneration: 5 }),
+        expect(decide).toHaveBeenCalledWith({
+            requestId,
+            choice: "alternative",
+        }),
     );
     expect(document.body.textContent).not.toMatch(
         /sources_time_limit|time_limit/,

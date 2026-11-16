@@ -1,6 +1,7 @@
 import type { ExternalThreadQueueAdapter } from "@assistant-ui/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { approvalActionCopy } from "@convex/domain/approvalCopy";
 import { isResumableResearchPause } from "@convex/domain/transitions";
 import { HISTORY_PAGE_SIZE } from "@convex/resourcePolicy";
 import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
@@ -19,6 +20,7 @@ import {
 } from "@/components/chat/conversation-mission";
 import {
     ConversationActivity,
+    ConversationApprovalProvider,
     ConversationComposer,
     ConversationContext,
     ConversationReference,
@@ -40,7 +42,7 @@ import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { SourcingLane } from "@/components/workbench-ui/sourcing-lane";
-import { SourcesTimeLimitDecision } from "@/components/workspace/sources/sources-time-limit-decision";
+import { ConnectedApprovalCard } from "@/components/workspace/approvals/connected-approval-card";
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
 import { useResponsive } from "@/hooks/use-responsive";
 import { sourcesPhasePresentation } from "@/lib/presentation/sources";
@@ -52,6 +54,7 @@ import {
     workbenchFailureCopy,
     workbenchTurn,
 } from "@/lib/presentation/workbench";
+import { conversationMessageContent } from "@/lib/workspace/conversation-approvals";
 import { insertOptimisticConversationMessage } from "@/lib/workspace/conversation-delivery";
 import {
     clearWorkbenchDraft,
@@ -281,6 +284,10 @@ function StartWorkspaceContent({
         start = useMutation(api.framing.startResearch);
     const pauseResearch = useMutation(api.execution.researchControl.pause),
         resumeResearch = useMutation(api.execution.researchControl.resume);
+    const activeGrants = useQuery(api.execution.approvals.listGrants, {
+        runId,
+    });
+    const revokeGrant = useMutation(api.execution.approvals.revokeGrant);
     const { draft, setDraft, edit, setEdit, launchKey, delivery } = drafts;
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -507,19 +514,35 @@ function StartWorkspaceContent({
         }));
     const conversation = useWorkbenchConversation({
         messages: [
-            ...messages.map((m) => ({
-                id: m._id,
-                role: m.role,
-                content: m.text,
-                createdAt: new Date(m.createdAt),
-                metadata: {
-                    custom: {
-                        agentId:
-                            m.role === "assistant" ? "workbench" : undefined,
-                        responseControl: m.responseControl,
+            ...messages.map((m) => {
+                const approvalIds =
+                    "approvalRequestIds" in m &&
+                    Array.isArray(m.approvalRequestIds) &&
+                    m.approvalRequestIds.length
+                        ? m.approvalRequestIds
+                        : m.approvalRequestId
+                          ? [m.approvalRequestId]
+                          : [];
+                return {
+                    id: m._id,
+                    role: m.role,
+                    content: conversationMessageContent(
+                        m._id,
+                        m.text,
+                        approvalIds,
+                    ),
+                    createdAt: new Date(m.createdAt),
+                    metadata: {
+                        custom: {
+                            agentId:
+                                m.role === "assistant"
+                                    ? "workbench"
+                                    : undefined,
+                            responseControl: m.responseControl,
+                        },
                     },
-                },
-            })),
+                };
+            }),
             ...[...previewTurns.values()].map((turn) => ({
                 id: `reply:${turn._id}`,
                 role: "assistant" as const,
@@ -686,11 +709,12 @@ function StartWorkspaceContent({
                         </Button>
                     </>
                 ) : snapshot.sourcesPhase === "time_limit" ? (
-                    <SourcesTimeLimitDecision
-                        runId={runId}
-                        expectedGeneration={run.executionGeneration}
-                        continueBlock={snapshot.sourcesContinueBlock}
-                    />
+                    // The time-limit decision is only made on its approval card; a generic Resume would renew the window unasked.
+                    snapshot.sourcesDecisionRequestId ? (
+                        <ConnectedApprovalCard
+                            requestId={snapshot.sourcesDecisionRequestId}
+                        />
+                    ) : null
                 ) : isResumableResearchPause(run) ? (
                     <Button
                         variant="outline"
@@ -722,6 +746,17 @@ function StartWorkspaceContent({
                 ) : null}
             </div>
         ) : null;
+    const grants = activeGrants?.map((grant) => ({
+        id: grant.action,
+        label: approvalActionCopy[grant.action].grantedLabel,
+        onRevoke: () =>
+            control(
+                revokeGrant({
+                    runId,
+                    action: grant.action,
+                }),
+            ),
+    }));
     const log = (
         <>
             {history.status === "CanLoadMore" && (
@@ -735,49 +770,58 @@ function StartWorkspaceContent({
             {history.status === "LoadingFirstPage" ? (
                 <Skeleton className="h-24 w-3/4" />
             ) : (
-                <ConversationHistory
-                    entries={[
-                        ...messages.map((m) => ({
-                            kind: "message" as const,
-                            id: m._id,
-                            time: m.createdAt,
-                        })),
-                        ...[...previewTurns.values()].map((turn) => ({
-                            kind: "message" as const,
-                            id: `reply:${turn._id}`,
-                            time: turn.createdAt,
-                        })),
-                        ...[...work.values()]
-                            .filter(
-                                (turn) =>
-                                    !turn.entries.some(
-                                        (entry) =>
-                                            entry.kind === "message" &&
-                                            (messages.some(
-                                                (m) => m._id === entry.id,
-                                            ) ||
-                                                [...previewTurns.values()].some(
-                                                    (t) =>
-                                                        `reply:${t._id}` ===
-                                                        entry.id,
-                                                )),
-                                    ),
-                            )
-                            .map((turn) => ({
-                                kind: "turn" as const,
-                                id: turn.id,
-                                time: Date.parse(turn.startedAt ?? "") || 0,
+                <ConversationApprovalProvider
+                    renderApproval={(requestId) => (
+                        <ConnectedApprovalCard
+                            requestId={requestId as Id<"approvalRequests">}
+                        />
+                    )}>
+                    <ConversationHistory
+                        entries={[
+                            ...messages.map((m) => ({
+                                kind: "message" as const,
+                                id: m._id,
+                                time: m.createdAt,
                             })),
-                        ...missions.map((m) => ({
-                            kind: "mission" as const,
-                            id: m.id,
-                            time: run.researchStartedAt ?? run.updatedAt,
-                        })),
-                    ].sort((a, b) => a.time - b.time)}
-                    turns={[...work.values()]}
-                    missions={missions}
-                    agents={agents}
-                />
+                            ...[...previewTurns.values()].map((turn) => ({
+                                kind: "message" as const,
+                                id: `reply:${turn._id}`,
+                                time: turn.createdAt,
+                            })),
+                            ...[...work.values()]
+                                .filter(
+                                    (turn) =>
+                                        !turn.entries.some(
+                                            (entry) =>
+                                                entry.kind === "message" &&
+                                                (messages.some(
+                                                    (m) => m._id === entry.id,
+                                                ) ||
+                                                    [
+                                                        ...previewTurns.values(),
+                                                    ].some(
+                                                        (t) =>
+                                                            `reply:${t._id}` ===
+                                                            entry.id,
+                                                    )),
+                                        ),
+                                )
+                                .map((turn) => ({
+                                    kind: "turn" as const,
+                                    id: turn.id,
+                                    time: Date.parse(turn.startedAt ?? "") || 0,
+                                })),
+                            ...missions.map((m) => ({
+                                kind: "mission" as const,
+                                id: m.id,
+                                time: run.researchStartedAt ?? run.updatedAt,
+                            })),
+                        ].sort((a, b) => a.time - b.time)}
+                        turns={[...work.values()]}
+                        missions={missions}
+                        agents={agents}
+                    />
+                </ConversationApprovalProvider>
             )}
             {state?.execution?.status === "blocked" && (
                 <LoadErrorAlert
@@ -861,6 +905,7 @@ function StartWorkspaceContent({
                 inputRef={inputRef}
                 onCommand={!edit ? onCommand : undefined}
                 availableCommands={[...snapshot.availableCommands, "/model"]}
+                grants={!edit ? grants : undefined}
                 onOpenModels={() => setModelPickerOpen(true)}
                 controlsOpen={modelPickerOpen}
                 modelSelector={

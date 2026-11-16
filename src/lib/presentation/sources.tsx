@@ -1,4 +1,5 @@
 import type { api } from "@convex/_generated/api";
+import { agentName } from "@convex/domain/agentIdentities";
 import type { FunctionReturnType } from "convex/server";
 import type { ConversationWorkItem } from "@/components/chat/conversation-activity";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +35,8 @@ type ContributionKind = keyof NonNullable<SourcesRow["contributions"]>["kinds"];
 type Run = NonNullable<FunctionReturnType<typeof api.researchRuns.getMine>>;
 export type SourcesPhase = Run["sourcesPhase"];
 
+const sourcesAgent = `The ${agentName("sources")}`;
+
 /** Analyst copy for the Sources phase Convex derives; every surface translates the same phase. */
 const phaseCopy: Record<
     SourcesPhase,
@@ -50,14 +53,14 @@ const phaseCopy: Record<
         label: "Working",
         outcome: "In progress",
         title: "Collecting the documentary material",
-        detail: "Sources is reading and checking documents. Outcomes settle when it hands off.",
+        detail: `${sourcesAgent} is reading and checking documents. Outcomes settle when it hands off.`,
     },
     waiting: {
         workState: "waiting",
         label: "Waiting",
         outcome: "Waiting",
         title: "Documentary preparation is waiting",
-        detail: "Sources continues when its current step can proceed. Material read so far remains inspectable.",
+        detail: `${sourcesAgent} continues when its current step can proceed. Material read so far remains inspectable.`,
     },
     paused: {
         workState: "paused",
@@ -70,8 +73,8 @@ const phaseCopy: Record<
         workState: "paused",
         label: "Decision needed",
         outcome: "Decision needed",
-        title: "Preparation reached its time limit",
-        detail: "Sources used its time window before finishing. Continue preparation to use the remaining capacity, or use what's prepared now.",
+        title: `${sourcesAgent} reached its time limit`,
+        detail: `${sourcesAgent} used its time window before finishing. Continue preparation to use the remaining capacity, or use what's prepared now.`,
     },
     completed: {
         workState: "completed",
@@ -85,14 +88,21 @@ const phaseCopy: Record<
         label: "Complete with limits",
         outcome: "Prepared with limits",
         title: "Documentary preparation completed with limits",
-        detail: "Sources handed off its material. Some needs have gaps or unfinished work. Investigation is not available yet.",
+        detail: `${sourcesAgent} handed off its material. Some needs have gaps or unfinished work. Investigation is not available yet.`,
+    },
+    ended_without_material: {
+        workState: "blocked",
+        label: "No material",
+        outcome: "No material",
+        title: "No usable material prepared",
+        detail: `${sourcesAgent} stopped without keeping any document. The documents it found remain listed as leads in Sources. Investigation is not available yet.`,
     },
     interrupted: {
         workState: "interrupted",
         label: "Interrupted",
         outcome: "Interrupted",
         title: "Documentary preparation interrupted",
-        detail: "Sources stopped before handing off its material. Documents read so far remain visible.",
+        detail: `${sourcesAgent} stopped before handing off its material. Documents read so far remain visible.`,
     },
     failed: {
         workState: "interrupted",
@@ -112,17 +122,6 @@ const phaseCopy: Record<
 
 export function sourcesPhasePresentation(phase: SourcesPhase) {
     return phaseCopy[phase];
-}
-
-/** Why Continue preparation is unavailable, in analyst terms; Use what's prepared stays available. */
-export function sourcesContinueBlockCopy(code: string) {
-    if (code === "execution_slot_unavailable")
-        return "Another of your analyses is running. Continue when it finishes, or use what's prepared now.";
-    if (code === "paid_work_disabled")
-        return "New research work is temporarily unavailable. You can use what's prepared now.";
-    if (code === "sources_settlement_requested")
-        return "You chose to use what's prepared. Sources is handing off its material.";
-    return "Preparation cannot continue right now. You can use what's prepared now.";
 }
 
 /** Documentary contributions borrow claim tones for colour only; their labels never imply an inventory class. */
@@ -516,14 +515,14 @@ export function sourcesPreparationView(
               .filter(Boolean)
               .join(" ")
         : run.sourcesPhase === "time_limit"
-          ? `Sources used its time window with ${plural(overview.reading.captured, ["document", "documents"])} read for ${needs}. Continue preparation to use the remaining capacity, or use what's prepared now.`
+          ? `${sourcesAgent} used its time window with ${plural(overview.reading.captured, ["document", "documents"])} read for ${needs}. Continue preparation to use the remaining capacity, or use what's prepared now.`
           : state === "paused"
-            ? `Sources is paused with ${plural(overview.reading.captured, ["document", "documents"])} read so far for ${needs}.`
+            ? `${sourcesAgent} is paused with ${plural(overview.reading.captured, ["document", "documents"])} read so far for ${needs}.`
             : run.sourcesPhase === "failed"
               ? `Preparation stopped because of an internal problem and cannot continue. ${plural(overview.reading.captured, ["document", "documents"])} read so far remain visible. Start a new analysis to continue.`
               : state === "interrupted"
-                ? `Sources stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} read so far remain available.`
-                : `Sources is collecting and reading material for ${needs}. Outcomes settle when it hands off.`;
+                ? `${sourcesAgent} stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} read so far remain available.`
+                : `${sourcesAgent} is collecting and reading material for ${needs}. Outcomes settle when it hands off.`;
     const families = new Map<SourcesRow["family"], "found" | "unavailable">();
     for (const row of rows) families.set(row.family, "found");
     for (const family of overview.collect.failedFamilies)

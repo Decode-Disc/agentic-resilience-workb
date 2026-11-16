@@ -16,6 +16,7 @@ import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { SOURCES_TEST_WINDOW_MINUTES } from "@/__tests__/setup/sources-mission";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 import workflowTest from "../workflows/workflow-test-register.js";
 
@@ -47,6 +48,10 @@ const inspectSourceReviewScenario = makeFunctionReference<
 >("e2eFixtures:inspectSourceReviewScenario");
 
 beforeEach(() => {
+    vi.stubEnv(
+        "SOURCES_PREPARATION_WINDOW_MINUTES",
+        String(SOURCES_TEST_WINDOW_MINUTES),
+    );
     vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
 });
 

@@ -36,6 +36,7 @@ type Env = {
   readonly E2E_FIXTURES_ENABLED: string | undefined;
   readonly OPENROUTER_API_KEY: string | undefined;
   readonly PREVIEW_CACHE_TTL_MS: string | undefined;
+  readonly SOURCES_PREPARATION_WINDOW_MINUTES: string | undefined;
   readonly SOURCE_CANDIDATE_LIMIT: string | undefined;
   readonly SOURCE_PREPARATION_INCIDENT_LIMIT: string | undefined;
   readonly SOURCE_PREPARATION_MAX_CONCURRENCY: string | undefined;

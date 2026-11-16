@@ -10,6 +10,10 @@
 
 **Spec:** [docs/brainstorming/2026-11-16-approval-requests-and-sources-time-limit.md](../brainstorming/2026-11-16-approval-requests-and-sources-time-limit.md)
 
+## Implementation status
+
+Implemented on 2026-11-16. The [verification record](../verification/2026-11-16-approval-requests-and-sources-time-limit.md) records deterministic repairs, passing protected desktop/mobile flows, passing static checks/build and the pre-existing formatting failures that prevent a successful aggregate check. Commit steps were not authorized. Reopening the real ServiceNow dossier remains a separate action requiring explicit confirmation; it was not performed.
+
 ## Global Constraints
 
 - Follow [AGENTS.md](../../AGENTS.md): English everywhere, `@/` and `@convex/` imports, generated Convex types only, validators on every Convex function argument and return, no `any`, Hugeicons through `@/components/icon`.

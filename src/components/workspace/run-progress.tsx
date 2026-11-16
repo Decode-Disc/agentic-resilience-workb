@@ -154,7 +154,7 @@ export function RunProgress({
                         </h3>
                         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                             {run.sourcesProtocol
-                                ? "Some public documents could not be retrieved. Sources shows which documents were read and which remain unavailable."
+                                ? "Some public documents could not be retrieved. The Sources view shows which documents were read and which remain unavailable."
                                 : run.lifecycleState ===
                                         "extracting_evidence" ||
                                     run.lifecycleState === "evidence_ready"

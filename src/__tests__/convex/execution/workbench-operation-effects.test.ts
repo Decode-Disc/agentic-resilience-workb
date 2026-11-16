@@ -937,12 +937,14 @@ test.each(
               }
             : name === "control_research"
               ? { kind: name, messageId, action: "resume" }
-              : {
-                    kind: "transmit_source_request",
-                    messageId,
-                    coverageRole: null,
-                    interpretedNeed: "Commercial terms.",
-                };
+              : name === "request_approval"
+                ? { kind: name, messageId, action: "pause_research" }
+                : {
+                      kind: "transmit_source_request",
+                      messageId,
+                      coverageRole: null,
+                      interpretedNeed: "Commercial terms.",
+                  };
     vi.spyOn(operation, "execute").mockResolvedValue({
         outcome: { kind: "success", value: {} },
     });

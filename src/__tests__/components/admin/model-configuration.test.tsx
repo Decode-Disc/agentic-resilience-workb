@@ -43,6 +43,9 @@ beforeEach(() => {
     convexReactHarness
         .action(api.modelConfigurationActions.prepare)
         .uses(prepare);
+    convexReactHarness
+        .action(api.modelConfigurationActions.refreshProfiles)
+        .uses(async () => ({ isDone: true, continueCursor: null }));
     convexReactHarness.query(api.modelConfiguration.list).returns({
         models: [],
         assignments: [],
@@ -163,5 +166,78 @@ test("reasoning preferences expose the recommendation and retain explicit suppor
             preference: "low",
             requestKey: expect.any(String),
         }),
+    );
+});
+
+const staleModel = {
+    _id: "stale-model",
+    _creationTime: 1,
+    currentRevisionId: "stale-revision",
+    model: "example/model",
+    label: "Stale model",
+    revision: 3,
+    status: "ready",
+    enabled: true,
+    workbenchSelectable: true,
+    compatible: false,
+    reasoning: {
+        preference: "recommended",
+        recommended: "medium",
+        effective: "medium",
+        choices: ["low", "medium", "high"],
+    },
+};
+
+test("an administrator refreshes stale input profiles through every retained revision", async () => {
+    const refresh = vi
+        .fn()
+        .mockResolvedValueOnce({ isDone: false, continueCursor: "page-2" })
+        .mockResolvedValueOnce({ isDone: true, continueCursor: null });
+    convexReactHarness
+        .action(api.modelConfigurationActions.refreshProfiles)
+        .uses(refresh);
+    convexReactHarness.query(api.modelConfiguration.list).returns({
+        models: [staleModel],
+        assignments: [],
+        agents: [],
+    });
+    render(<AdminModels />);
+    expect(
+        screen.getByText(
+            "The runtime changed since this model was prepared. Refresh its input profiles before analysts can use it.",
+        ),
+    ).toBeTruthy();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Refresh input profiles" }),
+    );
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
+    expect(refresh).toHaveBeenNthCalledWith(1, {
+        catalogId: "stale-model",
+        cursor: null,
+    });
+    expect(refresh).toHaveBeenNthCalledWith(2, {
+        catalogId: "stale-model",
+        cursor: "page-2",
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+});
+
+test("a failed profile refresh is reported without changing the model", async () => {
+    convexReactHarness
+        .action(api.modelConfigurationActions.refreshProfiles)
+        .uses(async () => {
+            throw new Error("model_profile_version_conflict");
+        });
+    convexReactHarness.query(api.modelConfiguration.list).returns({
+        models: [staleModel],
+        assignments: [],
+        agents: [],
+    });
+    render(<AdminModels />);
+    fireEvent.click(
+        screen.getByRole("button", { name: "Refresh input profiles" }),
+    );
+    expect((await screen.findByRole("alert")).textContent).toBe(
+        "The input profiles could not be refreshed. The model stays unavailable to analysts; try again.",
     );
 });

@@ -1,3 +1,4 @@
+import { executionFailureCode } from "@convex/execution/errors";
 import {
     companySearchResultLimit,
     preparationMaxConcurrency,
@@ -5,6 +6,7 @@ import {
     previewCacheTtlMs,
     sourceCandidateLimit,
     sourcePreparationEnabled,
+    sourcePreparationWindowMs,
     sourceRecommendedTarget,
 } from "@convex/resourceLimits";
 import {
@@ -15,6 +17,7 @@ import {
     MAX_PDF_PAGES,
     MAX_QUOTATION_CHARS,
     MAX_REDIRECTS,
+    requiredPositiveInteger,
 } from "@convex/resourcePolicy";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -145,4 +148,39 @@ test("exports Phase 5 locked resource limits", () => {
     expect(MAX_PASSAGES_PER_SOURCE).toBe(512);
     expect(MAX_QUOTATION_CHARS).toBe(4000);
     expect(MAX_REDIRECTS).toBe(5);
+});
+
+test("requiredPositiveInteger distinguishes a missing setting from an invalid one", () => {
+    expect(requiredPositiveInteger(undefined, "Window", 10)).toBeUndefined();
+    expect(requiredPositiveInteger("  ", "Window", 10)).toBeUndefined();
+    expect(requiredPositiveInteger("4", "Window", 10)).toBe(4);
+    for (const invalid of ["0", "1.5", "11"]) {
+        expect(() => requiredPositiveInteger(invalid, "Window", 10)).toThrow(
+            "Window must be an integer between 1 and 10",
+        );
+    }
+});
+
+test("sourcePreparationWindowMs requires a valid minute window whose milliseconds stay safe", () => {
+    vi.stubEnv("SOURCES_PREPARATION_WINDOW_MINUTES", "30");
+    expect(sourcePreparationWindowMs()).toBe(30 * 60_000);
+    for (const invalid of [
+        "",
+        "   ",
+        "0",
+        "-5",
+        "1.5",
+        String(Number.MAX_SAFE_INTEGER),
+    ]) {
+        vi.stubEnv("SOURCES_PREPARATION_WINDOW_MINUTES", invalid);
+        let caught: unknown;
+        try {
+            sourcePreparationWindowMs();
+        } catch (error) {
+            caught = error;
+        }
+        expect(executionFailureCode(caught)).toBe(
+            "sources_configuration_unavailable",
+        );
+    }
 });

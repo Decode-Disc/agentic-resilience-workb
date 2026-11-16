@@ -24,6 +24,7 @@ import {
 } from "@convex/domain/transitions";
 import { companySnapshotValidator } from "@convex/domain/validators";
 import {
+    approvalRequestIdFromOperation,
     explicitResearchControl,
     workbenchCommand,
     workbenchCommandOutcome,
@@ -33,6 +34,13 @@ import {
     readWorkbenchInstructions,
 } from "@convex/domain/workbenchInstructions";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { approvalCatalog } from "@convex/execution/approvalCatalog";
+import {
+    raiseApproval,
+    readApprovalFacts,
+    readSourcesDecisionRequestId,
+    recordCommandApproval,
+} from "@convex/execution/approvals";
 import {
     requireDossierAuthority,
     requireMissionAuthority,
@@ -40,6 +48,7 @@ import {
 import {
     analystConversationTurn,
     conversationTurnForAnalyst,
+    isApprovalReceiptMessage,
     recordControlExchange,
     requireConversationRequestKey,
     requireInstructionVersion,
@@ -51,7 +60,6 @@ import { retainOperationEffect } from "@convex/execution/operations";
 import { sessionForMission } from "@convex/execution/piStore";
 import {
     pauseResearch,
-    readResearchControlReadiness,
     researchControlConfirmation,
     resumeResearch,
 } from "@convex/execution/researchControl";
@@ -64,7 +72,10 @@ import {
 } from "@convex/modelConfiguration";
 import { reasoningEffort } from "@convex/modelConfigurationSchema";
 import { sourceDossierCandidateLimit } from "@convex/resourceLimits";
-import { WORKBENCH_OPERATION_PREVIEW_SIZE } from "@convex/resourcePolicy";
+import {
+    MAX_WORKBENCH_TURN_OPERATIONS,
+    WORKBENCH_OPERATION_PREVIEW_SIZE,
+} from "@convex/resourcePolicy";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import { startReviewPreparation } from "@convex/sourcePreparation";
@@ -349,15 +360,19 @@ export const command = mutation({
                           outcome !== "refused",
                           current,
                       );
-        return recordControlExchange(ctx, conversation, {
+        const exchange = await recordControlExchange(ctx, conversation, {
             nativeInputSequence,
             requestKey: args.requestKey,
             contentHash,
-            name: args.command,
-            expectedGeneration: args.expectedGeneration,
-            outcome,
+            exchange: {
+                kind: "command",
+                name: args.command,
+                expectedGeneration: args.expectedGeneration,
+                outcome,
+            },
             text,
         });
+        return { ...exchange, outcome };
     },
 });
 
@@ -369,6 +384,7 @@ const operationView = v.object({
     summary: v.string(),
     sourceId: v.optional(v.id("sources")),
     subject: v.optional(v.string()),
+    approvalRequestId: v.optional(v.id("approvalRequests")),
     createdAt: v.number(),
 });
 const turnView = v.object({
@@ -390,6 +406,7 @@ const operationTitles: Partial<
     search_available_material: "Search retained documentary material",
     read_in_context: "Read a passage in context",
     control_research: "Adjust research progression",
+    request_approval: "Request research approval",
     transmit_source_request: "Transmit an analyst instruction",
     discover_sources_for_need: "Find material for a research need",
     make_source_consultable: "Save a source for reading",
@@ -410,6 +427,8 @@ const operationResults: Partial<
     read_in_context: "A saved passage was read in context.",
     control_research:
         "Research control request processed. Check the current research state.",
+    request_approval:
+        "Approval request processed. Check the current research state.",
     transmit_source_request:
         "Instruction transmitted. Treatment is tracked separately.",
     discover_sources_for_need:
@@ -442,6 +461,7 @@ async function readMissionOperations(
                 const sourceId =
                     "sourceId" in r.input ? r.input.sourceId : undefined;
                 const source = sourceId ? await ctx.db.get(sourceId) : null;
+                const approvalRequestId = approvalRequestIdFromOperation(r);
                 const succeeded =
                     r.outcome?.kind === "success" && !r.adoptionRefusalCode;
                 const summary = r.adoptionRefusalCode
@@ -468,6 +488,7 @@ async function readMissionOperations(
                     summary,
                     createdAt: r.createdAt,
                     ...(sourceId ? { sourceId, subject: source?.title } : {}),
+                    ...(approvalRequestId ? { approvalRequestId } : {}),
                 };
             }),
     );
@@ -538,7 +559,7 @@ export const snapshot = query({
         run: schema.doc("researchRuns"),
         researchControlAvailable: v.boolean(),
         sourcesPhase: sourcesPhaseValidator,
-        sourcesContinueBlock: v.union(v.string(), v.null()),
+        sourcesDecisionRequestId: v.union(v.id("approvalRequests"), v.null()),
         availableCommands: v.array(workbenchCommand),
         company: v.union(companySnapshotValidator, v.null()),
         framing: v.union(schema.doc("framingRevisions"), v.null()),
@@ -673,11 +694,10 @@ export const snapshot = query({
             run,
             researchControlAvailable: supportsResearchControl(run),
             sourcesPhase,
-            sourcesContinueBlock:
-                sourcesPhase === "time_limit"
-                    ? (await readResearchControlReadiness(ctx, run, "resume"))
-                          .block
-                    : null,
+            sourcesDecisionRequestId: await readSourcesDecisionRequestId(
+                ctx,
+                run,
+            ),
             availableCommands:
                 workbenchCommandsSupported(conversation) &&
                 run.fixedFramingRevisionId &&
@@ -729,6 +749,7 @@ const messageFields = schema.tables.agentMessageDeliveries.validator.pick(
     "status",
     "createdAt",
     "responseControl",
+    "approvalRequestId",
 ).fields;
 export const history = query({
     args: {
@@ -739,6 +760,7 @@ export const history = query({
         v.object({
             ...messageFields,
             _id: v.id("agentMessageDeliveries"),
+            approvalRequestIds: v.optional(v.array(v.id("approvalRequests"))),
             text: v.string(),
             work: v.union(turnView, v.null()),
         }),
@@ -757,18 +779,26 @@ export const history = query({
             .withIndex("by_run", (q) => q.eq("runId", args.runId))
             .unique();
         if (!conversation) return { ...page, page: [] };
+        const visible = page.page.filter(
+            (message) => !isApprovalReceiptMessage(message),
+        );
+        if (visible.length === 0) return { ...page, page: [] };
         const texts = await readConversationMessages(
             ctx,
             conversation.storageRef,
-            page.page.map((m) => m.storageMessageRef),
+            visible.map((m) => m.storageMessageRef),
         );
         const turns = new Map<
             string,
             Awaited<ReturnType<typeof readTurn>> & { deferred?: boolean }
         >();
-        for (const message of page.page)
-            if (message.turnId && !turns.has(message.turnId)) {
-                const turn = await ctx.db.get(message.turnId);
+        const turnApprovals = new Map<string, Id<"approvalRequests">[]>();
+        for (const message of visible)
+            if (message.turnId) {
+                const existingTurn = turns.get(message.turnId);
+                const turn = existingTurn
+                    ? null
+                    : await ctx.db.get(message.turnId);
                 if (turn) {
                     const hasOperations =
                         turn.hasOperations ??
@@ -787,14 +817,32 @@ export const history = query({
                         operationsLimited: false,
                         deferred: hasOperations,
                     });
+                    if (turn.missionId) {
+                        const ops = await ctx.db
+                            .query("agentOperationRequests")
+                            .withIndex("by_mission", (q) =>
+                                q.eq("missionId", turn.missionId),
+                            )
+                            .take(MAX_WORKBENCH_TURN_OPERATIONS);
+                        const ids: Id<"approvalRequests">[] = [];
+                        for (const op of ops) {
+                            const id = approvalRequestIdFromOperation(op);
+                            if (id && !ids.includes(id)) ids.push(id);
+                        }
+                        if (ids.length) turnApprovals.set(turn._id, ids);
+                    }
                 }
             }
         return {
             ...page,
-            page: page.page.map((m, index) => {
+            page: visible.map((m, index) => {
                 const text = texts[index];
                 if (text === undefined)
                     throw new Error("Conversation message unavailable");
+                const approvalRequestIds =
+                    m.role === "assistant" && m.delivery === "reply" && m.turnId
+                        ? turnApprovals.get(m.turnId)
+                        : undefined;
                 return {
                     _id: m._id,
                     runId: m.runId,
@@ -807,6 +855,10 @@ export const history = query({
                     ...(m.responseControl
                         ? { responseControl: m.responseControl }
                         : {}),
+                    ...(m.approvalRequestId
+                        ? { approvalRequestId: m.approvalRequestId }
+                        : {}),
+                    ...(approvalRequestIds ? { approvalRequestIds } : {}),
                     text,
                     work: m.turnId ? (turns.get(m.turnId) ?? null) : null,
                 };
@@ -826,6 +878,7 @@ export const performInstruction = internalMutation({
         if (
             !request?.missionId ||
             (request.input.kind !== "control_research" &&
+                request.input.kind !== "request_approval" &&
                 request.input.kind !== "transmit_source_request")
         )
             throw executionError("operation_not_allowed");
@@ -865,6 +918,128 @@ export const performInstruction = internalMutation({
             throw executionError("instruction_not_authorized");
         if (request.effect?.outcome.kind === "success")
             return request.effect.outcome.valueJson;
+        if (input.kind === "request_approval") {
+            const pin = request.pin;
+            if (
+                pin?.kind !== "workbench_instruction" ||
+                pin.generation !== run.executionGeneration ||
+                pin.framingId !== run.fixedFramingRevisionId ||
+                (pin.controlRevision ?? 0) !==
+                    (run.researchControlRevision ?? 0)
+            )
+                throw executionError("version_conflict");
+            const [text] = await readConversationMessages(
+                ctx,
+                conversation.storageRef,
+                [message.storageMessageRef],
+            );
+            if (!text) throw executionError("instruction_not_authorized");
+            const control = explicitResearchControl(text);
+            const commandAction =
+                control === "pause" && input.action === "pause_research"
+                    ? ("pause_research" as const)
+                    : control === "resume" && input.action === "resume_research"
+                      ? ("resume_research" as const)
+                      : undefined;
+            if (commandAction) {
+                const block = await approvalCatalog[commandAction].availability(
+                    ctx,
+                    run,
+                );
+                if (block !== null)
+                    return retainOperationEffect(ctx, request, pin, {
+                        status: "unavailable" as const,
+                        reason: block,
+                    });
+                const requestId = await recordCommandApproval(ctx, {
+                    run,
+                    action: commandAction,
+                    requestedBy: {
+                        type: "agent",
+                        missionId: mission._id,
+                        messageId: message._id,
+                    },
+                    decidedBy: {
+                        type: "visitor",
+                        visitorId: mission.ownerVisitorId,
+                    },
+                });
+                const current = await ctx.db.get(run._id);
+                if (!current?.fixedFramingRevisionId)
+                    throw executionError("run_unavailable");
+                return retainOperationEffect(
+                    ctx,
+                    request,
+                    {
+                        kind: "workbench_instruction",
+                        generation: current.executionGeneration,
+                        framingId: current.fixedFramingRevisionId,
+                        ...(current.researchControlRevision !== undefined
+                            ? {
+                                  controlRevision:
+                                      current.researchControlRevision,
+                              }
+                            : {}),
+                    },
+                    {
+                        status: "applied" as const,
+                        action: commandAction,
+                        requestId,
+                    },
+                );
+            }
+            const facts = await readApprovalFacts(ctx, run);
+            const pending = facts.pending.find(
+                (item) =>
+                    item.action === input.action ||
+                    item.alternative === input.action,
+            );
+            if (!pending) {
+                const block = await approvalCatalog[input.action].availability(
+                    ctx,
+                    run,
+                );
+                if (block !== null)
+                    return retainOperationEffect(ctx, request, pin, {
+                        status: "unavailable" as const,
+                        reason: block,
+                    });
+            }
+            const raised = await raiseApproval(ctx, {
+                run,
+                action: input.action,
+                requestedBy: {
+                    type: "agent",
+                    missionId: mission._id,
+                    messageId: message._id,
+                },
+            });
+            const current = await ctx.db.get(run._id);
+            if (!current?.fixedFramingRevisionId)
+                throw executionError("run_unavailable");
+            return retainOperationEffect(
+                ctx,
+                request,
+                {
+                    kind: "workbench_instruction",
+                    generation: current.executionGeneration,
+                    framingId: current.fixedFramingRevisionId,
+                    ...(current.researchControlRevision !== undefined
+                        ? { controlRevision: current.researchControlRevision }
+                        : {}),
+                },
+                raised.status === "applied"
+                    ? {
+                          status: "applied" as const,
+                          action: input.action,
+                          requestId: raised.requestId,
+                      }
+                    : {
+                          status: "pending" as const,
+                          requestId: raised.requestId,
+                      },
+            );
+        }
         if (input.kind === "control_research") {
             const pin = request.pin;
             if (

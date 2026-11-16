@@ -63,7 +63,7 @@ import { type Infer, v } from "convex/values";
 import { getAgentDefinition } from "./agentCatalog";
 import { agentToolSchemas } from "./agentDefinition";
 import { requireMissionAuthority } from "./authority";
-import { submitAuthorizedMessage } from "./conversations";
+import { publishTurn, submitAuthorizedMessage } from "./conversations";
 import {
     agentBackendValidator,
     DEFAULT_AGENT_BACKEND,
@@ -1844,7 +1844,32 @@ export const reachSourcesTimeLimit = internalMutation({
     returns: v.null(),
     handler: async (ctx, args): Promise<null> => {
         const { run } = await requireLocalFixtureRun(ctx, args);
-        if (run.sourcePreparationId) return null;
+        if (run.sourcePreparationId) {
+            if (run.executionStatus !== "running") return null;
+            const mission = await readSourcesMission(ctx, run);
+            if (!mission) throw new Error("Sources mission required");
+            if (mission.workflowId)
+                await workflow.cancel(ctx, mission.workflowId as WorkflowId);
+            const expired = Date.now() - 1;
+            await ctx.db.patch(run.sourcePreparationId, {
+                deadlineAt: expired,
+                leaseExpiresAt: expired,
+            });
+            await ctx.db.patch(run._id, {
+                executionHarnessDeadlineAt: expired,
+            });
+            await ctx.db.patch(mission._id, {
+                deadlineAt: expired,
+                generation: run.executionGeneration,
+                status: "blocked",
+                blockCode: "operation_outcome_unknown",
+                workflowId: undefined,
+            });
+            await ctx.runMutation(internal.execution.handoffs.finishChild, {
+                missionId: mission._id,
+            });
+            return null;
+        }
         const envelope = activatedSourcesEnvelope();
         if (
             run.startMode !== "framed" ||
@@ -1926,6 +1951,182 @@ export const settleSourcesFixture = internalMutation({
             missionId: mission._id,
             expectedGeneration: state.generation,
         });
+        return null;
+    },
+});
+
+type PreparedRequestApprovalFixture =
+    | { kind: "done" }
+    | {
+          kind: "ready";
+          missionId: Id<"agentMissions">;
+          expectedGeneration: number;
+          operationId: Id<"agentOperationRequests">;
+          writer: string;
+          instructionVersion: number;
+      };
+
+export const prepareRequestApprovalFixture = internalMutation({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.union(
+        v.object({ kind: v.literal("done") }),
+        v.object({
+            kind: v.literal("ready"),
+            missionId: v.id("agentMissions"),
+            expectedGeneration: v.number(),
+            operationId: v.id("agentOperationRequests"),
+            writer: v.string(),
+            instructionVersion: v.number(),
+        }),
+    ),
+    handler: async (ctx, args): Promise<PreparedRequestApprovalFixture> => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        const requestKey = `${args.fixtureKey}:request-approval`;
+        const previous = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_key", (q) =>
+                q.eq("runId", run._id).eq("requestKey", requestKey),
+            )
+            .unique();
+        if (previous?.status === "processed") return { kind: "done" };
+        if (
+            run.startMode !== "framed" ||
+            !run.fixedFramingRevisionId ||
+            run.executionStatus !== "running"
+        )
+            throw new Error("A running framed fixture dossier is required");
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .unique();
+        if (
+            !conversation ||
+            conversation.activeTurnId ||
+            conversation.queuedCount
+        )
+            throw new Error("An idle simulated conversation is required");
+        const messageId = await submitAuthorizedMessage(ctx, {
+            runId: run._id,
+            requestKey,
+            delivery: "queue",
+            text: "Simulation: ask whether to pause research.",
+        });
+        await ctx.runMutation(internal.execution.conversations.pumpWorkbench, {
+            runId: run._id,
+        });
+        const current = await ctx.db.get(conversation._id);
+        const turn = current?.activeTurnId
+            ? await ctx.db.get(current.activeTurnId)
+            : null;
+        const mission = turn?.missionId
+            ? await ctx.db.get(turn.missionId)
+            : null;
+        if (
+            !turn ||
+            !mission?.piWakeToken ||
+            mission.provenance !== "simulation"
+        )
+            throw new Error("A simulated native mission is required");
+        const writer = `fixture:${requestKey}`;
+        const claimed = await ctx.runMutation(
+            internal.execution.piControl.prepare,
+            {
+                missionId: mission._id,
+                expectedGeneration: mission.generation,
+                token: mission.piWakeToken,
+                writer,
+            },
+        );
+        if (!claimed)
+            throw new Error("The simulated worker could not be claimed");
+        const operationId: Id<"agentOperationRequests"> = await ctx.runMutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: mission._id,
+                expectedGeneration: mission.generation,
+                cause: "fixture-request-approval",
+                input: {
+                    kind: "request_approval",
+                    action: "pause_research",
+                    messageId,
+                },
+                sourceMessageId: messageId,
+                interpretedNeed: "Ask the analyst whether to pause research.",
+            },
+        );
+        return {
+            kind: "ready",
+            missionId: mission._id,
+            expectedGeneration: mission.generation,
+            operationId,
+            writer,
+            instructionVersion: turn.instructionVersion,
+        };
+    },
+});
+
+export const finishRequestApprovalFixture = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        missionId: v.id("agentMissions"),
+        expectedGeneration: v.number(),
+        writer: v.string(),
+        instructionVersion: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        await requireLocalFixtureRun(ctx, args);
+        const mission = await ctx.db.get(args.missionId);
+        if (!mission || mission.generation !== args.expectedGeneration)
+            throw new Error("Simulated Workbench mission unavailable");
+        await publishTurn(
+            ctx,
+            mission,
+            "Simulation: please confirm whether to pause research.",
+            args.instructionVersion,
+        );
+        await ctx.db.patch(mission._id, { status: "completed" });
+        await ctx.runMutation(internal.execution.piControl.closeWorker, {
+            missionId: mission._id,
+            expectedGeneration: args.expectedGeneration,
+            writer: args.writer,
+            nativeSettled: true,
+        });
+        return null;
+    },
+});
+
+/** Enqueues and dispatches request_approval on a simulated Workbench mission so the browser tests the conversation approval card without calling a model. */
+export const requestApprovalFixture = internalAction({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.null(),
+    handler: async (ctx, args): Promise<null> => {
+        await ctx.runQuery(internal.execution.fixtures.authorize, {});
+        const prepared = await ctx.runMutation(
+            internal.execution.fixtures.prepareRequestApprovalFixture,
+            args,
+        );
+        if (prepared.kind === "done") return null;
+        const outcome = await ctx.runAction(
+            internal.execution.operations.dispatch,
+            {
+                requestId: prepared.operationId,
+                expectedGeneration: prepared.expectedGeneration,
+            },
+        );
+        if (outcome.kind !== "success")
+            throw new Error(`request_approval failed: ${outcome.kind}`);
+        await ctx.runMutation(
+            internal.execution.fixtures.finishRequestApprovalFixture,
+            {
+                ...args,
+                missionId: prepared.missionId,
+                expectedGeneration: prepared.expectedGeneration,
+                writer: prepared.writer,
+                instructionVersion: prepared.instructionVersion,
+            },
+        );
         return null;
     },
 });

@@ -1,13 +1,21 @@
 import { api, internal } from "@convex/_generated/api";
+import { approvalOutcomeText } from "@convex/domain/approvalCopy";
+import { submitAuthorizedMessage } from "@convex/execution/conversations";
 import { createNativeInputDelivery } from "@convex/integrations/piNativeInput";
 import { openMissionPiStorage } from "@convex/integrations/piStorage";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { getFunctionName } from "convex/server";
-import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
-import { seedWorkbench } from "@/__tests__/setup/workbench";
+import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
+import {
+    client,
+    reachTimeLimit,
+    seedExpiredPreparation,
+    seedTimeLimitConversation,
+} from "@/__tests__/setup/sources-time-limit";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 // Research starts run through the Sources mission; there is no corpus-approval fallback.
 beforeEach(() => activateSourcesMission());
@@ -605,4 +613,91 @@ test("the composer only offers control commands supported by the current convers
             })
         ).availableCommands,
     ).toEqual([]);
+});
+
+test("an approval decision is recorded as a control exchange for the native history", async () => {
+    const f = await seedExpiredPreparation();
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    await f.t.run(async (ctx) => {
+        const visitor = await ctx.db.get(f.visitorId);
+        assert(visitor);
+        await ctx.db.patch(visitor.invitationId, { slotKey: "analyst-4" });
+    });
+    const contextId = await f.t.mutation(
+        internal.runWorkspace.openBrowserTestContext,
+        {
+            slotKey: "analyst-4",
+            contextKey: "approval-native-history",
+            durationMs: 60_000,
+        },
+    );
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, {
+            purpose: "browser_test",
+            browserTestContextId: contextId,
+        }),
+    );
+    await seedTimeLimitConversation(f);
+    await f.t.run((ctx) =>
+        submitAuthorizedMessage(
+            ctx,
+            {
+                runId: f.runId,
+                requestKey: "native-history-check",
+                text: "Explain the source status.",
+                delivery: "queue",
+            },
+            { type: "system" },
+        ),
+    );
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    await reachTimeLimit(f);
+
+    const { sourcesDecisionRequestId: requestId } = await client(f).query(
+        api.researchRuns.getMine,
+        { runId: f.runId },
+    );
+    assert(requestId);
+    const view = await client(f).mutation(api.execution.approvals.decide, {
+        requestId,
+        choice: "always",
+    });
+
+    const lease = await f.t.mutation(internal.execution.piStore.claim, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        writer: "approval-sync",
+    });
+    const pending = await f.t.query(
+        internal.execution.piStore.pendingControlInputs,
+        {
+            ...lease,
+            paginationOpts: { numItems: 20, cursor: null },
+        },
+    );
+    expect(pending.entries).toHaveLength(1);
+    const entry = pending.entries[0];
+    assert(entry);
+    expect(entry).toMatchObject({
+        command: "Continue preparation: always for this dossier",
+        text: approvalOutcomeText(view),
+    });
+
+    await f.t.mutation(internal.execution.piStore.recordControlInputs, {
+        ...lease,
+        messageIds: [entry.messageId],
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(entry.messageId))).toMatchObject({
+        nativeControlStatus: "recorded",
+    });
 });

@@ -103,7 +103,6 @@ export const MAX_PDF_PAGES = 400;
 export const MAX_PASSAGES_PER_SOURCE = 512;
 export const MAX_QUOTATION_CHARS = 4000;
 export const MAX_REDIRECTS = 5;
-export const SOURCE_PREPARATION_DEADLINE_MS = 15 * 60_000;
 /** Immutable research window of the existing Sources qualification contract, not a generation timeout. */
 export const SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS = 15 * 60_000;
 /** Only for inspecting historical dossiers without versioned accounting. */
@@ -150,6 +149,8 @@ export const EXECUTION_WINDOW_MS = 15 * 60 * 1000;
 export const HISTORY_PAGE_SIZE = 20;
 /** Recent operation rows per conversation/mission preview; overflow remains inspectable in history. */
 export const WORKBENCH_OPERATION_PREVIEW_SIZE = 32;
+/** Completed operations one Workbench turn may record; reaching it blocks the turn as out of context capacity. */
+export const MAX_WORKBENCH_TURN_OPERATIONS = 128;
 export const MAX_CONTEXT_BYTES = 128 * 1024;
 export const MAX_OBSERVABLE_OUTPUT_BYTES = 512 * 1024;
 export const MAX_WORKING_NOTES_BYTES = 16 * 1024;
@@ -513,6 +514,19 @@ export const CLIENT_PAGE_SIZE = {
 /** Admission ceiling for a separately authorized analysis window, never a per-call timer. */
 export const MAX_REVIEW_AUTHORITY_DURATION_MS = 15 * 60_000;
 
+/** Validate required configuration without a fallback: undefined when missing/blank, throws if invalid. */
+export function requiredPositiveInteger(
+    value: string | undefined,
+    label: string,
+    maximum: number,
+): number | undefined {
+    if (value === undefined || value.trim().length === 0) return undefined;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > maximum)
+        throw new Error(`${label} must be an integer between 1 and ${maximum}`);
+    return parsed;
+}
+
 /** Validate configuration at the caller's boundary without reading its environment. */
 export function configuredPositiveInteger(
     value: string | undefined,
@@ -520,11 +534,7 @@ export function configuredPositiveInteger(
     label: string,
     maximum = MAX_CONFIGURED_COLLECTION_LIMIT,
 ): number {
-    if (value === undefined || value.trim().length === 0) return fallback;
-    const parsed = Number(value);
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > maximum)
-        throw new Error(`${label} must be an integer between 1 and ${maximum}`);
-    return parsed;
+    return requiredPositiveInteger(value, label, maximum) ?? fallback;
 }
 
 export function resolveSourceRecommendedTarget(
@@ -578,3 +588,7 @@ export function resolvePreparationModelLimits(
         throw new Error("Combined preparation limit must be a safe integer");
     return { work, incidents };
 }
+
+/** Written justification required for administrative and recovery actions recorded in the audit log. */
+export const MIN_AUDIT_REASON_CHARS = 12;
+export const MAX_AUDIT_REASON_CHARS = 500;

@@ -1,4 +1,7 @@
-import { v } from "convex/values";
+import type { Doc, Id } from "@convex/_generated/dataModel";
+import { approvalActionValidator } from "@convex/execution/approvalContracts";
+import { type Infer, v } from "convex/values";
+import { validate } from "convex-helpers/validators";
 import { framingContentValidator } from "./framingContracts";
 import { coverageRoleValidator } from "./sourceDiscoveryRecovery";
 import {
@@ -95,6 +98,56 @@ export const controlResearchInput = v.object({
     action: v.union(v.literal("pause"), v.literal("resume")),
     messageId: v.id("agentMessageDeliveries"),
 });
+export const requestApprovalInput = v.object({
+    action: approvalActionValidator,
+    messageId: v.id("agentMessageDeliveries"),
+});
+export const requestApprovalResultValidator = v.union(
+    v.object({
+        status: v.literal("applied"),
+        action: approvalActionValidator,
+        requestId: v.id("approvalRequests"),
+    }),
+    v.object({
+        status: v.literal("pending"),
+        requestId: v.id("approvalRequests"),
+    }),
+    v.object({
+        status: v.literal("unavailable"),
+        reason: v.string(),
+    }),
+);
+
+/** The adopted result of a `request_approval` operation; owned beside its validator so no caller parses operation JSON itself. */
+export function requestApprovalResult(
+    request: Doc<"agentOperationRequests">,
+): Infer<typeof requestApprovalResultValidator> | undefined {
+    if (
+        request.input.kind !== "request_approval" ||
+        request.outcome?.kind !== "success" ||
+        request.adoptionRefusalCode
+    )
+        return undefined;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(request.outcome.valueJson);
+    } catch {
+        return undefined;
+    }
+    return validate(requestApprovalResultValidator, parsed)
+        ? parsed
+        : undefined;
+}
+
+export function approvalRequestIdFromOperation(
+    request: Doc<"agentOperationRequests">,
+): Id<"approvalRequests"> | undefined {
+    const result = requestApprovalResult(request);
+    return result && result.status !== "unavailable"
+        ? result.requestId
+        : undefined;
+}
+
 export const sourceRequestInput = v.object({
     messageId: v.id("agentMessageDeliveries"),
     interpretedNeed: v.string(),
@@ -133,6 +186,10 @@ export const workbenchSchemas = {
         v.object({
             kind: v.literal("control_research"),
             ...controlResearchInput.fields,
+        }),
+        v.object({
+            kind: v.literal("request_approval"),
+            ...requestApprovalInput.fields,
         }),
         v.object({
             kind: v.literal("transmit_source_request"),

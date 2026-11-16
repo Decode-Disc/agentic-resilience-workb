@@ -5,13 +5,13 @@ import type { FunctionReturnType } from "convex/server";
 import { type ReactNode, useState } from "react";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ConnectedApprovalCard } from "@/components/workspace/approvals/connected-approval-card";
 import {
     SourcesMatrixScreen,
     SourcesPreparationScreen,
     SourcesReaderScreen,
     type SourcesScreenFrame,
 } from "@/components/workspace/sources/sources-screens";
-import { SourcesTimeLimitDecision } from "@/components/workspace/sources/sources-time-limit-decision";
 import {
     documentaryContributionTerms,
     filterSourcesRows,
@@ -229,13 +229,17 @@ function SourcesContent({
             frame={frame}
             view={sourcesPreparationView(overview, run, rows)}
             onInspectSources={() => onSearchChange({ sourcesView: "matrix" })}
+            inspectEmphasis={
+                run.sourcesPhase === "time_limit" &&
+                run.sourcesDecisionRequestId
+                    ? "secondary"
+                    : "primary"
+            }
             actions={
-                run.sourcesPhase === "time_limit" ? (
-                    <SourcesTimeLimitDecision
-                        runId={runId}
-                        expectedGeneration={run.executionGeneration}
-                        continueBlock={run.sourcesContinueBlock}
-                        size="lg"
+                run.sourcesPhase === "time_limit" &&
+                run.sourcesDecisionRequestId ? (
+                    <ConnectedApprovalCard
+                        requestId={run.sourcesDecisionRequestId}
                     />
                 ) : undefined
             }

@@ -183,6 +183,7 @@ function qualificationModelInput(snapshot?: unknown) {
 
 export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
     id: "sources_v1",
+    identity: "sources",
     version: 4,
     contextRendering: "separated_v1",
     executionScope: "research",

@@ -3,7 +3,7 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
     internalQuery,
-    mutation,
+    type MutationCtx,
     type QueryCtx,
     query,
 } from "@convex/_generated/server";
@@ -29,7 +29,10 @@ import {
     readSourcesMission,
     reconstructQualification,
     requireSourcesPreparation,
+    type SourcesSettlementCause,
+    sourcesContinuationAvailable,
     sourcesResourceStatus,
+    sourcesSettlementNote,
 } from "@convex/domain/sources";
 import {
     documentaryContributionValidator,
@@ -53,6 +56,7 @@ import {
     processWorkbenchInstructions,
 } from "@convex/domain/workbenchInstructions";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import type { AuditActor } from "@convex/execution/approvalContracts";
 import {
     requireDossierAuthority,
     requireMissionObservationAuthority,
@@ -954,6 +958,52 @@ export const start = internalMutation({
     },
 });
 
+export const reattach = internalMutation({
+    args: {
+        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        workflowId: v.string(),
+    },
+    returns: v.object({
+        missionId: v.id("agentMissions"),
+        eventId: vEventId(),
+    }),
+    handler: async (
+        ctx,
+        args,
+    ): Promise<{ missionId: Id<"agentMissions">; eventId: EventId }> => {
+        const { run } = await requireSourcesPreparation(
+            ctx,
+            args.preparationId,
+            "settlement",
+        );
+        if (run.workflowId !== args.workflowId)
+            throw executionError("stale_execution");
+        // Continuation renews the generation, but the recovery workflow retains its completion binding.
+        await requireSettlementAuthority(ctx, run._id, run.executionGeneration);
+        const mission = await readSourcesMission(ctx, run);
+        if (
+            !mission ||
+            !("scope" in mission) ||
+            mission.scope.kind !== "sources_v1" ||
+            mission.scope.preparationId !== args.preparationId
+        )
+            throw executionError("sources_mission_unavailable");
+        const eventId = await workflow.createEvent(ctx, {
+            name: `sources:${args.preparationId}:reattach:${run.executionGeneration}`,
+            workflowId: args.workflowId as WorkflowId,
+        });
+        await ctx.runMutation(
+            internal.execution.missions.rebindCompletionEvent,
+            {
+                missionId: mission._id,
+                eventId,
+                expectedGeneration: run.executionGeneration,
+            },
+        );
+        return { missionId: mission._id, eventId };
+    },
+});
+
 export const finish = internalMutation({
     args: {
         preparationId: v.id("sourceSelectionProposalRebuilds"),
@@ -1003,9 +1053,10 @@ export const finish = internalMutation({
             return { kind: "waiting", ...(eventId ? { eventId } : {}) };
         }
         await processWorkbenchInstructions(ctx, { runId: run._id }, reads);
-        // Instructions wait during a time-limit pause; the analyst's settlement does not wait for a resumption that will not come.
+        // Settlement cannot wait for instructions when no authorized continuation remains.
         if (
             preparation.settlementRequestedAt === undefined &&
+            (await sourcesContinuationAvailable(ctx, run, preparation)) &&
             (await hasWaitingWorkbenchInstructions(ctx, run._id))
         )
             return { kind: "waiting" };
@@ -1014,6 +1065,23 @@ export const finish = internalMutation({
             preparation._id,
             "settlement",
         );
+        const settlementCause: SourcesSettlementCause | null = current.data
+            .result
+            ? null
+            : current.preparation.settlementRequestedAt !== undefined
+              ? "decision"
+              : !(await sourcesContinuationAvailable(
+                      ctx,
+                      current.run,
+                      current.preparation,
+                  ))
+                ? "allowance_exhausted"
+                : mission.blockCode === "operation_outcome_unknown"
+                  ? "outcome_unknown"
+                  : "window_ended";
+        const settlementNote = settlementCause
+            ? sourcesSettlementNote(settlementCause)
+            : "";
         const material =
             current.data.result ??
             (await completeSources(
@@ -1024,9 +1092,7 @@ export const finish = internalMutation({
                     needsRevision: current.data.needsRevision,
                     needs: current.data.needs.map((need) => ({
                         needId: need.id,
-                        unfinished: [
-                            "Sources execution ended before the remaining documentary work was completed.",
-                        ],
+                        unfinished: [settlementNote],
                         workRequestIds: current.data.work
                             .filter((w) => w.needIds.includes(need.id))
                             .map((w) => w.requestId),
@@ -1062,53 +1128,60 @@ export const finish = internalMutation({
     },
 });
 
-/** The analyst uses the material prepared before a Sources time limit: the waiting handoff settles it with its limits, without another window. */
-export const settle = mutation({
-    args: { runId: v.id("researchRuns"), expectedGeneration: v.number() },
-    returns: v.null(),
-    handler: async (ctx, args): Promise<null> => {
-        const { run, visitor } = await requireWorkspaceRun(ctx, args.runId);
-        const preparation = run.sourcePreparationId
-            ? await ctx.db.get(run.sourcePreparationId)
-            : null;
-        if (
-            preparation?.settlementRequestedAt !== undefined &&
-            run.executionGeneration === args.expectedGeneration
-        )
-            return null;
-        if (
-            run.executionStatus !== "paused" ||
-            run.pauseReason !== "sources_time_limit" ||
-            run.executionGeneration !== args.expectedGeneration ||
-            !preparation ||
-            preparation.status !== "started"
-        )
-            throw executionError("stale_execution");
-        const mission = await readSourcesMission(ctx, run);
-        await ctx.db.patch(preparation._id, {
-            settlementRequestedAt: Date.now(),
+export async function sourcesSettlementBlock(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+): Promise<string | null> {
+    if (
+        run.executionStatus !== "paused" ||
+        run.pauseReason !== "sources_time_limit" ||
+        !run.sourcePreparationId
+    )
+        return "stale_execution";
+    const preparation = await ctx.db.get(run.sourcePreparationId);
+    if (
+        preparation?.status !== "started" ||
+        preparation.settlementRequestedAt !== undefined
+    )
+        return "stale_execution";
+    return null;
+}
+
+export async function requestSourcesSettlement(
+    ctx: MutationCtx,
+    { run, actor }: { run: Doc<"researchRuns">; actor: AuditActor },
+): Promise<void> {
+    const block = await sourcesSettlementBlock(ctx, run);
+    if (block) throw executionError(block);
+    if (!run.sourcePreparationId) throw executionError("stale_execution");
+    let eventActor: NonNullable<Doc<"agentExecutionEvents">["actor"]> = {
+        type: "system",
+    };
+    if (actor.type === "visitor") {
+        const visitorId = ctx.db.normalizeId("visitors", actor.visitorId);
+        if (!visitorId) throw executionError("not_authorized");
+        eventActor = { type: "visitor", visitorId };
+    }
+    const mission = await readSourcesMission(ctx, run);
+    await ctx.db.patch(run.sourcePreparationId, {
+        settlementRequestedAt: Date.now(),
+    });
+    if (mission?.status === "blocked") {
+        // The stop becomes terminal, so the waiting handoff receives the mission and settles it.
+        await ctx.db.patch(mission._id, {
+            blockCode: "execution_deadline",
         });
-        if (mission?.status === "blocked") {
-            // The stop becomes terminal, so the waiting handoff receives the mission and settles it.
-            await ctx.db.patch(mission._id, {
-                blockCode: "execution_deadline",
-            });
-            await ctx.runMutation(internal.execution.handoffs.finishChild, {
-                missionId: mission._id,
-            });
-        }
-        await recordResearchObservation(
-            ctx,
-            run._id,
-            "sources_settlement_requested",
-            {
-                type: "visitor",
-                visitorId: visitor._id,
-            },
-        );
-        return null;
-    },
-});
+        await ctx.runMutation(internal.execution.handoffs.finishChild, {
+            missionId: mission._id,
+        });
+    }
+    await recordResearchObservation(
+        ctx,
+        run._id,
+        "sources_settlement_requested",
+        eventActor,
+    );
+}
 
 export const materialStatus = internalQuery({
     args: {

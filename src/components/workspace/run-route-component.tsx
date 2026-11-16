@@ -2,6 +2,7 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { agentName } from "@convex/domain/agentIdentities";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -60,8 +61,7 @@ function sourcesFallbackCopy(
                 state === "paused"
                     ? presentation.title
                     : "Preparing documentary sources",
-            description:
-                "Sources is gathering public documents. Its preparation appears here as soon as discovery returns.",
+            description: `The ${agentName("sources")} is gathering public documents. Its preparation appears here as soon as discovery returns.`,
         };
     return {
         title: "Documentary preparation stopped",

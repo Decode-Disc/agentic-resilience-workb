@@ -3,17 +3,16 @@ import type { ModelRoute } from "@convex/integrations/modelRouting";
 import { NATIVE_PROFILE_CATALOG } from "@convex/integrations/modelRouting";
 import { prepareNativeProfiles } from "@convex/integrations/piModelProfiles";
 import type { modelDescriptor } from "@convex/modelConfigurationSchema";
-import {
-    RESOURCE_POLICY_VERSION,
-    SOURCE_PREPARATION_DEADLINE_MS,
-} from "@convex/resourcePolicy";
+import { RESOURCE_POLICY_VERSION } from "@convex/resourcePolicy";
 import type schema from "@convex/schema";
 import type { Infer } from "convex/values";
 import type { TestConvex } from "convex-test";
+import { vi } from "vitest";
+import { SOURCES_TEST_WINDOW_MINUTES } from "./sources-mission";
 
 /** An explicit current grant for deterministic transport fixtures, evaluated at fixture creation. */
 export function modelAttemptAuthority(
-    deadlineAt = Date.now() + SOURCE_PREPARATION_DEADLINE_MS,
+    deadlineAt = Date.now() + SOURCES_TEST_WINDOW_MINUTES * 60_000,
 ) {
     return { resourcePolicy: RESOURCE_POLICY_VERSION, deadlineAt };
 }
@@ -45,6 +44,11 @@ export async function installModel(
         >
     > = {},
 ) {
+    if (process.env.SOURCES_PREPARATION_WINDOW_MINUTES === undefined)
+        vi.stubEnv(
+            "SOURCES_PREPARATION_WINDOW_MINUTES",
+            String(SOURCES_TEST_WINDOW_MINUTES),
+        );
     const userId = await t.run(async (ctx) => {
         const existing = await ctx.db
             .query("invitations")

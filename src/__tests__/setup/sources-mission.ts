@@ -1,9 +1,9 @@
-import { vi } from "vitest";
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
 import { SOURCE_RETRIEVAL_VERSION } from "@convex/domain/sourceRetrievalPolicy";
 import { initializeSources } from "@convex/domain/sources";
+import { vi } from "vitest";
 import { seedInspectedEvidence } from "./source-preparation";
 
 /** Declares an already-adopted read for capacity/history fixtures; reading behavior tests dispatch the real operation. */
@@ -78,14 +78,24 @@ export const sourcesTestEnvelope = {
     controls: 20,
 };
 
+export const SOURCES_TEST_WINDOW_MINUTES = 15;
+
 /** Ordinary starts require explicit Sources activation; tests that start research opt in here. Pair with `vi.unstubAllEnvs()`. */
 export function activateSourcesMission(envelope = sourcesTestEnvelope) {
     vi.stubEnv("SOURCES_MISSION_ENABLED", "true");
     vi.stubEnv("SOURCES_MISSION_ENVELOPE", JSON.stringify(envelope));
+    vi.stubEnv(
+        "SOURCES_PREPARATION_WINDOW_MINUTES",
+        String(SOURCES_TEST_WINDOW_MINUTES),
+    );
 }
 
 /** Real mission/capture fixtures share the public operation path; no provider is called. */
 export async function seedCapturedSources(options: { text?: string } = {}) {
+    vi.stubEnv(
+        "SOURCES_PREPARATION_WINDOW_MINUTES",
+        String(SOURCES_TEST_WINDOW_MINUTES),
+    );
     const f = await seedInspectedEvidence(options);
     const preparationId = await f.t.run(async (ctx) => {
         const run = await ctx.db.get(f.runId);

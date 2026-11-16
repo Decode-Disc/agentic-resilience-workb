@@ -21,9 +21,9 @@ import {
     researchRunLifecycleValidator,
     workflowStepKeyValidator,
 } from "./domain/validators";
+import { readSourcesDecisionRequestId } from "./execution/approvals";
 import {
     applyRequestedResearchPause,
-    readResearchControlReadiness,
     recordResearchObservation,
 } from "./execution/researchControl";
 import { readWorkspace, requireWorkspaceRun } from "./runWorkspace";
@@ -386,12 +386,10 @@ export const getMine = query({
             ...projection,
             executionGeneration: run.executionGeneration,
             sourcesPhase,
-            // Continue is offered disabled with its reason before any attempt; Resume still enforces it.
-            sourcesContinueBlock:
-                sourcesPhase === "time_limit"
-                    ? (await readResearchControlReadiness(ctx, run, "resume"))
-                          .block
-                    : null,
+            sourcesDecisionRequestId: await readSourcesDecisionRequestId(
+                ctx,
+                run,
+            ),
             corpusRevisionStatus: revision?.status,
             canStartNewCorpusRevision: canStartNewCorpusRevision(
                 run,

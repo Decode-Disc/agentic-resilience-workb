@@ -81,3 +81,30 @@ test.each([
 ] as const)("Sources phase case %#", (run, preparation, mission, phase) => {
     expect(sourcesPreparationPhase(run, preparation, mission)).toBe(phase);
 });
+
+test("a handover that keeps no document ends without material", () => {
+    expect(
+        sourcesPreparationPhase(
+            { lifecycleState: "sources_prepared", executionStatus: "idle" },
+            { status: "blocked" },
+            null,
+        ),
+    ).toBe("ended_without_material");
+    expect(
+        sourcesPreparationPhase(
+            { lifecycleState: "sources_prepared", executionStatus: "idle" },
+            { status: "partial" },
+            null,
+        ),
+    ).toBe("completed_with_limits");
+    expect(
+        sourcesPreparationPhase(
+            {
+                lifecycleState: "awaiting_source_review",
+                executionStatus: "paused",
+            },
+            { status: "blocked" },
+            null,
+        ),
+    ).toBe("ended_without_material");
+});

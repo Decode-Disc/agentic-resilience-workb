@@ -3,13 +3,20 @@ import { mutation } from "./_generated/server";
 import { requireAdmin } from "./administrationAuthority";
 import { cancelRunExecution } from "./domain/runCancellation";
 import { withdrawableRun } from "./domain/runWithdrawal";
+import {
+    MAX_AUDIT_REASON_CHARS,
+    MIN_AUDIT_REASON_CHARS,
+} from "./resourcePolicy";
 
 export const restoreQuota = mutation({
     args: { runId: v.id("researchRuns"), reason: v.string() },
     returns: v.object({ restored: v.boolean() }),
     handler: async (ctx, args) => {
         const reason = args.reason.trim();
-        if (reason.length < 12 || reason.length > 500) {
+        if (
+            reason.length < MIN_AUDIT_REASON_CHARS ||
+            reason.length > MAX_AUDIT_REASON_CHARS
+        ) {
             throw new Error("Quota restoration requires a specific reason");
         }
         const admin = await requireAdmin(ctx);
@@ -59,7 +66,10 @@ export const withdrawDossier = mutation({
     returns: v.object({ withdrawn: v.boolean() }),
     handler: async (ctx, args) => {
         const reason = args.reason.trim();
-        if (reason.length < 12 || reason.length > 500) {
+        if (
+            reason.length < MIN_AUDIT_REASON_CHARS ||
+            reason.length > MAX_AUDIT_REASON_CHARS
+        ) {
             throw new Error("Dossier withdrawal requires a specific reason");
         }
         const admin = await requireAdmin(ctx);

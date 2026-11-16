@@ -1,5 +1,6 @@
 import { savedMaterialMissionFields } from "@convex/domain/savedMaterialOperations";
 import { preparationModelLimitsValidator } from "@convex/domain/sourcePreparationAuthority";
+import { auditActorValidator } from "@convex/domain/validators";
 import {
     workbenchCommand,
     workbenchCommandOutcome,
@@ -18,6 +19,12 @@ import {
     agentStateValidator,
     operationPinValidator,
 } from "./agentSchemas";
+import {
+    approvalActionValidator,
+    approvalDecisionValidator,
+    approvalRequesterValidator,
+    storedApprovalStatusValidator,
+} from "./approvalContracts";
 import {
     agentBackendValidator,
     agentDefinitionIdValidator,
@@ -253,6 +260,13 @@ export const executionTables = {
         nativeControlStatus: v.optional(
             v.union(v.literal("pending"), v.literal("recorded")),
         ),
+        approvalRequestId: v.optional(v.id("approvalRequests")),
+        approvalDecision: v.optional(
+            v.object({
+                requestId: v.id("approvalRequests"),
+                confirmationMessageId: v.id("agentMessageDeliveries"),
+            }),
+        ),
         requestKey: v.string(),
         contentHash: v.string(),
         role: v.union(v.literal("user"), v.literal("assistant")),
@@ -261,6 +275,7 @@ export const executionTables = {
             v.literal("steer"),
             v.literal("reply"),
             v.literal("control"),
+            v.literal("notice"),
         ),
         status: v.union(
             v.literal("queued"),
@@ -482,4 +497,28 @@ export const executionTables = {
         .index("by_request_and_kind", ["requestId", "kind"])
         .index("by_invocation_and_kind", ["invocationId", "kind"])
         .index("by_run", ["runId"]),
+    approvalRequests: defineTable({
+        runId: v.id("researchRuns"),
+        action: approvalActionValidator,
+        alternative: v.optional(approvalActionValidator),
+        requestedBy: approvalRequesterValidator,
+        expectedGeneration: v.number(),
+        status: storedApprovalStatusValidator,
+        decision: v.optional(approvalDecisionValidator),
+        createdAt: v.number(),
+    })
+        .index("by_run_and_status", ["runId", "status"])
+        .index("by_run_action_generation", [
+            "runId",
+            "action",
+            "expectedGeneration",
+        ]),
+    approvalGrants: defineTable({
+        runId: v.id("researchRuns"),
+        action: approvalActionValidator,
+        grantedBy: auditActorValidator,
+        grantedAt: v.number(),
+        revokedAt: v.optional(v.number()),
+        revokedBy: v.optional(auditActorValidator),
+    }).index("by_run_and_action", ["runId", "action"]),
 };

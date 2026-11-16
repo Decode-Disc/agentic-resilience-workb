@@ -3,16 +3,53 @@ import {
     awaitResearchControl,
     recordResearchObservation,
 } from "@convex/execution/researchControl";
-import { vResultValidator, vWorkflowId } from "@convex-dev/workflow";
+import {
+    type EventId,
+    vResultValidator,
+    vWorkflowId,
+    type WorkflowCtx,
+} from "@convex-dev/workflow";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import {
     corpusRevisionApproved,
     evidenceSufficiencyDecided,
     workflow,
 } from "./workflow";
+
+async function awaitSourcesHandoff(
+    step: WorkflowCtx,
+    args: {
+        preparationId: Id<"sourceSelectionProposalRebuilds">;
+        eventId: EventId;
+        executionGeneration: number;
+        checkpoint: () => Promise<number>;
+    },
+): Promise<null> {
+    const terminal = await step.awaitEvent({
+        id: args.eventId,
+        validator: v.object({ missionId: v.id("agentMissions") }),
+    });
+    let executionGeneration = await args.checkpoint();
+    while (true) {
+        const pending = await step.runMutation(internal.sourcesMission.finish, {
+            preparationId: args.preparationId,
+            missionId: terminal.missionId,
+            expectedGeneration: executionGeneration,
+        });
+        if (!pending) break;
+        if (pending.eventId)
+            await step.awaitEvent({
+                id: pending.eventId,
+                validator: v.null(),
+            });
+        executionGeneration = await args.checkpoint();
+    }
+    return null;
+}
 
 export const run = workflow
     .define({
@@ -22,6 +59,11 @@ export const run = workflow
             prepareSources: v.optional(v.boolean()),
             sourcesEnvelope: v.optional(sourcesEnvelopeValidator),
             controlled: v.optional(v.boolean()),
+            reattachSources: v.optional(
+                v.object({
+                    preparationId: v.id("sourceSelectionProposalRebuilds"),
+                }),
+            ),
         },
         returns: v.null(),
     })
@@ -33,7 +75,23 @@ export const run = workflow
                     step,
                     args.runId,
                 );
+            return executionGeneration;
         };
+        if (args.reattachSources) {
+            const reattached = await step.runMutation(
+                internal.sourcesMission.reattach,
+                {
+                    preparationId: args.reattachSources.preparationId,
+                    workflowId: step.workflowId,
+                },
+            );
+            return awaitSourcesHandoff(step, {
+                preparationId: args.reattachSources.preparationId,
+                eventId: reattached.eventId,
+                executionGeneration,
+                checkpoint,
+            });
+        }
         await checkpoint();
         const availability = await step.runAction(
             internal.companyResolution.revalidateRun,
@@ -96,29 +154,12 @@ export const run = workflow
                     workflowId: step.workflowId,
                 },
             );
-            const terminal = await step.awaitEvent({
-                id: started.eventId,
-                validator: v.object({ missionId: v.id("agentMissions") }),
+            return awaitSourcesHandoff(step, {
+                preparationId,
+                eventId: started.eventId,
+                executionGeneration,
+                checkpoint,
             });
-            await checkpoint();
-            while (true) {
-                const pending = await step.runMutation(
-                    internal.sourcesMission.finish,
-                    {
-                        preparationId,
-                        missionId: terminal.missionId,
-                        expectedGeneration: executionGeneration,
-                    },
-                );
-                if (!pending) break;
-                if (pending.eventId)
-                    await step.awaitEvent({
-                        id: pending.eventId,
-                        validator: v.null(),
-                    });
-                await checkpoint();
-            }
-            return null;
         }
         while (true) {
             await checkpoint();

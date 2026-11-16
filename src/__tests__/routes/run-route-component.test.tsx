@@ -152,7 +152,6 @@ test.each([
         canStartNewCorpusRevision: false,
         executionGeneration: 1,
         sourcesPhase: "collecting",
-        sourcesContinueBlock: null,
         providerFailures: [{ service: "exa", errorCode: "http_503" }],
         updatedAt: 2,
     });
@@ -187,7 +186,6 @@ test("a run that failed before Sources prepared material is reported as stopped,
         lifecycleState: "discovering_sources",
         executionStatus: "failed",
         sourcesPhase: "failed",
-        sourcesContinueBlock: null,
         providerFailures: [],
         updatedAt: 2,
     });

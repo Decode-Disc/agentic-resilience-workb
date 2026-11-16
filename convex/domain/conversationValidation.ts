@@ -15,6 +15,7 @@ export const conversationValidationDefinition: AgentDefinition & {
     id: "conversation_validation_v1";
 } = {
     id: "conversation_validation_v1",
+    identity: "workbench",
     version: 2,
     contextRendering: "separated_v1",
     executionScope: "conversation",

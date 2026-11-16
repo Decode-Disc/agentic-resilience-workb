@@ -1,5 +1,6 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
+import type { AgentIdentityId } from "@convex/domain/agentIdentities";
 import type { Infer, Validator } from "convex/values";
 import type {
     agentCompletionValidator,
@@ -46,6 +47,7 @@ export type AgentProgressMission = WithoutAccounting<Doc<"agentMissions">>;
 /** Definitions supply business rules; only the executor can change lifecycle or accounting. */
 export type AgentDefinition = {
     id: AgentScope["kind"];
+    identity: AgentIdentityId;
     version: number;
     authority: string;
     executionScope: ExecutionScope;

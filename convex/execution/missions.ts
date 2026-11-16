@@ -146,20 +146,17 @@ export const start = internalMutation({
             run.purpose === "browser_test" && run.browserTestContextId
                 ? await ctx.db.get(run.browserTestContextId)
                 : null;
+        const scopeDeadlineAt =
+            executionScope === "research"
+                ? (run.executionHarnessDeadlineAt ?? preparation?.deadlineAt)
+                : undefined;
         const deadlineAt = Math.min(
             run.purpose === "browser_test"
                 ? (browserContext?.expiresAt ?? now)
                 : Infinity,
-            (executionScope === "research"
-                ? run.executionHarnessDeadlineAt
-                : undefined) ??
-                Math.min(
-                    (await readCampaignResearchDeadline(ctx, run)) ??
-                        now + EXECUTION_WINDOW_MS,
-                    executionScope === "research"
-                        ? (preparation?.deadlineAt ?? Infinity)
-                        : Infinity,
-                ),
+            scopeDeadlineAt ??
+                (await readCampaignResearchDeadline(ctx, run)) ??
+                now + EXECUTION_WINDOW_MS,
         );
         if (deadlineAt <= now) throw executionError("execution_deadline");
         if (executionScope === "research")
@@ -438,5 +435,34 @@ export const resume = internalMutation({
             cause: "authorized_continuation",
         });
         return id;
+    },
+});
+
+export const rebindCompletionEvent = internalMutation({
+    args: {
+        missionId: v.id("agentMissions"),
+        eventId: vEventId(),
+        expectedGeneration: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args): Promise<null> => {
+        const mission = await ctx.db.get(args.missionId);
+        if (!mission) throw executionError("mission_unavailable");
+        const { run } = await requireDossierAuthority(ctx, mission.runId);
+        if (run.executionGeneration !== args.expectedGeneration)
+            throw executionError("stale_execution");
+        await ctx.db.patch(mission._id, {
+            completionEventId: args.eventId,
+            completionNotified: false,
+        });
+        if (
+            ["completed", "cancelled", "blocked"].includes(mission.status) &&
+            !isRecoverableInterruption(mission)
+        ) {
+            await ctx.runMutation(internal.execution.handoffs.finishChild, {
+                missionId: mission._id,
+            });
+        }
+        return null;
     },
 });

@@ -1,4 +1,5 @@
 import type { api } from "@convex/_generated/api";
+import { agentName } from "@convex/domain/agentIdentities";
 import type { FunctionReturnType } from "convex/server";
 import type { ConversationWorkItem } from "@/components/chat/conversation-activity";
 import type { ConversationTurnSnapshot } from "@/components/chat/conversation-turn";
@@ -90,7 +91,7 @@ export function workbenchFailureCopy(code?: string) {
         code === "configuration_unavailable" ||
         code === "paid_work_disabled"
     )
-        return "Framing assistance is not available yet. Your dossier and messages are saved. You can edit the scope and questions directly, or send another message later.";
+        return `The ${agentName("workbench")} cannot respond right now. Your dossier and messages are saved; send your message again later.`;
     if (
         code === "execution_deadline" ||
         code?.includes("budget") ||

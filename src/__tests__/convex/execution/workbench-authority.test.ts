@@ -46,23 +46,7 @@ test("native documentary registration requires an explicit routing choice", () =
     ).toBe(true);
 });
 
-test("an explicit pause does not offer resume as an alternative action", () => {
-    const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
-        framing: { fixed: true },
-        research: { controlAvailable: true },
-        conversationInstructions: {
-            messages: [
-                { messageId: "observed-message", text: "Pause research." },
-            ],
-        },
-    });
-    const control = tools.control_research;
-    assert(control);
-    expect(validate(control.inputValidator, { action: "pause" })).toBe(true);
-    expect(validate(control.inputValidator, { action: "resume" })).toBe(false);
-});
-
-test("native controls offer only actions explicitly authorized by active messages", async () => {
+test("native research actions use approval requests bound to active messages", async () => {
     const { t, client, runId } = await seedWorkbench(true);
     const queued = await t.run((ctx) =>
         ctx.db
@@ -105,6 +89,7 @@ test("native controls offer only actions explicitly authorized by active message
     const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), state);
     expect(tools).toHaveProperty("transmit_source_request");
     expect(tools).not.toHaveProperty("control_research");
+    expect(tools).toHaveProperty("request_approval");
 });
 
 test.each([

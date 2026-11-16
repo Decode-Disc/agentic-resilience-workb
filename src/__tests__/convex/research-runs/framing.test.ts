@@ -362,6 +362,50 @@ test("a program left over capacity by a configuration change stays repairable an
     ).toMatchObject({ analysesReserved: 0 });
 });
 
+test.each([
+    "",
+    "abc",
+])("Start blocks an unavailable Sources window %j without consuming the dossier", async (window) => {
+    activateSourcesMission();
+    const { t, analyst, runId, save } =
+        await framingDossier("window-readiness");
+    await save(1, "one-question", ["a"]);
+    vi.stubEnv("SOURCES_PREPARATION_WINDOW_MINUTES", window);
+    const args = { runId, expectedRevision: 2, requestKey: "configured-start" };
+    await expect(
+        analyst.mutation(api.framing.startResearch, args),
+    ).rejects.toThrow("sources_configuration_unavailable");
+    expect(
+        await analyst.query(api.workbench.snapshot, { runId }),
+    ).toMatchObject({
+        researchStart: { block: "sources_configuration_unavailable" },
+    });
+    const run = await t.run((ctx) => ctx.db.get(runId));
+    expect(run).toMatchObject({
+        lifecycleState: "framing",
+        executionStatus: "idle",
+    });
+    expect(run?.fixedFramingRevisionId).toBeUndefined();
+    expect(run?.workflowId).toBeUndefined();
+    expect(run?.researchStartRequestKey).toBeUndefined();
+    expect(
+        await t.run((ctx) => ctx.db.query("visitors").first()),
+    ).toMatchObject({ analysesReserved: 0 });
+    expect(await save(2, "still-editable", ["a"])).toBe(3);
+    vi.stubEnv("SOURCES_PREPARATION_WINDOW_MINUTES", "15");
+    await analyst.mutation(api.framing.startResearch, {
+        ...args,
+        expectedRevision: 3,
+    });
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        executionStatus: "running",
+        reservationStatus: "consumed",
+    });
+    expect(
+        await t.run((ctx) => ctx.db.query("visitors").first()),
+    ).toMatchObject({ analysesReserved: 1 });
+});
+
 test("Start availability reports an inactive documentary preparation before any attempt", async () => {
     const { analyst, runId, save } = await framingDossier("inactive-readiness");
     await save(1, "one-question", ["a"]);
@@ -376,6 +420,7 @@ test("Start availability reports an inactive documentary preparation before any 
 });
 
 test("new Sources research pins its protocol while repeated Start consumes no second analysis", async () => {
+    activateSourcesMission();
     vi.stubEnv("SOURCES_MISSION_ENABLED", "true");
     vi.stubEnv(
         "SOURCES_MISSION_ENVELOPE",

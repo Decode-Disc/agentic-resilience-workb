@@ -1,11 +1,13 @@
 import type { Id } from "./_generated/dataModel";
 import { env } from "./_generated/server";
+import { executionError } from "./execution/errors";
 import {
     configuredPositiveInteger,
     DEFAULT_COMPANY_SEARCH_RESULT_LIMIT,
     DEFAULT_PREPARATION_MAX_CONCURRENCY,
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     MAX_INITIAL_SOURCE_CANDIDATES,
+    requiredPositiveInteger,
     resolvePreparationModelLimits,
     resolvePreviewCacheTtlMs,
     resolveSourceRecommendedTarget,
@@ -71,4 +73,30 @@ export function preparationModelLimits() {
         process.env.SOURCE_PREPARATION_WORK_LIMIT,
         process.env.SOURCE_PREPARATION_INCIDENT_LIMIT,
     );
+}
+
+/**
+ * Sources paid-work window per preparation and per Continue.
+ * Unit: minutes (returned in milliseconds). Source: deployment setting
+ * `SOURCES_PREPARATION_WINDOW_MINUTES`. Exhaustion: triggers the recoverable
+ * time-limit decision when remaining capacity admits continuation, or settles
+ * with limits otherwise.
+ */
+export function sourcePreparationWindowMs(): number {
+    let minutes: number | undefined;
+    try {
+        minutes = requiredPositiveInteger(
+            env.SOURCES_PREPARATION_WINDOW_MINUTES,
+            "Sources preparation window",
+            Number.MAX_SAFE_INTEGER,
+        );
+    } catch {
+        throw executionError("sources_configuration_unavailable");
+    }
+    if (minutes === undefined)
+        throw executionError("sources_configuration_unavailable");
+    const windowMs = minutes * 60_000;
+    if (!Number.isSafeInteger(windowMs))
+        throw executionError("sources_configuration_unavailable");
+    return windowMs;
 }

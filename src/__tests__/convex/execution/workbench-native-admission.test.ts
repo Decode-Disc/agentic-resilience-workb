@@ -229,7 +229,8 @@ test("a domain change before admission rebuilds the offered tools from the admit
         inputs[0].messages as TranscriptContext["messages"],
     ).map((tool) => tool.name);
     expect(tools).not.toContain("adjust_framing");
-    expect(tools).toContain("control_research");
+    expect(tools).toContain("request_approval");
+    expect(tools).not.toContain("control_research");
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toEqual([]);

@@ -22,6 +22,7 @@ export const executionValidationDefinition: AgentDefinition & {
     id: "execution_validation_v1";
 } = {
     id: "execution_validation_v1",
+    identity: "workbench",
     version: 2,
     contextRendering: "separated_v1",
     executionScope: "research",

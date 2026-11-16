@@ -35,11 +35,9 @@ import { buildCccShowcaseManifest } from "./fixtures/cccShowcase";
 import {
     sourceCandidateLimit,
     sourcePreparationEnabled,
+    sourcePreparationWindowMs,
 } from "./resourceLimits";
-import {
-    MAX_PASSAGES_PER_SOURCE,
-    SOURCE_PREPARATION_DEADLINE_MS,
-} from "./resourcePolicy";
+import { MAX_PASSAGES_PER_SOURCE } from "./resourcePolicy";
 import {
     BROWSER_TEST_SLOT,
     requireBrowserFixtureContext,
@@ -2742,6 +2740,7 @@ export const advanceSourcePreparationFixture = internalMutation({
                 },
                 now,
             });
+            const windowMs = sourcePreparationWindowMs();
             await ctx.db.patch(preparation._id, {
                 operationKey,
                 executionGeneration,
@@ -2749,8 +2748,8 @@ export const advanceSourcePreparationFixture = internalMutation({
                 status: "started",
                 stopCode: undefined,
                 completedAt: undefined,
-                deadlineAt: now + SOURCE_PREPARATION_DEADLINE_MS,
-                leaseExpiresAt: now + SOURCE_PREPARATION_DEADLINE_MS,
+                deadlineAt: now + windowMs,
+                leaseExpiresAt: now + windowMs,
                 progress: { phase: "reading", updatedAt: now },
                 sourceOutcomes: preparation.sourceOutcomes?.filter(
                     (outcome) => outcome.sourceId !== capture.sourceId,

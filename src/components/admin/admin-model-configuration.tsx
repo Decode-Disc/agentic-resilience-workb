@@ -197,6 +197,9 @@ function ModelCatalogue({
     const setReasoning = useMutation(
         api.modelConfiguration.setReasoningPreference,
     );
+    const refreshProfiles = useAction(
+        api.modelConfigurationActions.refreshProfiles,
+    );
     const [saving, setSaving] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     if (!config)
@@ -271,6 +274,32 @@ function ModelCatalogue({
             setSaving(null);
         }
     };
+    /** Re-measures input profiles offline for every retained revision, following each page so older dossier pins are covered. */
+    const refresh = async (entry: CatalogModel) => {
+        if (saving) return;
+        setSaving(entry._id);
+        setError(null);
+        try {
+            let cursor: string | null = null;
+            // Descending revision history ends after at most one page per revision, plus an empty terminal page.
+            for (let page = 0; page <= entry.revision; page++) {
+                const result: FunctionReturnType<
+                    typeof api.modelConfigurationActions.refreshProfiles
+                > = await refreshProfiles({ catalogId: entry._id, cursor });
+                if (result.isDone) return;
+                if (!result.continueCursor || result.continueCursor === cursor)
+                    break;
+                cursor = result.continueCursor;
+            }
+            throw new Error("Profile refresh did not complete");
+        } catch {
+            setError(
+                "The input profiles could not be refreshed. The model stays unavailable to analysts; try again.",
+            );
+        } finally {
+            setSaving(null);
+        }
+    };
     return (
         <div className="space-y-3">
             {error && (
@@ -296,19 +325,30 @@ function ModelCatalogue({
                                 {entry.status === "ready"
                                     ? entry.compatible
                                         ? "Prepared · answer quality evaluated separately"
-                                        : "Runtime changed · prepare again"
+                                        : "The runtime changed since this model was prepared. Refresh its input profiles before analysts can use it."
                                     : entry.status === "preparing"
                                       ? "Preparing compatibility checks"
                                       : "Preparation failed · review configuration and prepare again"}
                             </p>
                         </div>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={pending || !!saving}
-                            onClick={() => onEdit(entry)}>
-                            Edit configuration
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                            {entry.status === "ready" && !entry.compatible && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={pending || !!saving}
+                                    onClick={() => void refresh(entry)}>
+                                    Refresh input profiles
+                                </Button>
+                            )}
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={pending || !!saving}
+                                onClick={() => onEdit(entry)}>
+                                Edit configuration
+                            </Button>
+                        </div>
                     </div>
                     {entry.currentRevisionId && (
                         <div className="max-w-sm space-y-2">

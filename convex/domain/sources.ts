@@ -18,6 +18,7 @@ import {
 } from "@convex/resourcePolicy";
 import { getDocumentSize, type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
+import { agentName } from "./agentIdentities";
 import { readResearchContext } from "./researchContext";
 import { MAX_RESEARCH_PLAN_QUESTIONS } from "./researchPlan";
 import { sha256Hex, stableStringify } from "./sourcePassages";
@@ -157,11 +158,33 @@ export const sourcesPhaseValidator = v.union(
     v.literal("time_limit"),
     v.literal("completed"),
     v.literal("completed_with_limits"),
+    v.literal("ended_without_material"),
     v.literal("interrupted"),
     v.literal("failed"),
     v.literal("insufficient_evidence"),
 );
 export type SourcesPhase = Infer<typeof sourcesPhaseValidator>;
+
+export type SourcesSettlementCause =
+    | "decision"
+    | "allowance_exhausted"
+    | "outcome_unknown"
+    | "window_ended";
+
+/** Explains why documentary work stopped on an unfinished need, naming the Sources Agent consistently. */
+export function sourcesSettlementNote(cause: SourcesSettlementCause): string {
+    const actor = `The ${agentName("sources")}`;
+    switch (cause) {
+        case "decision":
+            return `${actor} stopped here because you chose to use what was prepared.`;
+        case "allowance_exhausted":
+            return `${actor} stopped here because the dossier's searches, retrievals or checks were used up.`;
+        case "outcome_unknown":
+            return `${actor} stopped here because the outcome of its last check is unknown.`;
+        case "window_ended":
+            return `${actor} stopped here because its time window ended.`;
+    }
+}
 
 /** The single reading of Sources progress for the workspace and Workbench. A settled preparation keeps its outcome when later work starts or fails; a limit never reads as interruption once material is handed off. */
 export function sourcesPreparationPhase(
@@ -186,7 +209,9 @@ export function sourcesPreparationPhase(
     if (settled)
         return preparation.status === "complete"
             ? "completed"
-            : "completed_with_limits";
+            : preparation.status === "blocked"
+              ? "ended_without_material"
+              : "completed_with_limits";
     if (mission?.status === "completed") return "completed";
     // A later analytical stage, including its failure, does not rewrite documentary preparation.
     if (
@@ -212,10 +237,11 @@ export function sourcesPreparationPhase(
         run.lifecycleState === "awaiting_source_review" &&
         preparation?.status !== "started"
     )
-        return preparation?.status === "partial" ||
-            preparation?.status === "blocked"
-            ? "completed_with_limits"
-            : "completed";
+        return preparation?.status === "blocked"
+            ? "ended_without_material"
+            : preparation?.status === "partial"
+              ? "completed_with_limits"
+              : "completed";
     if (run.pauseReason === "analyst") return "paused";
     if (run.executionStatus === "running") return "collecting";
     return "waiting";

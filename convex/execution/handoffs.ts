@@ -143,13 +143,10 @@ export const finishChild = internalMutation({
     args: { missionId: v.id("agentMissions") },
     returns: v.null(),
     handler: async (ctx, args): Promise<null> => {
-        const retained = await ctx.db.get(args.missionId);
-        if (!retained) return null;
-        // A renewable time limit is classified before notification, so the waiting owner never settles it as complete.
-        const child = (await suspendResearchAtTimeLimit(ctx, retained))
-            ? await ctx.db.get(retained._id)
-            : retained;
+        const child = await ctx.db.get(args.missionId);
         if (!child) return null;
+        // A renewable time limit is classified before notification, so the waiting owner never settles it as complete. A standing permission applied during that classification has already notified through its own settlement.
+        if (await suspendResearchAtTimeLimit(ctx, child)) return null;
         if (
             child.completionEventId &&
             !child.completionNotified &&

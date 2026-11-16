@@ -7,7 +7,12 @@ import { HelpTip } from "./help-tip";
 import { listTransition, markerTransition } from "./motion";
 
 /** Where documentary work on a need stands; never a judgment on the questions it serves. */
-export type NeedOutcome = "in_progress" | "prepared" | "gap" | "unfinished";
+export type NeedOutcome =
+    | "in_progress"
+    | "on_hold"
+    | "prepared"
+    | "gap"
+    | "unfinished";
 
 export interface DocumentaryNeed {
     id: string;
@@ -33,12 +38,17 @@ export interface NeedQuestion {
 
 const outcomes: Record<NeedOutcome, { label: string; legend: string }> = {
     in_progress: { label: "In progress", legend: "Work under way" },
+    on_hold: {
+        label: "On hold",
+        legend: "Work stopped until research resumes",
+    },
     prepared: { label: "Prepared", legend: "Prepared material" },
     gap: { label: "Gap", legend: "Searched, nothing usable" },
     unfinished: { label: "Unfinished", legend: "Work not completed" },
 };
 const outcomeOrder: readonly NeedOutcome[] = [
     "in_progress",
+    "on_hold",
     "prepared",
     "gap",
     "unfinished",
@@ -111,25 +121,31 @@ function MarkTip({
 
 function NeedOutcomeSummary({ need }: { need: DocumentaryNeed }) {
     if (need.outcome === "gap") return <Badge tone="review">Gap</Badge>;
-    if (need.outcome === "unfinished")
-        return <Badge tone="dashed">Unfinished</Badge>;
-    if (need.outcome === "in_progress" && !need.contributions)
-        return <Badge tone="accent">In progress</Badge>;
-    const progress = need.outcome === "in_progress" && (
-        <Badge tone="accent">In progress</Badge>
-    );
-    const counts = [
-        need.documents !== undefined && `${need.documents} documents`,
-        need.contributions !== undefined &&
-            `${need.contributions} contributions`,
-    ].filter(Boolean);
+    const badge =
+        need.outcome === "in_progress" ? (
+            <Badge tone="accent">In progress</Badge>
+        ) : need.outcome === "on_hold" ? (
+            <Badge tone="dashed">On hold</Badge>
+        ) : need.outcome === "unfinished" ? (
+            <Badge tone="dashed">Unfinished</Badge>
+        ) : null;
+    const showCounts =
+        !badge || Boolean(need.documents) || Boolean(need.contributions);
+    const counts = showCounts
+        ? [
+              need.documents !== undefined && `${need.documents} documents`,
+              need.contributions !== undefined &&
+                  `${need.contributions} contributions`,
+          ].filter(Boolean)
+        : [];
+    if (!counts.length && !need.flag && badge) return badge;
     return (
         <span className={styles.prepared}>
             {counts.length > 0 && (
                 <span className="wb-meta">{counts.join(" · ")}</span>
             )}
             {need.flag}
-            {progress}
+            {badge}
         </span>
     );
 }
@@ -343,7 +359,8 @@ export function DocumentaryNeeds({
                     {outcomeOrder
                         .filter(
                             (outcome) =>
-                                outcome !== "in_progress" ||
+                                (outcome !== "in_progress" &&
+                                    outcome !== "on_hold") ||
                                 needs.some((need) => need.outcome === outcome),
                         )
                         .map((outcome) => (

@@ -2,6 +2,7 @@ import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import type { AgentDefinition } from "@convex/execution/agentDefinition";
+import { readApprovalFacts } from "@convex/execution/approvals";
 import { executionFailureCode } from "@convex/execution/errors";
 import {
     readResearchControlReadiness,
@@ -135,6 +136,7 @@ export async function readWorkbenchFacts(
                 run.fixedFramingRevisionId
             ),
             actions,
+            approvals: await readApprovalFacts(ctx, run),
             phase: run.lifecycleState,
             controlAvailable: supportsResearchControl(run),
             status: run.executionStatus,

@@ -66,6 +66,7 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
     id: "saved_material_inspection_v1";
 } = {
     id: SAVED_MATERIAL_DEFINITION_ID,
+    identity: "workbench",
     version: SAVED_MATERIAL_DEFINITION_VERSION,
     contextRendering: "separated_v1",
     executionScope: "research",

@@ -11,6 +11,7 @@ const app = defineApp({
         SOURCE_PREPARATION_WORK_LIMIT: v.optional(v.string()),
         SOURCE_PREPARATION_INCIDENT_LIMIT: v.optional(v.string()),
         SOURCE_PREPARATION_MAX_CONCURRENCY: v.optional(v.string()),
+        SOURCES_PREPARATION_WINDOW_MINUTES: v.optional(v.string()),
         SOURCE_RETRIEVAL_MODE: v.optional(
             v.union(v.literal("lexical"), v.literal("hybrid")),
         ),
