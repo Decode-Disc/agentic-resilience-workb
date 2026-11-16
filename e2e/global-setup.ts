@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -25,6 +26,22 @@ function pickUnusedCode(used: Set<string>, start: number): string {
 }
 
 export default async function globalSetup(config: FullConfig) {
+    // Each Actions shard owns a fresh loopback deployment and disposable keys.
+    if (process.env.GITHUB_ACTIONS === "true") {
+        const { privateKey, publicKey } = generateKeyPairSync("rsa", {
+            modulusLength: 2048,
+        });
+        await setConvexEnvironment({
+            JWT_PRIVATE_KEY: privateKey
+                .export({ type: "pkcs8", format: "pem" })
+                .toString()
+                .trimEnd()
+                .replace(/\n/g, " "),
+            JWKS: JSON.stringify({
+                keys: [{ use: "sig", ...publicKey.export({ format: "jwk" }) }],
+            }),
+        });
+    }
     const material = JSON.parse(
         readFileSync(
             resolve(process.cwd(), "invitation-otp-codes.local"),

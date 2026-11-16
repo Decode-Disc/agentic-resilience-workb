@@ -111,6 +111,56 @@ describe("createSecCompanyResolver", () => {
         );
     });
 
+    test("reuses the cached SEC company index across searches within its TTL without reserving additional SEC requests", async () => {
+        let currentTime = 1_000;
+        const fetchImplementation = vi.fn(async () =>
+            new Response(
+                JSON.stringify({
+                    fields: ["cik", "name", "ticker", "exchange"],
+                    data: [
+                        [1373715, "ServiceNow, Inc.", "NOW", "NYSE"],
+                        [
+                            1818201,
+                            "CCC Intelligent Solutions Holdings Inc.",
+                            "CCCS",
+                            "Nasdaq",
+                        ],
+                    ],
+                }),
+                { status: 200 },
+            ),
+        );
+        const reserveRequest = vi.fn(async () => undefined);
+        const recordAttempt = vi.fn(async (attempt: { status: string }) => ({
+            shouldExecute: attempt.status === "started",
+        }));
+        const resolver = createSecCompanyResolver({
+            fetch: fetchImplementation,
+            now: () => currentTime,
+            userAgent: "Evidence Workbench test@example.com",
+            reserveRequest,
+            recordAttempt,
+            companyIndexCacheTtlMs: 60_000,
+        });
+
+        await expect(resolver.search("serv")).resolves.toEqual([
+            expect.objectContaining({ ticker: "NOW" }),
+        ]);
+        currentTime = 5_000;
+        await expect(resolver.search("cccs")).resolves.toEqual([
+            expect.objectContaining({ ticker: "CCCS" }),
+        ]);
+        expect(reserveRequest).toHaveBeenCalledTimes(1);
+        expect(fetchImplementation).toHaveBeenCalledTimes(1);
+
+        currentTime = 62_000;
+        await expect(resolver.search("now")).resolves.toEqual([
+            expect.objectContaining({ ticker: "NOW" }),
+        ]);
+        expect(reserveRequest).toHaveBeenCalledTimes(2);
+        expect(fetchImplementation).toHaveBeenCalledTimes(2);
+    });
+
     test.each([
         "service now",
         "servce now",

@@ -735,6 +735,94 @@ describe("StartResearchPage", () => {
         ).toBeTruthy();
         expect(screen.queryByText(/drop files/i)).toBeNull();
     });
+
+    it("debounces search-as-you-type without clicking Search and ignores 1-character non-numeric queries", async () => {
+        searchCompanies.mockResolvedValue(companyCandidates);
+        renderWithInvitationAccess(<StartResearchPage />);
+
+        fireEvent.click(
+            screen.getByRole("button", { name: /Company to investigate/i }),
+        );
+        const searchInput = screen.getByRole("textbox", {
+            name: /^Company search$/i,
+        });
+
+        fireEvent.change(searchInput, { target: { value: "C" } });
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        expect(searchCompanies).not.toHaveBeenCalled();
+
+        fireEvent.change(searchInput, { target: { value: "CC" } });
+        fireEvent.change(searchInput, { target: { value: "CCC" } });
+        expect(searchCompanies).not.toHaveBeenCalled();
+
+        await waitFor(
+            () =>
+                expect(searchCompanies).toHaveBeenCalledWith({
+                    query: "CCC",
+                }),
+            { timeout: 1_500 },
+        );
+        expect(searchCompanies).toHaveBeenCalledTimes(1);
+        expect(
+            await screen.findByRole("option", {
+                name: /CCC Intelligent Solutions Holdings Inc\..*CCCS.*NASDAQ.*CIK 1818201/i,
+            }),
+        ).toBeTruthy();
+    });
+
+    it("ignores stale search results when the user continues typing", async () => {
+        let resolveStaleSearch:
+            | ((value: typeof companyCandidates) => void)
+            | undefined;
+        searchCompanies
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        resolveStaleSearch = resolve;
+                    }),
+            )
+            .mockResolvedValueOnce([
+                {
+                    legalName: "ServiceNow, Inc.",
+                    ticker: "NOW",
+                    exchange: "NYSE",
+                    cik: "1373715",
+                },
+            ]);
+        renderWithInvitationAccess(<StartResearchPage />);
+
+        fireEvent.click(
+            screen.getByRole("button", { name: /Company to investigate/i }),
+        );
+        const searchInput = screen.getByRole("textbox", {
+            name: /^Company search$/i,
+        });
+
+        fireEvent.change(searchInput, { target: { value: "CC" } });
+        fireEvent.click(screen.getByRole("button", { name: /^Search$/i }));
+        expect(searchCompanies).toHaveBeenCalledWith({ query: "CC" });
+
+        fireEvent.change(searchInput, { target: { value: "ServiceNow" } });
+        await waitFor(
+            () =>
+                expect(searchCompanies).toHaveBeenCalledWith({
+                    query: "ServiceNow",
+                }),
+            { timeout: 1_500 },
+        );
+
+        resolveStaleSearch?.(companyCandidates);
+        expect(
+            await screen.findByRole("option", {
+                name: /ServiceNow, Inc\..*NOW.*NYSE.*CIK 1373715/i,
+            }),
+        ).toBeTruthy();
+        expect(
+            screen.queryByRole("option", {
+                name: /CCC Intelligent Solutions Holdings Inc\./i,
+            }),
+        ).toBeNull();
+    });
 });
 
 describe("StartAnalysisRoute", () => {

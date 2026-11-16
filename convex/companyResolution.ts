@@ -385,30 +385,44 @@ export const search = action({
                 ),
             })),
         ];
-        // Best-effort enrichment: resolve marketing website URLs for the top
-        // candidates so the search dropdown can render favicons. Wrapped in a
-        // try-catch so a transient Exa failure never breaks the core search
-        // flow — candidates without a websiteUrl fall back to the building
-        // icon in the UI.
+        // Best-effort cache-only enrichment during search/typeahead: reuse any
+        // website already persisted on the `companies` record (or SEC IR root)
+        // without consuming the user's Exa website quota on intermediate
+        // search keystrokes. External Exa resolution runs on `preflight`.
         try {
-            const ENRICH_LIMIT = 3;
-            for (
-                let i = 0;
-                i < Math.min(ENRICH_LIMIT, results.length);
-                i += 1
-            ) {
-                const candidate = results[i];
-                if (candidate && !candidate.websiteUrl) {
-                    const resolution = await resolveWebsiteForCompany(
-                        ctx,
-                        authUserId,
-                        candidate,
-                    );
-                    if (resolution) {
+            const uncachedCiks = results
+                .filter((candidate) => !candidate.websiteUrl)
+                .map((candidate) => candidate.cik);
+            if (uncachedCiks.length > 0) {
+                const cachedEntries = await ctx.runQuery(
+                    internal.companyResolution.getWebsiteCachesByCiks,
+                    { ciks: uncachedCiks },
+                );
+                const cacheByCik = new Map(
+                    cachedEntries.map((entry) => [entry.cik, entry]),
+                );
+                for (let i = 0; i < results.length; i += 1) {
+                    const candidate = results[i];
+                    if (!candidate || candidate.websiteUrl) continue;
+                    const cached = cacheByCik.get(candidate.cik);
+                    if (cached) {
                         results[i] = {
                             ...candidate,
-                            websiteUrl: resolution.url,
-                            websiteUrlSource: resolution.source,
+                            websiteUrl: cached.websiteUrl,
+                            ...(cached.websiteUrlSource
+                                ? { websiteUrlSource: cached.websiteUrlSource }
+                                : {}),
+                        };
+                        continue;
+                    }
+                    const secWebsite = classifyIrAsWebsite(
+                        candidate.investorRelationsUrl,
+                    );
+                    if (secWebsite) {
+                        results[i] = {
+                            ...candidate,
+                            websiteUrl: secWebsite,
+                            websiteUrlSource: "sec_ir",
                         };
                     }
                 }
@@ -619,6 +633,11 @@ export const persistRunCompanyWebsite = internalMutation({
             (snapshot.websiteUrl === args.websiteUrl
                 ? snapshot.websiteUrlSource
                 : undefined);
+        const websiteResolvedAt =
+            company.websiteUrl === args.websiteUrl &&
+            company.websiteResolvedAt !== undefined
+                ? company.websiteResolvedAt
+                : now;
         const nextSnapshot = {
             ...snapshot,
             websiteUrl: args.websiteUrl,
@@ -627,6 +646,7 @@ export const persistRunCompanyWebsite = internalMutation({
         await ctx.db.patch(company._id, {
             websiteUrl: args.websiteUrl,
             websiteUrlSource: companyWebsiteUrlSource,
+            websiteResolvedAt,
             canonicalizedAt: now,
         });
         await ctx.db.patch(run._id, {
@@ -637,18 +657,15 @@ export const persistRunCompanyWebsite = internalMutation({
     },
 });
 
-const cachedWebsiteValidator = v.union(
-    v.object({
-        websiteUrl: v.string(),
-        websiteUrlSource: v.union(
-            v.literal("sec_ir"),
-            v.literal("exa"),
-            v.literal("probe"),
-        ),
-        websiteResolvedAt: v.optional(v.number()),
-    }),
-    v.null(),
-);
+const cachedWebsiteEntryValidator = v.object({
+    websiteUrl: v.string(),
+    websiteUrlSource: v.optional(
+        v.union(v.literal("sec_ir"), v.literal("exa"), v.literal("probe")),
+    ),
+    websiteResolvedAt: v.optional(v.number()),
+});
+
+const cachedWebsiteValidator = v.union(cachedWebsiteEntryValidator, v.null());
 
 export const getWebsiteCacheByCik = internalQuery({
     args: { cik: v.string() },
@@ -658,7 +675,7 @@ export const getWebsiteCacheByCik = internalQuery({
             .query("companies")
             .withIndex("by_cik", (query) => query.eq("cik", args.cik))
             .unique();
-        if (!company?.websiteUrl || !company.websiteUrlSource) {
+        if (!company?.websiteUrl) {
             return null;
         }
         return {
@@ -666,6 +683,47 @@ export const getWebsiteCacheByCik = internalQuery({
             websiteUrlSource: company.websiteUrlSource,
             websiteResolvedAt: company.websiteResolvedAt,
         };
+    },
+});
+
+export const getWebsiteCachesByCiks = internalQuery({
+    args: { ciks: v.array(v.string()) },
+    returns: v.array(
+        v.object({
+            cik: v.string(),
+            websiteUrl: v.string(),
+            websiteUrlSource: v.optional(
+                v.union(
+                    v.literal("sec_ir"),
+                    v.literal("exa"),
+                    v.literal("probe"),
+                ),
+            ),
+            websiteResolvedAt: v.optional(v.number()),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        const uniqueCiks = [...new Set(args.ciks)];
+        const entries = await Promise.all(
+            uniqueCiks.map((cik) =>
+                ctx.db
+                    .query("companies")
+                    .withIndex("by_cik", (query) => query.eq("cik", cik))
+                    .unique(),
+            ),
+        );
+        return entries.flatMap((company) =>
+            company?.websiteUrl
+                ? [
+                      {
+                          cik: company.cik,
+                          websiteUrl: company.websiteUrl,
+                          websiteUrlSource: company.websiteUrlSource,
+                          websiteResolvedAt: company.websiteResolvedAt,
+                      },
+                  ]
+                : [],
+        );
     },
 });
 
@@ -749,12 +807,13 @@ async function resolveWebsiteForCompany(
     const cachedResolution = cache
         ? {
               url: cache.websiteUrl,
-              source: cache.websiteUrlSource,
+              source: cache.websiteUrlSource ?? ("exa" as const),
           }
         : null;
     if (
-        cache?.websiteResolvedAt !== undefined &&
-        cache.websiteResolvedAt > Date.now() - WEBSITE_CACHE_TTL_MS
+        cachedResolution &&
+        (cache?.websiteResolvedAt === undefined ||
+            cache.websiteResolvedAt > Date.now() - WEBSITE_CACHE_TTL_MS)
     ) {
         return cachedResolution;
     }
@@ -799,7 +858,7 @@ async function resolveWebsiteForCompany(
         return replayedCache
             ? {
                   url: replayedCache.websiteUrl,
-                  source: replayedCache.websiteUrlSource,
+                  source: replayedCache.websiteUrlSource ?? ("exa" as const),
               }
             : cachedResolution;
     }
@@ -953,8 +1012,16 @@ export const verifyRevalidation = internalMutation({
             };
             if (companyMetadata.websiteUrl !== undefined)
                 requireCompanyWebsiteUrl(companyMetadata.websiteUrl);
+            const websiteResolvedAt =
+                company.websiteUrl === companyMetadata.websiteUrl &&
+                company.websiteResolvedAt !== undefined
+                    ? company.websiteResolvedAt
+                    : companyMetadata.websiteUrl
+                      ? now
+                      : undefined;
             await ctx.db.patch(company._id, {
                 ...companyMetadata,
+                websiteResolvedAt,
                 canonicalizedAt: now,
             });
             await ctx.db.patch(run._id, {

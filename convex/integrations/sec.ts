@@ -8,6 +8,7 @@ import {
     DEFAULT_SEC_TIMEOUT_MS,
     MAX_APPROVED_SOURCE_BYTES,
     MAX_SEC_ATTEMPTS,
+    SEC_COMPANY_INDEX_CACHE_TTL_MS,
 } from "@convex/resourcePolicy";
 import Fuse from "fuse.js";
 
@@ -39,6 +40,7 @@ type SecCompanyResolverDependencies = {
     maxAttempts?: 1 | 2 | 3;
     firstAttempt?: 1 | 2 | 3;
     retryPolicy?: "confirmed_response";
+    companyIndexCacheTtlMs?: number;
 };
 
 const MAX_FUZZY_COMPANY_SCORE = 0.45;
@@ -76,6 +78,24 @@ type CompanyIndexEntry = {
     ticker: string;
     exchange: string;
 };
+
+type CachedCompanyIndex = {
+    fetchRef: typeof globalThis.fetch;
+    expiresAt: number;
+    companies: ReadonlyArray<CompanyIndexEntry>;
+    fuse: Fuse<CompanyIndexEntry>;
+};
+
+let cachedCompanyIndex: CachedCompanyIndex | null = null;
+let inFlightCompanyIndex: {
+    fetchRef: typeof globalThis.fetch;
+    promise: Promise<CachedCompanyIndex>;
+} | null = null;
+
+export function resetSecCompanyIndexCache(): void {
+    cachedCompanyIndex = null;
+    inFlightCompanyIndex = null;
+}
 
 export type SecEvidenceSnapshot = {
     company: SecCompanyMatch;
@@ -705,18 +725,76 @@ export function createSecCompanyResolver(
         return (await inspectEvidence(cik)).company;
     }
 
+    async function loadCompanyIndex(): Promise<CachedCompanyIndex> {
+        const ttlMs =
+            dependencies.companyIndexCacheTtlMs ??
+            SEC_COMPANY_INDEX_CACHE_TTL_MS;
+        const now = dependencies.now();
+        if (
+            ttlMs > 0 &&
+            cachedCompanyIndex !== null &&
+            cachedCompanyIndex.fetchRef === dependencies.fetch &&
+            now < cachedCompanyIndex.expiresAt
+        ) {
+            return cachedCompanyIndex;
+        }
+        if (
+            ttlMs > 0 &&
+            inFlightCompanyIndex !== null &&
+            inFlightCompanyIndex.fetchRef === dependencies.fetch
+        ) {
+            return inFlightCompanyIndex.promise;
+        }
+        const loadPromise = (async () => {
+            const value = await requestJson(
+                "resolve_company",
+                "https://www.sec.gov/files/company_tickers_exchange.json",
+            );
+            const companies = parseCompanyIndex(value);
+            const fuse = new Fuse(companies, {
+                keys: ["legalName"],
+                includeScore: true,
+                threshold: 0.3,
+                ignoreLocation: true,
+                ignoreDiacritics: true,
+                minMatchCharLength: 2,
+                useTokenSearch: true,
+                tokenMatch: "all",
+            });
+            const entry: CachedCompanyIndex = {
+                fetchRef: dependencies.fetch,
+                expiresAt: dependencies.now() + Math.max(0, ttlMs),
+                companies,
+                fuse,
+            };
+            if (ttlMs > 0) {
+                cachedCompanyIndex = entry;
+            }
+            return entry;
+        })();
+        if (ttlMs > 0) {
+            inFlightCompanyIndex = {
+                fetchRef: dependencies.fetch,
+                promise: loadPromise,
+            };
+        }
+        try {
+            return await loadPromise;
+        } finally {
+            if (inFlightCompanyIndex?.promise === loadPromise) {
+                inFlightCompanyIndex = null;
+            }
+        }
+    }
+
     return {
         inspectEvidence,
         retrieveDocumentHtml,
         revalidate,
         async search(query) {
-            const value = await requestJson(
-                "resolve_company",
-                "https://www.sec.gov/files/company_tickers_exchange.json",
-            );
+            const { companies, fuse } = await loadCompanyIndex();
             const normalizedQuery = normalizeSearchText(query);
             const searchedCik = extractCikSearch(query);
-            const companies = parseCompanyIndex(value);
             const deterministicMatches = companies
                 .flatMap((entry) => {
                     const score = deterministicSearchScore(
@@ -744,16 +822,7 @@ export function createSecCompanyResolver(
                     }));
             }
 
-            const fuzzyMatches = new Fuse(companies, {
-                keys: ["legalName"],
-                includeScore: true,
-                threshold: 0.3,
-                ignoreLocation: true,
-                ignoreDiacritics: true,
-                minMatchCharLength: 2,
-                useTokenSearch: true,
-                tokenMatch: "all",
-            })
+            const fuzzyMatches = fuse
                 .search(normalizedQuery, {
                     limit: resultLimit,
                 })

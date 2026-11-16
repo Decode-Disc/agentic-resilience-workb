@@ -21,6 +21,11 @@ const searchCompanies = makeFunctionReference<
     { query: string },
     Array<{ cik: string; websiteUrl?: string }>
 >("companyResolution:search");
+const preflightCompany = makeFunctionReference<
+    "action",
+    { cik: string },
+    { company: { cik: string; websiteUrl?: string } }
+>("companyResolution:preflight");
 const originalFetch = globalThis.fetch;
 const originalSecUserAgent = process.env.SEC_USER_AGENT;
 const originalExaApiKey = process.env.EXA_API_KEY;
@@ -49,9 +54,9 @@ async function createSession(t: ReturnType<typeof convexTest>) {
 }
 
 function mockSecCompanyIndex() {
-    globalThis.fetch = vi.fn(async () =>
-        Promise.resolve(
-            new Response(
+    globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+        if (String(input).endsWith("/files/company_tickers_exchange.json")) {
+            return new Response(
                 JSON.stringify({
                     fields: ["cik", "name", "ticker", "exchange"],
                     data: [
@@ -64,9 +69,19 @@ function mockSecCompanyIndex() {
                     ],
                 }),
                 { status: 200 },
-            ),
-        ),
-    );
+            );
+        }
+        return new Response(
+            JSON.stringify({
+                cik: "0001818201",
+                name: "CCC Intelligent Solutions Holdings Inc.",
+                tickers: ["CCCS"],
+                exchanges: ["Nasdaq"],
+                filings: { recent: { accessionNumber: ["0001"] } },
+            }),
+            { status: 200 },
+        );
+    });
 }
 
 test("checks the paid-work switch before Exa website enrichment", async () => {
@@ -90,7 +105,7 @@ test("checks the paid-work switch before Exa website enrichment", async () => {
     expect(exaSearch).not.toHaveBeenCalled();
 });
 
-test("uses a fresh CIK website cache without calling Exa", async () => {
+test("uses a fresh CIK website cache without calling Exa in search or preflight", async () => {
     process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     process.env.EXA_API_KEY = "test-key";
     mockSecCompanyIndex();
@@ -118,10 +133,36 @@ test("uses a fresh CIK website cache without calling Exa", async () => {
             websiteUrl: "https://www.cccis.com/",
         }),
     ]);
+    await expect(
+        session.action(preflightCompany, { cik: "1818201" }),
+    ).resolves.toMatchObject({
+        company: {
+            cik: "1818201",
+            websiteUrl: "https://www.cccis.com/",
+        },
+    });
     expect(exaSearch).not.toHaveBeenCalled();
 });
 
-test("keeps a stale cached website when Exa refresh fails", async () => {
+test("does not call Exa during search for uncached companies to preserve Exa rate limits", async () => {
+    process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
+    process.env.EXA_API_KEY = "test-key";
+    mockSecCompanyIndex();
+    const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
+    const session = await createSession(t);
+
+    const results = await session.action(searchCompanies, { query: "CCCS" });
+    expect(results).toEqual([
+        expect.objectContaining({
+            cik: "1818201",
+        }),
+    ]);
+    expect(results[0]?.websiteUrl).toBeUndefined();
+    expect(exaSearch).not.toHaveBeenCalled();
+});
+
+test("keeps a stale cached website when Exa refresh fails during preflight", async () => {
     process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     process.env.EXA_API_KEY = "test-key";
     mockSecCompanyIndex();
@@ -143,10 +184,10 @@ test("keeps a stale cached website when Exa refresh fails", async () => {
     const session = await createSession(t);
 
     await expect(
-        session.action(searchCompanies, { query: "CCCS" }),
-    ).resolves.toEqual([
-        expect.objectContaining({ websiteUrl: "https://www.cccis.com/" }),
-    ]);
+        session.action(preflightCompany, { cik: "1818201" }),
+    ).resolves.toMatchObject({
+        company: { websiteUrl: "https://www.cccis.com/" },
+    });
     expect(exaSearch).toHaveBeenCalledOnce();
     await expect(
         t.run((ctx) =>
@@ -164,7 +205,7 @@ test("keeps a stale cached website when Exa refresh fails", async () => {
     ]);
 });
 
-test("persists a partial Exa website result and replays it from the CIK cache", async () => {
+test("persists a partial Exa website result on preflight and replays it from the CIK cache on subsequent preflight and search", async () => {
     process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     process.env.EXA_API_KEY = "test-key";
     mockSecCompanyIndex();
@@ -197,10 +238,15 @@ test("persists a partial Exa website result and replays it from the CIK cache", 
     const session = await createSession(t);
 
     await expect(
-        session.action(searchCompanies, { query: "CCCS" }),
-    ).resolves.toEqual([
-        expect.objectContaining({ websiteUrl: "https://www.cccis.com/" }),
-    ]);
+        session.action(preflightCompany, { cik: "1818201" }),
+    ).resolves.toMatchObject({
+        company: { websiteUrl: "https://www.cccis.com/" },
+    });
+    await expect(
+        session.action(preflightCompany, { cik: "1818201" }),
+    ).resolves.toMatchObject({
+        company: { websiteUrl: "https://www.cccis.com/" },
+    });
     await expect(
         session.action(searchCompanies, { query: "CCCS" }),
     ).resolves.toEqual([

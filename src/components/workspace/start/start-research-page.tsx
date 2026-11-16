@@ -78,6 +78,20 @@ const viewExitTransition = {
 
 const COMPANY_SEARCH_PAGE_SIZE = 5;
 const COMPANY_SEARCH_RESULT_LIMIT = 40;
+const COMPANY_SEARCH_DEBOUNCE_MS = 350;
+const COMPANY_SEARCH_MIN_CHARS = 2;
+
+function normalizeCompanySearchQuery(raw: string): string {
+    return raw.trim().replace(/\s+/g, " ");
+}
+
+function canAutoSearchCompanyQuery(raw: string): boolean {
+    const normalized = normalizeCompanySearchQuery(raw);
+    return (
+        normalized.length >= COMPANY_SEARCH_MIN_CHARS ||
+        /^\d+$/.test(normalized)
+    );
+}
 
 /** Owns the initial dossier journey; the composer view owns only input presentation. */
 export function StartResearchPage() {
@@ -150,21 +164,74 @@ function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
         Array<PreparedManualSource>
     >([]);
     const creationKey = useRef<string | null>(null);
+    const activeSearchKeyRef = useRef(0);
+    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastSearchedQueryRef = useRef<string | null>(null);
+    const inFlightQueryRef = useRef<string | null>(null);
 
-    const searchForCompanies = async () => {
+    const clearSearchDebounce = () => {
+        if (debounceTimerRef.current !== null) {
+            clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = null;
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (debounceTimerRef.current !== null) {
+                clearTimeout(debounceTimerRef.current);
+            }
+        };
+    }, []);
+
+    const runCompanySearch = async (
+        rawQuery: string,
+        mode: "auto" | "manual",
+    ) => {
+        clearSearchDebounce();
+
         if (!isSessionReady) {
-            setLookupError("Preparing your research workspace…");
-            setPickerOpen(true);
+            if (mode === "manual") {
+                setLookupError("Preparing your research workspace…");
+                setPickerOpen(true);
+            }
             return;
         }
 
-        const query = companyQuery.trim();
+        const query = normalizeCompanySearchQuery(rawQuery);
         if (!query) {
-            setLookupError("Enter a company name, ticker, CIK, or SEC URL.");
-            setPickerOpen(true);
+            if (mode === "manual") {
+                setLookupError("Enter a company name, ticker, CIK, or SEC URL.");
+                setPickerOpen(true);
+            }
             return;
         }
 
+        if (mode === "auto" && !canAutoSearchCompanyQuery(query)) {
+            return;
+        }
+
+        const queryKey = query.toLowerCase();
+        if (inFlightQueryRef.current === queryKey) {
+            if (mode === "manual") {
+                setPickerOpen(true);
+            }
+            return;
+        }
+        if (
+            lastSearchedQueryRef.current === queryKey &&
+            hasSearched &&
+            !lookupError
+        ) {
+            if (mode === "manual") {
+                setPickerOpen(true);
+            }
+            return;
+        }
+
+        const requestKey = activeSearchKeyRef.current + 1;
+        activeSearchKeyRef.current = requestKey;
+        inFlightQueryRef.current = queryKey;
         setLookupError(null);
         setCreationError(null);
         setIsSearching(true);
@@ -173,22 +240,86 @@ function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
 
         try {
             const results = await searchCompanies({ query });
+            if (activeSearchKeyRef.current !== requestKey) {
+                return;
+            }
+            lastSearchedQueryRef.current = queryKey;
             setCompanyCandidates([...results]);
             setHasSearched(true);
             setPickerOpen(true);
         } catch {
+            if (activeSearchKeyRef.current !== requestKey) {
+                return;
+            }
+            lastSearchedQueryRef.current = null;
             setCompanyCandidates([]);
             setLookupError("We couldn't search for companies. Try again.");
             setHasSearched(true);
         } finally {
+            if (activeSearchKeyRef.current === requestKey) {
+                inFlightQueryRef.current = null;
+                setIsSearching(false);
+            }
+        }
+    };
+
+    const searchForCompanies = async () => {
+        await runCompanySearch(companyQuery, "manual");
+    };
+
+    const handleCompanyQueryChange = (next: string) => {
+        setCompanyQuery(next);
+        setLookupError(null);
+        clearSearchDebounce();
+
+        const normalized = normalizeCompanySearchQuery(next);
+        const queryKey = normalized.toLowerCase();
+
+        if (
+            inFlightQueryRef.current !== null &&
+            inFlightQueryRef.current !== queryKey
+        ) {
+            activeSearchKeyRef.current += 1;
+            inFlightQueryRef.current = null;
             setIsSearching(false);
         }
+
+        if (!canAutoSearchCompanyQuery(normalized)) {
+            activeSearchKeyRef.current += 1;
+            inFlightQueryRef.current = null;
+            lastSearchedQueryRef.current = null;
+            setIsSearching(false);
+            setHasSearched(false);
+            setCompanyCandidates([]);
+            setCompanySearchRevision((revision) => revision + 1);
+            return;
+        }
+
+        if (
+            lastSearchedQueryRef.current === queryKey &&
+            hasSearched &&
+            !lookupError
+        ) {
+            return;
+        }
+
+        setHasSearched(false);
+        setCompanyCandidates([]);
+        if (!isSessionReady) {
+            return;
+        }
+
+        debounceTimerRef.current = setTimeout(() => {
+            debounceTimerRef.current = null;
+            void runCompanySearch(next, "auto");
+        }, COMPANY_SEARCH_DEBOUNCE_MS);
     };
 
     const selectCompany = async (candidate: CompanyCandidate) => {
         if (selectingCik) {
             return;
         }
+        clearSearchDebounce();
         setLookupError(null);
         setSelectingCik(candidate.cik);
         try {
@@ -205,6 +336,11 @@ function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
     };
 
     const clearResolution = () => {
+        clearSearchDebounce();
+        activeSearchKeyRef.current += 1;
+        inFlightQueryRef.current = null;
+        lastSearchedQueryRef.current = null;
+        setIsSearching(false);
         setResolution(null);
         setCompanyQuery("");
         setCompanyCandidates([]);
@@ -363,16 +499,9 @@ function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
                                                     resultCount={
                                                         companyCandidates.length
                                                     }
-                                                    onCompanyQueryChange={(
-                                                        next,
-                                                    ) => {
-                                                        setCompanyQuery(next);
-                                                        setHasSearched(false);
-                                                        setCompanyCandidates(
-                                                            [],
-                                                        );
-                                                        setLookupError(null);
-                                                    }}
+                                                    onCompanyQueryChange={
+                                                        handleCompanyQueryChange
+                                                    }
                                                     onClear={clearResolution}
                                                     onSearch={() =>
                                                         void searchForCompanies()
