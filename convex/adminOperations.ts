@@ -1,10 +1,11 @@
 import { hasKnownNonDispatch } from "@convex/execution/journal";
 import {
     ADMIN_BACKFILL_PAGE_MAX_ITEMS,
+    ADMIN_COUNT_LIMIT,
     ADMIN_JOURNAL_PAGE_MAX_ITEMS,
-    ADMIN_RECENT_EVENT_LIMIT as RECENT_EVENT_LIMIT,
     MAX_AUDIT_REASON_CHARS,
     MIN_AUDIT_REASON_CHARS,
+    ADMIN_RECENT_EVENT_LIMIT as RECENT_EVENT_LIMIT,
 } from "@convex/resourcePolicy";
 import type { WorkflowId } from "@convex-dev/workflow";
 import {
@@ -50,6 +51,7 @@ const runOverviewValidator = v.object({
     lifecycleState: runFields.lifecycleState,
     executionStatus: runFields.executionStatus,
     pauseReason: runFields.pauseReason,
+    completionOutcome: runFields.completionOutcome,
     createdAt: runFields.createdAt,
     updatedAt: runFields.updatedAt,
     preparation: v.optional(
@@ -641,6 +643,7 @@ async function projectOperationsRun(
         lifecycleState: run.lifecycleState,
         executionStatus: run.executionStatus,
         pauseReason: run.pauseReason,
+        completionOutcome: run.completionOutcome,
         createdAt: run.createdAt,
         updatedAt: run.updatedAt,
         preparation:
@@ -741,6 +744,47 @@ export const inspectRun = query({
             run,
             company: run.companyId ? await ctx.db.get(run.companyId) : null,
         };
+    },
+});
+
+const countResult = v.object({ count: v.number(), capped: v.boolean() });
+
+/** Counts at most `ADMIN_COUNT_LIMIT` rows, so a list total stays a bounded read; `capped` reports more. */
+async function boundedCount(rows: { take: (n: number) => Promise<unknown[]> }) {
+    const read = await rows.take(ADMIN_COUNT_LIMIT + 1);
+    return {
+        count: Math.min(read.length, ADMIN_COUNT_LIMIT),
+        capped: read.length > ADMIN_COUNT_LIMIT,
+    };
+}
+
+/** The total behind a paged dossier list of one purpose. */
+export const countRuns = query({
+    args: { purpose: runPurposeValidator },
+    returns: countResult,
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        return boundedCount(
+            ctx.db
+                .query("researchRuns")
+                .withIndex("by_purpose_and_updated_at", (q) =>
+                    q.eq("purpose", args.purpose),
+                ),
+        );
+    },
+});
+
+/** The total behind one dossier's paged provider receipts. */
+export const countRunProviderCalls = query({
+    args: { runId: v.id("researchRuns") },
+    returns: countResult,
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        return boundedCount(
+            ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", args.runId)),
+        );
     },
 });
 

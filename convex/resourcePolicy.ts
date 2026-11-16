@@ -202,6 +202,8 @@ export const RATE_LIMITS = {
 } as const;
 
 export const ADMIN_RECENT_EVENT_LIMIT = 50;
+/** Rows an administration total reads before reporting "N+"; bounds the read of a count shown beside paged lists. */
+export const ADMIN_COUNT_LIMIT = 1000;
 
 /**
  * Centralized string/payload bounds for policy evaluations and the bounded

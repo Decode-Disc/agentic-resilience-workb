@@ -1,11 +1,12 @@
 "use client";
 
 import { api } from "@convex/_generated/api";
-import { useMutation } from "convex/react";
 import type { Doc } from "@convex/_generated/dataModel";
+import { useMutation } from "convex/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { providerCostState } from "@/lib/presentation/admin";
 
 type ProviderCall = Pick<
     Doc<"providerCalls">,
@@ -26,14 +27,15 @@ export function AdminProviderBilling({ call }: { call: ProviderCall }) {
         );
         return () => clearTimeout(timer);
     }, [retryAt]);
+    const cost = providerCostState(call);
     const label =
-        call.billing?.state === "conflict"
+        cost.kind === "conflict"
             ? "Conflicting cost reports — inspect provider records"
-            : call.reportedCost !== undefined
-              ? `Cost confirmed: $${call.reportedCost}`
-              : call.billing?.state === "unavailable"
+            : cost.kind === "confirmed"
+              ? `Cost confirmed: $${cost.amount}`
+              : cost.kind === "unavailable"
                 ? "Cost unavailable"
-                : call.billing
+                : cost.kind === "checking"
                   ? "Checking cost…"
                   : "Cost not recorded";
     const retryReady = retryAt !== undefined && now >= retryAt;

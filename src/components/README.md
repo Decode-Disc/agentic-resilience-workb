@@ -112,6 +112,23 @@ The connected dossier consumer keeps persisted history and its current draft whi
 - The library EvidenceMatrix is a supplied presentation. [workspace/EvidenceMatrix](workspace/evidence-matrix.tsx) is the installed reactive evidence reader, and [EvidenceInventory](workspace/evidence-inventory.tsx) provides its connected dock/sheet. Library adoption does not replace those data owners or authorize changing their contracts.
 - The library InventoryDock can show a supplied class distribution. The installed EvidenceInventory deliberately uses the real total without that distribution; copying the gallery scene would change the accepted composition.
 
+## Administration
+
+| Need | Entry point | Responsibility and reuse boundary |
+| --- | --- | --- |
+| Compose the protected administration page | [AdminPage](admin/admin-page.tsx) | Role gate and the four sections on `DirectionAwareTabs`. [The route](../routes/workspace/_protected/admin.tsx) binds section, view and open dossier to the URL through [admin navigation](../lib/workspace/admin-navigation.ts). |
+| Show what blocks analysts | [AdminOverview](admin/admin-overview.tsx) | Attention list beside the paid work, agent models and recent spend status cards. |
+| Read dossiers, reservations and review decisions | [AdminDossiersSection](admin/admin-dossiers-section.tsx), [AdminDossierDetail](admin/admin-dossier-detail.tsx) | List beside its detail on wide screens; the same detail in a side panel on narrow ones. The list purpose is in the address and an open dossier always belongs to it; withdrawal sits in the detail header, gated by the domain `withdrawableRun` rule. |
+| Configure models and agents | [AdminModelsSection](admin/admin-models-section.tsx) | A rail of Agent models, Model catalogue and Reply check; the catalogue is one row per model. |
+| Follow provider activity and spend | [AdminProviderActivity](admin/admin-provider-activity.tsx) | Spend figures and one attempts table; each attempt opens its record. |
+| Decide what needs attention, model state and cost wording | [admin presentation](../lib/presentation/admin.ts) | `adminAttention`, `adminModelStatus`, `providerCostState` and `adminRecentSpend` are the single owners; components never re-derive these rules. |
+| Show a dossier's status anywhere | [DossierStatusBadge](dossier-status-badge.tsx) | Renders the single `dossierStatus` owner (label and tone) for admin, the dossier switcher and research progress; the dossier card maps the same tone to its pin through `dossierStatusSurface`. |
+| Show any admin state or marker | [admin status badges](admin/admin-status-badge.tsx) | The single owner of the remaining admin badge labels and tones: provider attempts, review decisions and fixed markers. |
+| Show a model's state | [AdminModelStatusBadge](admin/admin-model-status-badge.tsx) | One badge that explains its state on hover, focus or tap, used by the catalogue, agent models and the overview. |
+| Confirm an audited action | [AdminReasonDialog](admin/admin-reason-dialog.tsx) | Paid work, restoration and withdrawal share one reason-gated dialog using the server's audit reason limits. |
+| Bound a long list | [AdminScrollList](admin/admin-scroll-list.tsx), [AdminListFooter](admin/admin-pager.tsx) | Every admin list scrolls inside one shared height; its footer states what is shown out of the real total (`adminOperations.countRuns`, `countRunProviderCalls`, bounded by `ADMIN_COUNT_LIMIT`) beside Load more. |
+| Refresh a model's input profiles | [useRefreshModelProfiles](../lib/workspace/use-refresh-model-profiles.ts) | Follows every retained revision through the offline refresh action; the Overview and catalogue share it. |
+
 ## Shared primitives and style owners
 
 | Need | Existing owner | Reuse detail |

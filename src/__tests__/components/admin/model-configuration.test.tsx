@@ -11,7 +11,8 @@ vi.mock("convex/react", async () => {
 });
 
 import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
-import { AdminModels } from "@/components/admin/admin-model-configuration";
+import { AdminModels } from "@/components/admin/admin-models";
+import { AdminResponseControl } from "@/components/admin/admin-response-control";
 
 const prepare = vi.fn(async () => ({
     catalogId: "model-fixture" as Id<"modelCatalog">,
@@ -53,15 +54,17 @@ beforeEach(() => {
     });
 });
 
-test("an administrator prepares a model without choosing an upstream provider", async () => {
+test("an administrator prepares a model in a dialog without choosing an upstream provider", async () => {
     render(<AdminModels />);
+    fireEvent.click(screen.getByRole("button", { name: "Add a model" }));
+    await screen.findByRole("dialog", { name: "Add a model" });
     fireEvent.change(screen.getByLabelText("OpenRouter model ID"), {
         target: { value: "example/model" },
     });
     fireEvent.change(screen.getByLabelText("Display name"), {
         target: { value: "Example" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Prepare model" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
         expect(prepare).toHaveBeenCalledWith({
             model: "example/model",
@@ -95,7 +98,7 @@ test("coherence thresholds and activation are saved together with the observed c
     convexReactHarness
         .mutation(api.modelConfiguration.setResponseControl)
         .uses(save);
-    render(<AdminModels />);
+    render(<AdminResponseControl />);
     fireEvent.click(
         screen.getByRole("switch", {
             name: "Enable response coherence control",
@@ -107,9 +110,7 @@ test("coherence thresholds and activation are saved together with the observed c
     fireEvent.change(screen.getByLabelText("Support threshold"), {
         target: { value: "0.75" },
     });
-    fireEvent.click(
-        screen.getByRole("button", { name: "Save coherence settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
         expect(save).toHaveBeenCalledWith({
             expectedRevision: 4,
@@ -156,9 +157,13 @@ test("reasoning preferences expose the recommendation and retain explicit suppor
     });
     expect(select.textContent).toContain("Recommended");
     fireEvent.click(select);
-    const option = await screen.findByRole("option", { name: "low" });
+    const option = await screen.findByRole("option", { name: "Low" });
     option.focus();
     fireEvent.keyDown(option, { key: "Enter" });
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(
+        await screen.findByRole("button", { name: "Save changes" }),
+    );
     await waitFor(() =>
         expect(save).toHaveBeenCalledWith({
             catalogId: "reasoning-model",
@@ -202,14 +207,8 @@ test("an administrator refreshes stale input profiles through every retained rev
         agents: [],
     });
     render(<AdminModels />);
-    expect(
-        screen.getByText(
-            "The runtime changed since this model was prepared. Refresh its input profiles before analysts can use it.",
-        ),
-    ).toBeTruthy();
-    fireEvent.click(
-        screen.getByRole("button", { name: "Refresh input profiles" }),
-    );
+    expect(screen.getByText("Needs update")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Update model" }));
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
     expect(refresh).toHaveBeenNthCalledWith(1, {
         catalogId: "stale-model",
@@ -234,10 +233,76 @@ test("a failed profile refresh is reported without changing the model", async ()
         agents: [],
     });
     render(<AdminModels />);
-    fireEvent.click(
-        screen.getByRole("button", { name: "Refresh input profiles" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Update model" }));
     expect((await screen.findByRole("alert")).textContent).toBe(
-        "The input profiles could not be refreshed. The model stays unavailable to analysts; try again.",
+        "The model could not be updated. It stays unavailable to analysts; try again.",
+    );
+});
+
+test("editing a model prepares the same catalogue entry at its observed revision", async () => {
+    convexReactHarness.query(api.modelConfiguration.list).returns({
+        models: [{ ...staleModel, compatible: true }],
+        assignments: [],
+        agents: [],
+    });
+    render(<AdminModels />);
+    expect(screen.getByText("Ready")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit configuration" }));
+    await screen.findByRole("dialog", { name: "Edit Stale model" });
+    expect(
+        (screen.getByLabelText("OpenRouter model ID") as HTMLInputElement)
+            .disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+        expect(prepare).toHaveBeenCalledWith({
+            model: "example/model",
+            label: "Stale model",
+            requestKey: expect.any(String),
+            catalogId: "stale-model",
+            expectedRevision: 3,
+        }),
+    );
+});
+
+test("row changes wait for Save changes and Cancel discards them", async () => {
+    const update = vi.fn(async () => ({ revision: 4 }));
+    convexReactHarness
+        .mutation(api.modelConfiguration.updateAvailability)
+        .uses(update);
+    convexReactHarness.query(api.modelConfiguration.list).returns({
+        models: [{ ...staleModel, compatible: true }],
+        assignments: [],
+        agents: [],
+    });
+    render(<AdminModels />);
+    const availability = screen.getByRole("combobox", {
+        name: "Availability of Stale model",
+    });
+    expect(availability.textContent).toContain("Agents and chat menu");
+    const choose = async (label: string) => {
+        fireEvent.click(availability);
+        const option = await screen.findByRole("option", { name: label });
+        option.focus();
+        fireEvent.keyDown(option, { key: "Enter" });
+    };
+    await choose("Agents only");
+    expect(update).not.toHaveBeenCalled();
+    expect(await screen.findByText("Edited")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByText("Edited")).toBeNull();
+    expect(availability.textContent).toContain("Agents and chat menu");
+    await choose("Off");
+    fireEvent.click(
+        await screen.findByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() =>
+        expect(update).toHaveBeenCalledWith({
+            catalogId: "stale-model",
+            expectedRevision: 3,
+            enabled: false,
+            workbenchSelectable: false,
+            requestKey: expect.any(String),
+        }),
     );
 });

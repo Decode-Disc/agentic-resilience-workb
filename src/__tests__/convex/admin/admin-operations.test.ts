@@ -343,3 +343,77 @@ test("admin can inspect preparation configuration and dispatch evidence without 
         /OPENROUTER_API_KEY|apiKey|test-key/,
     );
 });
+
+test("counts dossiers per purpose and receipts per dossier for list totals, capped beyond the policy", async () => {
+    const { ADMIN_COUNT_LIMIT } = await import("@convex/resourcePolicy");
+    const t = convexTest({ schema, modules });
+    const { adminUserId, analystUserId } = await createVisitors(t);
+    const runId = await t.run(async (ctx) => {
+        const run = (purpose: "research" | "evaluation") =>
+            ctx.db.insert("researchRuns", {
+                purpose,
+                executionGeneration: 1,
+                lifecycleState: "draft",
+                executionStatus: "idle",
+                nextEventSequence: 1,
+                createdAt: 1,
+                updatedAt: 1,
+            });
+        const research = await run("research");
+        await run("research");
+        await run("evaluation");
+        for (let index = 0; index <= ADMIN_COUNT_LIMIT; index++)
+            await ctx.db.insert("providerCalls", {
+                runId: research,
+                service: "exa",
+                operation: "search",
+                operationKey: `count-${index}`,
+                status: "succeeded",
+                attempt: 1,
+                createdAt: index,
+            });
+        return research;
+    });
+    const admin = t.withIdentity({ subject: `${adminUserId}|admin-ops` });
+    expect(
+        await admin.query(api.adminOperations.countRuns, {
+            purpose: "research",
+        }),
+    ).toEqual({ count: 2, capped: false });
+    expect(
+        await admin.query(api.adminOperations.countRunProviderCalls, {
+            runId,
+        }),
+    ).toEqual({ count: ADMIN_COUNT_LIMIT, capped: true });
+    await expect(
+        t
+            .withIdentity({ subject: `${analystUserId}|admin-ops` })
+            .query(api.adminOperations.countRuns, { purpose: "research" }),
+    ).rejects.toThrow();
+});
+
+test("the dossier list carries the completion outcome its status label depends on", async () => {
+    const t = convexTest({ schema, modules });
+    const { adminUserId } = await createVisitors(t);
+    await t.run((ctx) =>
+        ctx.db.insert("researchRuns", {
+            purpose: "research",
+            executionGeneration: 1,
+            lifecycleState: "sources_prepared",
+            executionStatus: "idle",
+            completionOutcome: "insufficient_public_evidence",
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        }),
+    );
+    const page = await t
+        .withIdentity({ subject: `${adminUserId}|admin-ops` })
+        .query(api.adminOperations.listRunsPage, {
+            purpose: "research",
+            paginationOpts: { numItems: 5, cursor: null },
+        });
+    expect(page.page[0]?.completionOutcome).toBe(
+        "insufficient_public_evidence",
+    );
+});

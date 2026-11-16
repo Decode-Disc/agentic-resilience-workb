@@ -1,6 +1,6 @@
-import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import styles from "./framing-controls.module.css";
 import { WorkbenchIcon } from "./glyphs";
 export interface FramingChoice {

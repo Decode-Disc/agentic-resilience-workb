@@ -1,8 +1,8 @@
-import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import lightMark from "@/assets/logos/logo.png";
 import darkMark from "@/assets/logos/logo-bgdark.png";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Chip } from "./chip";
 import styles from "./cover.module.css";
 import { EvidenceBadge } from "./glyphs";

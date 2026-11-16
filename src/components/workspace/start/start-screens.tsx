@@ -1,6 +1,4 @@
 import type { AssistantRuntime } from "@assistant-ui/react";
-import { AgentIdentity } from "@/components/chat/agent-identity";
-import { SOURCES_AGENT } from "@/components/chat/conversation-agent";
 import {
     AiChat02Icon,
     ArrowLeft01Icon,
@@ -18,6 +16,7 @@ import {
     useState,
 } from "react";
 import type { GroupImperativeHandle, Layout } from "react-resizable-panels";
+import { AgentIdentity } from "@/components/chat/agent-identity";
 import {
     AgentQuestion,
     AgentQuestionDescription,
@@ -28,6 +27,7 @@ import {
     AgentQuestionOther,
     AgentQuestionTitle,
 } from "@/components/chat/agent-question";
+import { SOURCES_AGENT } from "@/components/chat/conversation-agent";
 import {
     ConversationThread,
     ConversationThreadDock,

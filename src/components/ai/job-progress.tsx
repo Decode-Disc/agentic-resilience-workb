@@ -1,13 +1,13 @@
 import {
+    AlertCircleIcon,
+    Cancel01Icon,
     CheckmarkCircle02Icon,
     Loading03Icon,
-    Cancel01Icon,
-    AlertCircleIcon,
-    PlayIcon,
     PauseIcon,
+    PlayIcon,
 } from "@hugeicons/core-free-icons";
-import Icon from "@/components/icon";
 import * as React from "react";
+import Icon from "@/components/icon";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -332,5 +332,5 @@ function StageIcon({
     );
 }
 
+export type { JobProgressProps, JobStage };
 export { JobProgress, JobProgressTrack };
-export type { JobStage, JobProgressProps };

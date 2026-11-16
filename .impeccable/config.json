@@ -21,6 +21,24 @@
         ],
         "createdAt": "2026-10-27T20:12:24.357Z",
         "reason": "Agent: DESIGN.md Typography pins locally hosted Geist Mono 400/500; preserve the user-requested exact adoption of the design system."
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-11-16T15:49:39.406Z",
+        "reason": "Agent: DESIGN.md pins Geist as the Workbench UI face; the composition mock must match the shipped font."
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist mono",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-11-16T15:49:39.413Z",
+        "reason": "Agent: DESIGN.md pins Geist Mono for identifiers; the composition mock must match the shipped font."
       }
     ]
   }

@@ -2,9 +2,9 @@ import { expect, test } from "vitest";
 
 import {
     CONVEX_CLI_ERROR,
+    type ConvexCliExecutor,
     runConvexCli,
     runConvexJson,
-    type ConvexCliExecutor,
 } from "../../../e2e/support/convex-cli";
 
 const MARKER_SECRET = "pepper-7f3c9a1b-supersecret";

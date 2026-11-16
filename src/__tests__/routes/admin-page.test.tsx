@@ -27,7 +27,49 @@ import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { AdminPage } from "@/components/admin/admin-page";
 import { Toaster } from "@/components/ui/sonner";
 
+/** Renders admin as on a wide screen, where the dossier detail sits beside its list. */
+function mockWideScreen() {
+    return vi.spyOn(window, "matchMedia").mockImplementation(
+        (query: string): MediaQueryList =>
+            Object.assign(new EventTarget(), {
+                matches: query.includes("min-width"),
+                media: query,
+                onchange: null,
+                addListener: () => undefined,
+                removeListener: () => undefined,
+            }),
+    );
+}
+
 const adminVisitor = { role: "admin", status: "active" };
+
+const preparedModel = {
+    _id: "glm",
+    _creationTime: 1,
+    currentRevisionId: "glm-revision",
+    model: "z-ai/glm-5.3-flash",
+    label: "GLM-5.3-Flash",
+    revision: 2,
+    status: "ready",
+    enabled: true,
+    workbenchSelectable: true,
+    compatible: true,
+    reasoning: {
+        preference: "recommended",
+        recommended: "high",
+        effective: "high",
+        choices: ["low", "high"],
+    },
+};
+
+const healthyModels = {
+    models: [preparedModel],
+    assignments: [{ agent: "workbench", catalogId: "glm", revision: 1 }],
+    agents: [{ agent: "workbench", label: "Workbench", implemented: true }],
+};
+
+const refreshProfiles = vi.fn();
+const dossiers = { section: "dossiers" } as const;
 
 test("administration exposes model setup separately from per-agent assignments", async () => {
     const initialize = vi.fn().mockResolvedValue({ ready: true });
@@ -63,14 +105,16 @@ test("administration exposes model setup separately from per-agent assignments",
         .uses(vi.fn());
     convexReactHarness.mutation(api.modelConfiguration.assign).uses(vi.fn());
     render(<AdminPage />);
-    fireEvent.click(await screen.findByRole("tab", { name: /^Models$/ }));
+    fireEvent.click(
+        await screen.findByRole("tab", { name: "Models & agents" }),
+    );
+    expect(await screen.findByText("Not connected yet")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: /^Model catalogue/ }));
     expect(await screen.findByText("No models configured")).toBeTruthy();
     fireEvent.click(
         screen.getByRole("button", { name: "Set up default models" }),
     );
     await waitFor(() => expect(initialize).toHaveBeenCalledWith({}));
-    fireEvent.click(screen.getByRole("tab", { name: /^Agent models$/ }));
-    expect(await screen.findByText("Not connected yet")).toBeTruthy();
 });
 
 const researchRun = {
@@ -157,7 +201,15 @@ beforeEach(() => {
     setPaidWorkEnabled.mockReset();
     restoreQuota.mockReset();
     withdrawDossier.mockReset();
+    refreshProfiles.mockReset();
+    refreshProfiles.mockResolvedValue({ isDone: true, continueCursor: null });
     convexReactHarness.query(api.visitors.current).returns(adminVisitor);
+    convexReactHarness
+        .query(api.modelConfiguration.list)
+        .returns(healthyModels as never);
+    convexReactHarness
+        .action(api.modelConfigurationActions.refreshProfiles)
+        .uses(refreshProfiles);
     convexReactHarness.query(api.adminOperations.get).returns(operations);
     convexReactHarness
         .paginatedQuery(api.adminOperations.listRunsPage)
@@ -171,6 +223,12 @@ beforeEach(() => {
             status: "Exhausted",
             loadMore: vi.fn(),
         }));
+    convexReactHarness
+        .query(api.adminOperations.countRuns)
+        .returns({ count: 1, capped: false });
+    convexReactHarness
+        .query(api.adminOperations.countRunProviderCalls)
+        .returns({ count: 2, capped: false });
     convexReactHarness
         .paginatedQuery(api.adminOperations.listRestorableRunsPage)
         .returns({
@@ -221,36 +279,42 @@ beforeEach(() => {
 });
 
 test("presents dossier identity, dates and filters by purpose", async () => {
-    render(<AdminPage />);
+    render(<AdminPage search={dossiers} />);
 
     expect(
         screen.getByRole("heading", { name: "Administration" }),
     ).toBeTruthy();
     expect(await screen.findByText("ServiceNow, Inc.")).toBeTruthy();
-    expect(screen.getByText("Waiting for review")).toBeTruthy();
-    expect(screen.getByText(/Updated .* · Created /)).toBeTruthy();
-    expect(screen.getByText("run-research")).toBeTruthy();
+    expect(screen.getByText("Review needed")).toBeTruthy();
+    expect(screen.getAllByText(/^Updated /).length).toBeGreaterThan(0);
+    expect(
+        within(screen.getByRole("tabpanel", { name: "Research" })).getByText(
+            "run-research",
+        ),
+    ).toBeTruthy();
     expect(screen.queryByText("run-evaluation")).toBeNull();
     expect(screen.getByRole("button", { name: "Status: All" })).toBeTruthy();
     expect(
-        screen.getByRole("button", { name: "Period: All time" }),
-    ).toBeTruthy();
+        screen.getAllByRole("button", { name: "Period: All time" }).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Service: All" })).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: "Benchmarks" }));
 
     expect(await screen.findByText("Zeta Labs")).toBeTruthy();
     // The inactive purpose panel leaves the tree once its exit transition ends,
-    // so only the evaluation dossier keeps an actionable inspection control.
+    // so only the evaluation dossier keeps an open control in the list.
     await waitFor(() =>
         expect(
-            screen.getAllByRole("button", { name: "Inspect dossier" }),
+            within(
+                screen.getByRole("tabpanel", { name: "Benchmarks" }),
+            ).getAllByRole("button", { name: "Open dossier" }),
         ).toHaveLength(1),
     );
 });
 
 test("keeps preparation detail behind a disclosure", async () => {
-    render(<AdminPage />);
+    render(<AdminPage search={dossiers} />);
 
     expect(
         screen.queryByText(/Assessment configuration unavailable/),
@@ -269,14 +333,16 @@ test("keeps preparation detail behind a disclosure", async () => {
 });
 
 test("opens a read-only dossier inspection with filterable receipts", async () => {
-    render(<AdminPage />);
+    render(<AdminPage search={dossiers} />);
 
     fireEvent.click(
-        await screen.findByRole("button", { name: "Inspect dossier" }),
+        (
+            await screen.findAllByRole("button", { name: "Open dossier" })
+        )[0] as HTMLElement,
     );
 
     const dialog = await screen.findByRole("dialog", {
-        name: "Dossier inspection",
+        name: "ServiceNow, Inc.",
     });
     expect(dialog.textContent).toContain("ServiceNow, Inc.");
     expect(dialog.textContent).toContain("Provider receipts");
@@ -292,21 +358,17 @@ test("opens a read-only dossier inspection with filterable receipts", async () =
     fireEvent.click(screen.getByRole("button", { name: "Status: All" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Failed" }));
 
-    expect(
-        await screen.findByText(
-            (_, element) =>
-                element?.textContent ===
-                "1 of 2 loaded receipts shown. Filters apply to loaded receipts.",
-        ),
-    ).toBeTruthy();
+    expect(await screen.findByText("1 of 2 receipts shown")).toBeTruthy();
     expect(within(dialog).queryByText("SEC public filings")).toBeNull();
 });
 
 test("filters receipts by period alongside status and service", async () => {
-    render(<AdminPage />);
+    render(<AdminPage search={dossiers} />);
 
     fireEvent.click(
-        await screen.findByRole("button", { name: "Inspect dossier" }),
+        (
+            await screen.findAllByRole("button", { name: "Open dossier" })
+        )[0] as HTMLElement,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Period: All time" }));
@@ -315,33 +377,23 @@ test("filters receipts by period alongside status and service", async () => {
     );
 
     // Both fixture receipts predate the window, so nothing matches.
-    expect(
-        await screen.findByText(
-            (_, element) =>
-                element?.textContent ===
-                "0 of 2 loaded receipts shown. Filters apply to loaded receipts.",
-        ),
-    ).toBeTruthy();
+    expect(await screen.findByText("0 of 2 receipts shown")).toBeTruthy();
 
     fireEvent.click(
         screen.getByRole("button", { name: "Period: Last 24 hours" }),
     );
     fireEvent.click(screen.getByRole("menuitemradio", { name: "All time" }));
 
-    expect(
-        await screen.findByText(
-            (_, element) =>
-                element?.textContent ===
-                "2 of 2 loaded receipts shown. Filters apply to loaded receipts.",
-        ),
-    ).toBeTruthy();
+    expect(await screen.findByText("2 of 2 receipts shown")).toBeTruthy();
 });
 
 test("opens the provider attempt dialog from a receipt", async () => {
-    render(<AdminPage />);
+    render(<AdminPage search={dossiers} />);
 
     fireEvent.click(
-        await screen.findByRole("button", { name: "Inspect dossier" }),
+        (
+            await screen.findAllByRole("button", { name: "Open dossier" })
+        )[0] as HTMLElement,
     );
     // Only the failed receipt stays after the filter, so one control matches.
     fireEvent.click(screen.getByRole("button", { name: "Status: All" }));
@@ -361,7 +413,7 @@ test("opens the provider attempt dialog from a receipt", async () => {
 test("inspects a dossier from the provider activity list", async () => {
     render(<AdminPage />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Provider activity" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Activity & spend" }));
 
     expect(
         await screen.findByText("Independent web discovery · Search"),
@@ -402,48 +454,49 @@ test("inspects a dossier from the provider activity list", async () => {
 });
 
 test("filters dossiers by status and period", async () => {
-    render(<AdminPage />);
+    render(<AdminPage search={dossiers} />);
 
     expect(await screen.findByText("ServiceNow, Inc.")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Status: All" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Complete" }));
 
+    expect(await screen.findByText("0 of 1 dossiers shown")).toBeTruthy();
     expect(
-        await screen.findByText(
-            (_, element) =>
-                element?.textContent ===
-                "0 of 1 loaded dossiers shown. Filters apply to loaded dossiers.",
+        within(screen.getByRole("tabpanel", { name: "Research" })).queryByText(
+            "run-research",
         ),
-    ).toBeTruthy();
-    expect(screen.queryByText("run-research")).toBeNull();
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Status: Complete" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "All" }));
-    fireEvent.click(screen.getByRole("button", { name: "Period: All time" }));
+    fireEvent.click(
+        screen.getAllByRole("button", {
+            name: "Period: All time",
+        })[0] as HTMLElement,
+    );
     fireEvent.click(
         screen.getByRole("menuitemradio", { name: "Last 30 days" }),
     );
 
-    expect(
-        await screen.findByText(
-            (_, element) =>
-                element?.textContent ===
-                "0 of 1 loaded dossiers shown. Filters apply to loaded dossiers.",
-        ),
-    ).toBeTruthy();
+    expect(await screen.findByText("0 of 1 dossiers shown")).toBeTruthy();
 });
 
 test("shows reserved-for-validation slots and restores an unused reservation", async () => {
-    render(<AdminPage />);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Reservations" }));
+    render(
+        <AdminPage search={{ section: "dossiers", view: "reservations" }} />,
+    );
 
     expect(await screen.findByText("Reserved for validation")).toBeTruthy();
+    const reservations = within(
+        screen
+            .getByText("Remaining reservations")
+            .closest('[data-slot="card"]') as HTMLElement,
+    );
     expect(screen.getByText("2 analyses remaining")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Quota: All" })).toBeTruthy();
     expect(
-        screen.getByRole("button", { name: "Period: All time" }),
+        reservations.getByRole("button", { name: "Period: All time" }),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Quota: All" }));
@@ -456,36 +509,26 @@ test("shows reserved-for-validation slots and restores an unused reservation", a
     await waitFor(() =>
         expect(screen.queryByText("Access slot browser-test")).toBeNull(),
     );
-    expect(
-        await screen.findByText(
-            (_, element) =>
-                element?.textContent ===
-                "1 of 2 loaded reservations shown. Filters apply to loaded reservations.",
-        ),
-    ).toBeTruthy();
+    expect(await screen.findByText("1 of 2 reservations shown")).toBeTruthy();
 
     fireEvent.click(
         screen.getByRole("button", { name: "Quota: With remaining" }),
     );
     fireEvent.click(screen.getByRole("menuitemradio", { name: "All" }));
-    fireEvent.click(screen.getByRole("button", { name: "Period: All time" }));
+    fireEvent.click(
+        reservations.getByRole("button", { name: "Period: All time" }),
+    );
     fireEvent.click(
         screen.getByRole("menuitemradio", { name: "Last 24 hours" }),
     );
 
-    expect(
-        await screen.findByText(
-            (_, element) =>
-                element?.textContent ===
-                "1 of 2 loaded reservations shown. Filters apply to loaded reservations.",
-        ),
-    ).toBeTruthy();
+    expect(await screen.findByText("1 of 2 reservations shown")).toBeTruthy();
     await waitFor(() =>
         expect(screen.queryByText("Access slot browser-test")).toBeNull(),
     );
 
     fireEvent.click(
-        screen.getByRole("button", { name: "Period: Last 24 hours" }),
+        reservations.getByRole("button", { name: "Period: Last 24 hours" }),
     );
     fireEvent.click(screen.getByRole("menuitemradio", { name: "All time" }));
 
@@ -508,22 +551,23 @@ test("shows reserved-for-validation slots and restores an unused reservation", a
 });
 
 test("names review decisions and opens the dossier inspection", async () => {
-    render(<AdminPage />);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Review decisions" }));
+    render(<AdminPage search={{ section: "dossiers", view: "reviews" }} />);
 
     expect(await screen.findByText("Source review")).toBeTruthy();
     expect(screen.getByText("Approved")).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/source_review/);
 
-    fireEvent.click(
-        await screen.findByRole("button", { name: "Inspect dossier" }),
+    const decisions = within(
+        screen
+            .getByText("Recent review decisions")
+            .closest('[data-slot="card"]') as HTMLElement,
     );
+    fireEvent.click(decisions.getByRole("button", { name: "Open dossier" }));
 
     const dialog = await screen.findByRole("dialog", {
-        name: "Dossier inspection",
+        name: "ServiceNow, Inc.",
     });
-    expect(dialog.textContent).toContain("ServiceNow, Inc.");
+    expect(dialog.textContent).toContain("Provider receipts");
 });
 
 test("confirms a paid-work change before applying it", async () => {
@@ -542,7 +586,7 @@ test("confirms a paid-work change before applying it", async () => {
     fireEvent.change(await screen.findByLabelText(/Reason for this change/i), {
         target: { value: "Pause Exa while spend is investigated." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Confirm disable" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop paid work" }));
 
     await waitFor(() =>
         expect(setPaidWorkEnabled).toHaveBeenCalledWith({
@@ -569,14 +613,12 @@ test("keeps the confirmation open and reports a failed paid-work change", async 
     fireEvent.change(await screen.findByLabelText(/Reason for this change/i), {
         target: { value: "Pause Exa while spend is investigated." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Confirm disable" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop paid work" }));
 
     expect(
         await screen.findByText(/We couldn’t update paid work/i),
     ).toBeTruthy();
-    expect(
-        screen.getByRole("dialog", { name: "Disable paid work" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Stop paid work" })).toBeTruthy();
     consoleError.mockRestore();
 });
 
@@ -616,4 +658,228 @@ test("retries administration queries after a load failure", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(screen.getByText("Administration")).toBeTruthy();
     consoleError.mockRestore();
+});
+
+test("the overview reports nothing to do on a healthy deployment", async () => {
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listRestorableRunsPage)
+        .returns({ results: [], status: "Exhausted", loadMore: vi.fn() });
+    render(<AdminPage />);
+    expect(await screen.findByText("Nothing needs attention")).toBeTruthy();
+    expect(screen.getByText("Recent spend")).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/_|compatible/);
+});
+
+test("the overview lists a restorable reservation with its next step", async () => {
+    render(<AdminPage />);
+    expect(
+        await screen.findByText("1 unused reservation can be restored"),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Review reservations" }),
+    ).toBeTruthy();
+});
+
+test("the overview refreshes a stale model an agent uses, in place", async () => {
+    convexReactHarness.query(api.modelConfiguration.list).returns({
+        ...healthyModels,
+        models: [{ ...preparedModel, compatible: false }],
+    } as never);
+    render(<AdminPage />);
+    expect(
+        await screen.findByText("GLM-5.3-Flash needs an update"),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Update model" }));
+    await waitFor(() =>
+        expect(refreshProfiles).toHaveBeenCalledWith({
+            catalogId: "glm",
+            cursor: null,
+        }),
+    );
+});
+
+test("sections and the open dossier are reported to the route", async () => {
+    const onSearchChange = vi.fn();
+    const { rerender } = render(
+        <AdminPage search={{}} onSearchChange={onSearchChange} />,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "Dossiers" }));
+    expect(onSearchChange).toHaveBeenLastCalledWith({ section: "dossiers" });
+    rerender(<AdminPage search={dossiers} onSearchChange={onSearchChange} />);
+    fireEvent.click(
+        within(screen.getByRole("tabpanel", { name: "Research" })).getByRole(
+            "button",
+            { name: "Open dossier" },
+        ),
+    );
+    expect(onSearchChange).toHaveBeenLastCalledWith({
+        section: "dossiers",
+        dossier: "run-research",
+    });
+    rerender(
+        <AdminPage
+            search={{ ...dossiers, dossier: "run-research" as never }}
+            onSearchChange={onSearchChange}
+        />,
+    );
+    expect(
+        await screen.findByRole("dialog", { name: "ServiceNow, Inc." }),
+    ).toBeTruthy();
+});
+
+test("a withdrawable dossier is withdrawn from its panel only with a reason", async () => {
+    withdrawDossier.mockResolvedValue(null);
+    convexReactHarness.query(api.adminOperations.inspectRun).returns({
+        run: {
+            _id: "run-research",
+            purpose: "research",
+            lifecycleState: "discovering_sources",
+            executionStatus: "failed",
+            ownerVisitorId: "v1",
+            reservationStatus: "consumed",
+            createdAt: 1,
+        },
+        company: { legalName: "ServiceNow, Inc." },
+    } as never);
+    render(
+        <AdminPage
+            search={{ ...dossiers, dossier: "run-research" as never }}
+        />,
+    );
+    const panel = await screen.findByRole("dialog", {
+        name: "ServiceNow, Inc.",
+    });
+    expect(panel.textContent).toContain("Research ·");
+    fireEvent.click(
+        within(panel).getByRole("button", { name: "Withdraw dossier" }),
+    );
+    const confirm = await screen.findByRole("button", {
+        name: "Confirm withdrawal",
+    });
+    fireEvent.change(screen.getByLabelText("Reason for withdrawal"), {
+        target: { value: "too short" },
+    });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Reason for withdrawal"), {
+        target: { value: "  Failed by the time-limit defect.  " },
+    });
+    fireEvent.click(confirm);
+    await waitFor(() =>
+        expect(withdrawDossier).toHaveBeenCalledWith({
+            runId: "run-research",
+            reason: "Failed by the time-limit defect.",
+        }),
+    );
+});
+
+test("the overview sends reservations to their own view", async () => {
+    const onSearchChange = vi.fn();
+    render(<AdminPage search={{}} onSearchChange={onSearchChange} />);
+    fireEvent.click(
+        await screen.findByRole("button", { name: "Review reservations" }),
+    );
+    expect(onSearchChange).toHaveBeenLastCalledWith({
+        section: "dossiers",
+        view: "reservations",
+    });
+});
+
+test("on a wide screen the selected dossier is read beside its list", async () => {
+    const matchMedia = mockWideScreen();
+    render(
+        <AdminPage
+            search={{ ...dossiers, dossier: "run-research" as never }}
+        />,
+    );
+    expect(
+        await screen.findByRole("heading", { name: "ServiceNow, Inc." }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const list = screen.getByRole("tabpanel", { name: "Research" });
+    expect(
+        within(list)
+            .getByText("ServiceNow, Inc.")
+            .closest('[aria-current="true"]'),
+    ).toBeTruthy();
+    matchMedia.mockRestore();
+});
+
+test("a list that can load more shows its real total beside Load more", async () => {
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listRunsPage)
+        .returns({
+            results: [researchRun],
+            status: "CanLoadMore",
+            loadMore: vi.fn(),
+        } as never);
+    convexReactHarness
+        .query(api.adminOperations.countRuns)
+        .returns({ count: 37, capped: false });
+    render(<AdminPage search={dossiers} />);
+    const list = await screen.findByRole("tabpanel", { name: "Research" });
+    expect(within(list).getByText("1 of 37 dossiers shown")).toBeTruthy();
+    expect(
+        within(list).getByRole("button", { name: "Load more dossiers" }),
+    ).toBeTruthy();
+});
+
+test("switching purpose closes a dossier opened from another list", async () => {
+    const onSearchChange = vi.fn();
+    const matchMedia = mockWideScreen();
+    render(
+        <AdminPage
+            search={{ ...dossiers, dossier: "run-research" as never }}
+            onSearchChange={onSearchChange}
+        />,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "Benchmarks" }));
+    expect(onSearchChange).toHaveBeenLastCalledWith({
+        section: "dossiers",
+        purpose: "evaluation",
+    });
+    matchMedia.mockRestore();
+});
+
+test("a dossier opened from Benchmarks keeps its purpose in the address", async () => {
+    const onSearchChange = vi.fn();
+    render(
+        <AdminPage
+            search={{ ...dossiers, purpose: "evaluation" }}
+            onSearchChange={onSearchChange}
+        />,
+    );
+    const list = await screen.findByRole("tabpanel", { name: "Benchmarks" });
+    fireEvent.click(within(list).getByRole("button", { name: "Open dossier" }));
+    expect(onSearchChange).toHaveBeenLastCalledWith({
+        section: "dossiers",
+        purpose: "evaluation",
+        dossier: "run-evaluation",
+    });
+});
+
+test("a dossier opened under the wrong list moves the view to its own purpose", async () => {
+    const onSearchChange = vi.fn();
+    convexReactHarness.query(api.adminOperations.inspectRun).returns({
+        run: {
+            _id: "run-evaluation",
+            purpose: "evaluation",
+            lifecycleState: "completed",
+            executionStatus: "completed",
+            createdAt: 1,
+        },
+        company: { legalName: "Zeta Labs" },
+    } as never);
+    render(
+        <AdminPage
+            search={{ ...dossiers, dossier: "run-evaluation" as never }}
+            onSearchChange={onSearchChange}
+        />,
+    );
+    await waitFor(() =>
+        expect(onSearchChange).toHaveBeenCalledWith({
+            section: "dossiers",
+            purpose: "evaluation",
+            dossier: "run-evaluation",
+        }),
+    );
 });

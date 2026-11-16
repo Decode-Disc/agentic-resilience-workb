@@ -46,29 +46,32 @@ for (const viewport of [
         await expect(
             page.getByRole("heading", { name: "Administration", exact: true }),
         ).toBeVisible({ timeout: 60000 });
-        await page.getByRole("tab", { name: "Models", exact: true }).click();
+        await page
+            .getByRole("tab", { name: "Models & agents", exact: true })
+            .click();
+        await page.getByRole("tab", { name: /^Model catalogue/ }).click();
         const initialize = page.getByRole("button", {
             name: "Set up default models",
             exact: true,
         });
         await expect(
             initialize.or(
-                page.getByRole("switch", {
-                    name: /^Enable GLM-5.3-Flash/,
+                page.getByRole("combobox", {
+                    name: "Availability of GLM-5.3-Flash",
                 }),
             ),
         ).toBeVisible({ timeout: 30000 });
         if (await initialize.count()) await initialize.click();
         await expect(
-            page.getByRole("switch", {
-                name: /^Enable GLM-5.3-Flash/,
+            page.getByRole("combobox", {
+                name: "Availability of GLM-5.3-Flash",
             }),
-        ).toBeChecked({ timeout: 90000 });
+        ).not.toContainText("Off", { timeout: 90000 });
         await expect(
-            page.getByRole("switch", {
-                name: /^Enable DeepSeek V4.1 Flash 1017/,
+            page.getByRole("combobox", {
+                name: "Availability of DeepSeek V4.1 Flash 1017",
             }),
-        ).toBeChecked();
+        ).not.toContainText("Off");
         await expect(
             page.getByText("Preparing compatibility checks", { exact: true }),
         ).toHaveCount(0);
@@ -81,16 +84,10 @@ for (const viewport of [
                     name: label,
                     exact: true,
                 });
-                const enable = entry.getByRole("switch", {
-                    name: new RegExp(`^Enable ${label.replaceAll(".", "\\.")}`),
+                const availability = entry.getByRole("combobox", {
+                    name: `Availability of ${label}`,
                 });
-                const offer = entry.getByRole("switch", {
-                    name: new RegExp(
-                        `^Offer ${label.replaceAll(".", "\\.")} in composer`,
-                    ),
-                });
-                const enabled = await enable.isChecked(),
-                    offered = await offer.isChecked();
+                const before = (await availability.textContent())?.trim() ?? "";
                 await entry
                     .getByRole("button", {
                         name: "Edit configuration",
@@ -98,31 +95,28 @@ for (const viewport of [
                     })
                     .click();
                 await page
-                    .getByRole("button", { name: "Prepare model", exact: true })
+                    .getByRole("button", { name: "Save", exact: true })
                     .click();
                 await expect(
-                    entry.getByText(
-                        "Prepared · answer quality evaluated separately",
-                        { exact: true },
-                    ),
+                    entry.getByText("Ready", { exact: true }),
                 ).toBeVisible({ timeout: 90000 });
-                await expect(enable).toBeEnabled({ timeout: 90000 });
-                if (enabled) {
-                    await enable.click();
-                    await expect(enable).toBeChecked();
-                }
-                if (offered) {
-                    await offer.click();
-                    await expect(offer).toBeChecked();
+                await expect(availability).toBeEnabled({ timeout: 90000 });
+                if ((await availability.textContent())?.trim() !== before) {
+                    await availability.click();
+                    await page.getByRole("option", { name: before }).click();
+                    await page
+                        .getByRole("button", {
+                            name: "Save changes",
+                            exact: true,
+                        })
+                        .click();
                 }
             }
         }
         await page.screenshot({
             path: `/tmp/workbench-model-controls/after-admin-models-${viewport.name}.png`,
         });
-        await page
-            .getByRole("tab", { name: "Agent models", exact: true })
-            .click();
+        await page.getByRole("tab", { name: /^Agent models/ }).click();
         await expect(
             page.getByRole("combobox", {
                 name: "Workbench model",
@@ -137,12 +131,15 @@ for (const viewport of [
         });
         await page.reload();
         await expectAdmissionClosed(page);
-        await page.getByRole("tab", { name: "Models", exact: true }).click();
+        await page
+            .getByRole("tab", { name: "Models & agents", exact: true })
+            .click();
+        await page.getByRole("tab", { name: /^Model catalogue/ }).click();
         await expect(
-            page.getByRole("switch", {
-                name: /^Enable GLM-5.3-Flash/,
+            page.getByRole("combobox", {
+                name: "Availability of GLM-5.3-Flash",
             }),
-        ).toBeChecked();
+        ).not.toContainText("Off");
         expect(
             await page.evaluate(
                 () => document.documentElement.scrollWidth > innerWidth,

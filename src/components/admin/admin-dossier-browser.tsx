@@ -3,9 +3,9 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { CLIENT_PAGE_SIZE } from "@convex/resourcePolicy";
-import { useMutation, usePaginatedQuery } from "convex/react";
+import { FolderOpenIcon } from "@hugeicons/core-free-icons";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { useState } from "react";
-import { toast } from "sonner";
 import { AdminDetailDisclosure } from "@/components/admin/admin-detail-disclosure";
 import {
     AdminDossierFilters,
@@ -15,22 +15,16 @@ import {
     filterSummary,
 } from "@/components/admin/admin-filters";
 import { AdminList } from "@/components/admin/admin-list";
-import { AdminLoadMore } from "@/components/admin/admin-pager";
-import { ExecutionStatusBadge } from "@/components/admin/admin-status-badge";
+import { AdminListFooter } from "@/components/admin/admin-pager";
+import { AdminScrollList } from "@/components/admin/admin-scroll-list";
+import { AdminMarkBadge } from "@/components/admin/admin-status-badge";
 import {
     dossierPurposes,
     type RunPurpose,
 } from "@/components/admin/dossier-purpose";
-import { Badge } from "@/components/ui/badge";
+import { DossierStatusBadge } from "@/components/dossier-status-badge";
+import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
 import {
     Empty,
     EmptyDescription,
@@ -44,82 +38,87 @@ import {
     ItemDescription,
     ItemTitle,
 } from "@/components/ui/item";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { lifecycleLabel } from "@/lib/presentation/research-copy";
 
 /**
- * Lists technical dossiers by purpose. Inspection opens from the page-level
- * dialog; benchmark and browser-test dossiers stay out of the analyst
- * workspaces.
+ * Lists dossiers of one purpose; opening one shows its detail beside the list. The purpose is controlled so
+ * an open dossier always belongs to the list in view. Benchmark and browser-test dossiers stay out of the
+ * analyst workspaces.
  */
 export function AdminDossierBrowser({
-    onInspectRun,
+    purpose,
+    onPurposeChange,
+    selectedId,
+    onOpenDossier,
 }: {
-    onInspectRun: (runId: Id<"researchRuns">) => void;
+    purpose: RunPurpose;
+    onPurposeChange: (purpose: RunPurpose) => void;
+    /** The dossier shown beside the list, marked as current. */
+    selectedId?: Id<"researchRuns">;
+    onOpenDossier: (runId: Id<"researchRuns">) => void;
 }) {
-    const [withdrawRunId, setWithdrawRunId] =
-        useState<Id<"researchRuns"> | null>(null);
     const [filters, setFilters] = useState(dossierFilterDefaults);
 
     return (
-        <section className="space-y-3">
-            <div className="flex flex-wrap items-center justify-end gap-2">
+        <Tabs
+            value={purpose}
+            onValueChange={(value) => {
+                const next = dossierPurposes.find(
+                    (entry) => entry.value === value,
+                )?.value;
+                if (next) onPurposeChange(next);
+            }}
+            className="gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <TabsList>
+                    {dossierPurposes.map((entry) => (
+                        <TabsTrigger key={entry.value} value={entry.value}>
+                            {entry.label}
+                        </TabsTrigger>
+                    ))}
+                </TabsList>
                 <AdminDossierFilters
                     filters={filters}
                     onChange={setFilters}
                     className="flex items-center gap-2"
                 />
             </div>
-            <Tabs defaultValue="research">
-                <TabsList>
-                    {dossierPurposes.map((purpose) => (
-                        <TabsTrigger key={purpose.value} value={purpose.value}>
-                            {purpose.label}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>
-                {dossierPurposes.map((purpose) => (
-                    <TabsContent
-                        key={purpose.value}
-                        value={purpose.value}
-                        className="mt-3">
-                        <DossierList
-                            purpose={purpose.value}
-                            filters={filters}
-                            onInspectRun={onInspectRun}
-                            onWithdraw={setWithdrawRunId}
-                        />
-                    </TabsContent>
-                ))}
-            </Tabs>
-
-            <WithdrawDossierDialog
-                run={withdrawRunId}
-                onClose={() => setWithdrawRunId(null)}
-            />
-        </section>
+            {dossierPurposes.map((entry) => (
+                <TabsContent key={entry.value} value={entry.value}>
+                    <DossierList
+                        purpose={entry.value}
+                        filters={filters}
+                        selectedId={selectedId}
+                        onOpenDossier={onOpenDossier}
+                    />
+                </TabsContent>
+            ))}
+        </Tabs>
     );
 }
 
 function DossierList({
     purpose,
     filters,
-    onInspectRun,
-    onWithdraw,
+    selectedId,
+    onOpenDossier,
 }: {
     purpose: RunPurpose;
     filters: DossierRunFilters;
-    onInspectRun: (runId: Id<"researchRuns">) => void;
-    onWithdraw: (runId: Id<"researchRuns">) => void;
+    selectedId?: Id<"researchRuns">;
+    onOpenDossier: (runId: Id<"researchRuns">) => void;
 }) {
+    const purposeLabel =
+        dossierPurposes.find((entry) => entry.value === purpose)?.label ??
+        "Dossier";
     const runs = usePaginatedQuery(
         api.adminOperations.listRunsPage,
         { purpose },
         { initialNumItems: CLIENT_PAGE_SIZE.adminDossiers },
     );
+    const total = useQuery(api.adminOperations.countRuns, { purpose });
 
     if (runs.status === "LoadingFirstPage") {
         return (
@@ -159,175 +158,104 @@ function DossierList({
                     No loaded dossier matches the selected filters.
                 </p>
             ) : (
-                <AdminList items={filtered} getKey={(run) => run.runId}>
-                    {(run) => (
-                        <Item size="sm">
-                            <ItemContent className="min-w-0">
-                                <ItemTitle>
-                                    {run.companyLegalName ??
-                                        "Company not recorded"}
-                                </ItemTitle>
-                                <ItemDescription>
-                                    {lifecycleLabel(run.lifecycleState)}
-                                </ItemDescription>
-                                <p className="text-xs text-muted-foreground">
-                                    Updated{" "}
-                                    {new Date(run.updatedAt).toLocaleString(
-                                        "en",
-                                    )}{" "}
-                                    · Created{" "}
-                                    {new Date(run.createdAt).toLocaleString(
-                                        "en",
-                                    )}
-                                </p>
-                                <p className="break-all font-mono text-xs text-muted-foreground">
-                                    {run.runId}
-                                </p>
-                                {run.preparation ? (
-                                    <AdminDetailDisclosure label="Preparation details">
-                                        {run.preparation.configurationCheck ? (
-                                            <p className="text-xs text-muted-foreground">
-                                                Assessment configuration{" "}
-                                                {run.preparation
-                                                    .configurationCheck
-                                                    .available
-                                                    ? "available"
-                                                    : "unavailable"}
-                                            </p>
-                                        ) : null}
-                                        {run.preparation.stopCode ? (
-                                            <p className="break-all font-mono text-[10px] text-muted-foreground">
-                                                Preparation:{" "}
-                                                {run.preparation.status} ·{" "}
-                                                {run.preparation.stopCode}
-                                            </p>
-                                        ) : null}
-                                        {run.preparation.failures?.map(
-                                            (failure) => (
-                                                <p
-                                                    key={failure.sourceId}
-                                                    className="break-all font-mono text-[10px] text-muted-foreground">
-                                                    Source {failure.sourceId}:{" "}
-                                                    {failure.reasonCode}
+                <AdminScrollList label={`${purposeLabel} dossiers`}>
+                    <AdminList items={filtered} getKey={(run) => run.runId}>
+                        {(run) => (
+                            <Item
+                                size="sm"
+                                aria-current={
+                                    run.runId === selectedId
+                                        ? "true"
+                                        : undefined
+                                }
+                                className="flex-wrap px-2 aria-current:bg-accent">
+                                <ItemContent className="min-w-56">
+                                    <ItemTitle>
+                                        {run.companyLegalName ??
+                                            "Company not recorded"}
+                                    </ItemTitle>
+                                    <ItemDescription className="flex flex-wrap gap-x-1.5">
+                                        <span>
+                                            {lifecycleLabel(run.lifecycleState)}
+                                        </span>
+                                        <span aria-hidden="true">·</span>
+                                        <span>
+                                            Updated{" "}
+                                            {new Date(
+                                                run.updatedAt,
+                                            ).toLocaleString("en", {
+                                                dateStyle: "medium",
+                                                timeStyle: "short",
+                                            })}
+                                        </span>
+                                    </ItemDescription>
+                                    <p className="truncate font-mono text-xs text-muted-foreground">
+                                        {run.runId}
+                                    </p>
+                                    {run.preparation ? (
+                                        <AdminDetailDisclosure label="Preparation details">
+                                            {run.preparation
+                                                .configurationCheck ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Assessment configuration{" "}
+                                                    {run.preparation
+                                                        .configurationCheck
+                                                        .available
+                                                        ? "available"
+                                                        : "unavailable"}
                                                 </p>
-                                            ),
-                                        )}
-                                    </AdminDetailDisclosure>
-                                ) : null}
-                            </ItemContent>
-                            <ItemActions>
-                                <ExecutionStatusBadge
-                                    status={run.executionStatus}
-                                />
-                                {run.withdrawnAt ? (
-                                    <Badge
-                                        variant="outline"
-                                        className="text-muted-foreground">
-                                        Withdrawn
-                                    </Badge>
-                                ) : null}
-                                {run.canWithdraw ? (
+                                            ) : null}
+                                            {run.preparation.stopCode ? (
+                                                <p className="break-all font-mono text-[10px] text-muted-foreground">
+                                                    Preparation:{" "}
+                                                    {run.preparation.status} ·{" "}
+                                                    {run.preparation.stopCode}
+                                                </p>
+                                            ) : null}
+                                            {run.preparation.failures?.map(
+                                                (failure) => (
+                                                    <p
+                                                        key={failure.sourceId}
+                                                        className="break-all font-mono text-[10px] text-muted-foreground">
+                                                        Source{" "}
+                                                        {failure.sourceId}:{" "}
+                                                        {failure.reasonCode}
+                                                    </p>
+                                                ),
+                                            )}
+                                        </AdminDetailDisclosure>
+                                    ) : null}
+                                </ItemContent>
+                                <ItemActions>
+                                    <DossierStatusBadge run={run} />
+                                    {run.withdrawnAt ? (
+                                        <AdminMarkBadge mark="withdrawn" />
+                                    ) : null}
                                     <Button
                                         size="sm"
-                                        variant="destructive"
-                                        onClick={() => onWithdraw(run.runId)}>
-                                        Withdraw dossier
+                                        variant="outline"
+                                        onClick={() =>
+                                            onOpenDossier(run.runId)
+                                        }>
+                                        <Icon iconNode={FolderOpenIcon} />
+                                        Open dossier
                                     </Button>
-                                ) : null}
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => onInspectRun(run.runId)}>
-                                    Inspect dossier
-                                </Button>
-                            </ItemActions>
-                        </Item>
-                    )}
-                </AdminList>
+                                </ItemActions>
+                            </Item>
+                        )}
+                    </AdminList>
+                </AdminScrollList>
             )}
-            <p className="text-xs text-muted-foreground">
-                {filterSummary(
+            <AdminListFooter
+                summary={filterSummary(
                     filtered.length,
-                    runs.results.length,
+                    total,
                     "dossiers",
+                    runs.results.length,
                 )}
-            </p>
-            <AdminLoadMore page={runs} label="Load more dossiers" />
+                page={runs}
+                label="Load more dossiers"
+            />
         </div>
-    );
-}
-
-function WithdrawDossierDialog({
-    run,
-    onClose,
-}: {
-    run: Id<"researchRuns"> | null;
-    onClose: () => void;
-}) {
-    const withdrawDossier = useMutation(api.admin.withdrawDossier);
-    const [reason, setReason] = useState("");
-    const [pending, setPending] = useState(false);
-
-    return (
-        <Dialog
-            open={run !== null}
-            onOpenChange={(open) => {
-                if (!open) onClose();
-            }}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Withdraw dossier</DialogTitle>
-                    <DialogDescription>
-                        This stops unfinished execution, removes the dossier
-                        from the analyst workspace list and releases its
-                        analysis once. Completed results stay readable through
-                        their direct link.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-2">
-                    <Label htmlFor="dossier-withdrawal-reason">
-                        Reason for withdrawal
-                    </Label>
-                    <Textarea
-                        id="dossier-withdrawal-reason"
-                        value={reason}
-                        onChange={(event) => setReason(event.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                        Recorded in the audit trail. At least 12 characters.
-                    </p>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="destructive"
-                        disabled={pending || reason.trim().length < 12}
-                        onClick={async () => {
-                            if (!run) return;
-                            setPending(true);
-                            try {
-                                await withdrawDossier({
-                                    runId: run,
-                                    reason: reason.trim(),
-                                });
-                                toast.success(
-                                    "Dossier withdrawn. The analysis seat has been released.",
-                                );
-                                onClose();
-                            } catch {
-                                toast.error(
-                                    "We couldn’t withdraw the dossier. Try again.",
-                                );
-                            } finally {
-                                setPending(false);
-                            }
-                        }}>
-                        Confirm withdrawal
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     );
 }

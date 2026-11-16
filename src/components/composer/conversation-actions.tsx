@@ -15,13 +15,13 @@ import {
 import { useEffect, useState } from "react";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
-import { ComposerToolItem } from "./tools-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     Tooltip,
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ComposerToolItem } from "./tools-menu";
 
 /** The runtime owns draft, queue and cancellation; this surface selects the corresponding primary action. */
 export function ConversationComposerActions({

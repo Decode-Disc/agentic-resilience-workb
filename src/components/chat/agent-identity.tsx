@@ -1,6 +1,6 @@
 import {
-    DEFAULT_CONVERSATION_AGENTS,
     type ConversationAgent,
+    DEFAULT_CONVERSATION_AGENTS,
     WORKBENCH_AGENT,
 } from "@/components/chat/conversation-agent";
 import Icon from "@/components/icon";

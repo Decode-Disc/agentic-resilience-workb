@@ -3,13 +3,15 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { CLIENT_PAGE_SIZE } from "@convex/resourcePolicy";
+import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { type Ref, useLayoutEffect, useRef, useState } from "react";
 import { AdminDetailDisclosure } from "@/components/admin/admin-detail-disclosure";
-import { AdminLoadMore } from "@/components/admin/admin-pager";
+import { AdminListFooter, AdminLoadMore } from "@/components/admin/admin-pager";
+import { AdminMarkBadge } from "@/components/admin/admin-status-badge";
+import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     Collapsible,
@@ -228,7 +230,7 @@ function EventDetail({
             {invocation ? (
                 <>
                     {invocation.provenance === "simulation" ? (
-                        <Badge>Simulation · Not live</Badge>
+                        <AdminMarkBadge mark="simulation" />
                     ) : null}
                     {!invocation.journalVersion ? (
                         <p>Historical trace · partial journal</p>
@@ -314,7 +316,7 @@ function JournalEvents({ runId }: { runId: Id<"researchRuns"> }) {
                 {events.results.map((event: JournalEvent) => (
                     <li
                         key={event._id}
-                        className="min-w-0 rounded-lg border p-3">
+                        className="min-w-0 rounded-lg border border-divider">
                         <Collapsible
                             open={selectedId === event._id}
                             onOpenChange={(open) =>
@@ -324,22 +326,30 @@ function JournalEvents({ runId }: { runId: Id<"researchRuns"> }) {
                                 render={
                                     <Button
                                         variant="ghost"
-                                        className="h-auto w-full justify-start whitespace-normal text-left"
+                                        className="group h-auto w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-left whitespace-normal hover:bg-muted aria-expanded:bg-muted/60"
                                     />
                                 }>
-                                <span className="min-w-0">
-                                    <span className="block">
+                                <Icon
+                                    iconNode={ArrowRight01Icon}
+                                    className="size-4 shrink-0 text-muted-foreground transition-transform group-aria-expanded:rotate-90 motion-reduce:transition-none"
+                                />
+                                <span className="min-w-0 flex-1">
+                                    <span className="block font-medium">
                                         {eventLabels[event.kind] ??
                                             event.kind.replaceAll("_", " ")}
                                     </span>
-                                    <span className="text-xs font-normal text-muted-foreground">
-                                        {new Date(
-                                            event.occurredAt,
-                                        ).toLocaleString("en")}
-                                    </span>
+                                </span>
+                                <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                                    {new Date(event.occurredAt).toLocaleString(
+                                        "en",
+                                        {
+                                            dateStyle: "medium",
+                                            timeStyle: "medium",
+                                        },
+                                    )}
                                 </span>
                             </CollapsibleTrigger>
-                            <CollapsibleContent>
+                            <CollapsibleContent className="border-t border-divider p-3">
                                 {selectedId === event._id ? (
                                     <LoadErrorBoundary
                                         title="Event unavailable"
@@ -355,7 +365,7 @@ function JournalEvents({ runId }: { runId: Id<"researchRuns"> }) {
                     </li>
                 ))}
             </ol>
-            <AdminLoadMore page={events} label="Load more events" />
+            <AdminListFooter page={events} label="Load more events" />
         </>
     );
 }

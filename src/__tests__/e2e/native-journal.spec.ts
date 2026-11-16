@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import type { internal } from "@convex/_generated/api";
 import { expect } from "@playwright/test";
 import type { FunctionReturnType } from "convex/server";
+import { closeDossierDetail, dossierDetail } from "../../../e2e/support/admin";
 import {
     accessCodeField,
     expectAdmissionClosed,
@@ -74,9 +75,7 @@ for (const width of [1440, 390]) {
                     exact: true,
                 }),
             ).toBeVisible();
-            const dialog = page.getByRole("dialog", {
-                name: "Dossier inspection",
-            });
+            const dialog = dossierDetail(page);
             const journal = dialog.getByRole("region", {
                 name: "Execution journal",
             });
@@ -85,13 +84,19 @@ for (const width of [1440, 390]) {
                 .filter({ has: page.getByText(state.runId, { exact: true }) });
             async function open() {
                 await page
+                    .getByRole("tab", { name: "Dossiers", exact: true })
+                    .click();
+                await page
                     .getByRole("tab", { name: "Browser tests", exact: true })
                     .click();
                 await row
                     .getByRole("button", {
-                        name: "Inspect dossier",
+                        name: "Open dossier",
                         exact: true,
                     })
+                    .click();
+                await dossierDetail(page)
+                    .getByRole("tab", { name: "Execution journal" })
                     .click();
                 await journal
                     .getByRole("button", { name: /Request recorded/ })
@@ -165,6 +170,8 @@ for (const width of [1440, 390]) {
                     .info()
                     .outputPath(`native-fragmented-journal-${width}.png`),
             });
+            // The open dossier is part of the address; close it so reconnection reopens it from the list.
+            await closeDossierDetail(page);
             await page.context().setOffline(true);
             await page.context().setOffline(false);
             await page.reload();
@@ -178,11 +185,10 @@ for (const width of [1440, 390]) {
             await open();
             await expect(journal.getByText(new RegExp(hash))).toBeVisible();
             expect((await snapshot.textContent()) === first).toBe(true);
-            await page.keyboard.press("Escape");
-            await expect(dialog).toBeHidden();
+            await closeDossierDetail(page);
             await expect(
                 row.getByRole("button", {
-                    name: "Inspect dossier",
+                    name: "Open dossier",
                     exact: true,
                 }),
             ).toBeFocused();

@@ -1,6 +1,7 @@
 import type { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 
+import { DossierStatusBadge } from "@/components/dossier-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +13,6 @@ import {
 import {
     eventLabel,
     evidenceStatusCopy,
-    executionLabel,
     lifecycleLabel,
 } from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
@@ -120,9 +120,7 @@ export function RunProgress({
                         <Badge variant="secondary">
                             {lifecycleLabel(run.lifecycleState)}
                         </Badge>
-                        <Badge variant="outline">
-                            {executionLabel(run.executionStatus)}
-                        </Badge>
+                        <DossierStatusBadge run={run} />
                     </div>
                     {run.lifecycleState === "corpus_approved" ? (
                         <p className="mt-4 text-sm text-muted-foreground">

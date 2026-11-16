@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { closeDossierDetail, dossierDetail } from "./support/admin";
 import type { internal } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { runConvexJson } from "./support/convex-cli";
@@ -127,15 +128,22 @@ test("protected administration separates and pages technical dossiers", async ({
         >("e2eFixtures:seedAdministrationPaginationScenario", {
             fixtureKey: "admin-pagination",
         });
+        await page
+            .getByRole("tab", { name: "Dossiers", exact: true })
+            .click();
         await page.getByRole("tab", { name: "Benchmarks", exact: true }).click();
+        // Review decisions share the section, so dossier rows are counted inside their purpose panel.
+        const benchmarks = page.getByRole("tabpanel", { name: "Benchmarks" });
         await expect(
-            page.getByRole("button", { name: "Inspect dossier", exact: true }),
+            benchmarks.getByRole("button", { name: "Open dossier", exact: true }),
         ).toHaveCount(20);
         await expect(
             page.getByRole("button", { name: "Status: All", exact: true }),
         ).toBeVisible();
         await expect(
-            page.getByRole("button", { name: "Period: All time", exact: true }),
+            page
+                .getByRole("button", { name: "Period: All time", exact: true })
+                .first(),
         ).toBeVisible();
         const firstPageMembership = await Promise.all(
             population.evaluationRunIds.map((id) =>
@@ -150,15 +158,15 @@ test("protected administration separates and pages technical dossiers", async ({
             .getByRole("button", { name: "Load more dossiers", exact: true })
             .click();
         await expect(
-            page.getByRole("button", { name: "Inspect dossier", exact: true }),
+            benchmarks.getByRole("button", { name: "Open dossier", exact: true }),
         ).toHaveCount(40);
         for (const id of population.evaluationRunIds)
             await expect(page.getByText(id, { exact: true })).toBeVisible();
-        await page
-            .getByRole("button", { name: "Inspect dossier", exact: true })
+        await benchmarks
+            .getByRole("button", { name: "Open dossier", exact: true })
             .first()
             .click();
-        const dialog = page.getByRole("dialog", { name: "Dossier inspection" });
+        const dialog = dossierDetail(page);
         await expect(
             dialog.getByText("Provider receipts", { exact: true }),
         ).toBeVisible();
@@ -174,10 +182,9 @@ test("protected administration separates and pages technical dossiers", async ({
         await expect(
             dialog.getByRole("button", { name: /resume|retry|start/i }),
         ).toHaveCount(0);
-        await page.keyboard.press("Escape");
-        await expect(dialog).toBeHidden();
+        await closeDossierDetail(page);
         await page
-            .getByRole("tab", { name: "Provider activity", exact: true })
+            .getByRole("tab", { name: "Activity & spend", exact: true })
             .click();
         await expect(
             page.getByRole("heading", {
@@ -199,13 +206,18 @@ test("protected administration separates and pages technical dossiers", async ({
             await expect(attemptDialog).toBeHidden();
         }
         await page.setViewportSize({ width: 390, height: 844 });
+        await page
+            .getByRole("tab", { name: "Dossiers", exact: true })
+            .click();
         await page.getByRole("tab", { name: "Browser tests", exact: true }).click();
         await expect(
-            page.getByRole("button", { name: "Inspect dossier", exact: true }),
+            page
+                .getByRole("tabpanel", { name: "Browser tests" })
+                .getByRole("button", { name: "Open dossier", exact: true }),
         ).toHaveCount(20);
         for (const id of population.browserRunIds)
             await expect(page.getByText(id, { exact: true })).toBeVisible();
-        await page.getByRole("tab", { name: "Reservations", exact: true }).click();
+        await page.getByRole("tab", { name: /^Reservations/ }).click();
         await expect(
             page.getByRole("button", { name: "Quota: All", exact: true }),
         ).toBeVisible();

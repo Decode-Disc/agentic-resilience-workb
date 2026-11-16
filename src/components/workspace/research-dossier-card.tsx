@@ -25,9 +25,8 @@ import {
 } from "@/components/ui/cutout-card";
 import { useCompanyCoverImage } from "@/hooks/use-company-cover-image";
 import {
-    executionLabel,
-    executionStatusEdgeClass,
-    executionStatusTone,
+    dossierStatus,
+    dossierStatusSurface,
     lifecycleLabel,
 } from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
@@ -54,6 +53,8 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
     const [pointerHovered, setPointerHovered] = useState(false);
     const [focusWithin, setFocusWithin] = useState(false);
     const companyName = dossier.company?.legalName ?? "Research dossier";
+    const status = dossierStatus(dossier);
+    const statusSurface = dossierStatusSurface(status.tone);
     const marketIdentity = dossier.company
         ? `${dossier.company.ticker} · ${dossier.company.exchange}`
         : "Company confirmation pending";
@@ -103,24 +104,20 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                     <CutoutCardPin
                         className={cn(
                             "top-0 right-0 rounded-bl-[16px] px-4 py-2 font-semibold text-sm shadow-md shadow-foreground/10 ring-1 ring-border/30",
-                            executionStatusTone(dossier.executionStatus),
+                            statusSurface.fill,
                         )}>
-                        {executionLabel(dossier.executionStatus)}
+                        {status.label}
                         <CutoutCorner
                             className={cn(
                                 "absolute top-0 -left-[23px] -rotate-90",
-                                executionStatusEdgeClass(
-                                    dossier.executionStatus,
-                                ),
+                                statusSurface.edge,
                             )}
                             size={24}
                         />
                         <CutoutCorner
                             className={cn(
                                 "absolute right-0 -bottom-[23px] -rotate-90",
-                                executionStatusEdgeClass(
-                                    dossier.executionStatus,
-                                ),
+                                statusSurface.edge,
                             )}
                             size={24}
                         />

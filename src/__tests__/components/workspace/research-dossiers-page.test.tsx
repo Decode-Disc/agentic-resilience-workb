@@ -115,7 +115,7 @@ describe("ResearchDossiersPage", () => {
         fireEvent.focus(dossierLink);
         expect(card?.getAttribute("data-state")).toBe("hovered");
         expect(screen.getByText("Review source set")).toBeTruthy();
-        expect(screen.getByText("Waiting for review")).toBeTruthy();
+        expect(screen.getByText("Review needed")).toBeTruthy();
         expect(screen.getByText("NOW · NYSE")).toBeTruthy();
     });
 

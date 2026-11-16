@@ -36,6 +36,9 @@ const badgeVariants = cva(
                     "bg-tint-review text-review-foreground outline outline-dashed -outline-offset-1 outline-review-foreground",
                 destructive: "bg-destructive/10 text-destructive-text",
                 approved: "bg-tint-approved text-approved",
+                // Technical success in Quiet Sage; Approval Teal stays reserved for analyst approval.
+                success:
+                    "bg-brand-green/15 text-[color-mix(in_oklab,var(--brand-green)_45%,var(--foreground))]",
                 accent: "bg-accent text-accent-foreground",
                 dashed: "bg-transparent text-muted-foreground outline outline-dashed -outline-offset-1 outline-edge-dashed",
             },
@@ -102,5 +105,6 @@ function Badge({
     );
 }
 
+export type BadgeTone = NonNullable<VariantProps<typeof badgeVariants>["tone"]>;
 export type { Color };
 export { Badge, badgeVariants };

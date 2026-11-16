@@ -9,6 +9,7 @@ vi.mock("convex/react", async () => {
     );
     return convexReactHarness.module;
 });
+
 import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { AdminProviderCallInspection } from "@/components/admin/admin-provider-call-inspection";
 

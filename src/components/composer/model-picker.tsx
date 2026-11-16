@@ -18,18 +18,10 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { reasoningEffortLabel } from "@/lib/presentation/model-choices";
 
 type ModelSelection = FunctionArgs<typeof api.workbench.setModel>;
 type Effort = NonNullable<ModelSelection["reasoningEffort"]>;
-const effortLabels: Record<Effort, string> = {
-    none: "Off",
-    minimal: "Minimal",
-    low: "Low",
-    medium: "Medium",
-    high: "High",
-    xhigh: "Extra",
-    max: "Max",
-};
 
 /** Adapted from Pasta UI Model Picker (MIT; see pasta-ui.LICENSE.txt), with persisted dossier choices. */
 export function WorkbenchModelSelector({
@@ -50,7 +42,7 @@ export function WorkbenchModelSelector({
             <Skeleton className="h-8 w-44" aria-label="Loading model choices" />
         );
     const effortLabel =
-        (snapshot.effort ? effortLabels[snapshot.effort] : "Default") +
+        (snapshot.effort ? reasoningEffortLabel(snapshot.effort) : "Default") +
         (snapshot.effort &&
         snapshot.effortChoices.length &&
         !snapshot.effortChoices.includes(snapshot.effort)
@@ -151,7 +143,7 @@ export function WorkbenchModelSelector({
                                     value={effort}
                                     closeOnClick
                                     className="composer-model-option">
-                                    {effortLabels[effort]}
+                                    {reasoningEffortLabel(effort)}
                                 </DropdownMenuRadioItem>
                             ))}
                         </DropdownMenuRadioGroup>

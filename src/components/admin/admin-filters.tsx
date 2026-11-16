@@ -39,12 +39,35 @@ const periodOptions = [
 ] as const;
 
 /** One owner for the "N of M loaded" wording used by every filtered list. */
+/** A list total as read: a server count beyond its bound reads "N+". */
+export function formatAdminTotal(
+    total: number | { count: number; capped: boolean },
+): string {
+    return typeof total === "number"
+        ? total.toLocaleString("en")
+        : `${total.count.toLocaleString("en")}${total.capped ? "+" : ""}`;
+}
+
+/**
+ * Says how many items are shown out of the list's real total. `total` is a server count (capped counts read
+ * "N+"); without it the loaded items are the total. When filters hide loaded items while more remain unloaded,
+ * it says the filters only cover what is loaded.
+ */
 export function filterSummary(
     shown: number,
-    total: number,
+    total: number | { count: number; capped: boolean } | undefined,
     noun: string,
+    loaded?: number,
 ): string {
-    return `${shown} of ${total} loaded ${noun} shown. Filters apply to loaded ${noun}.`;
+    const count = typeof total === "number" ? total : total?.count;
+    const label =
+        total === undefined ? String(loaded ?? shown) : formatAdminTotal(total);
+    const partial =
+        loaded !== undefined &&
+        count !== undefined &&
+        count > loaded &&
+        shown < loaded;
+    return `${shown} of ${label} ${noun} shown${partial ? ` · filters apply to the ${loaded} loaded` : ""}`;
 }
 
 function withinPeriod(createdAt: number, period: string, now: number): boolean {

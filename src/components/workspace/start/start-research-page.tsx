@@ -1,24 +1,23 @@
 "use client";
 
-import { ComposerToolbar } from "@/components/composer/composer";
-
 import { api } from "@convex/_generated/api";
 import { ArrowRight01Icon, Attachment01Icon } from "@hugeicons/core-free-icons";
 import { useNavigate } from "@tanstack/react-router";
 import { useAction, useMutation, useQuery } from "convex/react";
-import type { FunctionReturnType, FunctionArgs } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ComposerToolsMenu } from "@/components/composer/tools-menu";
-import { ResearchModelPicker } from "@/components/workspace/start/research-model-picker";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
+import { ComposerToolbar } from "@/components/composer/composer";
+import { ComposerToolsMenu } from "@/components/composer/tools-menu";
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Button } from "@/components/ui/button";
 import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { SmoothDropdwon } from "@/components/ui/smooth-dropdown";
+import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { AddSourceDialog } from "@/components/workspace/add-source-dialog";
 import {
     type CoveragePreset,
@@ -32,6 +31,7 @@ import {
     CompanyPickerTrigger,
     ResearchComposerView,
 } from "@/components/workspace/start/research-composer-view";
+import { ResearchModelPicker } from "@/components/workspace/start/research-model-picker";
 import { StartDossierHeading } from "@/components/workspace/start/start-dossier-heading";
 import {
     CompanyMandatePanel,
@@ -51,7 +51,6 @@ import {
     companyLookupErrorMessage,
     sourceAddErrorMessage,
 } from "@/lib/presentation/research-copy";
-import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { cn } from "@/lib/utils";
 import styles from "./start-screens.module.css";
 

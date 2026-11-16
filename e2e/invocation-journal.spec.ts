@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { closeDossierDetail, dossierDetail } from "./support/admin";
 import { expect } from "@playwright/test";
 import type { internal } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
@@ -96,6 +97,9 @@ for (const viewport of [
                     await submitAccessCode(page, invitation.code);
                     await expectAdmissionClosed(page);
                     await page
+                        .getByRole("tab", { name: "Dossiers", exact: true })
+                        .click();
+                    await page
                         .getByRole("tab", {
                             name: "Browser tests",
                             exact: true,
@@ -106,13 +110,14 @@ for (const viewport of [
                     });
                     await row
                         .getByRole("button", {
-                            name: "Inspect dossier",
+                            name: "Open dossier",
                             exact: true,
                         })
                         .click();
-                    const dialog = page.getByRole("dialog", {
-                        name: "Dossier inspection",
-                    });
+                    await dossierDetail(page)
+                        .getByRole("tab", { name: "Execution journal" })
+                        .click();
+                    const dialog = dossierDetail(page);
                     const journal = dialog.getByRole("region", {
                         name: "Execution journal",
                     });
@@ -275,6 +280,8 @@ for (const viewport of [
                     await expect(journal.locator("pre")).toContainText(
                         '"kind": "success"',
                     );
+                    // The open dossier is part of the address; close it so reconnection reopens it from the list.
+                    await closeDossierDetail(page);
                     await page.context().setOffline(true);
                     await page.context().setOffline(false);
                     await page.reload();
@@ -286,6 +293,9 @@ for (const viewport of [
                     ).toBeVisible();
                     await expectAdmissionClosed(page);
                     await page
+                        .getByRole("tab", { name: "Dossiers", exact: true })
+                        .click();
+                    await page
                         .getByRole("tab", {
                             name: "Browser tests",
                             exact: true,
@@ -293,9 +303,12 @@ for (const viewport of [
                         .click();
                     await row
                         .getByRole("button", {
-                            name: "Inspect dossier",
+                            name: "Open dossier",
                             exact: true,
                         })
+                        .click();
+                    await dossierDetail(page)
+                        .getByRole("tab", { name: "Execution journal" })
                         .click();
                     await expect(
                         journal.getByRole("heading", {
@@ -303,11 +316,10 @@ for (const viewport of [
                         }),
                     ).toBeVisible();
                     await expect(journal.locator("pre")).toHaveCount(0);
-                    await page.keyboard.press("Escape");
-                    await expect(dialog).toBeHidden();
+                    await closeDossierDetail(page);
                     await expect(
                         row.getByRole("button", {
-                            name: "Inspect dossier",
+                            name: "Open dossier",
                             exact: true,
                         }),
                     ).toBeFocused();

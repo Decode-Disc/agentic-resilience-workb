@@ -32,5 +32,15 @@ test("distinguishes analyst pause, required review and unavailable execution", (
             executionStatus: "completed",
             pauseReason: undefined,
         }),
-    ).toEqual({ label: "Complete", tone: "ink" });
+    ).toEqual({ label: "Complete", tone: "success" });
+});
+
+test("a ready dossier reads as ready in the success tone on every surface", () => {
+    expect(
+        dossierStatus({
+            ...base,
+            executionStatus: "idle",
+            pauseReason: undefined,
+        }),
+    ).toEqual({ label: "Ready", tone: "success" });
 });

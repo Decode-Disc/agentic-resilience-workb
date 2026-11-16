@@ -28,6 +28,7 @@ __unconfig*
 .pi/
 .factory/
 .vscode/
+.zed/
 .atlas/
 
 skills-lock.json

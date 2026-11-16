@@ -7,8 +7,8 @@ import {
 } from "@hugeicons/core-free-icons";
 import type { FunctionReturnType } from "convex/server";
 import { type ReactNode, type Ref, useId } from "react";
-import { ComposerSurface } from "@/components/composer/composer";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
+import { ComposerSurface } from "@/components/composer/composer";
 import Icon from "@/components/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -1,11 +1,21 @@
 "use client";
 
 import type { api } from "@convex/_generated/api";
+import { FolderOpenIcon } from "@hugeicons/core-free-icons";
 import type { FunctionReturnType } from "convex/server";
 
 import { AdminList } from "@/components/admin/admin-list";
-import { Badge } from "@/components/ui/badge";
+import { AdminScrollList } from "@/components/admin/admin-scroll-list";
+import { ReviewDecisionBadge } from "@/components/admin/admin-status-badge";
+import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card";
 import {
     Empty,
     EmptyDescription,
@@ -19,29 +29,23 @@ import {
     ItemDescription,
     ItemTitle,
 } from "@/components/ui/item";
-import {
-    checkpointDecisionLabel,
-    checkpointLabel,
-} from "@/lib/presentation/research-copy";
+import { checkpointLabel } from "@/lib/presentation/research-copy";
 
 type CheckpointEvent = FunctionReturnType<
     typeof api.adminOperations.get
 >["checkpoints"][number];
 
-// Positive decisions keep the approval tone; every other decision records a
-// request for more work, so it must not read as an approval.
-
 /** Recent human review decisions, newest first. */
 export function AdminReviewDecisions({
     checkpoints,
-    onInspectRun,
+    onOpenDossier,
 }: {
     checkpoints: CheckpointEvent[];
-    onInspectRun: (runId: CheckpointEvent["runId"]) => void;
+    onOpenDossier: (runId: CheckpointEvent["runId"]) => void;
 }) {
     if (checkpoints.length === 0) {
         return (
-            <Empty className="min-h-48">
+            <Empty className="min-h-40 rounded-xl border border-dashed border-border">
                 <EmptyHeader>
                     <EmptyTitle>No review decisions recorded</EmptyTitle>
                     <EmptyDescription>
@@ -54,51 +58,59 @@ export function AdminReviewDecisions({
     }
 
     return (
-        <section className="space-y-2">
-            <h2 className="text-section">Recent review decisions</h2>
-            <p className="text-sm text-muted-foreground">
-                Newest decisions first. Each entry records one analyst answer at
-                one checkpoint.
-            </p>
-            <AdminList
-                items={checkpoints}
-                getKey={(event) =>
-                    `${event.runId}-${event.checkpoint}-${event.occurredAt}`
-                }>
-                {(event) => {
-                    const approved = event.decision === "approved";
-                    return (
-                        <Item size="sm">
-                            <ItemContent className="min-w-0">
-                                <ItemTitle>
-                                    {checkpointLabel(event.checkpoint)}
-                                </ItemTitle>
-                                <ItemDescription>
-                                    {new Date(event.occurredAt).toLocaleString(
-                                        "en",
-                                    )}
-                                </ItemDescription>
-                                <p className="break-all font-mono text-xs text-muted-foreground">
-                                    {event.runId}
-                                </p>
-                            </ItemContent>
-                            <ItemActions>
-                                <Badge
-                                    variant={approved ? "regular" : "secondary"}
-                                    color={approved ? "emerald" : "primary"}>
-                                    {checkpointDecisionLabel(event.decision)}
-                                </Badge>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => onInspectRun(event.runId)}>
-                                    Inspect dossier
-                                </Button>
-                            </ItemActions>
-                        </Item>
-                    );
-                }}
-            </AdminList>
-        </section>
+        <Card>
+            <CardHeader>
+                <CardTitle>
+                    <h3>Recent review decisions</h3>
+                </CardTitle>
+                <CardDescription>
+                    Newest first. Each entry records one analyst answer at one
+                    checkpoint.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <AdminScrollList label="Recent review decisions">
+                    <AdminList
+                        items={checkpoints}
+                        getKey={(event) =>
+                            `${event.runId}-${event.checkpoint}-${event.occurredAt}`
+                        }>
+                        {(event) => {
+                            return (
+                                <Item size="sm">
+                                    <ItemContent className="min-w-0">
+                                        <ItemTitle>
+                                            {checkpointLabel(event.checkpoint)}
+                                        </ItemTitle>
+                                        <ItemDescription>
+                                            {new Date(
+                                                event.occurredAt,
+                                            ).toLocaleString("en")}
+                                        </ItemDescription>
+                                        <p className="break-all font-mono text-xs text-muted-foreground">
+                                            {event.runId}
+                                        </p>
+                                    </ItemContent>
+                                    <ItemActions>
+                                        <ReviewDecisionBadge
+                                            decision={event.decision}
+                                        />
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                                onOpenDossier(event.runId)
+                                            }>
+                                            <Icon iconNode={FolderOpenIcon} />
+                                            Open dossier
+                                        </Button>
+                                    </ItemActions>
+                                </Item>
+                            );
+                        }}
+                    </AdminList>
+                </AdminScrollList>
+            </CardContent>
+        </Card>
     );
 }

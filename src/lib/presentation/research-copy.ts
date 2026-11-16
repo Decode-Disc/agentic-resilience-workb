@@ -175,23 +175,31 @@ const executionLabels = {
 // Tailwind resolves utilities from literal source text, so these class names
 // are written out in full. Composing them from a color name at runtime emits
 // classes that never reach the stylesheet.
-const executionStatusTones = {
-    idle: "bg-secondary text-secondary-foreground ring-secondary/25",
-    running: "bg-info text-info-foreground ring-info/25",
-    paused: "bg-warning text-warning-foreground ring-warning/25",
-    failed: "bg-danger text-danger-foreground ring-danger/25",
-    cancelled: "bg-muted text-muted-foreground ring-muted/25",
-    completed: "bg-success text-success-foreground ring-success/25",
-} satisfies Record<ExecutionStatus, string>;
+type DossierTone = "success" | "accent" | "review" | "destructive" | "dashed" | "ink";
 
-const executionStatusEdges = {
-    idle: "text-secondary",
-    running: "text-info",
-    paused: "text-warning",
-    failed: "text-danger",
-    cancelled: "text-muted",
-    completed: "text-success",
-} satisfies Record<ExecutionStatus, string>;
+// The cutout card paints its status pin as a solid surface; this maps each
+// dossier-status tone (owned by `dossierStatus`) to that surface and to the
+// colour of the corners that bleed out of it.
+const dossierStatusSurfaces = {
+    success: {
+        fill: "bg-success text-success-foreground ring-success/25",
+        edge: "text-success",
+    },
+    accent: { fill: "bg-info text-info-foreground ring-info/25", edge: "text-info" },
+    review: {
+        fill: "bg-warning text-warning-foreground ring-warning/25",
+        edge: "text-warning",
+    },
+    destructive: {
+        fill: "bg-danger text-danger-foreground ring-danger/25",
+        edge: "text-danger",
+    },
+    dashed: { fill: "bg-muted text-muted-foreground ring-muted/25", edge: "text-muted" },
+    ink: {
+        fill: "bg-secondary text-secondary-foreground ring-secondary/25",
+        edge: "text-secondary",
+    },
+} satisfies Record<DossierTone, { fill: string; edge: string }>;
 
 const eventLabels = {
     run_created: "Research dossier created",
@@ -361,22 +369,9 @@ export function executionLabel(status: ExecutionStatus): string {
     return executionLabels[status];
 }
 
-/**
- * Returns Tailwind surface-tint classes (bg, text, ring) for an execution
- * status, so a badge or pin can carry the status's semantic tone without
- * hardcoding colors at each call site.
- */
-export function executionStatusTone(status: ExecutionStatus): string {
-    return executionStatusTones[status];
-}
-
-/**
- * Returns the text-color class that paints a shape bleeding out of a tinted
- * surface, such as the cutout corners beside a status pin. It matches the fill
- * that `executionStatusTone` applies as a background.
- */
-export function executionStatusEdgeClass(status: ExecutionStatus): string {
-    return executionStatusEdges[status];
+/** The solid surface and bleeding-corner colour for a dossier status shown as a card pin. */
+export function dossierStatusSurface(tone: DossierTone) {
+    return dossierStatusSurfaces[tone];
 }
 
 /** Returns a stable milestone label without exposing event keys. */
@@ -1518,16 +1513,11 @@ export function sourceRecoveryFeedback(
 
 /** Dossier execution is distinct from the current research phase and analyst approval. */
 export function dossierStatus(
-    run: Pick<
-        RunProjection,
-        | "executionStatus"
-        | "lifecycleState"
-        | "pauseReason"
-        | "completionOutcome"
-    >,
+    run: Pick<RunProjection, "executionStatus" | "lifecycleState"> &
+        Partial<Pick<RunProjection, "pauseReason" | "completionOutcome">>,
 ): {
     label: string;
-    tone: "ink" | "accent" | "review" | "destructive" | "dashed";
+    tone: DossierTone;
     running?: boolean;
 } {
     if (run.executionStatus === "failed")
@@ -1558,6 +1548,6 @@ export function dossierStatus(
         return { label: "Limited material", tone: "dashed" };
     return {
         label: run.executionStatus === "completed" ? "Complete" : "Ready",
-        tone: "ink",
+        tone: "success",
     };
 }
