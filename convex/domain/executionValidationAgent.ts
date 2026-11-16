@@ -5,9 +5,8 @@ import {
 import { executionError } from "@convex/execution/errors";
 import { missionScope, missionState } from "@convex/execution/missionData";
 import {
-    BROWSER_TEST_SLOT,
     requireBrowserFixtureContext,
-    requireBrowserTestOwner,
+    requireBrowserTestRunOwner,
 } from "@convex/runWorkspace";
 import { validate } from "convex-helpers/validators";
 import {
@@ -52,7 +51,7 @@ export const executionValidationDefinition: AgentDefinition & {
         };
     },
     async requireAuthority(ctx, mission, run) {
-        const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
+        const visitor = await requireBrowserTestRunOwner(ctx, run);
         const contextId = await requireBrowserFixtureContext(ctx, visitor);
         if (
             run.purpose !== "browser_test" ||

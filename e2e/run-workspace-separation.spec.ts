@@ -1,15 +1,20 @@
-import { readFileSync } from "node:fs";
-import { closeDossierDetail, dossierDetail } from "./support/admin";
+import {
+    browserTestDossierRow,
+    closeDossierDetail,
+    dossierDetail,
+} from "./support/admin";
 import type { internal } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
-import { runConvexJson } from "./support/convex-cli";
+import { runConvexJson } from "./support/convex-admin";
 import { expect } from "@playwright/test";
 import {
-    accessCodeField,
-    expectAdmissionClosed,
-    submitAccessCode,
+    admitAdministrator,
 } from "./support/admission";
-import { test, closeBrowserTestContext } from "./support/browser-workspace";
+import {
+    browserTestSlot,
+    test,
+    closeBrowserTestContext,
+} from "./support/browser-workspace";
 import {
     admitAnalyst,
     seedSourceReview,
@@ -26,7 +31,7 @@ for (const viewport of [
         const errors: string[] = [];
         page.on("pageerror", (error) => errors.push(error.message));
         await admitAnalyst(page);
-        const fixture = seedSourceReview(
+        const fixture = await seedSourceReview(
             `workspace-separation-${viewport.width}-${Date.now()}`,
         );
         await page.reload();
@@ -67,7 +72,7 @@ for (const viewport of [
     }) => {
         await page.setViewportSize(viewport);
         await admitAnalyst(page);
-        const fixture = seedSourceReview(`header-layout-${viewport.width}`);
+        const fixture = await seedSourceReview(`header-layout-${viewport.width}`);
         await page.goto(`/workspace/${fixture.runId}`);
         await expect(
             page.getByRole("heading", {
@@ -78,17 +83,23 @@ for (const viewport of [
         await page.screenshot({
             path: test.info().outputPath(`header-${viewport.width}.png`),
         });
-        const home = await page
-            .getByRole("button", { name: "Go to Home", exact: true })
+        const navigation = await page
+            .getByRole("button", { name: "Workbench navigation", exact: true })
             .boundingBox();
         const account = await page
             .getByRole("button", { name: "Workspace menu", exact: true })
             .boundingBox();
-        expect(home).not.toBeNull();
+        expect(navigation).not.toBeNull();
         expect(account).not.toBeNull();
-        if (!home || !account) throw new Error("Header controls are missing");
+        if (!navigation || !account)
+            throw new Error("Header controls are missing");
         expect(
-            Math.abs(home.y + home.height / 2 - account.y - account.height / 2),
+            Math.abs(
+                navigation.y +
+                    navigation.height / 2 -
+                    account.y -
+                    account.height / 2,
+            ),
         ).toBeLessThanOrEqual(2);
     });
 }
@@ -97,23 +108,7 @@ test("protected administration separates and pages technical dossiers", async ({
     page,
     browser,
 }) => {
-    const material = JSON.parse(
-        readFileSync("invitation-otp-codes.local", "utf8"),
-    ) as { invitations: Array<{ role: string; code: string }> };
-    await page.goto("/workspace/admin");
-    const invitation = material.invitations.find(
-        (item) => item.role === "admin",
-    );
-    if (!invitation)
-        throw new Error("Local administrator invitation is missing");
-    await expect(accessCodeField(page)).toBeVisible({
-        timeout: 30_000,
-    });
-    await submitAccessCode(page, invitation.code);
-    await expectAdmissionClosed(page);
-    await expect(
-        page.getByRole("heading", { name: "Administration" }),
-    ).toBeVisible();
+    await admitAdministrator(page);
     const validationContext = await browser.newContext({
         baseURL: test.info().project.use.baseURL,
         reducedMotion: "reduce",
@@ -121,12 +116,13 @@ test("protected administration separates and pages technical dossiers", async ({
     const validationPage = await validationContext.newPage();
     try {
         await admitAnalyst(validationPage);
-        const population = runConvexJson<
+        const population = await runConvexJson<
             FunctionReturnType<
                 typeof internal.e2eFixtures.seedAdministrationPaginationScenario
             >
         >("e2eFixtures:seedAdministrationPaginationScenario", {
             fixtureKey: "admin-pagination",
+            slotKey: browserTestSlot(),
         });
         await page
             .getByRole("tab", { name: "Dossiers", exact: true })
@@ -168,7 +164,7 @@ test("protected administration separates and pages technical dossiers", async ({
             .click();
         const dialog = dossierDetail(page);
         await expect(
-            dialog.getByText("Provider receipts", { exact: true }),
+            dialog.getByRole("tab", { name: /^Provider receipts/ }),
         ).toBeVisible();
         await expect(
             dialog.getByRole("button", { name: "Status: All", exact: true }),
@@ -216,13 +212,13 @@ test("protected administration separates and pages technical dossiers", async ({
                 .getByRole("button", { name: "Open dossier", exact: true }),
         ).toHaveCount(20);
         for (const id of population.browserRunIds)
-            await expect(page.getByText(id, { exact: true })).toBeVisible();
+            await expect(await browserTestDossierRow(page, id)).toBeVisible();
         await page.getByRole("tab", { name: /^Reservations/ }).click();
         await expect(
             page.getByRole("button", { name: "Quota: All", exact: true }),
         ).toBeVisible();
         await expect(
-            page.getByText("Reserved for validation", { exact: true }),
+            page.getByText("Reserved for validation", { exact: true }).first(),
         ).toBeVisible();
         await page.screenshot({
             path: test.info().outputPath("admin-mobile.png"),
@@ -233,7 +229,7 @@ test("protected administration separates and pages technical dossiers", async ({
             ),
         ).toBe(true);
     } finally {
-        closeBrowserTestContext(validationPage);
+        await closeBrowserTestContext(validationPage);
         await validationContext.close();
     }
 });

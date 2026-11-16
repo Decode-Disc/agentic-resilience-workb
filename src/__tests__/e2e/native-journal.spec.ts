@@ -1,19 +1,22 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import type { internal } from "@convex/_generated/api";
 import { expect } from "@playwright/test";
 import type { FunctionReturnType } from "convex/server";
-import { closeDossierDetail, dossierDetail } from "../../../e2e/support/admin";
 import {
-    accessCodeField,
+    browserTestDossierRow,
+    closeDossierDetail,
+    dossierDetail,
+} from "../../../e2e/support/admin";
+import {
+    admitAdministrator,
     expectAdmissionClosed,
-    submitAccessCode,
 } from "../../../e2e/support/admission";
 import {
+    browserTestSlot,
     closeBrowserTestContext,
     test,
 } from "../../../e2e/support/browser-workspace";
-import { runConvexJson } from "../../../e2e/support/convex-cli";
+import { runConvexJson } from "../../../e2e/support/convex-admin";
 import { admitAnalyst } from "../../../e2e/support/source-review-fixture";
 
 for (const width of [1440, 390]) {
@@ -38,10 +41,11 @@ for (const width of [1440, 390]) {
         const analystPage = await analyst.newPage();
         try {
             await admitAnalyst(analystPage);
-            const missionId = runConvexJson<string>(
+            const missionId = await runConvexJson<string>(
                 "execution/fixtures:startValidation",
                 {
                     fixtureKey: `native-large-journal-${width}`,
+                    slotKey: browserTestSlot(),
                     generationBackend: { id: "pi-durable", version: 1 },
                     largeJournal: true,
                 },
@@ -52,29 +56,10 @@ for (const width of [1440, 390]) {
                         typeof internal.execution.fixtures.inspect
                     >
                 >("execution/fixtures:inspect", { missionId });
-            const state = inspect();
+            const state = await inspect();
             expect(state.status).toBe("blocked");
             expect(state.providerCallCount).toBe(0);
-            const material = JSON.parse(
-                readFileSync("invitation-otp-codes.local", "utf8"),
-            ) as { invitations: Array<{ role: string; code: string }> };
-            const invitation = material.invitations.find(
-                (item) => item.role === "admin",
-            );
-            if (!invitation)
-                throw new Error("Local administrator admission unavailable");
-            await page.goto("/workspace/admin");
-            await expect(accessCodeField(page)).toBeVisible({
-                timeout: 60_000,
-            });
-            await submitAccessCode(page, invitation.code);
-            await expectAdmissionClosed(page);
-            await expect(
-                page.getByRole("heading", {
-                    name: "Administration",
-                    exact: true,
-                }),
-            ).toBeVisible();
+            await admitAdministrator(page);
             const dialog = dossierDetail(page);
             const journal = dialog.getByRole("region", {
                 name: "Execution journal",
@@ -89,7 +74,7 @@ for (const width of [1440, 390]) {
                 await page
                     .getByRole("tab", { name: "Browser tests", exact: true })
                     .click();
-                await row
+                await (await browserTestDossierRow(page, state.runId))
                     .getByRole("button", {
                         name: "Open dossier",
                         exact: true,
@@ -192,10 +177,10 @@ for (const width of [1440, 390]) {
                     exact: true,
                 }),
             ).toBeFocused();
-            expect(inspect()).toEqual(state);
+            expect(await inspect()).toEqual(state);
             expect(errors).toEqual([]);
         } finally {
-            closeBrowserTestContext(analystPage);
+            await closeBrowserTestContext(analystPage);
             await analyst.close();
         }
     });

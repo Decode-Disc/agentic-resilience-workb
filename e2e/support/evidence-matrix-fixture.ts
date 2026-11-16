@@ -7,11 +7,9 @@
 // convention are reused from the source-review fixture so the local invitation
 // stays a single shared bootstrap.
 /// <reference types="node" />
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
-import { BROWSER_TEST_SLOT } from "./browser-workspace";
-import { runConvexJson } from "./convex-cli";
+import { workerSlotAccessCode } from "./browser-workspace";
+import { runConvexJson } from "./convex-admin";
 
 export type EvidenceMatrixScenarioKind = "showcase" | "unavailable";
 
@@ -40,31 +38,6 @@ export type SeededEvidenceMatrix = {
     executionGeneration: number;
 };
 
-type InvitationMaterial = {
-    invitations: Array<{
-        slotKey: string;
-        role: "admin" | "analyst";
-        code: string;
-    }>;
-};
-
-/** The analyst-4 invitation used by the existing admission helper. */
-const analystSlot = (() => {
-    const material = JSON.parse(
-        readFileSync(
-            resolve(process.cwd(), "invitation-otp-codes.local"),
-            "utf8",
-        ),
-    ) as InvitationMaterial;
-    const analystInvitation = material.invitations.find(
-        ({ slotKey }) => slotKey === BROWSER_TEST_SLOT,
-    );
-    if (!analystInvitation) {
-        throw new Error("Local analyst invitation is not configured");
-    }
-    return analystInvitation;
-})();
-
 /**
  * Seeds the guarded evidence-matrix scenario for one bounded fixture key. The
  * real Phase 5 workflow then advances asynchronously: showcase registers the
@@ -75,10 +48,14 @@ const analystSlot = (() => {
 export function seedEvidenceMatrix(
     fixtureKey: string,
     scenarioKind: EvidenceMatrixScenarioKind,
-): SeededEvidenceMatrix {
+): Promise<SeededEvidenceMatrix> {
     return runConvexJson<SeededEvidenceMatrix>(
         "e2eFixtures:seedEvidenceMatrixScenario",
-        { slotKey: analystSlot.slotKey, fixtureKey, scenarioKind },
+        {
+            slotKey: workerSlotAccessCode("analyst").slotKey,
+            fixtureKey,
+            scenarioKind,
+        },
     );
 }
 
@@ -86,7 +63,7 @@ export function seedEvidenceMatrix(
 export function inspectEvidenceMatrix(
     runId: string,
     fixtureKey: string,
-): EvidenceMatrixSnapshot {
+): Promise<EvidenceMatrixSnapshot> {
     return runConvexJson<EvidenceMatrixSnapshot>(
         "e2eFixtures:inspectEvidenceMatrixScenario",
         { runId, fixtureKey },
@@ -94,12 +71,13 @@ export function inspectEvidenceMatrix(
 }
 
 /**
- * Reads the reusable analyst-4 access code from the shared local material.
+ * Reads the reusable worker analyst access code from the shared local material.
  * Admission through the real UI drawer is the only use; tests never print it.
  */
 export function analystAccessCode(): string {
-    if (!/^\d{4}$/.test(analystSlot.code)) {
+    const { code } = workerSlotAccessCode("analyst");
+    if (!/^\d{4}$/.test(code)) {
         throw new Error("Local analyst access code is not configured");
     }
-    return analystSlot.code;
+    return code;
 }

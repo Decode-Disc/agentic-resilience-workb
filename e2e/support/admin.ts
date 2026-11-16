@@ -13,3 +13,37 @@ export async function closeDossierDetail(page: Page) {
     else await detail.getByRole("button", { name: "Close dossier" }).click();
     await expect(detail).toBeHidden();
 }
+
+/** Reveals and returns a Browser tests dossier row, paging forward if concurrent workers added newer runs. */
+export async function browserTestDossierRow(
+    page: Page,
+    runId: string,
+): Promise<Locator> {
+    const panel = page.getByRole("tabpanel", { name: "Browser tests" });
+    await expect(
+        panel.getByRole("button", { name: "Open dossier", exact: true }).first(),
+    ).toBeVisible();
+    const row = panel
+        .locator('[data-slot="item"]')
+        .filter({ has: page.getByText(runId, { exact: true }) });
+    const loadMore = panel.getByRole("button", {
+        name: "Load more dossiers",
+        exact: true,
+    });
+    for (let pageIndex = 0; pageIndex < 5; pageIndex += 1) {
+        if ((await row.count()) > 0) return row;
+        if ((await loadMore.count()) === 0) break;
+        const previousCount = await panel
+            .getByRole("button", { name: "Open dossier", exact: true })
+            .count();
+        await loadMore.click();
+        await expect
+            .poll(() =>
+                panel
+                    .getByRole("button", { name: "Open dossier", exact: true })
+                    .count(),
+            )
+            .toBeGreaterThan(previousCount);
+    }
+    return row;
+}

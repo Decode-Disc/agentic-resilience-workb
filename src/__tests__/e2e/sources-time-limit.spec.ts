@@ -1,8 +1,8 @@
 import type { internal } from "@convex/_generated/api";
 import { expect, type Locator, type Page } from "@playwright/test";
 import type { FunctionReturnType } from "convex/server";
-import { test } from "../../../e2e/support/browser-workspace";
-import { runConvexCli, runConvexJson } from "../../../e2e/support/convex-cli";
+import { browserTestSlot, test } from "../../../e2e/support/browser-workspace";
+import { runConvexJson } from "../../../e2e/support/convex-admin";
 import { admitAnalyst } from "../../../e2e/support/source-review-fixture";
 
 const scratch =
@@ -10,14 +10,8 @@ const scratch =
 const raw =
     /approval_|sources_time_limit|execution_time_limit|stale_execution|_research\b/;
 
-function fixture(name: string, runId: string, fixtureKey: string) {
-    runConvexCli([
-        "run",
-        `execution/fixtures:${name}`,
-        JSON.stringify({ runId, fixtureKey }),
-        "--deployment",
-        "local",
-    ]);
+async function fixture(name: string, runId: string, fixtureKey: string) {
+    await runConvexJson(`execution/fixtures:${name}`, { runId, fixtureKey });
 }
 
 async function expectChoiceTabOrder(
@@ -51,9 +45,13 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     await page.setViewportSize({ width: 1440, height: 844 });
     await admitAnalyst(page);
     const fixtureKey = `sources-time-limit-1440-${Date.now()}`;
-    const runId = runConvexJson<string>("execution/fixtures:startWorkbench", {
-        fixtureKey,
-    });
+    const runId = await runConvexJson<string>(
+        "execution/fixtures:startWorkbench",
+        {
+            fixtureKey,
+            slotKey: browserTestSlot(),
+        },
+    );
     await page.goto(`/workspace/${runId}?section=progress`);
     const conversation = page.getByLabel("Research conversation");
     const progress = page.getByLabel("Documentary progress");
@@ -66,7 +64,7 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
             }),
     ).toBeVisible({ timeout: 60000 });
 
-    fixture("reachSourcesTimeLimit", runId, fixtureKey);
+    await fixture("reachSourcesTimeLimit", runId, fixtureKey);
 
     const cardTitle = "The Sources Agent reached its time limit";
     const timeLimitChoices = [
@@ -129,7 +127,7 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     ).toBeVisible({ timeout: 30000 });
 
     // A second limit continues automatically while the dossier grant is active.
-    fixture("reachSourcesTimeLimit", runId, fixtureKey);
+    await fixture("reachSourcesTimeLimit", runId, fixtureKey);
     await expect(
         progress.getByRole("button", { name: "Pause research" }),
     ).toBeVisible({ timeout: 30000 });
@@ -151,7 +149,7 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     await expect(allowedGroup).toHaveCount(0, { timeout: 15000 });
     await page.keyboard.press("Escape");
 
-    fixture("reachSourcesTimeLimit", runId, fixtureKey);
+    await fixture("reachSourcesTimeLimit", runId, fixtureKey);
     await expect(progressCard).toBeVisible({ timeout: 30000 });
     await expect(
         progressCard.getByRole("button", { name: "Always continue" }),
@@ -160,7 +158,8 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     await progressCard
         .getByRole("button", { name: "Use what's prepared" })
         .click();
-    fixture("settleSourcesFixture", runId, fixtureKey);
+    await expect(progressCard).toHaveCount(0, { timeout: 30000 });
+    await fixture("settleSourcesFixture", runId, fixtureKey);
     await expect(
         page.getByText("No usable material prepared", {
             exact: false,
@@ -188,9 +187,13 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
     await page.setViewportSize({ width: 390, height: 844 });
     await admitAnalyst(page);
     const fixtureKey = `sources-time-limit-390-${Date.now()}`;
-    const runId = runConvexJson<string>("execution/fixtures:startWorkbench", {
-        fixtureKey,
-    });
+    const runId = await runConvexJson<string>(
+        "execution/fixtures:startWorkbench",
+        {
+            fixtureKey,
+            slotKey: browserTestSlot(),
+        },
+    );
     await page.goto(`/workspace/${runId}?section=progress`);
 
     const progress = page.getByLabel("Documentary progress");
@@ -203,7 +206,7 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
                 exact: false,
             }),
     ).toBeVisible({ timeout: 60000 });
-    fixture("reachSourcesTimeLimit", runId, fixtureKey);
+    await fixture("reachSourcesTimeLimit", runId, fixtureKey);
 
     const cardTitle = "The Sources Agent reached its time limit";
     const timeLimitChoices = [
@@ -260,7 +263,7 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
             progress.getByRole("button", { name: "Pause research" }),
         ).toBeVisible({ timeout: 30000 });
     } finally {
-        const state = runConvexJson<
+        const state = await runConvexJson<
             FunctionReturnType<
                 typeof internal.execution.fixtures.inspectWorkbench
             >
@@ -290,7 +293,19 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
     }
 
     // Trigger a Workbench request_approval card and deny it.
-    fixture("requestApprovalFixture", runId, fixtureKey);
+    await expect
+        .poll(
+            async () =>
+                (
+                    await runConvexJson<{ nativeSettled: boolean }>(
+                        "execution/fixtures:inspectWorkbench",
+                        { runId, fixtureKey },
+                    )
+                ).nativeSettled,
+            { timeout: 30000 },
+        )
+        .toBe(true);
+    await fixture("requestApprovalFixture", runId, fixtureKey);
     await askAi.click();
     await expect(
         conversation.getByText(

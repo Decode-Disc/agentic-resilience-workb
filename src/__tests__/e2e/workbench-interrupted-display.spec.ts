@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
-import { test } from "../../../e2e/support/browser-workspace";
-import { runConvexCli, runConvexJson } from "../../../e2e/support/convex-cli";
+import { browserTestSlot, test } from "../../../e2e/support/browser-workspace";
+import { runConvexJson } from "../../../e2e/support/convex-admin";
 import { admitAnalyst } from "../../../e2e/support/source-review-fixture";
 
 for (const width of [1440, 390, 320]) {
@@ -16,9 +16,9 @@ for (const width of [1440, 390, 320]) {
         await page.setViewportSize({ width, height: 844 });
         await admitAnalyst(page);
         const fixtureKey = `interrupted-display-${width}`;
-        const runId = runConvexJson<string>(
+        const runId = await runConvexJson<string>(
             "execution/fixtures:startWorkbench",
-            { fixtureKey },
+            { fixtureKey, slotKey: browserTestSlot() },
         );
         await page.goto(`/workspace/${runId}?section=progress`);
         await expect(
@@ -26,13 +26,22 @@ for (const width of [1440, 390, 320]) {
                 exact: false,
             }),
         ).toBeVisible({ timeout: 60000 });
-        runConvexCli([
-            "run",
-            "execution/fixtures:interruptWorkbench",
-            JSON.stringify({ runId, fixtureKey }),
-            "--deployment",
-            "local",
-        ]);
+        await expect
+            .poll(
+                async () =>
+                    (
+                        await runConvexJson<{ nativeSettled: boolean }>(
+                            "execution/fixtures:inspectWorkbench",
+                            { runId, fixtureKey },
+                        )
+                    ).nativeSettled,
+                { timeout: 30000 },
+            )
+            .toBe(true);
+        await runConvexJson("execution/fixtures:interruptWorkbench", {
+            runId,
+            fixtureKey,
+        });
         const alert = page
             .getByRole("alert")
             .filter({ hasText: "Response unavailable" });
@@ -85,12 +94,13 @@ for (const width of [1440, 390, 320]) {
         });
         await expect.poll(visible).toBe(true);
         await expect(page.locator("#invitation-code")).toHaveCount(0);
+        await page.getByText("Proposed research program").click();
         await expect(
             page.getByText("Who controls the workflow and its rules?", {
                 exact: true,
             }),
         ).toBeVisible();
-        const snapshot = runConvexJson<{ providerCallCount: number }>(
+        const snapshot = await runConvexJson<{ providerCallCount: number }>(
             "execution/fixtures:inspectWorkbench",
             { runId, fixtureKey },
         );

@@ -466,6 +466,23 @@
         "Proposes real rendered helper-consumer characterization separately from Button component verification and reports any unrun runtime check."
       ],
       "expected_output": "A source-grounded compatibility assessment preserving raw recipe composition and the component's existing merge boundary."
+    },
+    {
+      "id": 25,
+      "name": "status-tone-single-owner",
+      "prompt": "On the admin dossier list, the Ready badge should use the same success color as the model Ready badge. Make the change. Analysis and edit only; do not run browser tests.",
+      "files": [
+        "../../../src/lib/presentation/research-copy.ts",
+        "../../../src/components/dossier-status-badge.tsx",
+        "../../../src/components/admin/admin-status-badge.tsx"
+      ],
+      "expectations": [
+        "Searches every renderer of the dossier execution status before choosing where to change the tone.",
+        "Changes the tone in the shared dossierStatus owner rather than adding a consumer-local status-to-tone map.",
+        "Notes the effect on other surfaces that read the same owner, such as the dossier switcher and cards.",
+        "Keeps Approval Teal reserved for analyst approval."
+      ],
+      "expected_output": "One owner change that propagates the success tone to every dossier-status surface, with the affected consumers named."
     }
   ]
 }

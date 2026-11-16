@@ -2854,13 +2854,16 @@ export const advanceSourcePreparationFixture = internalMutation({
 
 /** Supplies pagination data on a fresh deployment without starting work or reserving research. */
 export const seedAdministrationPaginationScenario = internalMutation({
-    args: { fixtureKey: v.string() },
+    args: { fixtureKey: v.string(), slotKey: v.optional(v.string()) },
     returns: v.object({
         evaluationRunIds: v.array(v.id("researchRuns")),
         browserRunIds: v.array(v.id("researchRuns")),
     }),
     handler: async (ctx, args) => {
-        const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
+        const visitor = await requireBrowserTestOwner(
+            ctx,
+            args.slotKey?.trim() || BROWSER_TEST_SLOT,
+        );
         const contextId = await requireBrowserFixtureContext(ctx, visitor);
         const key = args.fixtureKey.trim();
         if (!/^[a-zA-Z0-9._:-]{1,80}$/.test(key))

@@ -1,8 +1,8 @@
 import { expect } from "@playwright/test";
 import type { internal } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
-import { test } from "./support/browser-workspace";
-import { runConvexJson } from "./support/convex-cli";
+import { browserTestSlot, test } from "./support/browser-workspace";
+import { runConvexJson } from "./support/convex-admin";
 import { admitAnalyst } from "./support/source-review-fixture";
 
 type Snapshot = FunctionReturnType<typeof internal.execution.fixtures.inspect>;
@@ -22,8 +22,9 @@ for (const viewport of [
         });
         await admitAnalyst(page);
         const key = `pi-agent-harness-${viewport.name}`;
-        const missionId = runConvexJson<string>("execution/fixtures:start", {
+        const missionId = await runConvexJson<string>("execution/fixtures:start", {
             fixtureKey: key,
+            slotKey: browserTestSlot(),
         });
         const inspect = () =>
             runConvexJson<Snapshot>("execution/fixtures:inspect", {
@@ -32,7 +33,7 @@ for (const viewport of [
         await expect
             .poll(inspect, { timeout: 90_000 })
             .toMatchObject({ status: "completed" });
-        const snapshot = inspect();
+        const snapshot = await inspect();
         expect(snapshot.provenance).toBe("simulation");
         expect(snapshot.generationBackends).toEqual(
             Array.from({ length: snapshot.invocationCount }, () => ({
@@ -60,7 +61,7 @@ for (const viewport of [
             page.getByRole("heading", { name: "Dossiers", exact: true }),
         ).toBeVisible();
         await expect(page.getByLabel("Access code")).toHaveCount(0);
-        expect(inspect()).toEqual(snapshot);
+        expect(await inspect()).toEqual(snapshot);
         expect(errors).toEqual([]);
     });
 }

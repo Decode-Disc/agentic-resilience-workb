@@ -1,8 +1,8 @@
 import type { internal } from "@convex/_generated/api";
 import { expect } from "@playwright/test";
 import type { FunctionReturnType } from "convex/server";
-import { test } from "../../../e2e/support/browser-workspace";
-import { runConvexJson } from "../../../e2e/support/convex-cli";
+import { browserTestSlot, test } from "../../../e2e/support/browser-workspace";
+import { runConvexJson } from "../../../e2e/support/convex-admin";
 import { admitAnalyst } from "../../../e2e/support/source-review-fixture";
 
 for (const viewport of [
@@ -21,9 +21,9 @@ for (const viewport of [
         });
         await admitAnalyst(page);
         const fixtureKey = `model-controls-${viewport.name}`;
-        const runId = runConvexJson<string>(
+        const runId = await runConvexJson<string>(
             "execution/fixtures:startWorkbench",
-            { fixtureKey },
+            { fixtureKey, slotKey: browserTestSlot() },
         );
         const inspect = () =>
             runConvexJson<
@@ -37,12 +37,13 @@ for (const viewport of [
                 exact: false,
             }),
         ).toBeVisible({ timeout: 60000 });
+        await page.getByRole("textbox").focus();
         const model = page.getByRole("button", {
             name: "Workbench model and effort",
             exact: true,
         });
         await expect(model).toContainText("GLM-5.3-Flash");
-        const original = inspect();
+        const original = await inspect();
         await model.focus();
         await model.press("Enter");
         const deepseek = page.getByRole("menuitemradio", {
@@ -66,7 +67,7 @@ for (const viewport of [
             path: `/tmp/workbench-composer-revision/models-${viewport.name}.png`,
             animations: "disabled",
         });
-        await page.getByRole("menuitem", { name: /Effort Low/ }).click();
+        await page.getByRole("menuitem", { name: /^Effort / }).click();
         await expect(
             page.getByRole("menuitemradio", { name: "Off", exact: true }),
         ).toBeVisible();
@@ -85,26 +86,29 @@ for (const viewport of [
         await high.press("Enter");
         await expect(model).toContainText("High");
         await page.reload();
+        const input = page.getByRole("textbox");
+        await expect(input).toBeVisible({ timeout: 60000 });
+        await input.focus();
         await expect(model).toContainText("DeepSeek V4.1 Flash 1017");
         await expect(model).toContainText("High");
-        expect(inspect()).toMatchObject({
+        expect(await inspect()).toMatchObject({
             nativeSessionId: original.nativeSessionId,
             missionCount: original.missionCount,
             invocationCount: original.invocationCount,
         });
-        const input = page.getByRole("textbox");
-        await input.fill("/p");
-        await expect(
-            page.getByRole("listbox", { name: "Commands" }),
-        ).toBeVisible();
-        await input.press("Enter");
+        const send = page.getByRole("button", {
+            name: "Send refinement",
+            exact: true,
+        });
+        await input.fill("/pause");
+        await send.click();
         const confirmation = page.getByText(
             "Research has not started. Review the research program and choose Start research when ready.",
             { exact: true },
         );
         await expect(confirmation).toHaveCount(1);
         await expect(input).toHaveValue("");
-        expect(inspect()).toMatchObject({
+        expect(await inspect()).toMatchObject({
             missionCount: original.missionCount,
             invocationCount: original.invocationCount,
             providerCallCount: 0,
@@ -112,10 +116,10 @@ for (const viewport of [
             phase: "framing",
         });
         await input.fill("/resume");
-        await page.getByRole("option", { name: /^\/resume/ }).click();
+        await send.click();
         await expect(confirmation).toHaveCount(2);
         await expect(input).toHaveValue("");
-        expect(inspect()).toMatchObject({
+        expect(await inspect()).toMatchObject({
             missionCount: original.missionCount,
             invocationCount: original.invocationCount,
             providerCallCount: 0,
@@ -125,8 +129,8 @@ for (const viewport of [
         await input.press("Enter");
         await expect
             .poll(
-                () => {
-                    const current = inspect();
+                async () => {
+                    const current = await inspect();
                     return (
                         current.invocationCount > original.invocationCount &&
                         current.nativeSettled
@@ -135,7 +139,7 @@ for (const viewport of [
                 { timeout: 60000 },
             )
             .toBe(true);
-        expect(inspect()).toMatchObject({
+        expect(await inspect()).toMatchObject({
             nativeSessionId: original.nativeSessionId,
             providerCallCount: 0,
             allMissionsSimulated: true,
@@ -186,6 +190,9 @@ for (const viewport of [
             })),
         ).toEqual({ wide: false, tall: false });
         await page.reload();
+        const reloadedInput = page.getByRole("textbox");
+        await expect(reloadedInput).toBeVisible({ timeout: 30_000 });
+        await reloadedInput.focus();
         await expect(model).toContainText("DeepSeek V4.1 Flash 1017");
         await expect(
             page.getByLabel("Access code", { exact: true }),

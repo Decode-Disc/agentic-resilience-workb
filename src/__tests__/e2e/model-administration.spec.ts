@@ -1,10 +1,12 @@
-import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import {
     accessCodeField,
     expectAdmissionClosed,
+    localAccessCode,
     submitAccessCode,
 } from "../../../e2e/support/admission";
+
+test.describe.configure({ mode: "serial" });
 
 for (const viewport of [
     { name: "desktop", width: 1440, height: 1000 },
@@ -20,28 +22,9 @@ for (const viewport of [
         page.on("console", (message) => {
             if (message.type() === "error") errors.push(message.text());
         });
-        const material: unknown = JSON.parse(
-            readFileSync("invitation-otp-codes.local", "utf8"),
-        );
-        if (
-            !material ||
-            typeof material !== "object" ||
-            !("invitations" in material) ||
-            !Array.isArray(material.invitations)
-        )
-            throw new Error("Local invitation material unavailable");
-        const invitation = material.invitations.find(
-            (entry: unknown) =>
-                entry &&
-                typeof entry === "object" &&
-                "role" in entry &&
-                entry.role === "admin",
-        );
-        if (!invitation || typeof invitation.code !== "string")
-            throw new Error("Local administrator admission unavailable");
         await page.goto("/workspace/admin");
         await expect(accessCodeField(page)).toBeVisible({ timeout: 60000 });
-        await submitAccessCode(page, invitation.code);
+        await submitAccessCode(page, localAccessCode({ role: "admin" }));
         await expectAdmissionClosed(page);
         await expect(
             page.getByRole("heading", { name: "Administration", exact: true }),

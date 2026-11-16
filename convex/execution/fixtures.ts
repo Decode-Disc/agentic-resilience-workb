@@ -51,6 +51,7 @@ import {
     readWorkbenchQualification,
     requireBrowserFixtureContext,
     requireBrowserTestOwner,
+    requireBrowserTestRunOwner,
 } from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import { workflow } from "@convex/workflow";
@@ -69,21 +70,26 @@ import {
     DEFAULT_AGENT_BACKEND,
 } from "./executionProtocol";
 import { admittedInputJson } from "./journal";
-import { completeRetainedText, retainedTextPage } from "./retainedText";
+import {
+    completeRetainedText,
+    readRetainedText,
+    retainedTextPage,
+} from "./retainedText";
 
 /** Validates retained fixture provenance without granting or renewing execution authority. */
 async function readLocalFixtureRun(
     ctx: MutationCtx | QueryCtx,
     args: { runId: Id<"researchRuns">; fixtureKey: string },
 ) {
-    const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
     const run = await ctx.db.get(args.runId);
-    const context = run?.browserTestContextId
+    if (!run || run.purpose !== "browser_test")
+        throw new Error("Local simulation scope required");
+    const visitor = await requireBrowserTestRunOwner(ctx, run);
+    const context = run.browserTestContextId
         ? await ctx.db.get(run.browserTestContextId)
         : null;
     if (
         !/^[a-z0-9-]{1,80}$/.test(args.fixtureKey) ||
-        run?.purpose !== "browser_test" ||
         run.ownerVisitorId !== visitor._id ||
         context?.ownerVisitorId !== visitor._id ||
         !run.reservationKey?.endsWith(`:${args.fixtureKey}`)
@@ -116,7 +122,10 @@ async function requireCampaignScenarios(
         scenarioId: string;
     }[],
 ) {
-    const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
+    const first = dossiers[0] ? await ctx.db.get(dossiers[0].runId) : null;
+    const visitor = first
+        ? await requireBrowserTestRunOwner(ctx, first)
+        : await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
     const contextId = await requireBrowserFixtureContext(ctx, visitor);
     const context = await ctx.db.get(contextId);
     if (!context?.campaignLotId)
@@ -149,6 +158,29 @@ async function requireCampaignScenarios(
     };
 }
 /** Binds unpaid simulation dossiers before the first turn; the immutable mandate owns their identity. */
+
+/** The admitted input and, when recorded, the provider request snapshot of one invocation. */
+async function modelReceivedTexts(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+): Promise<string[]> {
+    const request = await ctx.db
+        .query("agentInvocationPayloads")
+        .withIndex("by_invocation_and_part", (q) =>
+            q.eq("invocationId", invocation._id).eq("part", "request"),
+        )
+        .unique();
+    const recorded =
+        request?.json ??
+        (request?.textId
+            ? await readRetainedText(ctx, request.textId)
+            : undefined);
+    return [
+        await admittedInputJson(ctx, invocation),
+        ...(recorded === undefined ? [] : [recorded]),
+    ];
+}
+
 export const bindCampaignScenarios = internalMutation({
     args: { dossiers: v.array(campaignDossier) },
     returns: v.null(),
@@ -179,15 +211,17 @@ export const bindCampaignScenarios = internalMutation({
 export const startValidation = internalAction({
     args: {
         fixtureKey: v.string(),
+        slotKey: v.optional(v.string()),
         generationBackend: v.optional(agentBackendValidator),
         largeJournal: v.optional(v.boolean()),
     },
     returns: v.id("agentMissions"),
     handler: async (ctx, args): Promise<Id<"agentMissions">> => {
-        await ctx.runQuery(internal.execution.fixtures.authorize, {});
+        const slotKey = args.slotKey?.trim() || BROWSER_TEST_SLOT;
+        await ctx.runQuery(internal.execution.fixtures.authorize, { slotKey });
         const base = await ctx.runAction(
             internal.e2eFixtures.seedInspectedSourceReviewScenario,
-            { slotKey: BROWSER_TEST_SLOT, fixtureKey: args.fixtureKey },
+            { slotKey, fixtureKey: args.fixtureKey },
         );
         return ctx.runMutation(internal.execution.fixtures.activateValidation, {
             runId: base.runId,
@@ -342,14 +376,16 @@ export const activateValidation = internalMutation({
 export const start = internalAction({
     args: {
         fixtureKey: v.string(),
+        slotKey: v.optional(v.string()),
         generationBackend: v.optional(agentBackendValidator),
     },
     returns: v.id("agentMissions"),
     handler: async (ctx, args): Promise<Id<"agentMissions">> => {
-        await ctx.runQuery(internal.execution.fixtures.authorize, {});
+        const slotKey = args.slotKey?.trim() || BROWSER_TEST_SLOT;
+        await ctx.runQuery(internal.execution.fixtures.authorize, { slotKey });
         const base = await ctx.runAction(
             internal.e2eFixtures.seedInspectedSourceReviewScenario,
-            { slotKey: BROWSER_TEST_SLOT, fixtureKey: args.fixtureKey },
+            { slotKey, fixtureKey: args.fixtureKey },
         );
         return ctx.runMutation(internal.execution.fixtures.activate, {
             runId: base.runId,
@@ -362,10 +398,13 @@ export const start = internalAction({
 });
 
 export const authorize = internalQuery({
-    args: {},
+    args: { slotKey: v.optional(v.string()) },
     returns: v.null(),
-    handler: async (ctx) => {
-        const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
+    handler: async (ctx, args) => {
+        const visitor = await requireBrowserTestOwner(
+            ctx,
+            args.slotKey?.trim() || BROWSER_TEST_SLOT,
+        );
         await requireBrowserFixtureContext(ctx, visitor);
         return null;
     },
@@ -523,13 +562,13 @@ export const inspect = internalQuery({
         conversationQueuedCount: v.number(),
     }),
     handler: async (ctx, args) => {
-        const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
-        const contextId = await requireBrowserFixtureContext(ctx, visitor);
         const mission = await ctx.db.get(args.missionId);
         const run = mission ? await ctx.db.get(mission.runId) : null;
+        if (!mission || !run || run.purpose !== "browser_test")
+            throw new Error("Local simulation scope required");
+        const visitor = await requireBrowserTestRunOwner(ctx, run);
+        const contextId = await requireBrowserFixtureContext(ctx, visitor);
         if (
-            !mission ||
-            run?.purpose !== "browser_test" ||
             run.ownerVisitorId !== visitor._id ||
             run.browserTestContextId !== contextId ||
             ![
@@ -593,17 +632,21 @@ export const inspect = internalQuery({
             observedInvocationCount: invocations.filter(
                 (invocation) => invocation.receivedOutputJson,
             ).length,
+            // What the model received: the admitted state, or a native
+            // backend's recorded request, which carries its own tool results.
             contextIncludesReturnedQuotation:
                 !!quotation &&
                 (
                     await Promise.all(
                         invocations.map((invocation) =>
-                            admittedInputJson(ctx, invocation),
+                            modelReceivedTexts(ctx, invocation),
                         ),
                     )
-                ).some((input) =>
-                    input.includes(JSON.stringify(quotation).slice(1, -1)),
-                ),
+                )
+                    .flat()
+                    .some((input) =>
+                        input.includes(JSON.stringify(quotation).slice(1, -1)),
+                    ),
             providerCallCount: calls.length,
             completionCount:
                 "protocolVersion" in mission
@@ -725,18 +768,26 @@ export const activateConversation = internalMutation({
 export const startConversation = internalAction({
     args: {
         fixtureKey: v.string(),
+        slotKey: v.optional(v.string()),
         generationBackend: v.optional(agentBackendValidator),
     },
     returns: v.id("agentMissions"),
     handler: async (ctx, args): Promise<Id<"agentMissions">> => {
-        await ctx.runQuery(internal.execution.fixtures.authorize, {});
+        const slotKey = args.slotKey?.trim() || BROWSER_TEST_SLOT;
+        await ctx.runQuery(internal.execution.fixtures.authorize, { slotKey });
         const base = await ctx.runAction(
             internal.e2eFixtures.seedInspectedSourceReviewScenario,
-            { slotKey: BROWSER_TEST_SLOT, fixtureKey: args.fixtureKey },
+            { slotKey, fixtureKey: args.fixtureKey },
         );
         const created = await ctx.runMutation(
             internal.execution.fixtures.activateConversation,
-            { ...args, runId: base.runId },
+            {
+                fixtureKey: args.fixtureKey,
+                ...(args.generationBackend
+                    ? { generationBackend: args.generationBackend }
+                    : {}),
+                runId: base.runId,
+            },
         );
         if (created.kind === "retained") return created.missionId;
         await ctx.runAction(internal.execution.operations.dispatch, {
@@ -1121,13 +1172,17 @@ export const authorizeWorkbenchQualification = internalMutation({
 
 /** Prepares a labelled START scenario in the already-admitted local browser workspace. */
 export const startWorkbench = internalAction({
-    args: { fixtureKey: v.string() },
+    args: {
+        fixtureKey: v.string(),
+        slotKey: v.optional(v.string()),
+    },
     returns: v.id("researchRuns"),
     handler: async (ctx, args): Promise<Id<"researchRuns">> => {
-        await ctx.runQuery(internal.execution.fixtures.authorize, {});
+        const slotKey = args.slotKey?.trim() || BROWSER_TEST_SLOT;
+        await ctx.runQuery(internal.execution.fixtures.authorize, { slotKey });
         const base = await ctx.runMutation(
             internal.e2eFixtures.seedSourceReviewScenario,
-            { slotKey: BROWSER_TEST_SLOT, fixtureKey: args.fixtureKey },
+            { slotKey, fixtureKey: args.fixtureKey },
         );
         return ctx.runMutation(internal.execution.fixtures.activateWorkbench, {
             runId: base.runId,
@@ -2102,11 +2157,27 @@ export const requestApprovalFixture = internalAction({
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
     returns: v.null(),
     handler: async (ctx, args): Promise<null> => {
-        await ctx.runQuery(internal.execution.fixtures.authorize, {});
-        const prepared = await ctx.runMutation(
-            internal.execution.fixtures.prepareRequestApprovalFixture,
-            args,
-        );
+        let prepared: PreparedRequestApprovalFixture | undefined;
+        for (let attempt = 1; ; attempt++) {
+            try {
+                prepared = await ctx.runMutation(
+                    internal.execution.fixtures.prepareRequestApprovalFixture,
+                    args,
+                );
+                break;
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : String(error);
+                if (
+                    attempt >= 6 ||
+                    !message.includes("changed while this mutation was being run")
+                )
+                    throw error;
+                await new Promise((resolve) =>
+                    setTimeout(resolve, 100 * attempt),
+                );
+            }
+        }
         if (prepared.kind === "done") return null;
         const outcome = await ctx.runAction(
             internal.execution.operations.dispatch,

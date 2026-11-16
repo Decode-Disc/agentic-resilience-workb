@@ -31,7 +31,7 @@ import { classifyRunPurpose, runPurposeValidator } from "./domain/runPurpose";
 import { withdrawableRun } from "./domain/runWithdrawal";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { sourceDossierCandidateLimit } from "./resourceLimits";
-import { BROWSER_TEST_SLOT } from "./runWorkspace";
+import { isBrowserTestSlot } from "./runWorkspace";
 import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 import { workflow } from "./workflow";
@@ -185,8 +185,9 @@ export const get = query({
             reservations: await Promise.all(
                 visitors.map(async (visitor) => {
                     const invitation = await ctx.db.get(visitor.invitationId);
-                    const reservedForTesting =
-                        invitation?.slotKey === BROWSER_TEST_SLOT;
+                    const reservedForTesting = isBrowserTestSlot(
+                        invitation?.slotKey,
+                    );
                     return {
                         visitorId: visitor._id,
                         role: visitor.role,

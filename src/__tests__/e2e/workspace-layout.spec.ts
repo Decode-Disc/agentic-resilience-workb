@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
-import { test } from "../../../e2e/support/browser-workspace";
-import { runConvexJson } from "../../../e2e/support/convex-cli";
+import { browserTestSlot, test } from "../../../e2e/support/browser-workspace";
+import { runConvexJson } from "../../../e2e/support/convex-admin";
 import { admitAnalyst } from "../../../e2e/support/source-review-fixture";
 
 for (const width of [1440, 390]) {
@@ -15,10 +15,11 @@ for (const width of [1440, 390]) {
             if (message.type() === "error") errors.push(message.text());
         });
         await admitAnalyst(page);
-        const runId = runConvexJson<string>(
+        const runId = await runConvexJson<string>(
             "execution/fixtures:startWorkbench",
             {
                 fixtureKey: `workspace-layout-${width}`,
+                slotKey: browserTestSlot(),
             },
         );
         await page.goto(`/workspace/${runId}?section=progress&detail=timeline`);

@@ -18,6 +18,34 @@ import { requireCampaignLot } from "./qualificationCampaigns";
 import { RESOURCE_POLICY_VERSION } from "./resourcePolicy";
 
 export const BROWSER_TEST_SLOT = "analyst-4";
+const WORKER_ANALYST_SLOT_PATTERN = /^analyst-4-w[1-9]\d*$/;
+const WORKER_ADMIN_SLOT_PATTERN = /^admin-w[1-9]\d*$/;
+
+export function isLoopbackDeployment(): boolean {
+    try {
+        return ["127.0.0.1", "localhost"].includes(
+            new URL(env.CONVEX_CLOUD_URL).hostname,
+        );
+    } catch {
+        return false;
+    }
+}
+
+export function isE2EWorkerSlot(slotKey: string | undefined): boolean {
+    return (
+        WORKER_ANALYST_SLOT_PATTERN.test(slotKey ?? "") ||
+        WORKER_ADMIN_SLOT_PATTERN.test(slotKey ?? "")
+    );
+}
+
+export function isBrowserTestSlot(slotKey: string | undefined): boolean {
+    return (
+        slotKey === BROWSER_TEST_SLOT ||
+        (localBrowserFixturesEnabled() &&
+            WORKER_ANALYST_SLOT_PATTERN.test(slotKey ?? ""))
+    );
+}
+
 /** Fixed limits of the explicitly authorized local two-dossier Sources qualification. */
 export const SOURCES_QUALIFICATION_ENVELOPE = {
     version: 1 as const,
@@ -28,14 +56,7 @@ export const SOURCES_QUALIFICATION_ENVELOPE = {
     controls: 8,
 };
 export function localBrowserFixturesEnabled() {
-    if (env.E2E_FIXTURES_ENABLED !== "true") return false;
-    try {
-        return ["127.0.0.1", "localhost"].includes(
-            new URL(env.CONVEX_CLOUD_URL).hostname,
-        );
-    } catch {
-        return false;
-    }
+    return env.E2E_FIXTURES_ENABLED === "true" && isLoopbackDeployment();
 }
 
 /** Resolves the workspace from the admitted principal; callers cannot choose a namespace. */
@@ -44,7 +65,7 @@ export async function workspaceForVisitor(
     visitor: Doc<"visitors">,
 ) {
     const invitation = await ctx.db.get(visitor.invitationId);
-    if (invitation?.slotKey !== BROWSER_TEST_SLOT)
+    if (!isBrowserTestSlot(invitation?.slotKey))
         return {
             key: `research:${visitor._id}`,
             purpose: "research" as const,
@@ -135,7 +156,7 @@ export async function requireBrowserFixtureContext(
 
 /** Derives the current anonymous test principal from the claimed reserved invitation. */
 export async function requireBrowserTestOwner(ctx: QueryCtx, slotKey: string) {
-    if (!localBrowserFixturesEnabled() || slotKey !== BROWSER_TEST_SLOT)
+    if (!localBrowserFixturesEnabled() || !isBrowserTestSlot(slotKey))
         throw new Error("Local browser test slot required");
     const invitation = await ctx.db
         .query("invitations")
@@ -152,6 +173,21 @@ export async function requireBrowserTestOwner(ctx: QueryCtx, slotKey: string) {
     )
         throw new Error("Admitted anonymous browser test visitor required");
     return visitor;
+}
+
+/** Derives and validates the browser-test visitor owning `run` via its claimed invitation slot. */
+export async function requireBrowserTestRunOwner(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+) {
+    if (!run.ownerVisitorId)
+        throw new Error("Admitted anonymous browser test visitor required");
+    const owner = await ctx.db.get(run.ownerVisitorId);
+    const invitation = owner ? await ctx.db.get(owner.invitationId) : null;
+    const verified = await requireBrowserTestOwner(ctx, invitation?.slotKey ?? "");
+    if (!owner || verified._id !== owner._id)
+        throw new Error("Admitted anonymous browser test visitor required");
+    return verified;
 }
 
 async function readQualificationScope(ctx: QueryCtx, run: Doc<"researchRuns">) {
@@ -247,7 +283,7 @@ export async function readWorkbenchQualification(
         });
     if (context.campaignLotId)
         await requireCampaignLot(ctx, context.campaignLotId);
-    const visitor = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
+    const visitor = await requireBrowserTestRunOwner(ctx, run);
     if (
         visitor._id !== context.ownerVisitorId ||
         visitor.authUserId !== context.authUserId
@@ -344,10 +380,9 @@ export const closeBrowserTestContext = internalMutation({
     ): Promise<{ done: boolean; cursor: string; cancelled: number }> => {
         // Closing also works after the fixture switch is removed; it cannot create work.
         if (
-            args.slotKey !== BROWSER_TEST_SLOT ||
-            !["127.0.0.1", "localhost"].includes(
-                new URL(env.CONVEX_CLOUD_URL).hostname,
-            )
+            (args.slotKey !== BROWSER_TEST_SLOT &&
+                !WORKER_ANALYST_SLOT_PATTERN.test(args.slotKey)) ||
+            !isLoopbackDeployment()
         )
             throw new Error("Local browser test slot required");
         const invitation = await ctx.db

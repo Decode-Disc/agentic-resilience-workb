@@ -1,22 +1,15 @@
 /// <reference types="node" />
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
 import { expect, type Page, type Request } from "@playwright/test";
 import type { internal } from "@convex/_generated/api";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 
-import { accessCodeField, expectAdmissionClosed, submitAccessCode } from "./admission";
-import { BROWSER_TEST_SLOT, bindBrowserTestContext } from "./browser-workspace";
-import { runConvexJson } from "./convex-cli";
-
-type InvitationMaterial = {
-    invitations: Array<{
-        slotKey: string;
-        role: "admin" | "analyst";
-        code: string;
-    }>;
-};
+import { openAdmitted } from "./admission";
+import {
+    bindBrowserTestContext,
+    workerSlotAccessCode,
+} from "./browser-workspace";
+import { runConvexJson } from "./convex-admin";
 
 export type SourceReviewSnapshot = FunctionReturnType<
     typeof internal.e2eFixtures.inspectSourceReviewScenario
@@ -29,22 +22,6 @@ type SeededSourceReview = {
     proposalVersion: number;
     sourceIds: Array<string>;
 };
-
-const invitation = (() => {
-    const material = JSON.parse(
-        readFileSync(
-            resolve(process.cwd(), "invitation-otp-codes.local"),
-            "utf8",
-        ),
-    ) as InvitationMaterial;
-    const analystInvitation = material.invitations.find(
-        ({ slotKey }) => slotKey === BROWSER_TEST_SLOT,
-    );
-    if (!analystInvitation) {
-        throw new Error("Local analyst invitation is not configured");
-    }
-    return analystInvitation;
-})();
 
 const externalImageFixtureRequests = new WeakSet<Request>();
 
@@ -75,19 +52,13 @@ export async function admitAnalyst(page: Page): Promise<void> {
             body: '<svg xmlns="http://www.w3.org/2000/svg"/>',
         });
     });
-    await page.goto("/workspace/dossiers");
-    // Cold-auth bootstrap: the workspace shell can paint before the access-code
-    // admission surface is interactive. Wait for the input to be visible before
-    // filling so first-run and reused sessions both resolve cleanly.
-    const accessCodeInput = accessCodeField(page);
-    await expect(accessCodeInput).toBeVisible({ timeout: 60_000 });
-    await submitAccessCode(page, invitation.code);
+    await openAdmitted(page, {
+        code: workerSlotAccessCode("analyst").code,
+        path: "/workspace/dossiers",
+        admitted: page.getByRole("heading", { name: "Dossiers", exact: true }),
+    });
     await expect(page).toHaveURL(/\/workspace\/dossiers$/);
-    await expectAdmissionClosed(page);
-    bindBrowserTestContext(page);
-    await expect(
-        page.getByRole("heading", { name: "Dossiers", exact: true }),
-    ).toBeVisible({ timeout: 30_000 });
+    await bindBrowserTestContext(page);
 }
 
 export function seedSourceReview(
@@ -96,11 +67,11 @@ export function seedSourceReview(
     recordedScenario?: FunctionArgs<
         typeof internal.e2eFixtures.seedSourceReviewScenario
     >["recordedScenario"],
-): SeededSourceReview {
+): Promise<SeededSourceReview> {
     return runConvexJson<SeededSourceReview>(
         "e2eFixtures:seedSourceReviewScenario",
         {
-            slotKey: invitation.slotKey,
+            slotKey: workerSlotAccessCode("analyst").slotKey,
             fixtureKey,
             ...(recoveryScenario ? { recoveryScenario: true } : {}),
             ...(recordedScenario ? { recordedScenario } : {}),
@@ -111,7 +82,7 @@ export function seedSourceReview(
 export function inspectSourceReview(
     runId: string,
     fixtureKey: string,
-): SourceReviewSnapshot {
+): Promise<SourceReviewSnapshot> {
     return runConvexJson<SourceReviewSnapshot>(
         "e2eFixtures:inspectSourceReviewScenario",
         { runId, fixtureKey },

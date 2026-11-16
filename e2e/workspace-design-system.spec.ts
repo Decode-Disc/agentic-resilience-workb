@@ -21,13 +21,13 @@ test("workspace navigation and inventory preserve context on desktop and mobile"
     });
     await admitAnalyst(page);
     const key = "design-system-layout";
-    const seeded = seedEvidenceMatrix(key, "showcase");
+    const seeded = await seedEvidenceMatrix(key, "showcase");
     await expect
-        .poll(() => inspectEvidenceMatrix(seeded.runId, key).lifecycleState, {
+        .poll(async () => (await inspectEvidenceMatrix(seeded.runId, key)).lifecycleState, {
             timeout: 90_000,
         })
         .toBe("evidence_ready");
-    const source = seedSourceReview(`${key}-sources`);
+    const source = await seedSourceReview(`${key}-sources`);
     for (const width of [1440, 390]) {
         await page.setViewportSize({
             width,
@@ -135,9 +135,9 @@ test("workspace navigation and inventory preserve context on desktop and mobile"
             });
         }
     }
-    expect(inspectEvidenceMatrix(seeded.runId, key).providerCallCount).toBe(0);
+    expect((await inspectEvidenceMatrix(seeded.runId, key)).providerCallCount).toBe(0);
     expect(
-        inspectSourceReview(source.runId, `${key}-sources`).providerCallCount,
+        (await inspectSourceReview(source.runId, `${key}-sources`)).providerCallCount,
     ).toBe(0);
     expect(errors).toEqual([]);
 });

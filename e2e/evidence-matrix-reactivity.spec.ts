@@ -88,12 +88,20 @@ function attachEvidenceGate(page: Page): EvidenceGate {
     });
 
     page.on("request", request => gate.requests.push(request));
-    // Only the exact aborted baseline Requests may fail. Every other request
-    // failure becomes an explicit issue instead of being swallowed by the
-    // generic console allowance.
+    // Only the exact aborted baseline Requests may fail, plus the local cover
+    // placeholder when useCompanyCoverImage swaps it mid-fetch for the mocked OG
+    // fixture SVG. Every other request failure remains an explicit error.
     page.on("requestfailed", (request) => {
         if (gate.abortedRequests.has(request)) {
             gate.matchedAbortFailureCount += 1;
+            return;
+        }
+        const url = new URL(request.url());
+        if (
+            (url.hostname === "127.0.0.1" || url.hostname === "localhost") &&
+            url.pathname === "/images/placeholders/research-dossier-cover.png" &&
+            request.failure()?.errorText === "net::ERR_ABORTED"
+        ) {
             return;
         }
         gate.issues.push(`requestfailed: ${request.url()} (${request.failure()?.errorText ?? "unknown"})`);
@@ -197,7 +205,7 @@ async function waitForEvidenceScenario(
               policyEvaluationCount: 0,
           };
     await expect
-        .poll(() => inspectEvidenceMatrix(runId, fixtureKey), {
+        .poll(async () => await inspectEvidenceMatrix(runId, fixtureKey), {
             // Must stay under the suite's 60s test timeout: the seeded workflow
             // only advances through already-terminal source statuses, so the
             // terminal tuple lands in a few seconds in practice.
@@ -205,6 +213,12 @@ async function waitForEvidenceScenario(
         })
         .toMatchObject(snapshot);
     return inspectEvidenceMatrix(runId, fixtureKey);
+}
+
+async function settleDossiersCoverImages(page: Page) {
+    await page.waitForFunction(() =>
+        Array.from(document.images).every((img) => img.complete),
+    );
 }
 
 /** Seats the real declared analyst admission, then seeds + verifies a scenario. */
@@ -215,12 +229,13 @@ async function openEvidence(
 ): Promise<{ fixtureKey: string; runId: string }> {
     await admitAnalyst(page);
     const key = fixtureKey(seedName);
-    const seeded = seedEvidenceMatrix(key, kind);
+    const seeded = await seedEvidenceMatrix(key, kind);
     const snapshot = await waitForEvidenceScenario(
         seeded.runId,
         key,
         kind,
     );
+    await settleDossiersCoverImages(page);
     await page.goto(`/workspace/${seeded.runId}?section=progress`);
     await expect(page.getByRole("heading", { name: /CCC Intelligent Solutions/i })).toBeVisible({ timeout: 60_000 });
     await page.getByRole("button", { name: "Open evidence inventory" }).click();
@@ -228,7 +243,7 @@ async function openEvidence(
         await expect(page.getByText("Evidence is ready for review")).toBeVisible();
     } else {
         await expect(
-            page.getByText("Evidence is temporarily unavailable"),
+            page.getByText("Evidence is temporarily unavailable").first(),
         ).toBeVisible();
     }
     // The seeded run document is fully loaded (page.goto creates a new
@@ -349,10 +364,7 @@ test.describe("evidence matrix deterministic browser gate", () => {
         // Assessment stays locked behind the evidence review gate; no claims
         // and no provider work are produced for the unavailable scenario.
         await expect(
-            page.getByText("Wait for claim extraction to finish building the evidence set."),
-        ).toBeVisible();
-        await expect(
-            page.getByText("Review and approve the evidence first."),
+            page.getByText(/dimension assessment stays locked until evidence can be reviewed/i),
         ).toBeVisible();
     });
 
@@ -456,11 +468,14 @@ test.describe("evidence matrix deterministic browser gate", () => {
         // Logout through the real workspace session menu.
         await page.getByRole("button", { name: "Workspace menu" }).click();
         await page.getByRole("button", { name: "Logout" }).click();
-        // Logout immediately reopens the Protected access / Access code
-        // admission drawer over the protected shell; the Start heading is
-        // hidden behind the modal, so the gate asserts the drawer itself.
-        await expect(page.getByText(/Protected access/i)).toBeVisible();
-        await expect(accessCodeField(page)).toBeVisible();
+        // Logout signs out and navigates to the public Start landing page;
+        // private routes remain revoked.
+        await expect(
+            page.getByRole("heading", { name: "Start a research dossier" }),
+        ).toBeVisible();
+        await expect(
+            page.getByRole("button", { name: "Go to Workspace" }),
+        ).toBeVisible();
 
         // The protected dossiers route no longer serves the admitted session;
         // it reopens admission instead of rendering private content.
@@ -478,7 +493,8 @@ test.describe("evidence matrix deterministic browser gate", () => {
         await expect(accessCodeField(page)).toBeHidden({
             timeout: 20_000,
         });
-        bindBrowserTestContext(page);
+        await bindBrowserTestContext(page);
+        await settleDossiersCoverImages(page);
         await page.goto(`/workspace/${runId}?section=evidence`);
         await expect(page.getByText("Evidence is ready for review")).toBeVisible();
         // Only after the recovered dossier document is fully loaded and its

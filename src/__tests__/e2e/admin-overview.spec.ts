@@ -1,35 +1,11 @@
-import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { closeDossierDetail, dossierDetail } from "../../../e2e/support/admin";
 import {
-    accessCodeField,
+    admitAdministrator,
     expectAdmissionClosed,
-    submitAccessCode,
 } from "../../../e2e/support/admission";
 
 const screenshots = process.env.ADMIN_SHOT_DIR;
-
-function administratorCode() {
-    const material: unknown = JSON.parse(
-        readFileSync("invitation-otp-codes.local", "utf8"),
-    );
-    const invitations =
-        material && typeof material === "object" && "invitations" in material
-            ? material.invitations
-            : undefined;
-    const invitation = Array.isArray(invitations)
-        ? invitations.find(
-              (entry: unknown) =>
-                  !!entry &&
-                  typeof entry === "object" &&
-                  "role" in entry &&
-                  entry.role === "admin",
-          )
-        : undefined;
-    if (!invitation || typeof invitation.code !== "string")
-        throw new Error("Local administrator admission unavailable");
-    return invitation.code as string;
-}
 
 async function expectReadable(page: Page) {
     expect(
@@ -62,12 +38,7 @@ for (const viewport of [
             if (message.type() === "error") errors.push(message.text());
         });
         try {
-            await page.goto("/workspace/admin");
-            await expect(accessCodeField(page)).toBeVisible({
-                timeout: 60_000,
-            });
-            await submitAccessCode(page, administratorCode());
-            await expectAdmissionClosed(page);
+            await admitAdministrator(page);
 
             await expect(
                 page.getByRole("tab", { name: "Overview", selected: true }),
@@ -100,13 +71,21 @@ for (const viewport of [
             await page.keyboard.press("ArrowRight");
             await page.keyboard.press("Enter");
             await expect(
-                page.getByRole("tab", { name: "Dossiers", exact: true, selected: true }),
+                page.getByRole("tab", {
+                    name: "Dossiers",
+                    exact: true,
+                    selected: true,
+                }),
             ).toBeVisible();
             await expect(page).toHaveURL(/section=dossiers/);
             await page.reload();
             await expectAdmissionClosed(page);
             await expect(
-                page.getByRole("tab", { name: "Dossiers", exact: true, selected: true }),
+                page.getByRole("tab", {
+                    name: "Dossiers",
+                    exact: true,
+                    selected: true,
+                }),
             ).toBeVisible({ timeout: 60_000 });
 
             const research = page.getByRole("tabpanel", { name: "Research" });
