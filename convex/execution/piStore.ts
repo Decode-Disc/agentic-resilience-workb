@@ -8,6 +8,7 @@ import {
 import { readConversationMessages } from "@convex/integrations/agentStorage";
 import {
     PI_SESSION_LEASE_MS as LEASE_MS,
+    MAX_OPERATION_RESULT_BYTES,
     PI_COMMIT_MAX_BYTES,
     PI_SESSION_MAX_BYTES,
 } from "@convex/resourcePolicy";
@@ -160,7 +161,26 @@ export const claim = internalMutation({
                   ),
                   ...(turn ? { conversationId: turn.conversationId } : {}),
               });
-        if (current) await ctx.db.patch(current._id, fields);
+        if (current) {
+            if (
+                current.publicPreview &&
+                current.publicPreview.turnId !== mission.conversationTurnId
+            ) {
+                const previousTurn = await ctx.db.get(
+                    current.publicPreview.turnId,
+                );
+                if (
+                    previousTurn &&
+                    !previousTurn.publishedMessageId &&
+                    current.publicPreview.instructionVersion ===
+                        previousTurn.instructionVersion
+                ) {
+                    const { turnId: _turn, ...preview } = current.publicPreview;
+                    await ctx.db.patch(previousTurn._id, { preview });
+                }
+            }
+            await ctx.db.patch(current._id, fields);
+        }
         return {
             missionId: args.missionId,
             sessionId,
@@ -331,6 +351,53 @@ const appendArgs = {
     key: v.string(),
     payload: v.string(),
 };
+
+/** A replaceable public view of committed native prose; it never publishes a response or executes tools. */
+export const publishPreview = internalMutation({
+    args: {
+        ...leaseValidator.fields,
+        invocationId: v.id("agentInvocations"),
+        sequence: v.number(),
+        text: v.string(),
+    },
+    returns: v.boolean(),
+    handler: async (ctx, args) => {
+        const session = await writer(ctx, args, Date.now());
+        const invocation = await ctx.db.get(args.invocationId);
+        const mission = await ctx.db.get(args.missionId);
+        const turn = mission?.conversationTurnId
+            ? await ctx.db.get(mission.conversationTurnId)
+            : null;
+        if (
+            !turn ||
+            !invocation ||
+            invocation.missionId !== mission?._id ||
+            invocation.purpose ||
+            turn.status !== "active" ||
+            invocation.instructionVersion !== turn.instructionVersion ||
+            mission?.lastInvocationId !== invocation._id ||
+            args.sequence > session.sequence ||
+            (session.publicPreview?.invocationId === invocation._id &&
+                session.publicPreview.sequence >= args.sequence)
+        )
+            return false;
+        if (
+            new TextEncoder().encode(args.text).length >
+            MAX_OPERATION_RESULT_BYTES
+        )
+            throw executionError("response_capacity");
+        await ctx.db.patch(session._id, {
+            publicPreview: {
+                turnId: turn._id,
+                invocationId: invocation._id,
+                instructionVersion: turn.instructionVersion,
+                sequence: args.sequence,
+                text: args.text,
+            },
+        });
+        return true;
+    },
+});
 export const append = internalMutation({
     args: appendArgs,
     returns: v.number(),

@@ -91,6 +91,7 @@ beforeEach(() => {
     pause.mockReset().mockResolvedValue(3);
     resumeResearch.mockReset().mockResolvedValue(4);
     convexReactHarness.query(api.workbench.snapshot).returns(readySnapshot);
+    convexReactHarness.query(api.workbench.responsePreview).returns(null);
     convexReactHarness.query(api.workbench.models).returns({
         selectedId: "model-glm",
         effort: "low",
@@ -139,6 +140,102 @@ beforeEach(() => {
     convexReactHarness
         .mutation(api.execution.conversations.submit)
         .uses(submitMessage);
+});
+
+test.each([
+    false,
+    true,
+])("a queued message is in the transcript unless a response is already active (%s)", (active) => {
+    convexReactHarness.query(api.execution.conversations.get).returns({
+        activeTurn: active
+            ? { _id: "turn-active", status: "active", createdAt: 1 }
+            : null,
+        execution: active ? { status: "running" } : null,
+        queuedCount: 1,
+        queuePaused: false,
+    });
+    convexReactHarness.paginatedQuery(api.workbench.history).returns({
+        results: [
+            {
+                _id: "pending-message",
+                runId,
+                requestKey: "pending",
+                role: "user",
+                delivery: "queue",
+                status: "queued",
+                text: "Inspect the existing material",
+                createdAt: 1,
+                work: null,
+            },
+        ],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const transcript = screen.queryByRole("article", { name: "You message" });
+    if (active) {
+        expect(transcript).toBeNull();
+        expect(
+            within(
+                screen.getByRole("region", { name: "Queued messages" }),
+            ).getByText("Inspect the existing material"),
+        ).toBeTruthy();
+    } else {
+        expect(transcript?.textContent).toContain(
+            "Inspect the existing material",
+        );
+        expect(
+            screen.queryByRole("region", { name: "Queued messages" }),
+        ).toBeNull();
+    }
+});
+
+test("distinguishes the Sources Agent identity from the source collection", () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "sources_prepared",
+            executionStatus: "idle",
+        },
+        preparation: { status: "partial" },
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    expect(
+        screen.getByRole("region", {
+            name: "Sources Agent · Documentary preparation",
+        }),
+    ).toBeTruthy();
+    expect(
+        document.querySelector('[data-slot="conversation-header"]')
+            ?.textContent,
+    ).not.toContain("//");
+});
+
+test("the context identifies a launched research program as accepted", () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "sources_prepared",
+            executionStatus: "idle",
+        },
+        preparation: { status: "partial" },
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    fireEvent.click(screen.getByRole("button", { name: "Research context" }));
+    fireEvent.click(screen.getByRole("button", { name: "Research program" }));
+    expect(
+        screen.getByRole("region", {
+            name: "Accepted research program",
+        }),
+    ).toBeTruthy();
+    expect(
+        screen.queryByRole("region", { name: "Proposed research scope" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start research" })).toBeNull();
 });
 
 test.each([
@@ -305,6 +402,11 @@ test("selecting /model opens the same model menu without a research operation", 
 test("the same composer saves an edited question against the visible framing revision", async () => {
     render(<ConnectedStartWorkspace runId={runId} />);
     expect(screen.getByText("Who controls coordination?")).toBeTruthy();
+    fireEvent.click(
+        screen.getByText("Proposed research program", {
+            selector: "summary span",
+        }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
     fireEvent.change(screen.getByRole("textbox"), {
         target: { value: "Who can set the workflow rules?" },
@@ -336,6 +438,16 @@ test("adding a question preserves the existing program and draft without startin
         }),
         { target: { value: "Keep my ordinary draft." } },
     );
+    if (
+        screen.queryByText("Proposed research program", {
+            selector: "summary span",
+        })
+    )
+        fireEvent.click(
+            screen.getByText("Proposed research program", {
+                selector: "summary span",
+            }),
+        );
     fireEvent.click(
         screen.getByRole("button", { name: "Add research question" }),
     );
@@ -416,6 +528,11 @@ test("a program at documentary capacity shows its limit and cannot grow, while S
     });
     render(<ConnectedStartWorkspace runId={runId} />);
     expect(screen.getByText("3 of 3 questions")).toBeTruthy();
+    fireEvent.click(
+        screen.getByText("Proposed research program", {
+            selector: "summary span",
+        }),
+    );
     const add = screen.getByRole<HTMLButtonElement>("button", {
         name: "Add research question",
     });
@@ -514,6 +631,11 @@ test("a query retry preserves an unsaved question and its revision", () => {
         .mockImplementation(() => undefined);
     try {
         const view = render(<ConnectedStartWorkspace runId={runId} />);
+        fireEvent.click(
+            screen.getByText("Proposed research program", {
+                selector: "summary span",
+            }),
+        );
         fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
         fireEvent.change(screen.getByRole("textbox"), {
             target: { value: "Unsaved analyst wording" },
@@ -683,6 +805,16 @@ test("cancelling the first question restores the ordinary draft and keyboard foc
     fireEvent.change(input, {
         target: { value: "Keep my conversation draft" },
     });
+    if (
+        screen.queryByText("Proposed research program", {
+            selector: "summary span",
+        })
+    )
+        fireEvent.click(
+            screen.getByText("Proposed research program", {
+                selector: "summary span",
+            }),
+        );
     fireEvent.click(
         screen.getByRole("button", { name: "Add research question" }),
     );
@@ -824,4 +956,206 @@ test("framing before launch keeps its screen without workspace sections", () => 
             name: "Research workspace sections",
         }),
     ).toBeNull();
+});
+
+test("the connected conversation renders a growing provisional reply outside operation details", async () => {
+    const activeWork = {
+        turn: {
+            _id: "turn-progress",
+            status: "active",
+            createdAt: 1,
+            preview: {
+                text: "Reading the saved program.",
+                instructionVersion: 1,
+            },
+        },
+        missionStatus: "running",
+        operations: [],
+        operationsLimited: false,
+    };
+    convexReactHarness
+        .query(api.workbench.snapshot)
+        .returns({ ...readySnapshot, activeWork });
+    convexReactHarness.query(api.workbench.responsePreview).returns({
+        turnId: "turn-progress",
+        text: "Reading the saved program.",
+    });
+    const view = render(<ConnectedStartWorkspace runId={runId} />);
+    expect(await screen.findByText("Reading the saved program.")).toBeTruthy();
+    expect(screen.getByText("Draft reply")).toBeTruthy();
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        activeWork: {
+            ...activeWork,
+            turn: {
+                ...activeWork.turn,
+                preview: {
+                    ...activeWork.turn.preview,
+                    text: "Reading the saved program. The scope is unchanged.",
+                },
+            },
+        },
+    });
+    convexReactHarness.query(api.workbench.responsePreview).returns({
+        turnId: "turn-progress",
+        text: "Reading the saved program. The scope is unchanged.",
+    });
+    view.rerender(<ConnectedStartWorkspace runId={runId} />);
+    expect(
+        await screen.findAllByText(
+            "Reading the saved program. The scope is unchanged.",
+        ),
+    ).toHaveLength(1);
+    convexReactHarness.paginatedQuery(api.workbench.history).returns({
+        results: [
+            {
+                _id: "published-progress",
+                role: "assistant",
+                turnId: "turn-progress",
+                status: "processed",
+                text: "The scope is unchanged.",
+                createdAt: 2,
+                work: {
+                    ...activeWork,
+                    turn: {
+                        ...activeWork.turn,
+                        status: "published",
+                        publishedMessageId: "published-progress",
+                        preview: undefined,
+                    },
+                },
+            },
+        ],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    });
+    // History and the active-work subscription can arrive in either order.
+    view.rerender(<ConnectedStartWorkspace runId={runId} />);
+    expect(await screen.findAllByText("The scope is unchanged.")).toHaveLength(
+        1,
+    );
+    expect(
+        screen.queryByText(
+            "Reading the saved program. The scope is unchanged.",
+        ),
+    ).toBeNull();
+});
+
+test("a blocked response keeps its partial text without claiming it is still generating", async () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        activeWork: {
+            turn: { _id: "turn-blocked", status: "active", createdAt: 1 },
+            missionStatus: "blocked",
+            operations: [],
+            operationsLimited: false,
+        },
+    });
+    convexReactHarness.query(api.workbench.responsePreview).returns({
+        turnId: "turn-blocked",
+        text: "The saved material supports this first observation.",
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    expect(
+        await screen.findByText(
+            "The saved material supports this first observation.",
+        ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Draft reply")).toBeNull();
+    expect(
+        screen.getByText(/Response interrupted. The partial reply remains/),
+    ).toBeTruthy();
+});
+
+test("dossier context summarizes source populations without rendering the entire collection", () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        sources: [
+            {
+                id: "source-a",
+                title: "A very long annual filing title",
+                state: "captured",
+                url: "https://example.test/filing",
+            },
+            {
+                id: "source-b",
+                title: "Another independent reference",
+                state: "found",
+                url: "https://example.test/research",
+            },
+        ],
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    expect(screen.queryByText("A very long annual filing title")).toBeNull();
+    expect(screen.queryByText("Another independent reference")).toBeNull();
+    expect(screen.getByText("2 references · 1 saved capture")).toBeTruthy();
+});
+
+test("offers a return to offscreen active Sources work and removes it on completion", async () => {
+    const callbacks: IntersectionObserverCallback[] = [];
+    vi.stubGlobal(
+        "IntersectionObserver",
+        class {
+            constructor(callback: IntersectionObserverCallback) {
+                callbacks.push(callback);
+            }
+            observe() {}
+            unobserve() {}
+            disconnect() {}
+            takeRecords() {
+                return [];
+            }
+        },
+    );
+    try {
+        const snapshot = {
+            ...readySnapshot,
+            run: {
+                ...readySnapshot.run,
+                fixedFramingRevisionId: "framing-1",
+                lifecycleState: "discovering_sources",
+                executionStatus: "running",
+            },
+        };
+        convexReactHarness.query(api.workbench.snapshot).returns(snapshot);
+        const view = render(<ConnectedStartWorkspace runId={runId} />);
+        const mission = document.querySelector<HTMLElement>(
+            '[data-mission-id="sources:run-connected"]',
+        );
+        if (!mission) throw new Error("Sources mission missing");
+        const observer = new IntersectionObserver(() => {});
+        for (const callback of [...callbacks])
+            callback(
+                [
+                    {
+                        target: mission,
+                        isIntersecting: false,
+                        boundingClientRect: new DOMRect(),
+                        intersectionRect: new DOMRect(),
+                        rootBounds: null,
+                        intersectionRatio: 0,
+                        time: 0,
+                    },
+                ],
+                observer,
+            );
+        const control = await screen.findByRole("button", {
+            name: /Return to Sources Agent work/,
+        });
+        mission.scrollIntoView = vi.fn();
+        fireEvent.click(control);
+        expect(document.activeElement).toBe(mission);
+        convexReactHarness.query(api.workbench.snapshot).returns({
+            ...snapshot,
+            preparation: { missionStatus: "completed", status: "partial" },
+        });
+        view.rerender(<ConnectedStartWorkspace runId={runId} />);
+        expect(
+            screen.queryByRole("button", {
+                name: /Return to Sources Agent work/,
+            }),
+        ).toBeNull();
+    } finally {
+        vi.unstubAllGlobals();
+    }
 });

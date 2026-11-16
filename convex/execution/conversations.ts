@@ -495,7 +495,13 @@ export function conversationTurnForAnalyst(
     turn: Doc<"agentConversationTurns">,
 ) {
     const { responseControl: _audit, ...visible } = turn;
-    return visible;
+    return {
+        ...visible,
+        preview:
+            turn.preview?.instructionVersion === turn.instructionVersion
+                ? turn.preview
+                : undefined,
+    };
 }
 
 export const get = query({
@@ -746,6 +752,7 @@ export async function publishTurn(
         });
     await ctx.db.patch(turn._id, {
         status: "published",
+        preview: undefined,
         publishedMessageId: messageId,
         publicationHash: hash,
         completedAt: Date.now(),
@@ -1250,6 +1257,14 @@ async function stopActiveResponse(
                 piWakeToken: undefined,
             });
             const session = await sessionForMission(ctx, mission);
+            if (
+                session?.publicPreview?.turnId === turn._id &&
+                session.publicPreview.instructionVersion ===
+                    turn.instructionVersion
+            ) {
+                const { turnId: _turn, ...preview } = session.publicPreview;
+                await ctx.db.patch(turn._id, { preview });
+            }
             if (session?.conversationId && session.missionId === mission._id)
                 await schedulePiMission(
                     ctx,

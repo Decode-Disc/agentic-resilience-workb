@@ -60,6 +60,7 @@ import {
     CompanyMandatePanel,
     FramingClarification,
     FramingProposal,
+    type StartFramingQuestion,
     StartAngleSuggestions,
     StartEntryScreen,
     StartFramingScreen,
@@ -157,7 +158,7 @@ function PreviewResearchContext({
     missions,
     agents,
     scope,
-    count,
+    questions,
     launched,
     hasReference,
     scopePending = false,
@@ -170,7 +171,7 @@ function PreviewResearchContext({
     missions: readonly ConversationMissionSnapshot[];
     agents: ConversationAgents;
     scope: string;
-    count: number;
+    questions: readonly StartFramingQuestion[];
     launched: boolean;
     hasReference: boolean;
     scopePending?: boolean;
@@ -190,24 +191,14 @@ function PreviewResearchContext({
             missions={missions}
             agents={agents}
             onChangeScope={onChangeScope}
-            planSummary={
-                <>
-                    <span>
-                        {scopePending
-                            ? "Scope being clarified"
-                            : (activityClarification.choices.find(
-                                  (choice) => choice.scope === scope,
-                              )?.label ?? scope)}
-                    </span>
-                    {!scopePending && (
-                        <span className="chat-context-meta">
-                            {launched ? "Accepted framing" : "Proposed framing"}{" "}
-                            · {count} questions
-                        </span>
-                    )}
-                </>
+            planSummary={scopePending ? "Scope being clarified" : scope}
+            questionCount={questions.length}
+            plan={
+                <FramingProposal
+                    title="Research program"
+                    questions={questions}
+                />
             }
-            plan={<p>{scopePending ? "Scope being clarified" : scope}</p>}
             planAction={
                 onInspectFraming && (
                     <Button
@@ -218,8 +209,10 @@ function PreviewResearchContext({
                     </Button>
                 )
             }
-            outputs={
-                <p className="chat-context-empty">No retained outputs yet.</p>
+            sourcesSummary={
+                hasReference
+                    ? "One supplied reference"
+                    : "No references supplied"
             }
             sources={
                 hasReference ? (
@@ -604,7 +597,7 @@ function FramingExample({
                                 ? requestScopeChange
                                 : undefined
                         }
-                        count={questions.length}
+                        questions={questions}
                         launched={state.launched}
                         hasReference={scenario === "specific"}
                     />
@@ -826,7 +819,7 @@ function ResearchExample({
                     agents={state.agents}
                     activities={activities}
                     scope={state.scope}
-                    count={state.questions.length}
+                    questions={state.questions}
                     launched
                     onInspectFraming={onInspectFraming}
                     open={contextOpen}
@@ -912,10 +905,10 @@ function ResearchExample({
                     running={workState === "running"}
                     label={
                         done
-                            ? "// Sources · done"
+                            ? "Complete"
                             : interrupted
-                              ? "// Sources · stopped"
-                              : "// Sources · live"
+                              ? "Interrupted"
+                              : "Working"
                     }
                     title={
                         done

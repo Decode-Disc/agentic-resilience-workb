@@ -34,6 +34,32 @@ test("message reading returns application delivery data without component storag
     ]);
 });
 
+test("public history preserves the analyst request identity while admission is pending", async () => {
+    const f = await fixture();
+    const messageId = await f.client.mutation(
+        api.execution.conversations.submit,
+        {
+            runId: f.runId,
+            requestKey: "immediate-message",
+            text: "Inspect the retained material",
+            delivery: "queue",
+        },
+    );
+    const history = await f.client.query(api.workbench.history, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
+    expect(history.page).toEqual([
+        expect.objectContaining({
+            _id: messageId,
+            requestKey: "immediate-message",
+            text: "Inspect the retained material",
+            status: "queued",
+        }),
+    ]);
+    expect(history.page[0]).not.toHaveProperty("storageMessageRef");
+});
+
 test("an admitted dossier keeps one conversation and idempotent queued messages without a research slot", async () => {
     const f = await fixture();
     const input = {

@@ -44,6 +44,7 @@ import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { missionStatusValidator } from "@convex/execution/executionProtocol";
 import { nextNativeInputSequence } from "@convex/execution/journal";
 import { retainOperationEffect } from "@convex/execution/operations";
+import { sessionForMission } from "@convex/execution/piStore";
 import {
     pauseResearch,
     researchControlConfirmation,
@@ -58,6 +59,7 @@ import {
 } from "@convex/modelConfiguration";
 import { reasoningEffort } from "@convex/modelConfigurationSchema";
 import { sourceDossierCandidateLimit } from "@convex/resourceLimits";
+import { WORKBENCH_OPERATION_PREVIEW_SIZE } from "@convex/resourcePolicy";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import { startReviewPreparation } from "@convex/sourcePreparation";
@@ -359,6 +361,9 @@ const operationView = v.object({
     title: v.string(),
     status: schema.tables.agentOperationRequests.validator.fields.status,
     succeeded: v.boolean(),
+    summary: v.string(),
+    sourceId: v.optional(v.id("sources")),
+    subject: v.optional(v.string()),
     createdAt: v.number(),
 });
 const turnView = v.object({
@@ -368,7 +373,9 @@ const turnView = v.object({
     operationsLimited: v.boolean(),
     deferred: v.optional(v.boolean()),
 });
-const operationTitles: Record<string, string> = {
+const operationTitles: Partial<
+    Record<Doc<"agentOperationRequests">["input"]["kind"], string>
+> = {
     adjust_framing: "Adjust the research program",
     consult_run_state: "Inspect dossier progress",
     consult_mission_state: "Inspect recorded work",
@@ -379,35 +386,131 @@ const operationTitles: Record<string, string> = {
     read_in_context: "Read a passage in context",
     control_research: "Adjust research progression",
     transmit_source_request: "Transmit an analyst instruction",
+    discover_sources_for_need: "Find material for a research need",
+    make_source_consultable: "Save a source for reading",
+    submit_documentary_qualification: "Prepare documentary contributions",
+    request_documentary_check: "Check a documentary statement",
 };
+const operationResults: Partial<
+    Record<Doc<"agentOperationRequests">["input"]["kind"], string>
+> = {
+    adjust_framing: "Research program updated.",
+    consult_run_state: "Current dossier state inspected.",
+    consult_mission_state: "Recorded work inspected.",
+    consult_prepared_material:
+        "Documentary needs and available material inspected.",
+    consult_conversation: "Earlier analyst exchanges inspected.",
+    search_available_material:
+        "Search completed. Inspect the matching material.",
+    read_in_context: "A saved passage was read in context.",
+    control_research:
+        "Research control request processed. Check the current research state.",
+    transmit_source_request:
+        "Instruction transmitted. Treatment is tracked separately.",
+    discover_sources_for_need:
+        "Discovery returned its recorded outcome; candidates are not yet supporting evidence.",
+    make_source_consultable:
+        "Source acquisition returned its recorded outcome. Reading availability remains separate from support.",
+    submit_documentary_qualification:
+        "Documentary contributions recorded with their permitted uses and restrictions.",
+    request_documentary_check:
+        "A documentary check returned its findings and limits.",
+    check_response_coherence: "Response consistency assessment returned.",
+};
+
+async function readMissionOperations(
+    ctx: QueryCtx,
+    missionId: Id<"agentMissions"> | undefined,
+) {
+    const requests = missionId
+        ? await ctx.db
+              .query("agentOperationRequests")
+              .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+              .order("desc")
+              .take(WORKBENCH_OPERATION_PREVIEW_SIZE + 1)
+        : [];
+    const operations = await Promise.all(
+        requests
+            .slice(0, WORKBENCH_OPERATION_PREVIEW_SIZE)
+            .reverse()
+            .map(async (r) => {
+                const sourceId =
+                    "sourceId" in r.input ? r.input.sourceId : undefined;
+                const source = sourceId ? await ctx.db.get(sourceId) : null;
+                const succeeded =
+                    r.outcome?.kind === "success" && !r.adoptionRefusalCode;
+                const summary = r.adoptionRefusalCode
+                    ? "This result needs review because the dossier changed."
+                    : r.outcome?.kind === "refused"
+                      ? "This request could not be applied. Review the current dossier before trying again."
+                      : r.outcome?.kind === "unavailable"
+                        ? "This work cannot continue yet. Available material remains inspectable."
+                        : succeeded
+                          ? (operationResults[r.input.kind] ??
+                            "The operation returned a result. Inspect the related dossier material.")
+                          : r.status === "unknown"
+                            ? "The outcome is not confirmed. The request has not been repeated."
+                            : r.status === "waiting"
+                              ? "Waiting for the engaged work to return."
+                              : "Work in progress.";
+                return {
+                    id: r._id,
+                    title:
+                        operationTitles[r.input.kind] ??
+                        "Inspect dossier material",
+                    status: r.status,
+                    succeeded,
+                    summary,
+                    createdAt: r.createdAt,
+                    ...(sourceId ? { sourceId, subject: source?.title } : {}),
+                };
+            }),
+    );
+    return {
+        operations,
+        operationsLimited: requests.length > WORKBENCH_OPERATION_PREVIEW_SIZE,
+    };
+}
 
 async function readTurn(ctx: QueryCtx, turn: Doc<"agentConversationTurns">) {
     const mission = turn.missionId ? await ctx.db.get(turn.missionId) : null;
-    const requests = mission
-        ? await ctx.db
-              .query("agentOperationRequests")
-              .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
-              .order("desc")
-              .take(33)
-        : [];
     return {
         turn: conversationTurnForAnalyst(turn),
         missionStatus: mission?.status,
-        operationsLimited: requests.length > 32,
-        operations: requests
-            .slice(0, 32)
-            .reverse()
-            .map((r) => ({
-                id: r._id,
-                title:
-                    operationTitles[r.input.kind] ??
-                    "Operation details unavailable",
-                status: r.status,
-                succeeded: r.outcome?.kind === "success",
-                createdAt: r.createdAt,
-            })),
+        ...(await readMissionOperations(ctx, mission?._id)),
     };
 }
+
+/** Native progress has its own small subscription so each partial does not rehydrate dossier sources. */
+export const responsePreview = query({
+    args: { runId: v.id("researchRuns") },
+    returns: v.union(
+        v.null(),
+        v.object(
+            schema.tables.piSessions.validator.fields.publicPreview.fields,
+        ),
+    ),
+    handler: async (ctx, { runId }) => {
+        await requireWorkspaceRun(ctx, runId);
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .unique();
+        const turn = conversation?.activeTurnId
+            ? await ctx.db.get(conversation.activeTurnId)
+            : null;
+        const mission = turn?.missionId
+            ? await ctx.db.get(turn.missionId)
+            : null;
+        if (turn?.status !== "active" || !mission) return null;
+        const preview = (await sessionForMission(ctx, mission))?.publicPreview;
+        return preview?.turnId === turn._id &&
+            preview.instructionVersion === turn.instructionVersion &&
+            preview.invocationId === mission.lastInvocationId
+            ? preview
+            : null;
+    },
+});
 
 export const turnWork = query({
     args: {
@@ -446,6 +549,16 @@ export const snapshot = query({
             }),
         ),
         activeWork: v.union(turnView, v.null()),
+        sourcesWork: v.union(
+            v.null(),
+            v.object({
+                missionId: v.id("agentMissions"),
+                startedAt: v.number(),
+                finishedAt: v.optional(v.number()),
+                operations: v.array(operationView),
+                operationsLimited: v.boolean(),
+            }),
+        ),
         preparation: v.union(
             schema
                 .doc("sourceSelectionProposalRebuilds")
@@ -533,6 +646,17 @@ export const snapshot = query({
         const sourcesMission = preparation
             ? await readSourcesMission(ctx, run)
             : null;
+        const sourcesCompletion = sourcesMission
+            ? await ctx.db
+                  .query("agentExecutionEvents")
+                  .withIndex("by_mission_and_kind", (q) =>
+                      q
+                          .eq("missionId", sourcesMission._id)
+                          .eq("kind", "mission_completed"),
+                  )
+                  .order("desc")
+                  .first()
+            : null;
         return {
             run,
             researchControlAvailable: supportsResearchControl(run),
@@ -555,6 +679,16 @@ export const snapshot = query({
             },
             instructions,
             activeWork: turn ? await readTurn(ctx, turn) : null,
+            sourcesWork: sourcesMission
+                ? {
+                      missionId: sourcesMission._id,
+                      startedAt: sourcesMission.createdAt,
+                      ...(sourcesCompletion
+                          ? { finishedAt: sourcesCompletion.occurredAt }
+                          : {}),
+                      ...(await readMissionOperations(ctx, sourcesMission._id)),
+                  }
+                : null,
             preparation: preparation
                 ? {
                       ...preparation,
@@ -570,6 +704,7 @@ export const snapshot = query({
 
 const messageFields = schema.tables.agentMessageDeliveries.validator.pick(
     "runId",
+    "requestKey",
     "turnId",
     "role",
     "delivery",
@@ -645,6 +780,7 @@ export const history = query({
                 return {
                     _id: m._id,
                     runId: m.runId,
+                    requestKey: m.requestKey,
                     turnId: m.turnId,
                     role: m.role,
                     delivery: m.delivery,

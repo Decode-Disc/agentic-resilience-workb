@@ -33,7 +33,7 @@ for (const [width, height] of [
             "Do not restart or change the research.\nWhat usable documentary material is available,\nand what remains unfinished?",
         );
         const mission = page.getByRole("button", {
-            name: "Inspect Sources mission: Documentary preparation",
+            name: "Inspect Sources Agent mission: Documentary preparation",
             exact: true,
         });
         await expect(mission).toBeVisible();
@@ -45,23 +45,16 @@ for (const [width, height] of [
             name: "Conversation scroll area",
             exact: true,
         });
-        // Reading earlier activity may place it behind the fixed composer.
-        const sendBox = await send.boundingBox();
-        const missionBox = await mission.boundingBox();
-        expect(sendBox && missionBox).toBeTruthy();
-        if (sendBox && missionBox)
-            await scroll.evaluate(
-                (node, delta) => {
-                    node.scrollTop += delta;
-                },
-                missionBox.y +
-                    missionBox.height / 2 -
-                    sendBox.y -
-                    sendBox.height / 2,
-            );
+        const scrollBox = await scroll.boundingBox();
+        const composerBox = await page
+            .getByRole("form", { name: "Message the workbench" })
+            .boundingBox();
         await page.screenshot({
-            path: `/tmp/mission-composer-${width}-${height}.png`,
+            path: `/tmp/chat-scroll-clearance-${width}-${height}.png`,
         });
+        if (!scrollBox || !composerBox)
+            throw new Error("Conversation and composer must be visible");
+        expect(scrollBox.y + scrollBox.height).toBeLessThan(composerBox.y);
         await send.click({ timeout: 3000 });
         await expect(composer).toHaveValue("");
         await expect(
@@ -75,7 +68,7 @@ for (const [width, height] of [
         await expect(
             page
                 .getByRole("region", {
-                    name: "Sources · Documentary preparation",
+                    name: "Sources Agent · Documentary preparation",
                     exact: true,
                 })
                 .getByText("Find company reporting", { exact: true }),

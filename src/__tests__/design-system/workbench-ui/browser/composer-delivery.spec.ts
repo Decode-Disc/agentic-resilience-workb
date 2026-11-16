@@ -95,7 +95,7 @@ for (const theme of ["light", "dark"])
             await expect(
                 page
                     .getByRole("log")
-                    .getByRole("status", { name: "Sources mission status" }),
+                    .getByRole("status", { name: "Sources Agent mission status" }),
             ).toContainText("Working");
             await input.fill("");
             await form

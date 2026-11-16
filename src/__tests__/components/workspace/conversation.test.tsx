@@ -28,7 +28,7 @@ it("restarts illustrative work while preserving the completed mission in convers
         }).disabled,
     ).toBe(true);
     const retained = within(screen.getByRole("log")).getByRole("button", {
-        name: "Inspect Sources mission: Documentary preparation",
+        name: "Inspect Sources Agent mission: Documentary preparation",
     });
     expect(retained.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(retained);
@@ -53,12 +53,12 @@ it("restarts illustrative work while preserving the completed mission in convers
     ).toBe(false);
     expect(
         within(screen.getByRole("log")).getByRole("button", {
-            name: "Inspect Sources mission: Documentary preparation",
+            name: "Inspect Sources Agent mission: Documentary preparation",
         }),
     ).toBeTruthy();
     expect(
         within(screen.getByRole("log")).getAllByRole("region", {
-            name: "Sources · Documentary preparation",
+            name: "Sources Agent · Documentary preparation",
         }),
     ).toHaveLength(2);
     expect(

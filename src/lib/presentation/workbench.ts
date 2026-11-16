@@ -8,6 +8,31 @@ import type { ConversationTurnSnapshot } from "@/components/chat/conversation-tu
 type Work = NonNullable<
     FunctionReturnType<typeof api.workbench.snapshot>["activeWork"]
 >;
+/** One operation projection supplies both conversational turns and independent research missions. */
+export function conversationOperation(
+    operation: Work["operations"][number],
+    parentState: ConversationWorkItem["state"],
+): ConversationWorkItem {
+    return {
+        id: operation.id,
+        title: operation.title,
+        state:
+            operation.status === "completed"
+                ? operation.succeeded
+                    ? "completed"
+                    : "interrupted"
+                : parentState === "interrupted" ||
+                    parentState === "blocked" ||
+                    parentState === "paused"
+                  ? parentState
+                  : operation.status === "waiting"
+                    ? "waiting"
+                    : "running",
+        summary: [operation.subject, operation.summary]
+            .filter(Boolean)
+            .join(" · "),
+    };
+}
 /** Translates persisted execution state into public work snapshots without exposing diagnostic keys. */
 export function workbenchTurn(work: Work): ConversationTurnSnapshot {
     const state =
@@ -23,28 +48,7 @@ export function workbenchTurn(work: Work): ConversationTurnSnapshot {
                   : "running";
     const operations = work.operations.map((operation) => ({
         kind: "operation" as const,
-        operation: {
-            id: operation.id,
-            title: operation.title,
-            state:
-                operation.status === "completed"
-                    ? operation.succeeded
-                        ? "completed"
-                        : "interrupted"
-                    : state === "interrupted" || state === "blocked"
-                      ? state
-                      : operation.status === "waiting"
-                        ? "waiting"
-                        : "running",
-            summary:
-                operation.status === "completed"
-                    ? operation.succeeded
-                        ? "Recorded work remains available."
-                        : "This operation could not finish. Retained work remains available."
-                    : state === "blocked"
-                      ? "This work cannot continue yet."
-                      : "Work is recorded as it progresses.",
-        } satisfies ConversationWorkItem,
+        operation: conversationOperation(operation, state),
     }));
     return {
         id: work.turn._id,
@@ -60,11 +64,19 @@ export function workbenchTurn(work: Work): ConversationTurnSnapshot {
                 ? [
                       {
                           kind: "message" as const,
-                          id: work.turn.publishedMessageId,
+                          id: `reply:${work.turn._id}`,
                           phase: "answer" as const,
                       },
                   ]
-                : []),
+                : work.turn.preview
+                  ? [
+                        {
+                            kind: "message" as const,
+                            id: `reply:${work.turn._id}`,
+                            phase: "answer" as const,
+                        },
+                    ]
+                  : []),
         ],
     };
 }

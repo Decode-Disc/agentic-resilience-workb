@@ -7,8 +7,8 @@ import { useWorkbenchConversation } from "@/components/chat/workbench-conversati
 
 const agents = {
     workbench: { id: "workbench", name: "Workbench Agent" },
-    sources: { id: "sources", name: "Sources" },
-    investigation: { id: "investigation", name: "Investigation" },
+    sources: { id: "sources", name: "Sources Agent" },
+    investigation: { id: "investigation", name: "Investigation Agent" },
 };
 function MissionHistory({ completed = false }: { completed?: boolean }) {
     const conversation = useWorkbenchConversation({
@@ -82,14 +82,20 @@ function MissionHistory({ completed = false }: { completed?: boolean }) {
 it("renders independently attributed missions in one chronological conversation", () => {
     render(<MissionHistory />);
     const sources = screen.getByRole("region", {
-        name: "Sources · Documentary preparation",
+        name: "Sources Agent · Documentary preparation",
     });
     const investigation = screen.getByRole("region", {
-        name: "Investigation · Examine decision rights",
+        name: "Investigation Agent · Examine decision rights",
     });
-    expect(within(sources).getByText("Find company reporting")).toBeTruthy();
     expect(
-        within(investigation).getByText("Compare retained passages"),
+        within(sources).getByRole("button", {
+            name: "Inspect Find company reporting",
+        }),
+    ).toBeTruthy();
+    expect(
+        within(investigation).getByRole("button", {
+            name: "Inspect Compare retained passages",
+        }),
     ).toBeTruthy();
     expect(screen.queryByText(/Response interrupted/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Stop response" })).toBeNull();
@@ -98,10 +104,10 @@ it("folds one completed mission without folding another agent's running work or 
     const { rerender } = render(<MissionHistory />);
     rerender(<MissionHistory completed />);
     const sources = screen.getByRole("region", {
-        name: "Sources · Documentary preparation",
+        name: "Sources Agent · Documentary preparation",
     });
     const trigger = within(sources).getByRole("button", {
-        name: "Inspect Sources mission: Documentary preparation",
+        name: "Inspect Sources Agent mission: Documentary preparation",
     });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     expect(
@@ -109,7 +115,11 @@ it("folds one completed mission without folding another agent's running work or 
             name: "Inspect Find company reporting",
         }),
     ).toBeNull();
-    expect(screen.getByText("Compare retained passages")).toBeTruthy();
+    expect(
+        screen.getByRole("button", {
+            name: "Inspect Compare retained passages",
+        }),
+    ).toBeTruthy();
     expect(screen.getAllByRole("article").map((n) => n.textContent)).toEqual(
         expect.arrayContaining([
             expect.stringContaining("Keep the evidence gap explicit."),
@@ -117,7 +127,11 @@ it("folds one completed mission without folding another agent's running work or 
         ]),
     );
     fireEvent.click(trigger);
-    expect(within(sources).getByText("Find company reporting")).toBeTruthy();
+    expect(
+        within(sources).getByRole("button", {
+            name: "Inspect Find company reporting",
+        }),
+    ).toBeTruthy();
 });
 
 it("shows a newly started mission before its first operation is recorded", () => {
@@ -135,7 +149,7 @@ it("shows a newly started mission before its first operation is recorded", () =>
     );
     expect(
         screen.getByRole("region", {
-            name: "Investigation · Examine decision rights",
+            name: "Investigation Agent · Examine decision rights",
         }),
     ).toBeTruthy();
     expect(screen.getByText("Working")).toBeTruthy();
@@ -203,10 +217,91 @@ it("shows supplied mission progress without inventing a zero operation count", (
     expect(screen.queryByText(/0 operations/)).toBeNull();
     fireEvent.click(
         screen.getByRole("button", {
-            name: "Inspect Sources mission: Documentary preparation",
+            name: "Inspect Sources Agent mission: Documentary preparation",
         }),
     );
     expect(
         screen.getByText("Inspect the retained documentary progress."),
     ).toBeTruthy();
+});
+
+it("keeps a long running mission compact and opens its retained activity on demand", () => {
+    const operations = Array.from({ length: 37 }, (_, index) => ({
+        id: `op-${index + 1}`,
+        title: `Recorded activity ${index + 1}`,
+        summary: "Retained result",
+        state: "completed" as const,
+    }));
+    const mission = {
+        id: "long-mission",
+        agentId: "sources",
+        title: "Documentary preparation",
+        state: "running" as const,
+        operations,
+    };
+    const { rerender } = render(
+        <ConversationMission agent={agents.sources} mission={mission} />,
+    );
+    const trigger = screen.getByRole("button", {
+        name: "Inspect Sources Agent mission: Documentary preparation",
+    });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("Recorded activity 37")).toBeTruthy();
+    expect(
+        screen.queryByRole("region", { name: "Agent activities" }),
+    ).toBeNull();
+    fireEvent.click(trigger);
+    expect(
+        screen.getByRole("region", { name: "Agent activities" }),
+    ).toBeTruthy();
+    expect(
+        screen.queryByRole("navigation", { name: "Activity pagination" }),
+    ).toBeNull();
+    rerender(
+        <ConversationMission
+            agent={agents.sources}
+            mission={{ ...mission, state: "completed" }}
+        />,
+    );
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(trigger);
+    expect(
+        screen.getByRole("region", { name: "Agent activities" }),
+    ).toBeTruthy();
+});
+
+it("returns focus from the latest activity to its mission summary when work finishes", () => {
+    const mission = {
+        id: "focused-preview",
+        agentId: "sources",
+        title: "Documentary preparation",
+        state: "running" as const,
+        operations: [
+            {
+                id: "focused-operation",
+                title: "Inspect retained reporting",
+                summary: "Reading available material",
+                state: "running" as const,
+            },
+        ],
+    };
+    const { rerender } = render(
+        <ConversationMission agent={agents.sources} mission={mission} />,
+    );
+    const activity = screen.getByRole("button", {
+        name: "Inspect Inspect retained reporting",
+    });
+    act(() => activity.focus());
+    expect(document.activeElement).toBe(activity);
+    rerender(
+        <ConversationMission
+            agent={agents.sources}
+            mission={{ ...mission, state: "completed" }}
+        />,
+    );
+    expect(document.activeElement).toBe(
+        screen.getByRole("button", {
+            name: "Inspect Sources Agent mission: Documentary preparation",
+        }),
+    );
 });

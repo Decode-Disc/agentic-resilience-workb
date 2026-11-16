@@ -30,6 +30,7 @@ import {
 } from "@/components/workbench-ui";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import { cn } from "@/lib/utils";
+import { AgentActivityExample } from "./agent-activity-example";
 import { ComposerExample } from "./composer-example";
 import { DossierSwitcherExample } from "./dossier-switcher-example";
 import {
@@ -1260,6 +1261,7 @@ function WorkspaceNavigationExample() {
 export const examples = {
     DossierSwitcher: DossierSwitcherExample,
     Composer: ComposerExample,
+    AgentActivity: AgentActivityExample,
     OverlayLayers: OverlayLayersExample,
     Chip: ChipExample,
     GlassPanel: GlassPanelExample,

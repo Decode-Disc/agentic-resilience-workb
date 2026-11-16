@@ -187,7 +187,9 @@ it("renders the answer when the first turn message is outside the supplied histo
 
 it("renders running work before the turn has any public message", () => {
     render(<PartialHistory withoutMessages />);
-    expect(screen.getByText("Inspect company context")).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Inspect Inspect company context" }),
+    ).toBeTruthy();
     expect(
         screen.getByRole("region", { name: "Work in progress" }),
     ).toBeTruthy();
@@ -195,7 +197,9 @@ it("renders running work before the turn has any public message", () => {
 
 it("keeps running work visible when its commentary is outside the supplied page", () => {
     render(<PartialHistory withoutMessages outsideCommentary />);
-    expect(screen.getByText("Inspect company context")).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Inspect Inspect company context" }),
+    ).toBeTruthy();
 });
 
 it("keeps a newly admitted turn visible before its first operation or public message", () => {
@@ -205,9 +209,7 @@ it("keeps a newly admitted turn visible before its first operation or public mes
             renderMessage={() => null}
         />,
     );
-    expect(screen.getByRole("status").textContent).toBe(
-        "Preparing a response…",
-    );
+    expect(screen.getByRole("status").textContent).toBe("Working…");
 });
 it("shows a blocked turn without implying ongoing generation", () => {
     render(

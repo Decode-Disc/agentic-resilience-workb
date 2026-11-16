@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
 
 for (const width of [1440, 390]) {
     test(`the same conversation continues through research launch and reload at ${width}px`, async ({
@@ -107,7 +108,7 @@ test("source preparation belongs to the same history and survives completion and
     await page.keyboard.press("Escape");
     await expect(turn).toHaveAttribute("data-state", "completed");
     const group = turn.getByRole("button", {
-        name: "Inspect Sources mission: Documentary preparation",
+        name: "Inspect Sources Agent mission: Documentary preparation",
     });
     await expect(group).toHaveAttribute("aria-expanded", "false");
     await expect(log).toContainText("Material ready for examination");
@@ -136,6 +137,10 @@ test("the accepted program remains inspectable from Plan without inserting anoth
     ).toHaveCount(0);
     await page
         .getByRole("button", { name: "Research context", exact: true })
+        .click();
+    await page
+        .getByRole("region", { name: "Plan", exact: true })
+        .getByRole("button", { name: "Research program", exact: true })
         .click();
     await page
         .getByRole("region", { name: "Plan", exact: true })
@@ -268,6 +273,9 @@ for (const width of [1440, 390]) {
                 .getByRole("button", { name: "Research context", exact: true })
                 .click();
             await page
+                .getByRole("button", { name: "Research program", exact: true })
+                .click();
+            await page
                 .getByRole("button", { name: "View framing", exact: true })
                 .click();
         } else {
@@ -305,6 +313,8 @@ for (const width of [1440, 390]) {
             name: "Does CCC control coordination, or supply replaceable modules?",
             exact: true,
         });
+        await expect(question).not.toBeVisible();
+        await reviewResearchProgram(page);
         await expect(question).toBeVisible();
         await header.focus();
         await page.keyboard.press("Enter");

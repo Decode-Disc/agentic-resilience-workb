@@ -148,6 +148,8 @@ export const PI_OPERATION_WAIT_POLL_MS = 30_000;
 // These byte capacities are not native model-context token limits.
 export const EXECUTION_WINDOW_MS = 15 * 60 * 1000;
 export const HISTORY_PAGE_SIZE = 20;
+/** Recent operation rows per conversation/mission preview; overflow remains inspectable in history. */
+export const WORKBENCH_OPERATION_PREVIEW_SIZE = 32;
 export const MAX_CONTEXT_BYTES = 128 * 1024;
 export const MAX_OBSERVABLE_OUTPUT_BYTES = 512 * 1024;
 export const MAX_WORKING_NOTES_BYTES = 16 * 1024;

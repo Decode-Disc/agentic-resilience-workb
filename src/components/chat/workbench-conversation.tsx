@@ -12,6 +12,7 @@ import {
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import {
+    ArrowLeft01Icon,
     ArrowRight01Icon,
     Cancel01Icon,
     CommandIcon,
@@ -21,8 +22,17 @@ import {
     Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
-import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
+import {
+    type CSSProperties,
+    type ReactNode,
+    type Ref,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from "react";
 import remarkGfm from "remark-gfm";
+import { AgentIdentity } from "@/components/chat/agent-identity";
 import {
     type ConversationWorkItem,
     workStateLabels,
@@ -37,6 +47,7 @@ import {
     ConversationMission,
     type ConversationMissionSnapshot,
 } from "@/components/chat/conversation-mission";
+import { useConversationVisible } from "@/components/chat/conversation-thread";
 import {
     Message,
     MessageBody,
@@ -89,6 +100,7 @@ export {
 } from "@/components/chat/conversation-activity";
 
 export const WORKBENCH_AGENT_NAME = WORKBENCH_AGENT.name;
+const CONTEXT_PANEL_WIDTH_PX = 280;
 
 /** Keeps conversation identity and its context together wherever the chat is composed. */
 export function ConversationHeader({
@@ -105,8 +117,7 @@ export function ConversationHeader({
     return (
         <header data-slot="conversation-header">
             {leading}
-            <span data-slot="conversation-brand">{"//"}</span>
-            <span>{agent.name}</span>
+            <AgentIdentity agent={agent} />
             <div>{identity}</div>
             {context}
         </header>
@@ -549,15 +560,26 @@ function ConversationComposerContent({
                                             variant="ghost"
                                             size="sm"
                                             disabled={pending}
-                                            onClick={() => {
+                                            onClick={(event) => {
+                                                const cancel =
+                                                    event.currentTarget;
                                                 onCancel();
-                                                requestAnimationFrame(() =>
-                                                    root.current
-                                                        ?.querySelector(
-                                                            "textarea",
-                                                        )
-                                                        ?.focus(),
-                                                );
+                                                requestAnimationFrame(() => {
+                                                    // Preserve an explicit return target supplied by the editing surface.
+                                                    const active =
+                                                        document.activeElement;
+                                                    if (
+                                                        !active ||
+                                                        active ===
+                                                            document.body ||
+                                                        active === cancel
+                                                    )
+                                                        root.current
+                                                            ?.querySelector(
+                                                                "textarea",
+                                                            )
+                                                            ?.focus();
+                                                });
                                             }}>
                                             Cancel
                                         </Button>
@@ -668,6 +690,11 @@ function ConversationMessage({
             }>
             <MessageBody>
                 {attributionError}
+                {streaming && (
+                    <span className="chat-reply-phase" role="status">
+                        Draft reply
+                    </span>
+                )}
                 <MessageContent>
                     <MessagePrimitive.Parts
                         components={{ Text: ConversationMarkdown }}
@@ -702,7 +729,7 @@ function ConversationMarkdown() {
         <MarkdownTextPrimitive
             smooth
             remarkPlugins={[remarkGfm]}
-            className="min-w-0 wrap-anywhere [&_p]:my-0 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_a]:text-accent-foreground [&_a]:underline [&_a]:underline-offset-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+            className="min-w-0 wrap-anywhere [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_a]:text-accent-foreground [&_a]:underline [&_a]:underline-offset-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
         />
     );
 }
@@ -743,7 +770,11 @@ export function ConversationPendingPanel({
     footer,
     composer,
     headerAction,
+    open: controlledOpen,
+    onOpenChange,
 }: {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
     title: string;
     summary: string;
     children?: ReactNode;
@@ -751,6 +782,12 @@ export function ConversationPendingPanel({
     composer?: ReactNode;
     headerAction?: ReactNode;
 }) {
+    const [expanded, setExpanded] = useControllableState({
+        prop: controlledOpen,
+        defaultProp: true,
+        onChange: onOpenChange,
+        caller: "ConversationPendingPanel",
+    });
     const heading = (
         <>
             <span>{title}</span>
@@ -758,14 +795,31 @@ export function ConversationPendingPanel({
         </>
     );
     return (
-        <section data-slot="conversation-pending-panel">
+        <section
+            data-slot="conversation-pending-panel"
+            data-expanded={expanded}>
             {children ? (
-                <details open data-slot="conversation-pending-details">
-                    <summary>
+                <details
+                    open={expanded}
+                    onToggle={(event) => setExpanded(event.currentTarget.open)}
+                    data-slot="conversation-pending-details">
+                    {/* biome-ignore lint/a11y/noStaticElementInteractions: summary is the native keyboard-accessible details disclosure; controlled toggling also preserves externally opened edits. */}
+                    <summary
+                        onClick={(event) => {
+                            event.preventDefault();
+                            setExpanded(!expanded);
+                        }}>
                         {heading}
+                        <span className="chat-pending-toggle">
+                            {expanded ? "Close" : "Review"}
+                        </span>
                         <Icon iconNode={ArrowRight01Icon} size={14} />
                     </summary>
-                    <div data-slot="conversation-pending-body">{children}</div>
+                    <div
+                        data-slot="conversation-pending-body"
+                        hidden={!expanded}>
+                        {children}
+                    </div>
                 </details>
             ) : (
                 <div data-slot="conversation-pending-summary">
@@ -910,7 +964,7 @@ function ConversationWorkList({
     );
 }
 
-/** A header-anchored overview of the current plan, retained outputs and reference inputs. */
+/** A compact dossier overview; program, source and work details stay one deliberate action away. */
 export function ConversationContext({
     defaultOpen = true,
     open: controlledOpen,
@@ -922,8 +976,10 @@ export function ConversationContext({
     plan,
     planSummary,
     planAction,
+    questionCount,
     outputs,
     sources,
+    sourcesSummary,
     onChangeScope,
 }: {
     defaultOpen?: boolean;
@@ -936,8 +992,10 @@ export function ConversationContext({
     plan: ReactNode;
     planSummary?: ReactNode;
     planAction?: ReactNode;
-    outputs: ReactNode;
+    questionCount?: number;
+    outputs?: ReactNode;
     sources: ReactNode;
+    sourcesSummary?: ReactNode;
     onChangeScope?: () => void;
 }) {
     const [open, setOpen] = useControllableState({
@@ -946,14 +1004,99 @@ export function ConversationContext({
         onChange: onOpenChange,
         caller: "ConversationContext",
     });
+    const [view, setView] = useState<"overview" | "plan" | "sources" | "work">(
+        "overview",
+    );
     const { isMobile } = useResponsive();
+    const visible = useConversationVisible();
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const backRef = useRef<HTMLButtonElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const detailTrigger = useRef<HTMLButtonElement | null>(null);
+    const previousView = useRef(view);
+    const [frame, setFrame] = useState<{
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    } | null>(null);
+    useLayoutEffect(() => {
+        const host = triggerRef.current?.closest<HTMLElement>(
+            '[data-slot="conversation-thread"]',
+        );
+        if (!host) return;
+        host.style.setProperty(
+            "--conversation-context-reserve",
+            `${CONTEXT_PANEL_WIDTH_PX + 44}px`,
+        );
+        const measure = () => {
+            const bounds = host.getBoundingClientRect();
+            if (!bounds.width || !bounds.height) return;
+            const headerHeight =
+                host
+                    .querySelector('[data-slot="conversation-header"]')
+                    ?.getBoundingClientRect().height ?? 0;
+            setFrame({
+                left: bounds.left,
+                top: bounds.top + headerHeight,
+                width: bounds.width,
+                height: bounds.height - headerHeight,
+            });
+        };
+        measure();
+        const observer = new ResizeObserver(measure);
+        observer.observe(host);
+        window.addEventListener("resize", measure);
+        window.addEventListener("scroll", measure, true);
+        return () => {
+            observer.disconnect();
+            host.style.removeProperty("--conversation-context-reserve");
+            window.removeEventListener("resize", measure);
+            window.removeEventListener("scroll", measure, true);
+        };
+    }, []);
+    const side = frame
+        ? frame.width >= CONTEXT_PANEL_WIDTH_PX + 640 + 92
+        : !isMobile;
+    const inspect = (next: typeof view, trigger: HTMLButtonElement) => {
+        detailTrigger.current = trigger;
+        setView(next);
+    };
+    useLayoutEffect(() => {
+        if (view !== "overview") backRef.current?.focus();
+        else if (previousView.current !== "overview") {
+            const label = detailTrigger.current?.getAttribute("aria-label");
+            Array.from(
+                panelRef.current?.querySelectorAll<HTMLButtonElement>(
+                    "button",
+                ) ?? [],
+            )
+                .find((button) => button.getAttribute("aria-label") === label)
+                ?.focus();
+        }
+        previousView.current = view;
+    }, [view]);
+    const back = () => setView("overview");
+    const latestActivity =
+        activities.find(
+            (activity) =>
+                activity.state === "running" || activity.state === "waiting",
+        ) ?? activities.at(-1);
+    const hasWork = missions.length > 0 || activities.length > 0;
+    const viewTitle = {
+        overview: title,
+        plan: "Research program",
+        sources: "Sources",
+        work: "Recorded work",
+    }[view];
     return (
         <Popover
-            open={open}
+            open={open && visible}
             onOpenChange={(next, details) => {
                 if (
-                    details.reason === "outside-press" ||
-                    details.reason === "focus-out"
+                    side &&
+                    (details.reason === "outside-press" ||
+                        details.reason === "focus-out")
                 ) {
                     details.cancel();
                     return;
@@ -962,6 +1105,8 @@ export function ConversationContext({
             }}
             modal={false}>
             <PopoverTrigger
+                ref={triggerRef}
+                data-context-layout={side ? "side" : "popover"}
                 render={<Button variant="ghost" size="icon-sm" />}
                 aria-label="Research context"
                 title="Research context"
@@ -969,16 +1114,51 @@ export function ConversationContext({
                 <Icon iconNode={Task01Icon} size={19} />
             </PopoverTrigger>
             <PopoverContent
-                layer="context"
+                ref={panelRef}
+                layer={side ? "context" : "popup"}
                 side="bottom"
                 align="end"
                 sideOffset={10}
                 className="chat-context-card"
                 initialFocus={false}
-                positionerStyle={{ top: isMobile ? 0 : "5px" }}>
+                data-context-layout={side ? "side" : "popover"}
+                style={
+                    frame
+                        ? ({
+                              "--context-card-max-height": `${Math.max(0, frame.height - 24)}px`,
+                          } as CSSProperties)
+                        : undefined
+                }
+                positionerStyle={
+                    side && frame
+                        ? {
+                              position: "fixed",
+                              left:
+                                  frame.left +
+                                  frame.width -
+                                  CONTEXT_PANEL_WIDTH_PX -
+                                  12,
+                              top: frame.top + 12,
+                              width: CONTEXT_PANEL_WIDTH_PX,
+                              transform: "none",
+                              margin: 0,
+                          }
+                        : undefined
+                }>
                 <div className="chat-context-topline">
-                    <Icon iconNode={Task01Icon} size={16} />
-                    <PopoverTitle>{title}</PopoverTitle>
+                    {view === "overview" ? (
+                        <Icon iconNode={Task01Icon} size={16} />
+                    ) : (
+                        <Button
+                            ref={backRef}
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label="Back to research context"
+                            onClick={back}>
+                            <Icon iconNode={ArrowLeft01Icon} size={15} />
+                        </Button>
+                    )}
+                    <PopoverTitle>{viewTitle}</PopoverTitle>
                     <Button
                         variant="ghost"
                         size="icon-xs"
@@ -989,7 +1169,8 @@ export function ConversationContext({
                     </Button>
                 </div>
                 <PopoverDescription className="sr-only">
-                    Current plan, retained outputs and reference inputs.
+                    Current research scope, program, source collection and
+                    recorded work.
                 </PopoverDescription>
                 <ScrollArea
                     className="chat-context-scroll"
@@ -1000,60 +1181,182 @@ export function ConversationContext({
                         tabIndex: 0,
                     }}>
                     <div className="chat-context-sections">
-                        <section aria-label="Plan">
-                            <div className="chat-context-section-heading">
-                                <h2>Plan</h2>
-                                {planAction}
-                                {onChangeScope && (
+                        {view === "overview" ? (
+                            <>
+                                <section aria-label="Plan">
+                                    <div className="chat-context-scope">
+                                        <div>{planSummary ?? plan}</div>
+                                    </div>
                                     <Button
                                         variant="ghost"
-                                        size="xs"
-                                        className="chat-context-scope-action"
-                                        onClick={() => {
-                                            onChangeScope();
-                                            if (isMobile) setOpen(false);
-                                        }}>
-                                        Change scope
-                                    </Button>
-                                )}
-                            </div>
-                            {planSummary ? (
-                                <Collapsible className="chat-context-plan">
-                                    <CollapsibleTrigger
-                                        render={
-                                            <Button variant="ghost" size="sm" />
-                                        }
-                                        aria-label="Inspect research plan">
-                                        <Icon iconNode={Task01Icon} size={15} />
-                                        <span>{planSummary}</span>
+                                        className="chat-context-nav"
+                                        aria-label="Research program"
+                                        onClick={(event) =>
+                                            inspect("plan", event.currentTarget)
+                                        }>
+                                        <Icon iconNode={File01Icon} size={15} />
+                                        <span>Research program</span>
+                                        {questionCount !== undefined && (
+                                            <small>
+                                                {questionCount}{" "}
+                                                {questionCount === 1
+                                                    ? "question"
+                                                    : "questions"}
+                                            </small>
+                                        )}
                                         <Icon
                                             iconNode={ArrowRight01Icon}
                                             size={12}
                                         />
-                                    </CollapsibleTrigger>
-                                    <CollapsibleContent>
-                                        <div className="chat-context-plan-details">
-                                            {plan}
-                                        </div>
-                                    </CollapsibleContent>
-                                </Collapsible>
-                            ) : (
-                                plan
-                            )}
-                        </section>
-                        <section aria-label="Outputs">
-                            <h2>Outputs</h2>
-                            {outputs}
-                        </section>
-                        <section aria-label="Sources">
-                            <h2>Sources</h2>
-                            {sources}
-                        </section>
-                        <ConversationWorkList
-                            activities={activities}
-                            missions={missions}
-                            agents={agents}
-                        />
+                                    </Button>
+                                </section>
+                                {outputs && (
+                                    <section aria-label="Outputs">
+                                        <h2>Outputs</h2>
+                                        {outputs}
+                                    </section>
+                                )}
+                                <section aria-label="Sources">
+                                    <Button
+                                        variant="ghost"
+                                        className="chat-context-nav"
+                                        aria-label="Sources"
+                                        onClick={(event) =>
+                                            inspect(
+                                                "sources",
+                                                event.currentTarget,
+                                            )
+                                        }>
+                                        <Icon iconNode={File01Icon} size={15} />
+                                        <span>
+                                            Sources
+                                            {sourcesSummary && (
+                                                <small>{sourcesSummary}</small>
+                                            )}
+                                        </span>
+                                        <Icon
+                                            iconNode={ArrowRight01Icon}
+                                            size={12}
+                                        />
+                                    </Button>
+                                </section>
+                                {hasWork && (
+                                    <section aria-label="Work">
+                                        <h2>Work</h2>
+                                        {missions.map((mission) => {
+                                            const agent =
+                                                agents[mission.agentId];
+                                            return (
+                                                <Button
+                                                    key={mission.id}
+                                                    variant="ghost"
+                                                    className="chat-context-nav chat-context-mission"
+                                                    aria-label={`Inspect ${agent?.name ?? "agent"} work`}
+                                                    onClick={(event) =>
+                                                        inspect(
+                                                            "work",
+                                                            event.currentTarget,
+                                                        )
+                                                    }>
+                                                    <span>
+                                                        {agent ? (
+                                                            <AgentIdentity
+                                                                agent={agent}
+                                                            />
+                                                        ) : (
+                                                            "Agent attribution unavailable"
+                                                        )}
+                                                        <small>
+                                                            {mission.operations.find(
+                                                                (operation) =>
+                                                                    operation.state ===
+                                                                    "running",
+                                                            )?.title ??
+                                                                mission.title}
+                                                        </small>
+                                                    </span>
+                                                    <small
+                                                        data-state={
+                                                            mission.state
+                                                        }>
+                                                        {
+                                                            workStateLabels[
+                                                                mission.state
+                                                            ]
+                                                        }
+                                                    </small>
+                                                    <Icon
+                                                        iconNode={
+                                                            ArrowRight01Icon
+                                                        }
+                                                        size={12}
+                                                    />
+                                                </Button>
+                                            );
+                                        })}
+                                        {!missions.length && latestActivity && (
+                                            <Button
+                                                variant="ghost"
+                                                className="chat-context-nav"
+                                                aria-label="Inspect recorded work"
+                                                onClick={(event) =>
+                                                    inspect(
+                                                        "work",
+                                                        event.currentTarget,
+                                                    )
+                                                }>
+                                                <span>
+                                                    {latestActivity.title}
+                                                    <small>
+                                                        {latestActivity.summary}
+                                                    </small>
+                                                </span>
+                                                <small
+                                                    data-state={
+                                                        latestActivity.state
+                                                    }>
+                                                    {
+                                                        workStateLabels[
+                                                            latestActivity.state
+                                                        ]
+                                                    }
+                                                </small>
+                                                <Icon
+                                                    iconNode={ArrowRight01Icon}
+                                                    size={12}
+                                                />
+                                            </Button>
+                                        )}
+                                    </section>
+                                )}
+                            </>
+                        ) : view === "plan" ? (
+                            <section aria-label="Plan">
+                                <div className="chat-context-section-heading">
+                                    {planAction}
+                                    {onChangeScope && (
+                                        <Button
+                                            variant="ghost"
+                                            size="xs"
+                                            onClick={() => {
+                                                onChangeScope();
+                                                if (!side) setOpen(false);
+                                            }}>
+                                            Change scope
+                                        </Button>
+                                    )}
+                                </div>
+                                {plan}
+                            </section>
+                        ) : view === "sources" ? (
+                            <section aria-label="Sources">{sources}</section>
+                        ) : (
+                            <ConversationWorkList
+                                activities={activities}
+                                missions={missions}
+                                agents={agents}
+                            />
+                        )}
                     </div>
                 </ScrollArea>
             </PopoverContent>

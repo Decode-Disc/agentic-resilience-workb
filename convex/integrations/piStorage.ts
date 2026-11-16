@@ -188,6 +188,10 @@ export class PiConvexStorage extends MemoryStorage {
         return this.lease?.sessionId;
     }
 
+    get committedSequence() {
+        return this.sequence;
+    }
+
     static async open(
         store: PiCommitStore,
         context: Context,

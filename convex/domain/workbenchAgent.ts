@@ -103,6 +103,10 @@ function simulateWorkbench(
             kind: "complete",
             text: "Simulation: the research program is saved. Review or edit the questions, then choose Start research when ready. No live model or research provider was called.",
         };
+    const capacity =
+        "questionCapacity" in input.framing
+            ? input.framing.questionCapacity
+            : null;
     return {
         kind: "operations",
         requests: [
@@ -142,7 +146,10 @@ function simulateWorkbench(
                                 rationale:
                                     "Distinguish operational importance from pricing power.",
                             },
-                        ],
+                        ].slice(
+                            0,
+                            typeof capacity === "number" ? capacity : undefined,
+                        ),
                     },
                 }),
             },

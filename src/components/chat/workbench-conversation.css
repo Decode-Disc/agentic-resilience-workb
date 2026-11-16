@@ -8,11 +8,6 @@
     border-bottom: 1px solid var(--divider);
     font-size: 12px;
 }
-[data-slot="conversation-brand"] {
-    color: var(--brand-purple);
-    font-size: 16px;
-    font-weight: 500;
-}
 [data-slot="conversation-header"] > div {
     display: flex;
     align-items: center;
@@ -362,7 +357,8 @@
 [data-slot="conversation-work-group"] > * {
     grid-column: 1;
 }
-[data-slot="conversation-work-group"]:has(> button:not([data-panel-open])) > * {
+[data-slot="conversation-work-group"]:has(> button:not([data-panel-open]))
+    > :not(.chat-work-latest) {
     grid-row: 1;
 }
 [data-slot="conversation-work-group"] > button:not([data-panel-open]) {
@@ -399,11 +395,15 @@
     display: flex;
     flex: 1;
     min-width: 0;
-    align-items: baseline;
+    align-items: center;
     flex-wrap: wrap;
     gap: 3px 8px;
 }
 .chat-work-description strong {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
     font-size: 12px;
     line-height: 19px;
     font-weight: 400;
@@ -476,7 +476,7 @@
 .chat-context-card {
     --context-card-max-height: min(78dvh, 660px);
     position: relative;
-    width: min(320px, calc(100vw - 24px));
+    width: min(280px, calc(100vw - 24px));
     max-height: var(--context-card-max-height);
     overflow: hidden;
     padding: 0;
@@ -765,57 +765,6 @@
     min-width: 0;
     padding: 2px 14px 12px;
 }
-.chat-question-topics,
-.chat-question-pagination {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-}
-.chat-question-topics {
-    overflow-x: auto;
-    scrollbar-width: thin;
-}
-.chat-question-topics button {
-    flex-shrink: 0;
-    height: 34px;
-    gap: 7px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: transparent;
-    box-shadow: none;
-    font-size: 12.5px;
-    font-weight: 500;
-}
-.chat-question-topics svg {
-    width: 14px;
-    height: 14px;
-}
-.chat-question-topics [aria-pressed="true"] {
-    border-color: var(--brand-purple);
-    background: color-mix(in oklab, var(--brand-purple) 8%, var(--card));
-}
-.chat-question-pagination {
-    flex-shrink: 0;
-    margin-left: auto;
-    gap: 10px;
-}
-.chat-question-pagination button {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: transparent;
-    box-shadow: none;
-}
-.chat-question-pagination span {
-    white-space: nowrap;
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-}
 .chat-focused-question {
     margin: 0 14px;
     padding: 14px 16px;
@@ -872,27 +821,6 @@
         gap: 8px;
         padding: 6px 10px 8px;
     }
-    .chat-question-topics {
-        width: 100%;
-        padding-block: 6px;
-        margin-block: -6px;
-    }
-    .chat-question-topics button {
-        position: relative;
-        height: 32px;
-        min-height: 32px;
-        padding-inline: 8px;
-        font-size: 12px;
-    }
-    .chat-question-topics button::after {
-        content: "";
-        position: absolute;
-        inset: -6px 0;
-    }
-    .chat-question-pagination button {
-        position: relative;
-    }
-    .chat-question-pagination button::after,
     .chat-question-actions button::after {
         content: "";
         position: absolute;
@@ -1097,4 +1025,223 @@
 }
 [data-slot="conversation-pending-summary"] > button {
     margin-left: auto;
+}
+
+/* A useful reading lane remains beside the content-sized context card. */
+[data-slot="conversation-thread"]:has(
+        [data-slot="conversation-context-trigger"][data-context-layout="side"][aria-expanded="true"]
+    )
+    > [data-slot="conversation-thread-body"] {
+    width: calc(100% - var(--conversation-context-reserve));
+}
+.chat-context-card[data-context-layout] .chat-context-scroll {
+    min-height: 0;
+    max-height: calc(var(--context-card-max-height) - 46px);
+}
+.chat-context-card[data-context-layout] .chat-context-viewport {
+    height: auto;
+    max-height: inherit;
+}
+.chat-context-scope {
+    padding: 3px 6px 10px;
+    font-size: 13px;
+    line-height: 1.6;
+    font-weight: 500;
+    overflow-wrap: anywhere;
+}
+.chat-context-scope > div {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.chat-context-card .chat-context-scope-detail {
+    margin: 0 0 16px;
+    font-size: 12px;
+    line-height: 1.65;
+}
+.chat-context-nav {
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 8px 6px;
+    text-align: left;
+    white-space: normal;
+    font-size: 12px;
+}
+.chat-context-nav > span {
+    flex: 1;
+    min-width: 0;
+}
+.chat-context-nav > svg {
+    flex: none;
+    color: var(--muted-foreground);
+}
+.chat-context-nav small {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+    line-height: 1.6;
+}
+.chat-context-nav > span > small {
+    display: block;
+    margin-top: 4px;
+}
+.chat-context-nav [data-state="interrupted"],
+.chat-context-nav [data-state="blocked"] {
+    color: var(--destructive-text);
+}
+.chat-context-mission {
+    align-items: flex-start;
+}
+.chat-context-mission > span > small {
+    padding-left: 25px;
+}
+.chat-context-card .chat-context-sections {
+    padding: 0;
+}
+.chat-context-card .chat-context-sections > section {
+    padding: 14px 12px;
+}
+.chat-context-card .chat-context-sections > section + section {
+    margin-top: 0;
+}
+.chat-context-card .chat-context-sections > section > h2 {
+    margin: 0 6px 5px;
+}
+.chat-context-card
+    .chat-context-sections
+    > section
+    > [data-slot="conversation-mission"] {
+    margin-top: 10px;
+}
+@media (max-width: 640px) {
+    .chat-context-card[data-context-layout="popover"] {
+        width: min(320px, calc(100vw - 24px));
+    }
+}
+.chat-work-return {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.chat-work-return:empty {
+    display: none;
+}
+.chat-work-return > button {
+    max-width: 100%;
+    justify-content: flex-start;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chat-pending-toggle {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+.chat-question-selector {
+    width: 100%;
+    min-width: 0;
+}
+.chat-reply-phase {
+    font-size: 11px;
+    color: var(--muted-foreground);
+}
+[data-slot="conversation-thread"]
+    [data-role="assistant"]
+    [data-slot="message-content"] {
+    max-width: 72ch;
+    line-height: 1.75;
+}
+[data-slot="conversation-thread"]
+    [data-role="assistant"]
+    [data-slot="message-content"]
+    p {
+    margin: 0 0 1em;
+}
+[data-slot="conversation-thread"]
+    [data-role="assistant"]
+    [data-slot="message-content"]
+    li
+    + li {
+    margin-top: 0.65em;
+}
+[data-slot="conversation-thread"]
+    [data-role="assistant"]
+    [data-slot="message-content"]
+    :is(h1, h2, h3, h4) {
+    margin-top: 1.5em;
+    margin-bottom: 0.6em;
+    line-height: 1.45;
+}
+[data-slot="conversation-thread"]
+    [data-role="assistant"]
+    [data-slot="message-content"]
+    > :first-child {
+    margin-top: 0;
+}
+[data-slot="conversation-thread"]
+    [data-role="assistant"]
+    [data-slot="message-content"]
+    > :last-child {
+    margin-bottom: 0;
+}
+[data-slot="conversation-pending-body"][hidden] {
+    display: none;
+}
+
+[data-slot="conversation-thread"]
+    [data-role="assistant"]
+    [data-slot="message-content"]
+    > :last-child
+    > :last-child {
+    margin-bottom: 0;
+}
+
+.chat-context-source-list {
+    display: grid;
+    gap: 12px;
+}
+.chat-context-source-list [data-slot="conversation-reference"] {
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    padding: 8px 4px;
+}
+.chat-context-source-list [data-slot="conversation-reference"] > span {
+    white-space: normal;
+    line-height: 1.6;
+    -webkit-line-clamp: unset;
+}
+
+.chat-activity-list {
+    min-width: 0;
+}
+.chat-activity-list .chat-activity-viewport {
+    height: auto;
+    max-height: min(18rem, 50dvh);
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    overflow-anchor: none;
+}
+.chat-activity-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+.chat-activity-item {
+    padding-bottom: 4px;
+}
+.chat-work-latest {
+    padding: 0 0 4px 20px;
+}
+[data-slot="conversation-work-group"] > button .chat-mission-heading {
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
+    margin: 4px 0;
 }

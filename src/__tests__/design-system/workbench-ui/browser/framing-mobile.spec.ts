@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
 
 test("mobile framing leaves the context closed and preserves the reader's choice on resize", async ({
     page,
@@ -74,6 +75,7 @@ for (const viewport of [
         await response.click({ trial: true });
         const input = page.getByRole("textbox");
         await expect(input).toBeInViewport();
+        await reviewResearchProgram(page);
         await page
             .getByRole("button", { name: "Edit question", exact: true })
             .click();
@@ -109,6 +111,7 @@ test("a short mobile viewport keeps the question editor inside the conversation 
 }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/?layout=start&screen=framing&theme=dark");
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Edit question", exact: true })
         .click();
@@ -151,35 +154,27 @@ test("a short mobile viewport keeps the question editor inside the conversation 
     ).toBeInViewport();
 });
 
-test("question pagination keeps the selected topic visible in the mobile strip", async ({
+test("mobile question selection reveals only the requested question without a horizontal strip", async ({
     page,
 }) => {
     await page.setViewportSize({ width: 320, height: 740 });
     await page.goto("/?layout=start&screen=framing&theme=light");
-    for (let index = 0; index < 3; index++)
-        await page
-            .getByRole("button", {
-                name: "Next research question",
-                exact: true,
-            })
-            .click();
-    const topics = page.getByRole("group", {
-        name: "Research questions",
-        exact: true,
-    });
-    const selected = topics.getByRole("button", {
-        name: "Bypass",
-        exact: true,
-    });
-    await expect(selected).toHaveAttribute("aria-pressed", "true");
+    await reviewResearchProgram(page);
+    const selector = page.getByRole("combobox", { name: "Research question" });
+    await selector.click();
+    await page.getByRole("option", { name: "4. Bypass", exact: true }).click();
+    await expect(selector).toContainText("4 of 4");
+    await expect(
+        page.getByRole("region", { name: "Framing summary" }),
+    ).toContainText("bypass");
+    await expect(
+        page.getByRole("button", { name: "Start research", exact: true }),
+    ).toBeInViewport();
     await expect
-        .poll(async () => {
-            const strip = await topics.boundingBox();
-            const button = await selected.boundingBox();
-            return strip && button
-                ? button.x >= strip.x &&
-                      button.x + button.width <= strip.x + strip.width
-                : false;
-        })
+        .poll(() =>
+            page.evaluate(
+                () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+        )
         .toBe(true);
 });

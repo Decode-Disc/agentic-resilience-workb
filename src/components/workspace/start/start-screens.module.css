@@ -136,6 +136,7 @@
     @apply h-[100%] min-h-[0] min-w-[0] flex flex-col;
 }
 .conversation {
+    --conversation-dock-bottom: max(16px, env(safe-area-inset-bottom));
     @apply flex flex-col p-[0] h-[100%] min-h-[0] min-w-[0] bg-card/35 bg-none;
 }
 .conversationComposer {
@@ -430,6 +431,7 @@
 }
 
 .framing {
+    --conversation-dock-bottom: 12px;
     @apply relative flex flex-col w-[100%] h-[100%] min-h-[0] min-w-[0] overflow-hidden;
 }
 .framing [data-slot="conversation-thread-log"] {
@@ -441,10 +443,19 @@
 }
 .framing [data-slot="conversation-scroll-content"] {
     @apply min-h-[100%];
-    padding-bottom: calc(var(--conversation-dock-height, 80px) + 28px);
+    padding-bottom: 12px;
+}
+.framing [data-slot="conversation-scroll"],
+.conversation [data-slot="conversation-scroll"] {
+    padding-bottom: calc(
+        var(--conversation-dock-height, 0px) +
+        var(--conversation-dock-bottom) +
+        16px
+    );
 }
 .framingDock {
-    @apply absolute z-[3] inset-x-0 bottom-[12px];
+    @apply absolute z-[3] inset-x-0;
+    bottom: var(--conversation-dock-bottom);
     width: min(1040px, calc(100% - 64px));
     @apply mx-auto flex flex-col gap-[0];
 }
@@ -471,6 +482,9 @@
     @apply flex flex-row flex-wrap items-center justify-between gap-[10px] py-[8px] px-[12px] bg-transparent bg-none;
     border: 0;
     @apply rounded-none;
+}
+.framingLaunch[hidden] {
+    display: none;
 }
 .framingLaunch p {
     @apply max-w-[52ch] text-[10px] leading-[15px] text-muted-foreground;
@@ -499,11 +513,11 @@
 }
 .conversationComposer {
     @apply absolute z-[2] inset-x-[16px];
-    bottom: max(16px, env(safe-area-inset-bottom));
+    bottom: var(--conversation-dock-bottom);
     @apply mt-[0] p-[0];
 }
 .conversation [data-slot="conversation-thread-content"] {
-    padding-bottom: calc(var(--conversation-dock-height, 0px) + 24px);
+    padding-bottom: 12px;
 }
 @media (max-width: 760px) {
     .framing [data-slot="conversation-thread"] {
@@ -536,16 +550,6 @@
 @media (max-width: 760px) {
     .framing [data-slot="conversation-header"] {
         @apply h-[44px];
-    }
-}
-
-@media (min-width: 960px) {
-    .framing:has(
-            [data-slot="conversation-context-trigger"][aria-expanded="true"]
-        )
-        > [data-slot="conversation-thread"]
-        > [data-slot="conversation-thread-body"] {
-        width: calc(100% - 344px);
     }
 }
 
@@ -652,8 +656,8 @@
     @apply mb-[12px];
 }
 @media (max-width: 640px) {
-    .framingDock {
-        @apply bottom-[8px];
+    .framing {
+        --conversation-dock-bottom: 8px;
     }
     .framing
         .framingDock
@@ -690,12 +694,6 @@
     }
     .pendingAction [class~="chat-question-navigation"] {
         @apply flex-nowrap;
-    }
-    .pendingAction [class~="chat-question-topics"] {
-        @apply w-auto flex-[1];
-    }
-    .pendingAction [class~="chat-question-pagination"] {
-        @apply gap-[4px];
     }
     .pendingAction [class~="chat-question-actions"] {
         @apply flex-nowrap gap-[12px];

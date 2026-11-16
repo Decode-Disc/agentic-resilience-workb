@@ -5,7 +5,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     type ConversationAgent,
-    WORKBENCH_AGENT,
+    DEFAULT_CONVERSATION_AGENTS,
 } from "@/components/chat/conversation-agent";
 import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
 import type { ConversationTurnSnapshot } from "@/components/chat/conversation-turn";
@@ -149,10 +149,7 @@ const previousKeys = [
     "start-conversation-preview-v4",
     "start-conversation-preview-v3",
 ];
-const previewAgents = {
-    workbench: WORKBENCH_AGENT,
-    sources: { id: "sources", name: "Sources" },
-};
+const previewAgents = DEFAULT_CONVERSATION_AGENTS;
 function messageEntries(messages: PreviewMessage[]): PreviewHistoryEntry[] {
     return messages.map((message) => ({ kind: "message", message }));
 }
@@ -1045,6 +1042,7 @@ function restoreConversation(screen: PreviewScreen): {
                 ? validateConversation(data)
                 : migrateConversation(data);
         restored = applyPreviewPatch(restored, {
+            agents: previewAgents,
             ...interruptTurn(restored),
             queuePaused: getMessages(restored).some(
                 (message) => message.delivery === "queued",

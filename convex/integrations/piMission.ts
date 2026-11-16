@@ -31,6 +31,7 @@ import {
 } from "@earendil-works/chord/context";
 import {
     type AssistantMessage,
+    type AssistantMessageEvent,
     createAssistantMessageEventStream,
     createModels,
     fauxAssistantMessage,
@@ -210,6 +211,14 @@ export async function runPiMission(
     const registry = createRegistry();
     let harness: Harness;
     let root: Conversation;
+    let publicInvocation:
+        | { invocationId: Id<"agentInvocations">; afterSequence: number }
+        | undefined;
+    let progressView:
+        | Awaited<ReturnType<Conversation["viewState"]>>
+        | undefined;
+    let unsubscribeProgress: (() => void) | undefined;
+    let progressWrite: Promise<unknown> = Promise.resolve();
     let nativeSettled = false;
     let preparationChanges = 0;
     const lastPreparedDelivery = { messages: 0, observations: 0, controls: 0 };
@@ -532,6 +541,7 @@ export async function runPiMission(
         model: Model<string>,
         transcript: TranscriptContext,
         options?: SimpleStreamOptions,
+        onProgress?: (event: AssistantMessageEvent) => void,
     ): Promise<AssistantMessage> {
         if (Date.now() - startedAt > PI_WORKER_SLICE_MS)
             throw executionError("pi_slice_complete");
@@ -686,6 +696,13 @@ export async function runPiMission(
             );
             return changedPreparation();
         }
+        publicInvocation =
+            !auxiliary && definition.nativeConversation
+                ? {
+                      invocationId: begun.invocationId,
+                      afterSequence: storage.committedSequence,
+                  }
+                : undefined;
         let message: AssistantMessage | undefined;
         if (retained.receivedOutputJson) {
             const response = JSON.parse(retained.receivedOutputJson);
@@ -936,6 +953,10 @@ export async function runPiMission(
                             },
                         },
                     );
+                    for await (const event of stream) {
+                        if (event.type !== "done" && event.type !== "error")
+                            onProgress?.(event);
+                    }
                     const received = await stream.result();
                     if (preparationCode) return reject(preparationCode);
                     if (
@@ -1254,7 +1275,9 @@ export async function runPiMission(
         options?: SimpleStreamOptions,
     ) {
         const stream = createAssistantMessageEventStream();
-        void request(model, transcript, options).then(
+        void request(model, transcript, options, (event) =>
+            stream.push(event),
+        ).then(
             (message) => stream.end(message),
             (error) => {
                 stop(error);
@@ -1337,6 +1360,58 @@ export async function runPiMission(
                 instructions: definition.instructions,
             },
         });
+        if (definition.nativeConversation && storage.lease) {
+            const lease = storage.lease;
+            progressView = await root.viewState(context);
+            let lastProgress = "";
+            unsubscribeProgress = progressView.subscribe((value) => {
+                const current = publicInvocation;
+                const sequence = storage.committedSequence;
+                if (!current || sequence <= current.afterSequence) return;
+                const generation = value.docs["pi.live"]?.generation;
+                if (
+                    !generation ||
+                    typeof generation !== "object" ||
+                    Array.isArray(generation)
+                )
+                    return;
+                const message = generation.message;
+                if (
+                    !message ||
+                    typeof message !== "object" ||
+                    Array.isArray(message) ||
+                    !Array.isArray(message.content)
+                )
+                    return;
+                const text = message.content
+                    .flatMap((part) =>
+                        part &&
+                        typeof part === "object" &&
+                        !Array.isArray(part) &&
+                        part.type === "text" &&
+                        typeof part.text === "string"
+                            ? [part.text]
+                            : [],
+                    )
+                    .join("");
+                const key = `${current.invocationId}:${text}`;
+                if (!text || key === lastProgress) return;
+                lastProgress = key;
+                progressWrite = progressWrite
+                    .then(() =>
+                        ctx.runMutation(
+                            internal.execution.piStore.publishPreview,
+                            {
+                                ...lease,
+                                invocationId: current.invocationId,
+                                sequence,
+                                text,
+                            },
+                        ),
+                    )
+                    .catch(stop);
+            });
+        }
         if (!terminal)
             await root.configure(
                 {
@@ -1477,6 +1552,10 @@ export async function runPiMission(
         throw failure ?? error;
     } finally {
         clearInterval(heartbeat);
+        unsubscribeProgress?.();
+        await progressWrite;
+        if (failure) nativeSettled = false;
+        progressView?.dispose();
         const nextWake = wake;
         await harness.close(BACKGROUND_CONTEXT);
         await ctx.runMutation(internal.execution.piControl.closeWorker, {

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
 
 for (const width of [1440, 390])
     for (const theme of ["light", "dark"]) {
@@ -30,7 +31,7 @@ for (const width of [1440, 390])
                 page.getByRole("button", {
                     name: "Inspect work for this turn",
                 }),
-            ).toHaveCount(0);
+            ).toHaveAttribute("aria-expanded", "false");
             await page.clock.runFor(8500);
             const group = page.getByRole("button", {
                 name: "Inspect work for this turn",
@@ -39,8 +40,8 @@ for (const width of [1440, 390])
             await expect(
                 page.getByRole("columnheader", { name: "What to test" }),
             ).toBeVisible();
+            await page.clock.resume();
             await group.click();
-            await page.clock.runFor(250);
             await expect(
                 page.getByText(
                     "I'll compare the retained material on integrations and coordination.",
@@ -64,7 +65,6 @@ for (const width of [1440, 390])
                     (node) => node.closest(".chat-work-entries") === null,
                 ),
             ).toBe(true);
-            await page.clock.resume();
             await expect
                 .poll(() =>
                     note.evaluate((element) => {
@@ -89,7 +89,6 @@ for (const width of [1440, 390])
             });
             await operation.focus();
             await page.keyboard.press("Enter");
-            await page.clock.runFor(250);
             await expect(
                 page.getByText(
                     "Illustrative reading: coordination and network participation.",
@@ -110,13 +109,14 @@ test("question actions share the composer and keep its ordinary draft", async ({
     await page.goto("/?layout=start&screen=framing&theme=dark");
     const input = page.getByRole("textbox");
     await input.fill("Keep my unsent message.");
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Add research question", exact: true })
         .click();
     await expect(page.getByRole("textbox")).toHaveCount(1);
     await expect(
         page.getByRole("button", { name: "Start research", exact: true }),
-    ).toBeDisabled();
+    ).toHaveCount(0);
     await input.fill("Can agents alter pricing power?");
     await page
         .getByRole("button", { name: "Add question", exact: true })
@@ -125,6 +125,7 @@ test("question actions share the composer and keep its ordinary draft", async ({
         page.getByRole("heading", { name: "Can agents alter pricing power?" }),
     ).toBeVisible();
     await expect(input).toHaveValue("Keep my unsent message.");
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Edit question", exact: true })
         .click();
@@ -136,7 +137,10 @@ test("question actions share the composer and keep its ordinary draft", async ({
     await expect(
         page.getByRole("heading", { name: "Who can change pricing?" }),
     ).toBeVisible();
-    await expect(page.getByText("5 of 5", { exact: true })).toBeVisible();
+    await expect(
+        page.getByRole("combobox", { name: "Research question", exact: true }),
+    ).toContainText("5 of 5");
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Edit question", exact: true })
         .click();
@@ -239,6 +243,7 @@ test("failed question submission preserves both drafts and retries once", async 
     await page.goto("/?layout=start&screen=framing&theme=dark");
     const input = page.getByRole("textbox");
     await input.fill("My unsent conversation draft.");
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Add research question", exact: true })
         .click();
@@ -258,7 +263,7 @@ test("failed question submission preserves both drafts and retries once", async 
     await expect(input).toHaveValue("Who can redirect this workflow?");
     await expect(
         page.getByRole("button", { name: "Start research", exact: true }),
-    ).toBeDisabled();
+    ).toHaveCount(0);
     await error.getByRole("button", { name: "Try again", exact: true }).click();
     await expect(
         page.getByRole("heading", {
@@ -266,7 +271,9 @@ test("failed question submission preserves both drafts and retries once", async 
             exact: true,
         }),
     ).toBeVisible();
-    await expect(page.getByText("5 of 5", { exact: true })).toBeVisible();
+    await expect(
+        page.getByRole("combobox", { name: "Research question", exact: true }),
+    ).toContainText("5 of 5");
     await expect(input).toHaveValue("My unsent conversation draft.");
     await expect(error).toHaveCount(0);
 });
@@ -275,6 +282,7 @@ test("question actions open on the first click from a resting composer", async (
     page,
 }) => {
     await page.goto("/?layout=start&screen=framing&theme=dark");
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Add research question", exact: true })
         .click();
@@ -294,6 +302,7 @@ test("question actions open on the first click from a resting composer", async (
             exact: true,
         }),
     ).toBeFocused();
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Edit question", exact: true })
         .click();

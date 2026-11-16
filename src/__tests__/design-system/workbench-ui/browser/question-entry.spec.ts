@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
 
 for (const width of [1440, 390])
     for (const theme of ["light", "dark"])
@@ -22,6 +23,7 @@ for (const width of [1440, 390])
                 exact: true,
             });
             await ordinary.fill("Keep my ordinary draft.");
+            await reviewResearchProgram(page);
             await page
                 .getByRole("button", {
                     name: "Add research question",
@@ -68,6 +70,7 @@ for (const width of [1440, 390])
                 }),
             ).toBeVisible();
             await expect(ordinary).toHaveValue("Keep my ordinary draft.");
+            await reviewResearchProgram(page);
             await page
                 .getByRole("button", {
                     name: "Add research question",

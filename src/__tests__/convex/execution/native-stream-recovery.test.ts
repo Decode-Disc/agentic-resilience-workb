@@ -1,4 +1,4 @@
-import { api } from "@convex/_generated/api";
+import { api, internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
@@ -384,4 +384,205 @@ test("native provider errors retain a bounded protected cause without exposing c
         runId,
     });
     expect(JSON.stringify(conversation)).not.toContain(diagnostic.message);
+});
+
+test("an admitted native reply exposes committed public text before EOF and publishes once after settlement", async () => {
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+    );
+    vi.stubEnv("OPENROUTER_API_KEY", "offline-progress-fixture");
+    let upstream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let upstreamClosed = false;
+    const partial = "I am examining the proposed workflow.";
+    const continuation = "\n\nThe program remains a proposal.";
+    let calls = 0;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+            calls++;
+            return new Response(
+                new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        upstream = controller;
+                        controller.enqueue(
+                            encode({
+                                id: "public-progress-fixture",
+                                choices: [
+                                    {
+                                        index: 0,
+                                        delta: {
+                                            role: "assistant",
+                                            content: partial,
+                                            reasoning:
+                                                "Private reasoning must remain private.",
+                                        },
+                                        finish_reason: null,
+                                    },
+                                ],
+                            }),
+                        );
+                    },
+                    cancel() {
+                        upstreamClosed = true;
+                    },
+                }),
+                { headers: { "content-type": "text/event-stream" } },
+            );
+        }),
+    );
+    const execution = t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    try {
+        await vi.waitFor(
+            async () => {
+                const snapshot = await client.query(api.workbench.snapshot, {
+                    runId,
+                });
+                expect(snapshot.activeWork?.turn).toMatchObject({
+                    status: "active",
+                });
+                expect(
+                    await client.query(api.workbench.responsePreview, {
+                        runId,
+                    }),
+                ).toMatchObject({ text: partial });
+            },
+            { timeout: 5000 },
+        );
+        const history = await client.query(
+            api.execution.conversations.listMessages,
+            {
+                runId,
+                paginationOpts: { numItems: 20, cursor: null },
+            },
+        );
+        expect(
+            history.page.filter((message) => message.role === "assistant"),
+        ).toEqual([]);
+        expect(calls).toBe(1);
+        const observed = await client.query(api.workbench.responsePreview, {
+            runId,
+        });
+        assert(observed);
+        const storage = await t.run(async (ctx) => ({
+            session: await ctx.db.query("piSessions").first(),
+            commits: await ctx.db.query("piCommits").collect(),
+        }));
+        assert(storage.session);
+        const lease = {
+            sessionId: storage.session._id,
+            missionId: storage.session.missionId,
+            writer: storage.session.writer,
+            epoch: storage.session.epoch,
+            generation: storage.session.generation,
+        };
+        await expect(
+            t.mutation(internal.execution.piStore.publishPreview, {
+                ...lease,
+                writer: "superseded-writer",
+                invocationId: observed.invocationId,
+                sequence: observed.sequence,
+                text: "Uncommitted replacement",
+            }),
+        ).rejects.toThrow("pi_writer_fenced");
+        expect(
+            await t.mutation(internal.execution.piStore.publishPreview, {
+                ...lease,
+                invocationId: observed.invocationId,
+                sequence: storage.session.sequence + 1,
+                text: "Uncommitted replacement",
+            }),
+        ).toBe(false);
+        expect(
+            await client.query(api.workbench.responsePreview, { runId }),
+        ).toEqual(observed);
+        expect(JSON.stringify(observed)).not.toContain("Private reasoning");
+        upstream?.enqueue(
+            encode({
+                choices: [
+                    {
+                        index: 0,
+                        delta: { content: continuation },
+                        finish_reason: null,
+                    },
+                ],
+            }),
+        );
+        await vi.waitFor(
+            async () => {
+                expect(
+                    await client.query(api.workbench.responsePreview, {
+                        runId,
+                    }),
+                ).toMatchObject({ text: partial + continuation });
+            },
+            { timeout: 5000 },
+        );
+    } finally {
+        if (!upstreamClosed) {
+            upstream?.enqueue(
+                encode({
+                    choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+                    usage: {
+                        prompt_tokens: 10,
+                        completion_tokens: 10,
+                        cost: 0.000001,
+                    },
+                }),
+            );
+            upstream?.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+            upstream?.close();
+        }
+        await execution;
+    }
+    const history = await client.query(
+        api.execution.conversations.listMessages,
+        {
+            runId,
+            paginationOpts: { numItems: 20, cursor: null },
+        },
+    );
+    expect(
+        history.page.filter((message) => message.role === "assistant"),
+    ).toEqual([
+        expect.objectContaining({
+            text: partial + continuation,
+            status: "processed",
+        }),
+    ]);
+    expect(calls).toBe(1);
+}, 15000);
+
+test("the admitted local simulation respects the current Sources question capacity", async () => {
+    const { activateSourcesMission } = await import(
+        "@/__tests__/setup/sources-mission"
+    );
+    const { SOURCES_QUALIFICATION_ENVELOPE } = await import(
+        "@convex/runWorkspace"
+    );
+    activateSourcesMission(SOURCES_QUALIFICATION_ENVELOPE);
+    const { t, client, runId } = await seedWorkbench(true);
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    const snapshot = await client.query(api.workbench.snapshot, { runId });
+    expect(snapshot.researchStart.questionCapacity).toBe(3);
+    expect(snapshot.framing?.content.questions).toHaveLength(3);
+    const history = await client.query(
+        api.execution.conversations.listMessages,
+        { runId, paginationOpts: { numItems: 20, cursor: null } },
+    );
+    expect(
+        history.page.filter((message) => message.role === "assistant"),
+    ).toEqual([
+        expect.objectContaining({
+            text: expect.stringContaining(
+                "Simulation: the research program is saved.",
+            ),
+        }),
+    ]);
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
 });

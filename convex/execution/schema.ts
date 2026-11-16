@@ -121,6 +121,15 @@ export const executionTables = {
         held: v.boolean(),
     }).index("by_key", ["key"]),
     piSessions: defineTable({
+        publicPreview: v.optional(
+            v.object({
+                turnId: v.id("agentConversationTurns"),
+                invocationId: v.id("agentInvocations"),
+                instructionVersion: v.number(),
+                sequence: v.number(),
+                text: v.string(),
+            }),
+        ),
         observationSequence: v.optional(v.number()),
         observationEntry: v.optional(v.number()),
         missionId: v.id("agentMissions"),
@@ -195,6 +204,14 @@ export const executionTables = {
     }).index("by_run", ["runId"]),
     agentConversationTurns: defineTable({
         responseControl: v.optional(responseControlState),
+        preview: v.optional(
+            v.object({
+                invocationId: v.id("agentInvocations"),
+                instructionVersion: v.number(),
+                sequence: v.number(),
+                text: v.string(),
+            }),
+        ),
         runId: v.id("researchRuns"),
         conversationId: v.id("agentConversations"),
         status: v.union(

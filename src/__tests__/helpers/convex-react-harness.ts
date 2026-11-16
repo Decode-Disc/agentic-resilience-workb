@@ -66,10 +66,13 @@ const usePaginatedQuery = vi.fn(
 );
 
 const useMutation = vi.fn((reference: AnyFunctionReference) => {
-    return (
+    const implementation =
         mutationFunctions.get(functionName(reference)) ??
-        missingMock("mutation", reference)
-    );
+        missingMock("mutation", reference);
+    // Cache reconciliation is exercised with the real SDK and the local-backend browser suite.
+    return Object.assign(implementation, {
+        withOptimisticUpdate: () => implementation,
+    });
 });
 
 const useAction = vi.fn((reference: AnyFunctionReference) => {

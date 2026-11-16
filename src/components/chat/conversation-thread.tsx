@@ -33,10 +33,15 @@ export type ConversationThreadProps = ComponentProps<"section"> & {
     variant?: ConversationThreadVariant;
     runtime: AssistantRuntime;
     header?: ReactNode;
+    visible?: boolean;
 };
 
-type ThreadContext = { variant: ConversationThreadVariant };
+type ThreadContext = { variant: ConversationThreadVariant; visible: boolean };
 const Context = createContext<ThreadContext | null>(null);
+/** Portal content follows the visibility of a kept-mounted conversation. */
+export function useConversationVisible() {
+    return useContext(Context)?.visible ?? true;
+}
 const SCROLL_END_TOLERANCE_PX = 40;
 const SCROLL_JUMP_REVEAL_DELAY_MS = 150;
 function useThread(part: string) {
@@ -51,6 +56,7 @@ export function ConversationThread({
     variant = "chat",
     runtime,
     header,
+    visible = true,
     children,
     className,
     ...props
@@ -58,7 +64,7 @@ export function ConversationThread({
     return (
         <AssistantRuntimeProvider runtime={runtime}>
             <TooltipProvider>
-                <Context.Provider value={{ variant }}>
+                <Context.Provider value={{ variant, visible }}>
                     <section
                         aria-label="Conversation"
                         data-slot="conversation-thread"
@@ -190,7 +196,7 @@ export function ConversationThreadLog({
                     tabIndex={0}
                     data-slot="conversation-thread-log"
                     scrollToBottomOnRunStart={false}
-                    scrollToBottomOnInitialize={false}
+                    scrollToBottomOnInitialize
                     className={cn(
                         "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain",
                         className,

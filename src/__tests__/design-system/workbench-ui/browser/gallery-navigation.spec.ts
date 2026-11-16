@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
 
 test("primary navigation opens from one header menu and supports keyboard dismissal", async ({
     page,
@@ -143,6 +144,7 @@ test("composer specimen saves and edits the analyst's question instead of insert
             exact: true,
         }),
     ).toBeVisible();
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Edit question", exact: true })
         .click();

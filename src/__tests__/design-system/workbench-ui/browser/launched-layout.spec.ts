@@ -70,48 +70,34 @@ for (const width of [320, 390, 768]) {
             "Keep this question while I inspect the progress.",
         );
         await expect
-            .poll(() => viewport.evaluate((node) => node.scrollTop))
-            .toBeCloseTo(100, 0);
+            .poll(() =>
+                viewport.evaluate(
+                    (node) =>
+                        node.scrollHeight - node.clientHeight - node.scrollTop,
+                ),
+            )
+            .toBeLessThanOrEqual(2);
         if (width === 390) {
+            await viewport.evaluate((node) => {
+                node.scrollTop = 100;
+                node.dispatchEvent(new Event("scroll"));
+            });
             const readingAnchor = page.getByText(
                 "I can help frame this research before it starts.",
-                {
-                    exact: true,
-                },
+                { exact: true },
             );
             await expect(readingAnchor).toBeInViewport();
             await page.setViewportSize({ width: 1440, height: 1000 });
+            await expect(readingAnchor).toBeInViewport();
             await expect(
                 page.getByRole("textbox", { name: "Ask about the sources" }),
             ).toHaveValue("Keep this question while I inspect the progress.");
-            await expect(readingAnchor).toBeInViewport();
-            await expect
-                .poll(() =>
-                    page
-                        .getByRole("region", {
-                            name: "Conversation scroll area",
-                        })
-                        .evaluate(
-                            (node) =>
-                                node.scrollHeight -
-                                node.clientHeight -
-                                node.scrollTop,
-                        ),
-                )
-                .toBeGreaterThan(40);
             await page.setViewportSize({ width, height: 844 });
             await expect(dialog).toBeVisible();
             await expect(readingAnchor).toBeInViewport();
-            await expect
-                .poll(() =>
-                    viewport.evaluate(
-                        (node) =>
-                            node.scrollHeight -
-                            node.clientHeight -
-                            node.scrollTop,
-                    ),
-                )
-                .toBeGreaterThan(40);
+            await expect(input).toHaveValue(
+                "Keep this question while I inspect the progress.",
+            );
         }
         await dialog
             .getByRole("button", { name: "Research context", exact: true })
@@ -153,6 +139,23 @@ test("launched context starts closed and retains the analyst's choice during wor
     await expect(context).toHaveAttribute("aria-expanded", "true");
     await page.setViewportSize({ width: 1440, height: 1000 });
     await expect(context).toHaveAttribute("aria-expanded", "true");
+    // The 40% desktop split uses a compact anchored popover.
+    await expect(context).toHaveAttribute("data-context-layout", "popover");
+    await page.setViewportSize({ width: 2800, height: 1000 });
+    await expect(context).toHaveAttribute("data-context-layout", "side");
+    await expect
+        .poll(async () => {
+            const reading = await page
+                .getByRole("region", { name: "Conversation scroll area" })
+                .boundingBox();
+            const panel = await page
+                .locator(".chat-context-card")
+                .boundingBox();
+            return (
+                !!reading && !!panel && reading.x + reading.width <= panel.x + 1
+            );
+        })
+        .toBe(true);
     await page
         .getByRole("button", { name: "Preview tools", exact: true })
         .click();

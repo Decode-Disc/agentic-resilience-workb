@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
 
 for (const width of [1440, 390]) {
     test(`scope clarification stays separate from research questions ${width}`, async ({
@@ -9,6 +10,7 @@ for (const width of [1440, 390]) {
             height: width === 390 ? 844 : 1000,
         });
         await page.goto("/?layout=start&screen=framing&theme=dark");
+        await reviewResearchProgram(page);
         await page
             .getByRole("button", { name: "Add research question", exact: true })
             .waitFor();
@@ -34,8 +36,8 @@ for (const width of [1440, 390]) {
                 page.getByRole("region", { name: "Plan", exact: true }),
             ).toBeVisible();
         await expect(
-            page.getByRole("group", {
-                name: "Research questions",
+            page.getByRole("combobox", {
+                name: "Research question",
                 exact: true,
             }),
         ).toHaveCount(0);
@@ -50,8 +52,8 @@ for (const width of [1440, 390]) {
             page.getByRole("region", { name: "Clarify research context" }),
         ).toHaveCount(0);
         await expect(
-            page.getByRole("group", {
-                name: "Research questions",
+            page.getByRole("combobox", {
+                name: "Research question",
                 exact: true,
             }),
         ).toBeVisible();
@@ -73,6 +75,7 @@ test("changing scope keeps an analyst-added question and the ordinary draft", as
 }) => {
     await page.goto("/?layout=start&screen=framing&theme=dark");
     await page.getByRole("textbox").fill("Keep my ordinary draft.");
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Add research question", exact: true })
         .click();
@@ -106,6 +109,7 @@ test("the open context card stays beside the program while entering a question",
 }) => {
     await page.setViewportSize({ width: 1672, height: 1005 });
     await page.goto("/?layout=start&screen=framing&theme=dark");
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Edit question", exact: true })
         .click();
@@ -119,6 +123,7 @@ test("the open context card stays beside the program while entering a question",
         page.getByRole("region", { name: "Plan", exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Add research question", exact: true })
         .click();

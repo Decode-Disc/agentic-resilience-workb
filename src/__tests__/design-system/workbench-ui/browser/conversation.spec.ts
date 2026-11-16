@@ -203,13 +203,27 @@ test("START compact activities reveal useful material and keep their keyboard di
         name: "Inspect Find company reporting",
         exact: true,
     });
-    await expect(trigger).toContainText(
-        "Looking for filings and earnings material about claims coordination.",
-    );
+    await expect(trigger).toContainText("Find company reporting");
+    await expect(
+        trigger
+            .locator("..")
+            .getByText(
+                "Looking for filings and earnings material about claims coordination.",
+                { exact: true },
+            ),
+    ).not.toBeVisible();
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await trigger.focus();
     await page.keyboard.press("Enter");
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await expect(
+        trigger
+            .locator("..")
+            .getByText(
+                "Looking for filings and earnings material about claims coordination.",
+                { exact: true },
+            ),
+    ).toBeVisible();
     await expect(
         page.getByText(
             "Illustrative activity — these documents have not been retrieved by this preview.",
@@ -353,7 +367,7 @@ for (const width of [390, 1440]) {
             log.getByRole("button", { name: /Inspect reference/ }),
         ).toHaveCount(0);
         await expect(
-            page.getByRole("heading", { name: "Plan", exact: true }),
+            page.getByRole("region", { name: "Plan", exact: true }),
         ).toBeVisible();
         await page
             .getByRole("button", {
@@ -371,14 +385,24 @@ for (const width of [390, 1440]) {
         });
         await context.focus();
         await page.keyboard.press("Enter");
-        for (const name of ["Plan", "Outputs", "Sources"])
+        for (const name of ["Research program", "Sources"])
             await expect(
-                page.getByRole("heading", { name, exact: true }),
+                page
+                    .locator(".chat-context-card")
+                    .getByRole("button", { name, exact: true }),
             ).toBeVisible();
+        await expect(
+            page.getByRole("region", { name: "Outputs", exact: true }),
+        ).toHaveCount(0);
         const source = page.getByRole("button", {
             name: "Inspect reference: Investor day 2025 deck",
             exact: true,
         });
+        await expect(source).toHaveCount(0);
+        await page
+            .locator(".chat-context-card")
+            .getByRole("button", { name: "Sources", exact: true })
+            .click();
         await source.click();
         await expect(
             page.getByText("Not retrieved", { exact: true }),
@@ -429,7 +453,7 @@ test("START grouped work precedes the assistant answer and keeps details optiona
 });
 
 for (const width of [390, 1440])
-    test(`START ${width} mission work stays continuous until completion and then folds`, async ({
+    test(`START ${width} mission activity stays inspectable during work and folds at completion`, async ({
         page,
     }) => {
         await page.setViewportSize({
@@ -464,15 +488,18 @@ for (const width of [390, 1440])
             .locator('[data-slot="conversation-mission"]')
             .last()
             .getByRole("button", {
-                name: "Inspect Sources mission: Documentary preparation",
+                name: "Inspect Sources Agent mission: Documentary preparation",
                 exact: true,
             });
-        await expect(group).toHaveCount(0);
+        await expect(group).toHaveAttribute("aria-expanded", "false");
         await expect(
             log.getByText("Check supplied reference", { exact: true }),
-        ).toBeVisible();
+        ).not.toBeVisible();
         await expect(
-            log.getByText("Find company reporting", { exact: true }),
+            log.getByRole("button", {
+                name: "Inspect Find company reporting",
+                exact: true,
+            }),
         ).toBeVisible();
         const composer = page.getByRole("form", {
             name: "Message the workbench",
@@ -498,6 +525,13 @@ for (const width of [390, 1440])
         };
         await runWorkControl("Advance illustrative work");
         await expect(
+            log.getByRole("button", {
+                name: "Inspect Find product and integration documentation",
+                exact: true,
+            }),
+        ).toBeVisible();
+        await group.click();
+        await expect(
             log.getByText(
                 "Filing and earnings candidates listed; contents remain unverified.",
                 { exact: true },
@@ -508,8 +542,15 @@ for (const width of [390, 1440])
                 exact: true,
             }),
         ).toBeVisible();
-        await expect(group).toHaveCount(0);
+        await expect(group).toHaveAttribute("aria-expanded", "true");
         await context.click();
+        await page
+            .locator(".chat-context-card")
+            .getByRole("button", {
+                name: "Inspect Sources Agent work",
+                exact: true,
+            })
+            .click();
         await expect(
             page.getByText("1 working", { exact: true }),
         ).toBeVisible();
@@ -522,7 +563,10 @@ for (const width of [390, 1440])
         await runWorkControl("Finish illustrative work");
         await expect(group).toHaveAttribute("aria-expanded", "false");
         await expect(
-            log.getByText("Find company reporting", { exact: true }),
+            log.getByRole("button", {
+                name: "Inspect Find company reporting",
+                exact: true,
+            }),
         ).not.toBeVisible();
         await expect(
             log.getByRole("heading", {
@@ -535,7 +579,10 @@ for (const width of [390, 1440])
         await group.focus();
         await page.keyboard.press("Enter");
         await expect(
-            log.getByText("Find company reporting", { exact: true }),
+            log.getByRole("button", {
+                name: "Inspect Find company reporting",
+                exact: true,
+            }),
         ).toBeVisible();
         await context.click();
         await expect(
@@ -579,12 +626,19 @@ for (const width of [390, 1440])
                 '[data-slot="conversation-mission"][data-state="completed"]',
             ),
         ).toHaveCount(1);
-        await expect(group).toHaveCount(0);
+        await expect(group).toHaveAttribute("aria-expanded", "false");
+        const restartedOperation = group.locator("..").getByRole("button", {
+            name: "Inspect Find company reporting",
+            exact: true,
+        });
+        await restartedOperation.click();
         await expect(
-            log.getByText(
-                "Looking for filings and earnings material about claims coordination.",
-                { exact: true },
-            ),
+            restartedOperation
+                .locator("..")
+                .getByText(
+                    "Looking for filings and earnings material about claims coordination.",
+                    { exact: true },
+                ),
         ).toBeVisible();
         await expect(
             page.getByRole("textbox", { name: "Ask about the sources" }),

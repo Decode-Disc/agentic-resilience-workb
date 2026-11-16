@@ -26,12 +26,12 @@ for (const theme of ["dark", "light"] as const) {
             }
             const log = page.getByRole("log");
             const mission = log.getByRole("region", {
-                name: "Sources · Documentary preparation",
+                name: "Sources Agent · Documentary preparation",
                 exact: true,
             });
             await expect(
                 mission.getByRole("status", {
-                    name: "Sources mission status",
+                    name: "Sources Agent mission status",
                     exact: true,
                 }),
             ).toBeVisible();
@@ -103,7 +103,7 @@ for (const theme of ["dark", "light"] as const) {
             ).toBeVisible();
             await expect(
                 mission.getByRole("status", {
-                    name: "Sources mission status",
+                    name: "Sources Agent mission status",
                     exact: true,
                 }),
             ).toBeVisible();
@@ -150,7 +150,7 @@ for (const theme of ["dark", "light"] as const) {
                 }),
             ).toHaveCount(0);
             const inspect = mission.getByRole("button", {
-                name: "Inspect Sources mission: Documentary preparation",
+                name: "Inspect Sources Agent mission: Documentary preparation",
                 exact: true,
             });
             await expect(inspect).toHaveAttribute("aria-expanded", "false");

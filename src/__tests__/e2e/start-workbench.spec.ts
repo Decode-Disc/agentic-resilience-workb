@@ -1,6 +1,7 @@
 import type { internal } from "@convex/_generated/api";
 import { expect } from "@playwright/test";
 import type { FunctionReturnType } from "convex/server";
+import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
 import { test } from "../../../e2e/support/browser-workspace";
 import { runConvexCli, runConvexJson } from "../../../e2e/support/convex-cli";
 import { admitAnalyst } from "../../../e2e/support/source-review-fixture";
@@ -19,6 +20,26 @@ for (const viewport of [
         page.on("console", (message) => {
             if (message.type() === "error") errors.push(message.text());
         });
+        let holdNextMessage = false;
+        let releaseMessage: (() => void) | undefined;
+        await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (socket) => {
+            const server = socket.connectToServer();
+            socket.onMessage((message) => {
+                if (typeof message === "string") {
+                    const request = JSON.parse(message);
+                    if (
+                        holdNextMessage &&
+                        request.type === "Mutation" &&
+                        request.udfPath === "execution/conversations:submit"
+                    ) {
+                        holdNextMessage = false;
+                        releaseMessage = () => server.send(message);
+                        return;
+                    }
+                }
+                server.send(message);
+            });
+        });
         await admitAnalyst(page);
         const runId = runConvexJson<string>(
             "execution/fixtures:startWorkbench",
@@ -29,6 +50,10 @@ for (const viewport of [
             page.getByRole("region", { name: "Research framing", exact: true }),
         ).toBeVisible({ timeout: 60000 });
         await expect(
+            page.getByRole("button", { name: "Start research", exact: true }),
+        ).toBeVisible({ timeout: 60000 });
+        await reviewResearchProgram(page);
+        await expect(
             page.getByText("Who controls the workflow and its rules?", {
                 exact: true,
             }),
@@ -38,7 +63,7 @@ for (const viewport of [
                 page.getByText("Simulation: the research program is saved.", {
                     exact: false,
                 }),
-            ).toBeVisible();
+            ).toBeVisible({ timeout: 60000 });
         } catch (error) {
             await test.info().attach("workbench-state-at-missing-reply", {
                 body: JSON.stringify(
@@ -67,6 +92,7 @@ for (const viewport of [
             page.getByText("Adjust the research program", { exact: true }),
         ).not.toBeVisible();
         const input = page.getByRole("textbox");
+        await reviewResearchProgram(page);
         await page
             .getByRole("button", { name: "Edit question", exact: true })
             .click();
@@ -103,10 +129,20 @@ for (const viewport of [
             ]),
         );
         expect(originalNative.nativeSessionId).toBeTruthy();
+        holdNextMessage = true;
         await input.fill("Retain this boundary for our discussion.");
         await page
             .getByRole("button", { name: "Send refinement", exact: true })
             .click();
+        await expect.poll(() => releaseMessage !== undefined).toBe(true);
+        const immediateMessage = page
+            .getByRole("article", { name: "You message", exact: true })
+            .filter({ hasText: "Retain this boundary for our discussion." });
+        await expect(immediateMessage).toHaveCount(1);
+        await expect(
+            page.getByRole("region", { name: "Queued messages" }),
+        ).toHaveCount(0);
+        releaseMessage?.();
         await expect(input).toHaveValue("");
         await expect(
             page.getByText("Simulation: the research program is saved.", {
@@ -130,13 +166,18 @@ for (const viewport of [
         await page.screenshot({
             path: `/tmp/start-workbench-${viewport.name}-light.png`,
         });
-        await page.evaluate(() => {
-            document.documentElement.classList.add("dark");
-        });
+        await page
+            .getByRole("button", { name: "Switch theme", exact: true })
+            .click();
+        await expect(page.locator("html")).toHaveClass(/dark/);
         await page.screenshot({
             path: `/tmp/start-workbench-${viewport.name}-dark.png`,
         });
         await page.reload();
+        await expect(
+            page.getByRole("button", { name: "Start research", exact: true }),
+        ).toBeVisible({ timeout: 60000 });
+        await reviewResearchProgram(page);
         await expect(
             page.getByText(
                 "Who controls coordination and switching in this workflow?",
@@ -200,13 +241,41 @@ for (const viewport of [
                 exact: true,
             }),
         ).toBeVisible();
-        await expect(
-            page.getByRole("button", { name: "Review sources", exact: true }),
-        ).toBeVisible();
         if (viewport.name === "mobile")
             await page
                 .getByRole("button", { name: "Ask AI", exact: true })
                 .click();
+        const context = page.getByRole("button", {
+            name: "Research context",
+            exact: true,
+        });
+        if ((await context.getAttribute("aria-expanded")) !== "true")
+            await context.click();
+        const contextCard = page.locator(".chat-context-card");
+        await contextCard
+            .getByRole("button", { name: "Sources", exact: true })
+            .click();
+        const sourceSearch = contextCard.getByRole("searchbox", {
+            name: "Find a source",
+        });
+        await expect(sourceSearch).toBeVisible();
+        await sourceSearch.fill("No source has this illustrative title");
+        await expect(
+            contextCard.getByText("No matching source. Try another title."),
+        ).toBeVisible();
+        await sourceSearch.fill("");
+        await expect(
+            contextCard.getByRole("button", {
+                name: "Inspect source workspace",
+                exact: true,
+            }),
+        ).toBeVisible();
+        await page
+            .getByRole("button", {
+                name: "Close research context",
+                exact: true,
+            })
+            .click();
         const followup = page.getByRole("textbox");
         await expect(followup).toBeVisible();
         await followup.fill("Keep this documentary question in my draft.");

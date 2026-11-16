@@ -10,9 +10,15 @@ import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { ConvexError } from "convex/values";
 import { MotionConfig, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { ConversationActivityList } from "@/components/chat/conversation-activity-list";
 import { ConversationHistory } from "@/components/chat/conversation-history";
-import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
+import { DEFAULT_CONVERSATION_AGENTS as agents } from "@/components/chat/conversation-agent";
 import {
+    type ConversationMissionSnapshot,
+    ConversationWorkReturn,
+} from "@/components/chat/conversation-mission";
+import {
+    ConversationActivity,
     ConversationComposer,
     ConversationContext,
     ConversationReference,
@@ -31,11 +37,13 @@ import {
 } from "@/components/ui/empty";
 import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { SourcingLane } from "@/components/workbench-ui/sourcing-lane";
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
 import { useResponsive } from "@/hooks/use-responsive";
 import {
+    conversationOperation,
     questionCapacityCopy,
     researchProgramReadiness,
     researchStartRefusalCopy,
@@ -47,6 +55,7 @@ import {
     clearWorkbenchDraft,
     peekWorkbenchDraft,
 } from "@/lib/workspace/workbench-draft";
+import { insertOptimisticConversationMessage } from "@/lib/workspace/conversation-delivery";
 import {
     FramingProposal,
     StartFramingScreen,
@@ -66,10 +75,6 @@ type Edit = {
     content: NonNullable<Snapshot["framing"]>["content"];
     requestKey: string;
     newQuestionId?: string;
-};
-const agents = {
-    workbench: { id: "workbench", name: "Workbench Agent" },
-    sources: { id: "sources", name: "Sources" },
 };
 
 /** The typed code a Convex operation refused with, if any. */
@@ -264,7 +269,9 @@ function StartWorkspaceContent({
         { runId },
         { initialNumItems: HISTORY_PAGE_SIZE },
     );
-    const submit = useMutation(api.execution.conversations.submit),
+    const submit = useMutation(
+            api.execution.conversations.submit,
+        ).withOptimisticUpdate(insertOptimisticConversationMessage),
         remove = useMutation(api.execution.conversations.removeQueued),
         promote = useMutation(api.execution.conversations.promoteQueued),
         stop = useMutation(api.execution.conversations.stopResponse),
@@ -415,9 +422,15 @@ function StartWorkspaceContent({
         delivery.current = null;
         setDraft((current) => (current === text ? "" : current));
     };
+    const awaitingAdmission =
+        !running && !state?.queuePaused
+            ? history.results
+                  .filter((message) => message.status === "queued")
+                  .at(-1)?._id
+            : undefined;
     const queue: Omit<ExternalThreadQueueAdapter, "enqueue" | "steer"> = {
         items: history.results
-            .filter((m) => m.status === "queued")
+            .filter((m) => m.status === "queued" && m._id !== awaitingAdmission)
             .slice()
             .reverse()
             .map((m) => ({
@@ -448,37 +461,98 @@ function StartWorkspaceContent({
                 "Remove the queued message and send your revised instruction.",
             ),
     };
+    const publishedTurns = new Set(
+        history.results.flatMap((m) =>
+            m.role === "assistant" && m.turnId ? [m.turnId] : [],
+        ),
+    );
+    const responsePreview = useQuery(
+        api.workbench.responsePreview,
+        snapshot.activeWork ? { runId } : "skip",
+    );
+    const previewTurns = new Map(
+        history.results.flatMap(({ work }) =>
+            work?.turn.preview && !work.turn.publishedMessageId
+                ? [[work.turn._id, work.turn] as const]
+                : [],
+        ),
+    );
+    if (
+        responsePreview &&
+        snapshot.activeWork?.turn._id === responsePreview.turnId &&
+        !publishedTurns.has(responsePreview.turnId)
+    )
+        previewTurns.set(responsePreview.turnId, {
+            ...snapshot.activeWork.turn,
+            preview: responsePreview,
+        });
+    for (const id of publishedTurns) previewTurns.delete(id);
     const messages = history.results
-        .filter((m) => m.status !== "queued" && m.status !== "removed")
+        .filter(
+            (m) =>
+                (m.status !== "queued" || m._id === awaitingAdmission) &&
+                m.status !== "removed",
+        )
         .slice()
-        .reverse();
+        .reverse()
+        .map((m) => ({
+            ...m,
+            _id:
+                m.role === "assistant" && m.turnId
+                    ? `reply:${m.turnId}`
+                    : m.role === "user" && m.requestKey
+                      ? `message:${m.requestKey}`
+                      : m._id,
+        }));
     const conversation = useWorkbenchConversation({
-        messages: messages.map((m) => ({
-            id: m._id,
-            role: m.role,
-            content: m.text,
-            createdAt: new Date(m.createdAt),
-            metadata: {
-                custom: {
-                    agentId: m.role === "assistant" ? "workbench" : undefined,
-                    responseControl: m.responseControl,
+        messages: [
+            ...messages.map((m) => ({
+                id: m._id,
+                role: m.role,
+                content: m.text,
+                createdAt: new Date(m.createdAt),
+                metadata: {
+                    custom: {
+                        agentId:
+                            m.role === "assistant" ? "workbench" : undefined,
+                        responseControl: m.responseControl,
+                    },
                 },
-            },
-        })),
+            })),
+            ...[...previewTurns.values()].map((turn) => ({
+                id: `reply:${turn._id}`,
+                role: "assistant" as const,
+                content: turn.preview?.text ?? "",
+                createdAt: new Date(turn.createdAt),
+                status:
+                    turn.status === "active" &&
+                    snapshot.activeWork?.turn._id === turn._id &&
+                    snapshot.activeWork.missionStatus === "running"
+                        ? { type: "running" as const }
+                        : {
+                              type: "incomplete" as const,
+                              reason: "cancelled" as const,
+                          },
+                metadata: { custom: { agentId: "workbench" } },
+            })),
+        ],
         draft: edit?.text ?? draft,
         onDraftChange: (text) =>
             edit
                 ? setEdit({ ...edit, text, requestKey: crypto.randomUUID() })
                 : setDraft(text),
         onSend: send,
-        isRunning: running,
+        isRunning: running || awaitingAdmission !== undefined,
         queue: edit ? undefined : queue,
         onStop: activeTurnId
             ? () => stop({ runId, turnId: activeTurnId }).then(() => {})
             : undefined,
     });
+    const wasEditing = useRef(false);
     useEffect(() => {
         if (editKey) inputRef.current?.focus();
+        else if (wasEditing.current) trigger.current?.focus();
+        wasEditing.current = Boolean(editKey);
     }, [editKey]);
     const work = new Map(
         history.results.flatMap(({ work }) => {
@@ -504,10 +578,18 @@ function StartWorkspaceContent({
             ];
         }),
     );
-    if (snapshot.activeWork)
+    if (
+        snapshot.activeWork &&
+        !publishedTurns.has(snapshot.activeWork.turn._id)
+    )
         work.set(
             snapshot.activeWork.turn._id,
-            workbenchTurn(snapshot.activeWork),
+            workbenchTurn({
+                ...snapshot.activeWork,
+                turn:
+                    previewTurns.get(snapshot.activeWork.turn._id) ??
+                    snapshot.activeWork.turn,
+            }),
         );
     const captured = snapshot.sources.filter(
         (s) => s.state === "captured",
@@ -517,6 +599,10 @@ function StartWorkspaceContent({
         snapshot.preparation,
     );
     const sourceState = sourcePresentation.state;
+    const sourceOperations =
+        snapshot.sourcesWork?.operations.map((operation) =>
+            conversationOperation(operation, sourceState),
+        ) ?? [];
     const missions: ConversationMissionSnapshot[] = launched
         ? [
               {
@@ -524,14 +610,36 @@ function StartWorkspaceContent({
                   agentId: "sources",
                   title: "Documentary preparation",
                   state: sourceState,
-                  startedAt: run.researchStartedAt
-                      ? new Date(run.researchStartedAt).toISOString()
+                  startedAt:
+                      (snapshot.sourcesWork?.startedAt ?? run.researchStartedAt)
+                          ? new Date(
+                                snapshot.sourcesWork?.startedAt ??
+                                    run.researchStartedAt ??
+                                    run._creationTime,
+                            ).toISOString()
+                          : undefined,
+                  operations: sourceOperations,
+                  finishedAt: snapshot.sourcesWork?.finishedAt
+                      ? new Date(snapshot.sourcesWork.finishedAt).toISOString()
                       : undefined,
-                  operations: [],
                   summary: `${snapshot.sources.length} references · ${captured} captures`,
                   details: (
                       <>
                           <p>{sourcePresentation.detail}</p>
+                          <ConversationActivityList>
+                              {sourceOperations.map((operation) => (
+                                  <ConversationActivity
+                                      key={operation.id}
+                                      {...operation}
+                                  />
+                              ))}
+                          </ConversationActivityList>
+                          {snapshot.sourcesWork?.operationsLimited && (
+                              <p>
+                                  Recent operations shown. Open the activity
+                                  timeline for earlier work.
+                              </p>
+                          )}
                           <Button
                               variant="outline"
                               size="sm"
@@ -630,15 +738,25 @@ function StartWorkspaceContent({
                             id: m._id,
                             time: m.createdAt,
                         })),
+                        ...[...previewTurns.values()].map((turn) => ({
+                            kind: "message" as const,
+                            id: `reply:${turn._id}`,
+                            time: turn.createdAt,
+                        })),
                         ...[...work.values()]
                             .filter(
                                 (turn) =>
                                     !turn.entries.some(
                                         (entry) =>
                                             entry.kind === "message" &&
-                                            messages.some(
+                                            (messages.some(
                                                 (m) => m._id === entry.id,
-                                            ),
+                                            ) ||
+                                                [...previewTurns.values()].some(
+                                                    (t) =>
+                                                        `reply:${t._id}` ===
+                                                        entry.id,
+                                                )),
                                     ),
                             )
                             .map((turn) => ({
@@ -664,12 +782,14 @@ function StartWorkspaceContent({
                     description={workbenchFailureCopy(state.execution.code)}
                 />
             )}
-            {state && state.queuedCount > queue.items.length && (
-                <p className="text-sm text-muted-foreground">
-                    {state.queuedCount} messages are queued. Load earlier
-                    conversation to inspect the remaining messages.
-                </p>
-            )}
+            {state &&
+                state.queuedCount - (awaitingAdmission ? 1 : 0) >
+                    queue.items.length && (
+                    <p className="text-sm text-muted-foreground">
+                        {state.queuedCount} messages are queued. Load earlier
+                        conversation to inspect the remaining messages.
+                    </p>
+                )}
             {(snapshot.activeWork?.operationsLimited ||
                 history.results.some((m) => m.work?.operationsLimited)) && (
                 <p className="text-sm text-muted-foreground">
@@ -729,71 +849,77 @@ function StartWorkspaceContent({
         setError(null);
     };
     const composer = (
-        <ConversationComposer
-            inputRef={inputRef}
-            onCommand={!edit ? onCommand : undefined}
-            availableCommands={[...snapshot.availableCommands, "/model"]}
-            onOpenModels={() => setModelPickerOpen(true)}
-            controlsOpen={modelPickerOpen}
-            modelSelector={
-                !edit ? (
-                    <WorkbenchModelSelector
-                        snapshot={modelChoices}
-                        open={modelPickerOpen}
-                        onOpenChange={setModelPickerOpen}
-                        pending={modelPending}
-                        onSelect={(id, effort) =>
-                            void onSelectModel(id, effort)
-                        }
-                    />
-                ) : undefined
-            }
-            label={
-                edit
-                    ? edit.kind === "scope"
-                        ? "Edit research scope"
-                        : edit.id
-                          ? "Edit research question"
-                          : "Add research question"
-                    : launched
-                      ? "Ask about the sources"
-                      : "Refine the framing in your own words"
-            }
-            placeholder={
-                edit?.kind === "question" && !edit.id
-                    ? "What would you like to investigate?"
-                    : undefined
-            }
-            actionLabel={
-                edit
-                    ? edit.kind === "scope" || edit.id
-                        ? "Save changes"
-                        : "Add question"
-                    : undefined
-            }
-            onCancel={
-                edit
-                    ? () => {
-                          setEdit(null);
-                          setError(null);
-                          trigger.current?.focus();
-                      }
-                    : undefined
-            }
-            pending={conversation.sending || saving || modelPending}
-            failed={conversation.failed}
-            compact={launched && !inspecting}
-            onResumeQueue={
-                state?.queuePaused &&
-                state.queuedCount &&
-                state.admissionFailure?.code !== "context_capacity" &&
-                state.admissionFailure?.code !==
-                    "native_settlement_incomplete" &&
-                state.admissionFailure?.code !== "definition_version_conflict"
-                    ? () => control(resume({ runId }))
-                    : undefined
-            }
-        />
+        <>
+            {launched && !edit && (
+                <ConversationWorkReturn missions={missions} agents={agents} />
+            )}
+            <ConversationComposer
+                inputRef={inputRef}
+                onCommand={!edit ? onCommand : undefined}
+                availableCommands={[...snapshot.availableCommands, "/model"]}
+                onOpenModels={() => setModelPickerOpen(true)}
+                controlsOpen={modelPickerOpen}
+                modelSelector={
+                    !edit ? (
+                        <WorkbenchModelSelector
+                            snapshot={modelChoices}
+                            open={modelPickerOpen}
+                            onOpenChange={setModelPickerOpen}
+                            pending={modelPending}
+                            onSelect={(id, effort) =>
+                                void onSelectModel(id, effort)
+                            }
+                        />
+                    ) : undefined
+                }
+                label={
+                    edit
+                        ? edit.kind === "scope"
+                            ? "Edit research scope"
+                            : edit.id
+                              ? "Edit research question"
+                              : "Add research question"
+                        : launched
+                          ? "Ask about the sources"
+                          : "Refine the framing in your own words"
+                }
+                placeholder={
+                    edit?.kind === "question" && !edit.id
+                        ? "What would you like to investigate?"
+                        : undefined
+                }
+                actionLabel={
+                    edit
+                        ? edit.kind === "scope" || edit.id
+                            ? "Save changes"
+                            : "Add question"
+                        : undefined
+                }
+                onCancel={
+                    edit
+                        ? () => {
+                              setEdit(null);
+                              setError(null);
+                              trigger.current?.focus();
+                          }
+                        : undefined
+                }
+                pending={conversation.sending || saving || modelPending}
+                failed={conversation.failed}
+                compact={launched && !inspecting}
+                onResumeQueue={
+                    state?.queuePaused &&
+                    state.queuedCount &&
+                    state.admissionFailure?.code !== "context_capacity" &&
+                    state.admissionFailure?.code !==
+                        "native_settlement_incomplete" &&
+                    state.admissionFailure?.code !==
+                        "definition_version_conflict"
+                        ? () => control(resume({ runId }))
+                        : undefined
+                }
+            />
+        </>
     );
     const context = (
         <ConversationContext
@@ -807,23 +933,8 @@ function StartWorkspaceContent({
                 ),
             )}
             onChangeScope={!launched ? () => beginEdit("scope") : undefined}
-            planSummary={
-                <>
-                    <span>
-                        {framing?.content.scope || "Scope being prepared"}
-                    </span>
-                    <span className="chat-context-meta">
-                        {launched ? "Accepted framing" : "Proposed framing"} ·{" "}
-                        {framing?.content.questions.length ?? 0} questions
-                    </span>
-                </>
-            }
-            plan={
-                <p>
-                    {framing?.content.scope ||
-                        "Workbench will propose an activity and a research program."}
-                </p>
-            }
+            planSummary={framing?.content.scope || "Scope being prepared"}
+            questionCount={framing?.content.questions.length ?? 0}
             planAction={
                 launched ? (
                     <Button
@@ -844,37 +955,37 @@ function StartWorkspaceContent({
                     </Button>
                 ) : undefined
             }
-            outputs={
-                <p className="chat-context-empty">
-                    No retained analytical outputs yet.
-                </p>
+            plan={
+                <>
+                    {launched && (
+                        <p className="chat-context-scope-detail">
+                            {framing?.content.scope}
+                        </p>
+                    )}
+                    <FramingProposal
+                        title={
+                            launched
+                                ? "Accepted research program"
+                                : "Proposed research program"
+                        }
+                        scope={launched ? undefined : framing?.content.scope}
+                        questions={
+                            framing?.content.questions.map(
+                                (question, index) => ({
+                                    ...question,
+                                    label: `Q${index + 1}`,
+                                }),
+                            ) ?? []
+                        }
+                    />
+                </>
             }
+            sourcesSummary={`${snapshot.sources.length} references · ${captured} saved ${captured === 1 ? "capture" : "captures"}`}
             sources={
-                snapshot.sources.length ? (
-                    snapshot.sources.map((s) => (
-                        <ConversationReference
-                            key={s.id}
-                            title={s.title}
-                            description={
-                                s.state === "captured"
-                                    ? "Retained capture"
-                                    : "Research input"
-                            }>
-                            <a href={s.url} target="_blank" rel="noreferrer">
-                                Open original
-                            </a>
-                            <p>
-                                {s.state === "captured"
-                                    ? "A capture is retained. Inclusion and factual support remain separate decisions."
-                                    : "This reference has not yet been captured."}
-                            </p>
-                        </ConversationReference>
-                    ))
-                ) : (
-                    <p className="chat-context-empty">
-                        No references supplied.
-                    </p>
-                )
+                <DossierContextSources
+                    sources={snapshot.sources}
+                    runId={launched ? runId : undefined}
+                />
             }
         />
     );
@@ -992,10 +1103,14 @@ function StartWorkspaceContent({
                                     running={sourceState === "running"}
                                     label={
                                         sourceState === "running"
-                                            ? "// Sources · live"
+                                            ? "Working"
                                             : sourceState === "paused"
-                                              ? "// Sources · paused"
-                                              : "// Sources"
+                                              ? "Paused"
+                                              : sourceState === "completed"
+                                                ? "Complete"
+                                                : sourceState === "interrupted"
+                                                  ? "Interrupted"
+                                                  : "Not running"
                                     }
                                     title={sourcePresentation.title}
                                     description={
@@ -1143,5 +1258,74 @@ function StartWorkspaceContent({
                 </WorkbenchUiRoot>
             </motion.div>
         </MotionConfig>
+    );
+}
+
+/** The context indexes research inputs without implying that an available capture establishes support. */
+function DossierContextSources({
+    sources,
+    runId,
+}: {
+    sources: Snapshot["sources"];
+    runId?: Id<"researchRuns">;
+}) {
+    const [search, setSearch] = useState("");
+    const navigate = useNavigate();
+    const matches = sources.filter((source) =>
+        source.title
+            .toLocaleLowerCase()
+            .includes(search.trim().toLocaleLowerCase()),
+    );
+    return (
+        <div className="chat-context-source-list">
+            <p className="chat-context-meta">
+                References and saved captures do not establish factual support.
+            </p>
+            {sources.length > 0 && (
+                <Input
+                    type="search"
+                    aria-label="Find a source"
+                    placeholder="Find a source"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                />
+            )}
+            {matches.map((source) => (
+                <ConversationReference
+                    key={source.id}
+                    title={source.title}
+                    description={
+                        source.state === "captured"
+                            ? "Saved capture"
+                            : "Research input"
+                    }>
+                    <a href={source.url} target="_blank" rel="noreferrer">
+                        Open original
+                    </a>
+                </ConversationReference>
+            ))}
+            {!matches.length && (
+                <p className="chat-context-empty">
+                    {sources.length
+                        ? "No matching source. Try another title."
+                        : "No references supplied."}
+                </p>
+            )}
+            {runId && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                        void navigate({
+                            to: "/workspace/$runId",
+                            params: { runId },
+                            search: { section: "sources" },
+                        })
+                    }>
+                    Inspect source workspace
+                    <Icon iconNode={ArrowRight01Icon} size={14} />
+                </Button>
+            )}
+        </div>
     );
 }

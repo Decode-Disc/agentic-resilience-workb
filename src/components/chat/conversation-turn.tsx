@@ -4,6 +4,7 @@ import {
     ConversationActivityGroup,
     type ConversationWorkItem,
 } from "@/components/chat/conversation-activity";
+import { ConversationActivityList } from "./conversation-activity-list";
 export type ConversationTurnSnapshot = {
     id: string;
     agentId?: string;
@@ -97,19 +98,20 @@ export function ConversationTurn({
                         activities={activities}
                         content={(open) => (
                             <>
-                                {turn.entries
-                                    .filter(
-                                        (e) =>
-                                            running ||
-                                            e.kind !== "message" ||
-                                            e.phase !== "answer",
-                                    )
-                                    .map(render)}
+                                <ConversationActivityList>
+                                    {turn.entries
+                                        .filter(
+                                            (e) =>
+                                                e.kind !== "message" ||
+                                                e.phase !== "answer",
+                                        )
+                                        .map(render)}
+                                </ConversationActivityList>
                                 {turn.workDetails?.(open)}
                             </>
                         )}
                     />
-                    {!running && answerEntries.map(render)}
+                    {answerEntries.map(render)}
                 </>
             ) : (
                 turn.entries.map(render)
@@ -119,7 +121,7 @@ export function ConversationTurn({
                 turn.state !== "interrupted" && (
                     <p role="status">
                         {turn.state === "running"
-                            ? "Preparing a response…"
+                            ? "Working…"
                             : turn.state === "blocked"
                               ? "Response unavailable. Recorded work remains available."
                               : turn.state === "paused"

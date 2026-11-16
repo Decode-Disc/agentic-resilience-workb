@@ -210,3 +210,26 @@ test("dossiers without the Sources protocol have no Sources workspace projection
         }),
     ).toBeNull();
 });
+
+test("the conversation exposes the same recorded Sources operation and keeps its documentary result distinct", async () => {
+    const f = await seedCapturedSources();
+    const owner = f.t.withIdentity({ subject: f.userId });
+    const snapshot = await owner.query(api.workbench.snapshot, {
+        runId: f.runId,
+    });
+    expect(snapshot).toMatchObject({
+        sourcesWork: {
+            missionId: f.missionId,
+            operations: [
+                expect.objectContaining({
+                    id: f.readRequestId,
+                    title: "Search retained documentary material",
+                    summary: "Search completed. Inspect the matching material.",
+                    sourceId: f.sourceId,
+                    succeeded: true,
+                }),
+            ],
+        },
+    });
+    expect(JSON.stringify(snapshot)).not.toContain('"valueJson"');
+});

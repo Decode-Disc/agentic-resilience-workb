@@ -11,6 +11,10 @@ import {
     useRef,
     useState,
 } from "react";
+import {
+    ConversationActivityList,
+    ConversationActivityVisibility,
+} from "./conversation-activity-list";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -109,7 +113,7 @@ export function ConversationActivity({
     );
 }
 
-/** Keeps operations visible during a turn and folds the same retained work when that turn ends. */
+/** Summarizes live work and exposes the same retained activity reader on demand. */
 export function ConversationActivityGroup({
     id,
     title,
@@ -119,6 +123,7 @@ export function ConversationActivityGroup({
     content,
     triggerLabel,
     runningHeader,
+    titleContent,
 }: {
     id: string;
     title: string;
@@ -128,16 +133,26 @@ export function ConversationActivityGroup({
     content?: ReactNode | ((open: boolean) => ReactNode);
     triggerLabel?: string;
     runningHeader?: ReactNode;
+    /** Optional title material; the text title remains the accessible group identity. */
+    titleContent?: ReactNode;
 }) {
     const [expanded, setExpanded] = useState(false);
     const trigger = useRef<HTMLButtonElement>(null);
     const workHasFocus = useRef(false);
     const running = state === "running";
+    const active = running || state === "waiting" || state === "paused";
     useLayoutEffect(() => {
-        if (!running && workHasFocus.current) trigger.current?.focus();
-    }, [running]);
-    const open =
-        running || state === "waiting" || state === "paused" || expanded;
+        if (!active) {
+            setExpanded(false);
+            if (workHasFocus.current) trigger.current?.focus();
+        }
+    }, [active]);
+    const open = expanded;
+    const latest =
+        [...activities]
+            .reverse()
+            .find((activity) => activity.state === "running") ??
+        activities.at(-1);
     if (!activities.length && !runningHeader && !content) return null;
     return (
         <Collapsible
@@ -147,49 +162,59 @@ export function ConversationActivityGroup({
             aria-label={title}
             data-slot="conversation-work-group"
             data-message-id={id}
-            data-state={state}>
-            {running && runningHeader}
-            {!running && (
-                <CollapsibleTrigger
-                    ref={trigger}
-                    render={<Button variant="ghost" />}
-                    aria-label={
-                        triggerLabel ?? `Inspect ${title.toLowerCase()}`
-                    }>
-                    <Icon iconNode={ArrowRight01Icon} size={13} />
+            data-state={state}
+            onFocusCapture={() => {
+                workHasFocus.current = true;
+            }}
+            onBlurCapture={(event) => {
+                workHasFocus.current = event.currentTarget.contains(
+                    event.relatedTarget,
+                );
+            }}>
+            <CollapsibleTrigger
+                ref={trigger}
+                render={<Button variant="ghost" />}
+                aria-label={triggerLabel ?? `Inspect ${title.toLowerCase()}`}>
+                <Icon iconNode={ArrowRight01Icon} size={13} />
+                {running && runningHeader ? (
+                    runningHeader
+                ) : (
                     <span className="chat-work-description">
-                        <strong>{title}</strong>
+                        <strong>{titleContent ?? title}</strong>
                         <span>{summary}</span>
                     </span>
-                    {state === "interrupted" && (
-                        <span className="chat-work-limit">Interrupted</span>
-                    )}
-                </CollapsibleTrigger>
+                )}
+                {state === "interrupted" && (
+                    <span className="chat-work-limit">Interrupted</span>
+                )}
+            </CollapsibleTrigger>
+            {!open && active && latest && (
+                <div className="chat-work-latest">
+                    <ConversationActivity {...latest} compact>
+                        {latest.details}
+                    </ConversationActivity>
+                </div>
             )}
             <CollapsibleContent keepMounted>
-                <div
-                    className="chat-work-entries"
-                    onFocusCapture={() => {
-                        workHasFocus.current = true;
-                    }}
-                    onBlurCapture={(event) => {
-                        workHasFocus.current = event.currentTarget.contains(
-                            event.relatedTarget,
-                        );
-                    }}>
-                    {(typeof content === "function"
-                        ? content(open)
-                        : content) ??
-                        activities.map((activity) => (
-                            <ConversationActivity
-                                key={activity.id}
-                                title={activity.title}
-                                summary={activity.summary}
-                                state={activity.state}
-                                compact={!running}>
-                                {activity.details}
-                            </ConversationActivity>
-                        ))}
+                <div className="chat-work-entries">
+                    <ConversationActivityVisibility value={open}>
+                        {(typeof content === "function"
+                            ? content(open)
+                            : content) ?? (
+                            <ConversationActivityList>
+                                {activities.map((activity) => (
+                                    <ConversationActivity
+                                        key={activity.id}
+                                        title={activity.title}
+                                        summary={activity.summary}
+                                        state={activity.state}
+                                        compact={!running}>
+                                        {activity.details}
+                                    </ConversationActivity>
+                                ))}
+                            </ConversationActivityList>
+                        )}
+                    </ConversationActivityVisibility>
                 </div>
             </CollapsibleContent>
         </Collapsible>

@@ -1,9 +1,10 @@
 import type { AssistantRuntime } from "@assistant-ui/react";
+import { AgentIdentity } from "@/components/chat/agent-identity";
+import { SOURCES_AGENT } from "@/components/chat/conversation-agent";
 import {
     AiChat02Icon,
     ArrowLeft01Icon,
     ArrowRight01Icon,
-    File01Icon,
     PencilEdit01Icon,
     PlusSignIcon,
 } from "@hugeicons/core-free-icons";
@@ -45,6 +46,11 @@ import {
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
     Empty,
     EmptyDescription,
     EmptyHeader,
@@ -55,6 +61,13 @@ import {
     ResizablePanel,
     ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import {
     Sheet,
     SheetClose,
@@ -156,12 +169,15 @@ function ResearchConversation({
     composer?: ReactNode;
     header: ReactNode;
     visible: boolean;
-    scrollPosition: RefObject<number>;
+    scrollPosition: RefObject<number | null>;
 }) {
     const container = useRef<HTMLElement>(null);
     const restoringScroll = useRef(false);
     useLayoutEffect(() => {
-        if (!visible) return;
+        if (!visible) {
+            scrollPosition.current = null;
+            return;
+        }
         const viewport = container.current?.querySelector<HTMLElement>(
             '[data-slot="conversation-thread-log"]',
         );
@@ -174,7 +190,7 @@ function ResearchConversation({
             if (viewport.clientHeight === 0) return;
             observer.disconnect();
             frame = requestAnimationFrame(() => {
-                viewport.scrollTop = offset;
+                viewport.scrollTop = offset ?? viewport.scrollHeight;
                 restoringScroll.current = false;
             });
         };
@@ -206,6 +222,7 @@ function ResearchConversation({
             <ConversationThread
                 runtime={runtime}
                 variant="compact"
+                visible={visible}
                 header={header}
                 aria-label="Research conversation">
                 <ConversationThreadLog>{children}</ConversationThreadLog>
@@ -248,7 +265,7 @@ export function StartResearchScreen({
 }) {
     const [conversationOpen, setConversationOpen] = useState(false);
     const compact = useMediaQuery("(width < 52rem)");
-    const conversationScroll = useRef(0);
+    const conversationScroll = useRef<number | null>(null);
     const askAiRef = useRef<HTMLButtonElement>(null);
     const group = useRef<GroupImperativeHandle | null>(null);
     const id = useId();
@@ -538,7 +555,11 @@ export function FramingProposal({
     error?: string;
 }) {
     const summaryRef = useRef<HTMLElement>(null);
-    const topicsRef = useRef<HTMLFieldSetElement>(null);
+    const [reviewing, setReviewing] = useState(!collapsible);
+    const needsInput = Boolean(clarification) || actionActive;
+    useEffect(() => {
+        if (needsInput) setReviewing(true);
+    }, [needsInput]);
     const limitNoteId = useId();
     const limitNote = startUnavailableReason ?? addUnavailableReason;
     const previousClarification = useRef(Boolean(clarification));
@@ -549,27 +570,6 @@ export function FramingProposal({
     }, [clarification]);
     const [selected, setSelected] = useState(questions[0]?.id);
     const current = questions.find((q) => q.id === selected) ?? questions[0];
-    useLayoutEffect(() => {
-        const topics = topicsRef.current;
-        if (!topics || clarification || !current) return;
-        const revealSelection = () => {
-            const button = topics.querySelector<HTMLButtonElement>(
-                '[aria-pressed="true"]',
-            );
-            if (!button) return;
-            const strip = topics.getBoundingClientRect();
-            const selectedTopic = button.getBoundingClientRect();
-            const shift =
-                selectedTopic.left < strip.left
-                    ? selectedTopic.left - strip.left
-                    : Math.max(0, selectedTopic.right - strip.right);
-            topics.scrollLeft += shift;
-        };
-        revealSelection();
-        const observer = new ResizeObserver(revealSelection);
-        observer.observe(topics);
-        return () => observer.disconnect();
-    }, [current, clarification]);
     const busy = pending || actionActive;
     const emptyProgram =
         collapsible &&
@@ -606,81 +606,32 @@ export function FramingProposal({
                             </details>
                         </section>
                     )}
-                    {current && (
+                    {current && !actionActive && (
                         <div className="chat-question-navigation">
-                            <fieldset
-                                ref={topicsRef}
-                                className="chat-question-topics"
-                                aria-label="Research questions">
-                                {questions.map((q) => (
-                                    <Button
-                                        key={q.id}
-                                        variant="outline"
-                                        aria-pressed={q.id === current?.id}
-                                        disabled={busy}
-                                        onClick={() => setSelected(q.id)}>
-                                        <Icon iconNode={File01Icon} size={17} />
-                                        {q.shortLabel ?? q.label}
-                                    </Button>
-                                ))}
-                            </fieldset>
-                            <fieldset
-                                className="chat-question-pagination"
-                                aria-label="Question navigation">
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    aria-label="Previous research question"
-                                    disabled={
-                                        busy ||
-                                        !current ||
-                                        questions.indexOf(current) === 0
-                                    }
-                                    onClick={() =>
-                                        setSelected(
-                                            questions[
-                                                (current
-                                                    ? questions.indexOf(current)
-                                                    : 0) - 1
-                                            ]?.id,
-                                        )
-                                    }>
-                                    <Icon
-                                        iconNode={ArrowLeft01Icon}
-                                        size={17}
-                                    />
-                                </Button>
-                                <span>
-                                    {current
-                                        ? questions.indexOf(current) + 1
-                                        : 0}{" "}
-                                    of {questions.length}
-                                </span>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    aria-label="Next research question"
-                                    disabled={
-                                        busy ||
-                                        !current ||
-                                        questions.indexOf(current) ===
-                                            questions.length - 1
-                                    }
-                                    onClick={() =>
-                                        setSelected(
-                                            questions[
-                                                (current
-                                                    ? questions.indexOf(current)
-                                                    : 0) + 1
-                                            ]?.id,
-                                        )
-                                    }>
-                                    <Icon
-                                        iconNode={ArrowRight01Icon}
-                                        size={17}
-                                    />
-                                </Button>
-                            </fieldset>
+                            <Select
+                                value={current.id}
+                                onValueChange={(value) => {
+                                    if (value) setSelected(value);
+                                }}
+                                disabled={busy}>
+                                <SelectTrigger
+                                    aria-label="Research question"
+                                    className="chat-question-selector">
+                                    <SelectValue>
+                                        {questions.indexOf(current) + 1} of{" "}
+                                        {questions.length} ·{" "}
+                                        {current.shortLabel ?? current.label}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {questions.map((q, index) => (
+                                        <SelectItem key={q.id} value={q.id}>
+                                            {index + 1}.{" "}
+                                            {q.shortLabel ?? q.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     )}
                     {current && !actionActive ? (
@@ -694,12 +645,19 @@ export function FramingProposal({
                             </span>
                             <h3>{current.text}</h3>
                             {current.rationale && (
-                                <div className="chat-question-rationale">
-                                    <span className="chat-question-caption">
-                                        Rationale
-                                    </span>
-                                    <p>{current.rationale}</p>
-                                </div>
+                                <Collapsible
+                                    key={current.id}
+                                    className="chat-question-rationale">
+                                    <CollapsibleTrigger
+                                        render={
+                                            <Button variant="ghost" size="xs" />
+                                        }>
+                                        Why this question?
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                        <p>{current.rationale}</p>
+                                    </CollapsibleContent>
+                                </Collapsible>
                             )}
                         </section>
                     ) : !current && !actionActive ? (
@@ -724,13 +682,17 @@ export function FramingProposal({
         </div>
     );
     const footer = !emptyProgram &&
-        !actionActive &&
         !clarification &&
         (onStart || onEditRequest || onAddRequest) && (
             <div
+                hidden={actionActive}
                 className={styles.framingLaunch}
                 data-empty-program={!current || undefined}>
-                <div hidden={actionActive} className="chat-question-actions">
+                <div
+                    hidden={
+                        actionActive || (collapsible && !reviewing && !!current)
+                    }
+                    className="chat-question-actions">
                     {current && onEditRequest && (
                         <Button
                             variant="ghost"
@@ -802,6 +764,8 @@ export function FramingProposal({
         <section aria-label={title ?? "Proposed framing"}>
             {collapsible ? (
                 <ConversationPendingPanel
+                    open={reviewing}
+                    onOpenChange={setReviewing}
                     title={
                         clarification
                             ? "Clarify the scope"
@@ -921,10 +885,11 @@ export function StartSourcesHeader({
         <div className={styles.sourceHeading}>
             <div className={styles.sourceTitles}>
                 <span className={styles.sourceLabel}>
+                    <AgentIdentity agent={SOURCES_AGENT} />
                     {running && (
                         <span className={styles.liveDot} aria-hidden="true" />
                     )}
-                    {label}
+                    <span>{label}</span>
                 </span>
                 <h1>{title}</h1>
                 {description && (

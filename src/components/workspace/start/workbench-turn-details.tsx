@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { ConversationActivity } from "@/components/chat/conversation-activity";
+import { ConversationActivityList } from "@/components/chat/conversation-activity-list";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -52,15 +53,17 @@ function TurnDetailsQuery({
                     </EmptyDescription>
                 </Empty>
             ) : (
-                workbenchTurn(work).entries.map((entry) =>
-                    entry.kind === "operation" ? (
-                        <ConversationActivity
-                            key={entry.operation.id}
-                            {...entry.operation}
-                            compact
-                        />
-                    ) : null,
-                )
+                <ConversationActivityList>
+                    {workbenchTurn(work).entries.map((entry) =>
+                        entry.kind === "operation" ? (
+                            <ConversationActivity
+                                key={entry.operation.id}
+                                {...entry.operation}
+                                compact
+                            />
+                        ) : null,
+                    )}
+                </ConversationActivityList>
             )}
             {work.operationsLimited && (
                 <p>Only the most recent operations are shown.</p>

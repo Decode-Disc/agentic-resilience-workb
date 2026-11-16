@@ -128,6 +128,7 @@ describe("Start presentation without backend providers", () => {
         const program = within(
             screen.getByRole("region", { name: "Proposed framing" }),
         );
+        fireEvent.click(program.getByText("Proposed research program"));
         fireEvent.click(program.getByRole("button", { name: "Edit question" }));
         fireEvent.change(program.getByRole("textbox"), {
             target: { value: "Who can change routing rules?" },
@@ -149,7 +150,7 @@ describe("Start presentation without backend providers", () => {
             }).disabled,
         ).toBe(false);
     });
-    it("cancels a question edit without changing its wording and returns focus to the composer", async () => {
+    it("cancels a question edit without changing its wording and returns focus to its editing command", async () => {
         sessionStorage.clear();
         render(
             <StartScreenPreview
@@ -162,6 +163,7 @@ describe("Start presentation without backend providers", () => {
         const program = within(
             screen.getByRole("region", { name: "Proposed framing" }),
         );
+        fireEvent.click(program.getByText("Proposed research program"));
         const original = program.getByRole("region", {
             name: "Framing summary",
         }).textContent;
@@ -176,13 +178,7 @@ describe("Start presentation without backend providers", () => {
             program.getByRole("region", { name: "Framing summary" })
                 .textContent,
         ).toBe(original);
-        await waitFor(() =>
-            expect(document.activeElement).toBe(
-                screen.getByRole("textbox", {
-                    name: "Refine the framing in your own words",
-                }),
-            ),
-        );
+        await waitFor(() => expect(document.activeElement).toBe(edit));
     });
     it("keeps shifted and composing Enter inside the composer and sends an ordinary Enter", async () => {
         sessionStorage.clear();
@@ -325,6 +321,11 @@ it("keeps an unfinished question edit and launch guard when the pending program 
             onOpenProgress={vi.fn()}
         />,
     );
+    fireEvent.click(
+        screen.getByText("Proposed research program", {
+            selector: "summary span",
+        }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
     const editor = screen.getByRole("textbox", {
         name: "Edit research question",
@@ -357,4 +358,47 @@ it("keeps an unfinished question edit and launch guard when the pending program 
             name: "Edit research question",
         }).value,
     ).toBe("Who can replace a service?");
+});
+
+it("keeps a prepared program compact and reveals one freely selected question without a rationale wall", async () => {
+    const questions = [
+        {
+            id: "a",
+            label: "Q1",
+            shortLabel: "Position",
+            text: "Who controls routing?",
+            rationale: "Separate control from supply.",
+        },
+        {
+            id: "b",
+            label: "Q2",
+            shortLabel: "Switching",
+            text: "What would a customer rebuild?",
+            rationale: "Examine dependencies.",
+        },
+    ];
+    const start = vi.fn();
+    render(
+        <FramingProposal
+            collapsible
+            questions={questions}
+            composer={<p>Conversation input</p>}
+            onStart={start}
+            onEditRequest={vi.fn()}
+            onAddRequest={vi.fn()}
+        />,
+    );
+    expect(
+        screen.queryByRole("region", { name: "Framing summary" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Start research" })).toBeTruthy();
+    fireEvent.click(screen.getByText("Proposed research program"));
+    expect(
+        await screen.findByRole("combobox", { name: "Research question" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Who controls routing?")).toBeTruthy();
+    expect(screen.queryByText("What would a customer rebuild?")).toBeNull();
+    expect(screen.queryByText("Separate control from supply.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Start research" }));
+    expect(start).toHaveBeenCalledOnce();
 });
