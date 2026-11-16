@@ -12,6 +12,7 @@ import {
     operationOutcomeValidator,
 } from "./executionProtocol";
 import { isRecoverableInterruption } from "./missionData";
+import { suspendResearchAtTimeLimit } from "./researchControl";
 
 /** Only an admitted business operation can grant a child mission; models never select a runtime. */
 export const startChild = internalMutation({
@@ -142,7 +143,12 @@ export const finishChild = internalMutation({
     args: { missionId: v.id("agentMissions") },
     returns: v.null(),
     handler: async (ctx, args): Promise<null> => {
-        const child = await ctx.db.get(args.missionId);
+        const retained = await ctx.db.get(args.missionId);
+        if (!retained) return null;
+        // A renewable time limit is classified before notification, so the waiting owner never settles it as complete.
+        const child = (await suspendResearchAtTimeLimit(ctx, retained))
+            ? await ctx.db.get(retained._id)
+            : retained;
         if (!child) return null;
         if (
             child.completionEventId &&

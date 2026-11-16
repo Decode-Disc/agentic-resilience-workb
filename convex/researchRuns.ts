@@ -10,6 +10,7 @@ import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
+import { readSourcesMission, sourcesPreparationPhase } from "./domain/sources";
 import {
     assertLifecycleTransition,
     canStartNewCorpusRevision,
@@ -22,6 +23,7 @@ import {
 } from "./domain/validators";
 import {
     applyRequestedResearchPause,
+    readResearchControlReadiness,
     recordResearchObservation,
 } from "./execution/researchControl";
 import { readWorkspace, requireWorkspaceRun } from "./runWorkspace";
@@ -373,8 +375,23 @@ export const getMine = query({
         const revision = run.activeCorpusRevisionId
             ? await ctx.db.get(run.activeCorpusRevisionId)
             : null;
+        const [preparation, mission] = await Promise.all([
+            run.sourcePreparationId
+                ? ctx.db.get(run.sourcePreparationId)
+                : null,
+            readSourcesMission(ctx, run),
+        ]);
+        const sourcesPhase = sourcesPreparationPhase(run, preparation, mission);
         return {
             ...projection,
+            executionGeneration: run.executionGeneration,
+            sourcesPhase,
+            // Continue is offered disabled with its reason before any attempt; Resume still enforces it.
+            sourcesContinueBlock:
+                sourcesPhase === "time_limit"
+                    ? (await readResearchControlReadiness(ctx, run, "resume"))
+                          .block
+                    : null,
             corpusRevisionStatus: revision?.status,
             canStartNewCorpusRevision: canStartNewCorpusRevision(
                 run,

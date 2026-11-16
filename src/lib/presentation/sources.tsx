@@ -1,5 +1,6 @@
 import type { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
+import type { ConversationWorkItem } from "@/components/chat/conversation-activity";
 import { Badge } from "@/components/ui/badge";
 import type { DocumentaryNeed } from "@/components/workbench-ui/documentary-needs";
 import {
@@ -19,7 +20,6 @@ import type {
     SourcesPreparationView,
 } from "@/components/workspace/sources/sources-screens";
 import { sourceDocumentKindLabel } from "@/lib/presentation/research-copy";
-import { sourceMissionPresentation } from "@/lib/presentation/workbench";
 
 type Overview = NonNullable<
     FunctionReturnType<typeof api.sourcesWorkspace.overview>
@@ -31,7 +31,99 @@ type Reading = NonNullable<
     FunctionReturnType<typeof api.sourcesWorkspace.getSource>
 >;
 type ContributionKind = keyof NonNullable<SourcesRow["contributions"]>["kinds"];
-type Run = Parameters<typeof sourceMissionPresentation>[0];
+type Run = NonNullable<FunctionReturnType<typeof api.researchRuns.getMine>>;
+export type SourcesPhase = Run["sourcesPhase"];
+
+/** Analyst copy for the Sources phase Convex derives; every surface translates the same phase. */
+const phaseCopy: Record<
+    SourcesPhase,
+    {
+        workState: ConversationWorkItem["state"];
+        label: string;
+        outcome: string;
+        title: string;
+        detail: string;
+    }
+> = {
+    collecting: {
+        workState: "running",
+        label: "Working",
+        outcome: "In progress",
+        title: "Collecting the documentary material",
+        detail: "Sources is reading and checking documents. Outcomes settle when it hands off.",
+    },
+    waiting: {
+        workState: "waiting",
+        label: "Waiting",
+        outcome: "Waiting",
+        title: "Documentary preparation is waiting",
+        detail: "Sources continues when its current step can proceed. Material read so far remains inspectable.",
+    },
+    paused: {
+        workState: "paused",
+        label: "Paused",
+        outcome: "Paused",
+        title: "Documentary preparation paused",
+        detail: "Research is paused. Material read so far remains inspectable. Resume research to continue.",
+    },
+    time_limit: {
+        workState: "paused",
+        label: "Decision needed",
+        outcome: "Decision needed",
+        title: "Preparation reached its time limit",
+        detail: "Sources used its time window before finishing. Continue preparation to use the remaining capacity, or use what's prepared now.",
+    },
+    completed: {
+        workState: "completed",
+        label: "Complete",
+        outcome: "Prepared",
+        title: "Documentary material ready",
+        detail: "Inspect the retained material before continuing. Investigation is not available yet.",
+    },
+    completed_with_limits: {
+        workState: "completed",
+        label: "Complete with limits",
+        outcome: "Prepared with limits",
+        title: "Documentary preparation completed with limits",
+        detail: "Sources handed off its material. Some needs have gaps or unfinished work. Investigation is not available yet.",
+    },
+    interrupted: {
+        workState: "interrupted",
+        label: "Interrupted",
+        outcome: "Interrupted",
+        title: "Documentary preparation interrupted",
+        detail: "Sources stopped before handing off its material. Documents read so far remain visible.",
+    },
+    failed: {
+        workState: "interrupted",
+        label: "Stopped",
+        outcome: "Stopped",
+        title: "Documentary preparation stopped",
+        detail: "Preparation stopped because of an internal problem and cannot continue. Gathered sources remain visible in Sources. Start a new analysis to continue.",
+    },
+    insufficient_evidence: {
+        workState: "blocked",
+        label: "Limited material",
+        outcome: "Limited material",
+        title: "Public evidence is insufficient",
+        detail: "Public evidence was not sufficient to prepare documentary material for this program.",
+    },
+};
+
+export function sourcesPhasePresentation(phase: SourcesPhase) {
+    return phaseCopy[phase];
+}
+
+/** Why Continue preparation is unavailable, in analyst terms; Use what's prepared stays available. */
+export function sourcesContinueBlockCopy(code: string) {
+    if (code === "execution_slot_unavailable")
+        return "Another of your analyses is running. Continue when it finishes, or use what's prepared now.";
+    if (code === "paid_work_disabled")
+        return "New research work is temporarily unavailable. You can use what's prepared now.";
+    if (code === "sources_settlement_requested")
+        return "You chose to use what's prepared. Sources is handing off its material.";
+    return "Preparation cannot continue right now. You can use what's prepared now.";
+}
 
 /** Documentary contributions borrow claim tones for colour only; their labels never imply an inventory class. */
 const documentaryKinds: Record<
@@ -398,15 +490,10 @@ export function sourcesPreparationView(
     run: Run,
     rows: readonly SourcesRow[],
 ): SourcesPreparationView {
-    const { state, title } = sourceMissionPresentation(run, {
-        status: overview.preparationStatus,
-        missionStatus: overview.missionStatus,
-    });
+    const presentation = sourcesPhasePresentation(run.sourcesPhase);
+    const state = presentation.workState;
     const labels = questionLabels(overview);
     const settled = state === "completed";
-    const limited =
-        overview.materialOutcome === "partial" ||
-        overview.materialOutcome === "blocked";
     const count = (outcome: DocumentaryNeed["outcome"]) =>
         overview.needs.filter((need) => need.outcome === outcome).length;
     const needs = plural(overview.needs.length, [
@@ -428,34 +515,24 @@ export function sourcesPreparationView(
           ]
               .filter(Boolean)
               .join(" ")
-        : state === "paused"
-          ? `Sources is paused with ${plural(overview.reading.captured, ["document", "documents"])} read so far for ${needs}.`
-          : state === "interrupted"
-            ? `Sources stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} read so far remain available.`
-            : `Sources is collecting and reading material for ${needs}. Outcomes settle when it hands off.`;
+        : run.sourcesPhase === "time_limit"
+          ? `Sources used its time window with ${plural(overview.reading.captured, ["document", "documents"])} read for ${needs}. Continue preparation to use the remaining capacity, or use what's prepared now.`
+          : state === "paused"
+            ? `Sources is paused with ${plural(overview.reading.captured, ["document", "documents"])} read so far for ${needs}.`
+            : run.sourcesPhase === "failed"
+              ? `Preparation stopped because of an internal problem and cannot continue. ${plural(overview.reading.captured, ["document", "documents"])} read so far remain visible. Start a new analysis to continue.`
+              : state === "interrupted"
+                ? `Sources stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} read so far remain available.`
+                : `Sources is collecting and reading material for ${needs}. Outcomes settle when it hands off.`;
     const families = new Map<SourcesRow["family"], "found" | "unavailable">();
     for (const row of rows) families.set(row.family, "found");
     for (const family of overview.collect.failedFamilies)
         if (!families.has(family)) families.set(family, "unavailable");
     return {
         eyebrow: "Initial preparation",
-        title,
+        title: presentation.title,
         summary,
-        outcome: {
-            label:
-                state === "completed"
-                    ? limited
-                        ? "Prepared with limits"
-                        : "Prepared"
-                    : state === "interrupted"
-                      ? "Interrupted"
-                      : state === "paused"
-                        ? "Paused"
-                        : state === "running"
-                          ? "In progress"
-                          : "Waiting",
-            settled,
-        },
+        outcome: { label: presentation.outcome, settled },
         collect: {
             candidates: overview.collect.candidates,
             families: familyOrder

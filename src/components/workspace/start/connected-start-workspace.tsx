@@ -11,8 +11,8 @@ import { ConvexError } from "convex/values";
 import { MotionConfig, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ConversationActivityList } from "@/components/chat/conversation-activity-list";
-import { ConversationHistory } from "@/components/chat/conversation-history";
 import { DEFAULT_CONVERSATION_AGENTS as agents } from "@/components/chat/conversation-agent";
+import { ConversationHistory } from "@/components/chat/conversation-history";
 import {
     type ConversationMissionSnapshot,
     ConversationWorkReturn,
@@ -35,27 +35,28 @@ import {
     EmptyHeader,
     EmptyTitle,
 } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
 import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { SourcingLane } from "@/components/workbench-ui/sourcing-lane";
+import { SourcesTimeLimitDecision } from "@/components/workspace/sources/sources-time-limit-decision";
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
 import { useResponsive } from "@/hooks/use-responsive";
+import { sourcesPhasePresentation } from "@/lib/presentation/sources";
 import {
     conversationOperation,
     questionCapacityCopy,
     researchProgramReadiness,
     researchStartRefusalCopy,
-    sourceMissionPresentation,
     workbenchFailureCopy,
     workbenchTurn,
 } from "@/lib/presentation/workbench";
+import { insertOptimisticConversationMessage } from "@/lib/workspace/conversation-delivery";
 import {
     clearWorkbenchDraft,
     peekWorkbenchDraft,
 } from "@/lib/workspace/workbench-draft";
-import { insertOptimisticConversationMessage } from "@/lib/workspace/conversation-delivery";
 import {
     FramingProposal,
     StartFramingScreen,
@@ -594,11 +595,8 @@ function StartWorkspaceContent({
     const captured = snapshot.sources.filter(
         (s) => s.state === "captured",
     ).length;
-    const sourcePresentation = sourceMissionPresentation(
-        run,
-        snapshot.preparation,
-    );
-    const sourceState = sourcePresentation.state;
+    const sourcePresentation = sourcesPhasePresentation(snapshot.sourcesPhase);
+    const sourceState = sourcePresentation.workState;
     const sourceOperations =
         snapshot.sourcesWork?.operations.map((operation) =>
             conversationOperation(operation, sourceState),
@@ -687,6 +685,12 @@ function StartWorkspaceContent({
                             Keep researching
                         </Button>
                     </>
+                ) : snapshot.sourcesPhase === "time_limit" ? (
+                    <SourcesTimeLimitDecision
+                        runId={runId}
+                        expectedGeneration={run.executionGeneration}
+                        continueBlock={snapshot.sourcesContinueBlock}
+                    />
                 ) : isResumableResearchPause(run) ? (
                     <Button
                         variant="outline"
@@ -1101,24 +1105,9 @@ function StartWorkspaceContent({
                             heading={
                                 <StartSourcesHeader
                                     running={sourceState === "running"}
-                                    label={
-                                        sourceState === "running"
-                                            ? "Working"
-                                            : sourceState === "paused"
-                                              ? "Paused"
-                                              : sourceState === "completed"
-                                                ? "Complete"
-                                                : sourceState === "interrupted"
-                                                  ? "Interrupted"
-                                                  : "Not running"
-                                    }
+                                    label={sourcePresentation.label}
                                     title={sourcePresentation.title}
-                                    description={
-                                        sourceState === "completed" ||
-                                        sourceState === "interrupted"
-                                            ? sourcePresentation.detail
-                                            : undefined
-                                    }
+                                    description={sourcePresentation.detail}
                                     actions={researchControls}
                                     onOpenProgress={() =>
                                         void navigate({
@@ -1148,7 +1137,11 @@ function StartWorkspaceContent({
                                                     ? "capturing"
                                                     : "waiting",
                                             highlight:
-                                                sourceState === "running",
+                                                sourceState === "running" &&
+                                                snapshot.sources.some(
+                                                    (s) =>
+                                                        s.state === "capturing",
+                                                ),
                                         },
                                         { value: captured, label: "captured" },
                                     ]}
@@ -1172,7 +1165,8 @@ function StartWorkspaceContent({
                                                 state={stage}
                                                 active={
                                                     stage === "capturing" &&
-                                                    sourceState === "running"
+                                                    sourceState === "running" &&
+                                                    docs.length > 0
                                                 }
                                                 label={
                                                     stage === "found"

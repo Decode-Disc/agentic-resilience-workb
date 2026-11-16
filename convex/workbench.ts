@@ -13,7 +13,11 @@ import {
 } from "@convex/domain/framingEditAuthority";
 import { sourceCaptureState } from "@convex/domain/sourceCaptureState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
-import { readSourcesMission } from "@convex/domain/sources";
+import {
+    readSourcesMission,
+    sourcesPhaseValidator,
+    sourcesPreparationPhase,
+} from "@convex/domain/sources";
 import {
     isResumableResearchPause,
     supportsResearchControl,
@@ -47,6 +51,7 @@ import { retainOperationEffect } from "@convex/execution/operations";
 import { sessionForMission } from "@convex/execution/piStore";
 import {
     pauseResearch,
+    readResearchControlReadiness,
     researchControlConfirmation,
     resumeResearch,
 } from "@convex/execution/researchControl";
@@ -532,6 +537,8 @@ export const snapshot = query({
     returns: v.object({
         run: schema.doc("researchRuns"),
         researchControlAvailable: v.boolean(),
+        sourcesPhase: sourcesPhaseValidator,
+        sourcesContinueBlock: v.union(v.string(), v.null()),
         availableCommands: v.array(workbenchCommand),
         company: v.union(companySnapshotValidator, v.null()),
         framing: v.union(schema.doc("framingRevisions"), v.null()),
@@ -646,6 +653,11 @@ export const snapshot = query({
         const sourcesMission = preparation
             ? await readSourcesMission(ctx, run)
             : null;
+        const sourcesPhase = sourcesPreparationPhase(
+            run,
+            preparation,
+            sourcesMission,
+        );
         const sourcesCompletion = sourcesMission
             ? await ctx.db
                   .query("agentExecutionEvents")
@@ -660,6 +672,12 @@ export const snapshot = query({
         return {
             run,
             researchControlAvailable: supportsResearchControl(run),
+            sourcesPhase,
+            sourcesContinueBlock:
+                sourcesPhase === "time_limit"
+                    ? (await readResearchControlReadiness(ctx, run, "resume"))
+                          .block
+                    : null,
             availableCommands:
                 workbenchCommandsSupported(conversation) &&
                 run.fixedFramingRevisionId &&

@@ -329,7 +329,7 @@ async function readCurrentPreparation(
         preparationId: Id<"sourceSelectionProposalRebuilds">;
         sourceId?: Id<"sources">;
     },
-    observation = false,
+    mode: "execution" | "observation" | "settlement" = "execution",
 ) {
     const preparation = await db.get(args.preparationId);
     if (
@@ -348,9 +348,12 @@ async function readCurrentPreparation(
         : null;
     const invitation = visitor ? await db.get(visitor.invitationId) : null;
     const pausedObservation =
-        observation &&
+        mode !== "execution" &&
         run?.agentExecutionVersion === 3 &&
-        isResumableResearchPause(run) &&
+        (mode === "observation"
+            ? isResumableResearchPause(run)
+            : run.executionStatus === "paused" &&
+              run.pauseReason === "sources_time_limit") &&
         run.executionGeneration === preparation.executionGeneration + 1;
     const expectedLifecycle =
         preparation.entryPoint === "initial_discovery"
@@ -477,7 +480,7 @@ export async function assertPreparationObservationFence(
         sourceId?: Id<"sources">;
     },
 ) {
-    return readCurrentPreparation(db, args, true);
+    return readCurrentPreparation(db, args, "observation");
 }
 
 /** Expiry stops I/O while the unchanged generation can still produce a partial review. */
@@ -497,6 +500,17 @@ export async function assertPreparationExecutionFence(
         state.preparation.leaseExpiresAt <= args.now
     )
         throw sourcePreparationError("stale_execution");
+    return state;
+}
+
+/** Settling retained material dispatches nothing, so the paid-work deadline and lease never block it; currency, authority and cancellation still do. */
+export async function assertPreparationSettlementFence(
+    db: GenericDatabaseReader<DataModel>,
+    args: { preparationId: Id<"sourceSelectionProposalRebuilds"> },
+) {
+    const state = await readCurrentPreparation(db, args, "settlement");
+    if (state.preparation.resourcePolicy !== RESOURCE_POLICY_VERSION)
+        throw sourcePreparationError("resource_policy_unsupported");
     return state;
 }
 

@@ -75,6 +75,11 @@ export type AgentDefinition = {
         maximumBytes?: number,
     ): Record<string, unknown>;
     operationDiagnostic?(code: string): string | undefined;
+    /** Whether a research mission stopped by its deadline still has domain capacity worth an analyst-authorized new window. */
+    continuationAfterDeadline?(
+        ctx: QueryCtx,
+        mission: Doc<"agentMissions">,
+    ): Promise<boolean>;
     conversationReply?(result: AgentResult): string;
     instructions: string;
     /** Domain distinctions the native summarizer must preserve across compaction. */

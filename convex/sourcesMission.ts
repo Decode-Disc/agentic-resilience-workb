@@ -3,6 +3,7 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
     internalQuery,
+    mutation,
     type QueryCtx,
     query,
 } from "@convex/_generated/server";
@@ -25,6 +26,7 @@ import {
     projectPreparedMaterial,
     readEngagedSourcesWork,
     readPreparedNeed,
+    readSourcesMission,
     reconstructQualification,
     requireSourcesPreparation,
     sourcesResourceStatus,
@@ -55,10 +57,12 @@ import {
     requireDossierAuthority,
     requireMissionObservationAuthority,
     requireRunAuthority,
+    requireSettlementAuthority,
 } from "@convex/execution/authority";
 import { executionError } from "@convex/execution/errors";
 import { recordContextObservation } from "@convex/execution/journal";
 import { registerOperationWaitEvent } from "@convex/execution/operations";
+import { recordResearchObservation } from "@convex/execution/researchControl";
 import { requireQualificationResultDeadline } from "@convex/providerCalls";
 import {
     SOURCES_HANDOFF_READ_CAPACITY,
@@ -141,7 +145,7 @@ async function workContext(
     const state = await requireSourcesPreparation(
         ctx,
         request.pin.preparationId,
-        observation,
+        observation ? "observation" : "execution",
     );
     if (observation && request.missionId)
         await requireMissionObservationAuthority(
@@ -970,8 +974,9 @@ export const finish = internalMutation({
         const { preparation, run } = await requireSourcesPreparation(
             ctx,
             args.preparationId,
+            "settlement",
         );
-        await requireRunAuthority(ctx, run._id, args.expectedGeneration);
+        await requireSettlementAuthority(ctx, run._id, args.expectedGeneration);
         const mission = await ctx.db.get(args.missionId);
         if (
             !mission ||
@@ -998,9 +1003,17 @@ export const finish = internalMutation({
             return { kind: "waiting", ...(eventId ? { eventId } : {}) };
         }
         await processWorkbenchInstructions(ctx, { runId: run._id }, reads);
-        if (await hasWaitingWorkbenchInstructions(ctx, run._id))
+        // Instructions wait during a time-limit pause; the analyst's settlement does not wait for a resumption that will not come.
+        if (
+            preparation.settlementRequestedAt === undefined &&
+            (await hasWaitingWorkbenchInstructions(ctx, run._id))
+        )
             return { kind: "waiting" };
-        const current = await requireSourcesPreparation(ctx, preparation._id);
+        const current = await requireSourcesPreparation(
+            ctx,
+            preparation._id,
+            "settlement",
+        );
         const material =
             current.data.result ??
             (await completeSources(
@@ -1045,6 +1058,54 @@ export const finish = internalMutation({
                 allowance: sourcesResourceStatus(current.data),
             },
         });
+        return null;
+    },
+});
+
+/** The analyst uses the material prepared before a Sources time limit: the waiting handoff settles it with its limits, without another window. */
+export const settle = mutation({
+    args: { runId: v.id("researchRuns"), expectedGeneration: v.number() },
+    returns: v.null(),
+    handler: async (ctx, args): Promise<null> => {
+        const { run, visitor } = await requireWorkspaceRun(ctx, args.runId);
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        if (
+            preparation?.settlementRequestedAt !== undefined &&
+            run.executionGeneration === args.expectedGeneration
+        )
+            return null;
+        if (
+            run.executionStatus !== "paused" ||
+            run.pauseReason !== "sources_time_limit" ||
+            run.executionGeneration !== args.expectedGeneration ||
+            !preparation ||
+            preparation.status !== "started"
+        )
+            throw executionError("stale_execution");
+        const mission = await readSourcesMission(ctx, run);
+        await ctx.db.patch(preparation._id, {
+            settlementRequestedAt: Date.now(),
+        });
+        if (mission?.status === "blocked") {
+            // The stop becomes terminal, so the waiting handoff receives the mission and settles it.
+            await ctx.db.patch(mission._id, {
+                blockCode: "execution_deadline",
+            });
+            await ctx.runMutation(internal.execution.handoffs.finishChild, {
+                missionId: mission._id,
+            });
+        }
+        await recordResearchObservation(
+            ctx,
+            run._id,
+            "sources_settlement_requested",
+            {
+                type: "visitor",
+                visitorId: visitor._id,
+            },
+        );
         return null;
     },
 });

@@ -1,11 +1,11 @@
 import { api, internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { researchStateSummary } from "@convex/execution/researchControl";
-import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
+import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import { seedPiHistory } from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
-import { seedWorkbench } from "@/__tests__/setup/workbench";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 // Research starts run through the Sources mission; there is no corpus-approval fallback.
 beforeEach(() => activateSourcesMission());
@@ -20,7 +20,10 @@ afterEach(() => {
 test.each([
     ["completed", "Research is complete."],
     ["cancelled", "Research has been cancelled."],
-    ["failed", "Research has stopped because a problem needs attention."],
+    [
+        "failed",
+        "Research stopped because of an internal problem and cannot continue. Gathered sources remain visible in Sources. Start a new analysis to continue.",
+    ],
 ] as const)("terminal %s state takes precedence over retained review metadata", (executionStatus, summary) => {
     expect(
         researchStateSummary({

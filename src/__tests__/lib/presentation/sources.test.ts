@@ -6,6 +6,7 @@ import {
     filterSourcesRows,
     type SourcesRow,
     sourcesFilterValues,
+    sourcesPhasePresentation,
 } from "@/lib/presentation/sources";
 import { workspaceSearch } from "@/lib/workspace/navigation";
 
@@ -86,4 +87,26 @@ test("Sources locations survive the URL only within the Sources section", () => 
     expect(
         workspaceSearch({ section: "sources", sourcesView: "elsewhere" }),
     ).toEqual({ section: "sources" });
+});
+
+test.each([
+    "collecting",
+    "waiting",
+    "paused",
+    "time_limit",
+    "completed",
+    "completed_with_limits",
+    "interrupted",
+    "failed",
+    "insufficient_evidence",
+] as const)("the %s Sources phase reads as analyst copy", (phase) => {
+    const copy = sourcesPhasePresentation(phase);
+    for (const text of [copy.label, copy.outcome, copy.title, copy.detail])
+        expect(text).not.toMatch(/_|sources_prepared|execution|mission/i);
+    if (phase === "failed")
+        expect(copy.detail).toContain("Start a new analysis");
+    if (phase === "time_limit")
+        expect(copy.detail).toMatch(
+            /Continue preparation.*use what's prepared/,
+        );
 });

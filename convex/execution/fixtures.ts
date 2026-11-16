@@ -13,6 +13,10 @@ import {
 } from "@convex/domain/executionClaim";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
+import {
+    activatedSourcesEnvelope,
+    readSourcesMission,
+} from "@convex/domain/sources";
 import { initializeFraming } from "@convex/framing";
 import {
     agentInputByteLength,
@@ -1831,5 +1835,97 @@ export const qualificationRoute = internalQuery({
                   )
                 : revision.reasoningEffort,
         };
+    },
+});
+
+/** Reaches a Sources time limit with remaining capacity through the production claim, mission and handoff owners. No provider is called; the browser decides as an analyst would. */
+export const reachSourcesTimeLimit = internalMutation({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.null(),
+    handler: async (ctx, args): Promise<null> => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        if (run.sourcePreparationId) return null;
+        const envelope = activatedSourcesEnvelope();
+        if (
+            run.startMode !== "framed" ||
+            !run.currentFramingRevisionId ||
+            !run.activeCorpusRevisionId ||
+            !envelope
+        )
+            throw new Error(
+                "An unlaunched START fixture with active Sources configuration is required",
+            );
+        await ctx.db.patch(run._id, {
+            fixedFramingRevisionId: run.currentFramingRevisionId,
+            agentExecutionVersion: 3,
+            sourcesProtocol: "sources_mission_v1",
+            sourcesEnvelope: envelope,
+            researchStartedAt: Date.now(),
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+            pauseReason: undefined,
+        });
+        await ctx.runMutation(internal.researchPlanning.createForRun, {
+            runId: run._id,
+            expectedExecutionGeneration: run.executionGeneration,
+        });
+        const preparationId = await ctx.runMutation(
+            internal.sourcesMission.claim,
+            {
+                runId: run._id,
+                corpusRevisionId: run.activeCorpusRevisionId,
+                expectedGeneration: run.executionGeneration,
+                envelope,
+            },
+        );
+        const missionId = await ctx.runMutation(
+            internal.execution.missions.start,
+            {
+                runId: run._id,
+                expectedGeneration: run.executionGeneration,
+                definitionId: "sources_v1",
+                scope: { kind: "sources_v1", preparationId },
+                requestKey: `${args.fixtureKey}:sources`,
+            },
+        );
+        // The window closes with an operation in flight, as observed on 2026-11-15.
+        const expired = Date.now() - 1;
+        await ctx.db.patch(preparationId, {
+            deadlineAt: expired,
+            leaseExpiresAt: expired,
+        });
+        await ctx.db.patch(run._id, { executionHarnessDeadlineAt: expired });
+        await ctx.db.patch(missionId, {
+            deadlineAt: expired,
+            status: "blocked",
+            blockCode: "operation_outcome_unknown",
+        });
+        await ctx.runMutation(internal.execution.handoffs.finishChild, {
+            missionId,
+        });
+        return null;
+    },
+});
+
+/** Performs the research workflow's own checkpoint-then-handoff step after the analyst settles; the fixture has no durable workflow. */
+export const settleSourcesFixture = internalMutation({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.null(),
+    handler: async (ctx, args): Promise<null> => {
+        const { run } = await requireLocalFixtureRun(ctx, args);
+        const mission = await readSourcesMission(ctx, run);
+        if (!run.sourcePreparationId || !mission)
+            throw new Error("A Sources time-limit fixture is required");
+        const state = await ctx.runMutation(
+            internal.execution.researchControl.checkpoint,
+            { runId: run._id },
+        );
+        if (state.waiting) throw new Error("No settlement was requested");
+        await ctx.runMutation(internal.sourcesMission.finish, {
+            preparationId: run.sourcePreparationId,
+            missionId: mission._id,
+            expectedGeneration: state.generation,
+        });
+        return null;
     },
 });

@@ -160,4 +160,5 @@ export const runPauseReasonValidator = v.union(
     v.literal("claim_generation_unavailable"),
     v.literal("analyst"),
     v.literal("execution_interrupted"),
+    v.literal("sources_time_limit"),
 );

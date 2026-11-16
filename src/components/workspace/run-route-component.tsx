@@ -4,6 +4,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import {
@@ -21,7 +22,7 @@ import {
     StartWorkspaceSkeleton,
 } from "@/components/workspace/start/connected-start-workspace";
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
-import { sourceMissionState } from "@/lib/presentation/workbench";
+import { sourcesPhasePresentation } from "@/lib/presentation/sources";
 import {
     type WorkspaceSearch,
     type WorkspaceSection,
@@ -37,9 +38,7 @@ type SourcesSearch = Pick<
 
 /** Sources content before the mission records preparation, or for dossiers prepared by the retired corpus review. Follows the shared Sources mission state. */
 function sourcesFallbackCopy(
-    run: Parameters<typeof sourceMissionState>[0] & {
-        sourcesProtocol?: "sources_mission_v1";
-    },
+    run: NonNullable<FunctionReturnType<typeof api.researchRuns.getMine>>,
 ) {
     if (run.lifecycleState === "framing")
         return {
@@ -53,12 +52,13 @@ function sourcesFallbackCopy(
             description:
                 "This dossier was prepared with a source review that is no longer available. Start a new analysis to use the current Sources view.",
         };
-    const state = sourceMissionState(run, null);
+    const presentation = sourcesPhasePresentation(run.sourcesPhase);
+    const state = presentation.workState;
     if (state === "running" || state === "waiting" || state === "paused")
         return {
             title:
                 state === "paused"
-                    ? "Documentary preparation paused"
+                    ? presentation.title
                     : "Preparing documentary sources",
             description:
                 "Sources is gathering public documents. Its preparation appears here as soon as discovery returns.",

@@ -179,6 +179,9 @@ const run: ComponentProps<typeof ConnectedSources>["run"] = {
     providerFailures: [],
     corpusRevisionStatus: undefined,
     canStartNewCorpusRevision: false,
+    executionGeneration: 4,
+    sourcesPhase: "collecting",
+    sourcesContinueBlock: null,
 };
 
 function renderSources(
@@ -311,4 +314,36 @@ test("without a Workbench conversation the reader offers no follow-up it cannot 
     expect(
         screen.queryByRole("button", { name: "Challenge this selection" }),
     ).toBeNull();
+});
+
+test("the Preparation screen carries the time-limit decision beside the material read so far", async () => {
+    const settle = vi.fn().mockResolvedValue(null);
+    convexReactHarness.mutation(api.sourcesMission.settle).uses(settle);
+    convexReactHarness
+        .mutation(api.execution.researchControl.resume)
+        .uses(vi.fn().mockResolvedValue(6));
+    renderSources({
+        run: {
+            ...run,
+            executionStatus: "paused",
+            pauseReason: "sources_time_limit",
+            executionGeneration: 5,
+            sourcesPhase: "time_limit",
+        },
+    });
+    expect(
+        screen.getByRole("heading", {
+            name: "Preparation reached its time limit",
+        }),
+    ).toBeTruthy();
+    expect(screen.getAllByText("Decision needed").length).toBeGreaterThan(0);
+    fireEvent.click(
+        screen.getByRole("button", { name: "Use what's prepared" }),
+    );
+    await vi.waitFor(() =>
+        expect(settle).toHaveBeenCalledWith({ runId, expectedGeneration: 5 }),
+    );
+    expect(document.body.textContent).not.toMatch(
+        /sources_time_limit|time_limit/,
+    );
 });

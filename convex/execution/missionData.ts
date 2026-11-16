@@ -23,11 +23,12 @@ export function operationProgressKeys(outcome: OperationOutcome): string[] {
         : [];
 }
 
-/** An interrupted executor can resume the same mission; it is not a terminal business result. */
+/** An interrupted executor, or a time limit the analyst may renew, can resume the same mission; neither is a terminal business result. */
 export function isRecoverableInterruption(mission: Doc<"agentMissions">) {
     return (
         mission.status === "blocked" &&
-        mission.blockCode === "execution_interrupted"
+        (mission.blockCode === "execution_interrupted" ||
+            mission.blockCode === "execution_time_limit")
     );
 }
 

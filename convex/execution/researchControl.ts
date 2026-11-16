@@ -10,7 +10,10 @@ import {
     isResumableResearchPause,
     supportsResearchControl,
 } from "@convex/domain/transitions";
-import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
+import {
+    PERSISTENCE_PAGE_SIZE,
+    SOURCE_PREPARATION_DEADLINE_MS,
+} from "@convex/resourcePolicy";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import { researchResumed, workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
@@ -206,6 +209,75 @@ export async function suspendInterruptedResearch(
     await recordResearchObservation(ctx, run._id, "research_interrupted");
 }
 
+/** A research mission stopped by its deadline while its domain still admits work waits for the analyst to continue or settle; it is never handed off as complete. */
+export async function suspendResearchAtTimeLimit(
+    ctx: MutationCtx,
+    mission: Doc<"agentMissions">,
+) {
+    const definition = getAgentDefinition(
+        mission.definitionId,
+        mission.definitionVersion,
+    );
+    if (
+        mission.status !== "blocked" ||
+        (mission.blockCode !== "execution_deadline" &&
+            mission.blockCode !== "operation_outcome_unknown") ||
+        mission.deadlineAt > Date.now() ||
+        definition.executionScope !== "research" ||
+        !definition.continuationAfterDeadline
+    )
+        return false;
+    const run = await ctx.db.get(mission.runId);
+    if (
+        !run ||
+        run.withdrawnAt ||
+        run.startMode !== "framed" ||
+        !supportsResearchControl(run)
+    )
+        return false;
+    const active =
+        run.executionStatus === "running" &&
+        run.executionGeneration === mission.generation;
+    if (!active && !isResumableResearchPause(run)) return false;
+    try {
+        await requireDossierAuthority(ctx, run._id);
+    } catch (error) {
+        if (!executionFailureCode(error)) throw error;
+        return false;
+    }
+    if (!(await definition.continuationAfterDeadline(ctx, mission)))
+        return false;
+    await ctx.db.patch(mission._id, { blockCode: "execution_time_limit" });
+    await recordMissionEvent(ctx, mission, {
+        kind: "mission_blocked",
+        cause: "execution_deadline",
+        code: "execution_time_limit",
+    });
+    if (!active) return true;
+    if (run.researchPauseRequested) {
+        await applyRequestedResearchPause(ctx, run);
+        return true;
+    }
+    await ctx.db.patch(run._id, {
+        executionStatus: "paused",
+        pauseReason: "sources_time_limit",
+        executionGeneration: run.executionGeneration + 1,
+        researchPauseRequested: false,
+        researchControlRevision: (run.researchControlRevision ?? 0) + 1,
+        updatedAt: Date.now(),
+    });
+    await ctx.db.insert("agentExecutionEvents", {
+        actor: { type: "system" },
+        runId: run._id,
+        missionId: mission._id,
+        kind: "research_time_limit",
+        cause: "execution_deadline",
+        occurredAt: Date.now(),
+    });
+    await recordResearchObservation(ctx, run._id, "research_time_limit");
+    return true;
+}
+
 export const pause = mutation({
     args: { runId: v.id("researchRuns"), expectedGeneration: v.number() },
     returns: v.number(),
@@ -250,6 +322,14 @@ export const resumeMissions = internalMutation({
                     !isRecoverableInterruption(mission))
             )
                 continue;
+            if (
+                mission.blockCode === "execution_time_limit" &&
+                run.executionHarnessDeadlineAt !== undefined &&
+                mission.deadlineAt < run.executionHarnessDeadlineAt
+            )
+                await ctx.db.patch(mission._id, {
+                    deadlineAt: run.executionHarnessDeadlineAt,
+                });
             try {
                 await ctx.runMutation(internal.execution.missions.resume, {
                     missionId: mission._id,
@@ -271,6 +351,12 @@ export const resumeMissions = internalMutation({
                     cause: "research_resume",
                     code,
                 });
+                // A mission that cannot resume is terminal; its waiting owner settles what it retained.
+                if (mission.parentRequestId || mission.completionEventId)
+                    await ctx.runMutation(
+                        internal.execution.handoffs.finishChild,
+                        { missionId: mission._id },
+                    );
             }
         }
         if (!page.isDone)
@@ -325,6 +411,13 @@ export const checkpoint = internalMutation({
             } else if (run.workflowId !== args.workflowId)
                 throw executionError("stale_execution");
         }
+        if (
+            run.pauseReason === "sources_time_limit" &&
+            run.sourcePreparationId &&
+            (await ctx.db.get(run.sourcePreparationId))
+                ?.settlementRequestedAt !== undefined
+        )
+            return { waiting: false, generation: run.executionGeneration };
         if (isResumableResearchPause(run))
             return { waiting: true, generation: run.executionGeneration };
         if (run.executionStatus !== "running")
@@ -410,12 +503,38 @@ export async function readResearchControlReadiness(
         if (preparation?.status !== "started")
             return { block: null, transition: "human_review" };
     }
-    return {
-        block: run.ownerVisitorId
-            ? await researchSlotBlock(ctx, run.ownerVisitorId)
-            : "not_authorized",
-        transition: "execute",
-    };
+    const slotBlock = run.ownerVisitorId
+        ? await researchSlotBlock(ctx, run.ownerVisitorId)
+        : "not_authorized";
+    const preparation =
+        run.startMode === "framed" &&
+        run.sourcesProtocol === "sources_mission_v1" &&
+        run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+    // An expired window is renewed only by an explicit analyst Resume; it never resets counters.
+    if (
+        preparation?.status === "started" &&
+        (run.pauseReason === "sources_time_limit" ||
+            (preparation.deadlineAt ?? 0) <= Date.now())
+    ) {
+        if (preparation.settlementRequestedAt !== undefined)
+            return {
+                block: "sources_settlement_requested",
+                transition: null,
+            };
+        const paidWork = await ctx.db
+            .query("paidWorkControls")
+            .withIndex("by_key", (q) => q.eq("key", "global"))
+            .unique();
+        return {
+            block:
+                slotBlock ??
+                (paidWork?.enabled === false ? "paid_work_disabled" : null),
+            transition: "renew_window",
+        };
+    }
+    return { block: slotBlock, transition: "execute" };
 }
 
 export async function pauseResearch(
@@ -498,11 +617,23 @@ export async function resumeResearch(
         return generation;
     }
     const generation = run.executionGeneration + 1;
+    const renewedDeadlineAt =
+        readiness.transition === "renew_window"
+            ? Date.now() + SOURCE_PREPARATION_DEADLINE_MS
+            : undefined;
+    if (renewedDeadlineAt !== undefined && run.sourcePreparationId)
+        await ctx.db.patch(run.sourcePreparationId, {
+            deadlineAt: renewedDeadlineAt,
+            leaseExpiresAt: renewedDeadlineAt,
+        });
     await ctx.db.patch(run._id, {
         executionStatus: "running",
         researchControlRevision: (run.researchControlRevision ?? 0) + 1,
         pauseReason: undefined,
         executionGeneration: generation,
+        ...(renewedDeadlineAt !== undefined
+            ? { executionHarnessDeadlineAt: renewedDeadlineAt }
+            : {}),
         updatedAt: Date.now(),
     });
     if (run.startMode === "framed" && run.sourcePreparationId)
@@ -568,7 +699,7 @@ export function researchStateSummary(
     if (run.executionStatus === "cancelled")
         return "Research has been cancelled.";
     if (run.executionStatus === "failed")
-        return "Research has stopped because a problem needs attention.";
+        return "Research stopped because of an internal problem and cannot continue. Gathered sources remain visible in Sources. Start a new analysis to continue.";
     if (
         run.pauseReason === "source_review" ||
         (run.lifecycleState === "awaiting_source_review" &&
@@ -577,6 +708,8 @@ export function researchStateSummary(
         return "Research is waiting for source review. Review the proposed sources to continue.";
     if (run.pauseReason === "execution_interrupted")
         return "Research was interrupted. Retained work remains available. Resume research to continue.";
+    if (run.pauseReason === "sources_time_limit")
+        return "Sources reached its time limit. Material read so far remains inspectable. Continue preparation to use the remaining capacity, or use what's prepared to hand it off with its limits.";
     if (run.pauseReason && run.pauseReason !== "analyst")
         return "Research is waiting for an analyst decision. Complete the pending review to continue.";
     if (run.executionStatus === "paused") return "Research is paused.";

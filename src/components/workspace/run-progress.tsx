@@ -34,6 +34,10 @@ export function RunProgress({
         "awaiting_evidence_sufficiency_review",
         "awaiting_source_review",
     ].includes(run.lifecycleState);
+    // Model incidents are not retrieval failures; they never imply that a source could not be read.
+    const retrievalFailures = run.sourcesProtocol
+        ? run.providerFailures.filter((failure) => failure.service !== "model")
+        : run.providerFailures;
     const evidenceCopy =
         run.lifecycleState === "extracting_evidence"
             ? run.pauseReason === "claim_generation_unavailable"
@@ -141,7 +145,7 @@ export function RunProgress({
                         </p>
                     ) : null}
                 </div>
-                {run.providerFailures.length > 0 ? (
+                {retrievalFailures.length > 0 ? (
                     <div
                         className="rounded-xl border border-destructive/30 bg-destructive/5 p-4"
                         role="alert">
@@ -149,14 +153,17 @@ export function RunProgress({
                             Some sources could not be retrieved
                         </h3>
                         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                            {run.lifecycleState === "extracting_evidence" ||
-                            run.lifecycleState === "evidence_ready"
-                                ? "Some research sources were unavailable. Inspect the approved set in Sources and consider any evidence gaps during review."
-                                : canAddManualSource
-                                  ? "Independent web discovery is unavailable. Filing sources remain available, and you can add a public source manually."
-                                  : run.lifecycleState === "corpus_approved"
-                                    ? "Independent web discovery was unavailable. Filing sources remain available in this approved source set."
-                                    : "Independent web discovery is unavailable. Filing sources remain available for the source review checkpoint."}
+                            {run.sourcesProtocol
+                                ? "Some public documents could not be retrieved. Sources shows which documents were read and which remain unavailable."
+                                : run.lifecycleState ===
+                                        "extracting_evidence" ||
+                                    run.lifecycleState === "evidence_ready"
+                                  ? "Some research sources were unavailable. Inspect the approved set in Sources and consider any evidence gaps during review."
+                                  : canAddManualSource
+                                    ? "Independent web discovery is unavailable. Filing sources remain available, and you can add a public source manually."
+                                    : run.lifecycleState === "corpus_approved"
+                                      ? "Independent web discovery was unavailable. Filing sources remain available in this approved source set."
+                                      : "Independent web discovery is unavailable. Filing sources remain available for the source review checkpoint."}
                         </p>
                     </div>
                 ) : null}

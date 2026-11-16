@@ -116,6 +116,24 @@ export async function requireRunAuthority(
     return { run, visitor };
 }
 
+/** Settling retained Sources material runs no paid work: a run paused at its time limit settles without claiming the execution slot. */
+export async function requireSettlementAuthority(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+    expectedGeneration: number,
+) {
+    const authority = await requireDossierAuthority(ctx, runId);
+    if (
+        authority.run.executionStatus === "paused" &&
+        authority.run.pauseReason === "sources_time_limit"
+    ) {
+        if (authority.run.executionGeneration !== expectedGeneration)
+            throw executionError("stale_execution");
+        return authority;
+    }
+    return requireRunAuthority(ctx, runId, expectedGeneration);
+}
+
 async function requireMissionAccess(
     ctx: QueryCtx,
     missionId: Id<"agentMissions">,

@@ -1,6 +1,4 @@
 import type { api } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
-import { isDocumentaryResearchPhase } from "@convex/domain/transitions";
 import type { FunctionReturnType } from "convex/server";
 import type { ConversationWorkItem } from "@/components/chat/conversation-activity";
 import type { ConversationTurnSnapshot } from "@/components/chat/conversation-turn";
@@ -160,85 +158,6 @@ export function researchStartRefusalCopy(
     if (code === "execution_slot_unavailable")
         return "Another of your analyses is still running. Start this one when it finishes. Your research program is saved.";
     return "Research cannot start right now. Review the latest program, then try again. Your research program is saved.";
-}
-
-/** Sources retains its own completed work when later analytical work starts or fails. */
-export function sourceMissionState(
-    run: Pick<
-        Doc<"researchRuns">,
-        | "lifecycleState"
-        | "executionStatus"
-        | "pauseReason"
-        | "completionOutcome"
-    >,
-    preparation: Pick<
-        NonNullable<
-            FunctionReturnType<typeof api.workbench.snapshot>["preparation"]
-        >,
-        "status" | "missionStatus"
-    > | null,
-): ConversationWorkItem["state"] {
-    if (preparation?.missionStatus === "completed") return "completed";
-    if (
-        preparation?.missionStatus &&
-        ["blocked", "failed", "cancelled"].includes(preparation.missionStatus)
-    )
-        return "interrupted";
-    if (run.completionOutcome === "insufficient_public_evidence")
-        return "blocked";
-    if (run.pauseReason === "execution_interrupted") return "interrupted";
-    if (run.lifecycleState === "sources_prepared") {
-        if (!preparation || preparation.status === "started") return "waiting";
-        return preparation.status === "complete" ? "completed" : "interrupted";
-    }
-    if (!isDocumentaryResearchPhase(run.lifecycleState)) return "completed";
-    if (run.executionStatus === "failed" || run.executionStatus === "cancelled")
-        return "interrupted";
-    if (
-        run.lifecycleState === "awaiting_source_review" &&
-        preparation?.status !== "started"
-    )
-        return preparation?.status === "partial" ||
-            preparation?.status === "blocked"
-            ? "interrupted"
-            : "completed";
-    if (run.pauseReason === "analyst") return "paused";
-    if (run.executionStatus === "running") return "running";
-    return "waiting";
-}
-
-/** Keeps mission execution, retained material and the available next capability distinct in every Sources heading. */
-export function sourceMissionPresentation(
-    run: Parameters<typeof sourceMissionState>[0],
-    preparation: Parameters<typeof sourceMissionState>[1],
-) {
-    const state = sourceMissionState(run, preparation);
-    const limited =
-        state === "completed" &&
-        (preparation?.status === "partial" ||
-            preparation?.status === "blocked");
-    const title =
-        run.completionOutcome === "insufficient_public_evidence"
-            ? "Public evidence is insufficient"
-            : state === "completed"
-              ? limited
-                  ? "Documentary preparation completed with limits"
-                  : "Documentary material ready"
-              : state === "paused"
-                ? "Documentary preparation paused"
-                : state === "interrupted"
-                  ? "Documentary preparation interrupted"
-                  : state === "waiting" || state === "blocked"
-                    ? "Documentary preparation needs review"
-                    : "Collecting the documentary material";
-    const detail = limited
-        ? "Sources finished its mission. Retained material has unresolved gaps or unfinished work. Investigation is not available yet."
-        : state === "interrupted"
-          ? "Sources stopped before completing its mission. Retained material and unfinished work remain available. Investigation is not available yet."
-          : state === "completed"
-            ? "Inspect the retained material before continuing. Investigation is not available yet."
-            : "Inspect the retained material and preparation limits before continuing.";
-    return { state, title, detail };
 }
 
 /** A consistency estimate is scoped to recorded facts; it never becomes a general truth score. */

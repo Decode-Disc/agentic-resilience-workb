@@ -631,6 +631,8 @@ export default defineSchema({
     ]),
     sourceSelectionProposalRebuilds: defineTable({
         resourcePolicy: v.optional(v.string()),
+        /** The analyst chose to use prepared material after a Sources time limit. */
+        settlementRequestedAt: v.optional(v.number()),
         sourcesMission: v.optional(sourcesPreparationValidator),
         modelRevisionId: v.optional(v.id("modelRevisions")),
         executionPlanVersion: v.optional(

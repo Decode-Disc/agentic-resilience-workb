@@ -1,6 +1,9 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
-import { requireRunAuthority } from "@convex/execution/authority";
+import {
+    requireRunAuthority,
+    requireSettlementAuthority,
+} from "@convex/execution/authority";
 import { executionError } from "@convex/execution/errors";
 import { operationHistoryReference } from "@convex/execution/journal";
 import {
@@ -13,7 +16,7 @@ import {
     SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
     SOURCES_WORK_ENTRY_CAPACITY,
 } from "@convex/resourcePolicy";
-import { getDocumentSize, type Infer } from "convex/values";
+import { getDocumentSize, type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { readResearchContext } from "./researchContext";
 import { MAX_RESEARCH_PLAN_QUESTIONS } from "./researchPlan";
@@ -21,6 +24,7 @@ import { sha256Hex, stableStringify } from "./sourcePassages";
 import {
     assertPreparationExecutionFence,
     assertPreparationObservationFence,
+    assertPreparationSettlementFence,
     preparationBudgetBlock,
     readPreparationBudget,
     readPreparationLimits,
@@ -40,6 +44,7 @@ import {
     admittedDocumentaryReading,
     documentaryContributionEvidenceAvailable,
 } from "./sourceUsage";
+import { isDocumentaryResearchPhase } from "./transitions";
 
 /** A missing or malformed envelope disables this protocol; historical defaults are not activation consent. */
 export function sourcesEnvelope() {
@@ -74,17 +79,23 @@ export function activatedSourcesEnvelope() {
     }
 }
 
+/** Execution admits paid work before the deadline; observation retains results during a pause; settlement hands off existing material at any time. */
 export async function requireSourcesPreparation(
     ctx: Pick<QueryCtx, "db">,
     preparationId: Id<"sourceSelectionProposalRebuilds">,
-    observation = false,
+    mode: "execution" | "observation" | "settlement" = "execution",
 ) {
-    const { preparation, run, revision } = observation
-        ? await assertPreparationObservationFence(ctx.db, { preparationId })
-        : await assertPreparationExecutionFence(ctx.db, {
-              preparationId,
-              now: Date.now(),
-          });
+    const { preparation, run, revision } =
+        mode === "observation"
+            ? await assertPreparationObservationFence(ctx.db, { preparationId })
+            : mode === "settlement"
+              ? await assertPreparationSettlementFence(ctx.db, {
+                    preparationId,
+                })
+              : await assertPreparationExecutionFence(ctx.db, {
+                    preparationId,
+                    now: Date.now(),
+                });
     if (!preparation.sourcesMission || run.sourcesProtocol !== SOURCES_PROTOCOL)
         throw executionError("sources_scope_invalid");
     return { preparation, run, revision, data: preparation.sourcesMission };
@@ -137,6 +148,106 @@ export function sourcesResourceStatus(data: SourcesPreparation) {
         },
         work: capacity("work", data.work.length, SOURCES_WORK_ENTRY_CAPACITY),
     };
+}
+
+export const sourcesPhaseValidator = v.union(
+    v.literal("collecting"),
+    v.literal("waiting"),
+    v.literal("paused"),
+    v.literal("time_limit"),
+    v.literal("completed"),
+    v.literal("completed_with_limits"),
+    v.literal("interrupted"),
+    v.literal("failed"),
+    v.literal("insufficient_evidence"),
+);
+export type SourcesPhase = Infer<typeof sourcesPhaseValidator>;
+
+/** The single reading of Sources progress for the workspace and Workbench. A settled preparation keeps its outcome when later work starts or fails; a limit never reads as interruption once material is handed off. */
+export function sourcesPreparationPhase(
+    run: Pick<
+        Doc<"researchRuns">,
+        | "lifecycleState"
+        | "executionStatus"
+        | "pauseReason"
+        | "completionOutcome"
+    >,
+    preparation: Pick<Doc<"sourceSelectionProposalRebuilds">, "status"> | null,
+    mission: Pick<Doc<"agentMissions">, "status" | "blockCode"> | null,
+): SourcesPhase {
+    if (run.completionOutcome === "insufficient_public_evidence")
+        return "insufficient_evidence";
+    if (run.lifecycleState === "framing") return "waiting";
+    const settled =
+        preparation &&
+        preparation.status !== "started" &&
+        (run.lifecycleState === "sources_prepared" ||
+            mission?.status === "completed");
+    if (settled)
+        return preparation.status === "complete"
+            ? "completed"
+            : "completed_with_limits";
+    if (mission?.status === "completed") return "completed";
+    // A later analytical stage, including its failure, does not rewrite documentary preparation.
+    if (
+        !isDocumentaryResearchPhase(run.lifecycleState) &&
+        run.lifecycleState !== "sources_prepared"
+    )
+        return "completed";
+    if (run.pauseReason === "sources_time_limit") return "time_limit";
+    if (run.executionStatus === "failed") return "failed";
+    if (run.lifecycleState === "sources_prepared") return "waiting";
+    if (
+        run.executionStatus === "cancelled" ||
+        run.pauseReason === "execution_interrupted"
+    )
+        return "interrupted";
+    if (
+        mission &&
+        ["blocked", "failed", "cancelled"].includes(mission.status) &&
+        mission.blockCode !== "execution_time_limit"
+    )
+        return "interrupted";
+    if (
+        run.lifecycleState === "awaiting_source_review" &&
+        preparation?.status !== "started"
+    )
+        return preparation?.status === "partial" ||
+            preparation?.status === "blocked"
+            ? "completed_with_limits"
+            : "completed";
+    if (run.pauseReason === "analyst") return "paused";
+    if (run.executionStatus === "running") return "collecting";
+    return "waiting";
+}
+
+/** A time-limited preparation is worth another window only while its envelope, registered work and model budget still admit work and no settlement was requested. */
+export async function sourcesContinuationAvailable(
+    ctx: Pick<QueryCtx, "db">,
+    run: Doc<"researchRuns">,
+    preparation: Doc<"sourceSelectionProposalRebuilds">,
+) {
+    const data = preparation.sourcesMission;
+    if (
+        !data ||
+        data.result ||
+        preparation.status !== "started" ||
+        preparation.settlementRequestedAt !== undefined ||
+        run.sourcePreparationId !== preparation._id
+    )
+        return false;
+    const status = sourcesResourceStatus(data);
+    if (
+        status.work.blockCode ||
+        [status.searches, status.acquisitions, status.controls].every(
+            (resource) => resource.blockCode,
+        )
+    )
+        return false;
+    return !preparationBudgetBlock(
+        await readPreparationBudget(ctx.db, run, preparation),
+        readPreparationLimits(preparation),
+    );
 }
 
 /** One need for common context and one per framed question; Start checks the same list against the envelope. */
@@ -1036,18 +1147,24 @@ export async function completeSources(
     sharedReads?: SourceReviewReads,
     assessmentAuthor?: Infer<typeof documentaryAssessmentAuthorValidator>,
 ) {
+    const settlement = assessmentAuthor?.type === "system";
     const { preparation, run, data } = await requireSourcesPreparation(
         ctx,
         preparationId,
+        settlement ? "settlement" : "execution",
     );
-    await requireRunAuthority(ctx, run._id, run.executionGeneration);
-    const blocked = preparationBudgetBlock(
-        await readPreparationBudget(ctx.db, run, preparation),
-        readPreparationLimits(preparation),
-    );
-    if (blocked) throw executionError(blocked);
-    if ((run.executionHarnessDeadlineAt ?? Infinity) <= Date.now())
-        throw executionError("execution_deadline");
+    if (settlement)
+        await requireSettlementAuthority(ctx, run._id, run.executionGeneration);
+    else {
+        await requireRunAuthority(ctx, run._id, run.executionGeneration);
+        const blocked = preparationBudgetBlock(
+            await readPreparationBudget(ctx.db, run, preparation),
+            readPreparationLimits(preparation),
+        );
+        if (blocked) throw executionError(blocked);
+        if ((run.executionHarnessDeadlineAt ?? Infinity) <= Date.now())
+            throw executionError("execution_deadline");
+    }
     const accounting = sourcesCompletionAccounting(data, response);
     const coveredNeeds = new Map<
         string,

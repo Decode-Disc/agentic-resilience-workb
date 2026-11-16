@@ -1539,6 +1539,11 @@ export function dossierStatus(
         run.pauseReason === "execution_interrupted"
     )
         return { label: "Interrupted", tone: "dashed" };
+    if (
+        run.executionStatus === "paused" &&
+        run.pauseReason === "sources_time_limit"
+    )
+        return { label: "Decision needed", tone: "review" };
     if (run.executionStatus === "paused")
         return run.pauseReason === "analyst"
             ? { label: "Paused", tone: "ink" }

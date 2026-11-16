@@ -11,6 +11,7 @@ import {
     SourcesReaderScreen,
     type SourcesScreenFrame,
 } from "@/components/workspace/sources/sources-screens";
+import { SourcesTimeLimitDecision } from "@/components/workspace/sources/sources-time-limit-decision";
 import {
     documentaryContributionTerms,
     filterSourcesRows,
@@ -228,6 +229,16 @@ function SourcesContent({
             frame={frame}
             view={sourcesPreparationView(overview, run, rows)}
             onInspectSources={() => onSearchChange({ sourcesView: "matrix" })}
+            actions={
+                run.sourcesPhase === "time_limit" ? (
+                    <SourcesTimeLimitDecision
+                        runId={runId}
+                        expectedGeneration={run.executionGeneration}
+                        continueBlock={run.sourcesContinueBlock}
+                        size="lg"
+                    />
+                ) : undefined
+            }
         />
     );
 }

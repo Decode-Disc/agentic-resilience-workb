@@ -32,6 +32,7 @@ import {
     readEngagedSourcesWork,
     requireSourcesPreparation,
     sourcesCompletionAccounting,
+    sourcesContinuationAvailable,
     sourcesMissionKey,
     sourcesReadingReferences,
     sourcesResourceStatus,
@@ -298,6 +299,19 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
             obligations: ["account_for_documentary_needs"],
         };
     },
+    async continuationAfterDeadline(ctx, mission) {
+        if (!("scope" in mission) || mission.scope.kind !== "sources_v1")
+            return false;
+        const [run, preparation] = await Promise.all([
+            ctx.db.get(mission.runId),
+            ctx.db.get(mission.scope.preparationId),
+        ]);
+        return (
+            !!run &&
+            !!preparation &&
+            sourcesContinuationAvailable(ctx, run, preparation)
+        );
+    },
     async requireAuthority(ctx, mission) {
         if (!("scope" in mission) || mission.scope.kind !== "sources_v1")
             throw executionError("sources_scope_invalid");
@@ -306,7 +320,7 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
         const state = await requireSourcesPreparation(
             ctx,
             mission.scope.preparationId,
-            true,
+            "observation",
         );
         if (state.run._id !== mission.runId)
             throw executionError("sources_scope_invalid");

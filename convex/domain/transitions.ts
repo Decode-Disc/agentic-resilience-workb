@@ -9,14 +9,15 @@ import type {
 export type ResearchRunLifecycle = Infer<typeof researchRunLifecycleValidator>;
 export type ExecutionStatus = Infer<typeof executionStatusValidator>;
 
-/** Both analyst suspension and a recoverable research interruption use explicit Resume. */
+/** Analyst suspension, a recoverable research interruption and a Sources time limit with remaining capacity use explicit Resume. */
 export function isResumableResearchPause(
     run: Pick<Doc<"researchRuns">, "executionStatus" | "pauseReason">,
 ) {
     return (
         run.executionStatus === "paused" &&
         (run.pauseReason === "analyst" ||
-            run.pauseReason === "execution_interrupted")
+            run.pauseReason === "execution_interrupted" ||
+            run.pauseReason === "sources_time_limit")
     );
 }
 

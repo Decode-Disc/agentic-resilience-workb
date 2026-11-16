@@ -78,6 +78,8 @@ const readySnapshot = {
     },
     researchStart: { block: null, questionCapacity: 3 },
     researchControlAvailable: true,
+    sourcesPhase: "collecting",
+    sourcesContinueBlock: null,
     availableCommands: ["/pause", "/resume"],
     activeWork: null,
     preparation: null,
@@ -241,7 +243,7 @@ test("the context identifies a launched research program as accepted", () => {
 test.each([
     "partial",
     "blocked",
-])("the connected Sources mission does not claim completion for %s material", (status) => {
+])("settled %s material reads as completed with limits, never as fully prepared", (status) => {
     convexReactHarness.query(api.workbench.snapshot).returns({
         ...readySnapshot,
         run: {
@@ -251,6 +253,7 @@ test.each([
             executionStatus: "idle",
         },
         preparation: { status },
+        sourcesPhase: "completed_with_limits",
     });
     render(<ConnectedStartWorkspace runId={runId} />);
     const mission = document.querySelector(
@@ -259,8 +262,11 @@ test.each([
     expect(mission).not.toBeNull();
     if (!(mission instanceof HTMLElement))
         throw new Error("Missing Sources mission");
-    expect(within(mission).queryByText(/Completed/)).toBeNull();
-    expect(mission.getAttribute("data-state")).toBe("interrupted");
+    expect(mission.getAttribute("data-state")).toBe("completed");
+    expect(
+        screen.getByText("Documentary preparation completed with limits"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Documentary material ready")).toBeNull();
     expect(mission.textContent).not.toMatch(
         /sources_prepared|operation_result_capacity/,
     );
@@ -611,6 +617,8 @@ test("research pause has a distinct control from stopping the conversation", asy
             questionCapacity: null,
         },
         researchControlAvailable: true,
+        sourcesPhase: "collecting",
+        sourcesContinueBlock: null,
         availableCommands: ["/pause"],
         activeWork: null,
         preparation: null,
@@ -670,6 +678,7 @@ test("insufficient evidence does not announce prepared sources or future discove
             executionStatus: "completed",
             completionOutcome: "insufficient_public_evidence",
         },
+        sourcesPhase: "insufficient_evidence",
     });
     render(<ConnectedStartWorkspace runId={runId} />);
     expect(screen.getByText("Public evidence is insufficient")).toBeTruthy();
@@ -1148,6 +1157,7 @@ test("offers a return to offscreen active Sources work and removes it on complet
         convexReactHarness.query(api.workbench.snapshot).returns({
             ...snapshot,
             preparation: { missionStatus: "completed", status: "partial" },
+            sourcesPhase: "completed_with_limits",
         });
         view.rerender(<ConnectedStartWorkspace runId={runId} />);
         expect(
@@ -1158,4 +1168,98 @@ test("offers a return to offscreen active Sources work and removes it on complet
     } finally {
         vi.unstubAllGlobals();
     }
+});
+
+const timeLimitSnapshot = (continueBlock: string | null = null) => ({
+    ...readySnapshot,
+    run: {
+        ...readySnapshot.run,
+        fixedFramingRevisionId: "framing-1",
+        lifecycleState: "discovering_sources",
+        executionStatus: "paused",
+        pauseReason: "sources_time_limit",
+        executionGeneration: 5,
+    },
+    sourcesPhase: "time_limit",
+    sourcesContinueBlock: continueBlock,
+});
+const timeLimitRaw =
+    /sources_time_limit|time_limit|execution_slot_unavailable|paid_work_disabled|stale_execution/;
+
+test("a Sources time limit offers continuing or using what is prepared, with the analyst deciding", async () => {
+    const settle = vi.fn().mockResolvedValue(null);
+    convexReactHarness.mutation(api.sourcesMission.settle).uses(settle);
+    convexReactHarness
+        .query(api.workbench.snapshot)
+        .returns(timeLimitSnapshot());
+    render(<ConnectedStartWorkspace runId={runId} />);
+    expect(screen.getByText("Preparation reached its time limit")).toBeTruthy();
+    expect(
+        screen.queryByRole("button", { name: "Resume research" }),
+    ).toBeNull();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Continue preparation" }),
+    );
+    await waitFor(() =>
+        expect(resumeResearch).toHaveBeenCalledWith({
+            runId,
+            expectedGeneration: 5,
+        }),
+    );
+    fireEvent.click(
+        screen.getByRole("button", { name: "Use what's prepared" }),
+    );
+    await waitFor(() =>
+        expect(settle).toHaveBeenCalledWith({ runId, expectedGeneration: 5 }),
+    );
+    expect(document.body.textContent).not.toMatch(timeLimitRaw);
+});
+
+test("Continue preparation is disabled with its reason before any attempt, while settling stays available", () => {
+    convexReactHarness
+        .mutation(api.sourcesMission.settle)
+        .uses(vi.fn().mockResolvedValue(null));
+    convexReactHarness
+        .query(api.workbench.snapshot)
+        .returns(timeLimitSnapshot("execution_slot_unavailable"));
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const proceed = screen.getByRole("button", {
+        name: "Continue preparation",
+    });
+    expect(proceed).toHaveProperty("disabled", true);
+    expect(proceed.getAttribute("aria-describedby")).toBeTruthy();
+    expect(
+        screen.getByText(
+            "Another of your analyses is running. Continue when it finishes, or use what's prepared now.",
+        ),
+    ).toBeTruthy();
+    expect(
+        screen.getByRole("button", { name: "Use what's prepared" }),
+    ).toHaveProperty("disabled", false);
+    expect(document.body.textContent).not.toMatch(timeLimitRaw);
+});
+
+test("a decision already taken elsewhere is explained without raw codes", async () => {
+    convexReactHarness
+        .mutation(api.sourcesMission.settle)
+        .uses(
+            vi
+                .fn()
+                .mockRejectedValue(
+                    new ConvexError({ code: "stale_execution" }),
+                ),
+        );
+    convexReactHarness
+        .query(api.workbench.snapshot)
+        .returns(timeLimitSnapshot());
+    render(<ConnectedStartWorkspace runId={runId} />);
+    fireEvent.click(
+        screen.getByRole("button", { name: "Use what's prepared" }),
+    );
+    expect(
+        await screen.findByText(
+            "This was already decided. Showing the current state.",
+        ),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(timeLimitRaw);
 });
