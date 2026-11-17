@@ -115,17 +115,21 @@ export function InvitationAccessProvider({
     return (
         <InvitationAccessContext.Provider value={contextValue}>
             {children}
-            <InvitationAccessDrawer
-                open={isOpen}
-                onOpenChange={(nextOpen) => {
-                    if (!nextOpen) {
-                        closeInvitationDrawer();
-                    } else {
-                        setIsOpen(true);
+            {isOpen ? (
+                <InvitationAccessDrawer
+                    open={isOpen}
+                    onOpenChange={(nextOpen) => {
+                        if (!nextOpen) {
+                            closeInvitationDrawer();
+                        } else {
+                            setIsOpen(true);
+                        }
+                    }}
+                    onAdmitted={(admission) =>
+                        resolveInvitationDrawer(admission)
                     }
-                }}
-                onAdmitted={(admission) => resolveInvitationDrawer(admission)}
-            />
+                />
+            ) : null}
         </InvitationAccessContext.Provider>
     );
 }

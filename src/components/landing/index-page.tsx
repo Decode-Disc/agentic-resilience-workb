@@ -9,7 +9,6 @@ import {
     UserCheck01Icon,
 } from "@hugeicons/core-free-icons";
 import { Link } from "@tanstack/react-router";
-import { motion } from "motion/react";
 import Icon from "@/components/icon";
 import { AppLogo } from "@/components/logo-icon";
 import {
@@ -29,7 +28,6 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { GridCard } from "@/components/ui/grid-card";
 import { LiquidMetalBorderButton } from "@/components/ui/liquid-metal-border-button";
-import MotionAnimatePresence from "@/components/ui/motion-animate-presence";
 import {
     Sheet,
     SheetContent,
@@ -43,8 +41,6 @@ import { PRODUCT_NAME, PRODUCT_SHORT_NAME } from "@/config/product";
 import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 import { EvidenceMatrixIllustration } from "./evidence-matrix-illustration";
-
-const easeOrganic = [0.32, 0.72, 0, 1] as const;
 
 const navigationItems = [
     {
@@ -122,7 +118,7 @@ function WorkbenchLink({ mobile = false }: { mobile?: boolean }) {
     return (
         <Link
             to="/workspace/start"
-            className={cn(buttonVariants({ size: "lg" }), mobile && "w-full")}>
+            className={cn(buttonVariants({ size: "default" }), mobile && "w-full")}>
             Open workbench
         </Link>
     );
@@ -273,15 +269,8 @@ function LandingHeader() {
 
 function CapabilityGrid() {
     return (
-        <motion.ul
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-                duration: 0.55,
-                delay: 0.5,
-                ease: easeOrganic,
-            }}
-            className="grid w-full list-none gap-px overflow-hidden rounded-2xl border border-border/70 bg-border/70 shadow-soft motion-reduce:!transform-none motion-reduce:!opacity-100 sm:grid-cols-2 xl:grid-cols-3"
+        <ul
+            className="grid w-full list-none gap-px overflow-hidden rounded-2xl border border-border/70 bg-border/70 shadow-soft sm:grid-cols-2 xl:grid-cols-3"
             aria-label="Research capabilities">
             {capabilities.map((capability) => (
                 <GridCard key={capability.title} tone="primary">
@@ -300,7 +289,7 @@ function CapabilityGrid() {
                     </li>
                 </GridCard>
             ))}
-        </motion.ul>
+        </ul>
     );
 }
 
@@ -311,9 +300,7 @@ function CapabilityGrid() {
 export function IndexPage() {
     return (
         <div className="relative isolate min-h-screen overflow-x-clip bg-(image:--landing-gradient)">
-            {/* Purple spotlight */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_620px_at_50%_200px,rgba(103,37,235,0.35),transparent_70%)]" />
-            {/* Soft grid with top fade */}
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#94a3b81f_1px,transparent_1px),linear-gradient(to_bottom,#94a3b81f_1px,transparent_1px)] bg-[size:22px_22px] [mask-image:radial-gradient(ellipse_85%_55%_at_50%_15%,#000_75%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_85%_55%_at_50%_15%,#000_75%,transparent_100%)] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]" />
 
             <LandingHeader />
@@ -327,14 +314,8 @@ export function IndexPage() {
             </div>
 
             <main className="relative z-10 mx-auto flex w-full min-h-0 max-w-4xl flex-col items-center px-4 pb-10 pt-20 md:pt-30">
-                <motion.section
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                        duration: 0.55,
-                        ease: easeOrganic,
-                    }}
-                    className="flex max-w-[40rem] xl:max-w-[50rem] flex-col gap-4 items-center text-center motion-reduce:transform-none! motion-reduce:opacity-100!"
+                <section
+                    className="flex max-w-[40rem] xl:max-w-[50rem] flex-col gap-4 items-center text-center"
                     aria-labelledby="index-title">
                     <span className="section-chip">
                         <span aria-hidden="true">{"//"}</span>
@@ -367,36 +348,19 @@ export function IndexPage() {
                         Independent research prototype · US-listed technology
                         companies
                     </p>
-                </motion.section>
+                </section>
 
-                <motion.section
-                    initial={{ opacity: 0, y: 18 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                        duration: 0.6,
-                        delay: 0.15,
-                        ease: easeOrganic,
-                    }}
-                    className="mt-8 w-[min(72rem,calc(100vw-2rem))] motion-reduce:!transform-none motion-reduce:!opacity-100"
+                <section
+                    className="mt-8 w-[min(72rem,calc(100vw-2rem))]"
                     aria-label="Evidence matrix preview">
-                    <MotionAnimatePresence
-                        preset="zoom"
-                        delay={0.2}
-                        className="motion-reduce:!transform-none motion-reduce:!opacity-100">
-                        <EvidenceMatrixIllustration />
-                    </MotionAnimatePresence>
-                </motion.section>
+                    <EvidenceMatrixIllustration />
+                </section>
 
                 <section
                     id="capabilities"
                     className="mt-10 w-full scroll-mt-24"
                     aria-label="How it holds up">
-                    <MotionAnimatePresence
-                        infinite
-                        preset="slide-up"
-                        className="motion-reduce:!transform-none motion-reduce:!opacity-100">
-                        <CapabilityGrid />
-                    </MotionAnimatePresence>
+                    <CapabilityGrid />
                 </section>
 
                 <footer className="mt-14 w-full border-t border-border pt-6 pb-2 text-center">
