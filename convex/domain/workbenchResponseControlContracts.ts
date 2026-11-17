@@ -1,5 +1,7 @@
+import type { Doc } from "@convex/_generated/dataModel";
 import { RESPONSE_CONTROL_MAX_INPUT_BYTES } from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
+import { researchStatus } from "./researchStateContracts";
 
 /** One versioned policy owns configuration, score boundaries and correction limits. */
 export const responseControlConfiguration = v.object({
@@ -155,4 +157,57 @@ export function coherenceRequest(
 
 export function responseReviewOperationKey(requestId: string) {
     return `response-coherence:${requestId}:attempt:1`;
+}
+
+/** Checks explicit status clauses, including list items and unstarted-research wording; historical quotations stay intact. */
+export function conflictsWithResearchStatus(
+    text: string,
+    run: Pick<Doc<"researchRuns">, "lifecycleState" | "executionStatus">,
+): boolean {
+    const expected = researchStatus(run);
+    let fenced = false;
+    for (const line of text.split("\n")) {
+        if (/^\s*```/.test(line)) {
+            fenced = !fenced;
+            continue;
+        }
+        if (fenced || /^\s*>/.test(line)) continue;
+        const paragraph = line
+            .replaceAll("**", "")
+            .replace(
+                /^\s*(?:(?:[-+*]|\d+[.)])\s+)?(?:(?:current(?: research)? status|status):\s*)?/i,
+                "",
+            );
+        for (const statement of paragraph.split(/(?<=[.!?;])\s+/)) {
+            const clause = statement.replace(
+                /^(?:the\s+)?research(?:\s+program)?\b/i,
+                "Research",
+            );
+            if (
+                /^(?:no research(?: program)? has been|research (?:has not|hasn't)(?: been)?) (?:started|initiated)\b/i.test(
+                    clause,
+                ) &&
+                expected !== "not_started"
+            )
+                return true;
+            const claim =
+                /^(research (?:has not started|is running|is paused|is complete|has been cancelled))\b/i.exec(
+                    clause,
+                );
+            const statuses = {
+                "research has not started": "not_started",
+                "research is running": "running",
+                "research is paused": "paused",
+                "research is complete": "completed",
+                "research has been cancelled": "cancelled",
+            } as const;
+            if (
+                claim?.[1] &&
+                statuses[claim[1].toLowerCase() as keyof typeof statuses] !==
+                    expected
+            )
+                return true;
+        }
+    }
+    return false;
 }

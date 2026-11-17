@@ -7,10 +7,12 @@ import {
     query,
 } from "@convex/_generated/server";
 import { mergeRunCompanyMetadata } from "@convex/domain/companyMetadata";
+import { researchQuestionCapacity } from "@convex/domain/framingEditAuthority";
 import {
-    researchQuestionCapacity,
-    researchStartBlock,
-} from "@convex/domain/framingEditAuthority";
+    formatResearchSummary,
+    readResearchState,
+} from "@convex/domain/researchState";
+import { researchStateValidator } from "@convex/domain/researchStateContracts";
 import { sourceCaptureState } from "@convex/domain/sourceCaptureState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
@@ -62,8 +64,6 @@ import {
     pauseResearch,
     readResearchControlReadiness,
     researchControlConfirmation,
-    researchInterruptionDetail,
-    researchStateSummary,
     resumeResearch,
 } from "@convex/execution/researchControl";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
@@ -82,7 +82,6 @@ import {
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import { startReviewPreparation } from "@convex/sourcePreparation";
-import { sourcesSettlementBlock } from "@convex/sourcesMission";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
     paginationOptsValidator,
@@ -362,7 +361,7 @@ export const command = mutation({
                     : researchControlConfirmation(
                           action,
                           outcome !== "refused",
-                          current,
+                          await readResearchState(ctx, current),
                       );
         const exchange = await recordControlExchange(ctx, conversation, {
             nativeInputSequence,
@@ -561,6 +560,7 @@ export const snapshot = query({
     args: { runId: v.id("researchRuns") },
     returns: v.object({
         run: schema.doc("researchRuns"),
+        research: researchStateValidator,
         researchControlAvailable: v.boolean(),
         researchResumeAvailable: v.boolean(),
         sourcesSettlementAvailable: v.boolean(),
@@ -616,7 +616,7 @@ export const snapshot = query({
         ),
     }),
     handler: async (ctx, { runId }) => {
-        const { run, visitor } = await requireWorkspaceRun(ctx, runId);
+        const { run } = await requireWorkspaceRun(ctx, runId);
         const framing = run.currentFramingRevisionId
             ? await ctx.db.get(run.currentFramingRevisionId)
             : null;
@@ -681,11 +681,10 @@ export const snapshot = query({
         const sourcesMission = preparation
             ? await readSourcesMission(ctx, run)
             : null;
-        const sourcesPhase = sourcesPreparationPhase(
-            run,
-            preparation,
-            sourcesMission,
-        );
+        const research = await readResearchState(ctx, run);
+        const sourcesPhase =
+            research.sources?.phase ??
+            sourcesPreparationPhase(run, preparation, sourcesMission);
         const sourcesCompletion = sourcesMission
             ? await ctx.db
                   .query("agentExecutionEvents")
@@ -704,10 +703,10 @@ export const snapshot = query({
         );
         return {
             run,
-            researchControlAvailable: supportsResearchControl(run),
+            research,
+            researchControlAvailable: research.controlAvailable,
             researchResumeAvailable: resumeReadiness.block === null,
-            sourcesSettlementAvailable:
-                (await sourcesSettlementBlock(ctx, run)) === null,
+            sourcesSettlementAvailable: research.actions.usePrepared.applicable,
             sourcesPhase,
             sourcesDecisionRequestId: await readSourcesDecisionRequestId(
                 ctx,
@@ -729,7 +728,7 @@ export const snapshot = query({
             company: company ?? null,
             framing,
             researchStart: {
-                block: await researchStartBlock(ctx, run, framing, visitor),
+                block: research.actions.start.reason,
                 questionCapacity: await researchQuestionCapacity(ctx, run),
             },
             instructions,
@@ -739,15 +738,7 @@ export const snapshot = query({
                       missionId: sourcesMission._id,
                       interruptionDetail:
                           sourcesPhase === "interrupted"
-                              ? run.pauseReason === "execution_interrupted"
-                                  ? researchStateSummary(
-                                        run,
-                                        sourcesMission.blockCode,
-                                        resumeReadiness.block,
-                                    )
-                                  : researchInterruptionDetail(
-                                        sourcesMission.blockCode,
-                                    )
+                              ? formatResearchSummary(research)
                               : undefined,
                       startedAt: sourcesMission.createdAt,
                       ...(sourcesCompletion

@@ -16,11 +16,12 @@ import {
     SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
     SOURCES_WORK_ENTRY_CAPACITY,
 } from "@convex/resourcePolicy";
-import { getDocumentSize, type Infer, v } from "convex/values";
+import { getDocumentSize, type Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { agentName } from "./agentIdentities";
 import { readResearchContext } from "./researchContext";
 import { MAX_RESEARCH_PLAN_QUESTIONS } from "./researchPlan";
+import type { ResearchState } from "./researchStateContracts";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import {
     assertPreparationExecutionFence,
@@ -46,6 +47,7 @@ import {
     documentaryContributionEvidenceAvailable,
 } from "./sourceUsage";
 import { isDocumentaryResearchPhase } from "./transitions";
+import type { sourcesPhaseValidator } from "./validators";
 
 /** A missing or malformed envelope disables this protocol; historical defaults are not activation consent. */
 export function sourcesEnvelope() {
@@ -151,18 +153,7 @@ export function sourcesResourceStatus(data: SourcesPreparation) {
     };
 }
 
-export const sourcesPhaseValidator = v.union(
-    v.literal("collecting"),
-    v.literal("waiting"),
-    v.literal("paused"),
-    v.literal("time_limit"),
-    v.literal("completed"),
-    v.literal("completed_with_limits"),
-    v.literal("ended_without_material"),
-    v.literal("interrupted"),
-    v.literal("failed"),
-    v.literal("insufficient_evidence"),
-);
+export { sourcesPhaseValidator } from "./validators";
 export type SourcesPhase = Infer<typeof sourcesPhaseValidator>;
 
 export type SourcesSettlementCause =
@@ -198,7 +189,12 @@ export function sourcesPreparationPhase(
         | "pauseReason"
         | "completionOutcome"
     >,
-    preparation: Pick<Doc<"sourceSelectionProposalRebuilds">, "status"> | null,
+    preparation:
+        | (Pick<Doc<"sourceSelectionProposalRebuilds">, "status"> &
+              Partial<
+                  Pick<Doc<"sourceSelectionProposalRebuilds">, "sourcesMission">
+              >)
+        | null,
     mission: Pick<Doc<"agentMissions">, "status" | "blockCode"> | null,
 ): SourcesPhase {
     if (run.completionOutcome === "insufficient_public_evidence")
@@ -207,7 +203,8 @@ export function sourcesPreparationPhase(
     const settled =
         preparation &&
         preparation.status !== "started" &&
-        (run.lifecycleState === "sources_prepared" ||
+        (!!preparation.sourcesMission?.result ||
+            run.lifecycleState === "sources_prepared" ||
             mission?.status === "completed");
     if (settled)
         return preparation.status === "complete"
@@ -516,7 +513,7 @@ export async function readSourcesMission(
 /** Required conversational state stays bounded; exact source material remains available through saved-material reads. */
 export function summarizeSourcesPreparation(
     preparation: Doc<"sourceSelectionProposalRebuilds">,
-    missionStatus?: Doc<"agentMissions">["status"],
+    observation?: ResearchState["sources"],
 ) {
     const data = preparation.sourcesMission;
     if (!data) return null;
@@ -524,7 +521,7 @@ export function summarizeSourcesPreparation(
         value ? Array.from(value).slice(0, limit).join("") : null;
     return {
         preparationId: preparation._id,
-        ...(missionStatus ? { missionStatus } : {}),
+        executionStop: observation?.executionStop ?? null,
         needsRevision: data.needsRevision,
         phase: data.phase,
         detailsHash: sha256Hex(
@@ -568,6 +565,10 @@ export function summarizeSourcesPreparation(
                   documentCount: data.result.documents.length,
                   documents: data.result.documents.map((document) => ({
                       sourceId: document.sourceId,
+                      title:
+                          observation?.retainedDocuments.find(
+                              (entry) => entry.sourceId === document.sourceId,
+                          )?.title ?? null,
                       captureId: document.captureId,
                       contentHash: document.contentHash,
                       qualificationTaskId: document.qualificationTaskId,

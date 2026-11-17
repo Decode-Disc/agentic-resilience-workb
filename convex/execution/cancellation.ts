@@ -149,6 +149,15 @@ async function cancelMission(
     const requestsToRefuse = outstanding.slice(0, CANCELLATION_REQUEST_BATCH);
     const cancelling =
         mission.status !== "completed" && mission.status !== "cancelled";
+    if (mission.status === "blocked") {
+        // Cleanup replaces the mutable block; retain its factual cause before that transition.
+        await recordMissionEvent(ctx, mission, {
+            kind: "mission_stop_retained",
+            cause: "run_cancellation",
+            code: mission.blockCode,
+            invocationId: mission.lastInvocationId,
+        });
+    }
     if (cancelling || mission.workflowId) {
         await ctx.db.patch(mission._id, {
             ...(cancelling

@@ -1442,7 +1442,7 @@ test("native reopen and compaction preserve Sources assessment authorship and co
         ),
     );
     expect(state.domain.documentaryPreparation).toMatchObject({
-        missionStatus: "completed",
+        executionStop: null,
         allowance: {
             searches: {
                 used: 2,
@@ -2021,3 +2021,39 @@ test("a terminal legacy conversation settles before its current-state anchor is 
         await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toHaveLength(0);
 }, 30000);
+
+test("new research observations retain structured stop facts without changing historical observations", async () => {
+    const { seedResearchStateScenario } = await import(
+        "@/__tests__/setup/research-state"
+    );
+    const { recordResearchObservation } = await import(
+        "@convex/execution/researchControl"
+    );
+    const f = await seedResearchStateScenario({
+        outcome: "partial",
+        blockCode: "invalid_output",
+        historicalTimeLimitNote: true,
+        retainedDocumentCount: 1,
+        capturedDocumentCount: 1,
+    });
+    const before = await f.t.run((ctx) => ctx.db.get(f.observationId));
+    await f.t.run((ctx) =>
+        recordResearchObservation(ctx, f.runId, "state_inspected"),
+    );
+    const observed = (await observations(f.t, f.runId)).find(
+        (row) => row.value?.event === "state_inspected",
+    );
+    expect(observed).toMatchObject({
+        value: {
+            status: "idle",
+            sources: {
+                outcome: "partial",
+                executionStop: { blockCode: "invalid_output" },
+            },
+            summary: expect.stringContaining(
+                "model response could not be used",
+            ),
+        },
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(f.observationId))).toEqual(before);
+});

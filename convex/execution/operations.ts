@@ -6,6 +6,7 @@ import {
     internalQuery,
     type MutationCtx,
 } from "@convex/_generated/server";
+import { readResearchState } from "@convex/domain/researchState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
     EXECUTION_WINDOW_MS,
@@ -51,11 +52,11 @@ import {
     retainedOperationPin,
 } from "./missionData";
 import {
+    currentRunStateResultValidator,
     dispatchFailureValidator,
     historyReadReceiptValidator,
     historySourceFor,
     isCommonConsultation,
-    runStateResultValidator,
 } from "./operationContracts";
 import { validateOperationValue } from "./operationResults";
 import { schedulePiMission } from "./piControl";
@@ -585,7 +586,7 @@ export const readRunState = internalQuery({
         expectedGeneration: v.number(),
         missionId: v.optional(v.id("agentMissions")),
     },
-    returns: runStateResultValidator,
+    returns: currentRunStateResultValidator,
     handler: async (ctx, args) => {
         const { run } = args.missionId
             ? await requireMissionAuthority(
@@ -595,10 +596,16 @@ export const readRunState = internalQuery({
               )
             : await requireDossierAuthority(ctx, args.runId);
         if (run._id !== args.runId) throw executionError("not_authorized");
+        if (
+            !args.missionId &&
+            run.executionGeneration !== args.expectedGeneration
+        )
+            throw executionError("stale_execution");
         return {
             lifecycleState: run.lifecycleState,
             executionStatus: run.executionStatus,
             executionGeneration: run.executionGeneration,
+            research: await readResearchState(ctx, run),
         };
     },
 });

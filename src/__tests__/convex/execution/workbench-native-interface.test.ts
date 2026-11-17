@@ -218,9 +218,7 @@ test.each([
         paginationOpts: { numItems: 20, cursor: null },
     });
     const published = page.page.find((m) => m.role === "assistant")?.text;
-    expect(published).toBe(
-        "Research has not started. Review the research program and choose Start research when ready.",
-    );
+    expect(published).toBe("Research has not started.");
     await client.mutation(api.execution.conversations.submit, {
         runId,
         requestKey: "follow-up",

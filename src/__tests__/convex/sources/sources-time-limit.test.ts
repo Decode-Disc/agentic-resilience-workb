@@ -1,9 +1,12 @@
 import { api, internal } from "@convex/_generated/api";
 import { approvalActionCopy } from "@convex/domain/approvalCopy";
+import {
+    formatResearchSummary,
+    readResearchState,
+} from "@convex/domain/researchState";
 import { sourcesSettlementNote } from "@convex/domain/sources";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { executionFailureCode } from "@convex/execution/errors";
-import { researchStateSummary } from "@convex/execution/researchControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 import {
@@ -388,9 +391,11 @@ test("one Sources phase reaches the workspace and Workbench before and after set
     expect(paused.snapshot.sourcesPhase).toBe("time_limit");
     const run = await f.t.run((ctx) => ctx.db.get(f.runId));
     assert(run);
-    expect(researchStateSummary(run)).toContain(
-        "The Sources Agent reached its time limit.",
-    );
+    expect(
+        formatResearchSummary(
+            await f.t.run((ctx) => readResearchState(ctx, run)),
+        ),
+    ).toContain("The Sources Agent reached its time limit.");
     await f.t.run((ctx) =>
         ctx.db.insert("paidWorkControls", {
             key: "global",
@@ -984,10 +989,16 @@ test.each([
         runId: f.runId,
     });
     expect(snapshot.sourcesPhase).toBe("interrupted");
-    expect(snapshot.sourcesWork?.interruptionDetail).toBe(
+    expect(snapshot.sourcesWork?.interruptionDetail).toContain(
         code === "invalid_output"
-            ? "Preparation was interrupted because the agent's response could not be used. Retained material remains available."
-            : "Preparation was interrupted after repeated attempts made no progress. Retained material remains available.",
+            ? "response could not be used"
+            : "repeated attempts made no progress",
+    );
+    expect(snapshot.sourcesWork?.interruptionDetail).toContain(
+        "Retained work remains available",
+    );
+    expect(snapshot.sourcesWork?.interruptionDetail).toContain(
+        "Resume research to continue",
     );
     const facts = await f.t.run(async (ctx) => {
         const current = await ctx.db.get(f.runId);

@@ -6,7 +6,11 @@ import {
     mutation,
     type QueryCtx,
 } from "@convex/_generated/server";
-import { agentName } from "@convex/domain/agentIdentities";
+import {
+    formatResearchSummary,
+    readResearchState,
+} from "@convex/domain/researchState";
+import type { ResearchState } from "@convex/domain/researchStateContracts";
 import {
     readSourcesMission,
     sourcesContinuationAvailable,
@@ -37,16 +41,6 @@ import {
     generationInterruption,
     isRecoverableInterruption,
 } from "./missionData";
-
-/** Analyst-safe generation interruption detail, shared by observations, context and workspace projections. */
-export function researchInterruptionDetail(code: string | undefined) {
-    const kind = generationInterruption(code);
-    return kind === "invalid_response"
-        ? "Preparation was interrupted because the agent's response could not be used. Retained material remains available."
-        : kind === "repeated_failure"
-          ? "Preparation was interrupted after repeated attempts made no progress. Retained material remains available."
-          : undefined;
-}
 
 async function recordControl(
     ctx: MutationCtx,
@@ -83,30 +77,15 @@ export async function recordResearchObservation(
 ) {
     const current = await ctx.db.get(runId);
     if (!current) throw executionError("run_unavailable");
-    const mission =
-        current.sourcesProtocol === "sources_mission_v1"
-            ? await readSourcesMission(ctx, current)
-            : null;
-    const readiness = await readResearchControlReadiness(
-        ctx,
-        current,
-        "resume",
-    );
+    const state = await readResearchState(ctx, current);
     await recordContextObservation(ctx, runId, {
         key: `research:${event}:${current.executionGeneration}:${current.researchControlRevision ?? 0}:${current.nextEventSequence}:${current.lifecycleState}:${current.executionStatus}`,
         topic: "research",
         actor,
         value: {
             event,
-            phase: current.lifecycleState,
-            status: current.executionStatus,
-            pauseReason: current.pauseReason ?? null,
-            pauseRequested: current.researchPauseRequested ?? false,
-            summary: researchStateSummary(
-                current,
-                mission?.blockCode,
-                readiness.block,
-            ),
+            ...state,
+            summary: formatResearchSummary(state),
             framingRevisionId: current.fixedFramingRevisionId ?? null,
         },
     });
@@ -829,146 +808,39 @@ export async function notifyResearchControlWaits(
         });
 }
 
-/** Canonical wording for observed research state, independent of any requested action. */
-export function researchStateSummary(
-    run: Pick<
-        Doc<"researchRuns">,
-        | "lifecycleState"
-        | "executionStatus"
-        | "pauseReason"
-        | "researchPauseRequested"
-    >,
-    interruptionCode?: string,
-    resumeBlock?: string | null,
-): string {
-    if (run.lifecycleState === "framing") return "Research has not started.";
-    if (run.lifecycleState === "sources_prepared")
-        return "Sources preparation has ended. Inspect the retained material and its limits. Question-led Investigation is not available yet.";
-    if (run.executionStatus === "completed") return "Research is complete.";
-    if (run.executionStatus === "cancelled")
-        return "Research has been cancelled.";
-    if (run.executionStatus === "failed")
-        return "Research stopped because of an internal problem and cannot continue. Gathered sources remain visible in Sources. Start a new analysis to continue.";
-    if (
-        run.pauseReason === "source_review" ||
-        (run.lifecycleState === "awaiting_source_review" &&
-            run.executionStatus !== "running")
-    )
-        return "Research is waiting for source review. Review the proposed sources to continue.";
-    if (
-        run.pauseReason === "execution_interrupted" &&
-        resumeBlock === "sources_settlement_requested"
-    )
-        return "You chose to use what's prepared. Preparation is finishing with the retained material and its limits.";
-    if (run.pauseReason === "execution_interrupted" && resumeBlock != null)
-        return "Preparation is interrupted and cannot resume right now. Retained material remains available. Choose Use what's prepared to finish preparation with its limits.";
-    if (run.pauseReason === "execution_interrupted")
-        return (
-            researchInterruptionDetail(interruptionCode) ??
-            "Research was interrupted. Retained work remains available. Resume research to continue."
-        );
-    if (run.pauseReason === "sources_time_limit")
-        return `The ${agentName("sources")} reached its time limit. Material read so far remains inspectable. The decision card in the conversation offers to continue preparation or use what's prepared.`;
-    if (run.pauseReason && run.pauseReason !== "analyst")
-        return "Research is waiting for an analyst decision. Complete the pending review to continue.";
-    if (run.executionStatus === "paused") return "Research is paused.";
-    if (run.executionStatus === "running")
-        return run.researchPauseRequested
-            ? "Pause requested. Research will pause after the work already in progress finishes."
-            : "Research is running.";
-    return "Research is not running.";
-}
-
 /** Confirms only persisted research state and an observed control effect. */
 export function researchControlConfirmation(
     action: "start" | "pause" | "resume",
     executed: boolean,
-    run: Doc<"researchRuns">,
+    state: ResearchState,
 ): string {
-    if (run.lifecycleState === "framing")
-        return `${researchStateSummary(run)} Review the research program and choose Start research when ready.`;
+    const summary = formatResearchSummary(state);
     if (
-        run.pauseReason === "source_review" ||
-        (run.lifecycleState === "awaiting_source_review" &&
-            run.executionStatus !== "running")
+        state.phase === "framing" ||
+        state.status === "completed" ||
+        state.status === "cancelled" ||
+        state.status === "failed" ||
+        (state.pauseReason && state.pauseReason !== "analyst")
     )
-        return researchStateSummary(run);
-    if (run.pauseReason && run.pauseReason !== "analyst")
-        return researchStateSummary(run);
+        return summary;
     if (action === "start")
-        return run.executionStatus === "running"
+        return state.status === "running"
             ? "Research has already started. Inspect the current research progress."
-            : "Research has already started. Check the current research state and use Resume when the prerequisites are satisfied.";
+            : summary;
     if (
-        action === "pause" &&
         executed &&
-        run.executionStatus === "running" &&
-        run.researchPauseRequested
-    )
-        return researchStateSummary(run);
-    if (
-        action === "pause" &&
-        executed &&
-        run.executionStatus === "paused" &&
-        run.pauseReason === "analyst"
-    )
-        return researchStateSummary(run);
-    if (
         action === "resume" &&
-        executed &&
-        run.executionStatus === "running" &&
-        !run.researchPauseRequested
+        state.status === "running" &&
+        !state.pauseRequested
     )
         return "Research has resumed.";
-    if (executed && action === "pause" && run.executionStatus !== "paused")
+    if (
+        executed &&
+        action === "pause" &&
+        state.status !== "paused" &&
+        !state.pauseRequested
+    )
         return "The pause request was recorded. Research is not currently paused.";
-    if (executed)
-        return action === "pause"
-            ? "The pause request was recorded. Inspect the current research state."
-            : "The resume request was recorded. Inspect the current research state.";
-    return action === "pause"
-        ? "No pause was executed. Check the current research state and use the research controls to pause it."
-        : "No resume was executed. Check the current research state and complete any pending review before resuming.";
-}
-
-/** Checks explicit status clauses, including list items and unstarted-research wording; historical quotations stay intact. */
-export function conflictsWithResearchStatus(
-    text: string,
-    run: Parameters<typeof researchStateSummary>[0],
-): boolean {
-    const expected = researchStateSummary(run).toLowerCase();
-    let fenced = false;
-    for (const line of text.split("\n")) {
-        if (/^\s*```/.test(line)) {
-            fenced = !fenced;
-            continue;
-        }
-        if (fenced || /^\s*>/.test(line)) continue;
-        const paragraph = line
-            .replaceAll("**", "")
-            .replace(
-                /^\s*(?:(?:[-+*]|\d+[.)])\s+)?(?:(?:current(?: research)? status|status):\s*)?/i,
-                "",
-            );
-        for (const statement of paragraph.split(/(?<=[.!?;])\s+/)) {
-            const clause = statement.replace(
-                /^(?:the\s+)?research(?:\s+program)?\b/i,
-                "Research",
-            );
-            if (
-                /^(?:no research(?: program)? has been|research (?:has not|hasn't)(?: been)?) (?:started|initiated)\b/i.test(
-                    clause,
-                ) &&
-                !expected.startsWith("research has not started.")
-            )
-                return true;
-            const claim =
-                /^(research (?:has not started|is running|is paused|is complete|has been cancelled))\b/i.exec(
-                    clause,
-                );
-            if (claim?.[1] && !expected.startsWith(claim[1].toLowerCase()))
-                return true;
-        }
-    }
-    return false;
+    if (executed) return summary;
+    return `${action === "pause" ? "No pause was executed." : "No resume was executed."} ${summary}`;
 }

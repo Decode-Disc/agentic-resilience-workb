@@ -2,6 +2,7 @@ import { commonOperationSuccessValidator } from "@convex/execution/operationCont
 import { operationResultValidator } from "@convex/execution/operationResults";
 import { type Infer, v } from "convex/values";
 import { sourceMaterialReferenceValidator } from "./sourceRetrievalPolicy";
+import { preparedMaterialOutcomeValidator } from "./validators";
 
 export const observedDestinationValidator = v.object({
     url: v.string(),
@@ -134,11 +135,7 @@ export const documentaryAssessmentValidator = v.object({
 export const preparedMaterialValidator = v.object({
     version: v.literal(1),
     needsRevision: v.number(),
-    outcome: v.union(
-        v.literal("complete"),
-        v.literal("partial"),
-        v.literal("blocked"),
-    ),
+    outcome: preparedMaterialOutcomeValidator,
     documents: v.array(preparedDocumentValidator),
     needs: v.array(preparedNeedOutcomeValidator),
     documentaryAssessment: v.optional(documentaryAssessmentValidator),

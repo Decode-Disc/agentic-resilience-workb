@@ -1,6 +1,6 @@
 # Approval Requests and Honest Sources Time Limits
 
-**Status: accepted design, 2026-11-16; implementation pending.** The user accepted every section below during the brainstorming session of 2026-11-16, which followed the delivery of [ADR-027](../decisions/027-settle-sources-at-limits-and-let-the-analyst-renew-the-window.md) in commit `c0d74f1`. This dated record preserves the decisions and their rationale. The executable sequence is [the implementation plan](../plans/2026-11-16-approval-requests-and-sources-time-limit.md). Current obligations move to [PRODUCT](../../PRODUCT.md), [TECH](../../context/TECH.md) and an ADR when the work is delivered.
+**Status: accepted design, 2026-11-16; implementation pending.** The user accepted every section below during the brainstorming session of 2026-11-16, which followed the delivery of [ADR-027](../decisions/027-settle-sources-at-limits-and-let-the-analyst-renew-the-window.md) in commit `c0d74f1`. This dated record preserves the decisions and their rationale. The executable sequence is the implementation plan (removed on 2026-11-17; retained at `git show f012626^:docs/plans/2026-11-16-approval-requests-and-sources-time-limit.md`). Current obligations move to [PRODUCT](../../PRODUCT.md), [TECH](../../context/TECH.md) and an ADR when the work is delivered.
 
 ## Destination
 

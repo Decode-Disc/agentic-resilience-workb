@@ -1,6 +1,6 @@
 # Approval requests and Sources time limits verification
 
-Date: 2026-11-16. Scope: the [implementation plan](../plans/2026-11-16-approval-requests-and-sources-time-limit.md) and [ADR-028](../decisions/028-ask-for-approval-through-general-requests-and-dossier-grants.md). Changes remain uncommitted. This record establishes deterministic execution and protected local browser behavior, not live model usefulness or documentary quality.
+Date: 2026-11-16. Scope: the implementation plan (removed on 2026-11-17; retained at `git show f012626^:docs/plans/2026-11-16-approval-requests-and-sources-time-limit.md`) and [ADR-028](../decisions/028-ask-for-approval-through-general-requests-and-dossier-grants.md). Changes remain uncommitted. This record establishes deterministic execution and protected local browser behavior, not live model usefulness or documentary quality.
 
 ## Delivered behavior
 
