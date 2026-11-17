@@ -326,14 +326,23 @@ function convexIdPaths(
     return [];
 }
 
-/** Both generation engines derive model schemas from the canonical operation validator. */
+const inputSchemas = new WeakMap<
+    AgentOperationDefinition["inputValidator"],
+    ReturnType<typeof modelInputSchema>
+>();
+
+/** Immutable canonical validators share their converted schema across calibration and both generation engines. */
 export function agentOperationInputSchema(
     operation: Pick<AgentOperationDefinition, "inputValidator">,
 ) {
-    return modelInputSchema(
+    let schema = inputSchemas.get(operation.inputValidator);
+    if (schema) return schema;
+    schema = modelInputSchema(
         convexToZod(operation.inputValidator),
         convexIdPaths(operation.inputValidator),
     );
+    inputSchemas.set(operation.inputValidator, schema);
+    return schema;
 }
 
 export function createAgentTools(

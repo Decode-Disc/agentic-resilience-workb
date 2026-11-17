@@ -1,6 +1,13 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    act,
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("convex/react", async () => {
@@ -13,6 +20,7 @@ vi.mock("convex/react", async () => {
 import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { AdminModels } from "@/components/admin/admin-models";
 import { AdminResponseControl } from "@/components/admin/admin-response-control";
+import { MODEL_REFRESH_FAILURE_COPY } from "@/lib/workspace/use-refresh-model-profiles";
 
 const prepare = vi.fn(async () => ({
     catalogId: "model-fixture" as Id<"modelCatalog">,
@@ -235,7 +243,147 @@ test("a failed profile refresh is reported without changing the model", async ()
     render(<AdminModels />);
     fireEvent.click(screen.getByRole("button", { name: "Update model" }));
     expect((await screen.findByRole("alert")).textContent).toBe(
-        "The model could not be updated. It stays unavailable to analysts; try again.",
+        MODEL_REFRESH_FAILURE_COPY,
+    );
+});
+
+test("a compatible current revision keeps Updating visible until historical refresh finishes", async () => {
+    let finish!: (value: {
+        isDone: boolean;
+        continueCursor: string | null;
+    }) => void;
+    const pending = new Promise<{
+        isDone: boolean;
+        continueCursor: string | null;
+    }>((resolve) => {
+        finish = resolve;
+    });
+    const refresh = vi
+        .fn()
+        .mockResolvedValueOnce({ isDone: false, continueCursor: "history" })
+        .mockImplementationOnce(() => pending);
+    convexReactHarness
+        .action(api.modelConfigurationActions.refreshProfiles)
+        .uses(refresh);
+    const config = { models: [staleModel], assignments: [], agents: [] };
+    convexReactHarness.query(api.modelConfiguration.list).returns(config);
+    const view = render(<AdminModels />);
+    fireEvent.click(screen.getByRole("button", { name: "Update model" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
+    convexReactHarness
+        .query(api.modelConfiguration.list)
+        .returns({ ...config, models: [{ ...staleModel, compatible: true }] });
+    view.rerender(<AdminModels />);
+    try {
+        expect(
+            screen
+                .getByRole("button", { name: "Updating…" })
+                .hasAttribute("disabled"),
+        ).toBe(true);
+    } finally {
+        await act(async () => finish({ isDone: true, continueCursor: null }));
+    }
+    expect(screen.queryByRole("button", { name: "Updating…" })).toBeNull();
+});
+
+test("refreshing one model leaves another model available and tracks both completions independently", async () => {
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    const first = new Promise<{ isDone: boolean; continueCursor: null }>(
+        (resolve) => {
+            finishFirst = () => resolve({ isDone: true, continueCursor: null });
+        },
+    );
+    const second = new Promise<{ isDone: boolean; continueCursor: null }>(
+        (resolve) => {
+            finishSecond = () =>
+                resolve({ isDone: true, continueCursor: null });
+        },
+    );
+    convexReactHarness
+        .action(api.modelConfigurationActions.refreshProfiles)
+        .uses(({ catalogId }) =>
+            catalogId === staleModel._id ? first : second,
+        );
+    convexReactHarness.query(api.modelConfiguration.list).returns({
+        models: [
+            staleModel,
+            { ...staleModel, _id: "other-model", label: "Other model" },
+        ],
+        assignments: [],
+        agents: [],
+    });
+    render(<AdminModels />);
+    const firstRow = screen.getByText(staleModel.label).closest("section");
+    const secondRow = screen.getByText("Other model").closest("section");
+    if (!firstRow || !secondRow) throw new Error("Missing model rows");
+    fireEvent.click(
+        within(firstRow).getByRole("button", { name: "Update model" }),
+    );
+    try {
+        expect(
+            within(secondRow)
+                .getByRole("button", { name: "Update model" })
+                .hasAttribute("disabled"),
+        ).toBe(false);
+        fireEvent.click(
+            within(secondRow).getByRole("button", { name: "Update model" }),
+        );
+        await act(async () => finishFirst());
+        expect(
+            within(firstRow).queryByRole("button", { name: "Updating…" }),
+        ).toBeNull();
+        expect(
+            within(secondRow)
+                .getByRole("button", { name: "Updating…" })
+                .hasAttribute("disabled"),
+        ).toBe(true);
+    } finally {
+        await act(async () => {
+            finishFirst();
+            finishSecond();
+        });
+    }
+    expect(screen.queryByRole("button", { name: "Updating…" })).toBeNull();
+});
+
+test("a failed historical refresh does not claim that the ready current model is unavailable", async () => {
+    let fail!: (error: Error) => void;
+    const pending = new Promise<{
+        isDone: boolean;
+        continueCursor: string | null;
+    }>((_resolve, reject) => {
+        fail = reject;
+    });
+    const refresh = vi
+        .fn()
+        .mockResolvedValueOnce({ isDone: false, continueCursor: "historical" })
+        .mockImplementationOnce(() => pending);
+    convexReactHarness
+        .action(api.modelConfigurationActions.refreshProfiles)
+        .uses(refresh);
+    const config = { models: [staleModel], assignments: [], agents: [] };
+    convexReactHarness.query(api.modelConfiguration.list).returns(config);
+    const view = render(<AdminModels />);
+    fireEvent.click(screen.getByRole("button", { name: "Update model" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
+    convexReactHarness
+        .query(api.modelConfiguration.list)
+        .returns({ ...config, models: [{ ...staleModel, compatible: true }] });
+    view.rerender(<AdminModels />);
+    await act(async () => fail(new Error("model_profile_version_conflict")));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/try again/i);
+    expect(alert.textContent).not.toMatch(
+        /stays unavailable|model_profile_version_conflict/,
+    );
+    expect(screen.getByText("Ready")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Updating…" })).toBeNull();
+    refresh.mockResolvedValueOnce({ isDone: true, continueCursor: null });
+    fireEvent.click(screen.getByRole("button", { name: "Update model" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(3));
+    await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "Updating…" })).toBeNull(),
     );
 });
 

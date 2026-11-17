@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import {
+    act,
     fireEvent,
     render,
     screen,
@@ -700,6 +701,70 @@ test("the overview refreshes a stale model an agent uses, in place", async () =>
             cursor: null,
         }),
     );
+});
+
+test.each([
+    false,
+    true,
+])("the overview keeps historical profile progress visible after the model attention item clears (failure: %s)", async (failure) => {
+    let finish!: (value: {
+        isDone: boolean;
+        continueCursor: string | null;
+    }) => void;
+    let fail!: (error: Error) => void;
+    const pending = new Promise<{
+        isDone: boolean;
+        continueCursor: string | null;
+    }>((resolve, reject) => {
+        finish = resolve;
+        fail = reject;
+    });
+    refreshProfiles
+        .mockResolvedValueOnce({ isDone: false, continueCursor: "historical" })
+        .mockImplementationOnce(() => pending);
+    convexReactHarness
+        .paginatedQuery(api.adminOperations.listRestorableRunsPage)
+        .returns({ results: [], status: "Exhausted", loadMore: vi.fn() });
+    convexReactHarness.query(api.modelConfiguration.list).returns({
+        ...healthyModels,
+        models: [{ ...preparedModel, compatible: false }],
+    } as never);
+    const view = render(<AdminPage />);
+    fireEvent.click(
+        await screen.findByRole("button", { name: "Update model" }),
+    );
+    await waitFor(() => expect(refreshProfiles).toHaveBeenCalledTimes(2));
+    convexReactHarness
+        .query(api.modelConfiguration.list)
+        .returns(healthyModels as never);
+    view.rerender(<AdminPage />);
+    try {
+        expect(
+            screen.getByRole("status", { name: "Updating model profiles" })
+                .textContent,
+        ).toContain(preparedModel.label);
+    } finally {
+        await act(async () =>
+            failure
+                ? fail(new Error("model_profile_version_conflict"))
+                : finish({ isDone: true, continueCursor: null }),
+        );
+    }
+    expect(
+        screen.queryByRole("status", { name: "Updating model profiles" }),
+    ).toBeNull();
+    if (failure) {
+        expect(screen.getByRole("alert").textContent).not.toMatch(
+            /model_profile_version_conflict|stays unavailable/,
+        );
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: `Retry ${preparedModel.label}`,
+            }),
+        );
+        await waitFor(() => expect(refreshProfiles).toHaveBeenCalledTimes(3));
+        await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    }
 });
 
 test("sections and the open dossier are reported to the route", async () => {

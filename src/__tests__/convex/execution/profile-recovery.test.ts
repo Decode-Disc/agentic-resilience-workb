@@ -1,14 +1,69 @@
 import { api, internal } from "@convex/_generated/api";
 import { buildMissionContext } from "@convex/execution/context";
+import { Harness } from "@earendil-works/pi-durable";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { seedWorkbench } from "@/__tests__/setup/workbench";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+});
+
+test("refresh reuses retained exact profiles while the native serializer is unavailable, then restores a missing profile", async () => {
+    const f = await seedWorkbench();
+    const installed = await installModel(f.t, nativePiFixtureRoute);
+    const before = await f.t.run(async (ctx) => ({
+        profiles: await ctx.db.query("nativeInputProfiles").collect(),
+        revisions: await ctx.db.query("modelRevisions").collect(),
+    }));
+    await f.t.run((ctx) =>
+        ctx.db.patch(installed.catalogId, {
+            preparedProfileCatalog: "prior-catalogue",
+        }),
+    );
+    const serializer = vi
+        .spyOn(Harness, "open")
+        .mockRejectedValue(new Error("Native serializer unavailable"));
+    await expect(
+        installed.admin.action(api.modelConfigurationActions.refreshProfiles, {
+            catalogId: installed.catalogId,
+        }),
+    ).resolves.toEqual({ isDone: true, continueCursor: null });
+    expect(
+        (
+            await installed.admin.query(api.modelConfiguration.list, {})
+        ).models.find((row) => row._id === installed.catalogId)?.compatible,
+    ).toBe(true);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("nativeInputProfiles").collect()),
+    ).toEqual(before.profiles);
+    serializer.mockRestore();
+    const missing = before.profiles[0];
+    assert(missing);
+    await f.t.run((ctx) => ctx.db.delete(missing._id));
+    await installed.admin.action(
+        api.modelConfigurationActions.refreshProfiles,
+        { catalogId: installed.catalogId },
+    );
+    const after = await f.t.run((ctx) =>
+        ctx.db.query("nativeInputProfiles").collect(),
+    );
+    expect(
+        after
+            .map(({ key, bytes }) => ({ key, bytes }))
+            .sort((a, b) => a.key.localeCompare(b.key)),
+    ).toEqual(
+        before.profiles
+            .map(({ key, bytes }) => ({ key, bytes }))
+            .sort((a, b) => a.key.localeCompare(b.key)),
+    );
+    expect(
+        await f.t.run((ctx) => ctx.db.query("modelRevisions").collect()),
+    ).toEqual(before.revisions);
 });
 
 test.each([

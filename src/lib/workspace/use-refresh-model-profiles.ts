@@ -2,10 +2,10 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 export const MODEL_REFRESH_FAILURE_COPY =
-    "The model could not be updated. It stays unavailable to analysts; try again.";
+    "The update did not finish. Try again to update all saved configurations.";
 
 /**
  * Re-measures a model's input profiles offline for every retained revision, following each page so
@@ -15,15 +15,26 @@ export function useRefreshModelProfiles() {
     const refreshProfiles = useAction(
         api.modelConfigurationActions.refreshProfiles,
     );
-    const [refreshing, setRefreshing] = useState<Id<"modelCatalog"> | null>(
-        null,
+    const inFlight = useRef(new Set<Id<"modelCatalog">>());
+    const [refreshing, setRefreshing] = useState<
+        ReadonlySet<Id<"modelCatalog">>
+    >(new Set());
+    const [failed, setFailed] = useState<ReadonlySet<Id<"modelCatalog">>>(
+        new Set(),
     );
     const refresh = async (model: {
         _id: Id<"modelCatalog">;
         revision: number;
     }): Promise<boolean> => {
-        if (refreshing) return false;
-        setRefreshing(model._id);
+        if (inFlight.current.has(model._id)) return false;
+        inFlight.current.add(model._id);
+        setRefreshing(new Set(inFlight.current));
+        setFailed((previous) => {
+            const next = new Set(previous);
+            next.delete(model._id);
+            return next;
+        });
+        let completed = false;
         try {
             let cursor: string | null = null;
             // Descending revision history ends after at most one page per revision, plus an empty terminal page.
@@ -31,7 +42,10 @@ export function useRefreshModelProfiles() {
                 const result: FunctionReturnType<
                     typeof api.modelConfigurationActions.refreshProfiles
                 > = await refreshProfiles({ catalogId: model._id, cursor });
-                if (result.isDone) return true;
+                if (result.isDone) {
+                    completed = true;
+                    return true;
+                }
                 if (!result.continueCursor || result.continueCursor === cursor)
                     return false;
                 cursor = result.continueCursor;
@@ -40,8 +54,11 @@ export function useRefreshModelProfiles() {
         } catch {
             return false;
         } finally {
-            setRefreshing(null);
+            if (!completed)
+                setFailed((previous) => new Set([...previous, model._id]));
+            inFlight.current.delete(model._id);
+            setRefreshing(new Set(inFlight.current));
         }
     };
-    return { refresh, refreshing };
+    return { refresh, refreshing, failed };
 }

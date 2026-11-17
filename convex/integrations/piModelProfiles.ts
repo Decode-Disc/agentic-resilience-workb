@@ -5,7 +5,10 @@ import {
     type AgentDefinition,
     agentToolSchemas,
 } from "@convex/execution/agentDefinition";
-import type { modelDescriptor } from "@convex/modelConfigurationSchema";
+import type {
+    modelDescriptor,
+    nativeProfile,
+} from "@convex/modelConfigurationSchema";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
     createModels,
@@ -143,11 +146,12 @@ async function profileTranscript(
     }
 }
 
-/** Measures the actual installed serializer; both tool execution and network dispatch are forbidden. */
+/** Reuses exact immutable profiles and measures missing keys with the installed serializer; no dispatch or tool execution. */
 export async function prepareNativeProfiles(
     route: ModelRoute,
     descriptor: Infer<typeof modelDescriptor>,
     signal?: AbortSignal,
+    readProfiles?: (keys: string[]) => Promise<Infer<typeof nativeProfile>[]>,
 ) {
     const configured = {
         ...route,
@@ -157,6 +161,11 @@ export async function prepareNativeProfiles(
     const model = configuredNativeModel(route.model, descriptor);
     const provider = openrouterProvider();
     const profiles = new Map<string, number>();
+    const plans: {
+        definition: AgentDefinition;
+        operations: ReturnType<typeof agentToolSchemas>;
+        requests: { key: string; nativeRoute: ModelRoute }[];
+    }[] = [];
     for (const definition of registeredAgentDefinitions()) {
         const variants = definition.nativeToolSets?.(definition.operations);
         const sets = variants
@@ -190,56 +199,81 @@ export async function prepareNativeProfiles(
                     return { key, nativeRoute };
                 }),
             );
-            const missing = requests.filter(
-                (request) => !profiles.has(request.key),
-            );
-            if (!missing.length) continue;
-            const history = await profileTranscript(
-                definition,
-                operations,
-                descriptor,
-            );
-            for (const { key, nativeRoute } of missing) {
-                const generation = modelCallSettings(nativeRoute).generation;
-                let bytes: number | undefined;
-                let dispatchAttempted = false;
-                const result = provider.streamSimple(
-                    model,
-                    normalizeContext({
-                        messages: history,
-                    }),
-                    {
-                        apiKey: "offline-profile-key",
-                        temperature: generation.temperature,
-                        maxRetries: generation.maxRetries,
-                        signal,
-                        fetch: async () => {
-                            dispatchAttempted = true;
-                            throw new Error(
-                                "Profile preparation forbids network access",
-                            );
-                        },
-                        onPayload(payload) {
-                            if (!payload || typeof payload !== "object")
-                                throw new Error(
-                                    "Native profile payload unavailable",
-                                );
-                            bytes = new TextEncoder().encode(
-                                preparePiModelPayload(payload, nativeRoute)
-                                    .json,
-                            ).length;
-                            throw new Error(
-                                "Offline preparation completed before dispatch",
-                            );
-                        },
-                    },
-                );
-                await result.result();
-                if (dispatchAttempted || bytes === undefined)
-                    throw new Error("Native profile preparation failed");
-                profiles.set(key, bytes);
-            }
+            plans.push({ definition, operations, requests });
         }
     }
-    return [...profiles].map(([key, bytes]) => ({ key, bytes }));
+    const keys = [
+        ...new Set(
+            plans.flatMap((plan) => plan.requests.map(({ key }) => key)),
+        ),
+    ];
+    signal?.throwIfAborted();
+    if (readProfiles) {
+        for (const profile of await readProfiles(keys)) {
+            if (
+                !keys.includes(profile.key) ||
+                !Number.isSafeInteger(profile.bytes) ||
+                profile.bytes < 1
+            )
+                throw new Error("Invalid retained native profile");
+            profiles.set(profile.key, profile.bytes);
+        }
+    }
+    for (const { definition, operations, requests } of plans) {
+        signal?.throwIfAborted();
+        const missing = requests.filter(
+            (request) => !profiles.has(request.key),
+        );
+        if (!missing.length) continue;
+        const history = await profileTranscript(
+            definition,
+            operations,
+            descriptor,
+        );
+        for (const { key, nativeRoute } of missing) {
+            const generation = modelCallSettings(nativeRoute).generation;
+            let bytes: number | undefined;
+            let dispatchAttempted = false;
+            const result = provider.streamSimple(
+                model,
+                normalizeContext({
+                    messages: history,
+                }),
+                {
+                    apiKey: "offline-profile-key",
+                    temperature: generation.temperature,
+                    maxRetries: generation.maxRetries,
+                    signal,
+                    fetch: async () => {
+                        dispatchAttempted = true;
+                        throw new Error(
+                            "Profile preparation forbids network access",
+                        );
+                    },
+                    onPayload(payload) {
+                        if (!payload || typeof payload !== "object")
+                            throw new Error(
+                                "Native profile payload unavailable",
+                            );
+                        bytes = new TextEncoder().encode(
+                            preparePiModelPayload(payload, nativeRoute).json,
+                        ).length;
+                        throw new Error(
+                            "Offline preparation completed before dispatch",
+                        );
+                    },
+                },
+            );
+            await result.result();
+            if (dispatchAttempted || bytes === undefined)
+                throw new Error("Native profile preparation failed");
+            profiles.set(key, bytes);
+        }
+    }
+    return keys.map((key) => {
+        const bytes = profiles.get(key);
+        if (bytes === undefined)
+            throw new Error("Native profile preparation incomplete");
+        return { key, bytes };
+    });
 }

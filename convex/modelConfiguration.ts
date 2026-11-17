@@ -376,6 +376,26 @@ export const profileRevisions = internalQuery({
             .paginate({ numItems: 1, cursor: args.cursor ?? null });
     },
 });
+
+/** Exact profile keys include route, descriptor, tools and installed serializer identity. */
+export const profiles = internalQuery({
+    args: { keys: v.array(v.string()) },
+    returns: v.array(nativeProfile),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        const rows = await Promise.all(
+            args.keys.map((key) =>
+                ctx.db
+                    .query("nativeInputProfiles")
+                    .withIndex("by_key", (q) => q.eq("key", key))
+                    .unique(),
+            ),
+        );
+        return rows.flatMap((row) =>
+            row ? [{ key: row.key, bytes: row.bytes }] : [],
+        );
+    },
+});
 export const retainRefreshedProfiles = internalMutation({
     args: {
         revisionId: v.id("modelRevisions"),

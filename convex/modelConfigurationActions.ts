@@ -216,6 +216,8 @@ async function prepareModel(
             },
             descriptor,
             signal,
+            (keys) =>
+                ctx.runQuery(internal.modelConfiguration.profiles, { keys }),
         );
         return await ctx.runMutation(
             internal.modelConfiguration.finishPreparation,
@@ -263,6 +265,7 @@ async function refreshRevision(
         revisionRoute(revision),
         revision.descriptor,
         AbortSignal.timeout(NATIVE_PROFILE_PREPARATION_TIMEOUT_MS),
+        (keys) => ctx.runQuery(internal.modelConfiguration.profiles, { keys }),
     );
     await ctx.runMutation(internal.modelConfiguration.retainRefreshedProfiles, {
         revisionId: revision._id,

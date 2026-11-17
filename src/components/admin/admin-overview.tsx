@@ -75,6 +75,7 @@ export function AdminOverview({
     onOpenActivity: () => void;
 }) {
     const config = useQuery(api.modelConfiguration.list, {});
+    const profileRefresh = useRefreshModelProfiles();
     const recentRuns = usePaginatedQuery(
         api.adminOperations.listRunsPage,
         { purpose: "research" },
@@ -121,6 +122,58 @@ export function AdminOverview({
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
+                        {profileRefresh.failed.size > 0 && (
+                            <div className="mb-3 space-y-2">
+                                <p
+                                    role="alert"
+                                    className="text-sm text-destructive">
+                                    {MODEL_REFRESH_FAILURE_COPY}
+                                </p>
+                                {config?.models
+                                    .filter(
+                                        (model) =>
+                                            model.compatible &&
+                                            profileRefresh.failed.has(
+                                                model._id,
+                                            ),
+                                    )
+                                    .map((model) => (
+                                        <Button
+                                            key={model._id}
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={async () => {
+                                                if (
+                                                    await profileRefresh.refresh(
+                                                        model,
+                                                    )
+                                                )
+                                                    toast.success(
+                                                        `${model.label} is ready for analysts again.`,
+                                                    );
+                                            }}>
+                                            Retry {model.label}
+                                        </Button>
+                                    ))}
+                            </div>
+                        )}
+                        {profileRefresh.refreshing.size > 0 && (
+                            <p
+                                role="status"
+                                aria-label="Updating model profiles"
+                                className="mb-3 text-sm text-muted-foreground">
+                                Updating{" "}
+                                {config?.models
+                                    .filter((model) =>
+                                        profileRefresh.refreshing.has(
+                                            model._id,
+                                        ),
+                                    )
+                                    .map((model) => model.label)
+                                    .join(", ")}
+                                …
+                            </p>
+                        )}
                         {loading ? (
                             <div
                                 role="status"
@@ -149,6 +202,7 @@ export function AdminOverview({
                             </Empty>
                         ) : (
                             <AttentionList
+                                profileRefresh={profileRefresh}
                                 items={items}
                                 models={config?.models ?? []}
                                 onEnablePaidWork={() => setPaidWorkTarget(true)}
@@ -190,6 +244,7 @@ const ATTENTION_MARKS: Record<AdminAttentionItem["kind"], string> = {
 };
 
 function AttentionList({
+    profileRefresh,
     items,
     models,
     onEnablePaidWork,
@@ -197,6 +252,7 @@ function AttentionList({
     onOpenDossier,
     onOpenReservations,
 }: {
+    profileRefresh: ReturnType<typeof useRefreshModelProfiles>;
     items: AdminAttentionItem[];
     models: FunctionReturnType<typeof api.modelConfiguration.list>["models"];
     onEnablePaidWork: () => void;
@@ -204,8 +260,7 @@ function AttentionList({
     onOpenDossier: (runId: Id<"researchRuns">) => void;
     onOpenReservations: () => void;
 }) {
-    const { refresh, refreshing } = useRefreshModelProfiles();
-    const [error, setError] = useState<string | null>(null);
+    const { refresh, refreshing } = profileRefresh;
     const actionFor = (item: AdminAttentionItem) => {
         const action = item.action;
         switch (action.kind) {
@@ -221,18 +276,16 @@ function AttentionList({
                 return (
                     <Button
                         size="sm"
-                        disabled={!model || !!refreshing}
+                        disabled={!model || refreshing.has(action.catalogId)}
                         onClick={async () => {
                             if (!model) return;
-                            setError(null);
                             if (await refresh(model))
                                 toast.success(
                                     `${model.label} is ready for analysts again.`,
                                 );
-                            else setError(MODEL_REFRESH_FAILURE_COPY);
                         }}>
                         <Icon iconNode={RefreshIcon} />
-                        {refreshing === action.catalogId
+                        {refreshing.has(action.catalogId)
                             ? "Updating…"
                             : "Update model"}
                     </Button>
@@ -269,11 +322,6 @@ function AttentionList({
     };
     return (
         <div className="space-y-3">
-            {error && (
-                <p role="alert" className="text-sm text-destructive">
-                    {error}
-                </p>
-            )}
             <ItemGroup>
                 {items.map((item, index) => (
                     <Fragment key={item.key}>

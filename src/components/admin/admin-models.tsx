@@ -257,7 +257,7 @@ function ModelCatalogue({ onEdit }: { onEdit: (model: CatalogModel) => void }) {
     const setReasoning = useMutation(
         api.modelConfiguration.setReasoningPreference,
     );
-    const { refresh, refreshing } = useRefreshModelProfiles();
+    const { refresh, refreshing, failed } = useRefreshModelProfiles();
     const [drafts, setDrafts] = useState<Record<string, ModelDraft>>({});
     const [saving, setSaving] = useState(false);
     const [initializing, setInitializing] = useState(false);
@@ -311,7 +311,7 @@ function ModelCatalogue({ onEdit }: { onEdit: (model: CatalogModel) => void }) {
                 </Button>
             </Empty>
         );
-    const busy = saving || !!refreshing;
+    const busy = saving;
     const current = (entry: CatalogModel) => ({
         preference: entry.reasoning.preference ?? "recommended",
         enabled: entry.enabled,
@@ -398,6 +398,7 @@ function ModelCatalogue({ onEdit }: { onEdit: (model: CatalogModel) => void }) {
             <AdminScrollList label="Model catalogue">
                 <ItemGroup>
                     {config.models.map((entry, index) => {
+                        const updating = refreshing.has(entry._id);
                         const stale =
                             entry.status === "ready" && !entry.compatible;
                         const value = shown(entry);
@@ -432,6 +433,7 @@ function ModelCatalogue({ onEdit }: { onEdit: (model: CatalogModel) => void }) {
                                                 preference={value.preference}
                                                 disabled={
                                                     busy ||
+                                                    updating ||
                                                     entry.status === "preparing"
                                                 }
                                                 onChange={(preference) =>
@@ -450,11 +452,17 @@ function ModelCatalogue({ onEdit }: { onEdit: (model: CatalogModel) => void }) {
                                         workbenchSelectable={
                                             value.workbenchSelectable
                                         }
-                                        disabled={busy || !entry.compatible}
+                                        disabled={
+                                            busy ||
+                                            updating ||
+                                            !entry.compatible
+                                        }
                                         onChange={(next) => stage(entry, next)}
                                     />
                                     <div className="col-span-2 flex flex-wrap justify-end gap-2 lg:col-span-1">
-                                        {stale ? (
+                                        {stale ||
+                                        updating ||
+                                        failed.has(entry._id) ? (
                                             <Tooltip>
                                                 <TooltipTrigger
                                                     render={
@@ -465,7 +473,9 @@ function ModelCatalogue({ onEdit }: { onEdit: (model: CatalogModel) => void }) {
                                                                     ? "default"
                                                                     : "outline"
                                                             }
-                                                            disabled={busy}
+                                                            disabled={
+                                                                busy || updating
+                                                            }
                                                             onClick={async () => {
                                                                 setError(null);
                                                                 if (
@@ -486,8 +496,7 @@ function ModelCatalogue({ onEdit }: { onEdit: (model: CatalogModel) => void }) {
                                                                     RefreshIcon
                                                                 }
                                                             />
-                                                            {refreshing ===
-                                                            entry._id
+                                                            {updating
                                                                 ? "Updating…"
                                                                 : "Update model"}
                                                         </Button>
@@ -504,7 +513,7 @@ function ModelCatalogue({ onEdit }: { onEdit: (model: CatalogModel) => void }) {
                                         {entry.status === "failed" ? (
                                             <Button
                                                 size="sm"
-                                                disabled={busy}
+                                                disabled={busy || updating}
                                                 onClick={() => onEdit(entry)}>
                                                 <Icon
                                                     iconNode={PencilEdit02Icon}
@@ -519,7 +528,9 @@ function ModelCatalogue({ onEdit }: { onEdit: (model: CatalogModel) => void }) {
                                                             size="icon-sm"
                                                             variant="outline"
                                                             aria-label="Edit configuration"
-                                                            disabled={busy}
+                                                            disabled={
+                                                                busy || updating
+                                                            }
                                                             onClick={() =>
                                                                 onEdit(entry)
                                                             }>
