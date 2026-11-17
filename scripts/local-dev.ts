@@ -9,6 +9,7 @@ import { LOCAL_RUNTIME_POLICY } from "../convex/resourcePolicy.ts";
 import { LocalProcessError } from "./local-processes.ts";
 import {
     assertRuntimeStartupLock,
+    formatLocalRuntimeStatus,
     getLocalRuntimeIdentity,
     getLocalRuntimePorts,
     getRuntimeStartupLockPath,
@@ -59,7 +60,7 @@ async function main(): Promise<number> {
         const status = inspectLocalRuntime(root);
         if (forwardedArgs.includes("--json"))
             console.log(JSON.stringify(status, null, 2));
-        else printRuntimeStatus(status);
+        else console.log(formatLocalRuntimeStatus(status));
         return 0;
     }
     if (!mode)
@@ -137,8 +138,17 @@ async function runLockedMode(
     }
     if (mode === "dev:stop") {
         const seen = new Set<string>();
+        let jsonOutput = false;
         for (let index = 0; index < args.length; index++) {
             const argument = args[index] ?? "";
+            if (argument === "--json") {
+                if (jsonOutput)
+                    throw new LocalDevError(
+                        "Unknown stop option or repeated selection: --json",
+                    );
+                jsonOutput = true;
+                continue;
+            }
             const name = argument.split("=")[0] ?? "";
             if (!["--port", "--pid"].includes(name) || seen.has(name))
                 throw new LocalDevError(
@@ -162,16 +172,40 @@ async function runLockedMode(
                     "The selected port is not assigned to this worktree.",
                 );
             await stopLocalRuntimeListener(root, selected, pid);
-            console.log(
-                `Stopped the selected owner of port ${port}. Port reservations are preserved.`,
-            );
+            const status = inspectLocalRuntime(root);
+            if (jsonOutput) {
+                console.log(
+                    JSON.stringify(
+                        {
+                            action: "stopped-listener",
+                            port,
+                            pid,
+                            ...status,
+                        },
+                        null,
+                        2,
+                    ),
+                );
+            } else {
+                console.log(
+                    `Stopped the selected owner of port ${port} (PID ${pid}). Port reservations are preserved.\n`,
+                );
+                console.log(formatLocalRuntimeStatus(status));
+            }
             return 0;
         }
         await stopLocalRuntime(root);
-        console.log(
-            "Verified runtime processes have stopped. Unmanaged listeners and port reservations are preserved.",
-        );
-        printRuntimeStatus(inspectLocalRuntime(root));
+        const status = inspectLocalRuntime(root);
+        if (jsonOutput) {
+            console.log(
+                JSON.stringify({ action: "stopped", ...status }, null, 2),
+            );
+        } else {
+            console.log(
+                "Verified runtime processes have stopped. Unmanaged listeners and port reservations are preserved.\n",
+            );
+            console.log(formatLocalRuntimeStatus(status));
+        }
         return 0;
     }
     if (mode === "dev" || mode === "convex:dev" || mode === "test:e2e")
@@ -182,20 +216,6 @@ async function runLockedMode(
             args,
         );
     throw new LocalDevError("Unknown locked local runtime command.");
-}
-
-function printRuntimeStatus(
-    status: ReturnType<typeof inspectLocalRuntime>,
-): void {
-    console.log(`Local runtime: ${status.identity.root}`);
-    for (const entry of status.ports) {
-        const owners = entry.listeners.flatMap(
-            (listener) => listener.processes,
-        );
-        console.log(
-            `${entry.role}: ${entry.port} — ${entry.listeners.length === 0 ? "free" : owners.length === 0 ? "in use (owner unavailable)" : owners.map((owner) => `${owner.command} (PID ${owner.pid}), ${owner.cwd ?? "directory unavailable"}`).join("; ")}`,
-        );
-    }
 }
 
 async function runNativeWatcher(

@@ -1292,6 +1292,109 @@ function writeProjectionUnlocked(
     renameSync(tempPath, manifestPath);
 }
 
+/** Format reserved fixed local ports as structured human-readable text. */
+export function formatLocalRuntimePorts(input: {
+    identity: Omit<
+        LocalRuntimeIdentity,
+        "deploymentName" | "deploymentSelector"
+    >;
+    ports: LocalRuntimePorts;
+    registryPath: string;
+}): string {
+    return [
+        "Local runtime ports",
+        `  Worktree: ${input.identity.root} (${input.identity.worktreeId})`,
+        `  Registry: ${input.registryPath}`,
+        "",
+        "Ports:",
+        ...PORT_ROLES.map(
+            (role) => `  ${role.padEnd(11)} ${input.ports[role]}`,
+        ),
+    ].join("\n");
+}
+
+/** Format port occupancy and managed process ownership as structured human-readable text. */
+export function formatLocalRuntimeStatus(
+    status: ReturnType<typeof inspectLocalRuntime>,
+): string {
+    const portLines = status.ports.map((entry) => {
+        const owners = entry.listeners.flatMap(
+            (listener) => listener.processes,
+        );
+        const state =
+            entry.listeners.length === 0
+                ? "free"
+                : owners.length === 0
+                  ? "in use  owner unavailable"
+                  : `in use  ${owners
+                        .map(
+                            (owner) =>
+                                `${owner.command} (PID ${owner.pid}, ${owner.cwd ?? "directory unavailable"})`,
+                        )
+                        .join("; ")}`;
+        return `  ${entry.role.padEnd(11)} ${String(entry.port).padEnd(6)} ${state}`;
+    });
+    const processLines =
+        status.processes.length === 0
+            ? ["  none"]
+            : status.processes.map((owner) => {
+                  const state = !owner.process
+                      ? "stopped"
+                      : owner.verified
+                        ? "verified"
+                        : "unverified (identity mismatch)";
+                  const detail = owner.process
+                      ? `${owner.process.command}, ${owner.process.cwd ?? "directory unavailable"}`
+                      : "process unavailable";
+                  return `  ${owner.role.padEnd(11)} PID ${String(owner.pid).padEnd(8)} ${state}  ${detail} (run ${owner.runId})`;
+              });
+    return [
+        "Local runtime status",
+        `  Worktree: ${status.identity.root} (${status.identity.worktreeId})`,
+        "",
+        "Ports:",
+        ...portLines,
+        "",
+        "Managed processes:",
+        ...processLines,
+    ].join("\n");
+}
+
+/** Format verified live runtime origins and ownership as structured human-readable text. */
+export function formatLocalRuntimeReadiness(
+    readiness: LocalRuntimeReadiness,
+): string {
+    const originRoles: readonly LocalRuntimeOrigin[] = [
+        "convex",
+        "site",
+        "web",
+        "preview",
+    ];
+    const originLines = originRoles.map(
+        (role) =>
+            `  ${role.padEnd(11)} ${readiness.origins[role] ?? "(not running)"}`,
+    );
+    const processLines =
+        readiness.ownedPids.length === 0
+            ? ["  none"]
+            : readiness.ownedPids.map(
+                  (owner) =>
+                      `  ${owner.role.padEnd(11)} PID ${String(owner.pid).padEnd(8)} run ${owner.runId}`,
+              );
+    return [
+        "Local runtime URLs",
+        `  Status:     ${readiness.status}`,
+        `  Worktree:   ${readiness.identity.root} (${readiness.identity.worktreeId})`,
+        `  Deployment: ${readiness.deploymentSelector} (${readiness.deploymentName})`,
+        "",
+        "Origins:",
+        ...originLines,
+        "",
+        "Managed processes:",
+        ...processLines,
+    ].join("\n");
+}
+
 async function main(): Promise<void> {
     const args = process.argv.slice(2);
     if (args[0] === "--reserve-ports") {
@@ -1312,9 +1415,21 @@ async function main(): Promise<void> {
         return;
     }
     const root = process.cwd();
+    const jsonOutput = args.includes("--json");
     if (args.includes("--ports")) {
+        const identity = getLocalRuntimeIdentity(root);
+        const ports = getLocalRuntimePorts(root);
+        const registryPath = join(identity.gitCommonDir, PORT_REGISTRY_NAME);
         process.stdout.write(
-            `${JSON.stringify({ ports: getLocalRuntimePorts(root), registryPath: join(getLocalRuntimeIdentity(root).gitCommonDir, PORT_REGISTRY_NAME) }, null, 2)}\n`,
+            `${
+                jsonOutput
+                    ? JSON.stringify({ ports, registryPath }, null, 2)
+                    : formatLocalRuntimePorts({
+                          identity,
+                          ports,
+                          registryPath,
+                      })
+            }\n`,
         );
         return;
     }
@@ -1324,7 +1439,11 @@ async function main(): Promise<void> {
     }
     const readiness = await resolveLocalRuntime(root);
     process.stdout.write(
-        `${JSON.stringify(readiness, null, args.includes("--json") ? 2 : 0)}\n`,
+        `${
+            jsonOutput
+                ? JSON.stringify(readiness, null, 2)
+                : formatLocalRuntimeReadiness(readiness)
+        }\n`,
     );
 }
 

@@ -2365,3 +2365,108 @@ it("required backend resolution still rejects the wrong native deployment", asyn
         }),
     ).rejects.toThrow("another deployment");
 });
+
+async function runLocalRuntimeCli(root: string, args: string[] = []) {
+    const env = { ...process.env };
+    delete env.CONVEX_DEPLOYMENT;
+    delete env.CONVEX_DEPLOY_KEY;
+    delete env.CONVEX_SELF_HOSTED_URL;
+    delete env.CONVEX_SELF_HOSTED_ADMIN_KEY;
+    const child = spawn(
+        process.execPath,
+        [
+            "--experimental-strip-types",
+            join(root, "scripts/local-runtime.ts"),
+            ...args,
+        ],
+        { cwd: root, env, stdio: "pipe" },
+    );
+    testProcesses.push(child);
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+    const status = await processExit(child);
+    return { status, stdout, stderr };
+}
+
+it("renders consistent structured text by default and pretty JSON with --json across dev:ports, dev:status, dev:urls, and dev:stop", async () => {
+    const { first } = await createWorktreePair();
+    const native = await backend("runtime-first");
+    const cloudPort = Number(new URL(native.origin).port);
+    configureNativeRuntime(first, "runtime-first", native.origin);
+
+    const portsText = await runLocalRuntimeCli(first, ["--ports"]);
+    expect(portsText.status, portsText.stderr).toBe(0);
+    expect(() => JSON.parse(portsText.stdout)).toThrow();
+    expect(portsText.stdout).toContain("Local runtime ports");
+    expect(portsText.stdout).toContain(`Worktree: ${first}`);
+    expect(portsText.stdout).toContain("Ports:");
+    expect(portsText.stdout).toContain(String(cloudPort));
+
+    const portsJson = await runLocalRuntimeCli(first, ["--ports", "--json"]);
+    expect(portsJson.status, portsJson.stderr).toBe(0);
+    expect(JSON.parse(portsJson.stdout)).toMatchObject({
+        ports: { convex: cloudPort },
+        registryPath: expect.stringContaining("local-runtime-ports.json"),
+    });
+
+    const urlsText = await runLocalRuntimeCli(first, []);
+    expect(urlsText.status, urlsText.stderr).toBe(0);
+    expect(() => JSON.parse(urlsText.stdout)).toThrow();
+    expect(urlsText.stdout).toContain("Local runtime URLs");
+    expect(urlsText.stdout).toContain("Status:");
+    expect(urlsText.stdout).toContain("ready");
+    expect(urlsText.stdout).toContain(native.origin);
+    expect(urlsText.stdout).toContain("Managed processes:");
+
+    const urlsJson = await runLocalRuntimeCli(first, ["--json"]);
+    expect(urlsJson.status, urlsJson.stderr).toBe(0);
+    expect(urlsJson.stdout).toContain("\n  ");
+    expect(JSON.parse(urlsJson.stdout)).toMatchObject({
+        status: "ready",
+        deploymentName: "runtime-first",
+        origins: { convex: native.origin },
+    });
+
+    const statusTextChild = spawnLocalDev(first, "dev:status", {}, [], "pipe");
+    let statusStdout = "";
+    let statusStderr = "";
+    statusTextChild.stdout?.on(
+        "data",
+        (c: Buffer) => (statusStdout += c.toString()),
+    );
+    statusTextChild.stderr?.on(
+        "data",
+        (c: Buffer) => (statusStderr += c.toString()),
+    );
+    expect(await processExit(statusTextChild), statusStderr).toBe(0);
+    expect(statusStdout).toContain("Local runtime status");
+    expect(statusStdout).toContain(`Worktree: ${first}`);
+    expect(statusStdout).toContain("Ports:");
+    expect(statusStdout).toContain("Managed processes:");
+
+    const stopJsonChild = spawnLocalDev(
+        first,
+        "dev:stop",
+        {},
+        ["--json"],
+        "pipe",
+    );
+    let stopStdout = "";
+    let stopStderr = "";
+    stopJsonChild.stdout?.on(
+        "data",
+        (c: Buffer) => (stopStdout += c.toString()),
+    );
+    stopJsonChild.stderr?.on(
+        "data",
+        (c: Buffer) => (stopStderr += c.toString()),
+    );
+    expect(await processExit(stopJsonChild), stopStderr).toBe(0);
+    expect(JSON.parse(stopStdout)).toMatchObject({
+        action: "stopped",
+        identity: { root: first },
+        processes: [],
+    });
+});
