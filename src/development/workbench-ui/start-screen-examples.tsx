@@ -60,9 +60,9 @@ import {
     CompanyMandatePanel,
     FramingClarification,
     FramingProposal,
-    type StartFramingQuestion,
     StartAngleSuggestions,
     StartEntryScreen,
+    type StartFramingQuestion,
     StartFramingScreen,
     StartResearchScreen,
     StartShowcaseCard,
@@ -902,7 +902,22 @@ function ResearchExample({
             }
             heading={
                 <StartSourcesHeader
-                    running={workState === "running"}
+                    mark={
+                        workState === "running"
+                            ? "live"
+                            : done
+                              ? "check"
+                              : interrupted
+                                ? "unfinished"
+                                : "clock"
+                    }
+                    tone={
+                        workState === "running"
+                            ? "accent"
+                            : done
+                              ? "success"
+                              : "muted"
+                    }
                     label={
                         done
                             ? "Complete"

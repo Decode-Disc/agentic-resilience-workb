@@ -1,5 +1,8 @@
+import { motion } from "motion/react";
+import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import { WorkbenchIcon } from "./glyphs";
+import { listTransition } from "./motion";
 import styles from "./sourcing-lane.module.css";
 export interface SourcingDocument {
     id: string;
@@ -27,6 +30,9 @@ export function SourcingLane({
     active = state === "capturing",
 }: SourcingLaneProps) {
     const running = active;
+    // Documents present when the lane first renders appear in place; later arrivals fade in.
+    const initialIds = useRef<ReadonlySet<string> | null>(null);
+    initialIds.current ??= new Set(documents.map((d) => d.id));
     return (
         <div className={cn(styles.lane, running ? styles.running : undefined)}>
             <span
@@ -56,8 +62,18 @@ export function SourcingLane({
                 <p className={cn("wb-meta", styles.metadata)}>{emptyMessage}</p>
             )}
             {documents.map((d) => (
-                <span
+                // A shared layout id lets a document glide between lanes when its state changes.
+                <motion.span
                     key={d.id}
+                    layoutId={`sourcing-document-${d.id}`}
+                    layout="position"
+                    transition={listTransition}
+                    initial={
+                        initialIds.current?.has(d.id)
+                            ? false
+                            : { opacity: 0, y: -6 }
+                    }
+                    animate={{ opacity: 1, y: 0 }}
                     className={cn(
                         styles.source,
                         d.fresh ? styles.freshDocument : undefined,
@@ -70,7 +86,7 @@ export function SourcingLane({
                     {running && (
                         <span className={cn("wb-sweep", styles.captureSweep)} />
                     )}
-                </span>
+                </motion.span>
             ))}
             {remainingLabel && (
                 <span className={cn("wb-meta", styles.metadata)}>

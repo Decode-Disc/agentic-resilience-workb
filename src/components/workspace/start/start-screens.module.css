@@ -176,6 +176,69 @@
 .muted {
     @apply opacity-[0.55];
 }
+.lanes {
+    transition:
+        opacity 320ms var(--wb-ease-arrive),
+        filter 320ms var(--wb-ease-arrive);
+}
+/* Preparation is not working: the lanes settle so the panel visibly rests. */
+.resting {
+    @apply opacity-[0.86];
+    filter: saturate(0.5);
+}
+/* "Open decision" outlines the conversation card twice, then lets it settle. */
+.research [data-attention] > [data-slot="approval-card"] {
+    /* Drawn on the card's own edge: the conversation's scroll area would clip an outer ring. */
+    outline: 2px solid transparent;
+    outline-offset: -1px;
+    animation: decision-attention 1.1s var(--wb-ease-arrive);
+}
+@keyframes decision-attention {
+    0% {
+        outline-offset: 5px;
+        outline-color: transparent;
+    }
+    22%,
+    68% {
+        outline-offset: -1px;
+        outline-color: color-mix(
+            in oklab,
+            var(--brand-purple) 70%,
+            transparent
+        );
+    }
+    45% {
+        outline-color: color-mix(
+            in oklab,
+            var(--brand-purple) 20%,
+            transparent
+        );
+    }
+    100% {
+        outline-offset: -1px;
+        outline-color: transparent;
+    }
+}
+@keyframes decision-attention-held {
+    0% {
+        outline-color: color-mix(
+            in oklab,
+            var(--brand-purple) 70%,
+            transparent
+        );
+    }
+    100% {
+        outline-color: transparent;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lanes {
+        transition: none;
+    }
+    .research [data-attention] > [data-slot="approval-card"] {
+        animation: decision-attention-held 2s steps(1, end);
+    }
+}
 .handoff {
     @apply absolute left-[50%] top-[52%];
     transform: translate(-50%, -50%);
@@ -232,7 +295,11 @@
     @apply flex flex-col gap-[2px];
 }
 .counts b {
-    @apply text-[44px] leading-[44px] font-medium tracking-[-0.05em];
+    @apply block text-[44px] leading-[44px] font-medium tracking-[-0.04em];
+}
+/* Clips the rolling digits to their own line. */
+.countValue {
+    @apply relative overflow-hidden;
 }
 .counts span {
     font: 400 11px / 1.5 var(--font-mono);
@@ -285,7 +352,26 @@
     @apply tracking-[0.12em] uppercase text-brand-purple;
 }
 .liveDot {
-    @apply w-[10px] h-[10px] rounded-[50%] bg-brand-purple bg-none;
+    @apply w-[8px] h-[8px] rounded-[50%] bg-brand-purple bg-none;
+}
+.stateLabel {
+    @apply inline-flex items-center gap-[7px];
+}
+/* The state label takes the dossier status tones; the agent identity keeps its own purple. */
+.sourceTitles[data-tone="review"] .stateLabel {
+    @apply text-review-foreground;
+}
+.sourceTitles[data-tone="ink"] .stateLabel {
+    @apply text-foreground;
+}
+.sourceTitles[data-tone="success"] .stateLabel {
+    color: color-mix(in oklab, var(--brand-green) 45%, var(--foreground));
+}
+.sourceTitles[data-tone="muted"] .stateLabel {
+    @apply text-muted-foreground;
+}
+.sourceTitles[data-tone="destructive"] .stateLabel {
+    @apply text-destructive-text;
 }
 .openProgress {
     /* Several decisions wrap within half the row instead of squeezing the title. */

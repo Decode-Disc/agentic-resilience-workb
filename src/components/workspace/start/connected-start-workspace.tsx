@@ -4,7 +4,13 @@ import type { Id } from "@convex/_generated/dataModel";
 import { approvalActionCopy } from "@convex/domain/approvalCopy";
 import { isResumableResearchPause } from "@convex/domain/transitions";
 import { HISTORY_PAGE_SIZE } from "@convex/resourcePolicy";
-import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import {
+    ArrowLeft01Icon,
+    ArrowRight01Icon,
+    Loading03Icon,
+    PauseIcon,
+    PlayIcon,
+} from "@hugeicons/core-free-icons";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
@@ -709,13 +715,16 @@ function StartWorkspaceContent({
                     <>
                         <p
                             role="status"
-                            className="text-sm text-muted-foreground">
-                            Pause requested. The current operation will finish
-                            first.
+                            className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <Icon
+                                iconNode={Loading03Icon}
+                                size={14}
+                                className="animate-spin motion-reduce:animate-none"
+                            />
+                            Pausing after the current step
                         </p>
                         <Button
-                            variant="ghost"
-                            size="sm"
+                            variant="outline"
                             onClick={() =>
                                 control(
                                     resumeResearch({
@@ -725,6 +734,7 @@ function StartWorkspaceContent({
                                     }),
                                 )
                             }>
+                            <Icon iconNode={PlayIcon} size={15} />
                             Keep researching
                         </Button>
                     </>
@@ -737,8 +747,6 @@ function StartWorkspaceContent({
                     ) : null
                 ) : isResumableResearchPause(run) ? (
                     <Button
-                        variant="outline"
-                        size="sm"
                         onClick={() =>
                             control(
                                 resumeResearch({
@@ -747,12 +755,12 @@ function StartWorkspaceContent({
                                 }),
                             )
                         }>
+                        <Icon iconNode={PlayIcon} size={15} />
                         Resume research
                     </Button>
                 ) : run.executionStatus === "running" ? (
                     <Button
-                        variant="ghost"
-                        size="sm"
+                        variant="outline"
                         onClick={() =>
                             control(
                                 pauseResearch({
@@ -761,6 +769,7 @@ function StartWorkspaceContent({
                                 }),
                             )
                         }>
+                        <Icon iconNode={PauseIcon} size={15} />
                         Pause research
                     </Button>
                 ) : null}
@@ -1169,7 +1178,8 @@ function StartWorkspaceContent({
                             conversationComposer={composer}
                             heading={
                                 <StartSourcesHeader
-                                    running={sourceState === "running"}
+                                    mark={sourcePresentation.mark}
+                                    tone={sourcePresentation.tone}
                                     label={sourcePresentation.label}
                                     title={sourcePresentation.title}
                                     description={sourcePresentation.detail}
@@ -1212,6 +1222,7 @@ function StartWorkspaceContent({
                                     ]}
                                 />
                             }
+                            resting={launched && sourceState !== "running"}
                             lanes={
                                 snapshot.sources.length ? (
                                     (

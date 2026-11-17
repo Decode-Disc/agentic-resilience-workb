@@ -37,11 +37,33 @@ export type SourcesPhase = Run["sourcesPhase"];
 
 const sourcesAgent = `The ${agentName("sources")}`;
 
+/** A Sources state's glyph: a live dot while working, otherwise a static mark. */
+export type SourcesStateMark =
+    | "live"
+    | "clock"
+    | "pause"
+    | "warning"
+    | "check"
+    | "unfinished-check"
+    | "unfinished"
+    | "barred";
+/** Follows the dossier status tones: accent while working, review when the analyst must decide, success once handed off. */
+export type SourcesStateTone =
+    | "accent"
+    | "review"
+    | "ink"
+    | "success"
+    | "muted"
+    | "destructive";
+
 /** Analyst copy for the Sources phase Convex derives; every surface translates the same phase. */
 const phaseCopy: Record<
     SourcesPhase,
     {
         workState: ConversationWorkItem["state"];
+        /** The state's glyph and tone, so working, waiting for the analyst and handed off read apart at a glance. */
+        mark: SourcesStateMark;
+        tone: SourcesStateTone;
         label: string;
         outcome: string;
         title: string;
@@ -50,6 +72,8 @@ const phaseCopy: Record<
 > = {
     collecting: {
         workState: "running",
+        mark: "live",
+        tone: "accent",
         label: "Working",
         outcome: "In progress",
         title: "Collecting the documentary material",
@@ -57,6 +81,8 @@ const phaseCopy: Record<
     },
     waiting: {
         workState: "waiting",
+        mark: "clock",
+        tone: "muted",
         label: "Waiting",
         outcome: "Waiting",
         title: "Documentary preparation is waiting",
@@ -64,6 +90,8 @@ const phaseCopy: Record<
     },
     paused: {
         workState: "paused",
+        mark: "pause",
+        tone: "ink",
         label: "Paused",
         outcome: "Paused",
         title: "Documentary preparation paused",
@@ -71,6 +99,8 @@ const phaseCopy: Record<
     },
     time_limit: {
         workState: "paused",
+        mark: "warning",
+        tone: "review",
         label: "Decision needed",
         outcome: "Decision needed",
         title: `${sourcesAgent} reached its time limit`,
@@ -78,6 +108,8 @@ const phaseCopy: Record<
     },
     completed: {
         workState: "completed",
+        mark: "check",
+        tone: "success",
         label: "Complete",
         outcome: "Prepared",
         title: "Documentary material ready",
@@ -85,6 +117,8 @@ const phaseCopy: Record<
     },
     completed_with_limits: {
         workState: "completed",
+        mark: "unfinished-check",
+        tone: "success",
         label: "Complete with limits",
         outcome: "Prepared with limits",
         title: "Documentary preparation completed with limits",
@@ -92,6 +126,8 @@ const phaseCopy: Record<
     },
     ended_without_material: {
         workState: "blocked",
+        mark: "barred",
+        tone: "muted",
         label: "No material",
         outcome: "No material",
         title: "No usable material prepared",
@@ -99,6 +135,8 @@ const phaseCopy: Record<
     },
     interrupted: {
         workState: "interrupted",
+        mark: "unfinished",
+        tone: "muted",
         label: "Interrupted",
         outcome: "Interrupted",
         title: "Documentary preparation interrupted",
@@ -106,6 +144,8 @@ const phaseCopy: Record<
     },
     failed: {
         workState: "interrupted",
+        mark: "unfinished",
+        tone: "destructive",
         label: "Stopped",
         outcome: "Stopped",
         title: "Documentary preparation stopped",
@@ -113,6 +153,8 @@ const phaseCopy: Record<
     },
     insufficient_evidence: {
         workState: "blocked",
+        mark: "barred",
+        tone: "muted",
         label: "Limited material",
         outcome: "Limited material",
         title: "Public evidence is insufficient",

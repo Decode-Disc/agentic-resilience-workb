@@ -94,6 +94,8 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     await expect(
         conversationCard.getByRole("button", { name: timeLimitChoices[0] }),
     ).toBeFocused();
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: `${scratch}-attention-1440.png` });
     await expectChoiceTabOrder(page, conversationCard, timeLimitChoices);
     await expectNoRawBodyCopy(page);
     await page.screenshot({
@@ -127,6 +129,7 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     await expect(
         progress.getByRole("button", { name: "Pause research" }),
     ).toBeVisible({ timeout: 30000 });
+    await page.screenshot({ path: `${scratch}-running-1440.png` });
 
     // A second limit continues automatically while the dossier grant is active.
     await fixture("reachSourcesTimeLimit", runId, fixtureKey);

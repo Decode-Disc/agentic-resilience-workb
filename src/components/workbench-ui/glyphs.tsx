@@ -210,6 +210,17 @@ const nodes = {
             },
         ],
     ],
+    pause: [
+        [
+            "path",
+            {
+                d: "M9 6.5v11M15 6.5v11",
+                key: "0",
+                strokeLinecap: "round",
+                strokeLinejoin: "round",
+            },
+        ],
+    ],
     warning: [
         [
             "path",

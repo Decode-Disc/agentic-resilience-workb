@@ -639,6 +639,41 @@ test("research pause has a distinct control from stopping the conversation", asy
     expect(screen.queryByText("executionGeneration")).toBeNull();
 });
 
+test("a requested pause says it waits for the current step and can be withdrawn", async () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+            executionGeneration: 3,
+            researchPauseRequested: true,
+        },
+        researchControlAvailable: true,
+        sourcesPhase: "collecting",
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const progress = screen.getByRole("region", {
+        name: "Documentary progress",
+    });
+    expect(
+        within(progress).getByText("Pausing after the current step"),
+    ).toBeTruthy();
+    expect(
+        within(progress).queryByRole("button", { name: "Pause research" }),
+    ).toBeNull();
+    fireEvent.click(
+        within(progress).getByRole("button", { name: "Keep researching" }),
+    );
+    await waitFor(() =>
+        expect(resumeResearch).toHaveBeenCalledWith({
+            runId,
+            expectedGeneration: 3,
+        }),
+    );
+});
+
 test("a query retry preserves an unsaved question and its revision", () => {
     const consoleError = vi
         .spyOn(console, "error")

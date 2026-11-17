@@ -6,6 +6,7 @@ import {
     PencilEdit01Icon,
     PlusSignIcon,
 } from "@hugeicons/core-free-icons";
+import { AnimatePresence, motion } from "motion/react";
 import {
     createContext,
     type ReactNode,
@@ -81,7 +82,16 @@ import {
 } from "@/components/ui/sheet";
 import { GlassPanel } from "@/components/workbench-ui/glass-panel";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
+import {
+    listExitTransition,
+    listTransition,
+} from "@/components/workbench-ui/motion";
 import { useMediaQuery } from "@/hooks/use-responsive";
+import type {
+    SourcesStateMark,
+    SourcesStateTone,
+} from "@/lib/presentation/sources";
+import { cn } from "@/lib/utils";
 import styles from "./start-screens.module.css";
 
 export function StartRequestMessage({
@@ -245,6 +255,23 @@ const RevealInConversationContext = createContext<
     ((elementId: string) => void) | null
 >(null);
 
+let attentionTimer: number | undefined;
+
+/** Replays the brief attention outline on a revealed element; each reveal restarts it. */
+function drawAttention(elementId: string) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    window.clearTimeout(attentionTimer);
+    element.removeAttribute("data-attention");
+    // Reading layout restarts the CSS animation when the attribute returns.
+    void element.offsetWidth;
+    element.setAttribute("data-attention", "");
+    attentionTimer = window.setTimeout(
+        () => element.removeAttribute("data-attention"),
+        2200,
+    );
+}
+
 /** The control to focus when revealing an element: its first enabled button, or the element itself. */
 function revealTarget(elementId: string): HTMLElement | null {
     const element = document.getElementById(elementId);
@@ -274,6 +301,7 @@ export function StartResearchScreen({
     lanes,
     limitations,
     handoff,
+    resting = false,
 }: {
     context?: ReactNode;
     runtime: AssistantRuntime;
@@ -286,6 +314,8 @@ export function StartResearchScreen({
     lanes: ReactNode;
     limitations?: ReactNode;
     handoff?: ReactNode;
+    /** Quiets the lanes while preparation is not working (paused, waiting or awaiting a decision). */
+    resting?: boolean;
 }) {
     const [conversationOpen, setConversationOpen] = useState(false);
     const compact = useMediaQuery("(width < 52rem)");
@@ -304,6 +334,7 @@ export function StartResearchScreen({
                 behavior: prefersReducedMotion() ? "auto" : "smooth",
             });
             target?.focus({ preventScroll: true });
+            drawAttention(elementId);
         },
         [compact],
     );
@@ -425,7 +456,10 @@ export function StartResearchScreen({
                                     className={
                                         handoff
                                             ? styles.completed
-                                            : styles.lanes
+                                            : cn(
+                                                  styles.lanes,
+                                                  resting && styles.resting,
+                                              )
                                     }>
                                     {lanes}
                                 </div>
@@ -461,6 +495,7 @@ export function StartResearchScreen({
                                     target?.scrollIntoView?.({
                                         block: "center",
                                     });
+                                    if (elementId) drawAttention(elementId);
                                     return target ?? true;
                                 }}
                                 className={styles.mobileConversation}>
@@ -888,12 +923,31 @@ export function StartSourceCounts({
         <div className={styles.counts}>
             {counts.map((count) => (
                 <div key={count.label}>
-                    <b
-                        className={
-                            count.highlight ? styles.highlight : undefined
-                        }>
-                        {count.value}
-                    </b>
+                    {/* A changed count rolls to its new value; the first render appears without motion. */}
+                    <div className={styles.countValue}>
+                        <AnimatePresence initial={false} mode="popLayout">
+                            <motion.b
+                                key={count.value}
+                                className={
+                                    count.highlight
+                                        ? styles.highlight
+                                        : undefined
+                                }
+                                initial={{ opacity: 0, y: "60%" }}
+                                animate={{
+                                    opacity: 1,
+                                    y: 0,
+                                    transition: listTransition,
+                                }}
+                                exit={{
+                                    opacity: 0,
+                                    y: "-60%",
+                                    transition: listExitTransition,
+                                }}>
+                                {count.value}
+                            </motion.b>
+                        </AnimatePresence>
+                    </div>
                     <span>{count.label}</span>
                 </div>
             ))}
@@ -928,6 +982,12 @@ export function StartSourceStages({
         </div>
     );
 }
+function SourcesStateGlyph({ mark }: { mark: SourcesStateMark }) {
+    if (mark === "live")
+        return <span className={cn("wb-live", styles.liveDot)} />;
+    return <WorkbenchIcon name={mark} size={14} strokeWidth={2} />;
+}
+
 export function StartSourcesHeader({
     label,
     title,
@@ -935,7 +995,8 @@ export function StartSourcesHeader({
     actions,
     onOpenProgress,
     detail,
-    running = false,
+    mark = "live",
+    tone = "accent",
 }: {
     label: string;
     title: string;
@@ -946,25 +1007,45 @@ export function StartSourcesHeader({
     /** Opens the dossier's activity log, the recorded timeline of research steps. */
     onOpenProgress?: () => void;
     detail?: string;
-    running?: boolean;
+    mark?: SourcesStateMark;
+    tone?: SourcesStateTone;
 }) {
     return (
         <div className={styles.sourceHeading}>
-            <div className={styles.sourceTitles}>
-                <span className={styles.sourceLabel}>
-                    <AgentIdentity agent={SOURCES_AGENT} />
-                    {running && (
-                        <span className={styles.liveDot} aria-hidden="true" />
+            {/* A persisted state change hands over its label, glyph and copy together; the first render appears without motion. */}
+            <AnimatePresence initial={false} mode="wait">
+                <motion.div
+                    key={`${mark}:${title}`}
+                    className={styles.sourceTitles}
+                    data-tone={tone}
+                    initial={{ opacity: 0, y: 6, filter: "blur(2px)" }}
+                    animate={{
+                        opacity: 1,
+                        y: 0,
+                        filter: "blur(0px)",
+                        transition: listTransition,
+                    }}
+                    exit={{
+                        opacity: 0,
+                        y: -4,
+                        filter: "blur(2px)",
+                        transition: listExitTransition,
+                    }}>
+                    <span className={styles.sourceLabel}>
+                        <AgentIdentity agent={SOURCES_AGENT} />
+                        <span className={styles.stateLabel}>
+                            <SourcesStateGlyph mark={mark} />
+                            <span>{label}</span>
+                        </span>
+                    </span>
+                    <h1>{title}</h1>
+                    {description && (
+                        <p className={styles.sourceDescription} role="status">
+                            {description}
+                        </p>
                     )}
-                    <span>{label}</span>
-                </span>
-                <h1>{title}</h1>
-                {description && (
-                    <p className={styles.sourceDescription} role="status">
-                        {description}
-                    </p>
-                )}
-            </div>
+                </motion.div>
+            </AnimatePresence>
             {(actions || onOpenProgress || detail) && (
                 <div className={styles.openProgress}>
                     {(actions || onOpenProgress) && (
