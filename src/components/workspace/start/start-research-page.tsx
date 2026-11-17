@@ -201,7 +201,9 @@ function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
         const query = normalizeCompanySearchQuery(rawQuery);
         if (!query) {
             if (mode === "manual") {
-                setLookupError("Enter a company name, ticker, CIK, or SEC URL.");
+                setLookupError(
+                    "Enter a company name, ticker, CIK, or SEC URL.",
+                );
                 setPickerOpen(true);
             }
             return;

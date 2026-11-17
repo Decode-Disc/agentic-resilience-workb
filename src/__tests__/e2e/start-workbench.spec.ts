@@ -88,7 +88,9 @@ for (const viewport of [
         await workDetails.focus();
         await workDetails.press("Enter");
         await expect(
-            page.getByText("Adjust the research program", { exact: true }).first(),
+            page
+                .getByText("Adjust the research program", { exact: true })
+                .first(),
         ).toBeVisible();
         await workDetails.press("Enter");
         await expect(

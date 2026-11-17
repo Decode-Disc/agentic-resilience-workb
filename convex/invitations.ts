@@ -458,7 +458,9 @@ export const applyE2EWorkerSlots = internalMutation({
                 ? "admin"
                 : "analyst";
             if (entry.role !== expectedRole) {
-                throw new Error(`Role mismatch for E2E worker slot: ${entry.slotKey}`);
+                throw new Error(
+                    `Role mismatch for E2E worker slot: ${entry.slotKey}`,
+                );
             }
         }
 
@@ -468,7 +470,9 @@ export const applyE2EWorkerSlots = internalMutation({
             if (!isE2EWorkerSlot(existing.slotKey)) continue;
             if (!desiredKeys.has(existing.slotKey)) {
                 if (existing.claimedByVisitorId) {
-                    const visitor = await ctx.db.get(existing.claimedByVisitorId);
+                    const visitor = await ctx.db.get(
+                        existing.claimedByVisitorId,
+                    );
                     if (visitor) {
                         const contexts = await ctx.db
                             .query("browserTestContexts")

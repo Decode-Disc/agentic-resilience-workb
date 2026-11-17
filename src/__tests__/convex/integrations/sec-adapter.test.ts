@@ -113,22 +113,23 @@ describe("createSecCompanyResolver", () => {
 
     test("reuses the cached SEC company index across searches within its TTL without reserving additional SEC requests", async () => {
         let currentTime = 1_000;
-        const fetchImplementation = vi.fn(async () =>
-            new Response(
-                JSON.stringify({
-                    fields: ["cik", "name", "ticker", "exchange"],
-                    data: [
-                        [1373715, "ServiceNow, Inc.", "NOW", "NYSE"],
-                        [
-                            1818201,
-                            "CCC Intelligent Solutions Holdings Inc.",
-                            "CCCS",
-                            "Nasdaq",
+        const fetchImplementation = vi.fn(
+            async () =>
+                new Response(
+                    JSON.stringify({
+                        fields: ["cik", "name", "ticker", "exchange"],
+                        data: [
+                            [1373715, "ServiceNow, Inc.", "NOW", "NYSE"],
+                            [
+                                1818201,
+                                "CCC Intelligent Solutions Holdings Inc.",
+                                "CCCS",
+                                "Nasdaq",
+                            ],
                         ],
-                    ],
-                }),
-                { status: 200 },
-            ),
+                    }),
+                    { status: 200 },
+                ),
         );
         const reserveRequest = vi.fn(async () => undefined);
         const recordAttempt = vi.fn(async (attempt: { status: string }) => ({

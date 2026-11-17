@@ -175,7 +175,13 @@ const executionLabels = {
 // Tailwind resolves utilities from literal source text, so these class names
 // are written out in full. Composing them from a color name at runtime emits
 // classes that never reach the stylesheet.
-type DossierTone = "success" | "accent" | "review" | "destructive" | "dashed" | "ink";
+type DossierTone =
+    | "success"
+    | "accent"
+    | "review"
+    | "destructive"
+    | "dashed"
+    | "ink";
 
 // The cutout card paints its status pin as a solid surface; this maps each
 // dossier-status tone (owned by `dossierStatus`) to that surface and to the
@@ -185,7 +191,10 @@ const dossierStatusSurfaces = {
         fill: "bg-success text-success-foreground ring-success/25",
         edge: "text-success",
     },
-    accent: { fill: "bg-info text-info-foreground ring-info/25", edge: "text-info" },
+    accent: {
+        fill: "bg-info text-info-foreground ring-info/25",
+        edge: "text-info",
+    },
     review: {
         fill: "bg-warning text-warning-foreground ring-warning/25",
         edge: "text-warning",
@@ -194,7 +203,10 @@ const dossierStatusSurfaces = {
         fill: "bg-danger text-danger-foreground ring-danger/25",
         edge: "text-danger",
     },
-    dashed: { fill: "bg-muted text-muted-foreground ring-muted/25", edge: "text-muted" },
+    dashed: {
+        fill: "bg-muted text-muted-foreground ring-muted/25",
+        edge: "text-muted",
+    },
     ink: {
         fill: "bg-secondary text-secondary-foreground ring-secondary/25",
         edge: "text-secondary",

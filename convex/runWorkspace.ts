@@ -184,7 +184,10 @@ export async function requireBrowserTestRunOwner(
         throw new Error("Admitted anonymous browser test visitor required");
     const owner = await ctx.db.get(run.ownerVisitorId);
     const invitation = owner ? await ctx.db.get(owner.invitationId) : null;
-    const verified = await requireBrowserTestOwner(ctx, invitation?.slotKey ?? "");
+    const verified = await requireBrowserTestOwner(
+        ctx,
+        invitation?.slotKey ?? "",
+    );
     if (!owner || verified._id !== owner._id)
         throw new Error("Admitted anonymous browser test visitor required");
     return verified;

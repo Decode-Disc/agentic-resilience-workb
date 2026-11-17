@@ -44,6 +44,7 @@ import {
     BROWSER_QUALIFICATION_MAX_COST_USD,
     BROWSER_QUALIFICATION_MAX_REQUESTS,
     MAX_SOURCES_QUALIFICATION_RECEIPTS,
+    QUALIFICATION_TOOLING_POLICY,
     RESOURCE_POLICY_VERSION,
 } from "@convex/resourcePolicy";
 import {
@@ -2169,12 +2170,20 @@ export const requestApprovalFixture = internalAction({
                 const message =
                     error instanceof Error ? error.message : String(error);
                 if (
-                    attempt >= 6 ||
-                    !message.includes("changed while this mutation was being run")
+                    attempt >=
+                        QUALIFICATION_TOOLING_POLICY.fixtureConflictMaxAttempts ||
+                    !message.includes(
+                        "changed while this mutation was being run",
+                    )
                 )
                     throw error;
                 await new Promise((resolve) =>
-                    setTimeout(resolve, 100 * attempt),
+                    // resource-policy-exception: Canonical fixture backoff multiplied by the one-based attempt counter, not a caller-local duration.
+                    setTimeout(
+                        resolve,
+                        QUALIFICATION_TOOLING_POLICY.fixtureConflictRetryBaseMs *
+                            attempt,
+                    ),
                 );
             }
         }

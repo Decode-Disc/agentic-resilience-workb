@@ -93,9 +93,9 @@ for (const theme of ["light", "dark"])
             await expect(input).toHaveValue("My unsent draft");
             await expect(queue).toBeVisible();
             await expect(
-                page
-                    .getByRole("log")
-                    .getByRole("status", { name: "Sources Agent mission status" }),
+                page.getByRole("log").getByRole("status", {
+                    name: "Sources Agent mission status",
+                }),
             ).toContainText("Working");
             await input.fill("");
             await form

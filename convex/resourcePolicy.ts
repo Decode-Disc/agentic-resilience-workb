@@ -400,6 +400,9 @@ export const NATIVE_WORKER_POLICY = {
 
 /** Runner wait/capture capacities, separate from generation deadlines and immutable campaign authority. */
 export const QUALIFICATION_TOOLING_POLICY = {
+    // Browser fixture OCC retries; exhaustion rethrows the last conflict.
+    fixtureConflictMaxAttempts: 6,
+    fixtureConflictRetryBaseMs: 100,
     worktreeLookupMaxBufferBytes: 256 * 1024,
     candidateValidationTimeoutMs: 300_000,
     localCommandTimeoutMs: 30_000,

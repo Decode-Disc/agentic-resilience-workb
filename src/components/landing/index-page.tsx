@@ -118,7 +118,10 @@ function WorkbenchLink({ mobile = false }: { mobile?: boolean }) {
     return (
         <Link
             to="/workspace/start"
-            className={cn(buttonVariants({ size: "default" }), mobile && "w-full")}>
+            className={cn(
+                buttonVariants({ size: "default" }),
+                mobile && "w-full",
+            )}>
             Open workbench
         </Link>
     );
