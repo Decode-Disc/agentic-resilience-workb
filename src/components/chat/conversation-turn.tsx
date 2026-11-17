@@ -1,5 +1,4 @@
 import { Fragment, type ReactNode } from "react";
-import { AgentIdentity } from "@/components/chat/agent-identity";
 import {
     ConversationActivity,
     ConversationActivityGroup,
@@ -100,9 +99,6 @@ export function ConversationTurn({
                                 : `${activities.length} ${activities.length === 1 ? "operation" : "operations"}`
                         }
                         triggerLabel="Inspect work for this turn"
-                        titleContent={
-                            agent ? <AgentIdentity agent={agent} /> : undefined
-                        }
                         statusLabel={
                             agent ? `${agent.name} response status` : undefined
                         }

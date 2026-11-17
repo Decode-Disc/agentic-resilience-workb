@@ -51,25 +51,15 @@ export const workStateLabels = {
     blocked: "Unavailable",
 } as const;
 
-/** Uses supplied execution state; only visible, running work has a looping indicator. */
-export function ConversationWorkMark({
-    state,
-}: {
-    state: ConversationWorkItem["state"];
-}) {
+/** Shares visibility and document gating between the icon and text animations. */
+function useWorkAnimationRef(state: ConversationWorkItem["state"]) {
     const element = useRef<HTMLSpanElement>(null);
-    const previous = useRef(state);
-    const changed = previous.current !== state;
-    const reducedMotion = useReducedMotion();
     useEffect(() => {
-        previous.current = state;
-    }, [state]);
-    useEffect(() => {
-        const mark = element.current;
-        if (!mark || state !== "running") return;
+        const target = element.current;
+        if (!target || state !== "running") return;
         let visible = false;
         const update = () =>
-            mark.style.setProperty(
+            target.style.setProperty(
                 "--work-animation-state",
                 visible && !document.hidden ? "running" : "paused",
             );
@@ -77,13 +67,42 @@ export function ConversationWorkMark({
             visible = entry?.isIntersecting ?? false;
             update();
         });
-        observer.observe(mark);
+        observer.observe(target);
         document.addEventListener("visibilitychange", update);
         update();
         return () => {
             observer.disconnect();
             document.removeEventListener("visibilitychange", update);
         };
+    }, [state]);
+    return element;
+}
+
+function ConversationWorkLabel({
+    state,
+}: {
+    state: ConversationWorkItem["state"];
+}) {
+    const element = useWorkAnimationRef(state);
+    return (
+        <span ref={element} className={styles.workLabel} data-state={state}>
+            {workStateLabels[state]}
+        </span>
+    );
+}
+
+/** Uses supplied execution state; only visible, running work has a looping indicator. */
+export function ConversationWorkMark({
+    state,
+}: {
+    state: ConversationWorkItem["state"];
+}) {
+    const element = useWorkAnimationRef(state);
+    const previous = useRef(state);
+    const changed = previous.current !== state;
+    const reducedMotion = useReducedMotion();
+    useEffect(() => {
+        previous.current = state;
     }, [state]);
     return (
         <span
@@ -132,7 +151,7 @@ export function ConversationWorkStatus({
             role="status"
             aria-label={label}>
             <ConversationWorkMark state={state} />
-            {workStateLabels[state]}
+            <ConversationWorkLabel state={state} />
         </span>
     );
 }
@@ -168,7 +187,7 @@ export function ConversationActivity({
                 )}
             </span>
             <span data-slot="activity-state" className={styles.state}>
-                {workStateLabels[state]}
+                <ConversationWorkLabel state={state} />
             </span>
             {(children || compact) && (
                 <Icon iconNode={ArrowRight01Icon} size={12} />

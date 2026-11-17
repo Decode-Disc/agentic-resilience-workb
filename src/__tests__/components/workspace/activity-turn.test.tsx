@@ -204,7 +204,7 @@ it("keeps each agent's supplied execution state readable independently of other 
     }
 });
 
-it("attributes conversational activity to its supplied agent and leaves the answer outside folded work", () => {
+it("keeps direct response work free of repeated agent identity and leaves the answer outside folded work", () => {
     const agent = { id: "specialist", name: "Dossier specialist" };
     const turn: ConversationTurnSnapshot = {
         id: "specialist-turn",
@@ -239,7 +239,8 @@ it("attributes conversational activity to its supplied agent and leaves the answ
     const group = screen.getByRole("button", {
         name: "Inspect work for this turn",
     });
-    expect(group.textContent).toContain("Dossier specialist");
+    expect(group.textContent).not.toContain("Dossier specialist");
+    expect(group.textContent).toContain("Work in progress");
     expect(
         screen.getByRole("status", {
             name: "Dossier specialist response status",
@@ -256,6 +257,8 @@ it("attributes conversational activity to its supplied agent and leaves the answ
         />,
     );
     expect(group.getAttribute("aria-expanded")).toBe("false");
+    expect(group.textContent).not.toContain("Dossier specialist");
+    expect(group.textContent).toContain("Work completed");
     expect(
         screen
             .getByText("The material leaves workflow control unresolved.")
