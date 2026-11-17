@@ -64,6 +64,7 @@ const overview: Overview = {
             outcome: "in_progress",
             unfinished: [],
             documents: 1,
+            sourceIds: [sourceId],
             contributions: 2,
             conflicts: 1,
         },
@@ -74,6 +75,7 @@ const overview: Overview = {
             outcome: "in_progress",
             unfinished: [],
             documents: 0,
+            sourceIds: [],
             contributions: 0,
             conflicts: 0,
         },
@@ -84,12 +86,22 @@ const overview: Overview = {
         searches: 1,
         acquisitions: 0,
     },
-    reading: { captured: 1, full: 1, partial: 0, unavailable: 0, capturing: 1 },
+    reading: {
+        captured: 1,
+        full: 1,
+        partial: 0,
+        unavailable: 0,
+        capturing: 1,
+        notCaptured: 0,
+    },
     contributions: tally,
+    retainedContributions: tally,
     organize: {
         retained: 0,
         contextOnly: 0,
         notRetained: 0,
+        notRetainedRead: 0,
+        notRetainedUnread: 0,
         excluded: 0,
         restricted: 0,
     },
@@ -204,7 +216,6 @@ function renderSources(
             onSearchChange={onSearchChange}
             navigation={<nav aria-label="Research workspace sections" />}
             fallback={<p>Corpus review</p>}
-            dock={<p>Inventory dock</p>}
             onFollowUp={onFollowUp}
             {...props}
         />,
@@ -230,7 +241,6 @@ test("dossiers on the corpus-approval path keep their existing review", () => {
     convexReactHarness.query(api.sourcesWorkspace.overview).returns(null);
     renderSources();
     expect(screen.getByText("Corpus review")).toBeTruthy();
-    expect(screen.queryByText("Inventory dock")).toBeNull();
 });
 
 test("preparation under way shows unsettled needs without backend vocabulary", () => {
@@ -246,10 +256,94 @@ test("preparation under way shows unsettled needs without backend vocabulary", (
         ),
     ).toBeTruthy();
     expect(screen.getAllByText("In progress").length).toBeGreaterThan(0);
-    expect(screen.getByText("Inventory dock")).toBeTruthy();
     expect(document.body.textContent).not.toMatch(rawValues);
     fireEvent.click(screen.getByRole("button", { name: /Inspect sources/ }));
     expect(onSearchChange).toHaveBeenCalledWith({ sourcesView: "matrix" });
+});
+
+test("how preparation ran accounts for every candidate and names conflicts and leads for what they are", () => {
+    convexReactHarness.query(api.sourcesWorkspace.overview).returns({
+        ...overview,
+        materialOutcome: "partial",
+        collect: { ...overview.collect, candidates: 9, acquisitions: 5 },
+        reading: {
+            captured: 5,
+            full: 3,
+            partial: 2,
+            unavailable: 0,
+            capturing: 0,
+            notCaptured: 4,
+        },
+        contributions: {
+            ...tally,
+            total: 38,
+            supported: 36,
+            conflict: 1,
+            notEstablished: 1,
+        },
+        retainedContributions: {
+            ...tally,
+            total: 29,
+            supported: 28,
+            conflict: 1,
+            notEstablished: 0,
+        },
+        organize: {
+            retained: 4,
+            contextOnly: 0,
+            notRetained: 5,
+            notRetainedRead: 1,
+            notRetainedUnread: 4,
+            excluded: 0,
+            restricted: 0,
+        },
+    });
+    const { onSearchChange } = renderSources({
+        run: { ...run, sourcesPhase: "completed" },
+    });
+    fireEvent.click(
+        screen.getByRole("button", { name: /How preparation ran/ }),
+    );
+    expect(
+        screen.getAllByText(
+            (_, element) =>
+                element?.textContent ===
+                "5 captured · 3 complete, 2 partial, 4 not captured",
+        )[0],
+    ).toBeTruthy();
+    expect(
+        screen.getByText("Controls on 29 retained contributions"),
+    ).toBeTruthy();
+    expect(screen.getByText("1 read, nothing usable")).toBeTruthy();
+    expect(screen.getByText("4 candidates never captured")).toBeTruthy();
+    expect(
+        screen.getByText("1 contribution in documentary conflict"),
+    ).toBeTruthy();
+    expect(
+        screen.getByText("1 targeted search · 5 documents acquired"),
+    ).toBeTruthy();
+    // Documents open from the outcome; the narrow-layout copy is hidden by CSS jsdom does not apply.
+    fireEvent.click(
+        screen.getAllByRole("button", {
+            name: /^1 document/,
+        })[0] as HTMLElement,
+    );
+    fireEvent.click(
+        within(
+            screen.getAllByRole("list", {
+                name: "Documents for this need",
+            })[0] as HTMLElement,
+        ).getByRole("button", { name: /Form 10-K · FY2025/ }),
+    );
+    expect(onSearchChange).toHaveBeenCalledWith({
+        sourcesView: "reader",
+        source: sourceId,
+        need: "workflow",
+    });
+    expect(screen.queryByText("Opposing")).toBeNull();
+    expect(screen.queryByText("Excluded")).toBeNull();
+    expect(screen.queryByText(/Planned discovery|full reading/i)).toBeNull();
+    expect(document.body.textContent).not.toMatch(rawValues);
 });
 
 test("the matrix keeps reading, documentary contributions and selection separate", () => {
@@ -262,7 +356,7 @@ test("the matrix keeps reading, documentary contributions and selection separate
         .closest("tr");
     expect(annual).not.toBeNull();
     const row = within(annual as HTMLElement);
-    expect(row.getByText("Full reading")).toBeTruthy();
+    expect(row.getByText("Complete capture")).toBeTruthy();
     expect(
         row.getByRole("button", {
             name: "2 contributions: 1 asserted fact, 1 attributed argument",
@@ -293,6 +387,12 @@ test("the reader shows effective use apart from the reported one and hands a fol
     expect(
         screen.getAllByText("The platform connects insurers.").length,
     ).toBeGreaterThan(0);
+    // Below the margin width, a citation's note opens from its note line.
+    fireEvent.click(
+        screen.getAllByRole("button", {
+            name: /^Show note for citation 1/,
+        })[0] as HTMLElement,
+    );
     expect(
         screen.getAllByText(
             /Inspection only · The call defines scope differently\. · Control reported attributed argument only; effective use is inspection only\./,
@@ -303,9 +403,10 @@ test("the reader shows effective use apart from the reported one and hands a fol
     );
     expect(document.body.textContent).not.toMatch(rawValues);
     fireEvent.click(
-        screen.getAllByRole("button", {
-            name: "Request a targeted check",
-        })[0] as HTMLElement,
+        screen.getAllByRole("button", { name: "Follow up" })[0] as HTMLElement,
+    );
+    fireEvent.click(
+        screen.getByRole("menuitem", { name: "Request a targeted check" }),
     );
     expect(onFollowUp).toHaveBeenCalledWith(
         expect.stringContaining(
@@ -314,17 +415,108 @@ test("the reader shows effective use apart from the reported one and hands a fol
     );
 });
 
+test("going to a conflict in another source starts on it once that document arrives", () => {
+    const blog: Reading = {
+        ...reading,
+        source: rows[1] as Row,
+        contributions: [
+            {
+                ...(reading
+                    .contributions[0] as Reading["contributions"][number]),
+                conclusion: "supported",
+            },
+        ],
+    };
+    let loaded = false;
+    convexReactHarness
+        .query(api.sourcesWorkspace.getSource)
+        .returnsFrom(({ args }) =>
+            args !== "skip" && args.sourceId === otherId
+                ? blog
+                : loaded
+                  ? reading
+                  : undefined,
+        );
+    const props = {
+        runId,
+        run,
+        onSearchChange: vi.fn(),
+        navigation: <nav aria-label="Research workspace sections" />,
+        fallback: <p>Corpus review</p>,
+    };
+    const { rerender } = render(
+        <ConnectedSources
+            {...props}
+            search={{ sourcesView: "reader", source: otherId }}
+        />,
+    );
+    // The previous document stays on screen while the conflicting one loads.
+    rerender(
+        <ConnectedSources
+            {...props}
+            search={{
+                sourcesView: "reader",
+                source: sourceId,
+                focus: "conflict",
+            }}
+        />,
+    );
+    loaded = true;
+    rerender(
+        <ConnectedSources
+            {...props}
+            search={{
+                sourcesView: "reader",
+                source: sourceId,
+                focus: "conflict",
+            }}
+        />,
+    );
+    expect(
+        screen
+            .getByRole("button", { name: /^Conflicts/ })
+            .getAttribute("aria-pressed"),
+    ).toBe("true");
+});
+
+test("on a phone, a source opened from preparation opens straight in its drawer, and closing it forgets the source", async () => {
+    const matchMedia = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+        ...matchMedia(query),
+        matches: query === "(max-width: 767px)",
+    });
+    try {
+        const { onSearchChange } = renderSources({
+            search: {
+                sourcesView: "reader",
+                source: sourceId,
+                need: "workflow",
+            },
+        });
+        const drawer = screen.getByRole("dialog", {
+            name: "Form 10-K · FY2025",
+        });
+        fireEvent.click(
+            within(drawer).getByRole("button", { name: "Close source" }),
+        );
+        // Reloading the address afterwards shows the list, not the drawer again.
+        await waitFor(() =>
+            expect(onSearchChange).toHaveBeenCalledWith(
+                { source: undefined, need: undefined, focus: undefined },
+                true,
+            ),
+        );
+    } finally {
+        window.matchMedia = matchMedia;
+    }
+});
+
 test("without a Workbench conversation the reader offers no follow-up it cannot deliver", () => {
     renderSources({
         search: { sourcesView: "reader", source: sourceId },
         onFollowUp: undefined,
     });
-    expect(
-        screen.queryByRole("button", { name: "Request a targeted check" }),
-    ).toBeNull();
-    expect(
-        screen.queryByRole("button", { name: "Challenge this selection" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Follow up" })).toBeNull();
 });
 
 test("the Sources page points to the conversation's time-limit decision", () => {

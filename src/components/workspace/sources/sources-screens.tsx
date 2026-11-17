@@ -3,7 +3,14 @@ import {
     Cancel01Icon,
     Search01Icon,
 } from "@hugeicons/core-free-icons";
-import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
+import {
+    type ReactNode,
+    type Ref,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from "react";
 import Icon from "@/components/icon";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Badge } from "@/components/ui/badge";
@@ -74,7 +81,6 @@ import {
 /** Slots shared by every Sources screen. */
 export interface SourcesScreenFrame {
     navigation: ReactNode;
-    dock?: ReactNode;
 }
 
 export type DiscoveryOutcome = "found" | "none" | "unavailable";
@@ -97,6 +103,8 @@ export interface SourcesPreparationView {
             outcome: DiscoveryOutcome;
         }[];
         note?: string;
+        /** How candidates were found, derived from the run; omitted when nothing is recorded. */
+        description?: string;
     };
     reading: {
         captured: number;
@@ -105,6 +113,11 @@ export interface SourcesPreparationView {
         full: number;
         partial: number;
         unavailable: number;
+        /** Candidates never captured: open leads, not judged irrelevant. */
+        notCaptured?: number;
+        /** `retained`: controls on the handed-off material; `checked`: everything controlled so far. */
+        controlScope?: "retained" | "checked";
+        /** Counts of controlled contributions, not documents. */
         controls: {
             supported: number;
             conflict: number;
@@ -118,13 +131,22 @@ export interface SourcesPreparationView {
         context: number;
         uses: readonly {
             id: string;
-            role: "primary" | "opposing" | "excluded";
+            /** `conflict`: sources disagree; `unused`: read, nothing usable; `lead`: never captured; `excluded`: removed by the analyst. */
+            role:
+                | "primary"
+                | "opposing"
+                | "conflict"
+                | "unused"
+                | "lead"
+                | "excluded";
             text: string;
         }[];
         handoff?: string;
     };
     questions: readonly NeedQuestion[];
     needs: readonly DocumentaryNeed[];
+    /** A reason shared by several needs, shown once above them. */
+    needsNotice?: string;
 }
 
 const discoveryMeta: Record<DiscoveryOutcome, string> = {
@@ -140,6 +162,14 @@ const roleBadges = {
             Opposing
         </Badge>
     ),
+    conflict: (
+        <Badge tone="counter">
+            <ClaimGlyph kind="counter" />
+            Conflict
+        </Badge>
+    ),
+    unused: <Badge tone="unknown">Not retained</Badge>,
+    lead: <Badge tone="dashed">Not captured</Badge>,
     excluded: <Badge tone="unknown">Excluded</Badge>,
 };
 const check = <WorkbenchIcon name="check" size={11} strokeWidth={2.4} />;
@@ -152,6 +182,7 @@ export function SourcesPreparationScreen({
     inspectEmphasis = "primary",
     actions,
     notices,
+    onOpenSource,
 }: {
     frame: SourcesScreenFrame;
     view: SourcesPreparationView;
@@ -162,6 +193,8 @@ export function SourcesPreparationScreen({
     actions?: ReactNode;
     /** Recovery, failed-search or availability notices shown above the needs. */
     notices?: ReactNode;
+    /** Opens one of a need's documents in the reader. */
+    onOpenSource?: (sourceId: string, needId: string) => void;
 }) {
     const [runOpen, setRunOpen] = useState(false);
     const runTrigger = useRef<HTMLButtonElement>(null);
@@ -248,7 +281,12 @@ export function SourcesPreparationScreen({
                 </div>
             }>
             {notices}
-            <DocumentaryNeeds questions={view.questions} needs={view.needs} />
+            <DocumentaryNeeds
+                questions={view.questions}
+                needs={view.needs}
+                notice={view.needsNotice}
+                onOpenSource={onOpenSource}
+            />
             <PreparationRun
                 view={view}
                 open={runOpen}
@@ -299,9 +337,8 @@ function PreparationRun({
                     <StageArrow />
                     <span className={styles.flowStep}>
                         <span>
-                            <b>{reading.captured}</b> read · {reading.full}{" "}
-                            full, {reading.partial} partial,{" "}
-                            {reading.unavailable} unavailable
+                            <b>{reading.captured}</b> captured ·{" "}
+                            {captureBreakdown(reading)}
                         </span>
                         <ReadingBar
                             height={5}
@@ -309,6 +346,7 @@ function PreparationRun({
                                 full: reading.full,
                                 partial: reading.partial,
                                 unavailable: reading.unavailable,
+                                notCaptured: reading.notCaptured,
                             }}
                         />
                     </span>
@@ -338,7 +376,7 @@ function PreparationStages({ view }: { view: SourcesPreparationView }) {
             <PreparationStageCard
                 step="01"
                 title="Collect sources"
-                description="Planned discovery within the allowance"
+                description={collect.description}
                 metrics={[
                     {
                         id: "candidates",
@@ -387,7 +425,7 @@ function PreparationStages({ view }: { view: SourcesPreparationView }) {
             <PreparationStageCard
                 step="02"
                 title="Read and check"
-                description="Capture, passages, documentary controls"
+                description="Captures and documentary controls"
                 metrics={[
                     {
                         id: "captured",
@@ -412,35 +450,48 @@ function PreparationStages({ view }: { view: SourcesPreparationView }) {
                             full: reading.full,
                             partial: reading.partial,
                             unavailable: reading.unavailable,
+                            notCaptured: reading.notCaptured,
                         }}
                     />
                     <span className={styles.readingLegend}>
                         <span>
-                            <b>{reading.full}</b> full reading
+                            <b>{reading.full}</b> complete
                         </span>
                         <span>
                             <b>{reading.partial}</b> partial
                         </span>
-                        <span>
-                            <b>{reading.unavailable}</b> unavailable
-                        </span>
+                        {reading.unavailable > 0 && (
+                            <span>
+                                <b>{reading.unavailable}</b> unavailable
+                            </span>
+                        )}
+                        {(reading.notCaptured ?? 0) > 0 && (
+                            <span>
+                                <b>{reading.notCaptured}</b> not captured
+                            </span>
+                        )}
                     </span>
                 </span>
                 <span className={styles.controls}>
-                    <span className="wb-label">Documentary controls</span>
+                    <span className="wb-label">
+                        Controls on {controlTotal(reading.controls)}
+                        {reading.controlScope === "retained" ? " retained" : ""}{" "}
+                        contributions
+                    </span>
                     <span className={styles.badges}>
                         <Badge tone="ink">
-                            {check}Supported {reading.controls.supported}
+                            {check}
+                            {reading.controls.supported} supported
                         </Badge>
                         <Badge tone="counter">
                             <ClaimGlyph kind="counter" />
-                            Conflict {reading.controls.conflict}
+                            {reading.controls.conflict} in conflict
                         </Badge>
                         <Badge tone="unknown">
-                            Not established {reading.controls.notEstablished}
+                            {reading.controls.notEstablished} not established
                         </Badge>
                         <Badge tone="dashed">
-                            Unfinished {reading.controls.unfinished}
+                            {reading.controls.unfinished} unchecked
                         </Badge>
                     </span>
                 </span>
@@ -486,6 +537,26 @@ function PreparationStages({ view }: { view: SourcesPreparationView }) {
             </PreparationStageCard>
         </div>
     );
+}
+
+function controlTotal(controls: SourcesPreparationView["reading"]["controls"]) {
+    return (
+        controls.supported +
+        controls.conflict +
+        controls.notEstablished +
+        controls.unfinished
+    );
+}
+
+function captureBreakdown(reading: SourcesPreparationView["reading"]) {
+    return [
+        `${reading.full} complete`,
+        `${reading.partial} partial`,
+        reading.unavailable ? `${reading.unavailable} unavailable` : undefined,
+        reading.notCaptured ? `${reading.notCaptured} not captured` : undefined,
+    ]
+        .filter(Boolean)
+        .join(", ");
 }
 
 function StageArrow() {
@@ -714,8 +785,8 @@ export function SourcesMatrixScreen({
     );
 }
 
-/** Below this width the reader's three columns no longer fit; the document and its contributions share tabs beside the list. */
-const splitReaderQuery = "(max-width: 1279px)";
+/** From this width notes sit in the document's margin; below it they open under their passage. */
+const marginNotesQuery = "(min-width: 1280px)";
 /** Below this width the list takes the screen and each source opens in a drawer. */
 const compactReaderQuery = "(max-width: 767px)";
 
@@ -726,6 +797,9 @@ export function SourcesReaderScreen({
     sources,
     selectedId,
     onSelectSource,
+    onOpenConflict,
+    openOnArrival = false,
+    onCloseSource,
     summary,
     matrixLabel,
     onOpenMatrix,
@@ -744,10 +818,25 @@ export function SourcesReaderScreen({
     }[];
     selectedId: string;
     onSelectSource: (id: string) => void;
+    /** Opens a source on its first conflicting citation. */
+    onOpenConflict?: (id: string) => void;
+    /** The screen was opened on a chosen source; on narrow screens it starts in its drawer. */
+    openOnArrival?: boolean;
+    /** The drawer finished closing; the open source is no longer chosen. */
+    onCloseSource?: () => void;
     summary: ReactNode;
     matrixLabel: string;
     onOpenMatrix: () => void;
-    document: Omit<SourceReaderProps, "navigation" | "actions" | "layout">;
+    document: Omit<
+        SourceReaderProps,
+        | "followUps"
+        | "decision"
+        | "noteMode"
+        | "notesShown"
+        | "onNotesShownChange"
+        | "dismiss"
+        | "arriving"
+    >;
     onRequestCheck?: () => void;
     onChallengeSelection?: () => void;
     /** Consumer-owned decision controls for the open source, such as include or remove. */
@@ -755,26 +844,40 @@ export function SourcesReaderScreen({
     /** Shown above the reader, such as a preview-only or unavailable-reading notice. */
     notices?: ReactNode;
 }) {
-    const split = useMediaQuery(splitReaderQuery);
+    const marginNotes = useMediaQuery(marginNotesQuery);
     const compact = useMediaQuery(compactReaderQuery);
-    const [drawerOpen, setDrawerOpen] = useState(false);
+    const noteMode = marginNotes && !compact ? "margin" : "inline";
+    // The analyst's show/hide choice holds while they move between sources.
+    const [notesPreference, setNotesPreference] = useState<boolean>();
+    const notes = {
+        noteMode,
+        notesShown: notesPreference ?? noteMode === "margin",
+        onNotesShownChange: setNotesPreference,
+    } as const;
+    const [drawerOpen, setDrawerOpen] = useState(openOnArrival);
     /** The source the screen opened on appears at once; later selections arrive. */
     const [arriving, setArriving] = useState(false);
     const opener = useRef<HTMLElement | null>(null);
+    // Selecting a source, or its conflict, opens it; on narrow screens in the drawer.
+    const open = (id: string, select: (id: string) => void) => {
+        if (id !== selectedId) setArriving(true);
+        select(id);
+        if (!compact) return;
+        opener.current =
+            globalThis.document.activeElement instanceof HTMLElement
+                ? globalThis.document.activeElement
+                : null;
+        setDrawerOpen(true);
+    };
     const list = (
         <SourceReaderList
             groups={sources}
-            selectedId={selectedId}
-            onSelect={(id) => {
-                if (id !== selectedId) setArriving(true);
-                onSelectSource(id);
-                if (!compact) return;
-                opener.current =
-                    globalThis.document.activeElement instanceof HTMLElement
-                        ? globalThis.document.activeElement
-                        : null;
-                setDrawerOpen(true);
-            }}
+            // In the drawer layout a source is chosen only while its drawer is open.
+            selectedId={!compact || drawerOpen ? selectedId : undefined}
+            onSelect={(id) => open(id, onSelectSource)}
+            onOpenConflict={
+                onOpenConflict ? (id) => open(id, onOpenConflict) : undefined
+            }
             summary={summary}
             footer={
                 <Button
@@ -786,26 +889,48 @@ export function SourcesReaderScreen({
             }
         />
     );
-    const actions = (onRequestCheck || onChallengeSelection || decision) && (
-        <span className={styles.readerActions}>
-            {decision}
-            {onRequestCheck && (
-                <Button
-                    className={styles.readerPrimary}
-                    onClick={onRequestCheck}>
-                    Request a targeted check
-                </Button>
-            )}
-            {onChallengeSelection && (
-                <Button
-                    variant="outline"
-                    className={styles.readerSecondary}
-                    onClick={onChallengeSelection}>
-                    Challenge this selection
-                </Button>
-            )}
-        </span>
-    );
+    const followUps = [
+        ...(onRequestCheck
+            ? [
+                  {
+                      id: "check",
+                      label: "Request a targeted check",
+                      onSelect: onRequestCheck,
+                  },
+              ]
+            : []),
+        ...(onChallengeSelection
+            ? [
+                  {
+                      id: "challenge",
+                      label: "Challenge this selection",
+                      onSelect: onChallengeSelection,
+                  },
+              ]
+            : []),
+    ];
+    // The workspace ends at the viewport's bottom edge, measured from where it actually starts.
+    const workspace = useRef<HTMLDivElement>(null);
+    const [workspaceTop, setWorkspaceTop] = useState<number>();
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the measured element changes when the layout switches between list and workspace.
+    useLayoutEffect(() => {
+        const element = workspace.current;
+        if (!element) return;
+        const measure = () =>
+            setWorkspaceTop(
+                element.getBoundingClientRect().top + window.scrollY,
+            );
+        measure();
+        window.addEventListener("resize", measure);
+        return () => window.removeEventListener("resize", measure);
+    }, [compact]);
+    // Both layouts end at the viewport's bottom edge, so long lists scroll inside their card.
+    const viewportHeight =
+        workspaceTop === undefined
+            ? undefined
+            : {
+                  height: `max(${compact ? 360 : 520}px, calc(100dvh - ${Math.round(workspaceTop)}px - ${compact ? 16 : 24}px))`,
+              };
     return (
         <SourcesWorkspaceFrame
             {...frame}
@@ -815,10 +940,18 @@ export function SourcesReaderScreen({
             {notices}
             {compact ? (
                 <>
-                    <div className={styles.compactList}>{list}</div>
+                    <div
+                        ref={workspace}
+                        className={styles.compactList}
+                        style={viewportHeight}>
+                        {list}
+                    </div>
                     <Drawer
                         open={drawerOpen}
                         onOpenChange={setDrawerOpen}
+                        onOpenChangeComplete={(next) => {
+                            if (!next) onCloseSource?.();
+                        }}
                         showSwipeHandle>
                         <DrawerContent
                             aria-label={document.title}
@@ -826,10 +959,11 @@ export function SourcesReaderScreen({
                             className={styles.drawer}>
                             <WorkbenchUiRoot className={styles.drawerBody}>
                                 <SourceReader
-                                    sourceId={selectedId}
                                     {...document}
-                                    layout="tabs"
-                                    actions={actions}
+                                    sourceId={document.sourceId ?? selectedId}
+                                    {...notes}
+                                    followUps={followUps}
+                                    decision={decision}
                                     dismiss={
                                         <DrawerClose
                                             render={
@@ -853,27 +987,23 @@ export function SourcesReaderScreen({
                         </DrawerContent>
                     </Drawer>
                 </>
-            ) : split ? (
-                <div className={styles.split}>
+            ) : (
+                <div
+                    ref={workspace}
+                    className={styles.readerWorkspace}
+                    style={viewportHeight}>
                     {list}
-                    <div className={cn("wb-glass", styles.splitDocument)}>
+                    <div className={cn("wb-glass", styles.readerDocument)}>
                         <SourceReader
-                            sourceId={selectedId}
                             {...document}
+                            sourceId={document.sourceId ?? selectedId}
+                            {...notes}
                             arriving={arriving}
-                            layout="tabs"
-                            actions={actions}
+                            followUps={followUps}
+                            decision={decision}
                         />
                     </div>
                 </div>
-            ) : (
-                <SourceReader
-                    sourceId={selectedId}
-                    {...document}
-                    arriving={arriving}
-                    navigation={list}
-                    actions={actions}
-                />
             )}
         </SourcesWorkspaceFrame>
     );

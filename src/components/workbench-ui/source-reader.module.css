@@ -1,128 +1,127 @@
 @reference "../../styles.css";
 
-.wrap {
-    @apply grid grid-cols-[minmax(0,_1fr)_300px] gap-[16px] max-w-[1000px];
+/* The reader fills its container; only the document body scrolls. */
+.reader {
+    @apply flex flex-col h-[100%] min-h-[0] min-w-[0];
+    container-type: inline-size;
 }
-/* The document's two panels sit directly in the reader grid. */
-.document {
-    @apply contents;
-}
-.main {
-    @apply rounded-(--radius-2xl) overflow-hidden flex flex-col;
-}
+
 .header {
-    @apply pt-[18px] px-[22px] pb-[16px] flex items-center gap-[14px];
+    @apply shrink-0 flex flex-col gap-[10px] pt-[16px] px-[22px] pb-[12px];
     border-bottom: 1px solid var(--divider);
 }
-.headerTitle {
-    @apply flex-[1] flex flex-col gap-[4px] min-w-[0];
+.titleRow {
+    @apply flex items-start justify-between gap-[12px];
 }
-.headerTitleRow {
-    @apply flex items-center justify-between gap-[12px];
+.titleActions {
+    @apply shrink-0 flex items-center gap-[4px] -mt-[3px] -mr-[6px];
 }
-.iconButton {
-    @apply w-[32px] h-[32px] rounded-[9px];
-    border: 0;
-    @apply bg-transparent bg-none;
-    box-shadow: inset 0 0 0 1px
-        color-mix(in oklab, var(--foreground) 14%, transparent);
-    @apply text-foreground inline-flex items-center justify-center cursor-pointer;
+.title {
+    @apply m-[0] text-[18px] leading-[24px] font-semibold tracking-[-0.02em];
+    text-wrap: balance;
 }
-.desk {
-    @apply pt-[24px] px-[24px] pb-0 bg-foreground/3 bg-none;
+.toolbar {
+    @apply flex items-center justify-between flex-wrap gap-y-[8px] gap-x-[16px];
 }
-.page {
-    @apply relative ml-[130px] max-w-[440px] pt-[28px] px-[32px] pb-[36px] bg-card bg-none;
-    border-radius: 6px 6px 0 0;
-    box-shadow:
-        0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent),
-        0 20px 40px -24px
-        color-mix(in oklab, var(--foreground) 35%, transparent);
-    @apply flex flex-col gap-[16px];
+.meta {
+    @apply min-w-[0];
 }
-.passage {
-    @apply relative m-[0] text-[15.5px] leading-[27px];
+.controls {
+    @apply flex items-center flex-wrap gap-[8px] ml-auto;
 }
-.mark {
-    @apply absolute left-[-162px] top-[3px] w-[124px] flex flex-col items-end gap-[4px] text-right;
+.stepper {
+    @apply inline-flex items-center gap-[2px] rounded-[10px] p-[2px] bg-foreground/5 bg-none;
 }
-.side {
-    @apply relative rounded-(--radius-2xl) py-[20px] px-[22px] flex flex-col gap-[6px];
+.position {
+    @apply px-[6px] font-mono text-[12px] text-foreground tabular-nums whitespace-nowrap;
 }
-.contributions {
-    @apply flex flex-col gap-[8px] py-[14px] px-0;
-    border-top: 1px solid var(--divider);
+.notesToggle {
+    @apply h-[30px] px-[10px] rounded-[9px] text-[12.5px];
 }
-.contributionLink {
-    all: unset;
-    @apply box-border flex flex-col gap-[8px] my-0 -mx-[10px] py-[14px] px-[10px];
-    border-top: 1px solid var(--divider);
-    @apply rounded-[12px] cursor-pointer;
-    transition:
-        background-color 0.15s ease-out,
-        box-shadow 0.15s ease-out;
+.notesToggle[aria-pressed="true"] {
+    @apply border-brand-purple/45;
+    background: color-mix(in oklab, var(--brand-purple) 8%, var(--card));
 }
-.contributionLink:hover {
-    @apply bg-foreground/[3.5%] bg-none;
+.original {
+    @apply inline-flex h-[30px] min-w-[30px] items-center justify-center gap-[6px] px-[7px] rounded-[9px] text-[12.5px] font-medium text-muted-foreground;
 }
-.contributionLink:focus-visible {
-    outline: 2px solid var(--ring);
-    @apply -outline-offset-[2px];
+/* The label shows when the reader has room; the icon alone otherwise. */
+.originalText {
+    @apply hidden;
 }
-.contributionLink[aria-current="true"] {
-    @apply bg-brand-purple/8 bg-none;
-    box-shadow: inset 0 0 0 1px
-        color-mix(in oklab, var(--brand-purple) 30%, transparent);
-}
-.contributionHeader {
-    @apply flex items-center flex-wrap gap-y-[6px] gap-x-[8px];
-}
-.contributionText {
-    @apply text-[13.5px] leading-[19px];
-}
-.contributionNote {
-    @apply text-[12.5px] leading-[17px] text-muted-foreground;
-}
-.contributionAction {
-    @apply inline-flex items-center gap-[4px] text-[12.5px] font-medium text-accent-foreground opacity-0;
-    transition: opacity 0.15s ease-out;
-}
-.contributionLink:hover .contributionAction,
-.contributionLink:focus-visible .contributionAction,
-.contributionLink[aria-current="true"] .contributionAction {
-    @apply opacity-[1];
-}
-@media (hover: none) {
-    .contributionAction {
-        @apply opacity-[1];
+@container (min-width: 640px) {
+    .originalText {
+        @apply inline;
     }
 }
-.sideHead {
-    @apply flex flex-col gap-[4px] pb-[8px];
+.original:hover {
+    @apply bg-foreground/6 bg-none;
 }
+.original:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+.original:hover {
+    @apply text-foreground;
+}
+.followUp {
+    @apply h-[30px] px-[12px] rounded-[9px] text-[12.5px] gap-[6px];
+}
+.followUp svg {
+    rotate: 90deg;
+}
+.followUpMenu {
+    @apply min-w-[220px];
+}
+/* A run of uncited paragraphs, folded so the citations lead. */
+.fold {
+    all: unset;
+    @apply box-border ml-[36px] my-[2px] inline-flex items-center gap-[8px] py-[4px] px-[10px] rounded-[999px] font-mono text-[11px] text-muted-foreground cursor-pointer;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 12%, transparent);
+    width: fit-content;
+}
+.fold::before,
+.fold::after {
+    content: "···";
+    @apply tracking-[0.1em] text-muted-foreground/60;
+}
+.fold[data-open]::before,
+.fold[data-open]::after {
+    content: "";
+}
+.fold[data-open] {
+    @apply mb-[2px];
+}
+.fold:hover {
+    @apply text-foreground bg-foreground/4 bg-none;
+}
+.fold:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+
 .questions {
-    @apply m-[0];
+    @apply m-[0] p-[0] min-w-[0] flex flex-wrap gap-[6px];
     border: 0;
-    @apply min-w-[0] flex flex-wrap gap-[6px] pb-[6px];
 }
 .question {
     all: unset;
-    @apply relative isolate inline-flex items-center gap-[6px] h-[28px] py-0 px-[10px] rounded-[999px] text-[12.5px] font-medium text-muted-foreground;
+    @apply relative isolate inline-flex items-center gap-[6px] h-[26px] py-0 px-[10px] rounded-[999px] text-[12.5px] font-medium text-muted-foreground cursor-pointer;
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--foreground) 12%, transparent);
-    @apply cursor-pointer;
 }
-.question:hover {
+.question[data-tone="conflict"] {
+    @apply text-counter-evidence;
+}
+.question:hover,
+.question[aria-pressed="true"] {
     @apply text-foreground;
 }
 .question:focus-visible {
     outline: 2px solid var(--ring);
     @apply outline-offset-[1px];
 }
-.question[aria-pressed="true"] {
-    @apply text-foreground;
-}
-/* Glides to the chosen question while the list below re-forms. */
 .questionMarker {
     @apply absolute inset-0 -z-[1] rounded-[inherit] bg-card bg-none;
     box-shadow:
@@ -131,220 +130,218 @@
         0 4px 10px -6px
         color-mix(in oklab, var(--brand-purple) 50%, transparent);
 }
-.questionCount {
-    @apply font-mono text-[11px] text-muted-foreground;
+.activeFilter {
+    @apply m-[0] flex items-baseline gap-[8px] text-[13px] leading-[18px] text-muted-foreground;
+    animation: note-in 0.24s var(--wb-ease-arrive);
 }
-.markLink {
+.activeFilterText {
+    @apply min-w-[0];
+}
+.activeFilterText[data-clamp] {
+    @apply line-clamp-2;
+}
+.activeFilterMore {
     all: unset;
-    @apply inline-flex rounded-[6px] cursor-pointer;
+    @apply shrink-0 text-[12.5px] font-medium text-accent-foreground cursor-pointer rounded-[4px];
 }
-.markLink:hover {
-    filter: brightness(0.96);
-}
-.markLink:focus-visible {
+.activeFilterMore:focus-visible {
     outline: 2px solid var(--ring);
     @apply outline-offset-[2px];
 }
-.passage[data-passage-active] {
-    @apply rounded-[6px];
-    outline: 2px solid color-mix(in oklab, var(--brand-purple) 50%, transparent);
-    @apply outline-offset-[6px];
-    animation: passage-arrive 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+.activeFilter b {
+    @apply shrink-0 font-mono text-[11.5px] font-medium text-accent-foreground;
+}
+.questionCount {
+    @apply font-mono text-[11px] text-muted-foreground;
+}
+
+.body {
+    @apply flex-[1] min-h-[0] overflow-y-auto overscroll-contain pt-[20px] px-[22px] pb-[40px] bg-foreground/[2.5%] bg-none;
+    scroll-padding: 96px 0;
+}
+.empty {
+    @apply m-[0] text-[13.5px] text-muted-foreground;
+}
+.unplaced {
+    @apply mx-auto mb-[18px] max-w-[860px] flex flex-col gap-[10px] rounded-[14px] py-[12px] px-[14px];
+    border: 1px dashed color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+
+.page {
+    @apply mx-auto mb-[18px] max-w-[860px] flex flex-col gap-[14px] rounded-[8px] pt-[24px] pr-[24px] pb-[28px] pl-[12px] bg-card bg-none;
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent),
+        0 20px 40px -28px
+        color-mix(in oklab, var(--foreground) 35%, transparent);
+}
+.pageHead {
+    @apply flex justify-between pl-[36px];
+}
+.heading {
+    @apply m-[0] pl-[36px] text-[19px] leading-[24px] font-semibold tracking-[-0.02em];
+}
+
+/* Marker, passage and note share one line; the note moves beside or under the passage. */
+.line {
+    @apply grid items-start gap-x-[10px];
+    grid-template-columns: 26px minmax(0, 1fr);
+    transition: opacity 0.2s var(--wb-ease-arrive);
+}
+.reader[data-layout="margin"] .line {
+    grid-template-columns: 26px minmax(0, 1fr) minmax(220px, 34%);
+    @apply gap-x-[18px];
+}
+.line[data-dim] {
+    @apply opacity-[0.4];
+}
+.passage {
+    @apply m-[0] text-[15.5px] leading-[27px] rounded-[6px];
+    max-width: 68ch;
+}
+.quiet {
+    @apply text-muted-foreground;
+}
+.line[data-active] .passage {
+    outline: 2px solid color-mix(in oklab, var(--brand-purple) 45%, transparent);
+    @apply outline-offset-[5px];
+    animation: passage-arrive 0.9s var(--wb-ease-arrive);
 }
 @keyframes passage-arrive {
     from {
-        outline-offset: 16px;
+        outline-offset: 14px;
         outline-color: transparent;
     }
 }
-@media (prefers-reduced-motion: reduce) {
-    .passage[data-passage-active] {
-        animation: none;
+
+.marker {
+    all: unset;
+    @apply mt-[3px] inline-grid place-items-center size-[22px] rounded-[999px] font-mono text-[11px] font-medium text-accent-foreground cursor-pointer;
+    background: color-mix(in oklab, var(--brand-purple) 12%, var(--card));
+    transition:
+        background-color 0.15s ease-out,
+        color 0.15s ease-out,
+        scale 0.2s var(--wb-ease-arrive);
+}
+.marker:hover {
+    background: color-mix(in oklab, var(--brand-purple) 22%, var(--card));
+}
+.marker:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+.line[data-active] .marker {
+    @apply bg-brand-purple bg-none text-white;
+    scale: 1.08;
+}
+
+.note {
+    @apply flex flex-col gap-[10px] rounded-r-[8px] py-[8px] pr-[10px] pl-[12px];
+    border-left: 2px solid
+        color-mix(in oklab, var(--brand-purple) 55%, transparent);
+    background: color-mix(in oklab, var(--brand-purple) 5%, transparent);
+    animation: note-in 0.24s var(--wb-ease-arrive);
+}
+.reader[data-layout="inline"] .note {
+    grid-column: 2;
+    @apply mt-[10px] mb-[4px];
+}
+.line:not([data-active]) .note {
+    border-left-color: color-mix(in oklab, var(--foreground) 16%, transparent);
+    @apply bg-transparent bg-none;
+}
+@keyframes note-in {
+    from {
+        opacity: 0;
+        translate: 0 -4px;
     }
 }
-.passage {
-    @apply scroll-m-[96px];
+.entry {
+    @apply flex flex-col gap-[4px];
 }
-.noPassages {
-    @apply m-[0] py-[12px] px-0 text-[13.5px] text-muted-foreground;
+.entryHead {
+    @apply flex items-center flex-wrap gap-[6px];
 }
-.tabbed {
-    @apply flex flex-col h-[100%] min-h-[0];
+/* Long unbroken strings (hashes, URLs) wrap inside the note. */
+.entry {
+    @apply min-w-[0];
+    overflow-wrap: anywhere;
 }
-/* Tabs serve narrow containers: the title takes its own line above the page controls. */
-.tabbed .header {
-    border-bottom: 0;
-    @apply flex-wrap pt-[14px] pr-[16px] pb-[12px] pl-[20px];
+.note {
+    @apply min-w-[0];
 }
-.tabbed .headerTitle {
-    @apply basis-[100%];
+/* Below the margin width: an explicit line under the passage opens its note. */
+.noteLine {
+    all: unset;
+    grid-column: 2;
+    @apply box-border mt-[6px] inline-flex items-center gap-[10px] w-fit max-w-[100%] py-[4px] pr-[10px] pl-[6px] rounded-[8px] cursor-pointer;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 10%, transparent);
 }
-.tabs {
-    @apply flex-[1] min-h-[0] gap-[0];
+.noteLine:hover {
+    @apply bg-foreground/4 bg-none;
 }
-.tabList {
-    @apply mt-0 mx-[20px] mb-[12px];
-    width: calc(100% - 40px);
+.noteLine:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
 }
-.tabList > * {
-    @apply flex-[1];
+.noteLineSummary {
+    @apply inline-flex items-center gap-[6px];
 }
-.tabScroll {
-    @apply flex-[1] min-h-[0];
+.noteLineAction {
+    @apply inline-flex items-center gap-[4px] text-[12.5px] font-medium text-accent-foreground;
 }
-.tabViewport {
-    @apply h-[100%] overscroll-contain;
+.noteLineAction svg {
+    rotate: 90deg;
+    transition: rotate 0.2s var(--wb-ease-arrive);
 }
-.tabbed .desk {
-    @apply pt-[4px] px-[16px] pb-[28px] bg-transparent bg-none;
+.noteLine[aria-expanded="true"] .noteLineAction svg {
+    rotate: -90deg;
 }
-.tabbed .page {
-    @apply mx-auto max-w-[620px] min-h-[0] pt-[28px] px-[28px] pb-[36px];
+.entryText {
+    @apply text-[13.5px] leading-[19px];
 }
-.tabbed .mark {
-    @apply static w-auto flex-row items-center mb-[6px] text-left;
+.entryMeta {
+    @apply inline-flex flex-wrap items-baseline gap-x-[6px];
 }
-.tabbedSide {
-    @apply pt-0 px-[20px] pb-[24px];
+.entryMeta {
+    @apply leading-[16px];
 }
-.tabActions {
-    @apply shrink-0;
-    padding: 14px 20px calc(16px + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--divider);
+.entryNote {
+    @apply text-[12.5px] leading-[17px] text-muted-foreground;
 }
-.tabActions > * {
-    @apply max-w-[620px] mx-auto;
-}
-.sideBody {
-    @apply relative flex flex-col gap-[10px];
-}
-.tabbedSide .sideBody {
-    @apply max-w-[620px] mx-auto;
-}
-.heading {
-    @apply m-[0] text-[19px] leading-[24px] font-semibold tracking-[-0.02em];
-}
-.original {
-    @apply h-[32px] rounded-[9px] gap-[6px] text-[13px];
-}
+
 .links {
-    @apply flex flex-col gap-[8px] pt-[12px];
-    border-top: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent);
+    @apply mx-auto max-w-[860px] flex flex-col gap-[8px];
 }
-.links ul {
-    @apply m-[0] p-[0];
+.linksToggle {
+    all: unset;
+    @apply inline-flex items-center gap-[6px] font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground cursor-pointer rounded-[4px];
+}
+.linksToggle svg {
+    transition: rotate 0.2s var(--wb-ease-arrive);
+}
+.linksToggle[data-panel-open] svg {
+    rotate: 90deg;
+}
+.linksToggle:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+.linkList {
+    @apply m-[0] p-[0] flex flex-col gap-[8px] pt-[6px];
     list-style: none;
-    @apply flex flex-col gap-[8px];
 }
-.links li {
+.linkList li {
     @apply flex items-center gap-[10px] text-[13px] text-muted-foreground;
 }
-.links li[data-captured] {
+.linkList li[data-captured] {
     @apply text-foreground;
 }
-.actions {
-    @apply mt-auto pt-[12px] flex flex-col gap-[8px];
-}
-.fade {
-    @apply absolute left-[0] right-[0] bottom-[0] h-[90px] pointer-events-none;
-    background: linear-gradient(
-        180deg,
-        transparent,
-        color-mix(in oklab, var(--background) 92%, transparent)
-    );
+.linkLabel {
+    @apply flex-[1] min-w-[0];
 }
 
-/* Workspace geometry from the Sources reader reference. */
-.workspace {
-    @apply grid-cols-[260px_minmax(0,_1fr)_380px] gap-[18px] max-w-none;
-}
-.workspace .main {
-    @apply rounded-[22px];
-}
-.workspace .desk {
-    @apply relative flex-[1] pt-[26px] px-[26px] pb-0 overflow-hidden;
-}
-.workspace .page {
-    @apply ml-[150px] max-w-[520px] min-h-[640px] pt-[34px] px-[40px] pb-[60px] gap-[18px];
-}
-.workspace .mark {
-    @apply left-[-142px] w-[120px];
-}
-.workspace .side {
-    @apply rounded-[22px] gap-[14px];
-}
-@media (max-width: 1180px) {
-    .workspace {
-        @apply grid-cols-[minmax(0,_1fr)];
-    }
-}
-@media (max-width: 760px) {
-    .wrap {
-        @apply grid-cols-[minmax(0,_1fr)];
-    }
-    .header {
-        @apply flex-wrap;
-    }
-    .headerTitle {
-        @apply basis-[100%];
-    }
-    .desk,
-    .workspace .desk {
-        @apply pt-[16px] px-[12px] pb-0;
-    }
-    .page,
-    .workspace .page {
-        @apply ml-[0] min-h-[0] pt-[24px] px-[20px] pb-[40px];
-    }
-    .mark,
-    .workspace .mark {
-        @apply static w-auto flex-row items-center mb-[6px] text-left;
-    }
-}
-
-.title {
-    @apply text-[18px] tracking-[-.02em];
-}
-
-.headingText {
-    @apply text-foreground;
-}
-
-.pageNavigation {
-    @apply flex justify-between;
-}
-
-.quietPassage {
-    @apply text-muted-foreground;
-}
-
-.accentLabel {
-    @apply text-accent-foreground;
-}
-
-.contributionTitle {
-    @apply text-[16px] tracking-[-.02em];
-}
-
-.flexibleContent {
-    @apply flex-[1];
-}
-
-.selectedHighlight {
-    @apply bg-brand-purple/14 bg-none;
-    box-shadow: 0 2px 0 var(--brand-purple);
-    @apply py-[1px] px-[2px];
-}
-.conflictHighlight {
-    @apply bg-counter-evidence/11 bg-none;
-    box-shadow: 0 2px 0 var(--counter-evidence);
-    @apply py-[1px] px-[2px];
-}
-.projectionHighlight {
-    border-bottom: 2px dotted var(--evidence-hypothesis);
-}
-
-/* A newly selected source settles into place: its title, page and contributions arrive in reading order. */
+/* A newly selected source settles into place in reading order. */
 @keyframes reader-arrive {
     from {
         opacity: 0;
@@ -352,53 +349,66 @@
         filter: blur(3px);
     }
 }
-.wrap[data-arriving] .headerTitle,
-.tabbed[data-arriving] .headerTitle,
-.wrap[data-arriving] .page:not([data-turn]),
-.tabbed[data-arriving] .page:not([data-turn]),
-.wrap[data-arriving] .side,
-.tabbed[data-arriving] .sideBody {
-    animation: reader-arrive 0.34s var(--wb-ease-arrive) both;
+.reader[data-arriving] .header {
+    animation: reader-arrive 0.3s var(--wb-ease-arrive) both;
 }
-.wrap[data-arriving] .page:not([data-turn]),
-.tabbed[data-arriving] .page:not([data-turn]) {
-    animation-delay: 40ms;
+.reader[data-arriving] .body {
+    animation: reader-arrive 0.34s var(--wb-ease-arrive) 40ms both;
 }
-.wrap[data-arriving] .side {
-    animation-delay: 80ms;
-}
-/* Page turns slide in from the side the reader moved toward. */
-@keyframes page-from-next {
-    from {
-        opacity: 0.35;
-        transform: translateX(14px);
+
+@container (max-width: 560px) {
+    .header {
+        @apply px-[16px];
+    }
+    .controls {
+        @apply ml-0;
+    }
+    .body {
+        @apply px-[10px];
+    }
+    .page {
+        @apply pt-[18px] pr-[14px] pb-[22px] pl-[6px];
+    }
+    .pageHead,
+    .heading {
+        @apply pl-[32px];
+    }
+    .passage {
+        @apply text-[15px] leading-[25px];
     }
 }
-@keyframes page-from-previous {
-    from {
-        opacity: 0.35;
-        transform: translateX(-14px);
+
+@media (prefers-reduced-motion: reduce) {
+    .line[data-active] .passage,
+    .note {
+        animation: none;
     }
-}
-.page[data-turn="next"] {
-    animation: page-from-next 0.26s var(--wb-ease-arrive);
-}
-.page[data-turn="previous"] {
-    animation: page-from-previous 0.26s var(--wb-ease-arrive);
+    .reader[data-arriving] .header,
+    .reader[data-arriving] .body {
+        animation: reader-fade 0.16s ease-out both;
+    }
+    .marker,
+    .linksToggle svg {
+        transition: none;
+    }
+    .line[data-active] .marker {
+        scale: none;
+    }
 }
 @keyframes reader-fade {
     from {
         opacity: 0;
     }
 }
-@media (prefers-reduced-motion: reduce) {
-    .wrap[data-arriving] .headerTitle,
-    .tabbed[data-arriving] .headerTitle,
-    .wrap[data-arriving] .page:not([data-turn]),
-    .tabbed[data-arriving] .page:not([data-turn]),
-    .wrap[data-arriving] .side,
-    .tabbed[data-arriving] .sideBody,
-    .page[data-turn] {
-        animation: reader-fade 0.16s ease-out both;
-    }
+
+.selectedHighlight {
+    @apply bg-brand-purple/14 bg-none py-[1px] px-[2px];
+    box-shadow: 0 2px 0 var(--brand-purple);
+}
+.conflictHighlight {
+    @apply bg-counter-evidence/11 bg-none py-[1px] px-[2px];
+    box-shadow: 0 2px 0 var(--counter-evidence);
+}
+.projectionHighlight {
+    border-bottom: 2px dotted var(--evidence-hypothesis);
 }

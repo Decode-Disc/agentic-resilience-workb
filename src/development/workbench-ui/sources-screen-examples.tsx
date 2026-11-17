@@ -1,17 +1,19 @@
-import { useId, useRef, useState } from "react";
+import { LeftToRightListBulletIcon } from "@hugeicons/core-free-icons";
+import { type ReactNode, useRef, useState } from "react";
+import Icon from "@/components/icon";
 import { WorkbenchShellSurface } from "@/components/workbench-shell/workbench-shell-surface";
-import {
-    HelpTip,
-    InventoryDock,
-    WorkbenchUiRoot,
-} from "@/components/workbench-ui";
+import { WorkbenchUiRoot } from "@/components/workbench-ui";
 import {
     SourcesMatrixScreen,
     SourcesPreparationScreen,
     SourcesReaderScreen,
     type SourcesScreenFrame,
 } from "@/components/workspace/sources/sources-screens";
-import { distribution } from "./fixture-data";
+import {
+    WorkspaceDock,
+    workspaceDockActionClass,
+} from "@/components/workspace/workspace-dock";
+import { useMediaQuery } from "@/hooks/use-responsive";
 import { IllustrativeInventorySheet } from "./inventory-sheet-fixture";
 import {
     annualReport,
@@ -21,6 +23,7 @@ import {
     type MatrixFilterValues,
     matrixFilters,
     preparationView,
+    readerQuestionTexts,
     readerSourceGroups,
     selectedSources,
     totalSources,
@@ -43,55 +46,41 @@ const unavailableSections = [
     ["Synthesis", "Synthesis is not available in this preview."],
 ] as const;
 
-/** Illustrative stand-in for the router-bound workspace navigation. */
+/** Illustrative stand-in for the router-bound workspace navigation, using the same dock. */
 function PreviewSectionNavigation({
     onOpenProgress,
+    inventory,
 }: {
     onOpenProgress: () => void;
+    inventory: ReactNode;
 }) {
-    const id = useId();
+    const narrow = useMediaQuery("(max-width: 48rem)");
     return (
-        <nav
-            aria-label="Research workspace sections"
-            className="segment-scroll">
-            <div className="segment-track">
-                <button
-                    type="button"
-                    className="segment-item"
-                    onClick={onOpenProgress}>
-                    Progress
-                </button>
-                <button
-                    type="button"
-                    className="segment-item"
-                    aria-current="page">
-                    <span aria-hidden="true" className="wb-slash">
-                        {"//"}
-                    </span>
-                    Sources
-                </button>
-                {unavailableSections.map(([label, reason]) => (
-                    <span key={label} className="contents">
-                        <HelpTip
-                            side="bottom"
-                            trigger={
-                                <button
-                                    type="button"
-                                    aria-disabled="true"
-                                    aria-describedby={`${id}-${label}`}
-                                    className="segment-item">
-                                    {label}
-                                </button>
-                            }>
-                            {reason}
-                        </HelpTip>
-                        <span id={`${id}-${label}`} className="sr-only">
-                            {reason}
-                        </span>
-                    </span>
-                ))}
-            </div>
-        </nav>
+        <WorkspaceDock
+            compact={narrow}
+            actions={inventory}
+            sections={[
+                {
+                    key: "progress",
+                    label: "Progress",
+                    current: false,
+                    render: <button type="button" onClick={onOpenProgress} />,
+                },
+                {
+                    key: "sources",
+                    label: "Sources",
+                    current: true,
+                    render: <button type="button" />,
+                },
+                ...unavailableSections.map(([label, reason]) => ({
+                    key: label.toLowerCase() as "investigation" | "synthesis",
+                    label,
+                    current: false,
+                    unavailable: reason,
+                    render: <button type="button" />,
+                })),
+            ]}
+        />
     );
 }
 
@@ -107,8 +96,8 @@ export function SourcesScreenPreview({
     onNavigate: (screen: SourcesScreenName) => void;
     onOpenProgress: () => void;
 }) {
+    const [focusConflict, setFocusConflict] = useState(false);
     const [selectedId, setSelectedId] = useState("10-k");
-    const [pageId, setPageId] = useState<string>();
     const [query, setQuery] = useState("");
     const [filters, setFilters] =
         useState<MatrixFilterValues>(defaultMatrixFilters);
@@ -117,30 +106,37 @@ export function SourcesScreenPreview({
     const source =
         illustrativeSources.find((item) => item.id === selectedId) ??
         annualReport;
-    const page =
-        source.document.pages.find((item) => item.id === pageId) ??
-        source.document.pages[source.document.initialPage ?? 0];
+    // Opening a chosen source starts it in the drawer on narrow screens, as in the workspace.
+    const [openedSource, setOpenedSource] = useState(false);
     const openSource = (id: string) => {
         setSelectedId(id);
-        setPageId(undefined);
+        setOpenedSource(true);
         onNavigate("reader");
     };
     const frame: SourcesScreenFrame = {
+        // Mirrors the live section bar: inventory opens from its end, nothing floats over the content.
         navigation: (
-            <PreviewSectionNavigation onOpenProgress={onOpenProgress} />
-        ),
-        dock: (
-            <InventoryDock
-                total={126}
-                newCount={3}
-                distribution={distribution}
-                onOpen={() => {
-                    dockFocus.current =
-                        document.activeElement instanceof HTMLElement
-                            ? document.activeElement
-                            : null;
-                    setInventoryOpen(true);
-                }}
+            <PreviewSectionNavigation
+                onOpenProgress={onOpenProgress}
+                inventory={
+                    <button
+                        type="button"
+                        aria-label="Open inventory"
+                        className={workspaceDockActionClass}
+                        onClick={(event) => {
+                            dockFocus.current = event.currentTarget;
+                            setInventoryOpen(true);
+                        }}>
+                        <Icon
+                            iconNode={LeftToRightListBulletIcon}
+                            className="size-4"
+                        />
+                        <span className="hidden sm:inline">Inventory</span>
+                        <span className="rounded-full bg-background/18 px-2 py-0.5 font-mono text-xs font-semibold tabular-nums">
+                            126
+                        </span>
+                    </button>
+                }
             />
         ),
     };
@@ -166,6 +162,7 @@ export function SourcesScreenPreview({
                         frame={frame}
                         view={preparationView}
                         onInspectSources={() => onNavigate("matrix")}
+                        onOpenSource={(id) => openSource(id)}
                     />
                 ) : name === "matrix" ? (
                     <SourcesMatrixScreen
@@ -202,9 +199,15 @@ export function SourcesScreenPreview({
                         ]}
                         sources={readerSourceGroups}
                         selectedId={source.id}
+                        openOnArrival={openedSource}
+                        onCloseSource={() => setOpenedSource(false)}
                         onSelectSource={(id) => {
                             setSelectedId(id);
-                            setPageId(undefined);
+                            setFocusConflict(false);
+                        }}
+                        onOpenConflict={(id) => {
+                            setSelectedId(id);
+                            setFocusConflict(true);
                         }}
                         summary={`${selectedSources} selected`}
                         matrixLabel={`All ${totalSources} in the matrix`}
@@ -213,15 +216,11 @@ export function SourcesScreenPreview({
                             title: source.title,
                             meta: source.document.meta,
                             pages: source.document.pages,
-                            initialPage: source.document.initialPage,
-                            pagePosition:
-                                page && source.document.pageCount
-                                    ? `${page.label} / ${source.document.pageCount}`
-                                    : undefined,
-                            onPageChange: setPageId,
                             contributionLabel:
                                 source.document.contributionLabel,
                             contributions: source.document.contributions,
+                            questionTexts: readerQuestionTexts,
+                            focusConflict,
                             observedLinks: source.document.observedLinks,
                             originalHref: source.document.originalHref,
                         }}

@@ -10,7 +10,6 @@ import { describe, expect, it, vi } from "vitest";
 import { EvidenceMatrixIllustration } from "@/components/landing/evidence-matrix-illustration";
 import { EvidenceMatrix } from "@/components/workbench-ui/evidence-matrix";
 import { InventorySheet } from "@/components/workbench-ui/inventory-sheet";
-import { SourceReader } from "@/components/workbench-ui/source-reader";
 
 describe("workbench controls", () => {
     it("opens the selected use rationale and passage and delegates its actions", async () => {
@@ -273,41 +272,5 @@ describe("workbench controls", () => {
         expect(filter).toHaveBeenCalledWith("fact");
         expect(recent).toHaveBeenCalledWith(false);
         expect(screen.getByText("Supplied evidence")).toBeTruthy();
-    });
-    it("moves through supplied pages and disables the document boundaries", () => {
-        render(
-            <SourceReader
-                title="Annual report"
-                meta="Illustrative"
-                pages={[
-                    {
-                        id: "p8",
-                        label: "p. 8",
-                        section: "Business",
-                        passages: [{ id: "one", text: "First passage" }],
-                    },
-                    {
-                        id: "p9",
-                        label: "p. 9",
-                        section: "Business",
-                        passages: [{ id: "two", text: "Second passage" }],
-                    },
-                ]}
-                contributionLabel="Company-authored"
-                contributions={[]}
-            />,
-        );
-        expect(
-            screen
-                .getByRole("button", { name: "Previous passage" })
-                .hasAttribute("disabled"),
-        ).toBe(true);
-        fireEvent.click(screen.getByRole("button", { name: "Next passage" }));
-        expect(screen.getByText("Second passage")).toBeTruthy();
-        expect(
-            screen
-                .getByRole("button", { name: "Next passage" })
-                .hasAttribute("disabled"),
-        ).toBe(true);
     });
 });

@@ -51,10 +51,13 @@ test("opens inventory from the current workspace without starting research", () 
             onInventoryOpenChange={onInventoryOpenChange}
         />,
     );
-    expect(screen.getByText("4")).toBeTruthy();
-    fireEvent.click(
-        screen.getByRole("button", { name: "Open evidence inventory" }),
-    );
+    const trigger = screen.getByRole("button", {
+        name: "Open evidence inventory",
+    });
+    // Inventory opens from the section bar rather than floating over the content.
+    expect(trigger.closest("[data-workspace-bar]")).not.toBeNull();
+    expect(trigger.textContent).toContain("4");
+    fireEvent.click(trigger);
     expect(onInventoryOpenChange).toHaveBeenCalledWith(true);
     // The workspace route owns no mutation: the harness rejects any unconfigured call.
     expect(navigate).not.toHaveBeenCalled();

@@ -25,17 +25,14 @@ import {
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
 import { sourcesPhasePresentation } from "@/lib/presentation/sources";
 import {
-    type WorkspaceSearch,
+    type SourcesLocation,
     type WorkspaceSection,
     type WorkspaceSubsection,
     workspaceSections,
 } from "@/lib/workspace/navigation";
 import { stashWorkbenchDraft } from "@/lib/workspace/workbench-draft";
 
-type SourcesSearch = Pick<
-    WorkspaceSearch,
-    "sourcesView" | "source" | "q" | "kind" | "reading" | "use"
->;
+type SourcesSearch = SourcesLocation;
 
 /** Sources content before the mission records preparation, or for dossiers prepared by the retired corpus review. Follows the shared Sources mission state. */
 function sourcesFallbackCopy(
@@ -169,19 +166,19 @@ export function RunRouteComponent({
             />
         );
 
-    const navigation = (
-        <WorkspaceNavigation
-            runId={runId}
-            section={section}
-            subsection={subsection}
-        />
-    );
     const inventory = (
         <EvidenceInventory
             runId={runId}
             open={onInventoryOpenChange ? inventoryOpen : localInventoryOpen}
             onOpenChange={onInventoryOpenChange ?? setLocalInventoryOpen}
-            expanded={section === "progress"}
+        />
+    );
+    const navigation = (
+        <WorkspaceNavigation
+            runId={runId}
+            section={section}
+            subsection={subsection}
+            actions={inventory}
         />
     );
     const fallback = sourcesFallbackCopy(run);
@@ -239,7 +236,6 @@ export function RunRouteComponent({
                     </div>
                 )}
             </div>
-            {inventory}
         </div>
     );
     if (section !== "sources" || !onSourcesSearchChange) return generic;
@@ -251,7 +247,6 @@ export function RunRouteComponent({
             onSearchChange={onSourcesSearchChange}
             navigation={navigation}
             fallback={generic}
-            dock={inventory}
             onOpenDecision={() =>
                 void navigate({
                     to: "/workspace/$runId",

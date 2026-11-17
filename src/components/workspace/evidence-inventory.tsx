@@ -1,11 +1,10 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ArrowExpand01Icon } from "@hugeicons/core-free-icons";
+import { LeftToRightListBulletIcon } from "@hugeicons/core-free-icons";
 import { useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
-import { Button } from "@/components/ui/button";
 import {
     Sheet,
     SheetContent,
@@ -16,19 +15,17 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EvidenceMatrix } from "@/components/workspace/evidence-matrix";
-import { cn } from "@/lib/utils";
+import { workspaceDockActionClass } from "@/components/workspace/workspace-dock";
 
-/** Keeps the real inventory in context and mounted across closing, without inventing a classification distribution. */
+/** A compact section-bar trigger with the real assertion count; the sheet stays mounted across closing. */
 export function EvidenceInventory({
     runId,
     open,
     onOpenChange,
-    expanded = false,
 }: {
     runId: Id<"researchRuns">;
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    expanded?: boolean;
 }) {
     const [hasOpened, setHasOpened] = useState(open);
     useEffect(() => {
@@ -36,35 +33,23 @@ export function EvidenceInventory({
     }, [open]);
     return (
         <Sheet open={open} onOpenChange={(nextOpen) => onOpenChange(nextOpen)}>
-            <div
-                className={cn(
-                    "fixed inset-x-4 bottom-4 z-40 rounded-xl bg-surface-float p-3 shadow-float backdrop-blur-glass sm:inset-x-auto sm:right-6 sm:bottom-7 sm:w-(--dock-width) md:right-12",
-                    expanded && "xl:w-(--side-column) xl:rounded-2xl xl:p-5",
-                )}>
-                <div className="flex items-center justify-between gap-4">
-                    <div>
-                        <p className="text-micro">Inventory</p>
-                        <LoadErrorBoundary
-                            title="Inventory unavailable"
-                            description="Try loading the inventory again."
-                            variant="compact">
-                            <InventoryCount runId={runId} expanded={expanded} />
-                        </LoadErrorBoundary>
-                    </div>
-                    <SheetTrigger
-                        render={
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="icon"
-                                aria-label="Open evidence inventory"
-                                className="rounded-tile bg-fill-quiet"
-                            />
-                        }>
-                        <Icon iconNode={ArrowExpand01Icon} />
-                    </SheetTrigger>
-                </div>
-            </div>
+            <SheetTrigger
+                render={
+                    <button
+                        type="button"
+                        aria-label="Open evidence inventory"
+                        className={workspaceDockActionClass}
+                    />
+                }>
+                <Icon iconNode={LeftToRightListBulletIcon} className="size-4" />
+                <span className="hidden sm:inline">Inventory</span>
+                <LoadErrorBoundary
+                    title="Inventory unavailable"
+                    description="Try loading the inventory again."
+                    variant="compact">
+                    <InventoryCount runId={runId} />
+                </LoadErrorBoundary>
+            </SheetTrigger>
             <SheetContent
                 keepMounted={hasOpened}
                 overlayClassName="bg-foreground/22 supports-backdrop-filter:backdrop-blur-[2px] motion-reduce:transition-none"
@@ -89,32 +74,19 @@ export function EvidenceInventory({
     );
 }
 
-function InventoryCount({
-    runId,
-    expanded,
-}: {
-    runId: Id<"researchRuns">;
-    expanded: boolean;
-}) {
+function InventoryCount({ runId }: { runId: Id<"researchRuns"> }) {
     const summary = useQuery(api.evidenceMatrix.getSummary, { runId });
     return summary === undefined ? (
         <Skeleton
             aria-label="Loading inventory count"
-            className="mt-2 h-7 w-28"
+            className="h-4 w-7 bg-background/25"
         />
     ) : (
-        <p className="mt-1 flex items-baseline gap-2">
-            <span
-                className={
-                    expanded
-                        ? "text-base font-semibold xl:text-figure"
-                        : "text-base font-semibold"
-                }>
-                {summary.claimCount}
+        <span className="rounded-full bg-background/18 px-2 py-0.5 font-mono text-xs font-semibold tabular-nums">
+            {summary.claimCount}
+            <span className="sr-only">
+                {summary.claimCount === 1 ? " assertion" : " assertions"}
             </span>
-            <span className="text-xs text-muted-foreground">
-                {summary.claimCount === 1 ? "assertion" : "assertions"}
-            </span>
-        </p>
+        </span>
     );
 }

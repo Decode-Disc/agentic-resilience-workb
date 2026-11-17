@@ -12,7 +12,7 @@ export interface SourcesTrailStep {
 
 /**
  * Common Sources frame: section navigation, location trail, page heading and
- * the inventory dock slot. Screens supply their content and actions.
+ * page heading. Screens supply their content and actions.
  */
 export function SourcesWorkspaceFrame({
     navigation,
@@ -23,7 +23,6 @@ export function SourcesWorkspaceFrame({
     titleHidden = false,
     prominent = false,
     headingAside,
-    dock,
     children,
 }: {
     navigation: ReactNode;
@@ -35,7 +34,6 @@ export function SourcesWorkspaceFrame({
     titleHidden?: boolean;
     prominent?: boolean;
     headingAside?: ReactNode;
-    dock?: ReactNode;
     children: ReactNode;
 }) {
     return (
@@ -96,7 +94,6 @@ export function SourcesWorkspaceFrame({
                 </div>
             )}
             {children}
-            {dock && <div className={styles.dock}>{dock}</div>}
         </div>
     );
 }

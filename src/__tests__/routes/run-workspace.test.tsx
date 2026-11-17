@@ -85,6 +85,28 @@ describe("production run workspace", () => {
         ).toBeNull();
     });
 
+    it("keeps every section one tap away on narrow screens, labelling only the current one", () => {
+        responsive.isMobile = true;
+        render(
+            <WorkspaceNavigation runId={"run-1" as never} section="sources" />,
+        );
+        const sources = screen.getByRole("link", { name: "Sources" });
+        expect(sources.getAttribute("aria-current")).toBe("page");
+        expect(sources.textContent).toContain("Sources");
+        // Other sections stay reachable by icon; their names remain accessible.
+        expect(screen.getByRole("link", { name: "Research" }).textContent).toBe(
+            "",
+        );
+        expect(
+            screen
+                .getByRole("button", { name: "Investigation" })
+                .getAttribute("aria-disabled"),
+        ).toBe("true");
+        expect(
+            screen.queryByRole("button", { name: /Workspace section/ }),
+        ).toBeNull();
+    });
+
     it("offers an actionable route recovery when a run query fails", () => {
         const ErrorComponent = RunRoute.options
             .errorComponent as ComponentType<ErrorComponentProps>;

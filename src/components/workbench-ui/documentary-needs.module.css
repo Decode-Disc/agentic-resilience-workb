@@ -38,11 +38,12 @@
 .table {
     @apply w-[100%] table-fixed border-separate border-spacing-0 text-left;
 }
-.questionCol {
-    @apply w-[60px];
+/* The need reads at a comfortable measure; question columns share the remaining width. */
+.needCol {
+    width: 44%;
 }
 .outcomeCol {
-    @apply w-[224px];
+    @apply w-[264px];
 }
 .table th,
 .table td {
@@ -103,6 +104,90 @@
 .needLabel {
     @apply block text-[14px] font-medium leading-[20px];
 }
+.moreToggle {
+    all: unset;
+    @apply mt-[4px] block w-fit text-[12.5px] font-medium text-accent-foreground cursor-pointer rounded-[4px];
+}
+.moreToggle:hover {
+    @apply underline underline-offset-[3px];
+}
+.moreToggle:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+.documents {
+    @apply flex flex-col gap-[6px] min-w-[0] max-w-[100%];
+}
+.documentsHead {
+    @apply flex flex-wrap items-center gap-[6px];
+}
+.documentsToggle {
+    all: unset;
+    @apply inline-flex items-start gap-x-[6px] rounded-[6px] py-[2px] px-[6px] -mx-[6px] font-mono text-[0.71875rem] leading-[17px] text-muted-foreground cursor-pointer;
+}
+.documentsToggle svg {
+    @apply shrink-0 mt-[3px];
+}
+.counts {
+    @apply flex flex-wrap gap-x-[0.6em] min-w-[0];
+}
+.counts > span {
+    @apply whitespace-nowrap;
+}
+.documentsToggle:hover {
+    @apply text-foreground bg-foreground/5 bg-none;
+}
+.documentsToggle:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[1px];
+}
+.documentsToggle svg {
+    transition: rotate 0.2s var(--wb-ease-arrive);
+}
+.documentsToggle[data-panel-open] svg {
+    rotate: 90deg;
+}
+.notice {
+    @apply m-[0] -mt-[2px] mb-[4px] text-[12.5px] leading-[18px] text-muted-foreground;
+}
+.needLabel[data-clamp] {
+    @apply line-clamp-2;
+}
+.needSources {
+    @apply m-[0] p-[0] flex flex-col gap-[2px];
+    list-style: none;
+}
+/* Titles wrap and the count sits under them, so documents fit narrow cells. */
+.needSource {
+    all: unset;
+    @apply box-border w-[100%] grid grid-cols-[12px_minmax(0,_1fr)] items-start gap-x-[8px] gap-y-[1px] py-[5px] px-[6px] -mx-[6px] rounded-[8px] cursor-pointer;
+}
+.needSource > :first-child {
+    @apply mt-[3px];
+}
+.needSource > .wb-meta,
+.needSource > :last-child {
+    grid-column: 2;
+}
+.needSource:hover {
+    @apply bg-foreground/5 bg-none;
+}
+.needSource:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply -outline-offset-[2px];
+}
+.needSource:disabled {
+    @apply cursor-default;
+}
+.needSourceTitle {
+    @apply min-w-[0] text-[13px] leading-[18px] font-medium;
+    overflow-wrap: anywhere;
+}
+@media (prefers-reduced-motion: reduce) {
+    .documentsToggle svg {
+        transition: none;
+    }
+}
 .detail {
     @apply block mt-[3px] text-[12.5px] leading-[18px] text-muted-foreground;
 }
@@ -139,7 +224,12 @@
     @apply pl-[16px];
 }
 .prepared {
-    @apply inline-flex flex-wrap items-center gap-[6px];
+    @apply inline-flex flex-wrap items-center gap-[6px] min-w-[0] max-w-[100%];
+}
+.need,
+.outcome {
+    @apply min-w-[0];
+    overflow-wrap: anywhere;
 }
 
 .mark {
@@ -183,9 +273,6 @@
 .tip {
     @apply flex flex-col gap-[4px];
 }
-.tipNeed {
-    @apply font-semibold;
-}
 .tipOutcome {
     @apply inline-flex items-center gap-[7px] text-muted-foreground;
 }
@@ -223,6 +310,9 @@
     }
     .lensLine {
         @apply justify-start text-left;
+    }
+    .needCol {
+        @apply w-auto;
     }
     .questionCol {
         @apply w-[40px];

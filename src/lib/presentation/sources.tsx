@@ -243,9 +243,10 @@ const docTags: Partial<Record<SourcesRow["documentKind"], string>> = {
     community_content: "POST",
     search_or_index: "INDEX",
 };
+/** Capture completeness, not agent reading; mirrors the library's reading labels. */
 const readingLabels: Record<SourcesRow["reading"], string> = {
-    full: "Full reading",
-    partial: "Partial reading",
+    full: "Complete capture",
+    partial: "Partial capture",
     capturing: "Capturing",
     unavailable: "Unavailable",
     not_captured: "Not captured",
@@ -384,12 +385,12 @@ export const sourcesMatrixFilters = [
     },
     {
         id: "reading",
-        label: "Reading",
+        label: "Capture",
         options: [
-            { id: "any", label: "Any reading" },
-            { id: "full", label: "Full" },
+            { id: "any", label: "Any capture" },
+            { id: "full", label: "Complete" },
             { id: "partial", label: "Partial" },
-            { id: "unread", label: "Not read" },
+            { id: "unread", label: "Not captured" },
         ],
     },
     {
@@ -481,6 +482,23 @@ export function filterSourcesRows(
 }
 
 /** Retained material first, then work still under way, then sources outside the prepared set. */
+const membershipRank: Record<SourcesRow["membership"], number> = {
+    retained: 0,
+    pending: 1,
+    not_retained: 2,
+    excluded: 3,
+};
+
+/** Contribution count first, then retained before pending, not retained and excluded, then title. */
+export function sortSourcesRows(rows: readonly SourcesRow[]) {
+    return [...rows].sort(
+        (a, b) =>
+            (b.contributions?.total ?? 0) - (a.contributions?.total ?? 0) ||
+            membershipRank[a.membership] - membershipRank[b.membership] ||
+            a.title.localeCompare(b.title),
+    );
+}
+
 export function sourcesReaderGroups(rows: readonly SourcesRow[]) {
     const item = (row: SourcesRow): SourceReaderListItem => ({
         id: row.sourceId,
@@ -492,7 +510,10 @@ export function sourcesReaderGroups(rows: readonly SourcesRow[]) {
               ? `${plural(row.contributions.total, ["contribution", "contributions"])} · ${row.host}`
               : `${readingLabels[row.reading]} · ${row.host}`,
         ...(row.contributions?.conflict
-            ? { metaTone: "counter" as const }
+            ? {
+                  metaTone: "counter" as const,
+                  conflicts: row.contributions.conflict,
+              }
             : {}),
         reading: readingState(row.reading),
     });
@@ -526,6 +547,21 @@ function questionLabels(overview: Overview | null | undefined) {
 const familyOrder = Object.keys(familyLabels) as SourcesRow["family"][];
 
 /** Preparation figures for the overview; the outcome label follows the shared Sources mission state. */
+function needReason(need: Overview["needs"][number]) {
+    return (
+        [need.gap, ...need.unfinished].filter(Boolean).join(" ") || undefined
+    );
+}
+
+function controlCounts(tally: Overview["contributions"]) {
+    return {
+        supported: tally.supported,
+        conflict: tally.conflict,
+        notEstablished: tally.notEstablished,
+        unfinished: tally.unchecked,
+    };
+}
+
 export function sourcesPreparationView(
     overview: Overview,
     run: Run,
@@ -565,6 +601,12 @@ export function sourcesPreparationView(
               : state === "interrupted"
                 ? `${sourcesAgent} stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} read so far remain available.`
                 : `${sourcesAgent} is collecting and reading material for ${needs}. Outcomes settle when it hands off.`;
+    const rowsById = new Map(rows.map((row) => [row.sourceId as string, row]));
+    // A reason repeated on several needs, such as the time window ending, is stated once.
+    const reasons = overview.needs.map(needReason).filter(Boolean);
+    const needsNotice = reasons.find(
+        (reason) => reasons.filter((entry) => entry === reason).length > 1,
+    );
     const families = new Map<SourcesRow["family"], "found" | "unavailable">();
     for (const row of rows) families.set(row.family, "found");
     for (const family of overview.collect.failedFamilies)
@@ -583,37 +625,37 @@ export function sourcesPreparationView(
                     label: familyLabels[family],
                     outcome: families.get(family) ?? "found",
                 })),
-            note:
-                overview.collect.searches || overview.collect.acquisitions
-                    ? [
-                          overview.collect.searches
-                              ? plural(overview.collect.searches, [
-                                    "targeted search",
-                                    "targeted searches",
-                                ])
-                              : undefined,
-                          overview.collect.acquisitions
-                              ? plural(overview.collect.acquisitions, [
-                                    "linked document acquired",
-                                    "linked documents acquired",
-                                ])
-                              : undefined,
-                      ]
-                          .filter(Boolean)
-                          .join(" · ")
-                    : undefined,
+            description:
+                [
+                    overview.collect.searches
+                        ? plural(overview.collect.searches, [
+                              "targeted search",
+                              "targeted searches",
+                          ])
+                        : undefined,
+                    overview.collect.acquisitions
+                        ? plural(overview.collect.acquisitions, [
+                              "document acquired",
+                              "documents acquired",
+                          ])
+                        : undefined,
+                ]
+                    .filter(Boolean)
+                    .join(" · ") || undefined,
         },
         reading: {
             captured: overview.reading.captured,
             full: overview.reading.full,
             partial: overview.reading.partial,
             unavailable: overview.reading.unavailable,
-            controls: {
-                supported: overview.contributions.supported,
-                conflict: overview.contributions.conflict,
-                notEstablished: overview.contributions.notEstablished,
-                unfinished: overview.contributions.unchecked,
-            },
+            notCaptured: overview.reading.notCaptured,
+            // After handoff, controls describe the retained material; before it, everything checked so far.
+            controlScope: overview.materialOutcome ? "retained" : "checked",
+            controls: controlCounts(
+                overview.materialOutcome
+                    ? overview.retainedContributions
+                    : overview.contributions,
+            ),
             note: overview.reading.capturing
                 ? `${plural(overview.reading.capturing, ["capture", "captures"])} under way`
                 : undefined,
@@ -629,30 +671,39 @@ export function sourcesPreparationView(
                         ? `${plural(overview.organize.retained - overview.organize.contextOnly, ["document", "documents"])} with usable contributions`
                         : "Retention settles at handoff",
                 },
-                ...(overview.contributions.conflict
+                ...(overview.retainedContributions.conflict
                     ? [
                           {
-                              id: "opposing",
-                              role: "opposing" as const,
-                              text: `${plural(overview.contributions.conflict, ["contribution", "contributions"])} in documentary conflict`,
+                              id: "conflict",
+                              role: "conflict" as const,
+                              text: `${plural(overview.retainedContributions.conflict, ["contribution", "contributions"])} in documentary conflict`,
                           },
                       ]
                     : []),
-                ...(overview.organize.notRetained || overview.organize.excluded
+                ...(overview.organize.notRetainedRead
+                    ? [
+                          {
+                              id: "unused",
+                              role: "unused" as const,
+                              text: `${overview.organize.notRetainedRead} read, nothing usable`,
+                          },
+                      ]
+                    : []),
+                ...(overview.organize.notRetainedUnread
+                    ? [
+                          {
+                              id: "lead",
+                              role: "lead" as const,
+                              text: `${plural(overview.organize.notRetainedUnread, ["candidate", "candidates"])} never captured`,
+                          },
+                      ]
+                    : []),
+                ...(overview.organize.excluded
                     ? [
                           {
                               id: "excluded",
                               role: "excluded" as const,
-                              text: [
-                                  overview.organize.notRetained
-                                      ? `${overview.organize.notRetained} not retained`
-                                      : undefined,
-                                  overview.organize.excluded
-                                      ? `${overview.organize.excluded} excluded by you`
-                                      : undefined,
-                              ]
-                                  .filter(Boolean)
-                                  .join(" · "),
+                              text: `${overview.organize.excluded} excluded by you`,
                           },
                       ]
                     : []),
@@ -685,6 +736,7 @@ export function sourcesPreparationView(
                         : question.text,
             };
         }),
+        needsNotice,
         needs: overview.needs.map(
             (need): DocumentaryNeed => ({
                 id: need.id,
@@ -706,13 +758,27 @@ export function sourcesPreparationView(
                           ),
                       }
                     : {}),
-                ...(need.gap || need.unfinished.length
-                    ? {
-                          detail: [need.gap, ...need.unfinished]
-                              .filter(Boolean)
-                              .join(" "),
-                      }
+                ...(needReason(need) && needReason(need) !== needsNotice
+                    ? { detail: needReason(need) }
                     : {}),
+                sources: need.sourceIds.flatMap((sourceId) => {
+                    const row = rowsById.get(sourceId);
+                    return row
+                        ? [
+                              {
+                                  id: row.sourceId,
+                                  title: row.title,
+                                  meta: row.contributions
+                                      ? plural(row.contributions.total, [
+                                            "contribution",
+                                            "contributions",
+                                        ])
+                                      : readingLabels[row.reading],
+                                  reading: readingState(row.reading),
+                              },
+                          ]
+                        : [];
+                }),
             }),
         ),
     };
@@ -840,6 +906,7 @@ export function sourcesReaderDocument(
                     .filter(Boolean)
                     .join(" · "),
                 ...(pageId ? { target: { pageId, passageId } } : {}),
+                needIds: contribution.needIds,
                 ...(questions.length ? { questions } : {}),
             };
         },
@@ -877,6 +944,12 @@ export function sourcesReaderDocument(
         contributions,
         observedLinks,
         originalHref: row.url,
+        questionTexts: Object.fromEntries(
+            (overview?.questions ?? []).flatMap((question) => {
+                const label = labels.get(question.id);
+                return label ? [[label, question.text]] : [];
+            }),
+        ),
     };
 }
 

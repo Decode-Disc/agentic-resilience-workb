@@ -470,9 +470,10 @@ export function EvidenceBadge({
 }
 
 export type ReadingState = "full" | "partial" | "unavailable";
+/** Capture completeness, not how much the agent read: a complete capture is not proof of complete reading. */
 export const readingLabels: Record<ReadingState, string> = {
-    full: "Full reading",
-    partial: "Partial reading",
+    full: "Complete capture",
+    partial: "Partial capture",
     unavailable: "Unavailable",
 };
 
@@ -541,13 +542,17 @@ export function ReadingGlyph({
     );
 }
 
-/** Proportional reading coverage across full, partial and unavailable captures. */
+/** Candidates never captured: an open lead, drawn as a faint hatch rather than a failure. */
+const notCapturedColor =
+    "repeating-linear-gradient(135deg, color-mix(in oklab, var(--foreground) 14%, transparent) 0 2px, transparent 2px 5px)";
+
+/** Proportional capture coverage across complete, partial, unavailable and, when supplied, never-captured candidates. */
 export function ReadingBar({
     counts,
     height = 8,
     width,
 }: {
-    counts: Record<ReadingState, number>;
+    counts: Record<ReadingState, number> & { notCaptured?: number };
     height?: number;
     width?: CSSProperties["width"];
 }) {
@@ -563,14 +568,17 @@ export function ReadingBar({
                 overflow: "hidden",
                 flexShrink: 0,
             }}>
-            {(["full", "partial", "unavailable"] as const).map(
+            {(["full", "partial", "unavailable", "notCaptured"] as const).map(
                 (state) =>
-                    counts[state] > 0 && (
+                    (counts[state] ?? 0) > 0 && (
                         <span
                             key={state}
                             style={{
                                 flex: counts[state],
-                                background: readingColors[state],
+                                background:
+                                    state === "notCaptured"
+                                        ? notCapturedColor
+                                        : readingColors[state],
                             }}
                         />
                     ),

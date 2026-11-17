@@ -19,6 +19,7 @@ import {
     claimCountLabel,
     ReadingGlyph,
     type ReadingState,
+    readingLabels,
     WorkbenchIcon,
 } from "./glyphs";
 import { HelpTip } from "./help-tip";
@@ -270,11 +271,7 @@ export function SourceMatrix({
                                         data-state={row.reading}>
                                         <ReadingGlyph state={row.reading} />
                                         {row.readingLabel ??
-                                            (row.reading === "full"
-                                                ? "Full reading"
-                                                : row.reading === "partial"
-                                                  ? "Partial"
-                                                  : "Unavailable")}
+                                            readingLabels[row.reading]}
                                     </span>
                                 </td>
                                 <td>

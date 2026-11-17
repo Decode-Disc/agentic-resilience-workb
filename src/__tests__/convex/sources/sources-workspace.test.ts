@@ -105,6 +105,7 @@ test("the Sources workspace keeps reading, contribution, control and membership 
     expect(need).toMatchObject({
         outcome: "in_progress",
         documents: 1,
+        sourceIds: [f.sourceId],
         contributions: 1,
         conflicts: 1,
     });
@@ -158,6 +159,40 @@ test("the Sources workspace keeps reading, contribution, control and membership 
     const rows = await owner.query(api.sourcesWorkspace.listSources, {
         runId: f.runId,
     });
+    assert(rows);
+    type Row = NonNullable<typeof rows>[number];
+    const tallyOf = (predicate: (entry: Row) => boolean) =>
+        rows.filter(predicate).length;
+    // Every candidate is accounted for: captured, unavailable, capturing or never captured.
+    expect(handed.reading.notCaptured).toBe(
+        tallyOf((entry) => entry.reading === "not_captured"),
+    );
+    expect(
+        handed.reading.captured +
+            handed.reading.unavailable +
+            handed.reading.capturing +
+            handed.reading.notCaptured,
+    ).toBe(handed.collect.candidates);
+    // Not retained separates read documents with nothing usable from leads never read.
+    expect(handed.organize.notRetainedRead).toBe(
+        tallyOf(
+            (entry) =>
+                entry.membership === "not_retained" &&
+                (entry.reading === "full" || entry.reading === "partial"),
+        ),
+    );
+    expect(
+        handed.organize.notRetainedRead + handed.organize.notRetainedUnread,
+    ).toBe(handed.organize.notRetained);
+    // Controls on retained material are reported separately from every control performed.
+    expect(handed.retainedContributions.total).toBe(
+        rows
+            .filter((entry) => entry.membership === "retained")
+            .reduce((sum, entry) => sum + (entry.contributions?.total ?? 0), 0),
+    );
+    expect(
+        handed.needs.find((entry) => entry.id === "common-context")?.sourceIds,
+    ).toEqual(retainedNeedSources(prepared.material, "common-context"));
     const retained = new Set(
         prepared.material.documents.map((document) => document.sourceId),
     );
@@ -193,6 +228,26 @@ test("the Sources workspace keeps reading, contribution, control and membership 
     ]);
     expect(reading.coherence).toBe(false);
 });
+
+function retainedNeedSources(
+    material: {
+        documents: { sourceId: string; qualificationTaskId: string }[];
+        needs: {
+            needId: string;
+            contributions: { qualificationTaskId: string }[];
+        }[];
+    },
+    needId: string,
+) {
+    const tasks = new Set(
+        material.needs
+            .find((entry) => entry.needId === needId)
+            ?.contributions.map((entry) => entry.qualificationTaskId),
+    );
+    return material.documents
+        .filter((document) => tasks.has(document.qualificationTaskId))
+        .map((document) => document.sourceId);
+}
 
 test("dossiers without the Sources protocol have no Sources workspace projection", async () => {
     const f = await seedCapturedSources();

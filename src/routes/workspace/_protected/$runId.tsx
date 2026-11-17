@@ -8,7 +8,7 @@ import { useRef } from "react";
 
 import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { RunRouteComponent } from "@/components/workspace/run-route-component";
-import { workspaceSearch } from "@/lib/workspace/navigation";
+import { sourcesLocation, workspaceSearch } from "@/lib/workspace/navigation";
 
 export const Route = createFileRoute("/workspace/_protected/$runId")({
     validateSearch: workspaceSearch,
@@ -18,18 +18,8 @@ export const Route = createFileRoute("/workspace/_protected/$runId")({
 
 function RunRoute() {
     const { runId } = Route.useParams();
-    const {
-        section,
-        subsection,
-        inventory,
-        detail,
-        sourcesView,
-        source,
-        q,
-        kind,
-        reading,
-        use,
-    } = Route.useSearch();
+    const search = Route.useSearch();
+    const { section, subsection, inventory, detail } = search;
     const navigate = Route.useNavigate();
     const router = useRouter();
     const inventoryOriginIndex = useRef<number | null>(null);
@@ -63,7 +53,7 @@ function RunRoute() {
                     resetScroll: false,
                 });
             }}
-            sourcesSearch={{ sourcesView, source, q, kind, reading, use }}
+            sourcesSearch={sourcesLocation(search)}
             onSourcesSearchChange={(patch, replace) =>
                 void navigate({
                     search: (previous) => ({ ...previous, ...patch }),

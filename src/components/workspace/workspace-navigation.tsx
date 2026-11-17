@@ -1,11 +1,9 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { Link } from "@tanstack/react-router";
-import { useId } from "react";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip";
+import type { ReactNode } from "react";
+import { WorkspaceDock } from "@/components/workspace/workspace-dock";
+import { useResponsive } from "@/hooks/use-responsive";
+import { cn } from "@/lib/utils";
 import {
     type WorkspaceSection,
     type WorkspaceSubsection,
@@ -28,12 +26,16 @@ export function WorkspaceNavigation({
     runId,
     section,
     subsection,
+    actions,
 }: {
     runId: Id<"researchRuns">;
     section: WorkspaceSection;
     subsection?: WorkspaceSubsection;
+    /** Workspace-wide controls at the bar's end, such as the evidence inventory. */
+    actions?: ReactNode;
 }) {
-    const id = useId();
+    // On phones only the current section keeps its label, so the dock fits one row.
+    const { isMobile } = useResponsive();
     const subTabs =
         section === "investigation"
             ? investigationTabs
@@ -41,69 +43,29 @@ export function WorkspaceNavigation({
               ? synthesisTabs
               : [];
     return (
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 pb-5">
-            <nav
-                aria-label="Research workspace sections"
-                className="segment-scroll">
-                <div className="segment-track">
-                    {workspaceSections.map((item) =>
-                        item.unavailable ? (
-                            <Tooltip key={item.key}>
-                                <TooltipTrigger
-                                    render={
-                                        <button
-                                            type="button"
-                                            aria-disabled="true"
-                                            aria-current={
-                                                section === item.key
-                                                    ? "page"
-                                                    : undefined
-                                            }
-                                            aria-describedby={`${id}-${item.key}`}
-                                            className="segment-item"
-                                        />
-                                    }>
-                                    {section === item.key ? (
-                                        <span
-                                            aria-hidden="true"
-                                            className="text-brand-purple tracking-[-.06em]">
-                                            {"//"}
-                                        </span>
-                                    ) : null}
-                                    {item.label}
-                                </TooltipTrigger>
-                                <span
-                                    id={`${id}-${item.key}`}
-                                    className="sr-only">
-                                    {item.unavailable}
-                                </span>
-                                <TooltipContent>
-                                    {item.unavailable}
-                                </TooltipContent>
-                            </Tooltip>
-                        ) : (
-                            <Link
-                                key={item.key}
-                                to="/workspace/$runId"
-                                params={{ runId }}
-                                search={{ section: item.key }}
-                                aria-current={
-                                    section === item.key ? "page" : undefined
-                                }
-                                className="segment-item">
-                                {section === item.key ? (
-                                    <span
-                                        aria-hidden="true"
-                                        className="text-brand-purple tracking-[-.06em]">
-                                        {"//"}
-                                    </span>
-                                ) : null}
-                                {item.label}
-                            </Link>
-                        ),
-                    )}
-                </div>
-            </nav>
+        <div
+            data-workspace-bar
+            className={cn(
+                "flex min-w-0 flex-wrap items-center justify-between gap-3 pb-5",
+                isMobile && "w-full",
+            )}>
+            <WorkspaceDock
+                compact={isMobile}
+                actions={actions}
+                sections={workspaceSections.map((item) => ({
+                    key: item.key,
+                    label: item.label,
+                    current: section === item.key,
+                    unavailable: item.unavailable,
+                    render: (
+                        <Link
+                            to="/workspace/$runId"
+                            params={{ runId }}
+                            search={{ section: item.key }}
+                        />
+                    ),
+                }))}
+            />
             {subTabs.length > 0 ? (
                 <nav
                     aria-label={

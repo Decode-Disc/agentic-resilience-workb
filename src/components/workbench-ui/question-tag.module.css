@@ -1,0 +1,23 @@
+@reference "../../styles.css";
+
+.tag {
+    all: unset;
+    @apply inline-flex items-center rounded-[4px] px-[3px] font-mono text-[inherit] leading-[inherit];
+}
+.tag[data-explained] {
+    @apply cursor-help underline decoration-dotted underline-offset-[3px] decoration-foreground/30;
+}
+.tag[data-explained]:hover,
+.tag[data-explained][data-popup-open] {
+    @apply text-foreground bg-foreground/6 bg-none;
+}
+.tag[data-explained]:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[1px];
+}
+.tip {
+    @apply flex flex-col gap-[2px];
+}
+.tip b {
+    @apply font-mono text-[11.5px] text-accent-foreground;
+}

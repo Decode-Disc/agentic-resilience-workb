@@ -1,7 +1,7 @@
 @reference "../../../styles.css";
 
 .frame {
-    @apply relative box-border w-[100%] max-w-[1440px] my-0 mx-auto pt-[20px] px-[48px] pb-[112px] flex flex-col gap-[20px] min-w-[0];
+    @apply relative box-border w-[100%] max-w-[1440px] my-0 mx-auto pt-[20px] px-[48px] pb-[48px] flex flex-col gap-[20px] min-w-[0];
 }
 main .frame {
     max-width: none;
@@ -57,21 +57,17 @@ main .frame {
 .description {
     @apply m-[0] max-w-[680px] text-[15px] leading-[22px] text-muted-foreground;
 }
-.dock {
-    @apply fixed right-[48px] bottom-[28px] z-[20];
-}
 @media (max-width: 760px) {
     .frame {
-        @apply pt-[16px] px-[16px] pb-[120px] gap-[16px];
+        @apply pt-[16px] px-[16px] pb-[32px] gap-[16px];
     }
     .title,
     .prominent .title {
         @apply text-[28px] leading-[32px];
     }
-    .dock {
-        @apply left-[16px] right-[16px] bottom-[16px];
-    }
-    .dock > * {
-        @apply w-[100%];
-    }
+}
+
+/* The section bar sits close to the trail and heading in Sources. */
+.top [data-workspace-bar] {
+    @apply pb-0;
 }

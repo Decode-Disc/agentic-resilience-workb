@@ -562,17 +562,6 @@ test("inventory search and filters operate on the supplied illustrative assertio
     ).toHaveCount(0);
 });
 
-test("reader pagination keeps the displayed page position in sync", async ({
-    page,
-}) => {
-    await page.goto("/?component=SourceReader&theme=light");
-    await page.getByRole("button", { name: "Previous passage" }).click();
-    await expect(page.getByText("p. 7 / 142", { exact: true })).toBeVisible();
-    await expect(
-        page.getByRole("button", { name: "Previous passage" }),
-    ).toBeDisabled();
-});
-
 test("the gallery index remains available until an inventory preview is opened", async ({
     page,
 }) => {

@@ -59,6 +59,26 @@
 .columns th {
     @apply pt-[10px] pb-[10px] text-[12.5px] font-normal text-muted-foreground;
 }
+/* Reading and Contribution carry the matrix: Reading in a faint band, Contribution a step stronger, so the two groups separate without a rule. */
+.group th:nth-child(2),
+.columns th:nth-child(2),
+.row td:nth-child(2) {
+    background: color-mix(in oklab, var(--brand-purple) 2.5%, transparent);
+}
+.group th:nth-child(3),
+.columns th:nth-child(3),
+.columns th:nth-child(4),
+.row td:nth-child(3),
+.row td:nth-child(4) {
+    background: color-mix(in oklab, var(--brand-purple) 6%, transparent);
+}
+.row:hover td:nth-child(2) {
+    background: color-mix(in oklab, var(--brand-purple) 5%, transparent);
+}
+.row:hover td:nth-child(3),
+.row:hover td:nth-child(4) {
+    background: color-mix(in oklab, var(--brand-purple) 9%, transparent);
+}
 .row {
     @apply cursor-pointer;
 }

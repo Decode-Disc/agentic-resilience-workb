@@ -19,6 +19,7 @@ import {
     filterSourcesRows,
     type SourcesFilterId,
     type SourcesRow,
+    sortSourcesRows,
     sourceFollowUpDraft,
     sourcesFilterValues,
     sourcesMatrixFilters,
@@ -27,13 +28,10 @@ import {
     sourcesReaderDocument,
     sourcesReaderGroups,
 } from "@/lib/presentation/sources";
-import type { WorkspaceSearch } from "@/lib/workspace/navigation";
+import type { SourcesLocation } from "@/lib/workspace/navigation";
 
 type Run = NonNullable<FunctionReturnType<typeof api.researchRuns.getMine>>;
-type SourcesSearch = Pick<
-    WorkspaceSearch,
-    "sourcesView" | "source" | "q" | "kind" | "reading" | "use"
->;
+type SourcesSearch = SourcesLocation;
 
 /**
  * Sources section for dossiers prepared by the Sources mission. Dossiers on
@@ -46,7 +44,6 @@ export function ConnectedSources({
     onSearchChange,
     navigation,
     fallback,
-    dock,
     onFollowUp,
     onOpenDecision,
 }: {
@@ -57,8 +54,6 @@ export function ConnectedSources({
     onSearchChange: (patch: SourcesSearch, replace?: boolean) => void;
     navigation: ReactNode;
     fallback: ReactNode;
-    /** The inventory dock, rendered beside the Sources screens. */
-    dock?: ReactNode;
     /** Opens the Workbench composer with this draft; absent when Workbench cannot receive it. */
     onFollowUp?: (draft: string) => void;
     /** Opens the conversation that holds the dossier's pending time-limit decision. */
@@ -77,7 +72,6 @@ export function ConnectedSources({
                 onSearchChange={onSearchChange}
                 frame={frame}
                 fallback={fallback}
-                dock={dock}
                 onFollowUp={onFollowUp}
                 onOpenDecision={onOpenDecision}
             />
@@ -95,12 +89,11 @@ type ScreenProps = {
     onOpenDecision?: () => void;
 };
 
-/** Decides the path once: the corpus-approval fallback, or the Sources screens with the dock. */
+/** Decides the path once: the corpus-approval fallback, or the Sources screens. */
 function SourcesQuery({
     fallback,
-    dock,
     ...props
-}: ScreenProps & { fallback: ReactNode; dock?: ReactNode }) {
+}: ScreenProps & { fallback: ReactNode }) {
     const overview = useQuery(api.sourcesWorkspace.overview, {
         runId: props.runId,
     });
@@ -109,18 +102,10 @@ function SourcesQuery({
         overview ? { runId: props.runId } : "skip",
     );
     if (overview === null || rows === null) return fallback;
-    return (
-        <>
-            {overview === undefined || rows === undefined ? (
-                <SourcesSkeleton
-                    frame={props.frame}
-                    view={props.search.sourcesView}
-                />
-            ) : (
-                <SourcesContent {...props} overview={overview} rows={rows} />
-            )}
-            {dock}
-        </>
+    return overview === undefined || rows === undefined ? (
+        <SourcesSkeleton frame={props.frame} view={props.search.sourcesView} />
+    ) : (
+        <SourcesContent {...props} overview={overview} rows={rows} />
     );
 }
 
@@ -147,13 +132,20 @@ function SourcesContent({
             onSearchChange({
                 sourcesView: undefined,
                 source: undefined,
+                need: undefined,
+                focus: undefined,
             }),
     };
     const matrixStep = {
         id: "matrix",
         label: "Source matrix",
         onSelect: () =>
-            onSearchChange({ sourcesView: "matrix", source: search.source }),
+            onSearchChange({
+                sourcesView: "matrix",
+                source: search.source,
+                need: undefined,
+                focus: undefined,
+            }),
     };
     if (search.sourcesView === "matrix") {
         const filters = sourcesFilterValues(search);
@@ -161,9 +153,11 @@ function SourcesContent({
             <SourcesMatrixScreen
                 frame={frame}
                 trail={[preparationStep, matrixStep]}
-                rows={filterSourcesRows(rows, search.q ?? "", filters).map(
-                    sourcesMatrixRow,
-                )}
+                rows={filterSourcesRows(
+                    sortSourcesRows(rows),
+                    search.q ?? "",
+                    filters,
+                ).map(sourcesMatrixRow)}
                 total={rows.length}
                 currentId={search.source}
                 query={search.q ?? ""}
@@ -195,7 +189,12 @@ function SourcesContent({
                     })
                 }
                 onOpenSource={(id) =>
-                    onSearchChange({ sourcesView: "reader", source: id })
+                    onSearchChange({
+                        sourcesView: "reader",
+                        source: id,
+                        need: undefined,
+                        focus: undefined,
+                    })
                 }
                 contributionTerms={documentaryContributionTerms}
             />
@@ -218,9 +217,35 @@ function SourcesContent({
                     ]}
                     rows={rows}
                     selected={selected}
+                    openOnArrival={Boolean(search.source)}
+                    onCloseSource={() =>
+                        onSearchChange(
+                            {
+                                source: undefined,
+                                need: undefined,
+                                focus: undefined,
+                            },
+                            true,
+                        )
+                    }
+                    needId={search.need}
+                    focusConflict={search.focus === "conflict"}
                     overview={overview}
+                    onOpenConflict={(id) =>
+                        onSearchChange({
+                            sourcesView: "reader",
+                            source: id,
+                            need: undefined,
+                            focus: "conflict",
+                        })
+                    }
                     onSelect={(id) =>
-                        onSearchChange({ sourcesView: "reader", source: id })
+                        onSearchChange({
+                            sourcesView: "reader",
+                            source: id,
+                            need: undefined,
+                            focus: undefined,
+                        })
                     }
                     onOpenMatrix={() =>
                         onSearchChange({
@@ -237,6 +262,13 @@ function SourcesContent({
             frame={frame}
             view={sourcesPreparationView(overview, run, rows)}
             onInspectSources={() => onSearchChange({ sourcesView: "matrix" })}
+            onOpenSource={(sourceId, needId) =>
+                onSearchChange({
+                    sourcesView: "reader",
+                    source: sourceId,
+                    need: needId,
+                })
+            }
             inspectEmphasis={
                 run.sourcesPhase === "time_limit" &&
                 run.sourcesDecisionRequestId
@@ -274,11 +306,24 @@ function SourceReaderQuery({
     trail,
     rows,
     selected,
+    openOnArrival,
+    onCloseSource,
+    needId,
+    focusConflict,
+    onOpenConflict,
     overview,
     onSelect,
     onOpenMatrix,
     onFollowUp,
 }: {
+    /** The reader was opened on a chosen source. */
+    openOnArrival: boolean;
+    onCloseSource: () => void;
+    /** The documentary need the reader was opened for. */
+    needId?: string;
+    /** Opens on the first conflicting citation. */
+    focusConflict?: boolean;
+    onOpenConflict: (id: string) => void;
     runId: Id<"researchRuns">;
     frame: SourcesScreenFrame;
     trail: Parameters<typeof SourcesReaderScreen>[0]["trail"];
@@ -294,13 +339,25 @@ function SourceReaderQuery({
         sourceId: selected.sourceId,
     });
     // The previous document stays in place until the next one arrives, so the list never collapses.
-    const [shown, setShown] = useState(current);
-    if (current !== undefined && current !== shown) setShown(current);
-    const reading = current === undefined ? shown : current;
-    const [page, setPage] = useState<{ source: string; id: string }>();
-    const pageId = page?.source === selected.sourceId ? page.id : undefined;
-    if (reading === undefined)
+    const [shown, setShown] = useState(
+        current === undefined
+            ? undefined
+            : { sourceId: selected.sourceId, reading: current },
+    );
+    if (
+        current !== undefined &&
+        (current !== shown?.reading || selected.sourceId !== shown.sourceId)
+    )
+        setShown({ sourceId: selected.sourceId, reading: current });
+    const displayed =
+        current === undefined
+            ? shown
+            : { sourceId: selected.sourceId, reading: current };
+    if (displayed === undefined)
         return <SourcesSkeleton frame={frame} view="reader" />;
+    const reading = displayed.reading;
+    // Where to start applies to the requested source only, once its own document is shown.
+    const arrived = displayed.sourceId === selected.sourceId;
     const document = reading
         ? sourcesReaderDocument(reading, overview)
         : {
@@ -312,10 +369,6 @@ function SourceReaderQuery({
               observedLinks: [],
               originalHref: selected.url,
           };
-    const index = Math.max(
-        0,
-        document.pages.findIndex((page) => page.id === pageId),
-    );
     const retained = rows.filter((row) => row.membership === "retained");
     return (
         <SourcesReaderScreen
@@ -324,6 +377,8 @@ function SourceReaderQuery({
             sources={sourcesReaderGroups(rows)}
             selectedId={selected.sourceId}
             onSelectSource={onSelect}
+            openOnArrival={openOnArrival}
+            onCloseSource={onCloseSource}
             summary={
                 retained.length
                     ? `${retained.length} retained`
@@ -333,12 +388,11 @@ function SourceReaderQuery({
             onOpenMatrix={onOpenMatrix}
             document={{
                 ...document,
-                pagePosition: document.pages.length
-                    ? `Excerpt ${index + 1} / ${document.pages.length}`
-                    : undefined,
-                onPageChange: (id) =>
-                    setPage({ source: selected.sourceId, id }),
+                sourceId: displayed.sourceId,
+                focusNeedId: arrived ? needId : undefined,
+                focusConflict: arrived && focusConflict,
             }}
+            onOpenConflict={onOpenConflict}
             onRequestCheck={
                 onFollowUp
                     ? () => onFollowUp(sourceFollowUpDraft("check", selected))

@@ -98,6 +98,8 @@ const overviewValidator = v.object({
             gap: v.optional(v.string()),
             unfinished: v.array(v.string()),
             documents: v.number(),
+            /** The documents serving this need: the handed-off result, or served contributions before handoff. */
+            sourceIds: v.array(v.id("sources")),
             contributions: v.number(),
             conflicts: v.number(),
         }),
@@ -116,12 +118,21 @@ const overviewValidator = v.object({
         partial: v.number(),
         unavailable: v.number(),
         capturing: v.number(),
+        /** Candidates that were never captured: open leads, not judged irrelevant. */
+        notCaptured: v.number(),
     }),
+    /** Every control performed, including documents later not retained. */
     contributions: contributionTallyValidator,
+    /** Controls on the documents retained in the handed-off material. */
+    retainedContributions: contributionTallyValidator,
     organize: v.object({
         retained: v.number(),
         contextOnly: v.number(),
         notRetained: v.number(),
+        /** Not retained after a capture: read, with nothing usable. */
+        notRetainedRead: v.number(),
+        /** Not retained and never captured. */
+        notRetainedUnread: v.number(),
         excluded: v.number(),
         restricted: v.number(),
     }),
@@ -288,6 +299,22 @@ function tally(
     return into;
 }
 
+function addTally(into: ContributionTally, from: ContributionTally | null) {
+    if (!from) return into;
+    into.total += from.total;
+    for (const kind of Object.keys(
+        into.kinds,
+    ) as (keyof ContributionTally["kinds"])[])
+        into.kinds[kind] += from.kinds[kind];
+    into.supported += from.supported;
+    into.conflict += from.conflict;
+    into.notEstablished += from.notEstablished;
+    into.unchecked += from.unchecked;
+    into.restricted += from.restricted;
+    into.inspectionOnly += from.inspectionOnly;
+    return into;
+}
+
 function membership(
     sourceId: Id<"sources">,
     decision: Controlled[number]["sourceDecision"] | null,
@@ -440,6 +467,11 @@ export const overview = query({
             const outcome = result?.needs.find(
                 (entry) => entry.needId === need.id,
             );
+            const outcomeTasks = new Set(
+                outcome?.contributions.map(
+                    (entry) => entry.qualificationTaskId,
+                ),
+            );
             return {
                 id: need.id,
                 information: need.information,
@@ -460,6 +492,13 @@ export const overview = query({
                           ),
                       ).size
                     : sources.size,
+                sourceIds: outcome
+                    ? (result?.documents ?? [])
+                          .filter((document) =>
+                              outcomeTasks.has(document.qualificationTaskId),
+                          )
+                          .map((document) => document.sourceId)
+                    : [...sources],
                 contributions: outcome
                     ? outcome.contributions.length
                     : served.length,
@@ -499,14 +538,32 @@ export const overview = query({
                 partial: count((row) => row.reading === "partial"),
                 unavailable: count((row) => row.reading === "unavailable"),
                 capturing: count((row) => row.reading === "capturing"),
+                notCaptured: count((row) => row.reading === "not_captured"),
             },
             contributions: tally(contributions),
+            retainedContributions: rows
+                .filter((row) => row.membership === "retained")
+                .reduce(
+                    (into, row) => addTally(into, row.contributions),
+                    emptyTally(),
+                ),
             organize: {
                 retained: count((row) => row.membership === "retained"),
                 contextOnly: count(
                     (row) => row.membership === "retained" && row.contextOnly,
                 ),
                 notRetained: count((row) => row.membership === "not_retained"),
+                notRetainedRead: count(
+                    (row) =>
+                        row.membership === "not_retained" &&
+                        (row.reading === "full" || row.reading === "partial"),
+                ),
+                notRetainedUnread: count(
+                    (row) =>
+                        row.membership === "not_retained" &&
+                        row.reading !== "full" &&
+                        row.reading !== "partial",
+                ),
                 excluded: count((row) => row.membership === "excluded"),
                 restricted: data.restrictedContributions.length,
             },

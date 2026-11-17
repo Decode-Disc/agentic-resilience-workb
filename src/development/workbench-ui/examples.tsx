@@ -472,18 +472,16 @@ function EvidenceMatrixExample() {
     );
 }
 function SourceReaderExample() {
-    const [page, setPage] = useState("p8");
     return (
-        <SourceReader
-            title="Form 10-K · FY2025"
-            meta="sec.gov · capture v1 · full reading · 142 pages"
-            pages={readerPages}
-            initialPage={1}
-            pagePosition={`${readerPages.find((p) => p.id === page)?.label} / 142`}
-            onPageChange={setPage}
-            contributionLabel="Company-authored · annual report"
-            contributions={readerContributions}
-        />
+        <div style={{ height: 720 }}>
+            <SourceReader
+                title="Form 10-K · FY2025"
+                meta="sec.gov · capture v1 · complete capture · 142 pages"
+                pages={readerPages}
+                contributionLabel="Company-authored · annual report"
+                contributions={readerContributions}
+            />
+        </div>
     );
 }
 function QuestionCardExample() {

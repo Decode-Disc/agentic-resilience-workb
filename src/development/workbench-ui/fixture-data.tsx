@@ -230,7 +230,9 @@ export const readerContributions: ReaderContribution[] = [
     },
     {
         id: "a31",
-        kind: "fact",
+        // A documentary conflict is presented as counter-evidence, as the live mapping does.
+        kind: "counter",
+        label: "Fact",
         meta: "p. 8 ¶4",
         questions: ["Q1"],
         target: { pageId: "p8", passageId: "p4" },

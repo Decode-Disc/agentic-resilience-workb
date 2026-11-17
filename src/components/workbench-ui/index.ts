@@ -21,6 +21,7 @@ export * from "./mechanism-node";
 export * from "./outcome-card";
 export * from "./progress-timeline";
 export * from "./question-card";
+export * from "./question-tag";
 export * from "./request-item";
 export { WorkbenchUiRoot } from "./root";
 export * from "./source-matrix";

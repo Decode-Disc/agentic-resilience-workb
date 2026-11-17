@@ -1,8 +1,14 @@
 import { MotionConfig, motion } from "motion/react";
 import { type ReactNode, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import styles from "./documentary-needs.module.css";
+import { ReadingGlyph, type ReadingState, WorkbenchIcon } from "./glyphs";
 import { HelpTip } from "./help-tip";
 import { listTransition, markerTransition } from "./motion";
 
@@ -28,6 +34,15 @@ export interface DocumentaryNeed {
     /** Why the need ended this way, in the analyst's terms. */
     detail?: ReactNode;
     action?: ReactNode;
+    /** Documents serving this need; listed when the need is expanded. */
+    sources?: readonly NeedSource[];
+}
+
+export interface NeedSource {
+    id: string;
+    title: string;
+    meta: string;
+    reading: ReadingState;
 }
 
 export interface NeedQuestion {
@@ -53,6 +68,10 @@ const outcomeOrder: readonly NeedOutcome[] = [
     "gap",
     "unfinished",
 ];
+
+function countLabel(count: number, noun: string) {
+    return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
 
 function needCount(relied: readonly DocumentaryNeed[]) {
     return [
@@ -88,9 +107,9 @@ function MarkTip({
     question: NeedQuestion;
 }) {
     const counts = [
-        need.documents !== undefined && `${need.documents} documents`,
+        need.documents !== undefined && countLabel(need.documents, "document"),
         need.contributions !== undefined &&
-            `${need.contributions} contributions`,
+            countLabel(need.contributions, "contribution"),
     ].filter(Boolean);
     const outcome = [outcomes[need.outcome].legend, ...counts].join(" · ");
     return (
@@ -106,7 +125,6 @@ function MarkTip({
                 </button>
             }>
             <span className={styles.tip}>
-                <b className={styles.tipNeed}>{need.label}</b>
                 <span>
                     Serves <b>{question.label}</b> · {question.question}
                 </span>
@@ -119,7 +137,56 @@ function MarkTip({
     );
 }
 
-function NeedOutcomeSummary({ need }: { need: DocumentaryNeed }) {
+/** Long needs clamp to two lines; expanding shows the full text, its reason and the documents serving it. */
+/** The need clamps to two lines; an explicit control shows the rest. */
+function NeedLabel({ need }: { need: DocumentaryNeed }) {
+    const [full, setFull] = useState(false);
+    const long = need.label.length > 110;
+    return (
+        <>
+            <span
+                className={styles.needLabel}
+                data-clamp={(long && !full) || undefined}>
+                {need.label}
+            </span>
+            {long && (
+                <button
+                    type="button"
+                    className={styles.moreToggle}
+                    aria-expanded={full}
+                    onClick={() => setFull(!full)}>
+                    {full ? "Show less" : "Show full need"}
+                </button>
+            )}
+            {need.detail && (
+                <span className={styles.detail}>{need.detail}</span>
+            )}
+        </>
+    );
+}
+
+/** Each count stays whole, so narrow cells wrap between counts rather than inside one. */
+function Counts({ counts }: { counts: readonly string[] }) {
+    return (
+        <span className={styles.counts}>
+            {counts.map((count, index) => (
+                <span key={count}>
+                    {count}
+                    {index < counts.length - 1 && " ·"}
+                </span>
+            ))}
+        </span>
+    );
+}
+
+/** Where the need ended, with its documents behind an explicit toggle. */
+function NeedOutcomeSummary({
+    need,
+    onOpenSource,
+}: {
+    need: DocumentaryNeed;
+    onOpenSource?: (sourceId: string, needId: string) => void;
+}) {
     if (need.outcome === "gap") return <Badge tone="review">Gap</Badge>;
     const badge =
         need.outcome === "in_progress" ? (
@@ -133,19 +200,71 @@ function NeedOutcomeSummary({ need }: { need: DocumentaryNeed }) {
         !badge || Boolean(need.documents) || Boolean(need.contributions);
     const counts = showCounts
         ? [
-              need.documents !== undefined && `${need.documents} documents`,
+              need.documents !== undefined &&
+                  countLabel(need.documents, "document"),
               need.contributions !== undefined &&
-                  `${need.contributions} contributions`,
-          ].filter(Boolean)
+                  countLabel(need.contributions, "contribution"),
+          ].filter((count): count is string => Boolean(count))
         : [];
     if (!counts.length && !need.flag && badge) return badge;
+    const sources = need.sources ?? [];
     return (
         <span className={styles.prepared}>
-            {counts.length > 0 && (
-                <span className="wb-meta">{counts.join(" · ")}</span>
+            {sources.length > 0 ? (
+                <Collapsible className={styles.documents}>
+                    <span className={styles.documentsHead}>
+                        <CollapsibleTrigger className={styles.documentsToggle}>
+                            <WorkbenchIcon
+                                name="chevron"
+                                size={11}
+                                strokeWidth={2}
+                            />
+                            <Counts counts={counts} />
+                        </CollapsibleTrigger>
+                        {need.flag}
+                        {badge}
+                    </span>
+                    <CollapsibleContent>
+                        <ul
+                            className={styles.needSources}
+                            aria-label="Documents for this need">
+                            {sources.map((source) => (
+                                <li key={source.id}>
+                                    <button
+                                        type="button"
+                                        className={styles.needSource}
+                                        disabled={!onOpenSource}
+                                        onClick={() =>
+                                            onOpenSource?.(source.id, need.id)
+                                        }>
+                                        <ReadingGlyph
+                                            state={source.reading}
+                                            size={12}
+                                        />
+                                        <span
+                                            className={styles.needSourceTitle}>
+                                            {source.title}
+                                        </span>
+                                        <span className="wb-meta">
+                                            {source.meta}
+                                        </span>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </CollapsibleContent>
+                </Collapsible>
+            ) : (
+                <>
+                    {counts.length > 0 && (
+                        <span className="wb-meta">
+                            <Counts counts={counts} />
+                        </span>
+                    )}
+                    {need.flag}
+                    {badge}
+                </>
             )}
-            {need.flag}
-            {badge}
         </span>
     );
 }
@@ -159,10 +278,16 @@ export function DocumentaryNeeds({
     title = "Documentary needs",
     questions,
     needs,
+    notice,
+    onOpenSource,
 }: {
     title?: string;
     questions: readonly NeedQuestion[];
     needs: readonly DocumentaryNeed[];
+    /** A reason shared by several needs, shown once above the table instead of on every row. */
+    notice?: ReactNode;
+    /** Opens a document from an expanded need. */
+    onOpenSource?: (sourceId: string, needId: string) => void;
 }) {
     const headingId = useId();
     const markerId = useId();
@@ -220,9 +345,10 @@ export function DocumentaryNeeds({
                         )}
                     </p>
                 </div>
+                {notice && <p className={styles.notice}>{notice}</p>}
                 <table className={styles.table} aria-labelledby={headingId}>
                     <colgroup>
-                        <col />
+                        <col className={styles.needCol} />
                         {questions.map((question) => (
                             <col
                                 key={question.id}
@@ -307,16 +433,12 @@ export function DocumentaryNeeds({
                                     undefined
                                 }>
                                 <th scope="row" className={styles.need}>
-                                    <span className={styles.needLabel}>
-                                        {need.label}
-                                    </span>
-                                    {need.detail && (
-                                        <span className={styles.detail}>
-                                            {need.detail}
-                                        </span>
-                                    )}
+                                    <NeedLabel need={need} />
                                     <span className={styles.inlineOutcome}>
-                                        <NeedOutcomeSummary need={need} />
+                                        <NeedOutcomeSummary
+                                            need={need}
+                                            onOpenSource={onOpenSource}
+                                        />
                                     </span>
                                     {need.action && (
                                         <span className={styles.action}>
@@ -357,7 +479,10 @@ export function DocumentaryNeeds({
                                     ))
                                 )}
                                 <td className={styles.outcome}>
-                                    <NeedOutcomeSummary need={need} />
+                                    <NeedOutcomeSummary
+                                        need={need}
+                                        onOpenSource={onOpenSource}
+                                    />
                                 </td>
                             </motion.tr>
                         ))}

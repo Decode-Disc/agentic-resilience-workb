@@ -20,6 +20,10 @@ export type WorkspaceSearch = {
     sourcesView?: "matrix" | "reader";
     /** The source open in the reader. */
     source?: string;
+    /** The documentary need the reader was opened for; it starts on that need's first citation. */
+    need?: string;
+    /** Opens the reader on its first conflicting citation. */
+    focus?: "conflict";
     /** Matrix search and filters, restored on refresh and history. */
     q?: string;
     kind?: string;
@@ -90,17 +94,52 @@ export function workspaceSearch(
         search.inventory === "1"
     )
         result.inventory = 1;
+    if (section === "sources" && search.focus === "conflict")
+        result.focus = "conflict";
     if (section === "sources") {
         if (search.sourcesView === "matrix" || search.sourcesView === "reader")
             result.sourcesView = search.sourcesView;
         // Links into the retired candidate inspection open the source matrix.
         else if (search.view === "inspect" || search.view === "adjust")
             result.sourcesView = "matrix";
-        for (const key of ["source", "q", "kind", "reading", "use"] as const) {
+        for (const key of [
+            "source",
+            "need",
+            "q",
+            "kind",
+            "reading",
+            "use",
+        ] as const) {
             const value = search[key];
             if (typeof value === "string" && value.length > 0)
                 result[key] = value;
         }
     }
     return result;
+}
+
+/** The Sources location keys, in one place for the route and every Sources consumer. */
+export const sourcesLocationKeys = [
+    "sourcesView",
+    "source",
+    "need",
+    "focus",
+    "q",
+    "kind",
+    "reading",
+    "use",
+] as const;
+export type SourcesLocation = Pick<
+    WorkspaceSearch,
+    (typeof sourcesLocationKeys)[number]
+>;
+
+/** Extracts the Sources location from a parsed workspace search. */
+export function sourcesLocation(search: WorkspaceSearch): SourcesLocation {
+    const location: SourcesLocation = {};
+    for (const key of sourcesLocationKeys) {
+        const value = search[key];
+        if (value !== undefined) Object.assign(location, { [key]: value });
+    }
+    return location;
 }

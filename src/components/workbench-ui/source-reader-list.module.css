@@ -1,7 +1,47 @@
 @reference "../../styles.css";
 
 .list {
-    @apply rounded-[22px] p-[10px] flex flex-col overflow-hidden min-w-[0];
+    @apply rounded-[22px] p-[10px] flex flex-col overflow-hidden min-w-[0] min-h-[0];
+}
+.filter {
+    @apply mx-[0] mt-[6px] mb-[4px] flex items-center gap-[8px] h-[34px] px-[10px] rounded-[10px] text-muted-foreground bg-foreground/5 bg-none;
+}
+.filter:focus-within {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[1px];
+}
+.filter input {
+    all: unset;
+    @apply flex-[1] min-w-[0] text-[13px] text-foreground;
+}
+.filter input::placeholder {
+    @apply text-muted-foreground;
+}
+.nothing {
+    @apply m-[0] py-[12px] px-[10px] text-[13px] text-muted-foreground;
+}
+/* Resets the button, so the label type is restated here rather than inherited from wb-label. */
+.groupToggle {
+    all: unset;
+    @apply box-border w-[100%] flex items-center gap-[6px] pt-[12px] px-[10px] pb-[4px] rounded-[6px] cursor-pointer font-mono text-[0.6875rem] font-medium tracking-[0.12em] uppercase text-muted-foreground;
+}
+.groupToggle svg {
+    transition: rotate 0.2s var(--wb-ease-arrive);
+}
+.groupToggle[data-panel-open] svg {
+    rotate: 90deg;
+}
+.groupToggle:hover {
+    @apply text-foreground;
+}
+.groupToggle:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply -outline-offset-[2px];
+}
+@media (prefers-reduced-motion: reduce) {
+    .groupToggle svg {
+        transition: none;
+    }
 }
 .header {
     @apply flex justify-between items-center pt-[8px] px-[10px] pb-[4px];
@@ -9,11 +49,9 @@
 .header h2 {
     @apply m-[0] text-[14px] font-semibold;
 }
+/* Only the groups scroll; the heading and filter stay in view. Rows share the filter's edges. */
 .groups {
-    @apply flex flex-col;
-}
-.group h3 {
-    @apply m-[0] pt-[12px] px-[10px] pb-[4px] font-medium;
+    @apply flex-[1] min-h-[0] overflow-y-auto overscroll-contain flex flex-col pb-[2px];
 }
 .group ul {
     @apply m-[0] p-[0];
@@ -31,12 +69,14 @@
     outline: 2px solid var(--ring);
     @apply outline-offset-[2px];
 }
-/* Glides between items when the selection changes, so the eye follows the new source. */
+/* Glides between items when the selection changes, so the eye follows the new source.
+   The ring is drawn inside the card, so the scrolling list never clips it. */
 .marker {
     @apply absolute inset-0 -z-[1] rounded-[inherit] bg-card bg-none;
     box-shadow:
-        0 0 0 1px color-mix(in oklab, var(--brand-purple) 35%, transparent),
-        0 8px 18px -12px
+        inset 0 0 0 1px
+        color-mix(in oklab, var(--brand-purple) 35%, transparent),
+        0 6px 14px -12px
         color-mix(in oklab, var(--brand-purple) 60%, transparent);
 }
 .text {
@@ -50,4 +90,30 @@
 }
 .footer {
     @apply mt-auto pt-[12px] px-[10px] pb-[6px];
+}
+/* The selection card wraps the whole entry, so a source's conflict link stays inside it. */
+.entry {
+    @apply relative isolate flex flex-col rounded-[12px];
+}
+/* A hairline from the title column separates neighbouring sources; it gives way around the selection. */
+.entry + .entry::before {
+    content: "";
+    @apply absolute top-[0] left-[46px] right-[10px] h-px bg-foreground/8;
+}
+.entry[data-selected]::before,
+.entry[data-selected] + .entry::before {
+    @apply hidden;
+}
+/* A direct way to a source's conflict, under its row. */
+.conflictLink {
+    all: unset;
+    @apply ml-[52px] -mt-[2px] mb-[6px] inline-flex w-fit items-center gap-[6px] py-[2px] px-[8px] rounded-[999px] text-[12px] font-medium text-counter-evidence cursor-pointer;
+    background: color-mix(in oklab, var(--counter-evidence) 9%, transparent);
+}
+.conflictLink:hover {
+    background: color-mix(in oklab, var(--counter-evidence) 15%, transparent);
+}
+.conflictLink:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
 }

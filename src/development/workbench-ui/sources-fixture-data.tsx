@@ -105,6 +105,26 @@ export const preparationView: SourcesPreparationView = {
             outcome: "prepared",
             documents: 3,
             contributions: 6,
+            sources: [
+                {
+                    id: "10-k",
+                    title: "Form 10-K · FY2025",
+                    meta: "4 contributions",
+                    reading: "full",
+                },
+                {
+                    id: "q2-call",
+                    title: "Q2 2025 earnings call",
+                    meta: "1 contribution",
+                    reading: "full",
+                },
+                {
+                    id: "10-q",
+                    title: "Form 10-Q · Q2 2025",
+                    meta: "1 contribution",
+                    reading: "full",
+                },
+            ],
             flag: (
                 <Badge tone="counter">
                     <ClaimGlyph kind="counter" />1 conflict
@@ -182,9 +202,7 @@ export interface IllustrativeSource extends SourceMatrixRow {
     use: SourceSelection;
     document: {
         meta: string;
-        pageCount?: number;
         pages: readonly ReaderPage[];
-        initialPage?: number;
         contributionLabel: string;
         contributions: readonly ReaderContribution[];
         observedLinks?: readonly ReaderObservedLink[];
@@ -219,8 +237,7 @@ const annualReport = row({
     restriction: "Outlook kept as projection",
     control: supported,
     document: {
-        meta: "sec.gov · capture v1 · full reading · 142 pages",
-        pageCount: 142,
+        meta: "sec.gov · capture v1 · complete capture · 142 pages",
         pages: readerPages.map((page) =>
             page.id === "p8"
                 ? {
@@ -237,7 +254,6 @@ const annualReport = row({
                   }
                 : page,
         ),
-        initialPage: 1,
         contributionLabel: "Company-authored · annual report · FY2025",
         contributions: readerContributions,
         observedLinks: [
@@ -300,7 +316,7 @@ function additionalSources(): IllustrativeSource[] {
             missing: reading === "unavailable",
             quiet: use === "excluded",
             document: {
-                meta: `${meta} · capture v1 · ${reading === "full" ? "full reading" : reading === "partial" ? "partial reading" : "capture unavailable"}`,
+                meta: `${meta} · capture v1 · ${reading === "full" ? "complete capture" : reading === "partial" ? "partial capture" : "capture unavailable"}`,
                 pages: [],
                 contributionLabel: `${relationship} · ${title}`,
                 contributions: [],
@@ -691,7 +707,7 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
             </Badge>
         ),
         document: {
-            meta: "investor relations · capture v1 · full reading · transcript",
+            meta: "investor relations · capture v1 · complete capture · transcript",
             pages: [
                 {
                     id: "remarks",
@@ -718,7 +734,8 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
             contributions: [
                 {
                     id: "routing",
-                    kind: "fact",
+                    kind: "counter",
+                    label: "Fact",
                     meta: "Prepared remarks",
                     questions: ["Q1"],
                     target: { pageId: "remarks", passageId: "routing" },
@@ -786,7 +803,7 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
         contributions: { count: 6, segments: [{ kind: "fact", count: 6 }] },
         control: supported,
         document: {
-            meta: "sec.gov · capture v1 · full reading",
+            meta: "sec.gov · capture v1 · complete capture",
             pages: [],
             contributionLabel: "Company-authored · quarterly report · Q2 2025",
             contributions: [],
@@ -804,7 +821,7 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
         contributions: { count: 0, note: "links only" },
         restriction: "Linked pages not read",
         document: {
-            meta: "company site · capture v1 · full reading · links only",
+            meta: "company site · capture v1 · complete capture · links only",
             pages: [],
             contributionLabel: "Company-authored · index page",
             contributions: [],
@@ -829,7 +846,7 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
         restriction: "Argument checked against filings",
         control: supported,
         document: {
-            meta: "industry publication · capture v1 · full reading",
+            meta: "industry publication · capture v1 · complete capture",
             pages: [],
             contributionLabel: "Third-party · article",
             contributions: [],
@@ -867,7 +884,7 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
         restriction: "Period 2022, not current",
         control: notEstablished,
         document: {
-            meta: "earlier dossier · capture v1 · full reading · 2022",
+            meta: "earlier dossier · capture v1 · complete capture · 2022",
             pages: [],
             contributionLabel: "Third-party · industry overview · 2022",
             contributions: [],
@@ -893,8 +910,17 @@ const listItem = (
         title: title ?? source.title,
         meta,
         metaTone,
+        ...(metaTone === "counter" ? { conflicts: 1 } : {}),
         reading: source.reading,
     };
+};
+
+/** Full question text by label, for every place the reader shows Q1, Q2… */
+export const readerQuestionTexts: Readonly<Record<string, string>> = {
+    Q1: "Does CCC control coordination?",
+    Q2: "Is its operational context durable?",
+    Q3: "Could core platforms replace it?",
+    Q4: "Could an agent bypass it?",
 };
 
 export const readerSourceGroups = [
@@ -911,7 +937,7 @@ export const readerSourceGroups = [
         label: "Calls and investor",
         items: [
             listItem("q2-call", "1 conflict", undefined, "counter"),
-            listItem("investor-day", "partial reading"),
+            listItem("investor-day", "partial capture"),
         ],
     },
     {
@@ -948,7 +974,7 @@ export const matrixFilters = [
         id: "reading",
         label: "Reading",
         options: [
-            { id: "any", label: "Any reading" },
+            { id: "any", label: "Any capture" },
             { id: "partial", label: "Partial" },
             { id: "unavailable", label: "Unavailable" },
         ],
@@ -980,14 +1006,21 @@ export function filterIllustrativeSources(
     filters: MatrixFilterValues,
 ) {
     const needle = query.trim().toLowerCase();
-    return illustrativeSources.filter(
-        (source) =>
-            (filters.kind === "all" || source.kind === filters.kind) &&
-            (filters.reading === "any" || source.reading === filters.reading) &&
-            (filters.use === "any" || source.use === filters.use) &&
-            (!needle ||
-                `${source.docType} ${source.title} ${source.meta} ${source.restriction ?? ""}`
-                    .toLowerCase()
-                    .includes(needle)),
-    );
+    // Same order as the live matrix: most contributions first.
+    return [...illustrativeSources]
+        .sort(
+            (a, b) =>
+                (b.contributions?.count ?? 0) - (a.contributions?.count ?? 0),
+        )
+        .filter(
+            (source) =>
+                (filters.kind === "all" || source.kind === filters.kind) &&
+                (filters.reading === "any" ||
+                    source.reading === filters.reading) &&
+                (filters.use === "any" || source.use === filters.use) &&
+                (!needle ||
+                    `${source.docType} ${source.title} ${source.meta} ${source.restriction ?? ""}`
+                        .toLowerCase()
+                        .includes(needle)),
+        );
 }

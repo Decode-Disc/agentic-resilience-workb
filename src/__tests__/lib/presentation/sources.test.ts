@@ -5,10 +5,11 @@ import { expect, test } from "vitest";
 import {
     filterSourcesRows,
     type SourcesRow,
+    sortSourcesRows,
     sourcesFilterValues,
     sourcesPhasePresentation,
 } from "@/lib/presentation/sources";
-import { workspaceSearch } from "@/lib/workspace/navigation";
+import { sourcesLocation, workspaceSearch } from "@/lib/workspace/navigation";
 
 type Row = NonNullable<
     FunctionReturnType<typeof api.sourcesWorkspace.listSources>
@@ -139,5 +140,68 @@ test("Sources copy names the agent and never shows raw codes", () => {
         label: "No material",
         outcome: "No material",
         title: "No usable material prepared",
+    });
+});
+
+const tallied = (total: number) => ({
+    total,
+    kinds: {
+        asserted_fact: total,
+        attributed_argument: 0,
+        forecast: 0,
+        context: 0,
+    },
+    supported: total,
+    conflict: 0,
+    notEstablished: 0,
+    unchecked: 0,
+    restricted: 0,
+    inspectionOnly: 0,
+});
+
+test("the matrix leads with the documents that contribute most", () => {
+    const sorted = sortSourcesRows([
+        row({
+            sourceId: "lead",
+            membership: "not_retained",
+            reading: "not_captured",
+        }),
+        row({ sourceId: "few", contributions: tallied(3) }),
+        row({ sourceId: "many", contributions: tallied(15) }),
+        row({
+            sourceId: "unused",
+            membership: "not_retained",
+            contributions: tallied(3),
+        }),
+        row({ sourceId: "excluded", membership: "excluded" }),
+        row({ sourceId: "pending", membership: "pending" }),
+    ]).map((r) => r.sourceId);
+    expect(sorted).toEqual([
+        "many",
+        "few",
+        "unused",
+        "pending",
+        "lead",
+        "excluded",
+    ]);
+});
+
+test("the reader receives every Sources location key, including its starting point", () => {
+    expect(
+        sourcesLocation(
+            workspaceSearch({
+                section: "sources",
+                sourcesView: "reader",
+                source: "abc",
+                need: "workflow",
+                focus: "conflict",
+                inventory: "1",
+            }),
+        ),
+    ).toEqual({
+        sourcesView: "reader",
+        source: "abc",
+        need: "workflow",
+        focus: "conflict",
     });
 });
