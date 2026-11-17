@@ -183,10 +183,7 @@ test("protected administration separates and pages technical dossiers", async ({
             .getByRole("tab", { name: "Activity & spend", exact: true })
             .click();
         await expect(
-            page.getByRole("heading", {
-                name: "Recent provider attempts",
-                exact: true,
-            }),
+            page.getByText("No provider attempts recorded", { exact: true }),
         ).toBeVisible();
         const inspectAttempt = page.getByRole("button", {
             name: "Inspect attempt",

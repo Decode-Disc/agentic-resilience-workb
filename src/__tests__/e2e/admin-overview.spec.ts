@@ -1,9 +1,18 @@
 import { expect, type Page, test } from "@playwright/test";
-import { closeDossierDetail, dossierDetail } from "../../../e2e/support/admin";
+import {
+    browserTestDossierRow,
+    closeDossierDetail,
+    dossierDetail,
+} from "../../../e2e/support/admin";
 import {
     admitAdministrator,
     expectAdmissionClosed,
 } from "../../../e2e/support/admission";
+import { closeBrowserTestContext } from "../../../e2e/support/browser-workspace";
+import {
+    admitAnalyst,
+    seedSourceReview,
+} from "../../../e2e/support/source-review-fixture";
 
 const screenshots = process.env.ADMIN_SHOT_DIR;
 
@@ -37,7 +46,15 @@ for (const viewport of [
         page.on("console", (message) => {
             if (message.type() === "error") errors.push(message.text());
         });
+        const analystContext = await browser.newContext({
+            baseURL: test.info().project.use.baseURL,
+        });
+        const analystPage = await analystContext.newPage();
         try {
+            await admitAnalyst(analystPage);
+            const seeded = await seedSourceReview(
+                `admin-overview-${viewport.name}`,
+            );
             await admitAdministrator(page);
 
             await expect(
@@ -88,10 +105,14 @@ for (const viewport of [
                 }),
             ).toBeVisible({ timeout: 60_000 });
 
-            const research = page.getByRole("tabpanel", { name: "Research" });
-            const open = research
-                .getByRole("button", { name: "Open dossier", exact: true })
-                .first();
+            await page
+                .getByRole("tab", { name: "Browser tests", exact: true })
+                .click();
+            const row = await browserTestDossierRow(page, seeded.runId);
+            const open = row.getByRole("button", {
+                name: "Open dossier",
+                exact: true,
+            });
             await expect(open).toBeVisible({ timeout: 30_000 });
             await open.click();
             const panel = dossierDetail(page);
@@ -149,7 +170,9 @@ for (const viewport of [
 
             await page.getByRole("tab", { name: "Activity & spend" }).click();
             await expect(
-                page.getByRole("heading", { name: "Recent provider attempts" }),
+                page.getByText("No provider attempts recorded", {
+                    exact: true,
+                }),
             ).toBeVisible();
             await expectReadable(page);
             if (screenshots)
@@ -159,6 +182,8 @@ for (const viewport of [
                 });
             expect(errors).toEqual([]);
         } finally {
+            await closeBrowserTestContext(analystPage);
+            await analystContext.close();
             await context.close();
         }
     });
