@@ -35,12 +35,7 @@ Read `PRODUCT.md` before product planning or implementation, relevant sections o
 | `scripts/evaluations/source-selection/fixtures/*/README.md` | evidence | - | Fixture provenance and evaluation boundaries. |
 | `scripts/evaluations/source-selection/fixtures/**` | excluded | - | Raw captures, frozen results and external copies. |
 | `scripts/evaluations/source-selection/runs/**` | excluded | - | Immutable experiment records and source snapshots. |
-| `docs/designs/**` | retired | - | Replaced by the brainstorming location. |
-| `docs/plans/**` | history | - | Implementation plans: the working task sequence for an accepted design, not product or technical authority. |
-| `docs/superpowers/**` | retired | - | Previous plans preserved in Git, not active instructions. |
-| `docs/product-architecture/**` | retired | - | Requirements consolidated into the current product and technical contracts. |
-| `docs/design-systems/**` | retired | - | Former redirect to the visual reference. |
-| `docs/preferences.md` | retired | - | Preferences incorporated into their current owners. |
+| `.implementation-plans/**` | history | - | Implementation plans: the working task sequence for an accepted design, not product or technical authority. |
 <!-- documentation-policy:end -->
 
 - Keep each rule in its listed owner; link to it rather than duplicating its contract. Consult history for rationale or evidence, never to override current references or renew execution permissions. If current references conflict, stop and identify the conflict.
