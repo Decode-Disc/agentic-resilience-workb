@@ -24,7 +24,7 @@ dist-ssr/
 __unconfig*
 
 .codex/
-.claude/
+# .claude/
 .pi/
 .factory/
 .vscode/
