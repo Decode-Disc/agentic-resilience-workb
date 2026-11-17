@@ -1,3 +1,4 @@
+import { patchQualificationReceipt } from "@convex/qualificationUsage";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
@@ -12,6 +13,10 @@ import {
     internalMutation,
     internalQuery,
 } from "./_generated/server";
+import {
+    mergeRunCompanyMetadata,
+    requireCompanyWebsiteUrl,
+} from "./domain/companyMetadata";
 import { companySnapshotValidator } from "./domain/validators";
 import { createExaWebsiteAdapter } from "./integrations/exa";
 import {
@@ -19,6 +24,11 @@ import {
     createSecCompanyResolver,
 } from "./integrations/sec";
 import { resolveWebsiteUrl } from "./integrations/websiteResolver";
+import {
+    COMPANY_PREFLIGHT_TTL_MS as PREFLIGHT_TTL_MS,
+    COMPANY_WEBSITE_CACHE_TTL_MS as WEBSITE_CACHE_TTL_MS,
+    COMPANY_WEBSITE_TIMEOUT_MS as WEBSITE_TIMEOUT_MS,
+} from "./resourcePolicy";
 
 const secCompanyMatchValidator = companySnapshotValidator;
 
@@ -52,11 +62,8 @@ type PersistPreflight<PreflightId extends string> = (input: {
     resolverVersion: string;
 }) => Promise<CompanyPreflightResult<PreflightId>>;
 
-const PREFLIGHT_TTL_MS = 15 * 60 * 1_000;
 const RESOLVER_VERSION = "sec-company-v2";
-const WEBSITE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const WEBSITE_RESOLVER_VERSION = "exa-company-website-v1";
-const WEBSITE_TIMEOUT_MS = 5_000;
 
 class WebsiteResolutionTimeoutError extends Error {
     constructor() {
@@ -208,24 +215,24 @@ export async function backfillRunCompanyWebsiteWithResolver<
         }) => Promise<void>;
     },
 ): Promise<WebsiteBackfillResult> {
-    if (args.companySnapshot?.websiteUrl) {
+    const company = mergeRunCompanyMetadata(args.companySnapshot, args.company);
+    if (company?.websiteUrl) {
+        if (
+            args.companySnapshot?.websiteUrl !== company.websiteUrl ||
+            args.companySnapshot?.websiteUrlSource !== company.websiteUrlSource
+        ) {
+            await dependencies.persist({
+                runId: args.runId,
+                companyId: args.companyId,
+                websiteUrl: company.websiteUrl,
+                ...(company.websiteUrlSource
+                    ? { websiteUrlSource: company.websiteUrlSource }
+                    : {}),
+            });
+        }
         return {
-            websiteUrl: args.companySnapshot.websiteUrl,
-            websiteUrlSource: args.companySnapshot.websiteUrlSource,
-        };
-    }
-    if (args.company.websiteUrl) {
-        await dependencies.persist({
-            runId: args.runId,
-            companyId: args.companyId,
-            websiteUrl: args.company.websiteUrl,
-            ...(args.company.websiteUrlSource
-                ? { websiteUrlSource: args.company.websiteUrlSource }
-                : {}),
-        });
-        return {
-            websiteUrl: args.company.websiteUrl,
-            websiteUrlSource: args.company.websiteUrlSource,
+            websiteUrl: company.websiteUrl,
+            websiteUrlSource: company.websiteUrlSource,
         };
     }
 
@@ -276,6 +283,7 @@ export const persistPreflight = internalMutation({
             .unique();
         const websiteUrl =
             args.company.websiteUrl ?? existingCompany?.websiteUrl;
+        if (websiteUrl !== undefined) requireCompanyWebsiteUrl(websiteUrl);
         const websiteUrlSource =
             args.company.websiteUrlSource ?? existingCompany?.websiteUrlSource;
         const websiteResolvedAt =
@@ -367,6 +375,8 @@ export const search = action({
         if (!authUserId) {
             throw new Error("Not authenticated");
         }
+        if (!(await ctx.runQuery(internal.runWorkspace.authorizeProvider, {})))
+            throw new Error("paid_work_disabled");
         const results = [
             ...(await searchCompaniesWithResolver(args, {
                 resolver: createPublicCompanyResolver(
@@ -375,30 +385,44 @@ export const search = action({
                 ),
             })),
         ];
-        // Best-effort enrichment: resolve marketing website URLs for the top
-        // candidates so the search dropdown can render favicons. Wrapped in a
-        // try-catch so a transient Exa failure never breaks the core search
-        // flow — candidates without a websiteUrl fall back to the building
-        // icon in the UI.
+        // Best-effort cache-only enrichment during search/typeahead: reuse any
+        // website already persisted on the `companies` record (or SEC IR root)
+        // without consuming the user's Exa website quota on intermediate
+        // search keystrokes. External Exa resolution runs on `preflight`.
         try {
-            const ENRICH_LIMIT = 3;
-            for (
-                let i = 0;
-                i < Math.min(ENRICH_LIMIT, results.length);
-                i += 1
-            ) {
-                const candidate = results[i];
-                if (candidate && !candidate.websiteUrl) {
-                    const resolution = await resolveWebsiteForCompany(
-                        ctx,
-                        authUserId,
-                        candidate,
-                    );
-                    if (resolution) {
+            const uncachedCiks = results
+                .filter((candidate) => !candidate.websiteUrl)
+                .map((candidate) => candidate.cik);
+            if (uncachedCiks.length > 0) {
+                const cachedEntries = await ctx.runQuery(
+                    internal.companyResolution.getWebsiteCachesByCiks,
+                    { ciks: uncachedCiks },
+                );
+                const cacheByCik = new Map(
+                    cachedEntries.map((entry) => [entry.cik, entry]),
+                );
+                for (let i = 0; i < results.length; i += 1) {
+                    const candidate = results[i];
+                    if (!candidate || candidate.websiteUrl) continue;
+                    const cached = cacheByCik.get(candidate.cik);
+                    if (cached) {
                         results[i] = {
                             ...candidate,
-                            websiteUrl: resolution.url,
-                            websiteUrlSource: resolution.source,
+                            websiteUrl: cached.websiteUrl,
+                            ...(cached.websiteUrlSource
+                                ? { websiteUrlSource: cached.websiteUrlSource }
+                                : {}),
+                        };
+                        continue;
+                    }
+                    const secWebsite = classifyIrAsWebsite(
+                        candidate.investorRelationsUrl,
+                    );
+                    if (secWebsite) {
+                        results[i] = {
+                            ...candidate,
+                            websiteUrl: secWebsite,
+                            websiteUrlSource: "sec_ir",
                         };
                     }
                 }
@@ -422,6 +446,8 @@ export const preflight = action({
         if (!authUserId) {
             throw new Error("Not authenticated");
         }
+        if (!(await ctx.runQuery(internal.runWorkspace.authorizeProvider, {})))
+            throw new Error("paid_work_disabled");
         const resolver = createPublicCompanyResolver(
             ctx,
             `preflight:${authUserId}:${args.cik}:${Date.now()}`,
@@ -481,6 +507,12 @@ export const ensureRunCompanyWebsite = action({
     args: { runId: v.id("researchRuns") },
     returns: websiteBackfillResultValidator,
     handler: async (ctx, args): Promise<WebsiteBackfillResult> => {
+        if (
+            !(await ctx.runQuery(internal.runWorkspace.authorizeProvider, {
+                runId: args.runId,
+            }))
+        )
+            throw new Error("paid_work_disabled");
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
             throw new Error("Not authenticated");
@@ -564,6 +596,7 @@ export const persistRunCompanyWebsite = internalMutation({
         if (!run || run.companyId !== args.companyId || !company) {
             throw new Error("Research run company metadata is unavailable");
         }
+        requireCompanyWebsiteUrl(args.websiteUrl);
 
         const snapshot = run.companySnapshot ?? {
             cik: company.cik,
@@ -574,44 +607,65 @@ export const persistRunCompanyWebsite = internalMutation({
             websiteUrl: company.websiteUrl,
             websiteUrlSource: company.websiteUrlSource,
         };
-        if (snapshot.websiteUrl) {
+        mergeRunCompanyMetadata(run.companySnapshot, {
+            ...company,
+            websiteUrl: args.websiteUrl,
+        });
+        if (
+            company.websiteUrl === args.websiteUrl &&
+            (!args.websiteUrlSource ||
+                company.websiteUrlSource === args.websiteUrlSource) &&
+            snapshot.websiteUrl === args.websiteUrl &&
+            (!args.websiteUrlSource ||
+                snapshot.websiteUrlSource === args.websiteUrlSource)
+        ) {
             return null;
         }
 
         const now = Date.now();
+        const companyWebsiteUrlSource =
+            args.websiteUrlSource ??
+            (company.websiteUrl === args.websiteUrl
+                ? company.websiteUrlSource
+                : undefined);
+        const snapshotWebsiteUrlSource =
+            args.websiteUrlSource ??
+            (snapshot.websiteUrl === args.websiteUrl
+                ? snapshot.websiteUrlSource
+                : undefined);
+        const websiteResolvedAt =
+            company.websiteUrl === args.websiteUrl &&
+            company.websiteResolvedAt !== undefined
+                ? company.websiteResolvedAt
+                : now;
+        const nextSnapshot = {
+            ...snapshot,
+            websiteUrl: args.websiteUrl,
+            websiteUrlSource: snapshotWebsiteUrlSource,
+        };
         await ctx.db.patch(company._id, {
             websiteUrl: args.websiteUrl,
-            ...(args.websiteUrlSource
-                ? { websiteUrlSource: args.websiteUrlSource }
-                : {}),
+            websiteUrlSource: companyWebsiteUrlSource,
+            websiteResolvedAt,
             canonicalizedAt: now,
         });
         await ctx.db.patch(run._id, {
-            companySnapshot: {
-                ...snapshot,
-                websiteUrl: args.websiteUrl,
-                ...(args.websiteUrlSource
-                    ? { websiteUrlSource: args.websiteUrlSource }
-                    : {}),
-            },
+            companySnapshot: nextSnapshot,
             updatedAt: now,
         });
         return null;
     },
 });
 
-const cachedWebsiteValidator = v.union(
-    v.object({
-        websiteUrl: v.string(),
-        websiteUrlSource: v.union(
-            v.literal("sec_ir"),
-            v.literal("exa"),
-            v.literal("probe"),
-        ),
-        websiteResolvedAt: v.optional(v.number()),
-    }),
-    v.null(),
-);
+const cachedWebsiteEntryValidator = v.object({
+    websiteUrl: v.string(),
+    websiteUrlSource: v.optional(
+        v.union(v.literal("sec_ir"), v.literal("exa"), v.literal("probe")),
+    ),
+    websiteResolvedAt: v.optional(v.number()),
+});
+
+const cachedWebsiteValidator = v.union(cachedWebsiteEntryValidator, v.null());
 
 export const getWebsiteCacheByCik = internalQuery({
     args: { cik: v.string() },
@@ -621,7 +675,7 @@ export const getWebsiteCacheByCik = internalQuery({
             .query("companies")
             .withIndex("by_cik", (query) => query.eq("cik", args.cik))
             .unique();
-        if (!company?.websiteUrl || !company.websiteUrlSource) {
+        if (!company?.websiteUrl) {
             return null;
         }
         return {
@@ -629,6 +683,47 @@ export const getWebsiteCacheByCik = internalQuery({
             websiteUrlSource: company.websiteUrlSource,
             websiteResolvedAt: company.websiteResolvedAt,
         };
+    },
+});
+
+export const getWebsiteCachesByCiks = internalQuery({
+    args: { ciks: v.array(v.string()) },
+    returns: v.array(
+        v.object({
+            cik: v.string(),
+            websiteUrl: v.string(),
+            websiteUrlSource: v.optional(
+                v.union(
+                    v.literal("sec_ir"),
+                    v.literal("exa"),
+                    v.literal("probe"),
+                ),
+            ),
+            websiteResolvedAt: v.optional(v.number()),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        const uniqueCiks = [...new Set(args.ciks)];
+        const entries = await Promise.all(
+            uniqueCiks.map((cik) =>
+                ctx.db
+                    .query("companies")
+                    .withIndex("by_cik", (query) => query.eq("cik", cik))
+                    .unique(),
+            ),
+        );
+        return entries.flatMap((company) =>
+            company?.websiteUrl
+                ? [
+                      {
+                          cik: company.cik,
+                          websiteUrl: company.websiteUrl,
+                          websiteUrlSource: company.websiteUrlSource,
+                          websiteResolvedAt: company.websiteResolvedAt,
+                      },
+                  ]
+                : [],
+        );
     },
 });
 
@@ -662,6 +757,7 @@ export const persistWebsiteResolution = internalMutation({
         ) {
             throw new Error("Website provider lease is no longer active");
         }
+        requireCompanyWebsiteUrl(args.websiteUrl);
         const existing = await ctx.db
             .query("companies")
             .withIndex("by_cik", (query) => query.eq("cik", args.company.cik))
@@ -683,7 +779,7 @@ export const persistWebsiteResolution = internalMutation({
                 canonicalizedAt: now,
             });
         }
-        await ctx.db.patch(providerCall._id, {
+        await patchQualificationReceipt(ctx, providerCall, {
             status: args.status,
             latencyMs: args.latencyMs,
             usage: {
@@ -711,12 +807,13 @@ async function resolveWebsiteForCompany(
     const cachedResolution = cache
         ? {
               url: cache.websiteUrl,
-              source: cache.websiteUrlSource,
+              source: cache.websiteUrlSource ?? ("exa" as const),
           }
         : null;
     if (
-        cache?.websiteResolvedAt !== undefined &&
-        cache.websiteResolvedAt > Date.now() - WEBSITE_CACHE_TTL_MS
+        cachedResolution &&
+        (cache?.websiteResolvedAt === undefined ||
+            cache.websiteResolvedAt > Date.now() - WEBSITE_CACHE_TTL_MS)
     ) {
         return cachedResolution;
     }
@@ -761,7 +858,7 @@ async function resolveWebsiteForCompany(
         return replayedCache
             ? {
                   url: replayedCache.websiteUrl,
-                  source: replayedCache.websiteUrlSource,
+                  source: replayedCache.websiteUrlSource ?? ("exa" as const),
               }
             : cachedResolution;
     }
@@ -859,20 +956,22 @@ export const getRunCompany = internalQuery({
         ) {
             throw new Error("Research run has no confirmed company");
         }
-        const company = await ctx.db.get(run.companyId);
-        const snapshot = run.companySnapshot ?? company;
-        if (!snapshot) {
+        const company = mergeRunCompanyMetadata(
+            run.companySnapshot,
+            await ctx.db.get(run.companyId),
+        );
+        if (!company) {
             throw new Error("Confirmed company was not found");
         }
         return {
             executionGeneration: run.executionGeneration,
             company: {
-                cik: snapshot.cik,
-                legalName: snapshot.legalName,
-                ticker: snapshot.ticker,
-                exchange: snapshot.exchange,
-                investorRelationsUrl: snapshot.investorRelationsUrl,
-                websiteUrl: snapshot.websiteUrl,
+                cik: company.cik,
+                legalName: company.legalName,
+                ticker: company.ticker,
+                exchange: company.exchange,
+                investorRelationsUrl: company.investorRelationsUrl,
+                websiteUrl: company.websiteUrl,
             },
         };
     },
@@ -895,22 +994,34 @@ export const verifyRevalidation = internalMutation({
             return false;
         }
         const company = await ctx.db.get(run.companyId);
-        const snapshot = run.companySnapshot ?? company;
-        if (snapshot?.cik === args.resolved.cik && company) {
+        const knownCompany = mergeRunCompanyMetadata(
+            run.companySnapshot,
+            company,
+        );
+        if (knownCompany?.cik === args.resolved.cik && company) {
             const now = Date.now();
             const companyMetadata = {
                 ...args.resolved,
-                websiteUrl:
-                    args.resolved.websiteUrl ??
-                    snapshot.websiteUrl ??
-                    company.websiteUrl,
+                websiteUrl: args.resolved.websiteUrl ?? knownCompany.websiteUrl,
                 websiteUrlSource:
                     args.resolved.websiteUrlSource ??
-                    snapshot.websiteUrlSource ??
-                    company.websiteUrlSource,
+                    knownCompany.websiteUrlSource,
+                investorRelationsUrl:
+                    args.resolved.investorRelationsUrl ??
+                    knownCompany.investorRelationsUrl,
             };
+            if (companyMetadata.websiteUrl !== undefined)
+                requireCompanyWebsiteUrl(companyMetadata.websiteUrl);
+            const websiteResolvedAt =
+                company.websiteUrl === companyMetadata.websiteUrl &&
+                company.websiteResolvedAt !== undefined
+                    ? company.websiteResolvedAt
+                    : companyMetadata.websiteUrl
+                      ? now
+                      : undefined;
             await ctx.db.patch(company._id, {
                 ...companyMetadata,
+                websiteResolvedAt,
                 canonicalizedAt: now,
             });
             await ctx.db.patch(run._id, {
@@ -971,6 +1082,27 @@ export const revalidateRun = internalAction({
             internal.companyResolution.getRunCompany,
             args,
         );
+        const simulation = await ctx.runQuery(
+            internal.sourcesSimulation.enabled,
+            args,
+        );
+        if (simulation) {
+            const valid = await ctx.runMutation(
+                internal.companyResolution.verifyRevalidation,
+                {
+                    runId: args.runId,
+                    executionGeneration: current.executionGeneration,
+                    resolved: current.company,
+                },
+            );
+            if (!valid) throw new Error("Confirmed company identity changed");
+            return {
+                cik: current.company.cik,
+                secFilingCount: 0,
+                investorRelationsPresent: true,
+                filings: [],
+            };
+        }
         const userAgent = process.env.SEC_USER_AGENT?.trim();
         if (!userAgent) {
             throw new Error("SEC company resolution is not configured");

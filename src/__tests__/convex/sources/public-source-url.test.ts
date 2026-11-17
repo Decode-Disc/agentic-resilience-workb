@@ -26,6 +26,7 @@ describe("validatePublicSourceUrl", () => {
         ).resolves.toEqual({
             canonicalUrl: "https://example.com/report",
             hostname: "example.com",
+            addresses: ["93.184.216.34"],
         });
     });
 
@@ -35,6 +36,28 @@ describe("validatePublicSourceUrl", () => {
                 "10.0.0.1",
             ]),
         ).rejects.toThrow("public network");
+    });
+
+    test.each([
+        ["not a URL", "invalid_url"],
+        ["http://example.com/report", "https_required"],
+        ["https://user:pass@example.com/report", "credentials_not_allowed"],
+        ["https://example.com:8443/report", "custom_port_not_allowed"],
+        ["https://127.0.0.1/report", "non_public_destination"],
+    ])("classifies %s as %s", async (url, code) => {
+        await expect(
+            validatePublicSourceUrl(url, async () => ["93.184.216.34"]),
+        ).rejects.toMatchObject({ data: { code, retryable: false } });
+    });
+
+    test("classifies DNS lookup failures", async () => {
+        await expect(
+            validatePublicSourceUrl("https://example.com/report", async () => {
+                throw new Error("resolver detail");
+            }),
+        ).rejects.toMatchObject({
+            data: { code: "dns_failed", retryable: false },
+        });
     });
 
     test.each([
@@ -70,6 +93,7 @@ test("captures bounded metadata without persisting content", async () => {
     ).resolves.toEqual({
         canonicalUrl: "https://example.com/report",
         title: "Public report",
+        contentType: "text/html",
     });
 });
 
@@ -103,6 +127,7 @@ test("pins the validated address for the initial request and redirects", async (
     ).resolves.toEqual({
         canonicalUrl: "https://reports.example.org/report",
         title: "Pinned public report",
+        contentType: "text/html",
     });
     expect(requests).toEqual([
         {
@@ -114,4 +139,45 @@ test("pins the validated address for the initial request and redirects", async (
             address: "93.184.216.35",
         },
     ]);
+});
+
+test.each([
+    [403, "access_blocked", false],
+    [404, "not_found", false],
+    [429, "upstream_rate_limited", true],
+    [503, "upstream_unavailable", true],
+] as const)("classifies HTTP %s as %s", async (status, code, retryable) => {
+    await expect(
+        inspectPublicSourceMetadata("https://example.com/report", {
+            resolveAddresses: async () => ["93.184.216.34"],
+            request: async () => new Response(null, { status }),
+        }),
+    ).rejects.toMatchObject({ data: { code, retryable } });
+});
+
+test("prepares a public PDF from headers without reading its body", async () => {
+    const response = new Response(null, {
+        status: 200,
+        headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition":
+                'attachment; filename="Annual Report 2025.pdf"',
+        },
+    });
+    Object.defineProperty(response, "body", {
+        get() {
+            throw new Error("PDF body must not be read");
+        },
+    });
+
+    await expect(
+        inspectPublicSourceMetadata("https://example.com/reports/annual.pdf", {
+            resolveAddresses: async () => ["93.184.216.34"],
+            request: async () => response,
+        }),
+    ).resolves.toEqual({
+        canonicalUrl: "https://example.com/reports/annual.pdf",
+        title: "Annual Report 2025.pdf",
+        contentType: "application/pdf",
+    });
 });

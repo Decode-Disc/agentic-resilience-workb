@@ -1,0 +1,6 @@
+[
+  "control:adobe-numeric",
+  "control:nvidia-forecast",
+  "control:snowflake-capability",
+  "control:crowdstrike-numeric"
+]

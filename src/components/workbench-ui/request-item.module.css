@@ -1,0 +1,53 @@
+@reference "../../styles.css";
+.item {
+    @apply flex gap-[12px] items-start p-[14px] rounded-(--radius-lg) bg-transparent bg-none;
+    text-decoration: none;
+    @apply text-inherit;
+}
+.icon {
+    @apply shrink-0 w-[34px] h-[34px] rounded-(--radius-tile) inline-flex items-center justify-center;
+}
+.title {
+    @apply text-[14px] font-medium;
+}
+.description {
+    @apply text-[12.5px] leading-[17px] text-muted-foreground;
+}
+.reviewAction {
+    @apply shrink-0 self-center;
+}
+
+.review {
+    border: 0;
+    background: color-mix(in oklab, var(--review) 10%, var(--card));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--review) 50%, transparent);
+}
+
+.reviewIcon {
+    background: color-mix(in oklab, var(--review) 25%, var(--card));
+    @apply text-review-foreground;
+}
+
+.body {
+    @apply flex-[1] flex flex-col gap-[5px];
+}
+
+.searching {
+    @apply bg-card bg-none;
+    box-shadow:
+        0 0 0 1.5px color-mix(in oklab, var(--brand-purple) 45%, transparent),
+        0 12px 24px -16px
+        color-mix(in oklab, var(--brand-purple) 60%, transparent);
+}
+
+.searchIcon {
+    @apply bg-accent bg-none text-accent-foreground;
+}
+
+.status {
+    @apply self-center;
+}
+
+.unavailableIcon {
+    @apply bg-fill-quiet bg-none text-muted-foreground;
+}

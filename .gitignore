@@ -8,6 +8,8 @@ node_modules/
 
 # Build, test, and framework output
 coverage/
+playwright-report/
+test-results/
 dist/
 dist-ssr/
 .output/
@@ -22,12 +24,30 @@ dist-ssr/
 __unconfig*
 
 .codex/
+.claude/
 .pi/
 .factory/
 .vscode/
+.zed/
+.atlas/
 
+skills-lock.json
+
+.design-systems
 .extract-design-system/
 inspirations/
 tmp/
+.impeccable/mocks/decision/*
+.impeccable/mocks/dossier-navigation/*
+# !.impeccable/mocks/decision/source-review-2026-10-22/
+# .impeccable/mocks/decision/source-review-2026-10-22/*
+# !.impeccable/mocks/decision/source-review-2026-10-22/final/
 
-skills-lock.json
+# Generated evaluation payloads, across studies; retain code and reference fixtures
+# Archive and restoration instructions: scripts/evaluations/source-selection/README.md
+/scripts/evaluations/**/runs/
+/scripts/evaluations/**/captures/
+
+# Per-worktree local runtime state and execution ledgers
+.local-runtime/
+.superpowers/

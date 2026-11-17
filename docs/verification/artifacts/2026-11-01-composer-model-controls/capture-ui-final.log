@@ -1,0 +1,13 @@
+
+> agentic-resilience-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/components/workspace/connected-start-workspace.test.tsx --maxWorkers=1 --testTimeout=30000
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  23:06:59
+   Duration  26.94s (transform 1.22s, setup 313ms, import 7.71s, tests 16.95s, environment 1.57s)
+

@@ -6,7 +6,7 @@ import { Link } from "@tanstack/react-router";
 import type { FunctionReturnType } from "convex/server";
 import { motion } from "motion/react";
 import { type FocusEvent, useState } from "react";
-
+import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,18 +19,21 @@ import {
     CutoutCardMedia,
     CutoutCardOverlay,
     CutoutCardPin,
-    cutoutCardSurfaceClassName,
     CutoutCorner,
+    cutoutCardSurfaceClassName,
     useCutoutContentStaggerVariants,
 } from "@/components/ui/cutout-card";
+import { useCompanyCoverImage } from "@/hooks/use-company-cover-image";
 import {
-    executionLabel,
+    dossierStatus,
+    dossierStatusSurface,
     lifecycleLabel,
 } from "@/lib/presentation/research-copy";
+import { cn } from "@/lib/utils";
 
 type ResearchDossier = FunctionReturnType<
     typeof api.researchRuns.listMine
->[number];
+>["page"][number];
 
 const updatedAtFormatter = new Intl.DateTimeFormat("en", {
     day: "numeric",
@@ -50,16 +53,22 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
     const [pointerHovered, setPointerHovered] = useState(false);
     const [focusWithin, setFocusWithin] = useState(false);
     const companyName = dossier.company?.legalName ?? "Research dossier";
+    const status = dossierStatus(dossier);
+    const statusSurface = dossierStatusSurface(status.tone);
     const marketIdentity = dossier.company
         ? `${dossier.company.ticker} · ${dossier.company.exchange}`
         : "Company confirmation pending";
     const description =
-        dossier.researchAngle ?? `Research prepared for ${companyName}.`;
+        dossier.researchAngle ?? `Research prepared for ${companyName}`;
     const route = {
         to: "/workspace/$runId" as const,
         params: { runId: dossier.runId },
         search: { section: "progress" as const },
     };
+    const coverImage = useCompanyCoverImage(
+        dossier.company?.websiteUrl,
+        dossier.company?.investorRelationsUrl,
+    );
 
     return (
         <CutoutCard
@@ -80,7 +89,8 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                     <CutoutCardImage
                         alt={`${companyName} research dossier cover`}
                         sizes="(max-width: 768px) 100vw, 448px"
-                        src="/placeholders/research-dossier-cover.png"
+                        src={coverImage.src}
+                        onError={coverImage.onError}
                     />
                     <CutoutCardOverlay />
                     <CutoutCardInsetLabel className="bottom-0 left-0 rounded-tr-[20px] bg-card px-5 py-3">
@@ -90,20 +100,31 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                         <CutoutCorner className="absolute -right-[31px] -bottom-px rotate-90 text-card" />
                         <CutoutCorner className="absolute -top-[31px] -left-px rotate-90 text-card" />
                     </CutoutCardInsetLabel>
-                    <CutoutCardPin className="top-0 right-0 rounded-bl-[16px] bg-primary px-4 py-2 font-semibold text-primary-foreground text-sm shadow-foreground/10 shadow-md ring-1 ring-border/30">
-                        {executionLabel(dossier.executionStatus)}
+
+                    <CutoutCardPin
+                        className={cn(
+                            "top-0 right-0 rounded-bl-[16px] px-4 py-2 font-semibold text-sm shadow-md shadow-foreground/10 ring-1 ring-border/30",
+                            statusSurface.fill,
+                        )}>
+                        {status.label}
                         <CutoutCorner
-                            className="absolute top-0 -left-[23px] -rotate-90 text-primary"
+                            className={cn(
+                                "absolute top-0 -left-[23px] -rotate-90",
+                                statusSurface.edge,
+                            )}
                             size={24}
                         />
                         <CutoutCorner
-                            className="absolute right-0 -bottom-[23px] -rotate-90 text-primary"
+                            className={cn(
+                                "absolute right-0 -bottom-[23px] -rotate-90",
+                                statusSurface.edge,
+                            )}
                             size={24}
                         />
                     </CutoutCardPin>
                 </CutoutCardMedia>
 
-                <CutoutCardContent>
+                <CutoutCardContent className="min-h-0 h-full">
                     <motion.div
                         animate="show"
                         className="contents"
@@ -115,17 +136,24 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                             {companyName}
                         </motion.h2>
                         <motion.p
-                            className="mb-4 line-clamp-3 text-pretty text-muted-foreground text-sm leading-relaxed"
+                            className="mb-4 line-clamp-3 text-muted-foreground text-sm leading-relaxed max-w-[calc(100%-2rem)] truncate"
                             variants={stagger.item}>
                             {description}
                         </motion.p>
                         <motion.div variants={stagger.item}>
                             <CutoutCardFooter className="border-border/80 border-t pt-4">
                                 <div className="flex items-center gap-3">
-                                    <div
-                                        aria-hidden="true"
-                                        className="h-8 w-8 rounded-full bg-linear-to-br from-brand-purple to-brand-green shadow-sm ring-2 ring-card"
-                                    />
+                                    {dossier.company ? (
+                                        <CompanyFaviconAvatar
+                                            size="default"
+                                            company={dossier.company}
+                                        />
+                                    ) : (
+                                        <div
+                                            aria-hidden="true"
+                                            className="h-8 w-8 rounded-full bg-linear-to-br from-brand-purple to-brand-green shadow-sm ring-2 ring-card"
+                                        />
+                                    )}
                                     <span className="font-medium text-card-foreground text-sm">
                                         {marketIdentity}
                                     </span>

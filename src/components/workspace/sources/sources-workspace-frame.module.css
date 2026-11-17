@@ -1,0 +1,77 @@
+@reference "../../../styles.css";
+
+.frame {
+    @apply relative box-border w-[100%] max-w-[1440px] my-0 mx-auto pt-[20px] px-[48px] pb-[112px] flex flex-col gap-[20px] min-w-[0];
+}
+main .frame {
+    max-width: none;
+    padding-inline: 0;
+    padding-top: 0;
+}
+.top {
+    @apply flex items-center justify-between flex-wrap gap-y-[12px] gap-x-[24px] min-w-[0];
+}
+.trail ol {
+    @apply m-[0] p-[0];
+    list-style: none;
+    @apply flex flex-wrap items-center gap-[8px] text-[13px] text-muted-foreground;
+}
+.trail li {
+    @apply inline-flex items-center gap-[8px];
+}
+.trail button {
+    all: unset;
+    @apply cursor-pointer rounded-[3px];
+}
+.trail button:hover {
+    @apply text-foreground;
+}
+.trail button:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+.trail [aria-current="page"] {
+    @apply font-medium text-foreground;
+}
+.heading {
+    @apply flex justify-between items-end flex-wrap gap-y-[16px] gap-x-[40px];
+}
+.titles {
+    @apply flex flex-col gap-[8px] min-w-[0];
+}
+.eyebrow {
+    @apply text-accent-foreground;
+}
+.title {
+    @apply m-[0] text-[34px] leading-[38px] font-medium tracking-[-0.045em];
+}
+.frame.prominent {
+    @apply gap-[24px];
+}
+.prominent .titles {
+    @apply gap-[10px];
+}
+.prominent .title {
+    @apply text-[38px] leading-[42px];
+}
+.description {
+    @apply m-[0] max-w-[680px] text-[15px] leading-[22px] text-muted-foreground;
+}
+.dock {
+    @apply fixed right-[48px] bottom-[28px] z-[20];
+}
+@media (max-width: 760px) {
+    .frame {
+        @apply pt-[16px] px-[16px] pb-[120px] gap-[16px];
+    }
+    .title,
+    .prominent .title {
+        @apply text-[28px] leading-[32px];
+    }
+    .dock {
+        @apply left-[16px] right-[16px] bottom-[16px];
+    }
+    .dock > * {
+        @apply w-[100%];
+    }
+}

@@ -1,0 +1,70 @@
+{
+  "skill_name": "workbench-harness-development",
+  "evals": [
+    {
+      "id": 1,
+      "name": "semantic-error-does-not-expand-phrase-filters",
+      "prompt": "A new generator paraphrases a false research-status claim in a way the closed filter does not recognize. The authoritative state was present. A proposed fix adds twelve model-specific phrases and a hardcoded replacement explanation. Plan the correction through the current harness; do not edit code or run providers.",
+      "expected_output": "A diagnosis and scoped implementation plan preserving the approved vocabulary and existing hybrid-control ownership.",
+      "files": [
+        "../../../context/TECH.md"
+      ],
+      "expectations": [
+        "Traces the supplied state and raw/published response before deciding which boundary failed, instead of treating another phrase as the domain invariant.",
+        "Rejects automatic expansion of the closed phrase list and canned replacement of free explanation.",
+        "Places semantic assessment and bounded correction in the current domain/operation owners without an agent-specific executor branch or a new loop.",
+        "Keeps deterministic regression coverage separate from any later semantic/provider qualification and makes no implementation change."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "versioned-policy-and-nondefault-boundaries",
+      "prompt": "Plan only: contradiction and support cutoffs are copied in the worker, controller and chat component. A turn pins contradiction 0.94 and support 0.73; an administrator changes settings while it runs. A contradiction score of 0.92 must not trigger its correction, equality at 0.94 must, and final support equal to 0.73 must not get the low-support reserve. Historical turns have no policy metadata. How should ownership and tests change without rewriting past decisions?",
+      "expected_output": "One policy/decision owner, immutable active-work snapshots and discriminating registered-boundary tests for nondefault values and historical compatibility.",
+      "files": [
+        "../../../context/TECH.md"
+      ],
+      "expectations": [
+        "Centralizes defaults, validation and score comparisons behind the owning configuration/domain boundary rather than maintaining three cutoff copies.",
+        "Retains the turn-pinned revision and treats the global kill switch separately from retroactively changing thresholds.",
+        "Names tests that distinguish 0.92 from 0.94, equality at the correction boundary and equality at the support boundary; hardcoded defaults would fail them.",
+        "Preserves the disabled fallback for historical turns without metadata and includes disabled/exempt zero-control-call cases.",
+        "Does not put those scenario-specific cutoff numbers or a fixed model identity into permanent workflow instructions."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "tool-free-correction-is-an-execution-bound",
+      "prompt": "The controller requests the allowed tool-free correction. The model nevertheless emits a tool request; it is refused, but generic recovery then starts two more generations. Both the reminder and offered tool schema already forbid tools. Propose the smallest shared correction and executable regression. No edits or calls.",
+      "expected_output": "A registered-lifecycle regression and shared enforcement that prevent additional correction generations without replaying operations or weakening structural refusal.",
+      "files": [
+        "../../../convex/execution/invocationLifecycle.ts",
+        "../../../convex/domain/workbenchAgent.ts"
+      ],
+      "expectations": [
+        "Identifies that hiding tools and writing a reminder did not enforce the generation bound.",
+        "Proposes a RED test through the real registered continuation/worker path that observes invocation count, retained raw output and absence of repeated business operations.",
+        "Keeps the structural refusal explicit and enforces the bound at the shared lifecycle owner rather than adding another prompt, retry loop or Workbench branch in the driver.",
+        "Does not turn invalid corrective tool output into a successful factual answer merely to close the turn."
+      ]
+    },
+    {
+      "id": 4,
+      "name": "advisory-receipts-and-business-unknowns",
+      "prompt": "Plan a regression batch for an advisory response check and a business acquisition. The advisory receipt commits with known scores/cost but its acknowledgement is lost. Another advisory response arrives after cancellation. Separately an acquisition has an unknown external outcome. Someone proposes retrying all three or making every unknown operation complete as unavailable. What must the existing owners preserve? No edits, provider calls or deployment.",
+      "expected_output": "Separate factual settlement, adoption and unknown-effect policies through existing receipt and operation owners, with explicit audit/public-summary checks.",
+      "files": [
+        "../../../context/TECH.md",
+        "../../../convex/providerCalls.ts",
+        "../../../convex/execution/operations.ts"
+      ],
+      "expectations": [
+        "Preserves committed response/cost facts after acknowledgement loss and refuses blind provider redispatch.",
+        "Allows original-identity factual settlement after cancellation while refusing stale adoption/publication.",
+        "Limits advisory unavailable continuation to its declared contract; the unknown business acquisition retains its blocking/recovery policy and consumption.",
+        "Tests missing or stale assessment without fabricated numeric confidence, and keeps raw audit separate from analyst-visible summaries.",
+        "Reuses existing accounting, operation and publication owners without a second settlement/retry mechanism."
+      ]
+    }
+  ]
+}

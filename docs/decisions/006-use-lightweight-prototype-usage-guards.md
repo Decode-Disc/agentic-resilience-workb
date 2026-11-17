@@ -56,3 +56,7 @@ The prototype will not implement:
 - Provider calls remain observable and idempotent without creating a miniature FinOps subsystem.
 - Exact guard values remain configuration and can be adjusted after one real showcase run.
 - ADR-005 is superseded.
+
+## Retrieval amendment (2026-10-21)
+
+[ADR-025](025-use-versioned-scoped-evidence-retrieval.md) adds versioned structured candidates, scoped native retrieval and a bounded optional embedding provider. It distinguishes whole-capture search candidates from the unchanged 512 approved-passage materialization ceiling, and introduces a cumulative conservative input-byte allowance for embeddings rather than a money settlement ledger. Historical preparation identities and human corpus approval remain unchanged. Local activation remains conditional on the recorded evaluation and verification gates.

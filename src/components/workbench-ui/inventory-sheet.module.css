@@ -1,0 +1,152 @@
+@reference "../../styles.css";
+
+.dim {
+    @apply absolute inset-0 bg-foreground/22 bg-none;
+}
+.sheet {
+    outline: none;
+    @apply absolute left-[60px] right-[24px] top-[28px] bottom-[0];
+    border-radius: var(--radius-3xl) var(--radius-3xl) 0 0;
+    @apply overflow-hidden flex flex-col bg-card/94 bg-none;
+    backdrop-filter: blur(var(--blur-glass));
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent),
+        0 0 0 1px var(--chip-edge),
+        0 40px 90px -30px
+        color-mix(in oklab, var(--foreground) 55%, transparent);
+}
+.top {
+    @apply pt-[18px] px-[22px] pb-[12px] flex items-end gap-[14px];
+    background: radial-gradient(
+        ellipse 60% 140% at 20% 0%,
+        color-mix(in oklab, var(--brand-purple) 11%, transparent),
+        transparent 70%
+    );
+}
+.heading {
+    @apply flex-[1] flex flex-col gap-[6px];
+}
+.field {
+    @apply flex items-center gap-[10px] w-[220px] h-[36px] py-0 px-[12px] rounded-(--radius-tile) bg-card bg-none;
+    box-shadow: inset 0 0 0 1px var(--input-border);
+    @apply text-muted-foreground text-[13px];
+}
+.collapse {
+    @apply h-[36px] py-0 px-[12px] rounded-(--radius-tile) inline-flex items-center gap-[8px] text-[13px] font-medium text-foreground text-left whitespace-normal;
+    border: 0;
+    text-decoration: none;
+}
+.bar {
+    @apply pt-0 px-[22px] pb-[12px] flex items-center gap-[10px];
+}
+.filters {
+    @apply flex items-center gap-[2px] p-[3px] rounded-(--radius-tile) bg-fill-quiet bg-none;
+}
+.filter {
+    @apply inline-flex items-center justify-center gap-[7px] h-[30px] py-0 px-[11px] rounded-[9px] text-[13px] font-medium text-muted-foreground cursor-pointer whitespace-nowrap;
+}
+.filter b {
+    @apply font-medium text-foreground;
+}
+.activeFilter {
+    @apply bg-card bg-none text-foreground;
+    box-shadow: var(--shadow-tab);
+}
+.footer {
+    @apply mt-auto py-[12px] px-[22px];
+    border-top: 1px solid var(--divider);
+    @apply bg-foreground/[2.5%] bg-none flex items-center gap-[14px];
+}
+.use {
+    @apply flex items-center gap-[8px] py-[8px] px-[10px] rounded-(--radius-tile) bg-card bg-none;
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
+    @apply text-[12.5px] leading-[17px] justify-start text-foreground font-normal;
+}
+.questionId {
+    @apply shrink-0 w-[26px] h-[26px] rounded-[8px] inline-flex items-center justify-center font-mono text-[10.5px] font-medium bg-tint-ink bg-none;
+}
+.content {
+    @apply flex-[1] min-h-[0] overflow-auto;
+    border-top: 1px solid var(--divider);
+    @apply flex flex-col;
+}
+.field input {
+    @apply flex-[1] w-[0] min-w-[0] bg-transparent bg-none;
+    border: 0;
+    outline: 0;
+    font: inherit;
+    @apply text-foreground p-[0];
+}
+.field:focus-within {
+    box-shadow:
+        inset 0 0 0 1px var(--ring),
+        0 0 0 3px color-mix(in oklab, var(--ring) 16%, transparent);
+}
+.field input::placeholder {
+    @apply text-muted-foreground opacity-[1];
+}
+@media (max-width: 640px) {
+    .sheet {
+        @apply left-[12px] right-[12px] top-[12px];
+    }
+    .top,
+    .bar,
+    .footer {
+        @apply flex-wrap;
+    }
+    .top {
+        @apply pt-[18px] px-[16px] pb-[12px];
+    }
+    .heading {
+        @apply basis-[100%];
+    }
+    .field {
+        @apply flex-[1] min-w-[0];
+    }
+    .bar {
+        @apply px-[16px];
+    }
+    .filters {
+        @apply max-w-[100%] overflow-x-auto;
+    }
+    .footer {
+        @apply py-[12px] px-[16px];
+    }
+    .footer > :last-child {
+        @apply basis-[100%];
+    }
+}
+
+.portalPosition {
+    @apply inset-0;
+}
+
+.accentLabel {
+    @apply text-accent-foreground;
+}
+
+.title {
+    @apply text-[22px] leading-[26px] font-medium tracking-[-.035em] m-[0];
+}
+
+.filterGroup {
+    @apply m-[0];
+    border: 0;
+}
+
+.sort {
+    @apply ml-auto inline-flex items-center gap-[8px] text-[13px] font-medium;
+}
+
+.sortInput {
+    @apply w-[16px] h-[16px] m-[0] accent-brand-purple;
+}
+
+.selectedUse {
+    box-shadow: 0 0 0 1px
+        color-mix(in oklab, var(--brand-purple) 35%, transparent);
+}
+
+.selectedQuestionId {
+    @apply bg-primary bg-none text-primary-foreground;
+}

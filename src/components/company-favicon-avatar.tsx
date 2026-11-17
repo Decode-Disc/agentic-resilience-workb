@@ -1,5 +1,4 @@
-import { Building2Icon } from "@hugeicons/core-free-icons";
-
+import { BuildingIcon } from "lucide-react";
 import { FaviconAvatar } from "@/components/favicon-avatar";
 import type { AvatarSize } from "@/types/ui";
 
@@ -24,7 +23,7 @@ export type CompanyFaviconSubject = {
 /**
  * Renders the favicon for a resolved company. Owns the company→favicon
  * composition so call sites stop repeating `canonicalUrl`, `entityName`, and
- * `fallbackIcon` — the `Building2Icon` fallback and the website/IR cascade
+ * `fallbackIcon` — the `BuildingIcon` fallback and the website/IR cascade
  * live here once.
  *
  * Resolution order: `websiteUrl` (marketing) → `investorRelationsUrl` (SEC IR)
@@ -43,7 +42,7 @@ export function CompanyFaviconAvatar({
         <FaviconAvatar
             canonicalUrl={canonicalUrl}
             entityName={company.legalName}
-            fallbackIcon={Building2Icon}
+            fallbackIcon={BuildingIcon}
             size={size}
         />
     );

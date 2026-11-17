@@ -1,0 +1,94 @@
+diff --git a/dist/cli.bundle.cjs b/dist/cli.bundle.cjs
+index 5698efdab6f041ae4f90c8702172fb8571692b3b..a341bbb65ad40c7ae6887d3d2c8340ef0eb14e8c 100644
+--- a/dist/cli.bundle.cjs
++++ b/dist/cli.bundle.cjs
+@@ -49677,12 +49677,12 @@ async function bigBrainPause(ctx, data2) {
+     data: data2
+   });
+ }
+-async function bigBrainRecordActivity(ctx, data2) {
+-  return bigBrainAPI({
++async function bigBrainRecordActivity(ctx, data) {
++  return bigBrainAPIMaybeThrows({
+     ctx,
+     method: "POST",
+     path: "local_deployment/record_activity",
+-    data: data2
++    data
+   });
+ }
+ async function bigBrainEnableFeatureMetadata(ctx) {
+@@ -122739,7 +122739,7 @@ async function handleLocalDeployment(ctx, options) {
+       allowOtherDeployments: true
+     });
+   }
+-  const { binaryPath, version: version4 } = await ensureBackendBinaryDownloaded(
++  const { binaryPath, version } = await ensureBackendBinaryDownloaded(
+     ctx,
+     options.backendVersion === void 0 ? {
+       kind: "latest",
+@@ -122763,7 +122763,7 @@ async function handleLocalDeployment(ctx, options) {
+       deploymentName,
+       oldVersion: existingDeploymentForProject?.config.backendVersion ?? null,
+       newBinaryPath: binaryPath,
+-      newVersion: version4,
++      newVersion: version,
+       ports: { cloud: cloudPort, site: sitePort },
+       existingCredentials: existingDeploymentForProject?.config ? {
+         adminKey: existingDeploymentForProject?.config.adminKey,
+@@ -122793,7 +122793,13 @@ async function handleLocalDeployment(ctx, options) {
+         instanceName: deploymentName,
+         adminKey
+       });
+-    } catch {
++    } catch (err) {
++      if (!activityPingStopped) {
++        const status = err instanceof ThrowingFetchError ? ` (HTTP ${err.response.status})` : "";
++        logWarning(
++          `Warning: Could not report local deployment activity${status}; continuing locally and retrying later.`
++        );
++      }
+     }
+     if (activityPingStopped) {
+       return;
+diff --git a/src/cli/lib/localDeployment/bigBrain.ts b/src/cli/lib/localDeployment/bigBrain.ts
+index deb7a59fca373e95792228aff4db9340561aa78f..de3ea8c8c55a2e5f8f1a250204092abfae495884 100644
+--- a/src/cli/lib/localDeployment/bigBrain.ts
++++ b/src/cli/lib/localDeployment/bigBrain.ts
+@@ -1,5 +1,5 @@
+ import { Context } from "../../../bundler/context.js";
+-import { bigBrainAPI } from "../utils/utils.js";
++import { bigBrainAPI, bigBrainAPIMaybeThrows } from "../utils/utils.js";
+ 
+ export async function bigBrainStart(
+   ctx: Context,
+@@ -46,7 +46,7 @@ export async function bigBrainRecordActivity(
+     adminKey: string;
+   },
+ ) {
+-  return bigBrainAPI({
++  return bigBrainAPIMaybeThrows({
+     ctx,
+     method: "POST",
+     path: "local_deployment/record_activity",
+diff --git a/src/cli/lib/localDeployment/localDeployment.ts b/src/cli/lib/localDeployment/localDeployment.ts
+index a890dc4426173ccd8743a86d127e5ed487fdd6e0..a115dfe46e85b3702072a8e1c3a243e6ef928864 100644
+--- a/src/cli/lib/localDeployment/localDeployment.ts
++++ b/src/cli/lib/localDeployment/localDeployment.ts
+@@ -144,8 +144,14 @@ export async function handleLocalDeployment(
+         instanceName: deploymentName,
+         adminKey,
+       });
+-    } catch {
+-      // Best-effort: don't crash on failed pings
++    } catch (err) {
++      if (!activityPingStopped) {
++        const status =
++          err instanceof ThrowingFetchError ? ` (HTTP ${err.response.status})` : "";
++        logWarning(
++          `Warning: Could not report local deployment activity${status}; continuing locally and retrying later.`,
++        );
++      }
+     }
+ 
+     if (activityPingStopped) {

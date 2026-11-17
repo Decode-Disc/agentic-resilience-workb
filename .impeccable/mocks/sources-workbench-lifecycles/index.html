@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sources and Workbench Agent — visual review</title>
+<link rel="icon" href="data:,">
+<style>
+@font-face { font-family: "Geist Variable"; src: url("geist.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+:root { color-scheme: light; --paper: #fbfafc; --ink: #242127; --muted: #625d68; --edge: #dedbe2; --accent: #7139a5; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.6 "Geist Variable", sans-serif; }
+a { color: inherit; text-underline-offset: 4px; }
+a:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; border-radius: 3px; }
+main { width: min(1580px, calc(100% - 64px)); margin: 0 auto; padding: 48px 0 32px; }
+header { max-width: 860px; margin-bottom: 28px; }
+h1 { font-size: clamp(28px, 3vw, 42px); line-height: 1.15; letter-spacing: -.03em; font-weight: 560; margin: 0 0 16px; }
+header p { color: var(--muted); max-width: 72ch; margin: 0 0 10px; }
+.overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin: 32px 0 56px; padding: 0; list-style: none; }
+.overview a { display: block; text-decoration: none; }
+.overview img { display: block; width: 100%; height: auto; border-radius: 8px; background: #211f23; }
+.overview strong { display: block; font-size: 17px; line-height: 1.3; margin-top: 12px; font-weight: 580; }
+.overview span { display: block; color: var(--muted); margin-top: 6px; font-size: 13px; }
+section { padding-top: 32px; margin-top: 40px; border-top: 1px solid var(--edge); }
+h2 { font-size: 25px; line-height: 1.3; letter-spacing: -.02em; margin: 0 0 12px; font-weight: 560; }
+.reading { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; max-width: 1080px; margin-bottom: 20px; }
+.reading p { margin: 0; color: var(--muted); }
+.reading strong { color: var(--ink); display: block; font-weight: 580; margin-bottom: 3px; }
+figure { margin: 0; }
+figure img { display: block; width: 100%; height: auto; border-radius: 10px; background: #211f23; }
+figcaption { margin-top: 10px; color: var(--muted); font-size: 13px; }
+.checks { display: flex; flex-wrap: wrap; gap: 8px 28px; padding-left: 20px; margin: 16px 0 0; color: var(--muted); font-size: 14px; }
+footer { border-top: 1px solid var(--edge); margin-top: 48px; padding-top: 24px; color: var(--muted); font-size: 13px; max-width: 1000px; }
+@media (max-width: 700px) { main { width: calc(100% - 32px); padding-top: 28px; } .overview { gap: 20px; grid-template-columns: 1fr; margin-bottom: 36px; } .reading { grid-template-columns: 1fr; gap: 12px; } h2 { font-size: 23px; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>Sources works. Workbench stays available.</h1>
+<p>Three successive states of the same proposed conversation. Sources owns documentary preparation; Workbench Agent handles the analyst's conversation. The existing Progress / chat split and composer remain the reference.</p>
+<p>Review attribution, ongoing work and the final reading experience. These generated images illustrate the proposal; they do not run research or change the application.</p>
+</header>
+<nav aria-label="Review the three states">
+<ol class="overview">
+<li><a href="#sources-working"><img src="01-sources-working.png" alt="Overview of Sources working while the Workbench composer stays available"><strong>1. Sources is working</strong><span>Documentary operations stay visible. Workbench has finished its launch acknowledgement.</span></a></li>
+<li><a href="#workbench-replying"><img src="02-workbench-replying.png" alt="Overview of a Workbench response while Sources remains active"><strong>2. Workbench answers alongside it</strong><span>The response has its own Stop response control; Sources continues preparing material.</span></a></li>
+<li><a href="#sources-completed"><img src="03-sources-completed.png" alt="Overview of completed Sources work followed by the final readable result"><strong>3. Read the result</strong><span>Completed work folds. The useful result remains visible after the intervening exchange.</span></a></li>
+</ol>
+</nav>
+<section id="sources-working" aria-labelledby="working-title">
+<h2 id="working-title">Sources is working; Workbench is available</h2>
+<div class="reading"><p><strong>What this shows</strong>The launch acknowledgement is complete. The Sources mission has its own visible attribution, working state and elapsed duration.</p><p><strong>What to inspect</strong>The operations remain continuous in the conversation. The available composer does not imply the documentary mission has ended.</p></div>
+<figure><a href="01-sources-working.png" target="_blank" rel="noopener" aria-label="Open the Sources working mock at full resolution"><img src="01-sources-working.png" alt="Full desktop mock: documentary progress on the left; one chat on the right with a Sources mission, its completed reference check and active company reporting search"></a><figcaption>Open the image at full resolution to inspect text and spacing. The controls inside the image are illustrative.</figcaption></figure>
+<ul class="checks"><li>Explicit Sources attribution.</li><li>Ongoing operations stay visible.</li><li>No response stop control while Workbench is idle.</li></ul>
+</section>
+<section id="workbench-replying" aria-labelledby="replying-title">
+<h2 id="replying-title">Workbench answers while Sources continues</h2>
+<div class="reading"><p><strong>What this shows</strong>The analyst asks a follow-up in the same conversation. Workbench replies while the documentary mission remains active.</p><p><strong>What to inspect</strong>Stop response belongs to the partial Workbench answer. It must not silently stop or pause Sources.</p></div>
+<figure><a href="02-workbench-replying.png" target="_blank" rel="noopener" aria-label="Open the simultaneous Workbench response mock at full resolution"><img src="02-workbench-replying.png" alt="Full desktop mock: Sources is still Working above the analyst's follow-up and Workbench's partial answer, which has its own Stop response control"></a><figcaption>One history, with independent conversational and documentary execution states.</figcaption></figure>
+<ul class="checks"><li>The earlier history remains present.</li><li>Sources still says Working.</li><li>The response has a separate lifecycle.</li></ul>
+</section>
+<section id="sources-completed" aria-labelledby="completed-title">
+<h2 id="completed-title">Sources finishes; the result stays readable</h2>
+<div class="reading"><p><strong>What this shows</strong>The completed Sources operations fold into a compact disclosure. The intervening analyst exchange keeps its chronological position; the new result appears last.</p><p><strong>What to inspect</strong>The result explains available material and limits. Progress also shows completion, with no active capture work remaining.</p></div>
+<figure><a href="03-sources-completed.png" target="_blank" rel="noopener" aria-label="Open the completed Sources mock at full resolution"><img src="03-sources-completed.png" alt="Full desktop mock: Progress shows Sources done, the Sources work disclosure is compact, and the final answer about the illustrative corpus appears after the analyst exchange"></a><figcaption>The result remains outside the work disclosure. No response stop control remains after the response is complete.</figcaption></figure>
+<ul class="checks"><li>Sources completion is distinct from response completion.</li><li>Completed operations remain inspectable.</li><li>The final result and its limits stay visible.</li></ul>
+</section>
+<footer>
+<p>Visual review only. All company material, counts and results are illustrative. Generated incidental document-card icons are not additional proposed features. The review concerns attribution, independent lifecycles and the agreed continuous-work / grouped-completion behavior.</p>
+<p>Created with the built-in imagegen tool, using the running Workbench as a visual reference. <a href="prompts.json" target="_blank" rel="noopener">Exact prompts and provenance</a>.</p>
+</footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,53 @@
+@reference "../../styles.css";
+.lane {
+    @apply rounded-(--radius-2xl) p-[14px] flex flex-col gap-[8px] min-w-[0] bg-foreground/[3.5%] bg-none;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+.header {
+    @apply flex items-center gap-[8px] pt-[2px] px-[4px] pb-[6px];
+}
+.header b {
+    @apply text-[14px];
+}
+.header [class~="wb-meta"] {
+    @apply ml-auto;
+}
+.source {
+    @apply relative overflow-hidden flex items-center gap-[10px] py-[10px] px-[12px] rounded-(--radius-item) bg-card bg-none;
+    box-shadow: var(--shadow-raised);
+}
+.sourceText {
+    @apply flex-[1] min-w-[0] flex flex-col gap-[1px];
+}
+.sourceText b {
+    @apply text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis;
+}
+
+.running {
+    @apply bg-brand-purple/6 bg-none;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--brand-purple) 22%, transparent);
+}
+
+.runningHeader {
+    @apply text-accent-foreground;
+}
+
+.liveDot {
+    @apply w-[8px] h-[8px] rounded-[50%] bg-brand-purple bg-none;
+}
+
+.metadata {
+    @apply p-[4px];
+}
+
+.freshDocument {
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--brand-purple) 35%, transparent),
+        var(--shadow-raised);
+}
+
+.captureSweep {
+    @apply absolute inset-0 block;
+}

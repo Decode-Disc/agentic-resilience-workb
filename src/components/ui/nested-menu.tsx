@@ -3,6 +3,7 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
@@ -33,8 +34,10 @@ export interface NestedMenuItem {
 }
 
 export interface NestedMenuSectionProps {
+    /** Optional key for the section */
+    key?: string;
     /** Section title */
-    title?: string;
+    title?: string | React.ReactNode;
     /** Items in this section */
     items: NestedMenuItem[];
     /** Show divider after section */
@@ -146,7 +149,8 @@ export function NestedMenuTooltip({
                     align="start"
                     sideOffset={10}
                     className={cn(
-                        "z-50 min-w-[180px] overflow-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                        "min-w-[180px] overflow-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                        uiLayerClasses.popup,
                         "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
                         className,
                     )}
@@ -281,11 +285,14 @@ export function NestedMenuSection({
 }: NestedMenuSectionComponentProps) {
     return (
         <div className="py-1">
-            {title && (
-                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                    {title}
-                </div>
-            )}
+            {title &&
+                (typeof title === "string" ? (
+                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                        {title}
+                    </div>
+                ) : (
+                    title
+                ))}
             {items.map((item) => (
                 <React.Fragment key={item.key}>
                     <NestedMenuItemComponent
@@ -425,7 +432,8 @@ export function NestedMenu({
                         align={align}
                         sideOffset={sideOffset}
                         className={cn(
-                            "z-50 min-w-[200px] overflow-hidden rounded-xl px-2 py-1 bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                            "min-w-[200px] overflow-hidden rounded-xl px-2 py-1 bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                            uiLayerClasses.popup,
                             "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
                             className,
                         )}
@@ -442,16 +450,25 @@ export function NestedMenu({
                                 e.preventDefault();
                             }
                         }}>
-                        {sections.map((section, index) => (
-                            <NestedMenuSection
-                                key={section.title || `section-${index}`}
-                                {...section}
-                                iconClassName={iconClassName}
-                                arrowIcon={arrowIcon}
-                                onSubmenuHover={handleSubmenuHover}
-                                onSubmenuLeave={handleSubmenuLeave}
-                            />
-                        ))}
+                        {sections.map((section, index) => {
+                            const { key: sectionKey, ...sectionProps } =
+                                section;
+                            return (
+                                <NestedMenuSection
+                                    key={
+                                        sectionKey ??
+                                        (typeof section.title === "string"
+                                            ? section.title
+                                            : `section-${index}`)
+                                    }
+                                    {...sectionProps}
+                                    iconClassName={iconClassName}
+                                    arrowIcon={arrowIcon}
+                                    onSubmenuHover={handleSubmenuHover}
+                                    onSubmenuLeave={handleSubmenuLeave}
+                                />
+                            );
+                        })}
                     </PopoverPrimitive.Content>
                 </PopoverPrimitive.Portal>
             </PopoverPrimitive.Root>

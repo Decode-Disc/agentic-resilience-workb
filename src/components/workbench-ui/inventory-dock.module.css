@@ -1,0 +1,131 @@
+@reference "../../styles.css";
+.compact {
+    @apply w-(--dock-width) pt-[10px] pr-[10px] pb-[10px] pl-[16px] rounded-(--radius-xl) flex items-center gap-[14px] text-foreground;
+    text-decoration: none;
+}
+.expanded {
+    @apply w-(--side-column) p-[18px] rounded-(--radius-2xl) flex flex-col gap-[14px] text-foreground;
+    text-decoration: none;
+}
+.legend {
+    @apply grid grid-cols-2 gap-y-[5px] gap-x-[14px] text-[12px] text-muted-foreground;
+}
+.legendItem {
+    @apply flex items-center gap-[6px];
+}
+.legendItem b {
+    @apply ml-auto text-foreground font-medium;
+}
+.icon {
+    @apply shrink-0 w-[36px] h-[36px] rounded-(--radius-tile) inline-flex items-center justify-center bg-fill-quiet bg-none;
+    transition:
+        background-color 0.18s ease-out,
+        color 0.18s ease-out,
+        scale 0.22s var(--wb-ease-arrive);
+}
+/* The action tile takes the primary ink when the dock is pointed at or focused, so it reads as the way in. */
+.compact:hover .icon,
+.expanded:hover .icon,
+.compact:focus-visible .icon,
+.expanded:focus-visible .icon {
+    @apply bg-primary bg-none text-primary-foreground;
+    scale: 1.06;
+}
+.change {
+    @apply flex items-center gap-[8px] text-[12.5px];
+}
+/* Lighter than the shared float so the page stays perceptible behind the dock. */
+.expanded,
+.compact {
+    background: color-mix(in oklab, var(--surface-float) 62%, transparent);
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.6);
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.6);
+    transition:
+        translate 0.22s var(--wb-ease-arrive),
+        scale 0.12s ease-out,
+        box-shadow 0.22s ease-out;
+}
+.compact:hover,
+.expanded:hover {
+    translate: 0 -2px;
+}
+.compact:active,
+.expanded:active {
+    scale: 0.985;
+}
+.compact:focus-visible,
+.expanded:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[3px];
+}
+@media (prefers-reduced-motion: reduce) {
+    .compact,
+    .expanded,
+    .icon {
+        transition: none;
+    }
+    .compact:hover,
+    .expanded:hover,
+    .compact:active,
+    .expanded:active {
+        translate: none;
+        scale: none;
+    }
+    .compact:hover .icon,
+    .expanded:hover .icon,
+    .compact:focus-visible .icon,
+    .expanded:focus-visible .icon {
+        scale: none;
+    }
+}
+.expanded {
+    @apply items-stretch;
+}
+
+.compactBadge {
+    @apply ml-auto py-[1px] px-[6px];
+}
+
+.statusDot {
+    @apply w-[5px] h-[5px];
+}
+
+.expandedTrigger {
+    @apply ml-auto w-[30px] h-[30px];
+}
+
+.header {
+    @apply flex items-center gap-[8px];
+}
+
+.total {
+    @apply flex items-baseline gap-[8px];
+}
+
+.totalValue {
+    @apply text-[36px] leading-[36px] font-medium tracking-[-.045em];
+}
+
+.totalLabel {
+    @apply text-[13px] text-muted-foreground;
+}
+
+.changes {
+    @apply flex flex-col gap-[7px] pt-[12px];
+}
+
+.changeText {
+    @apply flex-[1] min-w-[0] flex flex-col gap-[7px];
+}
+
+.changeLabel {
+    @apply text-[10.5px];
+}
+
+.changeTitle {
+    @apply text-[16px] tracking-[-.02em];
+}
+
+.changeDetail {
+    @apply text-[12px] text-muted-foreground;
+}

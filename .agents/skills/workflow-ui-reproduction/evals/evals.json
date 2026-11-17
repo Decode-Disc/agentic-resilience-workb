@@ -1,0 +1,95 @@
+{
+  "skill_name": "workflow-ui-reproduction",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Convert the approved Start-1-Composer and Start-4-Framing canvas references into reusable START screens for later workflow implementation. Preserve the current WorkbenchShell background, title, composer, company picker, favicon and typography. Make straightforward local interactions work. Do not connect backend operations.",
+      "files": [
+        "../../../DESIGN.md",
+        "../../../.design-systems/Agentic Resilience Workbench/canvas/Start-1-Composer.dc.html",
+        "../../../.design-systems/Agentic Resilience Workbench/canvas/Start-4-Framing.dc.html"
+      ],
+      "expected_output": "Faithful reusable screens and usable illustrative previews, preserving existing owners and separating presentation from future workflow logic.",
+      "expectations": [
+        "Captures and inspects the reference render before implementing its reproduction and captures the existing consumer before changing it.",
+        "Reuses the shell, composer, picker and company favicon instead of creating parallel implementations or changing unrelated pages.",
+        "Distinguishes the START layout from its screens in naming and preview navigation.",
+        "Quick text fills and focuses the intended composer; questions and local selections work without backend calls.",
+        "Compares reference and implementation on desktop and mobile and reports unconnected operations explicitly."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Reproduce the mechanism nodes from canvas/States.dc.html. I expect the appearance of the nodes in canvas/Mechanism.dc.html, but I have not chosen which differing treatment should win. Inspect the references and existing component, explain the concrete differences and ask for arbitration before applying a material visual change.",
+      "files": [
+        "../../../.design-systems/Agentic Resilience Workbench/canvas/States.dc.html",
+        "../../../.design-systems/Agentic Resilience Workbench/canvas/Mechanism.dc.html",
+        "../../../src/components/workbench-ui/mechanism-node.tsx"
+      ],
+      "expected_output": "An evidence-backed comparison and one focused question about the unresolved reference choice.",
+      "expectations": [
+        "Inspects the actual files and relevant browser renders rather than silently assuming the references are interchangeable.",
+        "Identifies the material difference and requests a specific decision instead of inventing a hybrid.",
+        "Preserves existing reusable ownership and does not rewrite consumers while the decision remains unresolved.",
+        "Does not introduce frozen HTML fixtures, Docker or permanent pixel comparisons to resolve the design choice."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "The START gallery looks close, but quick-text feedback, Stay here and the launched progress animation do not behave like the reference. Correct these local interactions while preserving the existing composition and illustrative data.",
+      "files": [
+        "../../../src/development/workbench-ui/start-screen-examples.tsx",
+        "../../../src/components/workbench-ui/handoff.tsx",
+        "../../../.design-systems/Agentic Resilience Workbench/canvas/Start-5-Launched.dc.html",
+        "../../../.design-systems/Agentic Resilience Workbench/canvas/Start-6-Handoff.dc.html"
+      ],
+      "expected_output": "Verified interaction and motion corrections with usable cancellation and reduced-motion behavior.",
+      "expectations": [
+        "Checks the consuming screen as well as the countdown component before diagnosing Stay here.",
+        "Cancellation prevents delayed navigation, restores readable content and retains a manual continuation path.",
+        "Quick-text feedback can replay without blocking edits or later overwriting typed text.",
+        "Observes and restores the reference progress sweep without fabricating changes to counts or execution state.",
+        "Exercises normal and reduced motion in the browser and uses functional regression coverage for cancellation."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Assess whether the current START reproduction is faithful enough to serve as a workflow implementation foundation. Analysis only: do not edit files, start services, install dependencies, synchronize a backend or run providers. Use available evidence and identify anything you cannot verify.",
+      "files": [
+        "../../../AGENTS.md",
+        "../../../DESIGN.md",
+        "../../../src/components/workspace/start/start-screens.tsx",
+        "../../../src/development/workbench-ui/start-screen-examples.tsx"
+      ],
+      "expected_output": "A read-only assessment that separates verified fidelity, local interaction behavior and missing workflow integration.",
+      "expectations": [
+        "Preserves the read-only boundary and reports unavailable browser evidence without inventing successful checks.",
+        "Does not infer backend delivery, saved decisions or real research from illustrative controls.",
+        "Locates the relevant reference and existing owners before identifying an implementation gap.",
+        "Uses observed differences and user decisions rather than proposing a new design or unnecessary infrastructure."
+      ]
+    },
+    {
+      "id": 5,
+      "name": "export-css-does-not-select-runtime-ownership",
+      "prompt": "An approved workflow export depicts a request row, compact Review action and an analytical-use tag. Its stylesheet repeats complete button resets per widget and combines every style globally. Plan the presentation conversion using the existing Workbench library. Explain ownership before translating CSS; do not edit, start services, run providers or claim rendered fidelity from source inspection alone.",
+      "files": [
+        "../../../DESIGN.md",
+        "../../../src/components/workbench-ui/request-item.tsx",
+        "../../../src/components/workbench-ui/request-item.module.css",
+        "../../../src/components/ui/button.tsx",
+        "../../../src/components/ui/button.module.css",
+        "../../../src/assets/styles/workbench-ui/index.css",
+        "../../../src/components/workbench-ui/evidence-use.module.css"
+      ],
+      "expected_output": "A read-only conversion plan that preserves the approved appearance while assigning local parts and shared treatments to their existing runtime owners, with unverified visual comparison explicit.",
+      "expectations": [
+        "Uses the linked frontend style-ownership procedure rather than treating export selectors and its global stylesheet as the target architecture.",
+        "Inspects and reuses existing request and Button APIs, avoiding cloned per-widget control resets or a forwarding WorkbenchButton.",
+        "Keeps local named parts and responsive rules in a colocated CSS Module using suitable Tailwind @apply, without long JSX utility lists or a new monolithic stylesheet.",
+        "Reuses the shared material family and evidence-use treatment rather than borrowing a consumer's private CSS; distinguishes matching values from genuinely shared responsibility.",
+        "Preserves authored units and cascade/state behavior and requires real reference/implementation comparison before claiming fidelity."
+      ]
+    }
+  ]
+}

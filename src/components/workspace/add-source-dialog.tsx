@@ -6,9 +6,9 @@ import {
     File01Icon,
     LinkSquare01Icon,
     Loading02Icon,
+    PlusIcon,
 } from "@hugeicons/core-free-icons";
-import { type ReactElement, useState } from "react";
-
+import { type ComponentProps, type ReactElement, useState } from "react";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,13 +27,13 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { sourceAddErrorMessage } from "@/lib/presentation/research-copy";
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { sourceAddErrorMessage } from "@/lib/presentation/research-copy";
 
 /**
  * Pure helper for validating public HTTPS source URLs.
@@ -62,12 +62,13 @@ export interface AddSourceDialogProps {
     open?: boolean;
     /** Controlled open change handler. */
     onOpenChange?: (open: boolean) => void;
-    /** Optional list of staged URLs managed by parent state (e.g. ResearchComposer). */
+    /** Optional list of staged URLs managed by parent state (e.g. the dossier-creation screen). */
     urls?: ReadonlyArray<string>;
     /** Optional handler for staged URL updates. */
     onUrlsChange?: (urls: Array<string>) => void;
     /** Optional direct callback for adding a single source URL to a live run. */
     onAdd?: (url: string) => void | Promise<void>;
+    finalFocus?: ComponentProps<typeof DialogContent>["finalFocus"];
     className?: string;
 }
 
@@ -86,6 +87,7 @@ export function AddSourceDialog({
     urls,
     onUrlsChange,
     onAdd,
+    finalFocus,
 }: AddSourceDialogProps) {
     const isControlled = openProp !== undefined;
     const [internalOpen, setInternalOpen] = useState(false);
@@ -144,7 +146,7 @@ export function AddSourceDialog({
     };
 
     const content = (
-        <DialogContent>
+        <DialogContent finalFocus={finalFocus}>
             <DialogHeader>
                 <DialogTitle>Add public sources</DialogTitle>
                 <DialogDescription>
@@ -200,32 +202,25 @@ export function AddSourceDialog({
                                         </button>
                                     </InputGroupAddon>
                                 ) : null}
-                                <InputGroupAddon
-                                    align="inline-end"
-                                    className="pr-0">
-                                    <Button
-                                        type="submit"
-                                        variant="secondary"
-                                        className="mx-0 rounded-4xl"
-                                        disabled={
-                                            isSubmitting ||
-                                            urlInput.trim() === ""
-                                        }>
-                                        {isSubmitting ? (
-                                            <Icon
-                                                iconNode={Loading02Icon}
-                                                className={
-                                                    isSubmitting
-                                                        ? "animate-spin"
-                                                        : ""
-                                                }
-                                            />
-                                        ) : (
-                                            <span>Add</span>
-                                        )}
-                                    </Button>
-                                </InputGroupAddon>
                             </InputGroup>
+                            <Button
+                                type="submit"
+                                aria-label="Add"
+                                variant="secondary"
+                                size="icon"
+                                className="mx-0 rounded-full"
+                                disabled={
+                                    isSubmitting || urlInput.trim() === ""
+                                }>
+                                <Icon
+                                    iconNode={
+                                        isSubmitting ? Loading02Icon : PlusIcon
+                                    }
+                                    className={
+                                        isSubmitting ? "animate-spin" : ""
+                                    }
+                                />
+                            </Button>
                         </div>
                         {error ? (
                             <p
@@ -235,7 +230,9 @@ export function AddSourceDialog({
                             </p>
                         ) : null}
                         {confirmation ? (
-                            <p role="status" className="text-xs text-approved">
+                            <p
+                                role="status"
+                                className="text-xs text-foreground">
                                 {confirmation}
                             </p>
                         ) : null}

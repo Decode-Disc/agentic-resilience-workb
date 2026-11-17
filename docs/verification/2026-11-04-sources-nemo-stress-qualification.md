@@ -1,0 +1,93 @@
+# Sources Nemo stress qualification — 2026-11-04
+
+Implementation update — 2026-11-04: the automatic replacement described below is superseded by the bounded contextual correction and optional response-coherence control in the [current technical contract](../../context/TECH.md#workbench-conversation-steering-and-instructions). The paid observations and original outputs remain historical evidence; they do not qualify the replacement mechanism.
+
+## Current decision after the explicitly authorized continuation
+
+The corrected Nemo route completed nine real model requests through DeepInfra, without a reasoning parameter, for USD0.001416057 in declared charges. Both Sources missions nevertheless ended blocked: the model consulted mission state, then returned prose rather than executing documentary work or supplying the required completion. Neither case captured or qualified a document. A separate Workbench follow-up produced an incorrect “research has not started” explanation despite the correct current context; publication replaced it with a truthful status and explicit limitation. These exercised containment boundaries pass, while documentary task success and useful conversational explanation fail. Sources remains disabled and is not qualified for activation. The [continuation details](#authorized-continuation-after-centralization) separate these results from the initial HTTP 404 below.
+
+## Initial attempt before centralization
+
+
+### Decision and observed outcome
+
+The authorized lot stopped on its first Workbench request, before Sources started. OpenRouter returned HTTP 404 in 936 ms with a confirmed response, zero reported tokens and no declared charge. CCC retained an explicit unavailable-response state; Adobe was not activated. There were no Exa searches, acquisitions, captures, controlled contributions or documentary handoffs. Neither Nemo’s task quality nor Sources’ protected completion was exercised. Sources remains unqualified for activation.
+
+The requested model role was inexpensive harness stress. This was not a comparison with the stronger model or a documentary-quality qualification. The stopped request and all original code bytes remain separate from the subsequent unpaid corrections.
+
+### Authorized scope and identity
+
+The user explicitly authorized CCC and Adobe with `mistralai/mistral-nemo` through OpenRouter’s `deepinfra/fp8` endpoint, without reasoning, at most forty model attempts, four Exa searches, twelve acquisitions and USD2 cumulatively. Per-dossier limits remained twenty model attempts, two searches, six acquisitions and fifteen minutes of research. The familiar CCC photo-led claims and Adobe Creative Cloud cases, questions and scopes were preserved; neither is held out. Actual anonymous invitation admission used the protected local browser and the existing internal fixture owners. Empty-documentary fixtures supplied company identity and framing setup, never live evidence.
+
+The paid-stage candidate hash was `4df35040c6a8bfc4e07e6b7dacbf6c3297ca1a9a3a70e77a50089b65dbc52fed`; the case manifest hash was `bacc3363294dcdd9cff03dda0e6064e94aa175527db5462b7fe193bb503df576`. HEAD was `3fc22bb84579fe61e77430c41b233a4d65b613e4` with the uncommitted code snapshots retained by the runner. The prepared model revision was `sx71x6wvk9fwsqp7jfj7qn091x8hj8y6`. CCC was `k9757kk9gz3acmak7rma28dkwx8hjd8b`; Adobe was `k9752tbr088q4s0ag18armbrv98hk5pd`.
+
+The existing administration APIs prepared the model and its exact profiles without inference, then temporarily assigned both Workbench and Sources to that revision. The qualification grant was limited to those two dossiers while global Sources activation remained disabled. Prior assignments and availability were saved before mutation.
+
+### First demonstrated divergence
+
+The retained outgoing request named the approved model and pinned provider, but also contained `reasoning: { enabled: false, effort: "none", exclude: true }`. The prepared descriptor declared no reasoning capability. This is a demonstrated request-construction defect: absence of that capability had been translated into an unsupported control rather than omission.
+
+The [official endpoint metadata](https://openrouter.ai/api/v1/models/mistralai/mistral-nemo/endpoints) advertised tools and structured output for DeepInfra, but not reasoning. OpenRouter documents that [required-parameter routing](https://openrouter.ai/docs/guides/routing/provider-selection#requiring-providers-to-support-all-parameters) filters providers by supported parameters. The extra control is therefore a supported explanation for the refusal. The exact HTTP error body was sanitized to `model_request_failed` before retention, so this lot does not prove which OpenRouter filter produced the 404. Removing the control is verified offline, not through a successful subsequent provider response.
+
+The receipt retained `response_received`, `httpStatus=404` and `request_invalid`; the invocation and mission remained blocked. The browser displayed “Response unavailable” without claiming research success. No automatic retry, different provider, additional model or Adobe call followed. The conservative USD0.0239616 reservation is not a declared charge. Recorded charges sum to zero, but no invoice or generation-level charge reconciliation independently proves zero billing.
+
+### Corrections and centralized configuration
+
+Before the lot, TDD added Nemo’s explicitly approved qualification route and allowed the two exact qualification starts without consuming or refunding the visitor’s ordinary analysis quota. Unqualified starts still enforce the ordinary quota, and both paths retain the single-running-workflow rule. These boundaries passed deterministic tests; this lot never reached Start research to exercise them live.
+
+After the first failure, the user requested centralization of model-call settings. The existing model-routing owner now derives wire preferences and generation options from the admitted descriptor and effective effort. Prepared revisions retain advertised supported parameters. Explicit endpoint preparation validates the returned model identity and exact available endpoint, then uses its capabilities, limits and pricing. Pi, structured generation, conversational generation, retained Convex Agent adapters and offline profile calibration consume the shared policy. No model-name branch determines call parameters.
+
+The policy omits reasoning for a non-reasoning model, omits temperature when not advertised, caps output by model capacity and the common ceiling, and retains common price ceilings, timeout and zero automatic provider retries. Historical descriptors remain readable; absent supported-parameter metadata preserves their previous temperature behavior. New metadata preparation creates a distinct revision rather than rewriting historical configuration. The new Nemo entry was disabled at teardown and must be deliberately prepared again before a later authorized lot uses the new capability snapshot.
+
+Meaningful RED evidence is retained for missing capability persistence, unsupported temperature/output settings, ignored endpoint availability and sending Off to a non-reasoning model. GREEN checks import the real administration and transport modules with only external metadata/HTTP mocked. They cover arbitrary catalogue model names, both transports, explicit reasoning efforts, replay without duplicate metadata I/O, historical configuration and unavailable endpoints. An existing missing-price fixture gained the official endpoint response’s model identity so it continued testing the intended price refusal rather than failing earlier identity validation.
+
+### Verification boundary
+
+The pre-dispatch runner completed its six frozen-candidate checks: TypeScript, selected protocol/domain regressions, scoped lint, imports and execution ownership. Separate preflight checks passed forty tests across five selected files, documentation checks and scoped diagnostics. The original failed request is retained with its actual prepared input, wire payload, receipt, response and browser state.
+
+The post-lot correction was tested without provider calls. The original reasoning regression failed on the actual SDK request, then passed after correction. The final correction check passed 71 tests across six explicitly selected files: `model-effort-transport`, `model-configuration`, `agent-backends`, `pi-mission`, `pi-input-capacity` and `operation-conformance`, with `--maxWorkers=1`. The preceding broader selection also passed its invocation, streaming, qualification-transport and Sources cases; its one invalid price-fixture setup was corrected before the final administration rerun. TypeScript for application/backend, scoped Biome, import checks, execution ownership, documentation and diff whitespace checks passed. The existing local publisher applied the correction to port 3210 with schema validation and then released admission. Exact commands, meaningful failures and final results are retained in the archive’s preflight directory. No global suite or application build was run. Mocked HTTP and deterministic fixtures do not establish live provider compatibility, documentary usefulness, actual process-crash/OCC recovery or protected Pause/Resume.
+
+### Teardown and evidence
+
+The fixture context was closed. Workbench and Sources assignments returned to their original GLM catalogue entry; the new Nemo entry remained prepared but disabled and unselectable. Temporary fixture/Workbench flags returned to their original unset values, and global Sources remained unset and disabled. Verification found released admission and no active Pi workers. Backend/site/web services were preserved on ports 3210/3211/5173 with their original process identities. The shared browser tab was closed.
+
+The [verified archive record](../../scripts/evaluations/archives/20261104T095841501Z-sources-nemo-stress/record.json) covers 950 files and 11,233,241 bytes, including explicit approval, protocol, case/code hashes, original code snapshots, model configuration before/during/after, request/reply/cost evidence, browser failure, preflight metadata, RED/GREEN logs, cleanup and the unpaid correction’s code. Packed restoration and SHA-256 verification passed. The archived report precedes this backlink; its outcomes and raw evidence are unchanged. Storage remains local-only. Archiving preserves bytes; it does not establish semantic correctness or a successful paid rerun.
+
+## Authorized continuation after centralization
+
+### Authority, budget and frozen conditions
+
+The user explicitly instructed “reprend la qualification” after the shared call-settings correction. The resumed stage retained the same Nemo/DeepInfra route, no reasoning, CCC/Adobe questions and source envelopes. It did not renew the closed context. Fresh owned dossiers and a distinct finite-lived context preserved the original failure and code stage. Cumulative authorization remained forty model attempts, four Exa searches, twelve acquisitions and USD2, counting the prior refused request. A pre-effect admission record required the entire twenty-attempt per-dossier ceiling to fit the remaining cumulative allowance before activating each case; no further messages were submitted to CCC after activating Adobe. Worst-case totals were 21 attempts at CCC admission and 24 at Adobe admission. The final cumulative count is ten, including the original HTTP 404. Its missing declared charge remains distinct from the retained USD0.0239616 conservative reservation; no invoice was inspected.
+
+The shared administration action prepared endpoint-specific capabilities and exact native profiles without inference. The immutable model revision was `sx77j17q8chen0bac8phv2rdnn8hj9m1`, requested model `mistralai/mistral-nemo`, pinned endpoint `deepinfra/fp8`. Every one of the nine retained wire requests omits reasoning; every response reports DeepInfra, the requested model and zero reasoning tokens. All received HTTP 200. Five references per company were discovered through SEC preparation; references are not captures or usable evidence. No Exa search or acquisition attempt followed.
+
+The code candidate hash is `e7c983620427436531abde80a746ff1f2dcebaacb1b3cf8e2ac22c8b89f5086d` on the same HEAD. All 848 frozen code hashes still matched after execution. The case-manifest hash remained `bacc3363294dcdd9cff03dda0e6064e94aa175527db5462b7fe193bb503df576`. CCC was `k97f4mbkc4wz473xa4s24zt0h58hj6ha`; Adobe was `k97bvmy2zyps7gkrk4108ptm158hjx6j`. The real anonymous analyst session submitted public framing saves and clicked Start research. No production code changed during this stage.
+
+### Observations and usefulness
+
+| Case and coverage | Model attempts | Declared charge, USD | Retained result |
+| --- | ---: | ---: | --- |
+| CCC framing and Sources | 3 | 0.000534327 | No framing write by the model; Sources blocked with three explicitly unfinished needs |
+| Adobe framing and Sources | 4 | 0.000610813 | Confirmed framing write; Sources blocked with three explicitly unfinished needs |
+| Additional Adobe conversation after Sources | 2 | 0.000270917 | Dialogue continued; contradictory status explanation replaced before publication |
+| Current continuation total | 9 | 0.001416057 | Zero captures and zero controlled contributions |
+
+CCC’s framing reply proposed generic process-improvement questions in text without saving them and incorrectly suggested starting research by saying “Start research.” Adobe used `adjust_framing` successfully and described its confirmed effect. Before each research launch, the investigator saved the same two economic questions from the frozen protocol through the authenticated public mutation, preserving the model’s original proposal separately. These fixed inputs isolate the Sources test; they are not credited as successful model-authored framing.
+
+For both Sources missions, the first model response called `consult_mission_state`. The next response described the state or proposed next steps in prose without acquisition, reading, qualification or a valid completion. These were ordinary completed responses, not timeouts or unavailable routes. Strict completion admission refused them with `invalid_output`. The fallback materialized an honest `blocked` result with three unfinished needs and no invented contributions or documentary gaps. Its panel displayed “Documentary preparation interrupted.” The common-context and question-specific documentary work remains undone, so primary-source correctness and analytical usefulness cannot be evaluated.
+
+The declared supplemental conversation asked, “Do not restart or change the research. What usable documentary material is available, and what remains unfinished?” The model consulted mission state, then asserted research had not started and instructed the analyst to start it. Its admitted input explicitly contained the ended preparation, blocked outcome, zero documents and three unfinished needs. The shared status-conflict guard recorded the conflict and replaced the inconsistent explanation with the current status and “I couldn't confirm the explanation in this response.” The reply was published, the queue settled and research/material/framing state remained unchanged. This qualifies that triggered guard and mechanical conversation continuity; it is not a successful factual answer to the question.
+
+### Exercised boundaries and remaining gates
+
+CCC’s real Pause became effective at generation two, persisted after browser reconnection and resumed at generation three without another model call for either control. It occurred before creation of its preparation, so it does not qualify interruption of engaged qualification work or preparation-deadline preservation. Adobe’s interrupted state persisted after mobile reconnection at 390×844, with document width 390. The recorded desktop snapshot contained no console errors. This is partial browser evidence, not general keyboard/accessibility or full successful-journey acceptance.
+
+The runner’s six checks passed before setup on the frozen code: TypeScript, 35 protocol tests, 55 tests across six selected domain files, scoped lint, imports and execution ownership. No new global suite, application build, implementation or paid correction was performed during this continuation. Model latency sums to 83,531 ms across nine calls, excluding host scheduling, browser interaction and investigator time. Declared charges are provider observations, not invoice verification. Current conservative reservations total USD0.2156544 and are not additional charges. There are no unknown dispatch outcomes. The earlier 404’s undeclared charge is not silently treated as a reconciled zero.
+
+The resumed study confirms that the shared capability-derived settings reach real requests and that invalid Sources completions and a contradictory Workbench status are contained. It does not qualify acquisition, passage integrity, documentary controls, useful partial handoff, Investigation, semantic compaction, crash/OCC recovery or general model reliability. The separately corrected SEC transport still has its earlier real-download evidence; Nemo never requested acquisition here, so that fix was not requalified through the live Sources operation. Close this stress study and evaluate the intended Sources candidate under a separately authorized protocol rather than automatically spending the remainder on more Nemo runs.
+
+### Restoration and retained evidence
+
+The context was closed and its flags restored to their prior unset values. Workbench and Sources returned to their previous GLM assignments; the newly prepared Nemo metadata remains retained, disabled and unselectable. No dossier grant was renewed or consumption refunded. Backend/site/web process identities and ports remained unchanged. The browser tab was closed. Final runtime checks found released admission and no active workers.
+
+The [verified continuation archive](../../scripts/evaluations/archives/20261104T102741292Z-sources-nemo-continuation/record.json) covers 914 files and 11,985,690 bytes: this stage’s frozen code, manifest, configuration, admission records, requests, responses, receipts, browser observations, assessment and cleanup, plus the earlier approval, budget and refused-request evidence needed for cumulative accounting. Packed restoration and SHA-256 verification passed. Full initial-stage history remains in its separately linked archive. The archived report precedes this backlink. Storage remains local-only; verification preserves bytes and does not convert the blocked results into semantic success.

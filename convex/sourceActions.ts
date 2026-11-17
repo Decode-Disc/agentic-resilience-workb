@@ -2,22 +2,57 @@
 
 import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
+import type { IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
-import { action, internalAction } from "./_generated/server";
+import { action } from "./_generated/server";
+import {
+    classifyManualSourceIntakeError,
+    manualSourceIntakeError,
+} from "./domain/manualSourceIntake";
 import { validatePublicSourceUrl } from "./domain/publicSourceUrl";
 import { assertSourceCandidateRequestFits } from "./domain/sourceCandidateCapacity";
 import { sourceCandidateLimit } from "./resourceLimits";
 
-const MAX_REDIRECTS = 5;
-const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
-const REQUEST_TIMEOUT_MS = 10_000;
+import {
+    MANUAL_SOURCE_MAX_REDIRECTS as MAX_REDIRECTS,
+    MANUAL_SOURCE_METADATA_MAX_BYTES as MAX_RESPONSE_BYTES,
+    MANUAL_SOURCE_PREPARATION_TTL_MS as PREPARATION_TTL_MS,
+    MANUAL_SOURCE_METADATA_TIMEOUT_MS as REQUEST_TIMEOUT_MS,
+} from "./resourcePolicy";
+
+const manualSourceTargetValidator = v.union(
+    v.object({
+        kind: v.literal("prelaunch"),
+        collectionKey: v.string(),
+    }),
+    v.object({
+        kind: v.literal("run"),
+        runId: v.id("researchRuns"),
+        corpusRevisionId: v.id("corpusRevisions"),
+    }),
+);
+const manualSourceResultValidator = v.union(
+    v.object({
+        kind: v.literal("prepared"),
+        preparationId: v.id("manualSourcePreparations"),
+        canonicalUrl: v.string(),
+        title: v.string(),
+        expiresAt: v.number(),
+    }),
+    v.object({
+        kind: v.literal("persisted"),
+        sourceId: v.id("sources"),
+        canonicalUrl: v.string(),
+        title: v.string(),
+    }),
+);
 
 type MetadataDependencies = {
     resolveAddresses: (hostname: string) => Promise<ReadonlyArray<string>>;
@@ -30,13 +65,43 @@ type PreparedLaunchManualSource = {
     providerReference: string;
 };
 
+type ManualCandidateAuthorization = {
+    executionGeneration: number;
+    workflowVersion: number;
+    stepKey: "evidence_sufficiency_review" | "source_review";
+    hasCapacity: boolean;
+};
+
+type ManualSourceTarget =
+    | { kind: "prelaunch"; collectionKey: string }
+    | {
+          kind: "run";
+          runId: Id<"researchRuns">;
+          corpusRevisionId: Id<"corpusRevisions">;
+      };
+
+type ManualSourceResult =
+    | {
+          kind: "prepared";
+          preparationId: Id<"manualSourcePreparations">;
+          canonicalUrl: string;
+          title: string;
+          expiresAt: number;
+      }
+    | {
+          kind: "persisted";
+          sourceId: Id<"sources">;
+          canonicalUrl: string;
+          title: string;
+      };
+
 async function readBoundedText(response: Response): Promise<string> {
     const declaredLength = Number(response.headers.get("content-length"));
     if (
         Number.isFinite(declaredLength) &&
         declaredLength > MAX_RESPONSE_BYTES
     ) {
-        throw new Error("Source metadata response is too large");
+        throw manualSourceIntakeError("response_too_large", { field: "url" });
     }
     if (!response.body) {
         return "";
@@ -53,7 +118,9 @@ async function readBoundedText(response: Response): Promise<string> {
         bytes += value.byteLength;
         if (bytes > MAX_RESPONSE_BYTES) {
             await reader.cancel();
-            throw new Error("Source metadata response is too large");
+            throw manualSourceIntakeError("response_too_large", {
+                field: "url",
+            });
         }
         text += decoder.decode(value, { stream: true });
     }
@@ -63,7 +130,7 @@ async function readBoundedText(response: Response): Promise<string> {
 export async function inspectPublicSourceMetadata(
     rawUrl: string,
     dependencies: MetadataDependencies,
-): Promise<{ canonicalUrl: string; title: string }> {
+): Promise<{ canonicalUrl: string; title: string; contentType: string }> {
     let current = rawUrl;
     for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
         let resolvedAddresses: ReadonlyArray<string> = [];
@@ -79,19 +146,26 @@ export async function inspectPublicSourceMetadata(
             resolvedAddresses[0] ??
             (isIP(validated.hostname) ? validated.hostname : undefined);
         if (!pinnedAddress) {
-            throw new Error("Source URL did not resolve to a public address");
+            throw manualSourceIntakeError("dns_failed", { field: "url" });
         }
-        const response = await dependencies.request(
-            validated.canonicalUrl,
-            pinnedAddress,
-        );
+        let response: Response;
+        try {
+            response = await dependencies.request(
+                validated.canonicalUrl,
+                pinnedAddress,
+            );
+        } catch (error) {
+            throw classifyManualSourceIntakeError(error);
+        }
         if (
             response.status >= 300 &&
             response.status < 400 &&
             response.headers.has("location")
         ) {
             if (redirect === MAX_REDIRECTS) {
-                throw new Error("Source URL exceeded the redirect limit");
+                throw manualSourceIntakeError("redirect_limit", {
+                    field: "url",
+                });
             }
             current = new URL(
                 response.headers.get("location") ?? "",
@@ -100,124 +174,244 @@ export async function inspectPublicSourceMetadata(
             continue;
         }
         if (!response.ok) {
-            throw new Error(
-                `Source metadata request failed with ${response.status}`,
-            );
+            if (response.status === 401 || response.status === 403) {
+                throw manualSourceIntakeError("access_blocked", {
+                    field: "url",
+                });
+            }
+            if (response.status === 404) {
+                throw manualSourceIntakeError("not_found", { field: "url" });
+            }
+            if (response.status === 429) {
+                throw manualSourceIntakeError("upstream_rate_limited", {
+                    field: "url",
+                });
+            }
+            if (response.status >= 500) {
+                throw manualSourceIntakeError("upstream_unavailable", {
+                    field: "url",
+                });
+            }
+            throw manualSourceIntakeError("access_blocked", { field: "url" });
         }
         const contentType =
-            response.headers.get("content-type")?.toLowerCase() ?? "";
+            (response.headers.get("content-type") ?? "")
+                .toLowerCase()
+                .split(";")[0]
+                ?.trim() ?? "";
         if (
             !contentType.startsWith("text/html") &&
             !contentType.startsWith("application/xhtml+xml") &&
             !contentType.startsWith("application/pdf")
         ) {
-            throw new Error("Source URL returned an unsupported content type");
+            throw manualSourceIntakeError("unsupported_content_type", {
+                field: "url",
+            });
         }
-        const body = contentType.startsWith("application/pdf")
-            ? ""
-            : await readBoundedText(response);
+        if (contentType.startsWith("application/pdf")) {
+            const disposition = response.headers.get("content-disposition");
+            const filename = disposition?.match(
+                /filename\*?=(?:UTF-8''|["']?)([^"';]+)["']?/i,
+            )?.[1];
+            const pathTitle = new URL(validated.canonicalUrl).pathname
+                .split("/")
+                .filter(Boolean)
+                .at(-1);
+            return {
+                canonicalUrl: validated.canonicalUrl,
+                contentType,
+                title:
+                    (filename ? decodeURIComponent(filename) : pathTitle) ||
+                    new URL(validated.canonicalUrl).hostname,
+            };
+        }
+        const body = await readBoundedText(response);
         const titleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(body)?.[1];
         return {
             canonicalUrl: validated.canonicalUrl,
+            contentType,
             title:
                 titleMatch?.replace(/\s+/g, " ").trim() ||
                 new URL(validated.canonicalUrl).hostname,
         };
     }
-    throw new Error("Source URL exceeded the redirect limit");
+    throw manualSourceIntakeError("redirect_limit", { field: "url" });
 }
 
-export async function prepareLaunchManualSources(
+async function inspectPrelaunchManualSource(
     ctx: Pick<ActionCtx, "runMutation" | "runQuery">,
     args: {
         ownerAuthUserId: Id<"users">;
         idempotencyKey: string;
-        urls: ReadonlyArray<string>;
+        url: string;
     },
     inspect: (url: string) => Promise<{ canonicalUrl: string; title: string }>,
-): Promise<Array<PreparedLaunchManualSource>> {
-    assertSourceCandidateRequestFits(args.urls.length, sourceCandidateLimit());
-    const prepared = new Map<string, PreparedLaunchManualSource>();
-    for (const rawUrl of args.urls) {
-        const url = rawUrl.trim();
-        const operationKey = `launch_url_metadata:${createHash("sha256")
-            .update(
-                `${args.ownerAuthUserId}:${args.idempotencyKey.trim()}:${url}`,
-            )
-            .digest("hex")}`;
-        let metadata: { canonicalUrl: string; title: string } | null = null;
+): Promise<PreparedLaunchManualSource> {
+    assertSourceCandidateRequestFits(1, sourceCandidateLimit());
+    const url = args.url.trim();
+    const operationKey = `launch_url_metadata:${createHash("sha256")
+        .update(`${args.ownerAuthUserId}:${args.idempotencyKey.trim()}:${url}`)
+        .digest("hex")}`;
+    let metadata: { canonicalUrl: string; title: string } | null = null;
 
-        for (let attempt = 1; attempt <= 2; attempt += 1) {
-            const startedAt = Date.now();
-            const lease = await ctx.runMutation(
-                internal.providerCalls.recordAttempt,
-                {
-                    service: "url_metadata",
-                    operation: "inspect_launch_manual_source",
-                    operationKey,
-                    status: "started",
-                    attempt,
-                },
-            );
-            if (!lease.shouldExecute) {
-                if (lease.status === "succeeded") {
-                    metadata = await ctx.runQuery(
-                        internal.providerCalls.getSucceededUrlMetadata,
-                        { operationKey },
-                    );
-                    if (!metadata) {
-                        throw new Error(
-                            "Completed source metadata operation has no result",
-                        );
-                    }
-                    break;
-                }
-                if (lease.status === "started") {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const startedAt = Date.now();
+        const lease = await ctx.runMutation(
+            internal.providerCalls.recordAttempt,
+            {
+                service: "url_metadata",
+                operation: "inspect_launch_manual_source",
+                operationKey,
+                status: "started",
+                attempt,
+            },
+        );
+        if (!lease.shouldExecute) {
+            if (lease.status === "succeeded") {
+                metadata = await ctx.runQuery(
+                    internal.providerCalls.getSucceededUrlMetadata,
+                    { operationKey },
+                );
+                if (!metadata) {
                     throw new Error(
-                        "Source metadata inspection is already in progress",
+                        "Completed source metadata operation has no result",
                     );
                 }
+                break;
+            }
+            if (lease.status === "started") {
+                throw new Error(
+                    "Source metadata inspection is already in progress",
+                );
+            }
+            continue;
+        }
+
+        try {
+            metadata = await inspect(url);
+            await ctx.runMutation(internal.providerCalls.recordAttempt, {
+                service: "url_metadata",
+                operation: "inspect_launch_manual_source",
+                operationKey,
+                status: "succeeded",
+                attempt,
+                latencyMs: Date.now() - startedAt,
+                usage: metadata,
+            });
+            break;
+        } catch (error) {
+            const classified = classifyManualSourceIntakeError(error);
+            await ctx.runMutation(internal.providerCalls.recordAttempt, {
+                service: "url_metadata",
+                operation: "inspect_launch_manual_source",
+                operationKey,
+                status: "failed",
+                attempt,
+                latencyMs: Date.now() - startedAt,
+                errorCode: classified.data.code,
+            });
+            if (classified.data.retryable && attempt < 2) {
                 continue;
             }
-
-            try {
-                metadata = await inspect(url);
-                await ctx.runMutation(internal.providerCalls.recordAttempt, {
-                    service: "url_metadata",
-                    operation: "inspect_launch_manual_source",
-                    operationKey,
-                    status: "succeeded",
-                    attempt,
-                    latencyMs: Date.now() - startedAt,
-                    usage: metadata,
-                });
-                break;
-            } catch (error) {
-                await ctx.runMutation(internal.providerCalls.recordAttempt, {
-                    service: "url_metadata",
-                    operation: "inspect_launch_manual_source",
-                    operationKey,
-                    status: "failed",
-                    attempt,
-                    latencyMs: Date.now() - startedAt,
-                    errorCode:
-                        error instanceof Error
-                            ? error.name
-                            : "UnknownProviderError",
-                });
-                throw error;
-            }
+            throw classified;
         }
-
-        if (!metadata) {
-            throw new Error("Source metadata retry limit reached");
-        }
-        prepared.set(metadata.canonicalUrl, {
-            ...metadata,
-            providerReference: operationKey,
-        });
     }
-    return [...prepared.values()];
+    if (!metadata) {
+        throw new Error("Source metadata retry limit reached");
+    }
+    return {
+        ...metadata,
+        providerReference: operationKey,
+    };
+}
+
+export async function submitManualUrlWithInspector(
+    ctx: Pick<ActionCtx, "runMutation" | "runQuery">,
+    authUserId: Id<"users">,
+    args: {
+        requestKey: string;
+        url: string;
+        target: ManualSourceTarget;
+    },
+    inspect: (url: string) => Promise<{ canonicalUrl: string; title: string }>,
+    now: () => number = Date.now,
+): Promise<ManualSourceResult> {
+    if (args.target.kind === "run") {
+        const persisted = await addManualUrlWithInspector(
+            ctx,
+            {
+                authUserId,
+                runId: args.target.runId,
+                corpusRevisionId: args.target.corpusRevisionId,
+                requestKey: args.requestKey,
+                url: args.url,
+            },
+            inspect,
+        );
+        return {
+            kind: "persisted",
+            ...persisted,
+        };
+    }
+    const requestKey = args.requestKey.trim();
+    const collectionKey = args.target.collectionKey.trim();
+    const url = args.url.trim();
+    if (
+        requestKey.length === 0 ||
+        requestKey.length > 128 ||
+        collectionKey.length === 0 ||
+        collectionKey.length > 128 ||
+        url.length === 0 ||
+        url.length > 2_048
+    ) {
+        throw manualSourceIntakeError("invalid_url", { field: "url" });
+    }
+    const inputDigest = createHash("sha256").update(url).digest("hex");
+    const currentTime = now();
+    const existing: {
+        preparationId: Id<"manualSourcePreparations">;
+        canonicalUrl: string;
+        title: string;
+        expiresAt: number;
+    } | null = await ctx.runQuery(internal.sourceIntake.findPreparation, {
+        collectionKey,
+        requestKey,
+        inputDigest,
+        now: currentTime,
+    });
+    if (existing) {
+        return { kind: "prepared", ...existing };
+    }
+    await ctx.runMutation(
+        internal.providerCalls.reserveSourceMetadataRateLimit,
+        {
+            authUserId,
+        },
+    );
+    const prepared = await inspectPrelaunchManualSource(
+        ctx,
+        {
+            ownerAuthUserId: authUserId,
+            idempotencyKey: `${collectionKey}:${requestKey}`,
+            url,
+        },
+        inspect,
+    );
+    const persisted: {
+        preparationId: Id<"manualSourcePreparations">;
+        canonicalUrl: string;
+        title: string;
+        expiresAt: number;
+    } = await ctx.runMutation(internal.sourceIntake.persistPreparation, {
+        collectionKey,
+        requestKey,
+        inputDigest,
+        canonicalUrl: prepared.canonicalUrl,
+        title: prepared.title,
+        providerReference: prepared.providerReference,
+        expiresAt: currentTime + PREPARATION_TTL_MS,
+    });
+    return { kind: "prepared", ...persisted };
 }
 
 function normalizeRemoteAddress(address: string | undefined): string {
@@ -231,28 +425,81 @@ function normalizeRemoteAddress(address: string | undefined): string {
 export function requestPinnedPublicSource(
     rawUrl: string,
     pinnedAddress: string,
+    options?: {
+        maxBytes?: number;
+        allowPdfBody?: boolean;
+        timeoutMs?: number;
+        headers?: Record<string, string>;
+        signal?: AbortSignal;
+    },
 ): Promise<Response> {
     const url = new URL(rawUrl);
+    const maxBytes = options?.maxBytes ?? MAX_RESPONSE_BYTES;
+    const timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    const allowPdfBody = options?.allowPdfBody ?? false;
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
+
     return new Promise((resolve, reject) => {
+        let settled = false;
+        let activeResponse: IncomingMessage | null = null;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let onAbort: (() => void) | undefined;
+
+        const cleanup = () => {
+            if (onAbort) options?.signal?.removeEventListener("abort", onAbort);
+            if (timer !== undefined) {
+                clearTimeout(timer);
+                timer = undefined;
+            }
+        };
+
+        const safeReject = (err: unknown) => {
+            if (!settled) {
+                settled = true;
+                cleanup();
+                reject(err);
+            }
+        };
+
+        const safeResolve = (res: Response) => {
+            if (!settled) {
+                settled = true;
+                cleanup();
+                resolve(res);
+            }
+        };
+
+        timer = setTimeout(() => {
+            const timeoutError = manualSourceIntakeError("request_timeout");
+            if (activeResponse) {
+                activeResponse.destroy(timeoutError);
+            }
+            request.destroy(timeoutError);
+            safeReject(timeoutError);
+        }, timeoutMs);
+
         const request = httpsRequest(
             url,
             {
                 method: "GET",
                 headers: {
                     Accept: "text/html,application/xhtml+xml,application/pdf;q=0.8",
+                    ...options?.headers,
                     "Accept-Encoding": "identity",
                     Host: url.host,
                 },
                 servername: url.hostname,
-                lookup: (_hostname, _options, callback) => {
-                    callback(
-                        null,
-                        pinnedAddress,
-                        isIP(pinnedAddress) === 6 ? 6 : 4,
-                    );
+                lookup: (_hostname, lookupOptions, callback) => {
+                    const family = isIP(pinnedAddress) === 6 ? 6 : 4;
+                    if (lookupOptions.all) {
+                        callback(null, [{ address: pinnedAddress, family }]);
+                    } else {
+                        callback(null, pinnedAddress, family);
+                    }
                 },
             },
             (response) => {
+                activeResponse = response;
                 const connectedAddress = normalizeRemoteAddress(
                     response.socket.remoteAddress,
                 );
@@ -260,7 +507,7 @@ export function requestPinnedPublicSource(
                     connectedAddress !== normalizeRemoteAddress(pinnedAddress)
                 ) {
                     response.destroy();
-                    reject(
+                    safeReject(
                         new Error(
                             "Source connection did not use the validated address",
                         ),
@@ -282,37 +529,57 @@ export function requestPinnedPublicSource(
                     "identity";
                 if (encoding !== "identity") {
                     response.destroy();
-                    reject(
-                        new Error(
-                            "Source metadata response uses unsupported content encoding",
-                        ),
+                    safeReject(
+                        manualSourceIntakeError("unsupported_content_type", {
+                            field: "url",
+                        }),
                     );
                     return;
+                }
+                const contentType =
+                    headers.get("content-type")?.toLowerCase() ?? "";
+                if (contentType.startsWith("application/pdf")) {
+                    if (!allowPdfBody) {
+                        response.destroy();
+                        safeResolve(
+                            new Response(null, {
+                                status: response.statusCode ?? 500,
+                                headers,
+                            }),
+                        );
+                        return;
+                    }
                 }
                 const declaredLength = Number(headers.get("content-length"));
                 if (
                     Number.isFinite(declaredLength) &&
-                    declaredLength > MAX_RESPONSE_BYTES
+                    declaredLength > maxBytes
                 ) {
                     response.destroy();
-                    reject(new Error("Source metadata response is too large"));
+                    safeReject(
+                        manualSourceIntakeError("response_too_large", {
+                            field: "url",
+                        }),
+                    );
                     return;
                 }
                 const chunks: Uint8Array[] = [];
                 let bytes = 0;
                 response.on("data", (chunk: Buffer) => {
                     bytes += chunk.byteLength;
-                    if (bytes > MAX_RESPONSE_BYTES) {
+                    if (bytes > maxBytes) {
                         response.destroy(
-                            new Error("Source metadata response is too large"),
+                            manualSourceIntakeError("response_too_large", {
+                                field: "url",
+                            }),
                         );
                         return;
                     }
                     chunks.push(chunk);
                 });
-                response.on("error", reject);
+                response.on("error", safeReject);
                 response.on("end", () => {
-                    resolve(
+                    safeResolve(
                         new Response(Buffer.concat(chunks), {
                             status: response.statusCode ?? 500,
                             headers,
@@ -321,10 +588,18 @@ export function requestPinnedPublicSource(
                 });
             },
         );
-        request.setTimeout(REQUEST_TIMEOUT_MS, () => {
-            request.destroy(new Error("Source metadata request timed out"));
-        });
-        request.on("error", reject);
+        request.on("error", safeReject);
+        onAbort = () => {
+            const reason = options?.signal?.reason;
+            activeResponse?.destroy();
+            request.destroy();
+            safeReject(reason);
+        };
+        options?.signal?.addEventListener("abort", onAbort, { once: true });
+        if (options?.signal?.aborted) {
+            onAbort();
+            return;
+        }
         request.end();
     });
 }
@@ -332,20 +607,61 @@ export function requestPinnedPublicSource(
 export async function addManualUrlWithInspector(
     ctx: Pick<ActionCtx, "runMutation" | "runQuery">,
     args: {
+        authUserId: Id<"users">;
         runId: Id<"researchRuns">;
         corpusRevisionId: Id<"corpusRevisions">;
+        requestKey: string;
         url: string;
     },
     inspect: (url: string) => Promise<{ canonicalUrl: string; title: string }>,
-): Promise<{ sourceId: Id<"sources"> }> {
-    const authorization = await ctx.runQuery(
+): Promise<{
+    sourceId: Id<"sources">;
+    canonicalUrl: string;
+    title: string;
+}> {
+    const requestKey = args.requestKey.trim();
+    const url = args.url.trim();
+    if (
+        requestKey.length === 0 ||
+        requestKey.length > 128 ||
+        url.length === 0 ||
+        url.length > 2_048
+    ) {
+        throw manualSourceIntakeError("invalid_url", { field: "url" });
+    }
+    const requestDigest = createHash("sha256").update(requestKey).digest("hex");
+    const urlDigest = createHash("sha256").update(url).digest("hex");
+    const legacyRequestSuffix = `:request:${requestDigest}:url_metadata:${urlDigest}`;
+    const providerReference = `run:${args.runId}:corpus:${args.corpusRevisionId}:manual-source${legacyRequestSuffix}`;
+    const lookup = {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        providerReference,
+        legacyRequestSuffix,
+    };
+    const existing: {
+        sourceId: Id<"sources">;
+        canonicalUrl: string;
+        title: string;
+    } | null = await ctx.runQuery(
+        internal.sources.findManualCandidateByProviderReference,
+        lookup,
+    );
+    if (existing) return existing;
+    const authorization: ManualCandidateAuthorization = await ctx.runQuery(
         internal.sources.authorizeManualCandidate,
+        { runId: args.runId, corpusRevisionId: args.corpusRevisionId },
+    );
+    const operationKey = `run:${args.runId}:workflow:${authorization.workflowVersion}:generation:${authorization.executionGeneration}:corpus:${args.corpusRevisionId}:step:${authorization.stepKey}${legacyRequestSuffix}`;
+    if (!authorization.hasCapacity) {
+        throw manualSourceIntakeError("candidate_limit");
+    }
+    await ctx.runMutation(
+        internal.providerCalls.reserveSourceMetadataRateLimit,
         {
-            runId: args.runId,
-            corpusRevisionId: args.corpusRevisionId,
+            authUserId: args.authUserId,
         },
     );
-    const operationKey = `run:${args.runId}:generation:${authorization.executionGeneration}:corpus:${args.corpusRevisionId}:url_metadata:${createHash("sha256").update(args.url.trim()).digest("hex")}`;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
         const startedAt = Date.now();
         const lease = await ctx.runMutation(
@@ -354,7 +670,7 @@ export async function addManualUrlWithInspector(
                 runId: args.runId,
                 corpusRevisionId: args.corpusRevisionId,
                 executionGeneration: authorization.executionGeneration,
-                workflowVersion: 2,
+                workflowVersion: authorization.workflowVersion,
                 stepKey: authorization.stepKey,
                 service: "url_metadata",
                 operation: "inspect_manual_source",
@@ -365,19 +681,20 @@ export async function addManualUrlWithInspector(
         );
         if (!lease.shouldExecute) {
             if (lease.status === "succeeded") {
-                const sourceId = await ctx.runQuery(
+                const persisted: {
+                    sourceId: Id<"sources">;
+                    canonicalUrl: string;
+                    title: string;
+                } | null = await ctx.runQuery(
                     internal.sources.findManualCandidateByProviderReference,
-                    {
-                        runId: args.runId,
-                        providerReference: operationKey,
-                    },
+                    lookup,
                 );
-                if (!sourceId) {
+                if (!persisted) {
                     throw new Error(
                         "Completed source metadata operation has no candidate",
                     );
                 }
-                return { sourceId };
+                return persisted;
             }
             if (lease.status === "started") {
                 throw new Error(
@@ -387,14 +704,14 @@ export async function addManualUrlWithInspector(
             continue;
         }
         try {
-            const metadata = await inspect(args.url);
+            const metadata = await inspect(url);
             const sourceId = await ctx.runMutation(
                 internal.sources.persistManualCandidate,
                 {
                     runId: args.runId,
                     corpusRevisionId: args.corpusRevisionId,
                     executionGeneration: authorization.executionGeneration,
-                    providerReference: operationKey,
+                    providerReference,
                     ...metadata,
                 },
             );
@@ -402,7 +719,7 @@ export async function addManualUrlWithInspector(
                 runId: args.runId,
                 corpusRevisionId: args.corpusRevisionId,
                 executionGeneration: authorization.executionGeneration,
-                workflowVersion: 2,
+                workflowVersion: authorization.workflowVersion,
                 stepKey: authorization.stepKey,
                 service: "url_metadata",
                 operation: "inspect_manual_source",
@@ -411,8 +728,9 @@ export async function addManualUrlWithInspector(
                 attempt,
                 latencyMs: Date.now() - startedAt,
             });
-            return { sourceId };
+            return { sourceId, ...metadata };
         } catch (error) {
+            const classified = classifyManualSourceIntakeError(error);
             await ctx.runMutation(internal.providerCalls.recordAttempt, {
                 runId: args.runId,
                 corpusRevisionId: args.corpusRevisionId,
@@ -425,87 +743,60 @@ export async function addManualUrlWithInspector(
                 status: "failed",
                 attempt,
                 latencyMs: Date.now() - startedAt,
-                errorCode:
-                    error instanceof Error
-                        ? error.name
-                        : "UnknownProviderError",
+                errorCode: classified.data.code,
             });
-            throw error;
+            if (classified.data.retryable && attempt < 2) {
+                continue;
+            }
+            throw classified;
         }
     }
     throw new Error("Source metadata retry limit reached");
 }
 
-export const addManualUrl = action({
+export const submitManualUrl = action({
     args: {
-        runId: v.id("researchRuns"),
-        corpusRevisionId: v.id("corpusRevisions"),
+        requestKey: v.string(),
         url: v.string(),
+        target: manualSourceTargetValidator,
     },
-    returns: v.object({ sourceId: v.id("sources") }),
-    handler: async (ctx, args): Promise<{ sourceId: Id<"sources"> }> => {
+    returns: manualSourceResultValidator,
+    handler: async (ctx, args): Promise<ManualSourceResult> => {
         const authUserId = await getAuthUserId(ctx);
         if (!authUserId) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(
+                manualSourceIntakeError("not_authenticated").data,
+            );
         }
-        const visitor = await ctx.runQuery(api.visitors.current, {});
-        if (visitor?.status !== "active") {
-            throw new Error("Unauthorized");
+        try {
+            if (
+                !(await ctx.runQuery(
+                    internal.runWorkspace.authorizeProvider,
+                    {},
+                ))
+            )
+                throw new ConvexError(
+                    manualSourceIntakeError("not_authorized").data,
+                );
+            return await submitManualUrlWithInspector(
+                ctx,
+                authUserId,
+                args,
+                (url) =>
+                    inspectPublicSourceMetadata(url, {
+                        resolveAddresses: async (hostname) =>
+                            (
+                                await lookup(hostname, {
+                                    all: true,
+                                    verbatim: true,
+                                })
+                            ).map(({ address }) => address),
+                        request: requestPinnedPublicSource,
+                    }),
+            );
+        } catch (error) {
+            const classified = classifyManualSourceIntakeError(error);
+            throw new ConvexError(classified.data);
         }
-        return addManualUrlWithInspector(ctx, args, (url) =>
-            inspectPublicSourceMetadata(url, {
-                resolveAddresses: async (hostname) =>
-                    (
-                        await lookup(hostname, {
-                            all: true,
-                            verbatim: true,
-                        })
-                    ).map(({ address }) => address),
-                request: requestPinnedPublicSource,
-            }),
-        );
-    },
-});
-
-export const prepareLaunchUrls = internalAction({
-    args: {
-        idempotencyKey: v.string(),
-        urls: v.array(v.string()),
-    },
-    returns: v.array(
-        v.object({
-            canonicalUrl: v.string(),
-            title: v.string(),
-            providerReference: v.string(),
-        }),
-    ),
-    handler: async (ctx, args): Promise<Array<PreparedLaunchManualSource>> => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.runQuery(api.visitors.current, {});
-        if (visitor?.status !== "active") {
-            throw new Error("Unauthorized");
-        }
-        return prepareLaunchManualSources(
-            ctx,
-            {
-                ownerAuthUserId: authUserId,
-                idempotencyKey: args.idempotencyKey,
-                urls: args.urls,
-            },
-            (url) =>
-                inspectPublicSourceMetadata(url, {
-                    resolveAddresses: async (hostname) =>
-                        (
-                            await lookup(hostname, {
-                                all: true,
-                                verbatim: true,
-                            })
-                        ).map(({ address }) => address),
-                    request: requestPinnedPublicSource,
-                }),
-        );
     },
 });

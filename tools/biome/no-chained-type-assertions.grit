@@ -1,0 +1,24 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+pattern assertion($expression, $type) {
+    or {
+        TsAsExpression(expression = $expression, ty = $type),
+        TsTypeAssertionExpression(expression = $expression, ty = $type)
+    }
+}
+
+assertion($expression, $type) as $chain where {
+    $expression <: or {
+        assertion($_, $inner_type),
+        JsParenthesizedExpression() as $parent where {
+            $parent <: contains assertion($_, $inner_type) until not JsParenthesizedExpression()
+        }
+    },
+    or { $type <: not r"^const$", $inner_type <: not r"^const$" },
+    register_diagnostic(
+        span = $chain,
+        message = "Review chained type assertions; preserve the original type evidence.",
+        severity = "warn"
+    )
+}

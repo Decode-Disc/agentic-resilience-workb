@@ -3,18 +3,21 @@
 @import "shadcn/tailwind.css";
 @import "./assets/styles/base-preset.css";
 @import "./assets/styles/themes/evidence-workbench.css";
+@import "./assets/styles/workbench-ui/index.css";
 
-@custom-variant dark (&:is(.dark *));
+@source "./components";
+@source inline("z-{20..100}");
+@source inline("z-999");
+
+@custom-variant dark (
+    &:is(.dark *, .wb-ui[data-theme="dark"] *):not(.wb-ui[data-theme="light"] *)
+);
 
 @theme inline {
-    --color-info: var(--color-sky-500);
-    --color-success: var(--color-green-500);
-    --color-danger: var(--color-red-500);
-    --color-warning: var(--color-amber-500);
+    --app-max-width: var(--container-8xl, 100rem);
+
     --color-source-selection-accent: var(--accent-foreground);
 
-    --radius-badge: calc(var(--radius) - 0.25rem);
-    --radius-input: calc(var(--radius) - 0.35rem);
     --input-height: calc(var(--spacing) * 11);
     --input-group-child-height: calc(var(--spacing) * 9);
     --input-group-height: calc(var(--spacing) * 11);
@@ -40,7 +43,8 @@
     button,
     input[type="button"],
     input[type="submit"],
-    a[data-slot="dropdown-menu-item"] {
+    a[data-slot="dropdown-menu-item"],
+    div[data-slot="combobox-item"] {
         @apply cursor-pointer!;
     }
 
@@ -50,38 +54,34 @@
 }
 
 @layer components {
+    .max-width-container {
+        @apply mx-auto w-full max-w-(--app-max-width) px-4 sm:px-6 md:px-12;
+    }
+
     .start-double-slash {
-        @apply text-accent-foreground;
+        @apply text-brand-purple;
     }
 
     .link {
-        @apply text-blue-500 underline underline-offset-4 transition-colors hover:text-blue-800;
+        @apply text-accent-foreground underline underline-offset-4 transition-colors hover:decoration-2;
     }
-
-    .source-selection {
-        @apply transition-[background-image,background-color,border-color,box-shadow] duration-200 ease-out;
-        @apply hover:bg-source-selection-accent/20;
+    .edit-button {
+        @apply border-info/50! bg-info/20! hover:border-info/70! hover:bg-info/30!;
     }
-    .source-selection-active {
-        @apply bg-source-selection-accent/10 text-foreground;
-        @apply ring ring-source-selection-accent;
-    }
-    /* The selected source remains legible without competing with the panel divider. */
-    .source-selection-bridge {
-        background-image: linear-gradient(
-            to right,
-            color-mix(in oklab, var(--brand-green) 26%, transparent),
-            color-mix(in oklab, var(--brand-green) 10%, transparent)
-        );
+    .approve-button {
+        @apply bg-approved! hover:bg-approved/90! text-approved-foreground! [&_svg:not([class*='size-'])]:size-6;
     }
 }
 
+/* Radii match what these surfaces are actually given at their call sites, so
+ * the utility carries the silhouette instead of being overridden everywhere.
+ * A consumer that needs a different corner still states it explicitly. */
 @utility surface-panel {
-    @apply rounded-3xl border border-border/60 bg-card text-card-foreground shadow-soft;
+    @apply rounded-xl bg-surface-glass text-card-foreground shadow-glass backdrop-blur-glass;
 }
 
 @utility surface-floating {
-    @apply rounded-3xl border border-border/50 bg-card/80 text-card-foreground shadow-floating backdrop-blur-md;
+    @apply rounded-2xl bg-surface-float text-card-foreground shadow-float backdrop-blur-glass;
 }
 
 @utility text-display {
@@ -94,4 +94,82 @@
 
 @utility text-micro {
     @apply font-mono text-[0.6875rem] font-medium tracking-[0.12em] text-muted-foreground uppercase;
+}
+
+@utility workbench-visual {
+    background-image: radial-gradient(
+        ellipse 48% 32% at 50% 10%,
+        var(--glow),
+        transparent 70%
+    );
+}
+
+@utility section-chip {
+    @apply inline-flex w-fit items-center gap-2 rounded-chip bg-tint-violet px-3 py-1.5 font-mono text-chip tracking-[0.16em] text-accent-foreground uppercase;
+    box-shadow: inset 0 0 0 1px var(--chip-edge);
+}
+
+/* Frame for a segment track wider than its space: the pill stays whole while
+ * its sections scroll inside it, and the clipped edge fades so the remaining
+ * sections stay discoverable. Browsers without scroll-driven animations keep
+ * plain scrolling. */
+@property --segment-fade-start {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+}
+@property --segment-fade-end {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+}
+@keyframes segment-scroll-fade {
+    from {
+        --segment-fade-start: 0px;
+        --segment-fade-end: 28px;
+    }
+    12%,
+    88% {
+        --segment-fade-start: 28px;
+        --segment-fade-end: 28px;
+    }
+    to {
+        --segment-fade-start: 28px;
+        --segment-fade-end: 0px;
+    }
+}
+@utility segment-scroll {
+    @apply flex w-fit max-w-full bg-fill-quiet;
+    border-radius: calc(var(--radius-tile) + 2px);
+    & > .segment-track {
+        @apply min-w-0 overflow-x-auto bg-transparent;
+        scrollbar-width: none;
+        mask-image: linear-gradient(
+            90deg,
+            transparent,
+            #000 var(--segment-fade-start),
+            #000 calc(100% - var(--segment-fade-end)),
+            transparent
+        );
+        animation: segment-scroll-fade linear both;
+        animation-timeline: scroll(self inline);
+    }
+    & > .segment-track::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+@utility segment-track {
+    @apply flex w-fit max-w-full items-center gap-1 bg-fill-quiet p-1;
+    border-radius: calc(var(--radius-tile) + 2px);
+}
+
+@utility segment-item {
+    @apply inline-flex h-8.5 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-tile px-3.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring;
+    &[aria-current="page"] {
+        @apply bg-card text-foreground shadow-tab;
+    }
+    &[aria-disabled="true"] {
+        @apply cursor-default opacity-70;
+    }
 }

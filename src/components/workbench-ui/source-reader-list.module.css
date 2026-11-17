@@ -1,0 +1,53 @@
+@reference "../../styles.css";
+
+.list {
+    @apply rounded-[22px] p-[10px] flex flex-col overflow-hidden min-w-[0];
+}
+.header {
+    @apply flex justify-between items-center pt-[8px] px-[10px] pb-[4px];
+}
+.header h2 {
+    @apply m-[0] text-[14px] font-semibold;
+}
+.groups {
+    @apply flex flex-col;
+}
+.group h3 {
+    @apply m-[0] pt-[12px] px-[10px] pb-[4px] font-medium;
+}
+.group ul {
+    @apply m-[0] p-[0];
+    list-style: none;
+    @apply flex flex-col;
+}
+.item {
+    all: unset;
+    @apply relative isolate box-border w-[100%] flex items-center gap-[10px] py-[8px] px-[10px] rounded-[12px] text-foreground cursor-pointer;
+}
+.item:hover {
+    @apply bg-foreground/4 bg-none;
+}
+.item:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+/* Glides between items when the selection changes, so the eye follows the new source. */
+.marker {
+    @apply absolute inset-0 -z-[1] rounded-[inherit] bg-card bg-none;
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--brand-purple) 35%, transparent),
+        0 8px 18px -12px
+        color-mix(in oklab, var(--brand-purple) 60%, transparent);
+}
+.text {
+    @apply flex-[1] flex flex-col gap-[1px] min-w-[0];
+}
+.title {
+    @apply text-[13px] font-medium leading-[1.35];
+}
+.meta[data-tone="counter"] {
+    @apply text-counter-evidence;
+}
+.footer {
+    @apply mt-auto pt-[12px] px-[10px] pb-[6px];
+}

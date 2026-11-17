@@ -2,10 +2,12 @@
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { agentName } from "@convex/domain/agentIdentities";
 import { useNavigate } from "@tanstack/react-router";
-import { useAction, useMutation, useQuery } from "convex/react";
-import { useEffect, useRef, useState } from "react";
-
+import { useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { useState } from "react";
+import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import {
     Empty,
     EmptyDescription,
@@ -13,63 +15,117 @@ import {
     EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EvidenceSufficiencyReview } from "@/components/workspace/evidence-sufficiency-review";
-import { LiveSourceReview } from "@/components/workspace/live-source-review";
+import { EvidenceInventory } from "@/components/workspace/evidence-inventory";
 import { RunProgress } from "@/components/workspace/run-progress";
+import { ConnectedSources } from "@/components/workspace/sources/connected-sources";
 import {
-    WorkspaceNavigationRail,
+    ConnectedStartWorkspace,
+    StartWorkspaceSkeleton,
+} from "@/components/workspace/start/connected-start-workspace";
+import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
+import { sourcesPhasePresentation } from "@/lib/presentation/sources";
+import {
+    type WorkspaceSearch,
     type WorkspaceSection,
-} from "@/components/workspace/workspace-navigation-rail";
+    type WorkspaceSubsection,
+    workspaceSections,
+} from "@/lib/workspace/navigation";
+import { stashWorkbenchDraft } from "@/lib/workspace/workbench-draft";
 
-function decisionKey(prefix: string) {
-    return `${prefix}:${crypto.randomUUID()}`;
+type SourcesSearch = Pick<
+    WorkspaceSearch,
+    "sourcesView" | "source" | "q" | "kind" | "reading" | "use"
+>;
+
+/** Sources content before the mission records preparation, or for dossiers prepared by the retired corpus review. Follows the shared Sources mission state. */
+function sourcesFallbackCopy(
+    run: NonNullable<FunctionReturnType<typeof api.researchRuns.getMine>>,
+) {
+    if (run.lifecycleState === "framing")
+        return {
+            title: "Sources has not started",
+            description:
+                "Documentary preparation starts when you start the research.",
+        };
+    if (!run.sourcesProtocol)
+        return {
+            title: "Sources view unavailable for this dossier",
+            description:
+                "This dossier was prepared with a source review that is no longer available. Start a new analysis to use the current Sources view.",
+        };
+    const presentation = sourcesPhasePresentation(run.sourcesPhase);
+    const state = presentation.workState;
+    if (state === "running" || state === "waiting" || state === "paused")
+        return {
+            title:
+                state === "paused"
+                    ? presentation.title
+                    : "Preparing documentary sources",
+            description: `The ${agentName("sources")} is gathering public documents. Its preparation appears here as soon as discovery returns.`,
+        };
+    return {
+        title: "Documentary preparation stopped",
+        description:
+            "Research stopped before Sources could prepare any material, so there is nothing to inspect here. Start a new analysis to try again.",
+    };
 }
 
 /** Owner-scoped production workspace backed only by reactive Convex state. */
 export function RunRouteComponent({
     runId,
     section,
+    detail,
+    subsection,
+    inventoryOpen = false,
+    onInventoryOpenChange,
+    sourcesSearch = {},
+    onSourcesSearchChange,
 }: {
     runId: Id<"researchRuns">;
     section: WorkspaceSection;
+    detail?: "timeline" | "framing";
+    subsection?: WorkspaceSubsection;
+    inventoryOpen?: boolean;
+    onInventoryOpenChange?: (open: boolean) => void;
+    /** Location within the Sources screens. */
+    sourcesSearch?: SourcesSearch;
+    onSourcesSearchChange?: (patch: SourcesSearch, replace?: boolean) => void;
 }) {
     const navigate = useNavigate();
     const run = useQuery(api.researchRuns.getMine, { runId });
     const events = useQuery(api.researchRuns.listMyEvents, { runId });
-    const decide = useMutation(api.sources.decide);
-    const approve = useMutation(api.sources.approveCorpusRevision);
-    const decideSufficiency = useMutation(api.evidenceSufficiency.decide);
-    const addManualUrl = useAction(api.sourceActions.addManualUrl);
-    const [error, setError] = useState<string | null>(null);
-    const routedToSourceReview = useRef(false);
+    const [localInventoryOpen, setLocalInventoryOpen] = useState(false);
 
-    useEffect(() => {
-        if (run?.lifecycleState !== "awaiting_source_review") {
-            routedToSourceReview.current = false;
-            return;
-        }
-        if (section === "progress" && !routedToSourceReview.current) {
-            routedToSourceReview.current = true;
-            void navigate({
-                to: "/workspace/$runId",
-                params: { runId },
-                search: { section: "sources" },
-                replace: true,
-            });
-        }
-    }, [navigate, run?.lifecycleState, runId, section]);
+    const needsEvents =
+        section !== "progress" ||
+        detail === "timeline" ||
+        (run !== undefined && run !== null && run.startMode !== "framed");
 
-    if (run === undefined || events === undefined) {
+    if (run === undefined || (needsEvents && events === undefined)) {
+        if (section === "progress")
+            return (
+                <div
+                    data-workbench-layout={
+                        detail === "timeline" ? "document" : "viewport"
+                    }
+                    className="flex min-h-0 flex-1 flex-col">
+                    <StartWorkspaceSkeleton
+                        detail={detail}
+                        ariaLabel="Loading research workspace"
+                    />
+                </div>
+            );
         return (
             <div
                 role="status"
-                className="grid gap-4 md:grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)] xl:grid-cols-[minmax(4.25rem,14rem)_minmax(0,1fr)]"
+                className="flex flex-col gap-5"
                 aria-label="Loading research workspace"
                 aria-busy="true">
-                <Skeleton className="h-112" />
-                <div className="space-y-3">
-                    <Skeleton className="h-24" />
-                    <Skeleton className="h-52" />
+                <Skeleton className="h-10 w-full max-w-md" />
+                <Skeleton className="h-8 w-64 max-w-full" />
+                <div className="space-y-4">
+                    <Skeleton className="h-24 rounded-xl" />
+                    <Skeleton className="h-80 rounded-xl" />
                 </div>
             </div>
         );
@@ -89,140 +145,125 @@ export function RunRouteComponent({
         );
     }
 
-    const corpusRevisionId = run.activeCorpusRevisionId;
-    const exaNotConfigured = run.providerFailures.some(
-        ({ service, errorCode }) =>
-            service === "exa" && errorCode === "exa_not_configured",
+    const openSources = () =>
+        void navigate({
+            to: "/workspace/$runId",
+            params: { runId },
+            search: { section: "sources" },
+        });
+
+    if (run.startMode === "framed" && section === "progress")
+        return (
+            <ConnectedStartWorkspace
+                runId={runId}
+                detail={detail}
+                progress={
+                    events ? (
+                        <RunProgress
+                            run={run}
+                            events={events}
+                            onOpenSources={openSources}
+                        />
+                    ) : undefined
+                }
+            />
+        );
+
+    const navigation = (
+        <WorkspaceNavigation
+            runId={runId}
+            section={section}
+            subsection={subsection}
+        />
     );
-    const sourceMode =
-        section === "sources" &&
-        ["awaiting_source_review", "corpus_approved"].includes(
-            run.lifecycleState,
-        ) &&
-        corpusRevisionId !== undefined;
-
-    async function handleAddManualUrl(url: string) {
-        if (!corpusRevisionId) {
-            throw new Error(
-                "The source set is not ready yet. Refresh and try again.",
-            );
-        }
-        await addManualUrl({ runId, corpusRevisionId, url });
-    }
-
-    return (
-        <div className="py-4">
+    const inventory = (
+        <EvidenceInventory
+            runId={runId}
+            open={onInventoryOpenChange ? inventoryOpen : localInventoryOpen}
+            onOpenChange={onInventoryOpenChange ?? setLocalInventoryOpen}
+            expanded={section === "progress"}
+        />
+    );
+    const fallback = sourcesFallbackCopy(run);
+    const generic = (
+        <div className="min-w-0 pb-28 pt-2 sm:pb-36">
+            {navigation}
             <header className="mb-5">
                 <p className="text-micro text-brand-purple">
                     {run.company.ticker} · {run.company.exchange}
                 </p>
-                <h1 className="mt-2 text-2xl font-medium">
-                    {run.company.legalName}
-                </h1>
-            </header>
-            <div className="grid items-start gap-4 md:grid-cols-[auto_minmax(0,1fr)]">
-                <div className="md:sticky md:top-20">
-                    <WorkspaceNavigationRail
-                        runId={runId}
-                        section={section}
-                        lifecycleState={run.lifecycleState}
+                <div className="flex gap-2 items-center mt-2">
+                    <CompanyFaviconAvatar
+                        company={run.company}
+                        size="default"
                     />
+                    <h1 className="text-section text-2xl">
+                        {run.company.legalName}
+                    </h1>
                 </div>
-                <main className="min-w-0">
-                    {error ? (
-                        <p
-                            role="alert"
-                            className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                            {error}
+            </header>
+            <div className="min-w-0">
+                {section === "progress" ? (
+                    <RunProgress
+                        run={run}
+                        events={events ?? []}
+                        onOpenSources={openSources}
+                    />
+                ) : section === "sources" ? (
+                    <div className="surface-panel p-6">
+                        <h2 className="text-section">{fallback.title}</h2>
+                        <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+                            {fallback.description}
                         </p>
-                    ) : null}
-                    {exaNotConfigured &&
-                    run.lifecycleState === "awaiting_source_review" ? (
-                        <p
-                            role="status"
-                            className="mb-4 rounded-lg border border-review/30 bg-review/10 p-3 text-sm text-muted-foreground">
-                            Independent web discovery is unavailable. Filing
-                            sources remain available for review.
+                    </div>
+                ) : (
+                    <div className="rounded-2xl border-[1.5px] border-dashed border-edge-dashed p-6 sm:p-8">
+                        <p className="section-chip mb-5">
+                            {"//"} {section}
                         </p>
-                    ) : null}
-                    {section === "progress" ? (
-                        <>
-                            {run.lifecycleState ===
-                            "awaiting_evidence_sufficiency_review" ? (
-                                <EvidenceSufficiencyReview
-                                    onAddManualUrl={handleAddManualUrl}
-                                    onDecide={async (decision) => {
-                                        await decideSufficiency({
-                                            runId,
-                                            decision,
-                                        });
-                                    }}
-                                />
-                            ) : null}
-                            <RunProgress run={run} events={events} />
-                        </>
-                    ) : sourceMode ? (
-                        <LiveSourceReview
-                            runId={runId}
-                            corpusRevisionId={corpusRevisionId}
-                            onDecide={async (sourceId, nextDecision) => {
-                                setError(null);
-                                try {
-                                    await decide({
-                                        runId,
-                                        corpusRevisionId: corpusRevisionId,
-                                        sourceId,
-                                        decision: nextDecision,
-                                        decisionKey:
-                                            decisionKey("source-decision"),
-                                    });
-                                } catch {
-                                    setError(
-                                        "We couldn't save that source decision. Try again.",
-                                    );
-                                }
-                            }}
-                            onApprove={async () => {
-                                setError(null);
-                                try {
-                                    await approve({
-                                        runId,
-                                        corpusRevisionId: corpusRevisionId,
-                                        decisionKey:
-                                            decisionKey("corpus-approval"),
-                                    });
-                                } catch {
-                                    setError(
-                                        "We couldn't approve this source set. Try again.",
-                                    );
-                                }
-                            }}
-                            onAddManualUrl={handleAddManualUrl}
-                        />
-                    ) : section === "sources" ? (
-                        <div className="surface-panel rounded-xl p-6">
-                            <h2 className="text-lg font-medium">
-                                Source discovery
-                            </h2>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                                {run.lifecycleState === "discovering_sources"
-                                    ? "We’re gathering public sources for your review."
-                                    : "Sources will appear here when discovery is ready."}
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="surface-panel rounded-xl p-6">
-                            <h2 className="text-lg font-medium capitalize">
-                                {section}
-                            </h2>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                                This section opens after you review and approve
-                                the preceding evidence.
-                            </p>
-                        </div>
-                    )}
-                </main>
+                        <h2 className="text-heading">
+                            {section === "investigation"
+                                ? "Investigation"
+                                : "Synthesis"}{" "}
+                            is not available yet
+                        </h2>
+                        <p className="mt-3 max-w-prose text-sm leading-6 text-muted-foreground">
+                            {
+                                workspaceSections.find(
+                                    (item) =>
+                                        item.key === section &&
+                                        "unavailable" in item,
+                                )?.unavailable
+                            }
+                        </p>
+                    </div>
+                )}
             </div>
+            {inventory}
         </div>
+    );
+    if (section !== "sources" || !onSourcesSearchChange) return generic;
+    return (
+        <ConnectedSources
+            runId={runId}
+            run={run}
+            search={sourcesSearch}
+            onSearchChange={onSourcesSearchChange}
+            navigation={navigation}
+            fallback={generic}
+            dock={inventory}
+            onFollowUp={
+                run.startMode === "framed"
+                    ? (draft) => {
+                          stashWorkbenchDraft(runId, draft);
+                          void navigate({
+                              to: "/workspace/$runId",
+                              params: { runId },
+                              search: { section: "progress" },
+                          });
+                      }
+                    : undefined
+            }
+        />
     );
 }

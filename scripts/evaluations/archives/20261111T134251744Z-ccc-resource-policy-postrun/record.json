@@ -1,0 +1,202 @@
+{
+    "schemaVersion": 1,
+    "id": "20261111T134251744Z-ccc-resource-policy-postrun",
+    "createdAt": "2026-11-11T13:42:51.744Z",
+    "git": {
+        "head": "2bd08082a5a94af187276f88b10a1a0a529abd3a",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/native-context-compaction/docs/verification/2026-11-11-resource-policy-ccc-live-qualification.md",
+            "archivePath": "repository/docs/verification/2026-11-11-resource-policy-ccc-live-qualification.md"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/native-context-compaction/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live",
+            "archivePath": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live"
+        }
+    ],
+    "files": [
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/backend-final-state.json",
+            "bytes": 7766,
+            "sha256": "867365270bcdc73974b0b0da5411642820b3bab7dc29ae1c112380489696e5a5"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/environment-restoration.json",
+            "bytes": 584,
+            "sha256": "87f0cc674a629991345969bc2c44fa83d54015800f8cbff8f16a1fc67542cc85"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/exit-status.json",
+            "bytes": 184,
+            "sha256": "fb2e321b6eafb420d9cf6011bd7d243e4080c6a3bbef2261549fe6d4e7b71f1e"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/failure.json",
+            "bytes": 148,
+            "sha256": "5fd978ad4f29cb46e1e3c78edfe4c29a0f7eeac3fbcd68e6e2cdffd1c8b1ff36"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/inspect-postrun.mjs",
+            "bytes": 6817,
+            "sha256": "6e335d038849b7ed1834532abf706996c28956985cf7f2c3832abc9c8029bf9f"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/intent.json",
+            "bytes": 5900,
+            "sha256": "00324776cb4ae4c267b6bc330f843439bf1ff6aae70b279ea5b755697ba9aa71"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/mandate.json",
+            "bytes": 5046,
+            "sha256": "61e1625cffe1c3ef3c4b447b3d47a3af07eaece47d62b8289029dd897dd4feae"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/postrun-observations.json",
+            "bytes": 52337,
+            "sha256": "2edd891ad8a42d8358fd51ac5963796a211b8693fd3701617160e73c1b071b29"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/provider-configuration.json",
+            "bytes": 206,
+            "sha256": "902984eaba5421d7b9354a99ae4b1bc2d4ae51dabcfef41b389a88e4ff0a76d7"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/publication-final-state.json",
+            "bytes": 49,
+            "sha256": "75817c860ac5fa795ccedcfb78a2c87c3001d96fe7a90aca20b6f5a2e40b9c04"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-1.json",
+            "bytes": 10546,
+            "sha256": "9f31c15d67fa73fe9848305bf9a2d24b9f853e65805ba638875b5574dc633d6a"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-10.json",
+            "bytes": 339712,
+            "sha256": "c35a0efcf621b0e8187883a51564046a134ef06e8b197851941b4b13a853d00a"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-11.json",
+            "bytes": 364725,
+            "sha256": "239470ae5ef7baada11bdd4bb2b708e0d6a623fb67febf46f74f0f47a1764bbc"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-12.json",
+            "bytes": 381697,
+            "sha256": "340e8e82800aa2489ab522bac40012746dc7c745810b196078dab83aba7ed0c0"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-13.json",
+            "bytes": 399293,
+            "sha256": "3fbf91eb9939b0ca4d1c88002e340cb6bfb1c3ac1236390a17e8ecdd8171a487"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-14.json",
+            "bytes": 446318,
+            "sha256": "3b3e17b598af98a98be6be57a79fbfc98bed86c96662c31ac64650d993ff1ed4"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-15.json",
+            "bytes": 467460,
+            "sha256": "3e6dc510b4f61d0fa71688c23776a555f7823053949bda45878c16b01857147b"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-16.json",
+            "bytes": 490041,
+            "sha256": "f4571988f6cddd6a924c3c1d89accfe4659566f60a9c4d2050b0cc35fe9633b3"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-17.json",
+            "bytes": 531207,
+            "sha256": "80504c0ae00c6876efadd0e8db27d7e659c483636208f2ae05b8de4c81752142"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-18.json",
+            "bytes": 585492,
+            "sha256": "cea289cddfd200cd72a9ad0435657d19dfd69e3fd580c744e1051ff71012714f"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-19.json",
+            "bytes": 627416,
+            "sha256": "ac795ac572dbbaaf7de19ab21134fe95a690ccc077e10cc44b04d60a8df498f0"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-2.json",
+            "bytes": 15083,
+            "sha256": "e6e69e91daa2541e9fe6540a6ffede24009a5db021e287f085455741435905c0"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-20.json",
+            "bytes": 642077,
+            "sha256": "b15dd593aa2e634ee81c1a82ece41bb5f52ddaed3bdd6ba8ee5a677b52814d66"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-21.json",
+            "bytes": 645633,
+            "sha256": "c32a36a635adff7c08e05071e335a2ca7b005f699f6762d50f78638c34281707"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-22.json",
+            "bytes": 649259,
+            "sha256": "24d6cd5e8d786d4486462589de71dc9078f35325aa4211a57565459e25989b1c"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-3.json",
+            "bytes": 41254,
+            "sha256": "3d028e4480c64ae40256cd3150e5cdceb135a5244db42a33d6b8d61d6042f713"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-4.json",
+            "bytes": 101132,
+            "sha256": "0fac171a55723eddd55f928fcbe77b17cd49f8b875db2756e4a37cd2b76ec66c"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-5.json",
+            "bytes": 151851,
+            "sha256": "4b6ec4382bdfc8ebbab064661e80626ae9b2ad9df9ba614fad8404ab9d7730bf"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-6.json",
+            "bytes": 182481,
+            "sha256": "7ee1a6a799479aa37aeeb08854750d8507e38b64848c5ebfae5f8d068411c42f"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-7.json",
+            "bytes": 253859,
+            "sha256": "2957eb15fd3592dbddca3aceee8b4f2d0eba6c7e9e75b46378af9d999f8d23d3"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-8.json",
+            "bytes": 278170,
+            "sha256": "306f3ae25cdbc75fd4e898cb28d155be2dc0916951facff76fa9c22b8a98a419"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/review-request-9.json",
+            "bytes": 307504,
+            "sha256": "a21618905f1653f6846781fd27e8325e0e74eb22f0bb01b8b68beb9e5e6dbd45"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/run.log",
+            "bytes": 1121,
+            "sha256": "79528bee8b4a180b0060ff4fada3619d6375feec13763c4bc388c012f04227ac"
+        },
+        {
+            "path": "repository/.pi/artifacts/debug/pi-agent/01a1bf9c-dc44-73bd-b062-56e627317efc/resource-policy-live/run.mjs",
+            "bytes": 7956,
+            "sha256": "7d1f3c126e5e82308e31f404e56f318d6a8dc254570c9ec03efc333f022b25e5"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-11-resource-policy-ccc-live-qualification.md",
+            "bytes": 8965,
+            "sha256": "161627517dec4a199b3064066f14d61fa88ca0451dace404741282abda248c7b"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261111T134251744Z-ccc-resource-policy-postrun.tar.gz",
+        "bytes": 1803342,
+        "sha256": "de39990524b04da27f1e8d67a6d2b0981af9baccb7bd6e36f3d4a7579abbbd4c"
+    },
+    "verification": "restored_and_verified"
+}

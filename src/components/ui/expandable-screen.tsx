@@ -209,18 +209,37 @@ interface ExpandableScreenContentProps {
 
 export function ExpandableScreenContent({
     children,
-    className = "",
+    className,
     showCloseButton = true,
-    closeButtonClassName = "",
+    closeButtonClassName,
     closeButtonIcon = Cancel02Icon,
 }: ExpandableScreenContentProps) {
     const { isExpanded, collapse, layoutId, contentRadius, animationDuration } =
         useExpandableScreen();
 
+    useEffect(() => {
+        if (!isExpanded) {
+            return;
+        }
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                collapse();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [isExpanded, collapse]);
+
     return (
         <AnimatePresence initial={false}>
             {isExpanded && (
                 <div
+                    role="dialog"
+                    aria-modal="true"
                     className={`fixed inset-0 ${uiLayerClasses.expandableScreen} flex items-center justify-center p-3 sm:p-2`}>
                     {/* Backdrop overlay */}
                     <motion.div
@@ -229,6 +248,7 @@ export function ExpandableScreenContent({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: animationDuration * 0.4 }}
+                        onClick={collapse}
                     />
                     {/* Morphing background with shared layoutId */}
                     <motion.div
@@ -255,7 +275,7 @@ export function ExpandableScreenContent({
                         {showCloseButton && (
                             <motion.button
                                 onClick={collapse}
-                                className={`absolute right-6 top-6 z-30 flex h-10 w-10 items-center justify-center transition-colors rounded-full ${
+                                className={`absolute right-4 top-4 z-30 flex h-10 w-10 items-center justify-center transition-colors rounded-full ${
                                     closeButtonClassName ||
                                     "text-foreground bg-transparent hover:bg-foreground/10"
                                 }`}

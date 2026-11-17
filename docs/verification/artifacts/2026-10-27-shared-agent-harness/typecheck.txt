@@ -1,0 +1,4 @@
+
+> agentic-resilience-workbench@ typecheck /home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/harnais-architecture
+> tsc --noEmit && tsc --noEmit -p convex/tsconfig.json
+

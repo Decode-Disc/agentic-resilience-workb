@@ -1,16 +1,27 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { api } from "@convex/_generated/api";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-const { claimInvitation, navigate, useAction, useAnonymousSession, useQuery } =
+const { claimInvitation, navigate, retrySession, useAnonymousSession } =
     vi.hoisted(() => ({
         claimInvitation: vi.fn(),
         navigate: vi.fn(),
-        useAction: vi.fn(),
+        retrySession: vi.fn(),
         useAnonymousSession: vi.fn(),
-        useQuery: vi.fn(),
     }));
 
-vi.mock(import("convex/react"), () => ({ useAction, useQuery }));
+vi.mock("convex/react", async () => {
+    const { convexReactHarness } = await import(
+        "@/__tests__/helpers/convex-react-harness"
+    );
+    return convexReactHarness.module;
+});
 vi.mock(import("@tanstack/react-router"), async (importOriginal) => {
     const router = await importOriginal();
     return {
@@ -24,6 +35,7 @@ vi.mock(import("@tanstack/react-router"), async (importOriginal) => {
 });
 vi.mock("@/hooks/use-anonymous-session", () => ({ useAnonymousSession }));
 
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
 import { ProtectedWorkspaceRoute } from "@/components/workspace/protected-workspace-route";
 
@@ -31,19 +43,20 @@ describe("ProtectedWorkspaceRoute", () => {
     beforeEach(() => {
         claimInvitation.mockReset();
         navigate.mockReset();
-        useAction.mockReset();
-        useAction.mockReturnValue(claimInvitation);
+        retrySession.mockReset();
+        convexReactHarness.reset();
+        convexReactHarness.action(api.invitations.claim).uses(claimInvitation);
         useAnonymousSession.mockReset();
         useAnonymousSession.mockReturnValue({
             isSessionLoading: false,
             isSessionReady: true,
             sessionError: null,
+            retrySession,
         });
-        useQuery.mockReset();
     });
 
     test("withholds protected content and opens admission for an anonymous visitor", () => {
-        useQuery.mockReturnValue(null);
+        convexReactHarness.query(api.visitors.current).returns(null);
 
         render(
             <InvitationAccessProvider>
@@ -52,13 +65,45 @@ describe("ProtectedWorkspaceRoute", () => {
         );
 
         expect(screen.queryByText("Protected route content")).toBeNull();
+        expect(document.getElementById("invitation-code")).not.toBeNull();
+    });
+
+    test("resolves a stale admission when the visitor becomes active without cancelling navigation", async () => {
+        const visitor = convexReactHarness.query(api.visitors.current);
+        visitor.returns(null);
+        const { rerender } = render(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
         expect(
-            screen.getByRole("heading", { name: /Protected access/i }),
+            screen.getByRole("form", { name: "Workspace access" }),
         ).toBeTruthy();
+        visitor.returns({
+            _id: "visitor-analyst",
+            role: "analyst",
+            status: "active",
+        } as never);
+        rerender(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("form", { name: "Workspace access" }),
+            ).toBeNull(),
+        );
+        expect(screen.getByText("Protected route content")).toBeTruthy();
+        expect(navigate).not.toHaveBeenCalledWith({ to: "/workspace/start" });
+        expect(navigate).not.toHaveBeenCalled();
+        expect(claimInvitation).not.toHaveBeenCalled();
     });
 
     test("renders protected content for an active visitor", () => {
-        useQuery.mockReturnValue({ role: "analyst", status: "active" });
+        convexReactHarness
+            .query(api.visitors.current)
+            .returns({ role: "analyst", status: "active" } as never);
 
         render(
             <InvitationAccessProvider>
@@ -73,7 +118,7 @@ describe("ProtectedWorkspaceRoute", () => {
     });
 
     test("sends an admitted analyst to the dossiers page", async () => {
-        useQuery.mockReturnValue(null);
+        convexReactHarness.query(api.visitors.current).returns(null);
         claimInvitation.mockResolvedValue({
             visitorId: "visitor-analyst",
             role: "analyst",
@@ -85,17 +130,63 @@ describe("ProtectedWorkspaceRoute", () => {
             </InvitationAccessProvider>,
         );
 
-        fireEvent.change(screen.getByLabelText(/Access code/i), {
+        const accessCodeForm = screen.getByRole("form", {
+            name: /Workspace access/i,
+        });
+        fireEvent.change(within(accessCodeForm).getByRole("textbox"), {
             target: { value: "4207" },
         });
-        fireEvent.submit(
-            screen.getByRole("form", { name: /Workspace access/i }),
-        );
+        fireEvent.submit(accessCodeForm);
 
         await waitFor(() =>
-            expect(navigate).toHaveBeenCalledWith({
+            expect(navigate).toHaveBeenLastCalledWith({
                 to: "/workspace/dossiers",
             }),
         );
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("form", { name: /Workspace access/i }),
+            ).toBeNull(),
+        );
+        expect(navigate).not.toHaveBeenCalledWith({ to: "/workspace/start" });
+    });
+
+    test("retries anonymous session preparation", () => {
+        useAnonymousSession.mockReturnValue({
+            isSessionLoading: false,
+            isSessionReady: false,
+            sessionError: "We couldn't prepare the private workspace.",
+            retrySession,
+        });
+
+        render(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
+
+        expect(retrySession).toHaveBeenCalledOnce();
+    });
+
+    test("recovers when the visitor query fails", () => {
+        const consoleError = vi
+            .spyOn(console, "error")
+            .mockImplementation(() => undefined);
+        const visitorQuery = convexReactHarness.query(api.visitors.current);
+        visitorQuery.throws(new Error("Visitor query failed"));
+
+        render(
+            <InvitationAccessProvider>
+                <ProtectedWorkspaceRoute />
+            </InvitationAccessProvider>,
+        );
+
+        visitorQuery.returns({ role: "analyst", status: "active" } as never);
+        fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
+
+        expect(screen.getByText("Protected route content")).toBeTruthy();
+        consoleError.mockRestore();
     });
 });

@@ -1,0 +1,38 @@
+
+> agentic-resilience-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/convex/execution/workbench-native-interface.test.ts -t 'a slash command'"'"'s exact receipt' --environment=node --maxWorkers=1 --testTimeout=30000
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/convex/execution/workbench-native-interface.test.ts (19 tests | 1 failed | 18 skipped) 1020ms
+   × a slash command's exact receipt enters the next native request once, without its own generation 1018ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/convex/execution/workbench-native-interface.test.ts > a slash command's exact receipt enters the next native request once, without its own generation
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/__tests__/convex/execution/workbench-native-interface.test.ts:1035:92
+    1033|     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1…
+    1034|     expect(payloads).toHaveLength(2);
+    1035|     expect(payloads[1]?.messages.filter(m => m.role === "user" && m.co…
+       |                                                                                            ^
+    1036|     expect(payloads[1]?.messages.filter(m => m.role === "assistant" &&…
+    1037|     expect(await t.run(ctx => ctx.db.query("piSessions").first())).toM…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 skipped (19)
+   Start at  21:07:39
+   Duration  3.11s (transform 1.39s, setup 167ms, import 1.76s, tests 1.02s, environment 0ms)
+
+ ELIFECYCLE  Test failed. See above for more details.

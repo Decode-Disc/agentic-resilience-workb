@@ -3,12 +3,43 @@ import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 import workflowTest from "../workflows/workflow-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 const originalFetch = globalThis.fetch;
 const originalSecUserAgent = process.env.SEC_USER_AGENT;
+
+test("invalid preparation concurrency rejects launch before reserving quota or calling providers", async () => {
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
+    vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "0");
+    try {
+        const t = convexTest(schema, modules);
+        workflowTest.register(t);
+        const { userId, preflightId } = await createAdmittedPreflight(t);
+        const request = vi.fn<typeof fetch>(async () => {
+            throw new Error("Unexpected provider call");
+        });
+        globalThis.fetch = request;
+        await expect(
+            t.withIdentity({ subject: userId }).action(confirmAndStart, {
+                preflightId,
+                idempotencyKey: "invalid-concurrency",
+                coveragePreset: "balanced",
+            }),
+        ).rejects.toThrow("preparation_configuration_invalid");
+        expect(
+            await t.run((ctx) => ctx.db.query("researchRuns").take(1)),
+        ).toEqual([]);
+        expect(
+            await t.run((ctx) => ctx.db.query("visitors").first()),
+        ).toMatchObject({ analysesReserved: 0 });
+        expect(request).not.toHaveBeenCalled();
+    } finally {
+        vi.unstubAllEnvs();
+    }
+});
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -33,6 +64,7 @@ const confirmAndStart = makeFunctionReference<
             | "first_party_depth"
             | "independent_scrutiny";
         researchAngle?: string;
+        manualSourcePreparationIds?: Array<Id<"manualSourcePreparations">>;
     },
     { runId: Id<"researchRuns">; remainingAnalyses: number }
 >("researchLaunch:confirmAndStart");
@@ -42,22 +74,10 @@ const confirmAndStartReserved = makeFunctionReference<
         preflightId: Id<"companyPreflights">;
         idempotencyKey: string;
         coveragePreset: "balanced";
-        manualSources: Array<{
-            canonicalUrl: string;
-            title: string;
-            providerReference: string;
-        }>;
+        manualSourcePreparationIds: Array<Id<"manualSourcePreparations">>;
     },
     { runId: Id<"researchRuns">; remainingAnalyses: number }
 >("researchLaunch:confirmAndStartReserved");
-const authorizeLaunchPreparation = makeFunctionReference<
-    "query",
-    {
-        preflightId: Id<"companyPreflights">;
-        idempotencyKey: string;
-    },
-    { shouldPrepareManualSources: boolean }
->("researchLaunch:authorizeLaunchPreparation");
 const getRun = makeFunctionReference<
     "query",
     { runId: Id<"researchRuns"> },
@@ -100,49 +120,6 @@ const decideSufficiency = makeFunctionReference<
     },
     { accepted: boolean }
 >("evidenceSufficiency:decide");
-
-async function createAdmittedPreflight(
-    t: ReturnType<typeof convexTest>,
-): Promise<{
-    userId: Id<"users">;
-    preflightId: Id<"companyPreflights">;
-}> {
-    return t.run(async (ctx) => {
-        const userId = await ctx.db.insert("users", { isAnonymous: true });
-        const invitationId = await ctx.db.insert("invitations", {
-            slotKey: "analyst-1",
-            role: "analyst",
-            codeDigest: "launch-test-digest",
-            status: "claimed",
-            createdAt: 1,
-        });
-        const visitorId = await ctx.db.insert("visitors", {
-            authUserId: userId,
-            invitationId,
-            role: "analyst",
-            status: "active",
-            analysesReserved: 0,
-            admittedAt: 1,
-        });
-        const companyId = await ctx.db.insert("companies", {
-            cik: "1818201",
-            legalName: "CCC Intelligent Solutions Holdings Inc.",
-            ticker: "CCCS",
-            exchange: "NASDAQ",
-            canonicalizedAt: Date.now(),
-        });
-        const preflightId = await ctx.db.insert("companyPreflights", {
-            ownerVisitorId: visitorId,
-            query: "CCCS",
-            companyId,
-            resolverVersion: "sec-company-v1",
-            status: "resolved",
-            expiresAt: Date.now() + 60_000,
-            createdAt: Date.now(),
-        });
-        return { userId, preflightId };
-    });
-}
 
 test("confirms a preflight and starts workflow version 2 once", async () => {
     const t = convexTest(schema, modules);
@@ -215,18 +192,25 @@ test("persists validated launch references as pending sources in corpus revision
     const analyst = t.withIdentity({
         subject: `${userId}|launch-reference-session`,
     });
+    const preparationId = await t.run((ctx) =>
+        ctx.db.insert("manualSourcePreparations", {
+            ownerAuthUserId: userId,
+            collectionKey: "research-composer",
+            requestKey: "public-report",
+            inputDigest: "public-report-digest",
+            canonicalUrl: "https://example.com/public-report",
+            title: "Public report",
+            providerReference: "launch_url_metadata:public-report",
+            expiresAt: Date.now() + 60_000,
+            createdAt: Date.now(),
+        }),
+    );
 
     const { runId } = await analyst.mutation(confirmAndStartReserved, {
         preflightId,
         idempotencyKey: "launch-with-public-reference",
         coveragePreset: "balanced",
-        manualSources: [
-            {
-                canonicalUrl: "https://example.com/public-report",
-                title: "Public report",
-                providerReference: "launch_url_metadata:public-report",
-            },
-        ],
+        manualSourcePreparationIds: [preparationId],
     });
 
     const persisted = await t.run(async (ctx) => {
@@ -253,7 +237,8 @@ test("persists validated launch references as pending sources in corpus revision
                 ),
             )
             .collect();
-        return { sources, decisions, reviewItems };
+        const preparation = await ctx.db.get(preparationId);
+        return { sources, decisions, reviewItems, preparation };
     });
 
     expect(persisted.sources).toEqual([
@@ -277,29 +262,172 @@ test("persists validated launch references as pending sources in corpus revision
             decisionRank: 0,
         }),
     ]);
+    expect(persisted.preparation).toMatchObject({
+        consumedAt: expect.any(Number),
+    });
 });
 
-test("skips manual source preparation when the launch key already owns a run", async () => {
+test("replays a launch after its preparation receipt was consumed", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
+    const preparationId = await t.run((ctx) =>
+        ctx.db.insert("manualSourcePreparations", {
+            ownerAuthUserId: userId,
+            collectionKey: "research-composer",
+            requestKey: "replay-report",
+            inputDigest: "replay-report-digest",
+            canonicalUrl: "https://example.com/replay-report",
+            title: "Replay report",
+            providerReference: "launch_url_metadata:replay-report",
+            expiresAt: Date.now() + 60_000,
+            createdAt: Date.now(),
+        }),
+    );
     const analyst = t.withIdentity({
-        subject: `${userId}|launch-preparation-session`,
+        subject: `${userId}|receipt-replay-session`,
     });
-
-    await analyst.action(confirmAndStart, {
+    const args = {
         preflightId,
-        idempotencyKey: "already-prepared-launch",
-        coveragePreset: "balanced",
+        idempotencyKey: "launch-with-consumed-reference",
+        coveragePreset: "balanced" as const,
+        manualSourcePreparationIds: [preparationId],
+    };
+
+    const first = await analyst.action(confirmAndStart, args);
+    const replay = await analyst.action(confirmAndStart, args);
+
+    expect(replay).toEqual(first);
+    await expect(
+        t.run(async (ctx) => ({
+            runs: await ctx.db.query("researchRuns").collect(),
+            sources: await ctx.db.query("sources").collect(),
+            visitor: await ctx.db
+                .query("visitors")
+                .withIndex("by_auth_user_id", (query) =>
+                    query.eq("authUserId", userId),
+                )
+                .unique(),
+        })),
+    ).resolves.toMatchObject({
+        runs: [expect.objectContaining({ _id: first.runId })],
+        sources: [
+            expect.objectContaining({
+                canonicalUrl: "https://example.com/replay-report",
+            }),
+        ],
+        visitor: { analysesReserved: 1 },
+    });
+});
+
+test("rejects an expired launch preparation without creating a run or reserving quota", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
+    workflowTest.register(t);
+    const { userId, preflightId } = await createAdmittedPreflight(t);
+    const preparationId = await t.run((ctx) =>
+        ctx.db.insert("manualSourcePreparations", {
+            ownerAuthUserId: userId,
+            collectionKey: "research-composer",
+            requestKey: "expired-report",
+            inputDigest: "expired-report-digest",
+            canonicalUrl: "https://example.com/expired-report",
+            title: "Expired report",
+            providerReference: "launch_url_metadata:expired-report",
+            expiresAt: Date.now() - 1,
+            createdAt: Date.now() - 60_000,
+        }),
+    );
+    const analyst = t.withIdentity({
+        subject: `${userId}|expired-preparation-session`,
     });
 
     await expect(
-        analyst.query(authorizeLaunchPreparation, {
+        analyst.action(confirmAndStart, {
             preflightId,
-            idempotencyKey: "already-prepared-launch",
+            idempotencyKey: "launch-with-expired-reference",
+            coveragePreset: "balanced",
+            manualSourcePreparationIds: [preparationId],
         }),
-    ).resolves.toEqual({ shouldPrepareManualSources: false });
+    ).rejects.toMatchObject({
+        data: {
+            code: "preparation_expired",
+            retryable: false,
+            preparationId,
+        },
+    });
+
+    await expect(
+        t.run(async (ctx) => ({
+            runs: await ctx.db.query("researchRuns").collect(),
+            visitor: await ctx.db
+                .query("visitors")
+                .withIndex("by_auth_user_id", (query) =>
+                    query.eq("authUserId", userId),
+                )
+                .unique(),
+        })),
+    ).resolves.toMatchObject({
+        runs: [],
+        visitor: { analysesReserved: 0 },
+    });
+});
+
+test("rejects a foreign launch preparation without creating a run or reserving quota", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
+    workflowTest.register(t);
+    const { userId, preflightId } = await createAdmittedPreflight(t);
+    const preparationId = await t.run(async (ctx) => {
+        const otherUserId = await ctx.db.insert("users", {
+            isAnonymous: true,
+        });
+        return ctx.db.insert("manualSourcePreparations", {
+            ownerAuthUserId: otherUserId,
+            collectionKey: "research-composer",
+            requestKey: "foreign-report",
+            inputDigest: "foreign-report-digest",
+            canonicalUrl: "https://example.com/foreign-report",
+            title: "Foreign report",
+            providerReference: "launch_url_metadata:foreign-report",
+            expiresAt: Date.now() + 60_000,
+            createdAt: Date.now(),
+        });
+    });
+    const analyst = t.withIdentity({
+        subject: `${userId}|foreign-preparation-session`,
+    });
+
+    await expect(
+        analyst.action(confirmAndStart, {
+            preflightId,
+            idempotencyKey: "launch-with-foreign-reference",
+            coveragePreset: "balanced",
+            manualSourcePreparationIds: [preparationId],
+        }),
+    ).rejects.toMatchObject({
+        data: {
+            code: "not_authorized",
+            retryable: false,
+            preparationId,
+        },
+    });
+
+    await expect(
+        t.run(async (ctx) => ({
+            runs: await ctx.db.query("researchRuns").collect(),
+            visitor: await ctx.db
+                .query("visitors")
+                .withIndex("by_auth_user_id", (query) =>
+                    query.eq("authUserId", userId),
+                )
+                .unique(),
+        })),
+    ).resolves.toMatchObject({
+        runs: [],
+        visitor: { analysesReserved: 0 },
+    });
 });
 
 test("adopts a pre-admission preflight for the admitted session", async () => {

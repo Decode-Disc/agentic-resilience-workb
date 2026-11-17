@@ -23,6 +23,7 @@
     "menuAccent": "subtle",
     "registries": {
         "@acme": "https://acme.com/r/{name}.json",
-        "@cult-ui": "https://cult-ui.com/r/{name}.json"
+        "@assistant-ui": "https://r.assistant-ui.com/styles/{style}/{name}.json",
+        "@pastaui": "https://pastaui.com/r/{name}.json"
     }
 }

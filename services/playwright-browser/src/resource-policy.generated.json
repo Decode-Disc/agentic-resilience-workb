@@ -1,0 +1,14 @@
+{
+    "maxConcurrentRenders": 3,
+    "renderTimeoutMs": 30000,
+    "navigationTimeoutMs": 15000,
+    "callerTimeoutMs": 35000,
+    "maxRedirects": 5,
+    "maxResponseBytes": 10485760,
+    "maxConnections": 128,
+    "maxRequests": 256,
+    "maxTransferredBytes": 33554432,
+    "requestBodyBytes": 10240,
+    "keepAliveTimeoutMs": 35000,
+    "headersTimeoutMs": 36000
+}

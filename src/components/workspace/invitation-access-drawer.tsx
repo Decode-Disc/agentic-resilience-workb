@@ -60,7 +60,6 @@ export function InvitationAccessDrawer({
             const admission = await claimInvitation({ code: normalizedCode });
             await onAdmitted(admission);
             setCode("");
-            onOpenChange(false);
         } catch (caughtError) {
             setError(accessCodeErrorMessage(caughtError));
         } finally {
@@ -114,7 +113,7 @@ export function InvitationAccessDrawer({
                                     <InputOTPSlot
                                         key={`invitation-otp-${slot}`}
                                         index={slot}
-                                        className="size-14 font-mono text-2xl"
+                                        className="size-16 font-mono text-2xl"
                                     />
                                 ))}
                             </InputOTPGroup>

@@ -1,0 +1,78 @@
+{
+  "reason": "Zero-inference preparation drafts archived outside the authoritative fixture to avoid duplicate payloads and stale source selection; ready is the only executable frozen run.",
+  "runs": [
+    {
+      "name": "complete-reference-check",
+      "manifestFileSha256": "6b2555f32a36bef2482dd09ceebea115a1dc0f7e13c6ddacff1061930570c138",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/complete-reference-check"
+    },
+    {
+      "name": "contract-inspection",
+      "manifestFileSha256": "24d7d7ff7634937b57cd39c3333f591ddddb058899ba7a4f996f21385814c50d",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/contract-inspection"
+    },
+    {
+      "name": "evidence-inspection",
+      "manifestFileSha256": "63b459a336fb612aa8240d5643a87e34ad4d1ca82d00774f8d3ff15286be7027",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/evidence-inspection"
+    },
+    {
+      "name": "input-inspection",
+      "manifestFileSha256": "cdcd031cdc76f6ee668c60aa0a122dddc16f3439984724a9f7dbff4a70df8bfd",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/input-inspection"
+    },
+    {
+      "name": "judgments-inputs",
+      "manifestFileSha256": "86c1b3622304129fceb446e1bfa7f505116a50796f896520033b418a1a7fc1cc",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/judgments-inputs"
+    },
+    {
+      "name": "minimized-company-context",
+      "manifestFileSha256": "ff31ed751c44f7528d4de5452a46004aa4e36841b4ebf9b3802a1d044fe7af02",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/minimized-company-context"
+    },
+    {
+      "name": "reference-citation-contract",
+      "manifestFileSha256": "f8e7f38adec56ca74bbcbafd715fc008a4dbfe99b6e4d462f1ea2206c56961a8",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/reference-citation-contract"
+    },
+    {
+      "name": "reference-contract",
+      "manifestFileSha256": "802fe91053b4c73a12d9ff907e3a046a7b85e5ca86b2a4cd461aeb28276b9c2e",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/reference-contract"
+    },
+    {
+      "name": "reference-input-freeze",
+      "manifestFileSha256": "6c6475b1eb1647a84d13347691053b082abd1dda6428181f62fc3278b12f15ca",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/reference-input-freeze"
+    },
+    {
+      "name": "reference-validated-citations",
+      "manifestFileSha256": "071ece09921edb30d7b7167c1a6ec52727fa28acff2e56fcbf3faf6054e892fb",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/reference-validated-citations"
+    },
+    {
+      "name": "unlabelled-final-inputs",
+      "manifestFileSha256": "f9300228f3d1ea3b40136713c5b40f6942fedebef906d98c8f21268c63a66f94",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/unlabelled-final-inputs"
+    },
+    {
+      "name": "ready-before-worker-settlement",
+      "manifestFileSha256": "a1a7e0282640dc2cae671b572bc5830089247db1e09c2378a620454d24cd2bc1",
+      "inferenceAttempts": 0,
+      "archive": "/tmp/source-quality-comparison-20261020/draft-manifests/ready-before-worker-settlement",
+      "reason": "Code-only executor completion fix after offline review; provider inputs unchanged"
+    }
+  ]
+}

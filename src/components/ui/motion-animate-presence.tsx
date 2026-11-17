@@ -11,6 +11,7 @@ import {
 } from "motion/react";
 import type React from "react";
 import { useRef } from "react";
+import { useMediaQuery } from "@/hooks/use-responsive";
 
 export type AnimatePresenceMode = "sync" | "wait" | "popLayout";
 
@@ -25,7 +26,8 @@ export type AnimationPreset =
     | "zoom"
     | "blur"
     | "flip-x"
-    | "flip-y";
+    | "flip-y"
+    | "shrink-pop";
 
 export interface PresetDefinition {
     initial: TargetAndTransition;
@@ -110,6 +112,12 @@ export const MOTION_PRESETS: Record<
         exit: { opacity: 0, rotateY: -90 },
         transition: { duration: 0.4, ease: defaultEase },
     },
+    "shrink-pop": {
+        initial: { opacity: 0, scale: 0.85 },
+        animate: { opacity: 1, scale: 1 },
+        exit: { opacity: 0, scale: 0.85 },
+        transition: { duration: 0.22, ease: [0.32, 0.72, 0, 1] },
+    },
 };
 
 export function registerMotionPreset(
@@ -123,7 +131,7 @@ export interface MotionAnimatePresenceProps
     extends Omit<HTMLMotionProps<"div">, "children" | "mode"> {
     children?: React.ReactNode;
     mode?: AnimatePresenceMode;
-    preset?: AnimationPreset | (string & {});
+    preset?: AnimationPreset | PresetDefinition | (string & {});
     presetMap?: Record<string, PresetDefinition>;
     infinite?: boolean;
     show?: boolean;
@@ -159,6 +167,9 @@ export function MotionAnimatePresence({
     ...restProps
 }: MotionAnimatePresenceProps) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const shouldReduceMotion = useMediaQuery(
+        "(prefers-reduced-motion: reduce)",
+    );
     const isInView = useInView(containerRef, {
         once: !infinite,
         margin: viewportMargin,
@@ -166,23 +177,34 @@ export function MotionAnimatePresence({
         initial: true,
     });
 
-    const selectedPreset = presetMap[preset] || MOTION_PRESETS.scale;
+    const selectedPreset: PresetDefinition =
+        typeof preset === "object" && preset !== null
+            ? preset
+            : presetMap[preset as string] || MOTION_PRESETS.scale;
 
-    const initial = customInitial ?? selectedPreset.initial;
-    const animateConfig = customAnimate ?? selectedPreset.animate;
-    const exit = customExit ?? selectedPreset.exit;
+    const initial = shouldReduceMotion ? false : customInitial;
+    const animateConfig = shouldReduceMotion
+        ? { opacity: 1 }
+        : (customAnimate ?? selectedPreset.animate);
+    const exit = shouldReduceMotion
+        ? { opacity: 0 }
+        : (customExit ?? selectedPreset.exit);
 
     let transition: Transition = {
         ...selectedPreset.transition,
         ...customTransition,
     };
 
-    if (duration !== undefined) {
-        transition.duration = duration;
-    }
+    if (shouldReduceMotion) {
+        transition = { duration: 0 };
+    } else {
+        if (duration !== undefined) {
+            transition.duration = duration;
+        }
 
-    if (delay !== undefined) {
-        transition.delay = delay;
+        if (delay !== undefined) {
+            transition.delay = delay;
+        }
     }
 
     if (
@@ -220,7 +242,7 @@ export function MotionAnimatePresence({
             ref={containerRef}
             className={wrapperClassName}
             style={wrapperStyle}>
-            <AnimatePresence mode={mode}>
+            <AnimatePresence mode={mode} initial={false}>
                 {isVisible && (
                     <motion.div
                         key={

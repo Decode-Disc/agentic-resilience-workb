@@ -1,0 +1,74 @@
+{
+    "schemaVersion": 1,
+    "id": "20261025T095226323Z-qualification-consistency-diagnosis",
+    "createdAt": "2026-10-25T09:52:26.323Z",
+    "git": {
+        "head": "1a22469b3e0bc0494aebcfa92506aee049578c7a",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/sourceQualification.ts",
+            "archivePath": "repository/convex/domain/sourceQualification.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/sourceSelectionPolicy.ts",
+            "archivePath": "repository/convex/domain/sourceSelectionPolicy.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/sourceQualification.ts",
+            "archivePath": "repository/convex/integrations/sourceQualification.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/sourcePreparation.ts",
+            "archivePath": "repository/convex/sourcePreparation.ts"
+        },
+        {
+            "origin": "/tmp/preparation-consistency-20261025",
+            "archivePath": "external/consistency"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/consistency/provenance.json",
+            "bytes": 474,
+            "sha256": "99cd3f43a81fdc81f86ad75a25a4a6a1ac5897d486562b4eded37546c7f1b302"
+        },
+        {
+            "path": "external/consistency/replay.json",
+            "bytes": 278065,
+            "sha256": "c1e92036a9d0c49db1aa7519a4d06d31c0b0ca8d4e27c7bbeda9e3c6d9aa7873"
+        },
+        {
+            "path": "external/consistency/replay.mjs",
+            "bytes": 3639,
+            "sha256": "926ae68cfd1dcb06f95cb1d1647a3f1226aee0c42e669d28a18beb67909f9379"
+        },
+        {
+            "path": "repository/convex/domain/sourceQualification.ts",
+            "bytes": 22634,
+            "sha256": "79b8db00b778f20fde25ec6758efc6435901b99ced05cc1850752aeb8faa5b70"
+        },
+        {
+            "path": "repository/convex/domain/sourceSelectionPolicy.ts",
+            "bytes": 82642,
+            "sha256": "18a03b111dacbbfa546e97b183fa65670aefed917316e20b7e0a78eb0932db08"
+        },
+        {
+            "path": "repository/convex/integrations/sourceQualification.ts",
+            "bytes": 14067,
+            "sha256": "7480331672c13b1c6fe5630f7c15a72c750cafbea510db2f0312cafca88d0434"
+        },
+        {
+            "path": "repository/convex/sourcePreparation.ts",
+            "bytes": 91719,
+            "sha256": "f84b0f1cb060c0cdc054364b015e4c656c37322ac889896ae8df6903ce9b1b16"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261025T095226323Z-qualification-consistency-diagnosis.tar.gz",
+        "bytes": 48886,
+        "sha256": "40bf0343ac4585f761743e76394dd5dd996ab7d692a6037cb0a74262d2bc258c"
+    },
+    "verification": "restored_and_verified"
+}

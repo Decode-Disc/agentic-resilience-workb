@@ -1,0 +1,36 @@
+
+> agentic-resilience-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/convex/admin/model-configuration.test.ts --environment=node --maxWorkers=1 -t 'Workbench default must'
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/convex/admin/model-configuration.test.ts (13 tests | 1 failed | 12 skipped) 1161ms
+   × a Workbench default must be eligible for dossier selection 1159ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/convex/admin/model-configuration.test.ts > a Workbench default must be eligible for dossier selection
+AssertionError: promise resolved "{ revision: 1 }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "revision": 1,
+  }
+
+ ❯ src/__tests__/convex/admin/model-configuration.test.ts:479:160
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 skipped (13)
+   Start at  23:05:33
+   Duration  3.21s (transform 1.54s, setup 342ms, import 1.38s, tests 1.16s, environment 0ms)
+
+ ELIFECYCLE  Test failed. See above for more details.

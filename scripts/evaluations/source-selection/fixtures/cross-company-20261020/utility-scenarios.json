@@ -1,0 +1,111 @@
+{
+  "version": "source-utility-v1",
+  "basis": "Recorded public captures and exact historical qualifications. No live discovery or new model output.",
+  "historicalModel": "deepseek/deepseek-v4.1-flash",
+  "scenarios": [
+    {
+      "id": "adobe-overview",
+      "companyId": "adobe",
+      "kind": "overview",
+      "researchAngle": "",
+      "suppliedDocumentId": null,
+      "analystNeeds": [
+        "Understand the product portfolio and reported business context.",
+        "Locate an external perspective without treating it as verified fact."
+      ],
+      "knownLimit": "The annual qualification failed in the recorded run. Do not replace it with another model result.",
+      "mobile": true
+    },
+    {
+      "id": "crowdstrike-overview",
+      "companyId": "crowdstrike",
+      "kind": "overview",
+      "researchAngle": "",
+      "suppliedDocumentId": null,
+      "analystNeeds": [
+        "Locate business and platform descriptions.",
+        "Inspect the disclosed incident and its limits."
+      ],
+      "knownLimit": "A single incident does not establish a general architectural conclusion.",
+      "mobile": false
+    },
+    {
+      "id": "nvidia-architecture",
+      "companyId": "nvidia",
+      "kind": "targeted",
+      "researchAngle": "How do compute, networking and software integrate in the platform?",
+      "suppliedDocumentId": null,
+      "analystNeeds": [
+        "Find technical descriptions of platform integration.",
+        "Distinguish advertised capabilities from demonstrated operational control."
+      ],
+      "knownLimit": "Product descriptions establish the stated offering, not customer outcomes.",
+      "mobile": true
+    },
+    {
+      "id": "snowflake-architecture",
+      "companyId": "snowflake",
+      "kind": "targeted",
+      "researchAngle": "How are storage, compute, services and integrations connected?",
+      "suppliedDocumentId": null,
+      "analystNeeds": [
+        "Locate architectural layers and integration documentation.",
+        "Separate current architecture from forecasts about future agent workflows."
+      ],
+      "knownLimit": "Documentation cannot verify future adoption or economic outcomes.",
+      "mobile": false
+    },
+    {
+      "id": "adobe-terms",
+      "companyId": "adobe",
+      "kind": "supplied_reference",
+      "researchAngle": "What do the supplied terms establish about commercial use and obligations?",
+      "suppliedDocumentId": "adobe-terms",
+      "analystNeeds": [
+        "Keep the supplied terms accessible for review.",
+        "Identify the scope of the agreement and unsupported claims about indemnification."
+      ],
+      "knownLimit": "General terms do not prove Firefly-specific indemnification.",
+      "mobile": false
+    },
+    {
+      "id": "snowflake-quarter",
+      "companyId": "snowflake",
+      "kind": "supplied_reference",
+      "researchAngle": "What revenue and comparison period does the supplied quarterly report establish?",
+      "suppliedDocumentId": "snowflake-quarterly",
+      "analystNeeds": [
+        "Keep the supplied quarterly filing accessible.",
+        "Inspect reporting dates, units and comparative values together."
+      ],
+      "knownLimit": "The historical retrieval missed the expected quarterly revenue table.",
+      "mobile": true
+    },
+    {
+      "id": "nvidia-uncertainty",
+      "companyId": "nvidia",
+      "kind": "uncertain",
+      "researchAngle": "What evidence supports or limits the argument that platform integration creates switching costs?",
+      "suppliedDocumentId": null,
+      "analystNeeds": [
+        "Retain the external argument with attribution.",
+        "Inspect relevant licensing context and disclose the missing causal evidence."
+      ],
+      "knownLimit": "Licensing clauses and integration descriptions do not by themselves establish switching costs.",
+      "mobile": false
+    },
+    {
+      "id": "crowdstrike-uncertainty",
+      "companyId": "crowdstrike",
+      "kind": "uncertain",
+      "researchAngle": "What evidence supports the claim that platform consolidation increases AI operational authority?",
+      "suppliedDocumentId": null,
+      "analystNeeds": [
+        "Retain useful analysis and incident context.",
+        "Identify what remains unproven about delegated AI authority."
+      ],
+      "knownLimit": "File-processing terms and a software incident do not establish AI delegation.",
+      "mobile": true
+    }
+  ]
+}

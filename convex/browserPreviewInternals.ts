@@ -1,0 +1,222 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
+import { purgePreviewCacheForSource } from "./domain/previewCache";
+import { rateLimiter } from "./rateLimiter";
+import { runMatchesWorkspace, workspaceForVisitor } from "./runWorkspace";
+
+// ─── Internal query: validate source ownership and return decision ────────────
+
+export const getSourceForPreview = internalQuery({
+    args: {
+        sourceId: v.id("sources"),
+        runId: v.id("researchRuns"),
+        visitorId: v.id("visitors"),
+    },
+    returns: v.union(
+        v.object({
+            canonicalUrl: v.string(),
+            title: v.string(),
+            decision: v.union(
+                v.literal("accepted"),
+                v.literal("rejected"),
+                v.literal("pending"),
+            ),
+        }),
+        v.null(),
+    ),
+    handler: readSourceForPreview,
+});
+
+async function readSourceForPreview(
+    ctx: QueryCtx,
+    args: {
+        sourceId: Id<"sources">;
+        visitorId: Id<"visitors">;
+        runId?: Id<"researchRuns">;
+    },
+) {
+    const visitor = await ctx.db.get(args.visitorId);
+    if (visitor?.status !== "active") return null;
+    const invitation = await ctx.db.get(visitor.invitationId);
+    if (
+        invitation?.status !== "claimed" ||
+        invitation.claimedByVisitorId !== visitor._id
+    )
+        return null;
+    const source = await ctx.db.get(args.sourceId);
+    if (!source || (args.runId && source.runId !== args.runId)) return null;
+    const run = await ctx.db.get(source.runId);
+    if (
+        !run ||
+        run.ownerVisitorId !== args.visitorId ||
+        !runMatchesWorkspace(run, await workspaceForVisitor(ctx, visitor))
+    )
+        return null;
+    return {
+        canonicalUrl: source.canonicalUrl,
+        title: source.title,
+        decision: await readSourceDecision(ctx, run._id, source._id),
+    };
+}
+
+async function readSourceDecision(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+    sourceId: Id<"sources">,
+): Promise<"accepted" | "rejected" | "pending"> {
+    const run = await ctx.db.get(runId);
+    const revisionId = run?.activeCorpusRevisionId;
+    if (!revisionId) return "pending";
+
+    const reviewItem = await ctx.db
+        .query("sourceReviewItems")
+        .withIndex("by_revision_and_source", (builder) =>
+            builder.eq("corpusRevisionId", revisionId).eq("sourceId", sourceId),
+        )
+        .unique();
+
+    return reviewItem?.decision ?? "pending";
+}
+
+/** Atomically checks workspace admission and reserves the visitor's decorative render allowance. */
+export const authorizeCompanyPreview = internalMutation({
+    args: {},
+    returns: v.union(
+        v.object({ status: v.literal("ok") }),
+        v.object({
+            status: v.literal("unavailable"),
+            error: v.union(
+                v.literal("unauthorized"),
+                v.literal("test_data"),
+                v.literal("rate_limited"),
+            ),
+        }),
+    ),
+    handler: async (ctx) => {
+        const authUserId = await getAuthUserId(ctx);
+        const visitor = authUserId
+            ? await ctx.db
+                  .query("visitors")
+                  .withIndex("by_auth_user_id", (q) =>
+                      q.eq("authUserId", authUserId),
+                  )
+                  .unique()
+            : null;
+        if (visitor?.status !== "active")
+            return { status: "unavailable", error: "unauthorized" } as const;
+        const invitation = await ctx.db.get(visitor.invitationId);
+        if (
+            invitation?.status !== "claimed" ||
+            invitation.claimedByVisitorId !== visitor._id
+        )
+            return { status: "unavailable", error: "unauthorized" } as const;
+        if ((await workspaceForVisitor(ctx, visitor)).isTestData)
+            return { status: "unavailable", error: "test_data" } as const;
+        const allowance = await rateLimiter.limit(ctx, "previewRender", {
+            key: `cover:${visitor._id}`,
+        });
+        return allowance.ok
+            ? ({ status: "ok" } as const)
+            : ({ status: "unavailable", error: "rate_limited" } as const);
+    },
+});
+
+// ─── Internal mutation: rate-limit check ──────────────────────────────────────
+
+export const checkRateLimit = internalMutation({
+    args: { key: v.string() },
+    returns: v.object({
+        allowed: v.boolean(),
+        retryAfterMs: v.optional(v.number()),
+    }),
+    handler: async (ctx, args) => {
+        const result = await rateLimiter.limit(ctx, "previewRender", {
+            key: args.key,
+        });
+        return {
+            allowed: result.ok,
+            retryAfterMs: result.retryAfter
+                ? result.retryAfter * 1000
+                : undefined,
+        };
+    },
+});
+
+// ─── Public read path: fresh cached preview, or null on miss/expiry ──────────
+
+export const getPreview = query({
+    args: { sourceId: v.id("sources") },
+    returns: v.union(v.object({ dataUrl: v.string() }), v.null()),
+    handler: async (ctx, args) => {
+        const authUserId = await getAuthUserId(ctx);
+        if (!authUserId) return null;
+        const visitor = await ctx.db
+            .query("visitors")
+            .withIndex("by_auth_user_id", (q) => q.eq("authUserId", authUserId))
+            .unique();
+        if (!visitor) return null;
+        const source = await readSourceForPreview(ctx, {
+            sourceId: args.sourceId,
+            visitorId: visitor._id,
+        });
+        if (source?.decision !== "pending") return null;
+        const entry = await ctx.db
+            .query("previewCaches")
+            .withIndex("by_source", (builder) =>
+                builder.eq("sourceId", args.sourceId),
+            )
+            .first();
+        if (!entry || entry.expiresAt <= Date.now()) {
+            return null;
+        }
+        return { dataUrl: entry.dataUrl };
+    },
+});
+
+// ─── Internal mutation: upsert a cache entry (delete-then-insert) ────────────
+
+export const storePreview = internalMutation({
+    args: {
+        sourceId: v.id("sources"),
+        visitorId: v.id("visitors"),
+        dataUrl: v.string(),
+        sizeBytes: v.number(),
+        expiresAt: v.number(),
+    },
+    returns: v.boolean(),
+    handler: async (ctx, args) => {
+        if ((await readSourceForPreview(ctx, args))?.decision !== "pending")
+            return false;
+        const existing = await ctx.db
+            .query("previewCaches")
+            .withIndex("by_source", (builder) =>
+                builder.eq("sourceId", args.sourceId),
+            )
+            .first();
+        if (existing) {
+            await ctx.db.delete(existing._id);
+        }
+        await ctx.db.insert("previewCaches", {
+            sourceId: args.sourceId,
+            dataUrl: args.dataUrl,
+            sizeBytes: args.sizeBytes,
+            createdAt: Date.now(),
+            expiresAt: args.expiresAt,
+        });
+        return true;
+    },
+});
+
+// ─── Internal mutation: purge a source's cached preview ──────────────────────
+
+export const purgePreviewForSource = internalMutation({
+    args: { sourceId: v.id("sources") },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        await purgePreviewCacheForSource(ctx, args.sourceId);
+        return null;
+    },
+});

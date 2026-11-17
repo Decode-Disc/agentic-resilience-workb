@@ -5,6 +5,7 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import * as React from "react";
 import Icon from "@/components/icon";
+import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 
 const TRANSITION = {
@@ -159,19 +160,14 @@ function PopoverTrigger({
 /**
  * Animated content that keeps cult transitions while matching Radix content props.
  *
- * @param zIndexClass - Tailwind z-index class applied to the popover panel. Defaults to `"z-75"`.
  */
 function PopoverContent({
     className,
     align = "center",
     sideOffset = 4,
     children,
-    zIndexClass = "z-75",
     ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content> & {
-    /** Tailwind z-index class applied to the popover panel. Defaults to `"z-75"`. */
-    zIndexClass?: string;
-}) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
     const { isOpen, uniqueId } = useCultPopoverContext();
 
     return (
@@ -185,7 +181,7 @@ function PopoverContent({
                         data-slot="popover-content"
                         className={cn(
                             "w-72 origin-(--radix-popover-content-transform-origin) overflow-hidden rounded-xl border border-zinc-950/10 bg-white shadow-xl outline-hidden dark:border-zinc-50/10 dark:bg-zinc-700",
-                            zIndexClass,
+                            uiLayerClasses.popup,
                             className,
                         )}
                         {...props}>

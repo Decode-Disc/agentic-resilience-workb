@@ -1,0 +1,62 @@
+@reference "../../styles.css";
+
+.diagram {
+    @apply relative w-[936px] h-[768px] rounded-[30px];
+}
+.surface {
+    @apply absolute inset-0 rounded-[inherit] bg-card/45 bg-none;
+    backdrop-filter: blur(10px);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent),
+        0 0 0 1px color-mix(in oklab, var(--brand-purple) 26%, transparent),
+        0 40px 90px -46px
+        color-mix(in oklab, var(--brand-purple) 60%, transparent);
+    @apply pointer-events-none;
+}
+.glow,
+.outerOrbit,
+.innerOrbit {
+    @apply absolute rounded-[50%] pointer-events-none;
+}
+.glow {
+    left: calc(50% - 250px);
+    top: calc(50% - 180px);
+    @apply w-[500px] h-[360px];
+    background: radial-gradient(
+        closest-side,
+        color-mix(in oklab, var(--brand-purple) 34%, transparent),
+        transparent
+    );
+    filter: blur(12px);
+}
+.outerOrbit {
+    left: calc(50% - 330px);
+    top: calc(50% - 330px);
+    @apply w-[660px] h-[660px];
+    border: 1px dashed color-mix(in oklab, var(--brand-purple) 30%, transparent);
+}
+.innerOrbit {
+    left: calc(50% - 180px);
+    top: calc(50% - 180px);
+    @apply w-[360px] h-[360px];
+    border: 1px solid color-mix(in oklab, var(--brand-purple) 22%, transparent);
+    background: radial-gradient(
+        closest-side,
+        color-mix(in oklab, var(--brand-purple) 6%, transparent),
+        transparent
+    );
+}
+.label {
+    @apply absolute font-mono text-[10px] font-medium tracking-[0.12em] uppercase text-accent-foreground;
+}
+.core {
+    left: calc(50% + 118px);
+    top: calc(50% - 160px);
+}
+.conditions {
+    left: calc(50% + 236px);
+    top: calc(50% - 256px);
+}
+.selection {
+    @apply absolute left-[24px] top-[68px] w-[290px];
+}

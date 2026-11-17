@@ -1,0 +1,465 @@
+{
+  "skill_name": "workbench-evaluation",
+  "evals": [
+    {
+      "id": 1,
+      "name": "interpret-existing-results",
+      "prompt": "Explain what our saved source-utility results let us conclude for the prototype. I want to know whether the current approach is useful enough to continue, not just its score. Read-only; do not launch calls, replay measurements, or create an archive.",
+      "expected_output": "A plain-language interpretation of the saved observations, their implications for analyst usefulness, and a bounded recommendation or explicit lack of evidence for a choice.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../docs/verification/2026-10-21-source-utility.md",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "Uses recorded conditions and observations without presenting historical quality, routes or prices as current verified facts.",
+        "Distinguishes exact matches, equivalent useful evidence and actual downstream availability when those distinctions affect the conclusion.",
+        "Explains what the results permit choosing now, or identifies the evidence missing for a supported choice.",
+        "Does not initiate a comparison, provider call or archive merely to complete the interpretation."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "diagnose-loss-before-expanding",
+      "prompt": "A useful passage appears in the saved source but not in the prepared input. Find where it is lost before suggesting another model comparison. Inspect the existing retrieval and preparation path; do not edit, execute measurements, or call providers.",
+      "expected_output": "A trace of the relevant stage boundaries identifying the first demonstrated loss or the specific missing observation, without an unsupported causal claim or a new benchmark campaign.",
+      "files": [
+        "../../../convex/domain/sourceComparison.ts",
+        "../../../scripts/evaluations/source-selection/retrieval-replay.ts",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "Chooses a bounded evidence-loss diagnosis rather than assuming a new comparison is required.",
+        "Traces the actual source, capture, selected context and prepared-input owners instead of inferring loss from an aggregate score.",
+        "If no concrete saved passage is supplied or found, identifies that missing input and avoids claiming the loss is reproduced.",
+        "Stops at the supported cause or missing observation and keeps any proposed correction separate from implementation authority."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "ambiguous-quality-request",
+      "prompt": "Je veux améliorer la qualité des dossiers, mais je ne sais pas si le problème vient des sources, des passages transmis ou de l'analyse finale. Dis-moi comment aborder ça. Ne lance rien et ne modifie aucun fichier.",
+      "expected_output": "A project-grounded framing that separates the possible outcome failures, reuses current evidence and asks one focused question only if the intended decision remains unresolved.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../docs/ROADMAP.md",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "Inspects the product outcome, current delivery limits and available evidence before selecting an investigation.",
+        "Does not turn the ambiguous request into a model benchmark or assume later analytical capabilities are already available.",
+        "Identifies the smallest observation or focused user question that can determine the relevant investigation.",
+        "Does not invent a numerical acceptance target, paid batch or expanded scope."
+      ]
+    },
+    {
+      "id": 4,
+      "name": "bounded-comparison-and-stop",
+      "prompt": "Plan a comparison of the current preparation approach with an alternative. I want useful evidence at low cost, not a perfect retrieval score. Explain what observation would justify changing the approach and when we should stop. Planning only; no new measurements or paid calls.",
+      "expected_output": "A bounded comparison proposal with comparable conditions, a decision-relevant stopping condition and an actionable conclusion format, leaving unapproved thresholds and live execution pending.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "States the product decision and distinguishes an analyst-useful outcome from improvement of an incidental benchmark score.",
+        "Identifies the existing protocol and comparable conditions, including reference exposure and relevant cost limits.",
+        "Proposes what evidence would support changing or retaining the approach, with explicit stopping and inconclusive outcomes rather than automatic additional batches.",
+        "Does not treat planning or skill invocation as authorization to execute or establish an unapproved acceptance threshold."
+      ]
+    },
+    {
+      "id": 5,
+      "name": "frontend-check-boundary",
+      "prompt": "Planifie uniquement la vérification du placement d'une icône dans le rail Coverage. Aucun comportement ou sens de texte ne change. Ne modifie rien.",
+      "expected_output": "A narrowly scoped frontend verification proposal using the relevant UI workflow rather than the research evaluation procedure.",
+      "files": [
+        "../../../AGENTS.md",
+        "../../../src/components/workspace/source-coverage-rail.tsx"
+      ],
+      "expectations": [
+        "Recognizes ordinary presentation verification as outside this evaluation skill's scope.",
+        "Does not prepare research protocols, model comparisons, archive manifests or provider calls.",
+        "Keeps verification proportional to the visual change and preserves the read-only request."
+      ]
+    },
+    {
+      "id": 6,
+      "name": "reference-curation-versus-corpus-checkpoint",
+      "prompt": "For an offline appraisal regression, must I first click Approve proposed corpus in the application? Explain how to prepare the reference material and expected judgments under the current conception while preserving any still-enforced legacy guards. Analysis only; do not create fixtures, approve a dossier or run measurements.",
+      "expected_output": "A distinction between frozen investigator-reviewed evaluation references, current compatibility checkpoints and the approved target, without requiring an application approval click for every offline regression.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md"
+      ],
+      "expectations": [
+        "Defines identifiable reference material, cutoff, expected assertions, competing interpretations and unresolved questions without treating investigator curation as a runtime analyst decision.",
+        "Keeps offline evaluation preparation separate from driving the application; preserves a corpus checkpoint when the exercised compatibility path still requires it.",
+        "Does not restore manual source approval as a universal target requirement or infer implemented delegated selection from documentation alone.",
+        "Keeps fixture creation, application decisions and measurement execution outside the read-only request."
+      ]
+    },
+    {
+      "id": 7,
+      "name": "documentary-quality-versus-analytical-quality",
+      "prompt": "Our source-preparation results look good. Can we claim that question appraisals and the final mechanism diagram with its note are reliable too? Inspect the current requirements and available evaluation tools, then identify what is established and the smallest missing evaluation. Do not implement a runner, generate analysis or call providers.",
+      "expected_output": "A bounded assessment separating documentary results from assertion-use, appraisal and synthesis quality, with an explicit supported runner or evaluation gap rather than a transferred quality claim.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "Does not infer correct analytical uses, appraisal reasoning or synthesis relationships from source inclusion, passage retention or valid structured output.",
+        "Selects relevant expected support, objections, unknowns, human revisions and diagram-to-note coherence from the current product contract.",
+        "Inspects actual runner scope and available artifacts, identifies unsupported stages explicitly, and does not present a proposed protocol as an executable existing comparison.",
+        "Keeps automated semantic controls distinct from human adoption and proposes only a check that could resolve the stated uncertainty."
+      ]
+    },
+    {
+      "id": 8,
+      "name": "model-use-before-acquisition",
+      "prompt": "I want to assess model-assisted framing before source acquisition, but someone says all AI calls must follow retrieval. Explain whether that premise matches current policy and how to compare the proposed assistance with reliable deterministic work. Plan only; no provider calls, new runner or acceptance threshold.",
+      "expected_output": "A policy-grounded, bounded evaluation proposal for framing assistance, separating semantic usefulness from deterministic operations, factual authority and application activation.",
+      "files": [
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../scripts/evaluations/source-selection/README.md"
+      ],
+      "expectations": [
+        "Uses the current technical policy rather than an inherited phase-wide prohibition to assess whether the framing task justifies model assistance.",
+        "Identifies which parts require interpretation and which reliable lookups, validation or transitions should remain deterministic; does not require a model merely to decide whether another call is useful.",
+        "Keeps early framing proposals separate from established company facts and explicit research-start authority.",
+        "Defines comparable bounded inputs and useful outcomes, identifies unsupported runner scope, and preserves the read-only, provider and threshold boundaries."
+      ]
+    },
+    {
+      "id": 9,
+      "name": "cheap-stress-model-versus-task-quality",
+      "prompt": "Interpret this recorded batch without calls or edits: eleven Nemo scenarios, eight published answers, two blocked cases and one unfinished case. One answer says research started although the dossier stayed in framing. Another answer is economically generic but correctly preserves the data and completes. Keep Nemo for harness corrections before qualifying the intended candidate, glm-5.3-flash. What can we conclude and what is the smallest next step?",
+      "expected_output": "An evidence-bounded interpretation separating published replies, actual business outcomes, harness integrity and economic answer quality; preserves the selected stress and quality model roles.",
+      "files": [
+        "../../../docs/verification/2026-11-01-workbench-nemo-requalification.md"
+      ],
+      "expectations": [
+        "Does not report eight business successes from eight published responses, or infer the cause of the unfinished case without execution evidence.",
+        "Treats the false published start as a system/publication failure even though the server refused the underlying action.",
+        "Can classify the safely completed generic response as mechanically successful but analytically insufficient rather than requiring a better model to repair the harness.",
+        "Retains Nemo for the requested stress work and glm-5.3-flash as the intended later candidate; does not substitute a model or claim its current route identity is verified.",
+        "Recommends the smallest harness diagnosis or regression before another paid qualification and performs no provider call."
+      ]
+    },
+    {
+      "id": 10,
+      "name": "ambiguous-elaboration-and-unresolved-timeout",
+      "prompt": "Read-only judgment: the analyst asked to refine the switching question. The answer retained the scope and added a parenthetical explanation of switching. A reviewer calls this invented analyst intent, but there is no evidence that it changed the requested meaning or granted authority. Separately a concurrent-edit scenario has no answer after 190 seconds, with no worker trace. Should we add an attribution guard and blame the timeout on the model?",
+      "expected_output": "A causal assessment distinguishing authorized elaboration from unsupported attribution and observed non-completion from a proven timeout cause.",
+      "files": [],
+      "expectations": [
+        "Does not treat the explanatory parenthesis alone as a demonstrated authority defect or prescribe an additional guard without a semantic or scope divergence.",
+        "Keeps the concurrent-edit cause unresolved and identifies the missing lifecycle evidence rather than blaming the model or inventing a deadlock.",
+        "Uses separate supported verdicts for the ambiguous wording and incomplete execution; does not modify code or launch calls."
+      ]
+    },
+    {
+      "id": 11,
+      "name": "paid-browser-qualification-after-corrections",
+      "prompt": "Plan browser qualification after the harness corrections. I want glm-5.3-flash, not a substitute Nemo model. The only available result is real inference with isolated Convex persistence; final regressions have not passed and no cost ceiling or maximum attempt count is agreed. Planning only: state what the proposed checks could establish.",
+      "expected_output": "A bounded staged proposal that keeps final deterministic validation before paid protected-browser work, preserves exact model choice and makes missing execution authorization explicit.",
+      "files": [
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md"
+      ],
+      "expectations": [
+        "Does not treat isolated Convex persistence with a real model as qualification of the actual protected browser or deployed application.",
+        "Places the paid batch after the relevant deterministic regressions on identified final code and keeps changed code stages/results separate.",
+        "Preserves the requested model, requires live exact route verification before dispatch and does not silently substitute a cheaper candidate.",
+        "Identifies the missing attempt and cost bounds without calling providers, activating a route or requesting pasted secrets.",
+        "Includes relevant real admission, persisted effects, visible responses and reconnection with separately stated simulated and untested boundaries."
+      ]
+    },
+    {
+      "id": 12,
+      "name": "explicit-control-cost-and-unwired-composer",
+      "prompt": "The backend /pause and /resume API retains a deterministic receipt without a model invocation. The composer is deliberately not connected yet. Ordinary text such as “pause, then explain the current evidence” still goes through the model. How should we qualify control costs now, and can we call the browser slash journey complete? Analysis only, no edits or calls.",
+      "expected_output": "An entry-point-specific qualification proposal preserving typed controls, model-mediated natural language and the visible composer delivery gap.",
+      "files": [
+        "../../../convex/workbench.ts",
+        "../../../docs/ROADMAP.md"
+      ],
+      "expectations": [
+        "Checks zero model invocation for the explicit control itself through the implemented API and its actual persisted receipt rather than inferring it from confirmation copy.",
+        "Separates any resumed research calls from the command cost and latency, without promising that resume makes all downstream work free.",
+        "Does not replace natural-language interpretation with keyword detection or misclassify the mixed text as a pure command.",
+        "Reports the browser slash interaction as unqualified while the composer remains unwired and keeps implementation outside this analysis request."
+      ]
+    },
+    {
+      "id": 13,
+      "name": "changed-coverage-is-not-a-regression-comparison",
+      "prompt": "Read-only: the browser lot passed an exact-history read without forced compression. A new isolated lot forces compression and tests a source-review state for the first time; it publishes a false unstarted status. The user asks why the previous qualification missed it and is tired of fixing one case at a time. Explain the evidence and define the next bounded work unit.",
+      "expected_output": "A bounded, evidence-led qualification decision with stable coverage and separate execution, task and containment outcomes.",
+      "files": [],
+      "expectations": [
+        "Identifies the changed runtime/compaction/state coverage instead of claiming an established code regression or a previously proven absence.",
+        "Groups related history/state defects at their shared owner and preserves the core battery, with added cases labelled separately.",
+        "Names a bounded stopping point and capability-specific acceptance; does not start an open-ended paid or prompt-optimization loop."
+      ]
+    },
+    {
+      "id": 14,
+      "name": "partial-containment-is-not-task-success",
+      "prompt": "Read-only: four live cases complete. One model reply contains a false status; publication replaces it with the canonical status and explicitly says its explanation could not be confirmed. Another reply paraphrases a saved sentence while labelling it verbatim. The infrastructure and persistence checks all pass. Can we call this four successes and activate everything?",
+      "expected_output": "A bounded, evidence-led qualification decision with stable coverage and separate execution, task and containment outcomes.",
+      "files": [],
+      "expectations": [
+        "Reports code-owned partial containment separately from a correct model answer.",
+        "Counts the inaccurate verbatim quotation as a task miss rather than weakening its frozen criterion.",
+        "Restricts acceptance to observed capabilities and describes the guard vocabulary limit; no global activation claim."
+      ]
+    },
+    {
+      "id": 15,
+      "name": "bounded-exit-with-nonmaterial-style-limits",
+      "prompt": "Read-only: the fixed battery passes state, authority and provenance checks across two repeats. Replies remain wordy but accurate. The user wants to resume building the next independent feature. Should we spend the unused qualification budget rewriting prompts and run a new scenario set?",
+      "expected_output": "A bounded, evidence-led qualification decision with stable coverage and separate execution, task and containment outcomes.",
+      "files": [],
+      "expectations": [
+        "Ends the agreed batch without more calls or prompt patches for accurate stylistic imperfections.",
+        "Preserves the same battery and limits the reliability conclusion to the exercised states, repetitions and runtime.",
+        "Records remaining style limits and resumes independent roadmap work without weakening material integrity gates."
+      ]
+    },
+    {
+      "id": 16,
+      "name": "hybrid-control-stage-attribution",
+      "prompt": "Read-only assessment of two completed turns. In the first, the initial explanation contradicts the recorded state, the controller flags it, a tool-free correction fixes it and the published answer is supported by investigator-reviewed evidence. In the second, the initial explanation is correct, the controller falsely flags it, the correction becomes inaccurate and publication retains that text with a visible reserve. Can both turns count as successes because the controller ran and publication completed? Use only these observations; no edits or calls.",
+      "expected_output": "Separate judgments for initial generator quality, controller correctness, correction benefit or harm, execution integrity and final analyst usefulness.",
+      "files": [
+        "../../../context/TECH.md"
+      ],
+      "expectations": [
+        "Classifies the first initial draft as wrong, its contradiction alert as correct and its revised final answer as supported; does not erase the original failure.",
+        "Classifies the second initial draft as correct, its alert as a false positive and its correction as harmful, even though a reserve is visible.",
+        "Distinguishes honest advisory containment from semantic task success without automatically declaring the permitted reserve a mandatory execution violation.",
+        "Uses the investigator-reviewed evidence rather than the controller score as the reference judgment and performs no new measurement."
+      ]
+    },
+    {
+      "id": 17,
+      "name": "control-eligibility-and-separated-call-cost",
+      "prompt": "Plan only a control-enabled versus control-disabled comparison with the same generator and frozen inputs. The cases include a final explanation after a refused operation, a discussion with no operation and unchanged authoritative facts since its preceding substantive reply and a code-owned command confirmation. A recorded eligible turn has one initial generation, two semantic checks and one corrective generation. Its last check has an unknown charge. What should be compared, counted and left unresolved? Do not run calls or change settings.",
+      "expected_output": "An eligibility-aware comparison and stage-specific call/cost accounting without enabling control on exempt paths or treating an unknown charge as zero.",
+      "files": [
+        "../../../context/TECH.md"
+      ],
+      "expectations": [
+        "Keeps the generator, facts and independent references constant and records the pinned control policy for each condition.",
+        "Treats the operation refusal as eligible under the current contract while exempt discussion and code-owned confirmations have no semantic-control call.",
+        "Counts one initial generation, one corrective generation and two controller calls separately rather than reporting only two model calls.",
+        "Separates stage latency and known charges from the unresolved charge/reservation, and checks that correction repeats no business operation.",
+        "Proposes bounded observations without dispatching providers or changing application configuration."
+      ]
+    },
+    {
+      "id": 18,
+      "name": "exposed-examples-do-not-calibrate-controller",
+      "prompt": "Read-only: the controller matches investigator labels on 38 of 40 examples used while designing its question. A correct analyst instruction was falsely flagged twice. Someone proposes tuning the threshold against these same examples, reporting the resulting controller score as the answer key and enabling it globally. What conclusion and next bounded check are justified? No calls, tuning or activation.",
+      "expected_output": "A supported development-set interpretation, explicit false-alert analysis and an independent validation proposal that does not mistake fitting for calibration.",
+      "files": [],
+      "expectations": [
+        "Labels the exposed examples as development evidence and does not infer held-out reliability or calibrated truth confidence from the match count.",
+        "Treats the repeated false flag as a controller error on an independently supported answer rather than proof that the answer needs changing.",
+        "Requires investigator-reviewed references separate from the assessed controller and an unexposed validation set for any broader reliability claim.",
+        "Describes any proposed threshold change as a separate versioned policy, preserves the original results and does not tune or activate it."
+      ]
+    },
+    {
+      "id": 19,
+      "name": "advisory-unavailability-and-authority-loss",
+      "prompt": "Interpret three recorded cases under the current hybrid control contract. A missing controller configuration publishes the unchanged explanation with an unavailable notice and no number. A final unsupported explanation is retained with a low consistency estimate and a visible reserve after the permitted correction. A third response arrives after cancellation, retains its provider cost receipt and is not published. Which cases establish containment, answer quality or an execution defect? Analysis only.",
+      "expected_output": "Contract-specific outcomes separating unavailable assessment, flagged wrong content and correct cancellation fencing.",
+      "files": [
+        "../../../context/TECH.md"
+      ],
+      "expectations": [
+        "Does not label unavailable assessment as either semantic support or a zero-confidence score; checks the explicit unavailable notice.",
+        "Counts the flagged unsupported answer as a semantic miss while assessing its advisory containment separately.",
+        "Recognizes that retaining cancellation-era response/cost facts does not authorize publication or a new call.",
+        "Does not weaken authority fences to obtain another published reply, infer zero cost from no publication or approve global activation."
+      ]
+    },
+    {
+      "id": 20,
+      "name": "close-interrupted-correction-with-causal-action",
+      "prompt": "The local qualification stopped; give me the final usable evaluation conclusion. Read-only, no new calls. Saved observations: the current program has two fixed questions and research has ended. The first draft instead discusses five earlier questions. The controller request contains that exact draft and the current facts, and returns contradiction 0.90. The corrective provider request contains the current two-question program, the ended-research state, the old published assistant answer, and a reminder to revise the preceding draft; the rejected draft itself is absent and no tools are offered. Its resulting draft still discusses five questions and asks the analyst to Start research. The observer then throws at 21 provider receipts although the approved lot allows 40 model calls plus retrieval. All charges are known and the lot is closed. Do not wait for me to ask whether this is a harness or model problem.",
+      "expected_output": "A proactive causal closeout that distinguishes the missing corrective draft in the application harness, the observer ceiling in evaluation tooling and the incorrect model output, without declaring model correction quality isolated. It gives each boundary a concrete correction and falsifiable regression, labels final publication and unstarted cases untested, and recommends no automatic paid rerun.",
+      "files": [],
+      "expectations": [
+        "Inspects the actual corrective request rather than treating the stored current facts or the controller score as proof of a valid correction experiment.",
+        "Performs available read-only isolation before the closeout instead of offering to inspect the supplied corrective request only after another user question.",
+        "Identifies the absent rejected draft as a confirmed application input defect and the receipt ceiling as a separate evaluation-tooling defect; does not attribute the whole failed correction to the model.",
+        "Names concrete owner-level corrections and checks: exact rejected draft in serialized corrective input with current facts and no tools, plus inspection covering admitted model and technical receipts.",
+        "States the observed model errors and the unresolved causal contribution of the faulty input; does not guarantee semantic repair from the proposed fix.",
+        "Places attribution, evidence, next actions and capability decision in the final answer itself, not only in a linked report or cost summary.",
+        "Keeps the closed lot closed and distinguishes untested final publication from a successfully contained published answer."
+      ]
+    },
+    {
+      "id": 21,
+      "name": "closeout-with-missing-provider-input",
+      "prompt": "Give me the evaluation closeout, read-only. The saved result contains a wrong answer and a completed mission. Current database state is correct. The actual provider request and the corrective request were not retained. No other evidence identifies what the model received. We have unused paid budget. Explain what is established and exactly what to do next; do not run anything.",
+      "expected_output": "An explicitly unresolved attribution with the known semantic failure, a concrete attempt to recover actual provider inputs/journals or reproduce the delivery boundary deterministically, and a clear limit on what completion and database state establish.",
+      "files": [],
+      "expectations": [
+        "Does not infer that correct stored state reached the provider or call the failure a confirmed model limitation.",
+        "Identifies the missing actual request as the observation blocking attribution and names the cheapest recovery or deterministic delivery check.",
+        "Provides the action, owner/boundary and observable resolution criterion in the user-facing closeout.",
+        "Does not invent a harness defect, present a hypothesis as confirmed or use remaining budget to authorize another experiment."
+      ]
+    },
+    {
+      "id": 22,
+      "name": "successful-closeout-needs-no-speculative-fix",
+      "prompt": "Close this evaluation from the supplied verified observations; do not edit or run new measurements. Actual provider inputs contain current facts and, for the one correction, the exact rejected draft. The one permitted correction produces an investigator-verified accurate explanation. Recorded actions occur once; publication and the separate notice match their contracts. All agreed cases complete, charges reconcile, and the analyst can inspect the retained useful passages. Coverage is local and small; production crash recovery was not exercised.",
+      "expected_output": "A concise useful-outcome decision with the limited local coverage and no invented defect, corrective work or unnecessary next paid comparison.",
+      "files": [],
+      "expectations": [
+        "States the demonstrated analyst benefit and distinguishes execution, answer quality and control containment using the supplied independent judgment.",
+        "Explains why no corrective action is justified for these observations while keeping production crash recovery and general reliability unverified.",
+        "Does not manufacture an architectural issue, tune thresholds or recommend another paid lot without a decision-relevant uncertainty.",
+        "Includes the supported capability decision in the final answer rather than only listing completed calls or passed checks."
+      ]
+    },
+    {
+      "id": 23,
+      "name": "continue-authorized-automated-campaign",
+      "prompt": "The active, unexpired campaign already authorizes the prepared next configuration within its remaining lot and cumulative limits. The previous lot has a recorded assessment, complete cleanup and reconciled charges. Continue the qualification. Do not expand the mandate or change runner code.",
+      "expected_output": "Uses the native campaign lifecycle for the next covered lot, examines and records its evidence-bound assessment, and continues or closes at the agreed boundary without asking the user to reconfirm the existing mandate.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Verifies the retained mandate and status, then uses the existing campaign run rather than reconstructing temporary configuration, capture or cleanup in scripts.",
+        "Does not ask for renewed approval of the covered lot or delegate semantic scoring to the user.",
+        "Inspects actual requests, persisted effects and published replies, fills the declared checks and invokes native assessment before another lot.",
+        "Does not treat unused budget as an instruction to repeat work after the agreed decision or stopping condition is reached."
+      ]
+    },
+    {
+      "id": 24,
+      "name": "interrupted-campaign-rejects-stale-evidence",
+      "prompt": "A campaign was interrupted. Native status shows cleanup is pending. Its recovery run later finishes cleanup without model calls, but assess rejects Stale campaign evidence. Complete the available diagnosis and explain whether we can record a model-quality verdict. Do not patch the runner, rewrite evidence indexes, or start another paid lot.",
+      "expected_output": "Inspects native status and recovery diagnostics, preserves rejected evidence and distinguishes an assessment-tooling failure from unexercised model quality, with no index rewrite or replacement paid run.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Uses native status and cleanup recovery rather than replaying the interrupted scenarios or changing provider configuration manually.",
+        "Preserves existing evidence, hashes and indexes when native assessment rejects them instead of rewriting them to obtain acceptance.",
+        "Locates the first demonstrated evidence mismatch where available and separates it from any unresolved interruption cause.",
+        "Reports model quality as unexercised or inconclusive when no model calls occurred and does not claim the assessment was recorded."
+      ]
+    },
+    {
+      "id": 25,
+      "name": "automate-request-without-current-mandate",
+      "prompt": "Automate the next qualification so I no longer have to coordinate every step. There is an old approved campaign in the archives, but I do not know whether any current mandate is active. Inspect what exists and prepare the next step; do not launch paid calls.",
+      "expected_output": "Checks current support and retained campaign status, prepares a reviewable mandate when needed and identifies the concrete missing authorization without treating historical approval or an automation request as paid-execution authority.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Checks whether an active mandate actually covers the requested work before selecting a new campaign or reusing one.",
+        "Uses native preparation and schema guidance for a reviewable mandate when no current authority covers the work.",
+        "Does not authorize or execute a paid campaign from historical approval, an implicit default or the request to automate.",
+        "Keeps mechanical lifecycle work with the runner and semantic assessment with the development agent rather than asking the user to coordinate each step."
+      ]
+    },
+    {
+      "id": 26,
+      "name": "adaptive-work-without-predicted-call-shares",
+      "prompt": "Prepare a targeted live qualification with three fixed cases and a cumulative twelve-model-attempt/USD0.50 mandate. The number of consultations each agent needs is unknown. A previous case consumed the budget before a later final reply could be observed. Prepare only; no authorization or inference. The user rejected predictive agent call shares.",
+      "expected_output": "A native campaign preparation using cumulative limits without invented per-case or final-response reservations. It preserves all cases and expected meanings, discloses any ordering change and keeps incomplete coverage possible.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Does not introduce a six/three/three split, reserve a predicted final generation or ask the user to estimate tool needs.",
+        "Inspects the resolved manifest for unintended scenario limits and counts model generations, mandatory controls and tool operations separately.",
+        "If cases are reordered, states that condition explicitly without removing failed cases or changing expectations.",
+        "Keeps preparation separate from paid authority and does not promise all cases will complete within the envelope."
+      ]
+    },
+    {
+      "id": 27,
+      "name": "refusal-feedback-before-undispatched-recovery",
+      "prompt": "Explain this closed lot, read-only. Sources returns prose around JSON on its sixth paid attempt. Its invocation retains invalid_output correction feedback requesting one JSON object without prose or Markdown. The next invocation is created but has no providerCallId and stops with qualification_budget_exhausted. The evaluator imposed a six-attempt scenario cap; nine of twelve global attempts were consumed. Do not edit, spend, or propose a fix before checking existing recovery.",
+      "expected_output": "An evidence-led attribution: malformed output is rejected, feedback and continuation exist, but the evaluator cap prevents the next provider call. The actual model correction remains untested; the conclusion does not invent a missing recovery mechanism.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Separates the invalid response, feedback generation, continuation admission and actual paid dispatch.",
+        "Identifies the evaluator-imposed scenario cap and remaining global authority as the demonstrated stop condition.",
+        "Does not claim the model received feedback merely because it is retained, or that it failed a correction it never generated.",
+        "Checks existing recovery code/tests and does not recommend a new completion mechanism or reopen the closed lot on this evidence."
+      ]
+    },
+    {
+      "id": 28,
+      "name": "announced-correction-versus-returned-arguments",
+      "prompt": "Interpret the preserved Sources trace, no new calls or edits. A qualification with two new contributions supplies contributionId=\"\" twice and is refused. The next provider request includes this refusal and current facts. The model says it will omit contributionId, but its returned tool arguments still contain two empty strings. The same request identity reuses the original refusal; no additional documentary control is dispatched. A later global limit stops generation.",
+      "expected_output": "A causal account grounded in the returned arguments: the repair was announced but not performed, the refusal is safely reused and no second control or adoption occurred. Budget truncation and untested completion remain separate.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Compares actual tool arguments rather than accepting the model's statement that the fields were removed.",
+        "Distinguishes unchanged invalid input from missing feedback, unsupported tools and a new executed effect.",
+        "Keeps the successful prior material and exact versions separate from the refused proposal.",
+        "Names the existing input-normalization/domain boundary for an offline regression without silently repairing input, weakening evidence checks or starting another lot."
+      ]
+    },
+    {
+      "id": 29,
+      "name": "explicit-scenario-cap-boundary-test",
+      "prompt": "Prepare an unpaid manifest review for a user-authorized budget-boundary test. The user explicitly requires this scenario to stop at two paid generations even when the global mandate has room. Other adaptive qualification cases have no scenario cap. Do not run or enlarge anything.",
+      "expected_output": "Preserves the explicit two-generation test boundary and leaves ordinary adaptive cases uncapped beyond their cumulative authority. It judges refusal containment separately from task completion.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Does not remove or enlarge the explicitly requested two-generation cap under the default cumulative-allocation policy.",
+        "Distinguishes a deliberate resource-boundary test from an evaluator prediction of sufficient consultations.",
+        "Does not propagate this test cap to ordinary scenarios or interpret expected budget refusal as model task failure.",
+        "Keeps resource containment, final-answer quality and paid-execution authority separate."
+      ]
+    },
+    {
+      "id": 30,
+      "name": "schema-in-prompt-is-not-enforced-output",
+      "prompt": "Read-only: a Sources request contains its completion schema in a system-context message but no response_format. The selected endpoint advertises structured_outputs and tools. Documentary controls use a separate structured one-shot transport, while Sources uses a native tool loop. The user deferred output-format changes. Explain whether prose around JSON proves structured output is unsupported.",
+      "expected_output": "Distinguishes prompt guidance from provider-enforced output. It identifies the unused capability and transport-specific integration uncertainty, keeps the native loop intact and respects the deferred implementation.",
+      "files": [
+        "../SKILL.md",
+        "../references/campaigns.md"
+      ],
+      "expectations": [
+        "Examines actual serialized request parameters and selected endpoint capabilities rather than inferring enforcement from a schema in context.",
+        "Distinguishes tool-argument schema, JSON-only mode, schema-enforced final output and separate one-shot controls.",
+        "Does not claim the native tools/stream/schema combination is proven compatible without verification or technically impossible because it is not wired today.",
+        "Does not implement the deferred change, add a parallel loop or claim schema validity would establish documentary or analytical truth."
+      ]
+    }
+  ]
+}

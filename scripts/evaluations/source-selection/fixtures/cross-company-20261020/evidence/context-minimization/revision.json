@@ -1,0 +1,22 @@
+{
+  "revisedAt": "2026-10-20T21:56:58.353482Z",
+  "priorSha256": {
+    "study.json": "5446b90b817c0a2e93c6df1bbc48f53fce256142b1462fbfc187d40b09e8d098",
+    "reference.json": "0b0b860519723f13d825b21ff8892be7905a82d2582bc0ab07dd4d5a9b4b4c32",
+    "input-contract-freeze.json": "04b88db0569299ed832d7876a30b3268c7fba661719f05055fbbc0cb23885db9"
+  },
+  "inferenceAttemptsBeforeRevision": 0,
+  "reason": "Remove benchmark cohort/id and website metadata from production adapter inputs; freeze the resulting actual SDK wire payloads. Before inference, correct the grouped Snowflake capability reference against the already supplied primary:1 architecture passage.",
+  "instructionChanges": false,
+  "citationRemappings": [],
+  "referenceCorrection": {
+    "caseId": "comparison:control:snowflake-capability",
+    "before": [
+      "inconclusive"
+    ],
+    "after": [
+      "no_conflict_observed"
+    ],
+    "basis": "snowflake-annual, production primary:1, cloud-native storage and compute layers built on three major public clouds"
+  }
+}

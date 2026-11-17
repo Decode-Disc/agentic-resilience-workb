@@ -1,0 +1,55 @@
+# Workflow and Verification
+
+Use this reference when a frontend change touches async work, recovery, navigation, research launch, human decisions, or the evidence needed to declare the result working.
+
+## Reconstruct the affected transition
+
+An action can appear correct while its feedback belongs to another selection or its result disappears on return. Establish the real transition so the analyst sees the outcome of the action they took. When async work, navigation, or a checkpoint changes, follow its state from the caller through persistence and back to presentation.
+
+Trace the actual route, Convex hooks, operation, persisted result, and presentation. For the affected action, identify its prerequisite, pending state, terminal outcomes, available recovery, and consequences for existing decisions. Inspect what happens after selection changes, navigation, refresh, and reconnect when those behaviors are relevant.
+
+First establish whether the affected path is delivered, an approved target awaiting implementation, or a compatibility transition using [PRODUCT.md](../../../../PRODUCT.md), [TECH.md](../../../../context/TECH.md) and the [roadmap](../../../../docs/ROADMAP.md). For a target-only view, identify the missing operation or projection instead of presenting proposed controls as working. Locate the current AI-use and deterministic-execution policy in the technical document; neither an old source-review sequence nor this frontend procedure defines when models may run.
+
+The connected Sources section is wired through `src/components/workspace/sources/connected-sources.tsx` and its query-owning subtree. Find the generated function references in the caller rather than guessing an endpoint. Other surfaces require their own owner inspection. The same visible action in an illustrative prototype may use local state; that does not establish protected persistence or subscription behavior.
+
+Keep status scopes visible during inspection: a dossier-wide search limit can affect multiple topics, while results belong to the requested topic. Confirm that pending and terminal feedback stays with the correct action, and that obsolete results cannot replace the current selection or message. An open detail belongs to the list or scope in view: when that scope changes, close the detail or move to the scope it belongs to. Within one surface, keep one commit rule (changes apply on Save, with Cancel, or apply immediately) rather than mixing them. Inspect the shared recovery projection before creating local loading or error state.
+
+For a human decision, identify its object, reviewed version, consequence and actual prerequisite. Inspect the information available before the decision and the handoff afterward. Use the current product document to distinguish research launch, grouped appraisal review and synthesis outcomes rather than reusing a corpus-approval sequence. On the existing compatibility path, preserve enforced source-approval guards until their authorized replacement is verified. A visible button does not prove an informed decision; uncertainty alone does not justify inventing another approval stop.
+
+## Match checks to the observable change
+
+Excessive style assertions slow iteration, while a screenshot alone cannot prove a saved decision. Choose evidence that can expose the changed failure, because verification is useful only for the claim it actually tests. Classify the observable change before selecting the checks below.
+
+| Change                                                                                                         | Smallest useful evidence                                                                                                               |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Spacing, colors, alignment, icon placement, or wording without changed meaning                                 | Inspect the affected real surface and states in the browser; compare with the pre-change baseline. Use existing checks as appropriate. |
+| Changed status meaning, validation, selection, navigation, async transition, or custom keyboard/focus behavior | Start with a failing test importing the real module at the relevant public boundary. Then inspect the affected rendered states.        |
+| Convex persistence, authorization, or workflow transition                                                      | Use the repository's focused Convex tests; prove updated local-backend behavior when runtime verification is required.                 |
+| Subscription, durable return path, or protected checkpoint                                                     | Exercise the real admitted local path, including refresh/reconnect as relevant. Component fixtures do not establish these properties.  |
+
+Select existing tests under `src/__tests__/` and application browser scenarios under `e2e/`. Library browser scenarios live under `src/__tests__/design-system/workbench-ui/browser/` with their own configuration. React integration tests use the shared reference-routed Convex hook harness. Do not freeze incidental classes, dimensions, SVG paths, or library behavior merely to manufacture a RED step. A concrete harmful overflow or inaccessible action can justify a focused regression; assert the user-visible failure.
+
+For new or recomposed views, inspect desktop and narrow mobile with realistic content; 320, 390, 1024, and 1440 pixels are useful starting samples, not a substitute for checking the actual breakpoint boundaries affected. For a small correction, inspect its affected widths and states. Record viewport height when diagnosing scroll ownership.
+
+Exercise relevant tabs, disclosures, search, clear, navigation, and recovery. Inspect keyboard/focus, touch operation, loading geometry, empty/error outcomes, long text, and console errors. When motion changes, inspect both normal motion and reduced motion, including opening, closing, focus and retained content where relevant. Check the browser/test configuration: a run forced to reduced motion does not validate the ordinary animation. Inspect both themes when colors or surfaces change. For scrolling, resizing or overflow corrections, measure the actual scrolling elements and the position of approved anchors before and after interaction. Verify that long content and required actions remain reachable while the agreed placement is preserved. Derive these checks from the approved behavior, not from the replacement layout just implemented; a passing test for a different composition does not establish that the requested correction was delivered.
+
+## Verify library fidelity and integration separately
+
+A gallery can demonstrate an approved component while its application caller still supplies incomplete data or an ineffective action. Use the standalone gallery for presentation fidelity and the affected screen for integration, because neither check establishes the other's contract.
+
+For library presentation changes, inspect the relevant examples in the gallery and the current design references. Use temporary browser captures to guide implementation and assess the affected themes, widths and states. Reusable components can evolve with their consumers. Component conversion does not require permanent screenshot baselines or a separate rendering infrastructure. `pnpm workbench-ui:dev` starts the gallery; `pnpm workbench-ui:check` runs its interaction checks directly through Playwright.
+
+When a component is connected to an application surface, trace its supplied data, callbacks and owning operations. Verify the actual screen's composition and changed functional contract; use the admitted local journey for protected persistence or subscription claims. A populated InventorySheet example, an AppraisalBlock callback or a selected OutcomeCard state does not prove saved evidence, retained judgment or synthesis. Report library fidelity and connected behavior separately, including whichever remains unverified.
+
+## Keep evidence levels distinct
+
+Controlled examples can establish correctness without establishing live availability or analytical usefulness. Keep the observed evidence level explicit so the handoff does not promise more than the checks demonstrate. Use the distinctions below when selecting a check and reporting its result.
+
+- **Mockup:** establishes intended composition, not execution or persistence.
+- **Deterministic fixture or component test:** establishes the exercised contract with controlled inputs, not provider availability or fresh research quality.
+- **Protected local browser journey:** establishes the observed admitted path and state transitions; record whether its data is illustrative or freshly prepared.
+- **Authorized live preparation:** can establish the outcome for that run. It does not establish general quality across companies or dossier types.
+
+Use existing sessions and services. Do not start providers, searches, preparation, paid evaluations, or backend synchronization merely to improve the evidence level of a frontend task. Respect the specific authorization needed for each operation. When access or data is missing, report the exact unverified claim instead of substituting a public page.
+
+Finish with checks scoped to the stabilized change: formatting once, focused diagnostics and tests, and the required documentation checks for documentation edits. A skill-only edit needs skill/reference validation, not an application build or a replay of the research journey. Report commands actually run and preserve failed or incomplete checks. Broaden validation only for new evidence, a repository requirement, or transversal risk.

@@ -45,6 +45,8 @@ export interface SmoothDropdownProps {
     footer?: ReactNode;
     openPosition?: "bottom" | "top";
     openFrom?: "left" | "right";
+    align?: "start" | "center" | "end";
+    alignOffset?: number;
     portalContainer?: Element | DocumentFragment | null;
     className?: string;
     menuClassName?: string;
@@ -53,6 +55,13 @@ export interface SmoothDropdownProps {
     openWidth?: number;
     closedHeight?: number;
     defaultActiveItemId?: string;
+    /** Controlled selection, independent of the current filtered items. */
+    activeItemId?: string;
+    /** Accessible name of the portalled menu’s persistent trigger. */
+    triggerAriaLabel?: string;
+    triggerClassName?: string;
+    /** Consumer-specific closed geometry; the expanded menu retains its shared shape. */
+    closedRadius?: number;
     style?: CSSProperties;
     /**
      * Optional controlled open state. When omitted, the dropdown manages its
@@ -78,6 +87,8 @@ export function SmoothDropdwon({
     footer,
     openPosition = "bottom",
     openFrom = "left",
+    align,
+    alignOffset = 0,
     portalContainer = null,
     className,
     menuClassName,
@@ -86,6 +97,10 @@ export function SmoothDropdwon({
     openWidth = 220,
     closedHeight = 40,
     defaultActiveItemId,
+    activeItemId,
+    triggerAriaLabel = "Open dropdown",
+    triggerClassName,
+    closedRadius = 12,
     style,
     open: openProp,
     defaultOpen = false,
@@ -108,8 +123,30 @@ export function SmoothDropdwon({
     const containerRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
+    const triggerContentRef = useRef<HTMLDivElement>(null);
+    const restoreTriggerFocus = useRef(false);
     const [contentHeight, setContentHeight] = useState(0);
     const [portalStyle, setPortalStyle] = useState<CSSProperties>({});
+
+    useEffect(() => {
+        if (isOpen) {
+            contentRef.current
+                ?.querySelector<HTMLElement>(
+                    "input:not(:disabled), textarea:not(:disabled), [role=option]:not([aria-disabled=true])",
+                )
+                ?.focus();
+        } else if (restoreTriggerFocus.current) {
+            const triggerButton =
+                triggerContentRef.current?.querySelector<HTMLButtonElement>(
+                    "button",
+                ) ??
+                containerRef.current?.querySelector<HTMLButtonElement>(
+                    "button",
+                );
+            triggerButton?.focus();
+            restoreTriggerFocus.current = false;
+        }
+    }, [isOpen]);
 
     useEffect(() => {
         const contentElement = contentRef.current;
@@ -173,8 +210,22 @@ export function SmoothDropdwon({
     }, [isOpen, isControlled]);
 
     const openHeight = Math.max(closedHeight, Math.ceil(contentHeight));
-    const opensToLeft = openFrom === "right";
+    const resolvedAlign = align ?? (openFrom === "right" ? "end" : "start");
+    const opensToLeft = resolvedAlign === "end";
+    const isCentered = resolvedAlign === "center";
     const isPortalled = portalContainer !== null;
+
+    const effectiveOpenWidth = (() => {
+        if (!containerRef.current) return openWidth;
+        const rect = containerRef.current.getBoundingClientRect();
+        const available = isCentered
+            ? window.innerWidth - 16
+            : opensToLeft
+              ? rect.right - alignOffset
+              : window.innerWidth - rect.left - alignOffset;
+        return Math.min(openWidth, Math.floor(available));
+    })();
+    const itemClosedOffset = opensToLeft ? 8 : -8;
 
     useEffect(() => {
         if (!isPortalled || !isOpen || !containerRef.current) {
@@ -188,13 +239,35 @@ export function SmoothDropdwon({
                 return;
             }
 
+            const horizontalStyle: CSSProperties = isCentered
+                ? {
+                      left: Math.max(
+                          8,
+                          Math.min(
+                              rect.left +
+                                  rect.width / 2 -
+                                  effectiveOpenWidth / 2 +
+                                  alignOffset,
+                              window.innerWidth - effectiveOpenWidth - 8,
+                          ),
+                      ),
+                  }
+                : opensToLeft
+                  ? {
+                        right: Math.max(
+                            0,
+                            window.innerWidth - rect.right - alignOffset,
+                        ),
+                    }
+                  : {
+                        left: Math.max(0, rect.left + alignOffset),
+                    };
+
             setPortalStyle({
                 ...(openPosition === "top"
                     ? { bottom: Math.max(0, window.innerHeight - rect.bottom) }
                     : { top: Math.max(0, rect.top) }),
-                ...(opensToLeft
-                    ? { right: Math.max(0, window.innerWidth - rect.right) }
-                    : { left: Math.max(0, rect.left) }),
+                ...horizontalStyle,
             });
         };
 
@@ -207,17 +280,15 @@ export function SmoothDropdwon({
             window.removeEventListener("resize", updatePortalPosition);
             window.removeEventListener("scroll", updatePortalPosition, true);
         };
-    }, [isOpen, isPortalled, openPosition, opensToLeft]);
-
-    const effectiveOpenWidth = (() => {
-        if (!containerRef.current) return openWidth;
-        const rect = containerRef.current.getBoundingClientRect();
-        const available = opensToLeft
-            ? rect.right
-            : window.innerWidth - rect.left;
-        return Math.min(openWidth, Math.floor(available));
-    })();
-    const itemClosedOffset = opensToLeft ? 8 : -8;
+    }, [
+        alignOffset,
+        effectiveOpenWidth,
+        isCentered,
+        isOpen,
+        isPortalled,
+        openPosition,
+        opensToLeft,
+    ]);
 
     const renderItemIcon = (icon: PlatformIcon | ReactNode | undefined) => {
         if (!icon) {
@@ -238,16 +309,24 @@ export function SmoothDropdwon({
 
     const menuOriginClass =
         openPosition === "top"
-            ? opensToLeft
-                ? "origin-bottom-right"
-                : "origin-bottom-left"
-            : opensToLeft
-              ? "origin-top-right"
-              : "origin-top-left";
+            ? isCentered
+                ? "origin-bottom"
+                : opensToLeft
+                  ? "origin-bottom-right"
+                  : "origin-bottom-left"
+            : isCentered
+              ? "origin-top"
+              : opensToLeft
+                ? "origin-top-right"
+                : "origin-top-left";
 
     const menuPositionClass = cn(
         "absolute cursor-pointer overflow-hidden border border-border bg-popover shadow-lg",
-        opensToLeft ? "right-0" : "left-0",
+        isCentered
+            ? "left-1/2 -translate-x-1/2"
+            : opensToLeft
+              ? "right-0"
+              : "left-0",
         openPosition === "top" ? "bottom-0" : "top-0",
         menuOriginClass,
     );
@@ -255,6 +334,9 @@ export function SmoothDropdwon({
     const menuContent = (
         <>
             <motion.div
+                ref={triggerContentRef}
+                aria-hidden={isOpen}
+                inert={isOpen}
                 initial={false}
                 animate={{
                     opacity: isOpen ? 0 : 1,
@@ -274,7 +356,7 @@ export function SmoothDropdwon({
                 )}
             </motion.div>
 
-            <div ref={contentRef}>
+            <div ref={contentRef} aria-hidden={!isOpen} inert={!isOpen}>
                 <motion.div
                     layout
                     initial={false}
@@ -313,7 +395,8 @@ export function SmoothDropdwon({
                                 );
                             }
 
-                            const isActive = activeItem === item.id;
+                            const isActive =
+                                (activeItemId ?? activeItem) === item.id;
                             const isDestructive =
                                 item.variant === "destructive";
                             const showIndicator = hoveredItem
@@ -326,6 +409,7 @@ export function SmoothDropdwon({
                                 setActiveItem(item.id);
                                 item.onSelect?.();
                                 if (item.closeOnSelect !== false) {
+                                    restoreTriggerFocus.current = true;
                                     requestOpenChange(false);
                                 }
                             };
@@ -387,7 +471,7 @@ export function SmoothDropdwon({
                                                 "absolute inset-0 rounded",
                                                 isDestructive
                                                     ? "bg-destructive/10"
-                                                    : "bg-accent/40",
+                                                    : "bg-accent/60",
                                             )}
                                             transition={{
                                                 type: "spring",
@@ -404,7 +488,7 @@ export function SmoothDropdwon({
                                                 "absolute top-0 bottom-0 left-0 my-auto h-5 w-0.75 rounded-full",
                                                 isDestructive
                                                     ? "bg-destructive"
-                                                    : "bg-foreground",
+                                                    : "bg-accent-foreground",
                                             )}
                                             transition={{
                                                 type: "spring",
@@ -445,13 +529,14 @@ export function SmoothDropdwon({
             layout
             initial={false}
             data-testid="smooth-dropdown-menu"
-            data-open-from={openFrom}
+            data-align={resolvedAlign}
+            data-open-from={opensToLeft ? "right" : "left"}
             data-open-position={openPosition}
             data-portalled={isPortalled && isOpen ? "true" : "false"}
             animate={{
                 width: isOpen ? effectiveOpenWidth : closedWidth,
                 height: isOpen ? openHeight : closedHeight,
-                borderRadius: isOpen ? 14 : 12,
+                borderRadius: isOpen ? 14 : closedRadius,
             }}
             transition={{
                 type: "spring" as const,
@@ -463,7 +548,7 @@ export function SmoothDropdwon({
                 isPortalled && isOpen
                     ? "fixed cursor-pointer overflow-hidden border border-border bg-popover shadow-lg"
                     : menuPositionClass,
-                isPortalled && isOpen && uiLayerClasses.modal,
+                isPortalled && isOpen && uiLayerClasses.popup,
                 isPortalled && isOpen && menuOriginClass,
             )}
             style={isPortalled && isOpen ? portalStyle : undefined}
@@ -475,6 +560,42 @@ export function SmoothDropdwon({
     return (
         <div
             ref={containerRef}
+            role="group"
+            onKeyDown={(event) => {
+                if (
+                    isOpen &&
+                    (event.key === "ArrowDown" || event.key === "ArrowUp")
+                ) {
+                    const options = Array.from(
+                        contentRef.current?.querySelectorAll<HTMLElement>(
+                            '[role="option"]:not([aria-disabled="true"])',
+                        ) ?? [],
+                    );
+                    if (options.length) {
+                        const current = options.findIndex((option) =>
+                            option.contains(event.target as Node),
+                        );
+                        const next =
+                            current < 0
+                                ? event.key === "ArrowDown"
+                                    ? 0
+                                    : options.length - 1
+                                : (current +
+                                      (event.key === "ArrowDown" ? 1 : -1) +
+                                      options.length) %
+                                  options.length;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        options[next]?.focus();
+                    }
+                }
+                if (isOpen && event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    restoreTriggerFocus.current = true;
+                    requestOpenChange(false);
+                }
+            }}
             data-testid="smooth-dropdown-container"
             data-open={isOpen ? "true" : undefined}
             className={cn("relative not-prose", className)}
@@ -483,8 +604,14 @@ export function SmoothDropdwon({
                 <>
                     <button
                         type="button"
-                        aria-label="Open dropdown"
-                        className="absolute inset-0 cursor-pointer overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+                        aria-label={triggerAriaLabel}
+                        aria-expanded={isOpen}
+                        aria-haspopup="listbox"
+                        style={{ borderRadius: closedRadius }}
+                        className={cn(
+                            "absolute inset-0 cursor-pointer overflow-hidden border border-border bg-popover shadow-lg",
+                            triggerClassName,
+                        )}
                         onClick={() => requestOpenChange(true)}>
                         <div className="absolute inset-0 flex items-center justify-center">
                             {trigger ?? (

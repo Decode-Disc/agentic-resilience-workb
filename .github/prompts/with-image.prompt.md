@@ -1,1 +1,0 @@
-Load instructions in [image-analysis.instructions.md](../instructions/image-analysis.instructions.md).

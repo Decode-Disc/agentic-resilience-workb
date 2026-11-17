@@ -1,0 +1,68 @@
+{
+    "schemaVersion": 1,
+    "id": "20261109T062001769Z-mission-return-cause-investigation",
+    "createdAt": "2026-11-09T06:20:01.769Z",
+    "git": {
+        "head": "867f08a17a4ab08f59cccdaa907379abf487ce58",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/mission-return-live-qualification-20261109053926Z/cause-investigation",
+            "archivePath": "external/investigation"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/investigation/analytics-access.json",
+            "bytes": 252,
+            "sha256": "cf3ab4221bc0a68c0011a153522dc7707d14319567656e8b8e6741eccacc6b84"
+        },
+        {
+            "path": "external/investigation/code-hashes.json",
+            "bytes": 775,
+            "sha256": "2465839fa3cbedea99f443ae0af7e062edd8e4616fde70afc9bd6404275c3830"
+        },
+        {
+            "path": "external/investigation/findings.md",
+            "bytes": 5148,
+            "sha256": "ce1676902597fc7b2a747b29db60263b4e876ac78c458e9c9e32bda02423a8b7"
+        },
+        {
+            "path": "external/investigation/last-successful-generation.json",
+            "bytes": 1998,
+            "sha256": "0f4c76b33354a251e0330df9f4f4542df03b9f7e69be688a19ade1fcbcf5e3f7"
+        },
+        {
+            "path": "external/investigation/native-sdk-faults.json",
+            "bytes": 998,
+            "sha256": "e3295a2d7ff08376b8bc5b49714fe25d1fc0891d511de0defc1447dd44f61ac5"
+        },
+        {
+            "path": "external/investigation/pi-commits.json",
+            "bytes": 395929,
+            "sha256": "9bb7ecfd5e833a8c72eba0158856fce4e9452f4ccd2bf7d4067057029b1c45d8"
+        },
+        {
+            "path": "external/investigation/pi-session.json",
+            "bytes": 369,
+            "sha256": "c4b6599a4e70de8b5f31089e11f3d7be9833ae0fa4620f12542f81b789c8c718"
+        },
+        {
+            "path": "external/investigation/probe-native-errors.mjs",
+            "bytes": 3744,
+            "sha256": "0c9cfc64eeabdd0c663a55eb4192d656f0e5ebade4d40118a6beffa58f3a8b02"
+        },
+        {
+            "path": "external/investigation/probe.log",
+            "bytes": 652,
+            "sha256": "1f5262b754b5916635564b89804548f94050ff25211efb34591c1073e478a570"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261109T062001769Z-mission-return-cause-investigation.tar.gz",
+        "bytes": 88749,
+        "sha256": "eb87827299b364d8473706c61cdead81c3881d2d7500d89700b36df2bbf4c04d"
+    },
+    "verification": "restored_and_verified"
+}

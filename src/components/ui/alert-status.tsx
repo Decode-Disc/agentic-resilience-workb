@@ -12,7 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const alertStatusVariants = cva(
-    "group/alert relative grid w-full gap-0.5 rounded-2xl border text-left transition-colors has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2.5 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current",
+    "group/alert relative grid w-full gap-0.5 rounded-sm border text-left transition-colors has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2.5 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current",
     {
         variants: {
             variant: {

@@ -1,7 +1,6 @@
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
-
 import { cn } from "@/lib/utils";
 
 type Color =
@@ -13,90 +12,64 @@ type Color =
     | "orange"
     | "primary";
 
-const colorVariantsFancy = {
-    primary:
-        "border-primary/10 from-primary/10 to-primary/50 hover:bg-primary/10 text-primary/80  dark:from-primary/30 dark:hover:bg-primary/10",
-    emerald:
-        "border-emerald-300 from-emerald-200/20 to-emerald-300  hover:bg-emerald-100 text-emerald-600  dark:hover:bg-emerald/10 dark:from-emerald-700/50 dark:text-emerald-400",
-    red: "border-red-300 from-red-200/50 to-red-400/80 hover:bg-red-100 text-red-600 dark:hover:bg-red/30 dark:from-red-700/20 dark:to-transparent dark:text-red-400",
-    amber: "border-amber-300 from-amber-200/20 to-amber-200 hover:bg-amber-100 text-amber-600 dark:hover:bg-amber/30 dark:from-amber-700/50 dark:text-amber-400",
-    sky: "border-sky-300 from-sky-200/20 to-sky-300 hover:bg-sky-100 text-sky-600 dark:hover:bg-sky/30 dark:from-sky-700/50 dark:text-sky-400",
-    indigo: "border-indigo-300 from-indigo-200/20 to-indigo-300 hover:bg-indigo-100 text-indigo-600 dark:hover:bg-indigo/30 dark:from-indigo-700/50 dark:text-indigo-400",
-    orange: "border-orange-300 from-orange-200/20 to-orange-300 hover:bg-orange-100 text-orange-600 dark:hover:bg-orange/30 dark:from-orange-700/50 dark:text-orange-400",
-};
-
-const colorVariantsRegular = {
-    primary:
-        "bg-primary/10 hover:bg-primary/20 text-primary/80 dark:bg-primary/10 dark:hover:bg-primary/10",
-    emerald:
-        "bg-emerald-100 hover:bg-emerald-200 text-emerald-600 dark:bg-emerald-600/10 dark:hover:bg-emerald-600/30 dark:text-emerald-400",
-    red: "bg-red-100 hover:bg-red-200 text-red-600 dark:bg-red-600/10 dark:hover:bg-red-600/30 dark:text-red-400",
-    amber: "bg-amber-100 hover:bg-amber-200 text-amber-600 dark:bg-amber-500/10 dark:hover:bg-amber-600/30 dark:text-amber-400",
-    sky: "bg-sky-100 hover:bg-sky-200 text-sky-600 dark:bg-sky-500/10 dark:hover:bg-sky-600/30 dark:text-sky-400",
-    indigo: "bg-indigo-100 hover:bg-indigo-200 text-indigo-600 dark:bg-indigo-500/10 dark:hover:bg-indigo-600/30 dark:text-indigo-400",
-    orange: "bg-orange-100 hover:bg-orange-200 text-orange-600 dark:bg-orange-500/10 dark:hover:bg-orange-600/30 dark:text-orange-400",
-};
-
-const colorVariantsOutline = {
-    primary:
-        "hover:bg-primary/10 hover:border-primary/80 [&>svg]:text-primary dark:hover:bg-primary/10 dark:hover:border-primary/80",
-    emerald:
-        "hover:bg-emerald-100 hover:border-emerald-300 [&>svg]:text-emerald-400 dark:hover:bg-emerald-600/10 dark:hover:border-emerald-300",
-    red: "hover:bg-red-100 hover:border-red-300 [&>svg]:text-red-400 dark:hover:bg-red-600/10 dark:hover:border-red-300",
-    amber: "hover:bg-amber-100 hover:border-amber-300 [&>svg]:text-amber-400 dark:hover:bg-amber-600/10 dark:hover:border-amber-300",
-    sky: "hover:bg-sky-100 hover:border-sky-300 [&>svg]:text-sky-400 dark:hover:bg-sky-600/10 dark:hover:border-sky-300",
-    indigo: "hover:bg-indigo-100 hover:border-indigo-300 [&>svg]:text-indigo-400 dark:hover:bg-indigo-600/10 dark:hover:border-indigo-300",
-    orange: "hover:bg-orange-100 hover:border-orange-300 [&>svg]:text-orange-400 dark:hover:bg-orange-600/10 dark:hover:border-orange-300",
-};
-
 const badgeVariants = cva(
-    "inline-flex items-center justify-center rounded-lg border px-1.5 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-0.5 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-all duration-300 overflow-hidden",
+    "inline-flex w-fit shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-badge px-[7px] py-0.5 text-xs leading-4.5 font-medium [&>svg]:shrink-0 [&>svg]:pointer-events-none",
     {
         variants: {
             variant: {
-                default:
-                    "border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-                regular: "border-none",
-                secondary:
-                    "border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
-                destructive:
-                    "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
-                outline:
-                    "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground hover:bg-border/50",
-                fancy: "bg-white dark:border-card dark:bg-background bg-radial-[at_40%_30%] shadow-md inset-shadow-sm shadow-shade inset-shadow-white/70 dark:inset-shadow-white/50 dark:inset-shadow-xs dark:to-transparent ",
+                default: "bg-tint-ink text-foreground",
+                regular: "bg-tint-ink text-foreground",
+                secondary: "bg-tint-ink text-foreground",
+                outline: "bg-tint-ink text-foreground",
+                fancy: "bg-tint-ink text-foreground",
+                destructive: "bg-destructive/10 text-destructive-text",
+            },
+            tone: {
+                ink: "bg-tint-ink text-foreground",
+                fact: "bg-tint-fact text-evidence-fact",
+                inference: "bg-tint-inference text-evidence-inference",
+                hypothesis: "bg-tint-hypothesis text-evidence-hypothesis",
+                unknown: "bg-tint-unknown text-evidence-unknown",
+                counter: "bg-tint-counter text-counter-evidence",
+                review: "bg-tint-review text-review-foreground",
+                "review-pending":
+                    "bg-tint-review text-review-foreground outline outline-dashed -outline-offset-1 outline-review-foreground",
+                destructive: "bg-destructive/10 text-destructive-text",
+                approved: "bg-tint-approved text-approved",
+                // Technical success in Quiet Sage; Approval Teal stays reserved for analyst approval.
+                success:
+                    "bg-brand-green/15 text-[color-mix(in_oklab,var(--brand-green)_45%,var(--foreground))]",
+                accent: "bg-accent text-accent-foreground",
+                dashed: "bg-transparent text-muted-foreground outline outline-dashed -outline-offset-1 outline-edge-dashed",
             },
         },
-        defaultVariants: {
-            variant: "default",
-        },
+        compoundVariants: [
+            {
+                tone: ["fact", "inference", "hypothesis", "unknown", "counter"],
+                className: "inset-ring inset-ring-current/20",
+            },
+        ],
+        defaultVariants: { variant: "default" },
     },
 );
 
-const colorVariantSets: Record<string, Record<Color, string>> = {
-    fancy: colorVariantsFancy,
-    regular: colorVariantsRegular,
-    outline: colorVariantsOutline,
+// Compatibility for existing operational badges: success is neutral, never analyst approval.
+const operationalColors: Record<Color, string> = {
+    primary: "bg-tint-ink text-foreground",
+    emerald: "bg-tint-ink text-foreground",
+    red: "bg-destructive/10 text-destructive-text",
+    amber: "bg-tint-review text-review-foreground",
+    orange: "bg-tint-review text-review-foreground",
+    sky: "bg-accent text-accent-foreground",
+    indigo: "bg-accent text-accent-foreground",
 };
-
-const dotVariants = cva("h-2 w-2 rounded-full mr-0.5", {
-    variants: {
-        color: {
-            emerald: "bg-emerald-400",
-            red: "bg-red-400",
-            amber: "bg-amber-400",
-            sky: "bg-sky-400",
-            indigo: "bg-indigo-400",
-            orange: "bg-orange-400",
-            primary: "bg-primary/80",
-        },
-    },
-});
 
 function Badge({
     className,
     variant,
+    tone,
     asChild = false,
-    color = "primary",
+    color,
     showDot = false,
     children,
     ...props
@@ -104,24 +77,34 @@ function Badge({
     VariantProps<typeof badgeVariants> & {
         asChild?: boolean;
         color?: Color;
-        showDot?: boolean;
+        showDot?: boolean | "running";
     }) {
     const Comp = asChild ? Slot : "span";
-
     return (
         <Comp
             data-slot="badge"
             className={cn(
-                badgeVariants({ variant }),
-                colorVariantSets[variant || "default"]?.[color],
+                badgeVariants({ variant, tone }),
+                !tone && color ? operationalColors[color] : undefined,
                 className,
             )}
             {...props}>
-            {showDot && <div className={dotVariants({ color })}></div>}
+            {showDot ? (
+                <span
+                    aria-hidden="true"
+                    className={cn(
+                        "shrink-0 rounded-full bg-current",
+                        showDot === "running"
+                            ? "size-[7px] animate-workbench-live motion-reduce:animate-none"
+                            : "size-1.5",
+                    )}
+                />
+            ) : null}
             {children}
         </Comp>
     );
 }
 
+export type BadgeTone = NonNullable<VariantProps<typeof badgeVariants>["tone"]>;
 export type { Color };
 export { Badge, badgeVariants };

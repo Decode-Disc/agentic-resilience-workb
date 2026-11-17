@@ -1,0 +1,67 @@
+{
+  "title": "Cadrage du chat — revue des compositions",
+  "question": "Compare les trois organisations du même programme de recherche. Que faut-il conserver, combiner ou revoir ? Choisir une composition valide uniquement la direction visuelle, sans lancer l’implémentation.",
+  "options": [
+    {
+      "id": "overview",
+      "label": "Vue d’ensemble avec une question développée",
+      "kicker": "COMPOSITION ACTUELLEMENT PROPOSÉE",
+      "thesis": "Les quatre questions restent visibles ; une seule dévoile son détail.",
+      "palette": [
+        "#201e22",
+        "#28262b",
+        "#efedf0",
+        "#bb8add"
+      ],
+      "materials": [
+        "Surfaces opaques",
+        "Geist",
+        "Fil continu"
+      ],
+      "viewport": "Programme attaché au composer, accès direct aux quatre questions et lancement explicite.",
+      "risk": "La liste occupe davantage de hauteur quand une question est développée.",
+      "comp": ".impeccable/mocks/chat-framing-review/program-overview.png"
+    },
+    {
+      "id": "focus",
+      "label": "Une question au premier plan",
+      "kicker": "COMPOSITION À COMPARER",
+      "thesis": "Une question détaillée à la fois, avec un sélecteur compact pour parcourir librement le programme.",
+      "palette": [
+        "#201e22",
+        "#28262b",
+        "#efedf0",
+        "#bb8add"
+      ],
+      "materials": [
+        "Surfaces opaques",
+        "Geist",
+        "Fil continu"
+      ],
+      "viewport": "Carte de question unique au-dessus du composer ; les quatre thèmes restent accessibles sans étapes obligatoires.",
+      "risk": "Comparer les questions nécessite de passer de l’une à l’autre.",
+      "comp": ".impeccable/mocks/chat-framing-review/question-focus.png"
+    },
+    {
+      "id": "document",
+      "label": "Programme lisible comme un document",
+      "kicker": "COMPOSITION À COMPARER",
+      "thesis": "Le programme reste consultable dans son ensemble ; le composer sert aux demandes de modification.",
+      "palette": [
+        "#201e22",
+        "#28262b",
+        "#efedf0",
+        "#bb8add"
+      ],
+      "materials": [
+        "Surfaces opaques",
+        "Geist",
+        "Fil continu"
+      ],
+      "viewport": "Programme structuré dans le fil, résumé de la proposition active et actions attachés au composer.",
+      "risk": "Déplace la proposition active dans le fil, contrairement au panneau attaché au composer retenu jusqu’ici.",
+      "comp": ".impeccable/mocks/chat-framing-review/program-document.png"
+    }
+  ],
+  "steer": true
+}

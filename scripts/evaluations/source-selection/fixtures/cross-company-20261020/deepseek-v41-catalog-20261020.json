@@ -1,0 +1,21 @@
+{
+  "observedAt": "2026-10-20T22:23:39.242Z",
+  "models": [
+    {
+      "id": "deepseek/deepseek-v4.1-flash",
+      "inputPricePerToken": 7e-08,
+      "outputPricePerToken": 5e-07,
+      "contextLength": 1048576,
+      "provider": "relace",
+      "sourceUrl": "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash/endpoints"
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash-1017",
+      "inputPricePerToken": 7e-08,
+      "outputPricePerToken": 5e-07,
+      "contextLength": 1048576,
+      "provider": "relace",
+      "sourceUrl": "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash-1017/endpoints"
+    }
+  ]
+}

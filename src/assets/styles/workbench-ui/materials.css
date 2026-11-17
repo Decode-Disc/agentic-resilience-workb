@@ -1,0 +1,128 @@
+.wb-chip {
+    @apply inline-flex items-center gap-[8px] rounded-chip px-[11px] py-[6px] font-mono text-[0.6875rem] font-medium tracking-[0.16em] leading-[1.5] uppercase text-accent-foreground bg-tint-violet bg-none;
+    box-shadow: inset 0 0 0 1px var(--chip-edge);
+}
+.wb-glass {
+    @apply bg-surface-glass bg-none;
+    -webkit-backdrop-filter: blur(var(--blur-glass));
+    backdrop-filter: blur(var(--blur-glass));
+    box-shadow: var(--shadow-glass);
+}
+.wb-glass.wb-focal {
+    box-shadow: var(--shadow-focal);
+}
+.wb-glass.wb-waits {
+    box-shadow: var(--shadow-review);
+}
+.wb-float {
+    @apply bg-surface-float bg-none;
+    -webkit-backdrop-filter: blur(var(--blur-glass));
+    backdrop-filter: blur(var(--blur-glass));
+    box-shadow: var(--shadow-float);
+}
+.wb-raised {
+    @apply bg-card bg-none;
+    box-shadow: var(--shadow-raised);
+}
+.wb-dashed {
+    border: 1.5px dashed var(--edge-dashed);
+    @apply bg-transparent bg-none;
+}
+.wb-divider {
+    border-top: 1px solid var(--divider);
+}
+.wb-panel-focal {
+    background: linear-gradient(
+        var(--wb-panel-angle, 180deg),
+        var(--tint-violet),
+        var(--surface-glass) 55%
+    );
+}
+.wb-panel-unfinished {
+    background: repeating-linear-gradient(
+        135deg,
+        transparent 0 10px,
+        color-mix(in oklab, var(--foreground) 2.5%, transparent) 10px 11px
+    );
+}
+.wb-backdrop {
+    @apply bg-background;
+    background-image:
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: var(--grid-pitch) var(--grid-pitch);
+}
+.wb-backdrop-glow {
+    background-image:
+        radial-gradient(
+            ellipse 40% 30% at 50% 20%,
+            var(--glow),
+            transparent 70%
+        ),
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size:
+        100% 100%,
+        var(--grid-pitch) var(--grid-pitch),
+        var(--grid-pitch) var(--grid-pitch);
+}
+.wb-well {
+    @apply shrink-0 inline-flex;
+    align-items: center;
+    @apply justify-center w-[36px] h-[36px] rounded-(--radius-tile);
+}
+.wb-well-lg {
+    @apply w-[44px] h-[44px] rounded-(--radius-item);
+}
+.wb-doc {
+    @apply shrink-0 inline-flex;
+    align-items: flex-end;
+    @apply justify-center box-border w-[24px] h-[30px] pb-[4px] rounded-[6px] bg-card bg-none;
+    box-shadow: 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 12%, transparent);
+    @apply font-mono text-[7px] font-medium text-muted-foreground;
+}
+/* Larger document tags for source lists and the source matrix. */
+.wb-doc.wb-doc-md {
+    @apply w-[26px] h-[32px] text-[7.5px];
+}
+.wb-doc.wb-doc-lg {
+    @apply w-[34px] h-[40px] pb-[5px] rounded-[7px] text-[8.5px] tracking-[0.04em];
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
+        0 4px 10px -6px color-mix(in oklab, var(--foreground) 35%, transparent);
+}
+/* A document that could not be captured keeps a dashed outline. */
+.wb-doc.wb-doc-missing {
+    @apply bg-transparent bg-none;
+    box-shadow: none;
+    outline: 1px dashed color-mix(in oklab, var(--foreground) 30%, transparent);
+}
+.wb-live {
+    animation: var(--animate-workbench-live);
+}
+.wb-sweep {
+    background-image: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in oklab, var(--brand-purple) 35%, transparent),
+        transparent
+    );
+    background-size: 160px 100%;
+    @apply bg-no-repeat;
+    animation: wb-sweep 2.2s ease-in-out infinite;
+}
+@keyframes wb-sweep {
+    0% {
+        background-position: -160px 0;
+    }
+    100% {
+        background-position: 260px 0;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .wb-live,
+    .wb-sweep {
+        animation: none;
+    }
+}

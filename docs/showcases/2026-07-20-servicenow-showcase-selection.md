@@ -1,8 +1,10 @@
 # ServiceNow Showcase Selection
 
+> **Historical record.** Preserve the observations and limitations below. Its status, requirements and permissions describe that checkpoint, not current authority. Use the [current document owners](../../AGENTS.md#document-authority-and-required-reading) and [delivery roadmap](../ROADMAP.md); no historical budget or execution permission is renewed.
+
 ## Status
 
-Provisional candidate — audience-fit review required
+Historical provisional selection, superseded by the [2026-07-21 audience-fit decision](2026-07-21-servicenow-audience-fit-decision.md). ServiceNow was rejected as the primary candidature showcase; [CCC Intelligent Solutions](2026-07-21-ccc-showcase-selection.md) is the accepted candidate. The rationale below is retained as history and does not reopen that selection.
 
 ## Date
 

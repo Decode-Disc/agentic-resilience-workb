@@ -1,0 +1,82 @@
+{
+    "schemaVersion": 1,
+    "id": "20261108T070113186Z-native-context-qualification-closeout-20261108",
+    "createdAt": "2026-11-08T07:01:13.186Z",
+    "git": {
+        "head": "df7b943caaa123aabf8b7e6d710dadadcbb0fb5a",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-context-qualification-20261108/report.md",
+            "archivePath": "external/report/report.md"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-context-qualification-20261108/analysis.json",
+            "archivePath": "external/analysis/analysis.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-context-qualification-20261108/mandate.json",
+            "archivePath": "external/mandate/mandate.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-context-qualification-20261108/official-route-metadata.json",
+            "archivePath": "external/official-metadata/official-route-metadata.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-context-qualification-20261108/review.json",
+            "archivePath": "external/review/review.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-context-qualification-20261108/provider-cleanup.json",
+            "archivePath": "external/cleanup/provider-cleanup.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/native-context-qualification-20261108/campaign-final/status.json",
+            "archivePath": "external/status/status.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/analysis/analysis.json",
+            "bytes": 2384,
+            "sha256": "7f4f176db5d991770bc51bb50b595ede34ac123cd923d570b2bbfa25948cca67"
+        },
+        {
+            "path": "external/cleanup/provider-cleanup.json",
+            "bytes": 217,
+            "sha256": "e3fdafd9a61eec93209d00292a11f20f7eb09c0b7ddc05de446c085317eca590"
+        },
+        {
+            "path": "external/mandate/mandate.json",
+            "bytes": 5128,
+            "sha256": "1db4f72bffb33b8d303a6eea233051f17bce92512f3845567820d9b66bff2b17"
+        },
+        {
+            "path": "external/official-metadata/official-route-metadata.json",
+            "bytes": 183818,
+            "sha256": "240bee9dbacc5f6656280c0a6ecd0cb126fd144ed37ea2e03767a36fb2c5cd80"
+        },
+        {
+            "path": "external/report/report.md",
+            "bytes": 8873,
+            "sha256": "88b59f54fcb018b6beafa9217addb17417a7c75a6084cdadbf6381afb7230faa"
+        },
+        {
+            "path": "external/review/review.json",
+            "bytes": 2826,
+            "sha256": "2609955ab007f043a8af9ae9eff380ccb9309186bdfe2ea7a9d5d53cc93c40b9"
+        },
+        {
+            "path": "external/status/status.json",
+            "bytes": 7717,
+            "sha256": "25ce8ec7ba11c35d9d5e4cd50d5de9d4a6781863bf4a3d46da9337be79f39c65"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261108T070113186Z-native-context-qualification-closeout-20261108.tar.gz",
+        "bytes": 18897,
+        "sha256": "ce736ab564538e0ec04372c58af3cdbcefb30e72fb0440f4874bd2d241434d3b"
+    },
+    "verification": "restored_and_verified"
+}

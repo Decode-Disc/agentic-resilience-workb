@@ -1,0 +1,50 @@
+{
+    "archiveRecord": "scripts/evaluations/archives/20261025T094214915Z-preparation-concurrency-live/record.json",
+    "canonicalUrl": "https://www.servicenow.com/docs/",
+    "title": "ServiceNow",
+    "text": "ServiceNow\n\nServiceNow\n[\n![](https://www.servicenow.com/docs/portal-asset/new-release-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/rn-summary-new-features.html)[\n![](https://www.servicenow.com/docs/portal-asset/prepare-upgrade-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/rn-prepare-landing-page.html)[\n![](https://www.servicenow.com/docs/portal-asset/upgrade-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/available-versions.html)\n[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/australia/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/zurich/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/yokohama/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/xanadu/release-notes/family-release-notes.html)\n[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/store-release-notes/sn-store-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/mobile-release-notes/mobile-apps.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/other-release-notes/sn-oob-rn.html)\n[](https://www.servicenow.com/docs/p/product-directory/product-directory.html)",
+    "qualification": {
+        "companyMatch": "subject",
+        "companyPassages": [
+            {
+                "passageKey": "p0",
+                "quotation": "ServiceNow"
+            },
+            {
+                "passageKey": "p1",
+                "quotation": "ServiceNow\n[\n![](https://www.servicenow.com/docs/portal-asset/new-release-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/rn-summary-new-features.html)[\n![](https://www.servicenow.com/docs/portal-asset/prepare-upgrade-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/rn-prepare-landing-page.html)[\n![](https://www.servicenow.com/docs/portal-asset/upgrade-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/available-versions.html)\n[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/australia/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/zurich/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/yokohama/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/xanadu/release-notes/family-release-notes.html)\n[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/store-release-notes/sn-store-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/mobile-release-notes/mobile-apps.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/other-release-notes/sn-oob-rn.html)\n[](https://www.servicenow.com/docs/p/product-directory/product-directory.html)"
+            }
+        ],
+        "documentKind": "official_product_documentation",
+        "findings": [
+            {
+                "dependsOnFlaggedAssertion": false,
+                "kind": "asserted_fact",
+                "passages": [
+                    {
+                        "passageKey": "p1",
+                        "quotation": "ServiceNow\n[\n![](https://www.servicenow.com/docs/portal-asset/new-release-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/rn-summary-new-features.html)[\n![](https://www.servicenow.com/docs/portal-asset/prepare-upgrade-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/rn-prepare-landing-page.html)[\n![](https://www.servicenow.com/docs/portal-asset/upgrade-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/available-versions.html)\n[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/australia/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/zurich/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/yokohama/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/xanadu/release-notes/family-release-notes.html)\n[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/store-release-notes/sn-store-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/mobile-release-notes/mobile-apps.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/other-release-notes/sn-oob-rn.html)\n[](https://www.servicenow.com/docs/p/product-directory/product-directory.html)"
+                    }
+                ],
+                "period": "unspecified",
+                "periodPassages": [],
+                "role": "official_product_platform",
+                "summary": "ServiceNow\n[\n![](https://www.servicenow.com/docs/portal-asset/new-release-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/rn-summary-new-features.html)[\n![](https://www.servicenow.com/docs/portal-asset/prepare-upgrade-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/rn-prepare-landing-page.html)[\n![](https://www.servicenow.com/docs/portal-asset/upgrade-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://w"
+            }
+        ],
+        "limitations": [
+            {
+                "code": "no_substantive_content",
+                "explanation": "The document is a documentation portal landing page consisting of navigation links and release-note references; it contains no substantive product capability descriptions, financial data, contractual terms, pricing, security architecture, or external analysis.",
+                "passages": [
+                    {
+                        "passageKey": "p1",
+                        "quotation": "ServiceNow\n[\n![](https://www.servicenow.com/docs/portal-asset/new-release-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/rn-summary-new-features.html)[\n![](https://www.servicenow.com/docs/portal-asset/prepare-upgrade-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/rn-prepare-landing-page.html)[\n![](https://www.servicenow.com/docs/portal-asset/upgrade-icon-homepage)\n![](https://www.servicenow.com/docs/portal-asset/right-arrow)\n](https://www.servicenow.com/docs/r/release-notes/available-versions.html)\n[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/australia/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/zurich/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/yokohama/release-notes/family-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/xanadu/release-notes/family-release-notes.html)\n[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/store-release-notes/sn-store-release-notes.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/mobile-release-notes/mobile-apps.html)[![](https://www.servicenow.com/docs/portal-asset/right-arrow)](https://www.servicenow.com/docs/r/other-release-notes/sn-oob-rn.html)\n[](https://www.servicenow.com/docs/p/product-directory/product-directory.html)"
+                    }
+                ]
+            }
+        ],
+        "reportingPeriodEnd": null,
+        "reportingPeriodPassages": []
+    }
+}

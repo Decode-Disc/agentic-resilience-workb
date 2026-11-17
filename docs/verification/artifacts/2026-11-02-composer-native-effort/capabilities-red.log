@@ -1,0 +1,55 @@
+
+> agentic-resilience-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/convex/admin/model-configuration.test.ts --environment=node --maxWorkers=1 --testTimeout=30000 -t 'administrative import prepares'
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/convex/admin/model-configuration.test.ts (13 tests | 1 failed | 12 skipped) 3375ms
+   × administrative import prepares a model absent from Pi's bundled catalogue without inference 3373ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/convex/admin/model-configuration.test.ts > administrative import prepares a model absent from Pi's bundled catalogue without inference
+AssertionError: expected { …(10) } to match object { descriptor: { …(2) }, …(1) }
+(15 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "descriptor": {
+-     "reasoningEfforts": [
+-       "low",
+-       "high",
+-       "max",
+-     ],
+-     "reasoningMandatory": true,
++     "cacheReadPrice": 0.01,
++     "contextWindow": 131072,
++     "inputPrice": 0.03,
++     "maxTokens": 8192,
++     "outputPrice": 0.09999999999999999,
++     "reasoning": true,
++     "structuredOutputs": true,
+    },
+    "reasoningEffort": "low",
+  }
+
+ ❯ src/__tests__/convex/admin/model-configuration.test.ts:216:70
+    214|     ]);
+    215|     expect(fetch).toHaveBeenCalledTimes(2);
+    216|     expect(await t.run(ctx=>ctx.db.query("modelRevisions").first())).t…
+       |                                                                      ^
+    217| });
+    218|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 skipped (13)
+   Start at  08:16:05
+   Duration  6.25s (transform 2.56s, setup 487ms, import 2.05s, tests 3.38s, environment 0ms)
+
+ ELIFECYCLE  Test failed. See above for more details.

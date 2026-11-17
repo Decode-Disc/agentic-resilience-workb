@@ -1,0 +1,166 @@
+{
+    "schemaVersion": 1,
+    "id": "20261104T190749837Z-correction-input-and-evaluation-closeout",
+    "createdAt": "2026-11-04T19:07:49.837Z",
+    "git": {
+        "head": "3fc22bb84579fe61e77430c41b233a4d65b613e4",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/skills/workbench-evaluation/SKILL.md",
+            "archivePath": "repository/.agents/skills/workbench-evaluation/SKILL.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/skills/workbench-evaluation/evals/evals.json",
+            "archivePath": "repository/.agents/skills/workbench-evaluation/evals/evals.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/responseControl.ts",
+            "archivePath": "repository/convex/responseControl.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/response-control.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/response-control.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/context/TECH.md",
+            "archivePath": "repository/context/TECH.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/PRODUCT.md",
+            "archivePath": "repository/PRODUCT.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-04-sources-jev-enabled-qualification.md",
+            "archivePath": "repository/docs/verification/2026-11-04-sources-jev-enabled-qualification.md"
+        },
+        {
+            "origin": "/tmp/workbench-draft-correction-checks-20261104-xp7qdhxt",
+            "archivePath": "external/checks"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/checks/skill-structure-validation.log",
+            "bytes": 167,
+            "sha256": "b8f94eca8c5c7bc8736c92b7d110c3a31c647df05a632fcd3a6bdbfc04b65085"
+        },
+        {
+            "path": "external/checks/skill-validation.json",
+            "bytes": 276,
+            "sha256": "8c691cb5a2761ddbd27daa7e8624eb92e8f6eb84f5e33e749446411681d8bc81"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-biome.log",
+            "bytes": 41,
+            "sha256": "c0bfb781122a06e74e258bb3813e16640a5a36b698d4a31146bd6f35d9011891"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-controller-isolated.log",
+            "bytes": 386,
+            "sha256": "d209ea52c5ecc5abb5e05bc5260b718597cf88df7f8db96c2edf519493ce0fa2"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-docs.log",
+            "bytes": 282,
+            "sha256": "9f2f88e6376e363086fa8316ed7d045f72512e26779613b7bc54ca0a72dab1aa"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-final-docs.log",
+            "bytes": 282,
+            "sha256": "9f2f88e6376e363086fa8316ed7d045f72512e26779613b7bc54ca0a72dab1aa"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-green.log",
+            "bytes": 452,
+            "sha256": "ad69ef996b332b32a7e0795a00406575f1540259cfae8540f3c7cc3ba6f8bc0e"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-hold.log",
+            "bytes": 299,
+            "sha256": "9946b013f092850bd0375783d64f61de04fc03c10d382e908afb597d032522be"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-native.log",
+            "bytes": 435,
+            "sha256": "fa5d9856c5046afedc6a9797f0913b1907a1dbd9869337f578a0ad771bbc0aab"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-ownership.log",
+            "bytes": 35,
+            "sha256": "e1b5d3738a16db11e8af45ef62ad93afe0fd55e4a10e2b99cc5fca694db746b5"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-publication.log",
+            "bytes": 967,
+            "sha256": "b4c3c493d02b097326175b150ec5ec64ca8ec5fca9f220b6b24fa6a20ef93ee3"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-red.log",
+            "bytes": 7053,
+            "sha256": "e8b263e54991a9d5073d66820a6407b4865cb27ff102208415e48bdc587a88bb"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-regressions.log",
+            "bytes": 1788,
+            "sha256": "60288d6b43a4ca7ff0c8bf39fffcaf3f78d9359a688a83e59d4381156671145b"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-release.log",
+            "bytes": 197,
+            "sha256": "9db1db5d74d05c676d8f876fb9576325c696ab56d381557ffa588bf9849bea49"
+        },
+        {
+            "path": "external/checks/workbench-draft-correction-typecheck.log",
+            "bytes": 55,
+            "sha256": "275cd6edeed412bf468510b7ae1fa591679d39ee8104c8765c681630946cded0"
+        },
+        {
+            "path": "external/checks/workbench-evaluation-skill-validation.log",
+            "bytes": 218,
+            "sha256": "23e97aaabb1fefdbae680f58f366af7e7bf9837d20d045a6f4d0a63547d3c937"
+        },
+        {
+            "path": "repository/.agents/skills/workbench-evaluation/evals/evals.json",
+            "bytes": 30904,
+            "sha256": "49a89f30ce8236689af326b8427d123851fcff338ffaa4bef6eb9462e923f09e"
+        },
+        {
+            "path": "repository/.agents/skills/workbench-evaluation/SKILL.md",
+            "bytes": 25873,
+            "sha256": "0f079cdbab2e730d48dd191c8f339e8c705c2fd483b405086688b28d64d1fa0c"
+        },
+        {
+            "path": "repository/context/TECH.md",
+            "bytes": 161412,
+            "sha256": "b99737bee56e2af97bf787578ca623c95f19391433a42d5719b0c81f4d301f53"
+        },
+        {
+            "path": "repository/convex/responseControl.ts",
+            "bytes": 20156,
+            "sha256": "b2e4fd949d501cc4621a90b0c73746ad1fb936de345212032fff64974ae6da96"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-04-sources-jev-enabled-qualification.md",
+            "bytes": 15158,
+            "sha256": "be43653997a63cbfe4141d2b07dbbd513268400d1da1522ed60521afed4aa815"
+        },
+        {
+            "path": "repository/PRODUCT.md",
+            "bytes": 37996,
+            "sha256": "597eede9549f65f2d543f9fb5fd08ff3c8e388b51e4aa4b97a4722d13a03c005"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/response-control.test.ts",
+            "bytes": 49878,
+            "sha256": "bec47cd503924a66b79ebd8b9b362346e25ea05ef06241f09f3f83599b764b42"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261104T190749837Z-correction-input-and-evaluation-closeout.tar.gz",
+        "bytes": 106250,
+        "sha256": "75af522834df368eae969da4ac216849df8b90e44055d69999c1aa3e616f5d44"
+    },
+    "verification": "restored_and_verified"
+}

@@ -10,6 +10,7 @@ const IGNORE = new Set([
     ".agents",
     "dist",
     "build",
+    "services",
 ]);
 
 /**
@@ -92,6 +93,29 @@ function* walk(dir: string): Generator<string> {
     }
 }
 
+// These primitives own body-portalled surfaces; their global levels belong to ui-layers.
+const PORTAL_PRIMITIVES = new Set(
+    [
+        "popover",
+        "drawer",
+        "sheet",
+        "dialog",
+        "dropdown-menu",
+        "select",
+        "tooltip",
+        "combobox",
+        "nested-menu",
+        "smooth-popver",
+        "smooth-dropdown",
+        "linear-modal",
+        "sonner",
+    ].map((name) => `src/components/ui/${name}.tsx`),
+);
+PORTAL_PRIMITIVES.add("src/components/navigation-menu.tsx");
+PORTAL_PRIMITIVES.add("src/components/landing/index-page.tsx");
+const GLOBAL_LAYER_LITERAL =
+    /(?<![\w-])z-(?:[2-9]\d|\d{3,})\b|(?<![\w-])z-\[[^\]]+\]|zIndex\s*:\s*\d+/;
+
 let failed = false;
 
 for (const file of walk(ROOT)) {
@@ -108,6 +132,12 @@ for (const file of walk(ROOT)) {
         const line = lines[i];
         if (line === undefined) {
             continue;
+        }
+        if (PORTAL_PRIMITIVES.has(rel) && GLOBAL_LAYER_LITERAL.test(line)) {
+            console.error(
+                `${rel}:${i + 1} global portal layers must come from src/lib/ui-layers.ts`,
+            );
+            failed = true;
         }
         if (RELATIVE_PARENT.test(line)) {
             console.error(

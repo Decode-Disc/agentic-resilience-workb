@@ -1,0 +1,13 @@
+
+> agentic-resilience-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/convex/execution/workbench-commands.test.ts src/__tests__/convex/execution/workbench-native-interface.test.ts src/__tests__/convex/execution/pi-store.test.ts src/__tests__/convex/execution/pi-storage.test.ts src/__tests__/convex/execution/workbench-control-confirmations.test.ts --environment=node --maxWorkers=1 --testTimeout=30000
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+
+ Test Files  5 passed (5)
+      Tests  78 passed (78)
+   Start at  21:24:18
+   Duration  26.51s (transform 3.52s, setup 1.10s, import 6.58s, tests 17.59s, environment 1ms)
+

@@ -90,4 +90,21 @@ describe("CompanyFaviconAvatar", () => {
 
         expect(screen.getByLabelText(/Minimal Inc\./i)).toBeTruthy();
     });
+
+    it("renders with size xs when requested", () => {
+        render(
+            <CompanyFaviconAvatar
+                company={{
+                    legalName: "Tiny Corp",
+                    ticker: "TINY",
+                    websiteUrl: "https://tiny.example",
+                }}
+                size="xs"
+            />,
+        );
+
+        const avatar = screen.getByLabelText(/Tiny Corp favicon/i);
+        expect(avatar).toBeTruthy();
+        expect(avatar.getAttribute("data-size")).toBe("xs");
+    });
 });

@@ -1,0 +1,339 @@
+
+> agentic-resilience-workbench@ check /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> pnpm docs:check && pnpm design:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build
+
+
+> agentic-resilience-workbench@ docs:check /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> node --experimental-strip-types scripts/check-documentation.ts
+
+AGENTS.md: 4540 words
+DESIGN.md: 6557 words
+PRODUCT.md: 4574 words
+context/TECH.md: 14491 words (WARNING: advisory limit 6000)
+docs/ROADMAP.md: 5086 words
+Documentation: 102 Markdown files, 602 local links, 0 errors.
+
+> agentic-resilience-workbench@ design:check /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> pnpm design:sync --check
+
+
+> agentic-resilience-workbench@ design:sync /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> node --experimental-strip-types scripts/sync-design-context.ts --check
+
+Design documentation is up to date.
+
+> agentic-resilience-workbench@ typecheck /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> tsc --noEmit && tsc --noEmit -p convex/tsconfig.json
+
+
+> agentic-resilience-workbench@ lint /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> biome lint . && node --experimental-strip-types scripts/check-imports.ts
+
+src/components/workbench-shell/analyzed-company-list.tsx:225:47 lint/complexity/noUselessTernary  FIXABLE  ━━━━━━━━━━
+
+  i Unnecessary use of boolean literals in conditional expression.
+  
+    223 │               variant="outline"
+    224 │               size="sm"
+  > 225 │               className={companyBtnClassNames(activeRun ? true : false)}
+        │                                               ^^^^^^^^^^^^^^^^^^^^^^^^
+    226 │             >
+    227 │               {activeRun?.company ? (
+  
+  i Simplify your code by directly assigning the result without using a ternary operator.
+  
+  i If your goal is negation, you may use the logical NOT (!) or double NOT (!!) operator for clearer and concise code.
+     Check for more details about NOT operator.
+  
+  i Unsafe fix: Remove the conditional expression with
+  
+    223 223 │                 variant="outline"
+    224 224 │                 size="sm"
+    225     │ - ··············className={companyBtnClassNames(activeRun·?·true·:·false)}
+        225 │ + ··············className={companyBtnClassNames(!!activeRun)}
+    226 226 │               >
+    227 227 │                 {activeRun?.company ? (
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:132:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    130 │     color: var(--muted-foreground);
+    131 │ }
+  > 132 │ .cm-reference-button > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    133 │     color: var(--foreground);
+    134 │ }
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:189:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    187 │     font-weight: 500;
+    188 │ }
+  > 189 │ .cm-assistant-author > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    190 │     color: var(--brand-purple);
+    191 │ }
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:239:29 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━
+
+  ! Avoid the use of the !important style.
+  
+    237 │ }
+    238 │ .cm-work-detail {
+  > 239 │     margin: 3px 0 10px 22px !important;
+        │                             ^^^^^^^^^^
+    240 │     color: var(--muted-foreground);
+    241 │     font-size: 12.5px;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    239 │ ····margin:·3px·0·10px·22px·!important;
+        │                            ----------- 
+
+src/development/workbench-ui/chat-composition-mocks.css:244:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    242 │     line-height: 18px;
+    243 │ }
+  > 244 │ .cm-work-detail > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^
+    245 │     opacity: 0.8;
+    246 │ }
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:367:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    365 │     padding: 4px 8px 7px 12px;
+    366 │ }
+  > 367 │ .cm-pending-footer > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    368 │     color: var(--muted-foreground);
+    369 │     font-size: 10px;
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:412:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    410 │     margin-top: 5px;
+    411 │ }
+  > 412 │ .cm-composer-bottom > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    413 │     color: var(--muted-foreground);
+    414 │     font-size: 10px;
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:468:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    466 │     color: var(--muted-foreground);
+    467 │ }
+  > 468 │ .cm-active-work > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^
+    469 │     width: 5px;
+    470 │     height: 5px;
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:497:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    495 │     font-size: 10px;
+    496 │ }
+  > 497 │ .cm-reference-strip > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    498 │     display: inline-flex;
+    499 │     align-items: center;
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:697:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    695 │     }
+    696 │ }
+  > 697 │ .cm-active-work > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^
+    698 │     animation: cm-live-work 1.7s ease-in-out infinite;
+    699 │ }
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:701:5 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    699 │ }
+    700 │ @media (prefers-reduced-motion: reduce) {
+  > 701 │     .cm-active-work > span {
+        │     ^^^^^^^^^^^^^^^^^^^^^^
+    702 │         animation: none;
+    703 │     }
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/start-screen-preview.css:140:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 0)
+  
+    138 │     border: 0;
+    139 │ }
+  > 140 │ .start-preview-scenarios {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^
+    141 │     display: flex;
+    142 │     align-items: center;
+  
+  i This selector specificity is (1, 1, 0)
+  
+    134 │     display: none;
+    135 │ }
+  > 136 │ #start-preview-controls .start-preview-scenarios {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    137 │     padding: 0;
+    138 │     border: 0;
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/start-screen-preview.css:200:5 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 0)
+  
+    198 │         font-size: 10px;
+    199 │     }
+  > 200 │     .start-preview-scenarios {
+        │     ^^^^^^^^^^^^^^^^^^^^^^^^
+    201 │         justify-content: space-between;
+    202 │         padding: 6px 12px;
+  
+  i This selector specificity is (1, 1, 0)
+  
+    134 │     display: none;
+    135 │ }
+  > 136 │ #start-preview-controls .start-preview-scenarios {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    137 │     padding: 0;
+    138 │     border: 0;
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+Checked 826 files in 5s. No fixes applied.
+Found 12 warnings.
+Found 1 info.
+src/__tests__/benchmarks/evaluation-budget.test.ts:9 relative parent path in import.meta.glob/import() — use alias
+src/__tests__/benchmarks/sources-approach-cli.test.ts:15 relative parent path in import.meta.glob/import() — use alias
+src/__tests__/benchmarks/sources-approach-report.test.ts:11 relative parent path in import.meta.glob/import() — use alias
+src/__tests__/benchmarks/sources-approach-runner.test.ts:12 relative parent path in import.meta.glob/import() — use alias
+src/__tests__/benchmarks/sources-approach-runner.test.ts:18 relative parent path in import.meta.glob/import() — use alias
+src/__tests__/benchmarks/sources-approach-study.test.ts:17 relative parent path in import.meta.glob/import() — use alias
+ ELIFECYCLE  Command failed with exit code 1.
+ ELIFECYCLE  Command failed with exit code 1.

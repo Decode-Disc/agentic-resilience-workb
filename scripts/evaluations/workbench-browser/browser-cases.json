@@ -1,0 +1,243 @@
+{
+    "version": 1,
+    "capability": "browser-execution",
+    "cases": [
+        {
+            "id": "initial-framing",
+            "prompt": null,
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "proposed-framing-is-saved",
+                "tentative-status-is-explicit",
+                "research-unstarted"
+            ],
+            "taskReviewRequired": true,
+            "steps": [
+                {
+                    "id": "framing",
+                    "action": "wait_for",
+                    "state": "conversation_settled"
+                }
+            ]
+        },
+        {
+            "id": "refinement",
+            "prompt": "Refine the research program to distinguish insurer-repairer relationships from data migration costs when an insurer switches claims platforms. Treat these as hypotheses before research. Do not start research.",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "requested-distinction-is-saved",
+                "hypotheses-not-presented-as-evidence",
+                "reply-matches-saved-program"
+            ],
+            "taskReviewRequired": true,
+            "steps": [
+                {
+                    "id": "message",
+                    "action": "send_message",
+                    "text": "Refine the research program to distinguish insurer-repairer relationships from data migration costs when an insurer switches claims platforms. Treat these as hypotheses before research. Do not start research."
+                }
+            ]
+        },
+        {
+            "id": "malformed-recovery",
+            "prompt": "Refine only the first research question to distinguish contractual insurer-repairer ties from data migration costs. Preserve the scope and other questions; do not start research.",
+            "modes": ["live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "fault-applied-and-refused",
+                "no-forbidden-effect",
+                "continuation-matches-saved-program"
+            ],
+            "taskReviewRequired": true,
+            "steps": [
+                {
+                    "id": "malformed",
+                    "action": "fault",
+                    "recipe": "malformed_response"
+                },
+                {
+                    "id": "message",
+                    "action": "send_message",
+                    "text": "Refine only the first research question to distinguish contractual insurer-repairer ties from data migration costs. Preserve the scope and other questions; do not start research."
+                }
+            ]
+        },
+        {
+            "id": "concurrent-edit",
+            "prompt": "Rewrite the first research question to focus on repairer dependency. Preserve the scope and other questions; do not start research.",
+            "modes": ["live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "analyst-edit-preserved",
+                "reply-matches-current-program"
+            ],
+            "taskReviewRequired": true,
+            "steps": [
+                {
+                    "id": "gate",
+                    "action": "fault",
+                    "recipe": "concurrent_edit"
+                },
+                {
+                    "id": "message",
+                    "action": "send_message",
+                    "text": "Rewrite the first research question to focus on repairer dependency. Preserve the scope and other questions; do not start research.",
+                    "wait": "started"
+                },
+                {
+                    "id": "edit",
+                    "action": "save_framing"
+                },
+                {
+                    "id": "settle",
+                    "action": "wait_for",
+                    "state": "conversation_settled"
+                }
+            ]
+        },
+        {
+            "id": "reload",
+            "prompt": "Explain the saved research program without changing it or starting research.",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "native-session-preserved",
+                "framing-unchanged",
+                "reply-matches-current-program"
+            ],
+            "taskReviewRequired": true,
+            "steps": [
+                {
+                    "id": "message",
+                    "action": "send_message",
+                    "text": "Explain the saved research program without changing it or starting research."
+                },
+                {
+                    "id": "mobile",
+                    "action": "viewport",
+                    "width": 390,
+                    "height": 844
+                },
+                {
+                    "id": "reload",
+                    "action": "reload"
+                },
+                {
+                    "id": "settle",
+                    "action": "wait_for",
+                    "state": "conversation_settled"
+                }
+            ]
+        },
+        {
+            "id": "stop-before-generation",
+            "prompt": "Explain the current plan without changing it.",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 0,
+            "expectations": ["cancelled-before-dispatch"],
+            "taskReviewRequired": false,
+            "steps": [
+                {
+                    "id": "hold",
+                    "action": "fault",
+                    "recipe": "stop_before_generation"
+                },
+                {
+                    "id": "message",
+                    "action": "send_message",
+                    "text": "Explain the current plan without changing it.",
+                    "wait": "started"
+                },
+                {
+                    "id": "stop",
+                    "action": "stop_response"
+                }
+            ]
+        },
+        {
+            "id": "continue",
+            "prompt": "Can we continue? Summarize the current question without changing the saved program or starting research.",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "current-question-accurate",
+                "framing-unchanged",
+                "research-unstarted"
+            ],
+            "taskReviewRequired": true,
+            "steps": [
+                {
+                    "id": "message",
+                    "action": "send_message",
+                    "text": "Can we continue? Summarize the current question without changing the saved program or starting research."
+                }
+            ]
+        },
+        {
+            "id": "start-control",
+            "prompt": "Start research now",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "research-unstarted",
+                "framing-unchanged",
+                "next-action-accurate"
+            ],
+            "taskReviewRequired": true,
+            "steps": [
+                {
+                    "id": "message",
+                    "action": "send_message",
+                    "text": "Start research now"
+                }
+            ]
+        },
+        {
+            "id": "pause-control",
+            "prompt": "Pause research",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "research-unstarted",
+                "framing-unchanged",
+                "next-action-accurate"
+            ],
+            "taskReviewRequired": true,
+            "steps": [
+                {
+                    "id": "message",
+                    "action": "send_message",
+                    "text": "Pause research"
+                }
+            ]
+        },
+        {
+            "id": "resume-control",
+            "prompt": "Resume research",
+            "modes": ["deterministic", "live"],
+            "minimumInferenceRequests": 1,
+            "expectations": [
+                "research-unstarted",
+                "framing-unchanged",
+                "next-action-accurate"
+            ],
+            "taskReviewRequired": true,
+            "steps": [
+                {
+                    "id": "message",
+                    "action": "send_message",
+                    "text": "Resume research"
+                }
+            ]
+        }
+    ],
+    "unavailableCapabilities": [
+        {
+            "id": "conversation-continuity",
+            "reference": "scripts/evaluations/workbench/continuity-cases.json",
+            "reason": "No retained executor for the role-bearing history and state/compaction matrix."
+        }
+    ]
+}

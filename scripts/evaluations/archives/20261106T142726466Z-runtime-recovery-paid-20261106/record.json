@@ -1,0 +1,219 @@
+{
+    "schemaVersion": 1,
+    "id": "20261106T142726466Z-runtime-recovery-paid-20261106",
+    "createdAt": "2026-11-06T14:27:26.466Z",
+    "git": {
+        "head": "417ca2af5c6c69e34784bed95f9c8b9dd0ca2be1",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-06-runtime-recovery-paid-qualification.md",
+            "archivePath": "repository/docs/verification/2026-11-06-runtime-recovery-paid-qualification.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-06-local-convex-timeouts-and-recovery.md",
+            "archivePath": "repository/docs/verification/2026-11-06-local-convex-timeouts-and-recovery.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/local-dev.ts",
+            "archivePath": "repository/scripts/local-dev.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/convex-timeout-diagnosis-20261106/verify-final-state.mjs",
+            "archivePath": "repository/.local-runtime/convex-timeout-diagnosis-20261106/verify-final-state.mjs"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/runtime-recovery-paid-prepare.log",
+            "archivePath": "repository/.local-runtime/runtime-recovery-paid-prepare.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/runtime-recovery-paid-authorize.log",
+            "archivePath": "repository/.local-runtime/runtime-recovery-paid-authorize.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/runtime-recovery-paid-run.log",
+            "archivePath": "repository/.local-runtime/runtime-recovery-paid-run.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/runtime-recovery-paid-assessment.log",
+            "archivePath": "repository/.local-runtime/runtime-recovery-paid-assessment.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/runtime-recovery-paid-close.log",
+            "archivePath": "repository/.local-runtime/runtime-recovery-paid-close.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/runtime-recovery-paid-final-state.log",
+            "archivePath": "repository/.local-runtime/runtime-recovery-paid-final-state.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/runtime-recovery-paid-final-status.log",
+            "archivePath": "repository/.local-runtime/runtime-recovery-paid-final-status.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.local-runtime/runtime-recovery-paid-docs-check.log",
+            "archivePath": "repository/.local-runtime/runtime-recovery-paid-docs-check.log"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/runtime-recovery-paid-20261106-preparation",
+            "archivePath": "external/preparation"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/runtime-recovery-paid-20261106/campaign.json",
+            "archivePath": "external/outcome-campaign/campaign.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/runtime-recovery-paid-20261106/cleanup.json",
+            "archivePath": "external/outcome-cleanup/cleanup.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/runtime-recovery-paid-20261106/flags.json",
+            "archivePath": "external/outcome-flags/flags.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/runtime-recovery-paid-20261106/summary.json",
+            "archivePath": "external/outcome-summary/summary.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/runtime-recovery-paid-20261106/final-state.json",
+            "archivePath": "external/outcome-final-state/final-state.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/runtime-recovery-paid-20261106/review-lot-1.json",
+            "archivePath": "external/outcome-review-lot-1/review-lot-1.json"
+        },
+        {
+            "origin": "/home/abdwhb/.local/share/agentic-resilience-workbench/runtime-recovery-paid-20261106/assessment-archive-lot-1.json",
+            "archivePath": "external/outcome-assessment-archive-lot-1/assessment-archive-lot-1.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/outcome-assessment-archive-lot-1/assessment-archive-lot-1.json",
+            "bytes": 24,
+            "sha256": "93b2b5d505d88d67c54bd0e60b27a21e3acb019e8dda704a715863e2701771f0"
+        },
+        {
+            "path": "external/outcome-campaign/campaign.json",
+            "bytes": 117979,
+            "sha256": "a0071595b6546f0ae6e33875477f714b93290fabe43b5a77dd38edc045558fe6"
+        },
+        {
+            "path": "external/outcome-cleanup/cleanup.json",
+            "bytes": 45,
+            "sha256": "5dfa4c8ffc66a7bd9b6aa8bedf71185cec59b805ad698b4c0b3e6b266a8f5d3f"
+        },
+        {
+            "path": "external/outcome-final-state/final-state.json",
+            "bytes": 412,
+            "sha256": "ced99b7230a8b0c2d6e9d2627586133a28a091bcbddf8242c5018a81a3efab37"
+        },
+        {
+            "path": "external/outcome-flags/flags.json",
+            "bytes": 138,
+            "sha256": "49611e6681208e50b6b67cd23ebc5bd10a745639250e0dd580a5c895113a0eb7"
+        },
+        {
+            "path": "external/outcome-review-lot-1/review-lot-1.json",
+            "bytes": 2076,
+            "sha256": "72e2a2d9488f7a944c8e11a52f9ff760526a6dbafa9d8b4d146d6bd05e60d063"
+        },
+        {
+            "path": "external/outcome-summary/summary.json",
+            "bytes": 8613,
+            "sha256": "a28223aed8b735b941550c3d91f7fa7a2f116087a96d71d52eec130bd2ccfd34"
+        },
+        {
+            "path": "external/preparation/authorization-context.json",
+            "bytes": 603,
+            "sha256": "424ed764b73df1243b07c2366b9dcba9fe63dc1d1d18231fcb5c45020ef2724e"
+        },
+        {
+            "path": "external/preparation/glm-endpoints.json",
+            "bytes": 71789,
+            "sha256": "1e6c526ea37d5bb5620802e4c91b5f78ec30d3b0c259cafba6f6e7c4323c1119"
+        },
+        {
+            "path": "external/preparation/host-after-failure.json",
+            "bytes": 611,
+            "sha256": "37111145ec8085d907f4bcc45dd0ad9d6a434bca48d20728e223dc13c7b97786"
+        },
+        {
+            "path": "external/preparation/manifest.json",
+            "bytes": 5782,
+            "sha256": "50154b5dc03db179f7af6618a0a8ceb8cfeca14622eab449412bd890bb64b6d1"
+        },
+        {
+            "path": "external/preparation/native-failures.json",
+            "bytes": 2294,
+            "sha256": "4e8f98eb1bce884656b1bf9984e008903771b60d2777ebab75e5eea0597658f5"
+        },
+        {
+            "path": "repository/.local-runtime/convex-timeout-diagnosis-20261106/verify-final-state.mjs",
+            "bytes": 2040,
+            "sha256": "a808bed702ddec22d62e9ceb549e9c7dc5133ae842cad174378319cedafe44df"
+        },
+        {
+            "path": "repository/.local-runtime/runtime-recovery-paid-assessment.log",
+            "bytes": 647,
+            "sha256": "a10c78d74a8e15cf3e3a8d86220440a21731ddd0e5a6b5cfa97cfaa69d0b3250"
+        },
+        {
+            "path": "repository/.local-runtime/runtime-recovery-paid-authorize.log",
+            "bytes": 199,
+            "sha256": "2af3ece129bed8644e2d88fe19fe856bb94ae93768bd602f7168b20ff412433e"
+        },
+        {
+            "path": "repository/.local-runtime/runtime-recovery-paid-close.log",
+            "bytes": 195,
+            "sha256": "9116cb18ebc517d87d09a922a9bb6a15f3ce1cb1d21232482c33be1ada2df5ec"
+        },
+        {
+            "path": "repository/.local-runtime/runtime-recovery-paid-docs-check.log",
+            "bytes": 282,
+            "sha256": "1e21795541b294a46a93ec06272320205954310fda10aa99d477c90f4108e958"
+        },
+        {
+            "path": "repository/.local-runtime/runtime-recovery-paid-final-state.log",
+            "bytes": 291,
+            "sha256": "9dff31e0e2a709a5c1610225e39f7a77576cb58d45dd5f16c15e5442e50ba21d"
+        },
+        {
+            "path": "repository/.local-runtime/runtime-recovery-paid-final-status.log",
+            "bytes": 8809,
+            "sha256": "36680b6427446ec105646bca2b6c29e642b2cac11546a90478d5e954e2d2b308"
+        },
+        {
+            "path": "repository/.local-runtime/runtime-recovery-paid-prepare.log",
+            "bytes": 320,
+            "sha256": "39b260995beeb66e510d7835f3744788f7d8012ad27c2f09bc31c6b065a22588"
+        },
+        {
+            "path": "repository/.local-runtime/runtime-recovery-paid-run.log",
+            "bytes": 428,
+            "sha256": "d47e4cbd4dcd090f180f26186ba0f46d7ed6f6f49e452a39e491b2c602a5103a"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-06-local-convex-timeouts-and-recovery.md",
+            "bytes": 13182,
+            "sha256": "4830f97286b84adc99267f6dba2e6c1f2bcc4fb902f00e30a5da57a5e18ac528"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-06-runtime-recovery-paid-qualification.md",
+            "bytes": 7295,
+            "sha256": "452eb71e989c588e54d3a8ce23c20bab97a266c5602d8d9ae8ef5824ffa04c1a"
+        },
+        {
+            "path": "repository/scripts/local-dev.ts",
+            "bytes": 34163,
+            "sha256": "763a0cc31a831ab6b5f2102557f5bfdb5ac75c563f67e3fd503c9c5f9621ec33"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261106T142726466Z-runtime-recovery-paid-20261106.tar.gz",
+        "bytes": 77708,
+        "sha256": "7f017279a726576f4bdcdbd73bd2d15763f9dc6bbe993b639babb4a9a893c913"
+    },
+    "verification": "restored_and_verified"
+}

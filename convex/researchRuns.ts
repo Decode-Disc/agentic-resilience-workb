@@ -1,15 +1,33 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
+import type { IndexRangeBuilder } from "convex/server";
+import {
+    paginationOptsValidator,
+    paginationResultValidator,
+} from "convex/server";
 import { v } from "convex/values";
-
-import type { Doc } from "./_generated/dataModel";
+import { stream } from "convex-helpers/server/stream";
+import type { DataModel, Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
-import { assertLifecycleTransition } from "./domain/transitions";
+import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
+import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
+import { readSourcesMission, sourcesPreparationPhase } from "./domain/sources";
 import {
+    assertLifecycleTransition,
+    canStartNewCorpusRevision,
+} from "./domain/transitions";
+import {
+    companySnapshotValidator,
     executionStatusValidator,
     researchRunLifecycleValidator,
     workflowStepKeyValidator,
 } from "./domain/validators";
+import { readSourcesDecisionRequestId } from "./execution/approvals";
+import {
+    applyRequestedResearchPause,
+    recordResearchObservation,
+} from "./execution/researchControl";
+import { readWorkspace, requireWorkspaceRun } from "./runWorkspace";
+import schema from "./schema";
 
 export const createDraft = internalMutation({
     args: {},
@@ -17,6 +35,7 @@ export const createDraft = internalMutation({
     handler: async (ctx) => {
         const now = Date.now();
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             executionGeneration: 0,
             lifecycleState: "draft",
             executionStatus: "idle",
@@ -33,6 +52,91 @@ export const createDraft = internalMutation({
             occurredAt: now,
         });
         return runId;
+    },
+});
+
+export const pauseForClaimGenerationUnavailable = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        expectedExecutionGeneration: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const run = await ctx.db.get(args.runId);
+        if (!run) {
+            throw new Error("Research run not found");
+        }
+        if (run.executionGeneration !== args.expectedExecutionGeneration) {
+            throw new Error("Stale research execution generation");
+        }
+        if (
+            run.lifecycleState === "extracting_evidence" &&
+            run.executionStatus === "paused" &&
+            run.pauseReason === "claim_generation_unavailable"
+        ) {
+            return null;
+        }
+        if (
+            run.lifecycleState !== "extracting_evidence" ||
+            run.executionStatus !== "running"
+        ) {
+            throw new Error("Research run is not extracting evidence");
+        }
+        const now = Date.now();
+        await ctx.db.patch(run._id, {
+            executionStatus: "paused",
+            pauseReason: "claim_generation_unavailable",
+            nextEventSequence: run.nextEventSequence + 1,
+            updatedAt: now,
+        });
+
+        const existingStep = await ctx.db
+            .query("workflowSteps")
+            .withIndex("by_run_and_key", (query) =>
+                query.eq("runId", run._id).eq("key", "generate_claims"),
+            )
+            .order("desc")
+            .first();
+        if (existingStep) {
+            await ctx.db.patch(existingStep._id, {
+                state: "needs_review",
+                completedAt: undefined,
+                updatedAt: now,
+            });
+        } else {
+            await ctx.db.insert("workflowSteps", {
+                runId: run._id,
+                key: "generate_claims",
+                state: "needs_review",
+                attempt: 1,
+                startedAt: now,
+                updatedAt: now,
+            });
+        }
+
+        await ctx.db.insert("runEvents", {
+            runId: run._id,
+            sequence: run.nextEventSequence + 1,
+            type: "claim_generation_paused",
+            lifecycleState: run.lifecycleState,
+            executionStatus: "paused",
+            stepKey: "generate_claims",
+            occurredAt: now,
+        });
+        return null;
+    },
+});
+
+export const failEvidenceExtraction = internalMutation({
+    args: {
+        runId: v.id("researchRuns"),
+        expectedExecutionGeneration: v.number(),
+        failureCode: v.string(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        await applyEvidenceExtractionFailed(ctx, args);
+        return null;
     },
 });
 
@@ -65,6 +169,13 @@ export const transition = internalMutation({
             args.executionStatus,
         );
 
+        const sourceReview =
+            args.lifecycleState === "awaiting_source_review" &&
+            args.executionStatus === "paused";
+        const settledRun = sourceReview
+            ? await applyRequestedResearchPause(ctx, run)
+            : run;
+
         const now = Date.now();
         const pauseReason =
             args.lifecycleState === "awaiting_evidence_sufficiency_review"
@@ -77,7 +188,10 @@ export const transition = internalMutation({
         await ctx.db.patch(args.runId, {
             lifecycleState: args.lifecycleState,
             executionStatus: args.executionStatus,
-            pauseReason,
+            pauseReason:
+                sourceReview && settledRun.pauseReason === "analyst"
+                    ? "analyst"
+                    : pauseReason,
             nextEventSequence: run.nextEventSequence + 1,
             updatedAt: now,
         });
@@ -124,6 +238,11 @@ export const transition = internalMutation({
             stepKey: args.stepKey,
             occurredAt: now,
         });
+        if (
+            run.lifecycleState !== args.lifecycleState ||
+            run.executionStatus !== args.executionStatus
+        )
+            await recordResearchObservation(ctx, run._id, "phase_changed");
         return null;
     },
 });
@@ -158,23 +277,7 @@ export const listSteps = internalQuery({
 export const listMyEvents = query({
     args: { runId: v.id("researchRuns") },
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (builder) =>
-                builder.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
+        const { run } = await requireWorkspaceRun(ctx, args.runId);
         return ctx.db
             .query("runEvents")
             .withIndex("by_run_and_sequence", (builder) =>
@@ -184,36 +287,58 @@ export const listMyEvents = query({
     },
 });
 
-async function getActiveVisitor(ctx: QueryCtx) {
-    const authUserId = await getAuthUserId(ctx);
-    if (!authUserId) {
-        throw new Error("Not authenticated");
-    }
-    const visitor = await ctx.db
-        .query("visitors")
-        .withIndex("by_auth_user_id", (builder) =>
-            builder.eq("authUserId", authUserId),
-        )
-        .unique();
-    if (visitor?.status !== "active") {
-        throw new Error("Unauthorized");
-    }
-    return visitor;
+async function framingScope(ctx: QueryCtx, run: Doc<"researchRuns">) {
+    const id = run.fixedFramingRevisionId ?? run.currentFramingRevisionId;
+    if (!id) return null;
+    const revision = await ctx.db.get(id);
+    if (!revision || revision.runId !== run._id)
+        throw new Error("Invalid dossier framing reference");
+    return revision.content.scope.trim() || null;
 }
 
 async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
     const company = run.companyId ? await ctx.db.get(run.companyId) : null;
-    const companySnapshot = run.companySnapshot ?? company;
-    const providerFailures = (await ctx.db.query("providerCalls").collect())
-        .filter((call) => call.runId === run._id && call.status === "failed")
-        .sort((left, right) => right.createdAt - left.createdAt)
-        .slice(0, 5)
-        .map((call) => ({
+    const companySnapshot = mergeRunCompanyMetadata(
+        run.companySnapshot,
+        company,
+    );
+    const latestFailures = await ctx.db
+        .query("providerCalls")
+        .withIndex("by_run_and_status_and_created_at", (q) =>
+            q.eq("runId", run._id).eq("status", "failed"),
+        )
+        .order("desc")
+        .take(5);
+    const cutoff = latestFailures.at(-1)?.createdAt;
+    const newerFailures = latestFailures
+        .filter((call) => cutoff !== undefined && call.createdAt > cutoff)
+        .sort(
+            (left, right) =>
+                right.createdAt - left.createdAt ||
+                left._creationTime - right._creationTime,
+        );
+    // The old stable sort kept insertion order for ties, including ties across the fifth result.
+    const cutoffFailures =
+        cutoff === undefined
+            ? []
+            : await ctx.db
+                  .query("providerCalls")
+                  .withIndex("by_run_and_status_and_created_at", (q) =>
+                      q
+                          .eq("runId", run._id)
+                          .eq("status", "failed")
+                          .eq("createdAt", cutoff),
+                  )
+                  .order("asc")
+                  .take(5 - newerFailures.length);
+    const providerFailures = [...newerFailures, ...cutoffFailures].map(
+        (call) => ({
             service: call.service,
             operation: call.operation,
             errorCode: call.errorCode,
             occurredAt: call.completedAt ?? call.createdAt,
-        }));
+        }),
+    );
     return {
         runId: run._id,
         company: companySnapshot
@@ -222,20 +347,19 @@ async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
                   ticker: companySnapshot.ticker,
                   exchange: companySnapshot.exchange,
                   cik: companySnapshot.cik,
-                  investorRelationsUrl:
-                      companySnapshot.investorRelationsUrl ??
-                      company?.investorRelationsUrl,
-                  websiteUrl: companySnapshot.websiteUrl ?? company?.websiteUrl,
-                  websiteUrlSource:
-                      companySnapshot.websiteUrlSource ??
-                      company?.websiteUrlSource,
+                  investorRelationsUrl: companySnapshot.investorRelationsUrl,
+                  websiteUrl: companySnapshot.websiteUrl,
+                  websiteUrlSource: companySnapshot.websiteUrlSource,
               }
             : null,
         lifecycleState: run.lifecycleState,
         executionStatus: run.executionStatus,
+        startMode: run.startMode,
+        sourcesProtocol: run.sourcesProtocol,
         pauseReason: run.pauseReason,
         coveragePreset: run.coveragePreset,
         researchAngle: run.researchAngle,
+        framingScope: await framingScope(ctx, run),
         activeCorpusRevisionId: run.activeCorpusRevisionId,
         completionOutcome: run.completionOutcome,
         updatedAt: run.updatedAt,
@@ -246,30 +370,138 @@ async function projectRun(ctx: QueryCtx, run: Doc<"researchRuns">) {
 export const getMine = query({
     args: { runId: v.id("researchRuns") },
     handler: async (ctx, args) => {
-        const visitor = await getActiveVisitor(ctx);
-        const run = await ctx.db.get(args.runId);
-        if (run?.ownerVisitorId !== visitor._id) {
-            throw new Error("Unauthorized");
-        }
-        return projectRun(ctx, run);
+        const { run } = await requireWorkspaceRun(ctx, args.runId);
+        const projection = await projectRun(ctx, run);
+        const revision = run.activeCorpusRevisionId
+            ? await ctx.db.get(run.activeCorpusRevisionId)
+            : null;
+        const [preparation, mission] = await Promise.all([
+            run.sourcePreparationId
+                ? ctx.db.get(run.sourcePreparationId)
+                : null,
+            readSourcesMission(ctx, run),
+        ]);
+        const sourcesPhase = sourcesPreparationPhase(run, preparation, mission);
+        return {
+            ...projection,
+            executionGeneration: run.executionGeneration,
+            sourcesPhase,
+            sourcesDecisionRequestId: await readSourcesDecisionRequestId(
+                ctx,
+                run,
+            ),
+            corpusRevisionStatus: revision?.status,
+            canStartNewCorpusRevision: canStartNewCorpusRevision(
+                run,
+                revision?.status,
+            ),
+        };
     },
 });
 
+const runProjectionValidator = v.object({
+    startMode: v.optional(v.literal("framed")),
+    sourcesProtocol:
+        schema.tables.researchRuns.validator.fields.sourcesProtocol,
+    runId: v.id("researchRuns"),
+    company: v.union(companySnapshotValidator, v.null()),
+    lifecycleState: researchRunLifecycleValidator,
+    executionStatus: executionStatusValidator,
+    pauseReason: schema.tables.researchRuns.validator.fields.pauseReason,
+    coveragePreset: schema.tables.researchRuns.validator.fields.coveragePreset,
+    researchAngle: v.optional(v.string()),
+    framingScope: v.union(v.string(), v.null()),
+    activeCorpusRevisionId: v.optional(v.id("corpusRevisions")),
+    completionOutcome:
+        schema.tables.researchRuns.validator.fields.completionOutcome,
+    updatedAt: v.number(),
+    providerFailures: v.array(
+        v.object({
+            service: schema.tables.providerCalls.validator.fields.service,
+            operation: v.string(),
+            errorCode: schema.tables.providerCalls.validator.fields.errorCode,
+            occurredAt: v.number(),
+        }),
+    ),
+});
+
 export const listMine = query({
-    args: {},
-    handler: async (ctx) => {
-        const visitor = await getActiveVisitor(ctx);
-        const runs = await ctx.db
+    args: {
+        workspaceKey: v.string(),
+        search: v.optional(v.string()),
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: paginationResultValidator(runProjectionValidator),
+    handler: async (ctx, args) => {
+        const { visitor, workspace } = await readWorkspace(ctx);
+        if (
+            args.workspaceKey !== workspace.key ||
+            (workspace.isTestData && !workspace.contextId)
+        ) {
+            return { page: [], isDone: true, continueCursor: "" };
+        }
+        if ((args.search?.length ?? 0) > 200)
+            throw new Error("Dossier search is too long");
+        const ownerRange = (
+            q: IndexRangeBuilder<
+                Doc<"researchRuns">,
+                DataModel["researchRuns"]["indexes"]["by_owner_purpose_context_withdrawn_updated_at"]
+            >,
+        ) =>
+            q
+                .eq("ownerVisitorId", visitor._id)
+                .eq("purpose", workspace.purpose)
+                .eq("browserTestContextId", workspace.contextId ?? undefined)
+                .eq("withdrawnAt", undefined);
+        const query = stream(ctx.db, schema)
             .query("researchRuns")
-            .withIndex("by_owner_and_execution_status", (builder) =>
-                builder.eq("ownerVisitorId", visitor._id),
+            .withIndex(
+                "by_owner_purpose_context_withdrawn_updated_at",
+                ownerRange,
             )
-            .collect();
-        return Promise.all(
-            runs
-                .sort((left, right) => right.updatedAt - left.updatedAt)
-                .map((run) => projectRun(ctx, run)),
-        );
+            .order("desc");
+        const words =
+            args.search
+                ?.trim()
+                .toLocaleLowerCase("en")
+                .split(/\s+/)
+                .filter(Boolean) ?? [];
+        const result = words.length
+            ? await query
+                  .filterWith(async (run) => {
+                      const company = run.companyId
+                          ? await ctx.db.get(run.companyId)
+                          : null;
+                      const metadata = mergeRunCompanyMetadata(
+                          run.companySnapshot,
+                          company,
+                      );
+                      const text = [
+                          metadata?.legalName,
+                          metadata?.ticker,
+                          run.researchAngle,
+                          await framingScope(ctx, run),
+                      ]
+                          .filter(Boolean)
+                          .join(" ")
+                          .toLocaleLowerCase("en");
+                      return words.every((word) => text.includes(word));
+                  })
+                  .paginate({ ...args.paginationOpts, maximumRowsRead: 100 })
+            : await ctx.db
+                  .query("researchRuns")
+                  .withIndex(
+                      "by_owner_purpose_context_withdrawn_updated_at",
+                      ownerRange,
+                  )
+                  .order("desc")
+                  .paginate(args.paginationOpts);
+        return {
+            ...result,
+            page: await Promise.all(
+                result.page.map((run) => projectRun(ctx, run)),
+            ),
+        };
     },
 });
 

@@ -1,0 +1,1166 @@
+
+> agentic-resilience-workbench@ format:check /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> biome format .
+
+components.json format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+     1  1 │   {
+     2    │ - ··"$schema":·"https://ui.shadcn.com/schema.json",
+     3    │ - ··"style":·"base-luma",
+     4    │ - ··"rsc":·false,
+     5    │ - ··"tsx":·true,
+     6    │ - ··"tailwind":·{
+     7    │ - ····"config":·"",
+     8    │ - ····"css":·"src/styles.css",
+     9    │ - ····"baseColor":·"mist",
+    10    │ - ····"cssVariables":·true,
+    11    │ - ····"prefix":·""
+    12    │ - ··},
+    13    │ - ··"iconLibrary":·"hugeicons",
+    14    │ - ··"rtl":·false,
+    15    │ - ··"aliases":·{
+    16    │ - ····"components":·"@/components",
+    17    │ - ····"utils":·"@/lib/utils",
+    18    │ - ····"ui":·"@/components/ui",
+    19    │ - ····"lib":·"@/lib",
+    20    │ - ····"hooks":·"@/hooks"
+    21    │ - ··},
+    22    │ - ··"menuColor":·"default",
+    23    │ - ··"menuAccent":·"subtle",
+    24    │ - ··"registries":·{
+    25    │ - ····"@acme":·"https://acme.com/r/{name}.json",
+    26    │ - ····"@assistant-ui":·"https://r.assistant-ui.com/styles/{style}/{name}.json",
+    27    │ - ····"@pastaui":·"https://pastaui.com/r/{name}.json"
+    28    │ - ··}
+        2 │ + ····"$schema":·"https://ui.shadcn.com/schema.json",
+        3 │ + ····"style":·"base-luma",
+        4 │ + ····"rsc":·false,
+        5 │ + ····"tsx":·true,
+        6 │ + ····"tailwind":·{
+        7 │ + ········"config":·"",
+        8 │ + ········"css":·"src/styles.css",
+        9 │ + ········"baseColor":·"mist",
+       10 │ + ········"cssVariables":·true,
+       11 │ + ········"prefix":·""
+       12 │ + ····},
+       13 │ + ····"iconLibrary":·"hugeicons",
+       14 │ + ····"rtl":·false,
+       15 │ + ····"aliases":·{
+       16 │ + ········"components":·"@/components",
+       17 │ + ········"utils":·"@/lib/utils",
+       18 │ + ········"ui":·"@/components/ui",
+       19 │ + ········"lib":·"@/lib",
+       20 │ + ········"hooks":·"@/hooks"
+       21 │ + ····},
+       22 │ + ····"menuColor":·"default",
+       23 │ + ····"menuAccent":·"subtle",
+       24 │ + ····"registries":·{
+       25 │ + ········"@acme":·"https://acme.com/r/{name}.json",
+       26 │ + ········"@assistant-ui":·"https://r.assistant-ui.com/styles/{style}/{name}.json",
+       27 │ + ········"@pastaui":·"https://pastaui.com/r/{name}.json"
+       28 │ + ····}
+    29 29 │   }
+    30 30 │   
+  
+
+src/components/chat/conversation-thread.tsx format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+      3   3 │   
+      4   4 │   import {
+      5     │ - ··type·AssistantRuntime,
+      6     │ - ··AssistantRuntimeProvider,
+      7     │ - ··ThreadPrimitive,
+          5 │ + ····type·AssistantRuntime,
+          6 │ + ····AssistantRuntimeProvider,
+          7 │ + ····ThreadPrimitive,
+      8   8 │   } from "@assistant-ui/react";
+      9   9 │   import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+     10  10 │   import { useReducedMotion } from "motion/react";
+     11  11 │   import {
+     12     │ - ··type·ComponentProps,
+     13     │ - ··createContext,
+     14     │ - ··type·ReactNode,
+     15     │ - ··useContext,
+     16     │ - ··useLayoutEffect,
+     17     │ - ··useRef,
+     18     │ - ··useState,
+         12 │ + ····type·ComponentProps,
+         13 │ + ····createContext,
+         14 │ + ····type·ReactNode,
+         15 │ + ····useContext,
+         16 │ + ····useLayoutEffect,
+         17 │ + ····useRef,
+         18 │ + ····useState,
+     19  19 │   } from "react";
+     20  20 │   import Icon from "@/components/icon";
+    ······· │ 
+     23  23 │   import { cn } from "@/lib/utils";
+     24  24 │   
+     25     │ - export·const·CONVERSATION_THREAD_VARIANTS·=·["chat",·"document",·"compact"]·as·const;
+     26     │ - export·type·ConversationThreadVariant·=·(typeof·CONVERSATION_THREAD_VARIANTS)[number];
+         25 │ + export·const·CONVERSATION_THREAD_VARIANTS·=·[
+         26 │ + ····"chat",
+         27 │ + ····"document",
+         28 │ + ····"compact",
+         29 │ + ]·as·const;
+         30 │ + export·type·ConversationThreadVariant·=
+         31 │ + ····(typeof·CONVERSATION_THREAD_VARIANTS)[number];
+     27  32 │   export type ConversationThreadProps = ComponentProps<"section"> & {
+     28     │ - ··variant?:·ConversationThreadVariant;
+     29     │ - ··runtime:·AssistantRuntime;
+     30     │ - ··header?:·ReactNode;
+         33 │ + ····variant?:·ConversationThreadVariant;
+         34 │ + ····runtime:·AssistantRuntime;
+         35 │ + ····header?:·ReactNode;
+     31  36 │   };
+     32  37 │   
+    ······· │ 
+     36  41 │   const SCROLL_JUMP_REVEAL_DELAY_MS = 150;
+     37  42 │   function useThread(part: string) {
+     38     │ - ··const·context·=·useContext(Context);
+     39     │ - ··if·(!context)·throw·new·Error(`${part}·must·be·used·within·ConversationThread`);
+     40     │ - ··return·context;
+         43 │ + ····const·context·=·useContext(Context);
+         44 │ + ····if·(!context)
+         45 │ + ········throw·new·Error(`${part}·must·be·used·within·ConversationThread`);
+         46 │ + ····return·context;
+     41  47 │   }
+     42  48 │   
+     43  49 │   /** A conversation column with a scrollable log and a separately anchored composer. */
+     44  50 │   export function ConversationThread({
+     45     │ - ··variant·=·"chat",
+     46     │ - ··runtime,
+     47     │ - ··header,
+     48     │ - ··children,
+     49     │ - ··className,
+     50     │ - ··...props
+         51 │ + ····variant·=·"chat",
+         52 │ + ····runtime,
+         53 │ + ····header,
+         54 │ + ····children,
+         55 │ + ····className,
+         56 │ + ····...props
+     51  57 │   }: ConversationThreadProps) {
+     52     │ - ··return·(
+     53     │ - ····<AssistantRuntimeProvider·runtime={runtime}>
+     54     │ - ······<TooltipProvider>
+     55     │ - ········<Context.Provider·value={{·variant·}}>
+     56     │ - ··········<section
+     57     │ - ············aria-label="Conversation"
+     58     │ - ············data-slot="conversation-thread"
+     59     │ - ············data-variant={variant}
+     60     │ - ············className={cn(
+     61     │ - ··············"relative·box-border·@container·flex·min-h-0·flex-1·flex-col·min-w-0·text-[13px]/[18px]·text-foreground",
+     62     │ - ··············className,
+     63     │ - ············)}
+     64     │ - ············{...props}
+     65     │ - ··········>
+     66     │ - ············{header}
+     67     │ - ············<div
+     68     │ - ··············data-slot="conversation-thread-body"
+     69     │ - ··············className={cn(
+     70     │ - ················"flex·min-h-0·flex-1·flex-col",
+     71     │ - ················variant·===·"compact"·?·"gap-3"·:·"gap-4",
+     72     │ - ··············)}
+     73     │ - ············>
+     74     │ - ··············{children}
+     75     │ - ············</div>
+     76     │ - ··········</section>
+     77     │ - ········</Context.Provider>
+     78     │ - ······</TooltipProvider>
+     79     │ - ····</AssistantRuntimeProvider>
+     80     │ - ··);
+         58 │ + ····return·(
+         59 │ + ········<AssistantRuntimeProvider·runtime={runtime}>
+         60 │ + ············<TooltipProvider>
+         61 │ + ················<Context.Provider·value={{·variant·}}>
+         62 │ + ····················<section
+         63 │ + ························aria-label="Conversation"
+         64 │ + ························data-slot="conversation-thread"
+         65 │ + ························data-variant={variant}
+         66 │ + ························className={cn(
+         67 │ + ····························"relative·box-border·@container·flex·min-h-0·flex-1·flex-col·min-w-0·text-[13px]/[18px]·text-foreground",
+         68 │ + ····························className,
+         69 │ + ························)}
+         70 │ + ························{...props}>
+         71 │ + ························{header}
+         72 │ + ························<div
+         73 │ + ····························data-slot="conversation-thread-body"
+         74 │ + ····························className={cn(
+         75 │ + ································"flex·min-h-0·flex-1·flex-col",
+         76 │ + ································variant·===·"compact"·?·"gap-3"·:·"gap-4",
+         77 │ + ····························)}>
+         78 │ + ····························{children}
+         79 │ + ························</div>
+         80 │ + ····················</section>
+         81 │ + ················</Context.Provider>
+         82 │ + ············</TooltipProvider>
+         83 │ + ········</AssistantRuntimeProvider>
+         84 │ + ····);
+     81  85 │   }
+     82  86 │   
+     83  87 │   /** Measures the composer and its pending artifact so the transcript can leave room for both. Positioning belongs to the consumer. */
+     84     │ - export·function·ConversationThreadDock({·className,·...props·}:·ComponentProps<"div">)·{
+     85     │ - ··useThread("ConversationThreadDock");
+     86     │ - ··const·ref·=·useRef<HTMLDivElement>(null);
+     87     │ - ··useLayoutEffect(()·=>·{
+     88     │ - ····const·dock·=·ref.current;
+     89     │ - ····const·host·=·dock?.closest<HTMLElement>('[data-slot="conversation-thread"]');
+     90     │ - ····if·(!dock·||·!host)·return;
+     91     │ - ····const·measure·=·()·=>
+     92     │ - ······host.style.setProperty(
+     93     │ - ········"--conversation-dock-height",
+     94     │ - ········`${dock.getBoundingClientRect().height}px`,
+     95     │ - ······);
+     96     │ - ····measure();
+     97     │ - ····const·observer·=·new·ResizeObserver(measure);
+     98     │ - ····observer.observe(dock);
+     99     │ - ····return·()·=>·{
+    100     │ - ······observer.disconnect();
+  229 more lines truncated
+  
+
+src/components/landing/index-page.tsx format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+      1   1 │   import {
+      2     │ - ··ArrowRight01Icon,
+      3     │ - ··Audit01Icon,
+      4     │ - ··BookSearchIcon,
+      5     │ - ··ChartRelationshipIcon,
+      6     │ - ··CheckmarkCircle02Icon,
+      7     │ - ··FileSearchIcon,
+      8     │ - ··Menu01Icon,
+      9     │ - ··UserCheck01Icon,
+          2 │ + ····ArrowRight01Icon,
+          3 │ + ····Audit01Icon,
+          4 │ + ····BookSearchIcon,
+          5 │ + ····ChartRelationshipIcon,
+          6 │ + ····CheckmarkCircle02Icon,
+          7 │ + ····FileSearchIcon,
+          8 │ + ····Menu01Icon,
+          9 │ + ····UserCheck01Icon,
+     10  10 │   } from "@hugeicons/core-free-icons";
+     11  11 │   import { Link } from "@tanstack/react-router";
+    ······· │ 
+     15  15 │   import { AppLogo } from "@/components/logo-icon";
+     16  16 │   import {
+     17     │ - ··NavigationMenu,
+     18     │ - ··NavigationMenuContent,
+     19     │ - ··NavigationMenuItem,
+     20     │ - ··NavigationMenuList,
+     21     │ - ··NavigationMenuTrigger,
+         17 │ + ····NavigationMenu,
+         18 │ + ····NavigationMenuContent,
+         19 │ + ····NavigationMenuItem,
+         20 │ + ····NavigationMenuList,
+         21 │ + ····NavigationMenuTrigger,
+     22  22 │   } from "@/components/navigation-menu";
+     23  23 │   import {
+     24     │ - ··Accordion,
+     25     │ - ··AccordionContent,
+     26     │ - ··AccordionItem,
+     27     │ - ··AccordionTrigger,
+         24 │ + ····Accordion,
+         25 │ + ····AccordionContent,
+         26 │ + ····AccordionItem,
+         27 │ + ····AccordionTrigger,
+     28  28 │   } from "@/components/ui/accordion";
+     29  29 │   import { Button, buttonVariants } from "@/components/ui/button";
+    ······· │ 
+     32  32 │   import MotionAnimatePresence from "@/components/ui/motion-animate-presence";
+     33  33 │   import {
+     34     │ - ··Sheet,
+     35     │ - ··SheetContent,
+     36     │ - ··SheetDescription,
+     37     │ - ··SheetFooter,
+     38     │ - ··SheetHeader,
+     39     │ - ··SheetTitle,
+     40     │ - ··SheetTrigger,
+         34 │ + ····Sheet,
+         35 │ + ····SheetContent,
+         36 │ + ····SheetDescription,
+         37 │ + ····SheetFooter,
+         38 │ + ····SheetHeader,
+         39 │ + ····SheetTitle,
+         40 │ + ····SheetTrigger,
+     41  41 │   } from "@/components/ui/sheet";
+     42  42 │   import { PRODUCT_NAME, PRODUCT_SHORT_NAME } from "@/config/product";
+    ······· │ 
+     47  47 │   
+     48  48 │   const navigationItems = [
+     49     │ - ··{
+     50     │ - ····id:·"value",
+     51     │ - ····label:·"Value·at·stake",
+     52     │ - ····title:·"See·what·could·hold.·And·what·could·erode.",
+     53     │ - ····description:
+     54     │ - ······"Look·beyond·AI·announcements·to·examine·who·owns·the·context,·directs·the·work,·and·captures·the·value.",
+     55     │ - ····details:·["Workflow·control·and·context·ownership",·"Dependencies·and·exposure·to·bypass"],
+     56     │ - ··},
+     57     │ - ··{
+     58     │ - ····id:·"thesis",
+     59     │ - ····label:·"Test·the·thesis",
+     60     │ - ····title:·"Put·the·company's·story·to·the·test.",
+     61     │ - ····description:
+     62     │ - ······"Bring·filings,·product·documentation,·and·independent·analysis·into·one·research·dossier.·Examine·the·support,·contradictions,·and·unanswered·questions.",
+     63     │ - ····details:·["Traceable·sources·and·passages",·"Counter-evidence·and·critical·unknowns"],
+     64     │ - ··},
+     65     │ - ··{
+     66     │ - ····id:·"judgment",
+     67     │ - ····label:·"Your·judgment",
+     68     │ - ····title:·"Keep·every·conclusion·open·to·challenge.",
+     69     │ - ····description:
+     70     │ - ······"Inspect·the·sources,·question·interpretations,·and·record·your·reasoning.·The·workbench·prepares·the·evidence.·You·make·the·assessment.",
+     71     │ - ····details:·["Explicit·uncertainty",·"Recorded·decisions·and·overrides"],
+     72     │ - ··},
+         49 │ + ····{
+         50 │ + ········id:·"value",
+         51 │ + ········label:·"Value·at·stake",
+         52 │ + ········title:·"See·what·could·hold.·And·what·could·erode.",
+         53 │ + ········description:
+         54 │ + ············"Look·beyond·AI·announcements·to·examine·who·owns·the·context,·directs·the·work,·and·captures·the·value.",
+         55 │ + ········details:·[
+         56 │ + ············"Workflow·control·and·context·ownership",
+         57 │ + ············"Dependencies·and·exposure·to·bypass",
+         58 │ + ········],
+         59 │ + ····},
+         60 │ + ····{
+         61 │ + ········id:·"thesis",
+         62 │ + ········label:·"Test·the·thesis",
+         63 │ + ········title:·"Put·the·company's·story·to·the·test.",
+         64 │ + ········description:
+         65 │ + ············"Bring·filings,·product·documentation,·and·independent·analysis·into·one·research·dossier.·Examine·the·support,·contradictions,·and·unanswered·questions.",
+         66 │ + ········details:·[
+         67 │ + ············"Traceable·sources·and·passages",
+         68 │ + ············"Counter-evidence·and·critical·unknowns",
+         69 │ + ········],
+         70 │ + ····},
+         71 │ + ····{
+         72 │ + ········id:·"judgment",
+         73 │ + ········label:·"Your·judgment",
+         74 │ + ········title:·"Keep·every·conclusion·open·to·challenge.",
+         75 │ + ········description:
+         76 │ + ············"Inspect·the·sources,·question·interpretations,·and·record·your·reasoning.·The·workbench·prepares·the·evidence.·You·make·the·assessment.",
+         77 │ + ········details:·["Explicit·uncertainty",·"Recorded·decisions·and·overrides"],
+         78 │ + ····},
+     73  79 │   ] as const;
+     74  80 │   
+     75  81 │   const capabilities = [
+     76     │ - ··{
+     77     │ - ····title:·"See·the·business·in·context",
+     78     │ - ····description:·"Situate·the·company·and·focus·on·a·workflow·that·matters·to·its·economics.",
+     79     │ - ····icon:·BookSearchIcon,
+     80     │ - ··},
+     81     │ - ··{
+     82     │ - ····title:·"Find·the·control·points",
+     83     │ - ····description:
+     84     │ - ······"Identify·who·owns·the·context,·directs·execution,·and·holds·the·right·to·act.",
+     85     │ - ····icon:·ChartRelationshipIcon,
+     86     │ - ··},
+     87     │ - ··{
+     88     │ - ····title:·"Examine·what·agents·could·change",
+     89     │ - ····description:
+     90     │ - ······"Explore·what·could·be·strengthened,·bypassed,·or·made·replaceable.",
+     91     │ - ····icon:·Audit01Icon,
+     92     │ - ··},
+     93     │ - ··{
+     94     │ - ····title:·"Confront·competing·interpretations",
+     95     │ - ····description:
+     96     │ - ······"Weigh·each·interpretation·against·supporting·evidence,·objections,·and·dependencies.",
+     97     │ - ····icon:·FileSearchIcon,
+     98     │ - ··},
+     99     │ - ··{
+    100     │ - ····title:·"Surface·the·decisive·unknowns",
+    101     │ - ····description:
+    102     │ - ······"Identify·what·remains·unestablished·and·what·could·change·the·assessment.",
+    103     │ - ····icon:·UserCheck01Icon,
+    104     │ - ··},
+    105     │ - ··{
+  552 more lines truncated
+  
+
+src/components/ui/button.tsx format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+     5  5 │   
+     6  6 │   const buttonVariants = cva(
+     7    │ - ··"group/button·inline-flex·shrink-0·items-center·justify-center·rounded-md·border·border-transparen...
+     8    │ - ··{
+     9    │ - ····variants:·{
+    10    │ - ······variant:·{
+    11    │ - ········default:·"bg-primary·text-primary-foreground·hover:bg-primary/80",
+    12    │ - ········outline:
+    13    │ - ··········"border-border·bg-transparent·border-primary/35·hover:bg-muted·hover:text-foreground·aria-expanded:bg-muted·aria-expanded:text-foreground·dark:bg-transparent·dark:hover:bg-input/30",
+    14    │ - ········secondary:
+    15    │ - ··········"bg-secondary·text-secondary-foreground·hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]·aria-expanded:bg-secondary·aria-expanded:text-secondary-foreground",
+    16    │ - ········ghost:
+    17    │ - ··········"hover:bg-muted·hover:text-foreground·aria-expanded:bg-muted·aria-expanded:text-foreground·dark:hover:bg-muted/50",
+    18    │ - ········destructive:
+    19    │ - ··········"bg-destructive/10·text-destructive-text·hover:bg-destructive/20·focus-visible:border-destructive/40·focus-visible:ring-destructive/20·dark:bg-destructive/20·dark:hover:bg-destructive/30·dark:focus-visible:ring-destructive/40",
+    20    │ - ········link:·"text-accent-foreground·underline-offset-4·hover:underline",
+    21    │ - ········approved:·"bg-approved·text-approved-foreground·hover:bg-approved/90",
+    22    │ - ········launch:
+    23    │ - ··········"border-0·rounded-full·bg-linear-to-b·from-primary-sheen·to-primary·to-55%·text-primary-foreground·shadow-launch·hover:brightness-110",
+    24    │ - ········round:
+    25    │ - ··········"border-0·rounded-full·bg-primary·text-primary-foreground·shadow-[inset_0_1px_0_oklch(1_0_0_/_0.2)]·hover:bg-primary/80",
+    26    │ - ······},
+    27    │ - ······size:·{
+    28    │ - ········default:
+    29    │ - ··········"h-9·gap-1.5·px-3·has-data-[icon=inline-end]:pr-2.5·has-data-[icon=inline-start]:pl-2.5",
+    30    │ - ········xs:·"h-6·gap-1·px-2.5·text-xs·has-data-[icon=inline-end]:pr-2·has-data-[icon=inline-start]:pl-2·[&_svg:not([class*='size-'])]:size-3",
+    31    │ - ········sm:·"h-8·gap-1·px-3·has-data-[icon=inline-end]:pr-2·has-data-[icon=inline-start]:pl-2",
+    32    │ - ········lg:·"h-11·gap-1.5·px-5·has-data-[icon=inline-end]:pr-3.5·has-data-[icon=inline-start]:pl-3.5·text-base",
+    33    │ - ········icon:·"size-9",
+    34    │ - ········"icon-xs":·"size-6·[&_svg:not([class*='size-'])]:size-3",
+    35    │ - ········"icon-sm":·"size-8",
+    36    │ - ········"icon-lg":·"size-10",
+    37    │ - ······},
+    38    │ - ····},
+    39    │ - ····compoundVariants:·[{·variant:·"launch",·className:·"text-[15px]·gap-2.5"·}],
+    40    │ - ····defaultVariants:·{
+    41    │ - ······variant:·"default",
+    42    │ - ······size:·"default",
+    43    │ - ····},
+    44    │ - ··},
+        7 │ + ····"group/button·inline-flex·shrink-0·items-center·justify-center·rounded-md·border·border-transpar...
+        8 │ + ····{
+        9 │ + ········variants:·{
+       10 │ + ············variant:·{
+       11 │ + ················default:
+       12 │ + ····················"bg-primary·text-primary-foreground·hover:bg-primary/80",
+       13 │ + ················outline:
+       14 │ + ····················"border-border·bg-transparent·border-primary/35·hover:bg-muted·hover:text-foreground·aria-expanded:bg-muted·aria-expanded:text-foreground·dark:bg-transparent·dark:hover:bg-input/30",
+       15 │ + ················secondary:
+       16 │ + ····················"bg-secondary·text-secondary-foreground·hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]·aria-expanded:bg-secondary·aria-expanded:text-secondary-foreground",
+       17 │ + ················ghost:·"hover:bg-muted·hover:text-foreground·aria-expanded:bg-muted·aria-expanded:text-foreground·dark:hover:bg-muted/50",
+       18 │ + ················destructive:
+       19 │ + ····················"bg-destructive/10·text-destructive-text·hover:bg-destructive/20·focus-visible:border-destructive/40·focus-visible:ring-destructive/20·dark:bg-destructive/20·dark:hover:bg-destructive/30·dark:focus-visible:ring-destructive/40",
+       20 │ + ················link:·"text-accent-foreground·underline-offset-4·hover:underline",
+       21 │ + ················approved:
+       22 │ + ····················"bg-approved·text-approved-foreground·hover:bg-approved/90",
+       23 │ + ················launch:·"border-0·rounded-full·bg-linear-to-b·from-primary-sheen·to-primary·to-55%·text-primary-foreground·shadow-launch·hover:brightness-110",
+       24 │ + ················round:·"border-0·rounded-full·bg-primary·text-primary-foreground·shadow-[inset_0_1px_0_oklch(1_0_0_/_0.2)]·hover:bg-primary/80",
+       25 │ + ············},
+       26 │ + ············size:·{
+       27 │ + ················default:
+       28 │ + ····················"h-9·gap-1.5·px-3·has-data-[icon=inline-end]:pr-2.5·has-data-[icon=inline-start]:pl-2.5",
+       29 │ + ················xs:·"h-6·gap-1·px-2.5·text-xs·has-data-[icon=inline-end]:pr-2·has-data-[icon=inline-start]:pl-2·[&_svg:not([class*='size-'])]:size-3",
+       30 │ + ················sm:·"h-8·gap-1·px-3·has-data-[icon=inline-end]:pr-2·has-data-[icon=inline-start]:pl-2",
+       31 │ + ················lg:·"h-11·gap-1.5·px-5·has-data-[icon=inline-end]:pr-3.5·has-data-[icon=inline-start]:pl-3.5·text-base",
+       32 │ + ················icon:·"size-9",
+       33 │ + ················"icon-xs":·"size-6·[&_svg:not([class*='size-'])]:size-3",
+       34 │ + ················"icon-sm":·"size-8",
+       35 │ + ················"icon-lg":·"size-10",
+       36 │ + ············},
+       37 │ + ········},
+       38 │ + ········compoundVariants:·[
+       39 │ + ············{·variant:·"launch",·className:·"text-[15px]·gap-2.5"·},
+       40 │ + ········],
+       41 │ + ········defaultVariants:·{
+       42 │ + ············variant:·"default",
+       43 │ + ············size:·"default",
+       44 │ + ········},
+       45 │ + ····},
+    45 46 │   );
+    46 47 │   
+    47 48 │   function Button({
+    48    │ - ··className,
+    49    │ - ··variant·=·"default",
+    50    │ - ··size,
+    51    │ - ··...props
+       49 │ + ····className,
+       50 │ + ····variant·=·"default",
+       51 │ + ····size,
+       52 │ + ····...props
+    52 53 │   }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+    53    │ - ··return·(
+    54    │ - ····<ButtonPrimitive
+    55    │ - ······data-slot="button"
+    56    │ - ······className={cn(
+    57    │ - ········buttonVariants({
+    58    │ - ··········variant,
+    59    │ - ··········size:
+    60    │ - ············size·===·undefined
+    61    │ - ··············?·variant·===·"round"
+    62    │ - ················?·"icon-lg"
+    63    │ - ················:·variant·===·"launch"
+    64    │ - ··················?·"lg"
+    65    │ - ··················:·"default"
+    66    │ - ··············:·size,
+    67    │ - ··········className:·cn(variant·===·"round"·&&·size·===·undefined·&&·"size-11",·className),
+    68    │ - ········}),
+    69    │ - ······)}
+    70    │ - ······{...props}
+    71    │ - ····/>
+    72    │ - ··);
+       54 │ + ····return·(
+       55 │ + ········<ButtonPrimitive
+       56 │ + ············data-slot="button"
+       57 │ + ············className={cn(
+       58 │ + ················buttonVariants({
+       59 │ + ····················variant,
+       60 │ + ····················size:
+       61 │ + ························size·===·undefined
+       62 │ + ····························?·variant·===·"round"
+       63 │ + ································?·"icon-lg"
+       64 │ + ································:·variant·===·"launch"
+       65 │ + ··································?·"lg"
+       66 │ + ··································:·"default"
+       67 │ + ····························:·size,
+       68 │ + ····················className:·cn(
+       69 │ + ························variant·===·"round"·&&·size·===·undefined·&&·"size-11",
+       70 │ + ························className,
+       71 │ + ····················),
+       72 │ + ················}),
+       73 │ + ············)}
+       74 │ + ············{...props}
+       75 │ + ········/>
+       76 │ + ····);
+    73 77 │   }
+    74 78 │   
+  
+
+src/components/ui/item.tsx format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+      7   7 │   
+      8   8 │   function ItemGroup({ className, ...props }: React.ComponentProps<"div">) {
+      9     │ - ··return·(
+     10     │ - ····<div
+     11     │ - ······role="list"
+     12     │ - ······data-slot="item-group"
+     13     │ - ······className={cn(
+     14     │ - ········"group/item-group·flex·w-full·flex-col·gap-4·has-data-[size=sm]:gap-2.5·has-data-[size=xs]:gap-2",
+     15     │ - ········className,
+     16     │ - ······)}
+     17     │ - ······{...props}
+     18     │ - ····/>
+     19     │ - ··);
+          9 │ + ····return·(
+         10 │ + ········<div
+         11 │ + ············role="list"
+         12 │ + ············data-slot="item-group"
+         13 │ + ············className={cn(
+         14 │ + ················"group/item-group·flex·w-full·flex-col·gap-4·has-data-[size=sm]:gap-2.5·has-data-[size=xs]:gap-2",
+         15 │ + ················className,
+         16 │ + ············)}
+         17 │ + ············{...props}
+         18 │ + ········/>
+         19 │ + ····);
+     20  20 │   }
+     21  21 │   
+     22     │ - function·ItemSeparator({·className,·...props·}:·React.ComponentProps<typeof·Separator>)·{
+     23     │ - ··return·(
+     24     │ - ····<Separator
+     25     │ - ······data-slot="item-separator"
+     26     │ - ······orientation="horizontal"
+     27     │ - ······className={cn("my-2",·className)}
+     28     │ - ······{...props}
+     29     │ - ····/>
+     30     │ - ··);
+         22 │ + function·ItemSeparator({
+         23 │ + ····className,
+         24 │ + ····...props
+         25 │ + }:·React.ComponentProps<typeof·Separator>)·{
+         26 │ + ····return·(
+         27 │ + ········<Separator
+         28 │ + ············data-slot="item-separator"
+         29 │ + ············orientation="horizontal"
+         30 │ + ············className={cn("my-2",·className)}
+         31 │ + ············{...props}
+         32 │ + ········/>
+         33 │ + ····);
+     31  34 │   }
+     32  35 │   
+     33  36 │   const itemVariants = cva(
+     34     │ - ··"group/item·flex·w-full·flex-wrap·items-center·rounded-2xl·border·text-sm·transition-colors·duration-100·outline-none·focus-visible:border-ring·focus-visible:ring-[3px]·focus-visible:ring-ring/50·[a]:transition-colors·[a]:hover:bg-muted",
+     35     │ - ··{
+     36     │ - ····variants:·{
+     37     │ - ······variant:·{
+     38     │ - ········default:·"border-transparent·bg-card/30·backdrop-blur",
+     39     │ - ········outline:·"border-border",
+     40     │ - ········muted:·"border-transparent·bg-muted/50",
+     41     │ - ······},
+     42     │ - ······size:·{
+     43     │ - ········default:·"gap-3.5·px-4·py-3.5",
+     44     │ - ········sm:·"gap-3.5·px-3.5·py-3",
+     45     │ - ········xs:·"gap-2.5·px-3·py-2.5·in-data-[slot=dropdown-menu-content]:p-0",
+     46     │ - ······},
+     47     │ - ····},
+     48     │ - ····defaultVariants:·{
+     49     │ - ······variant:·"default",
+     50     │ - ······size:·"default",
+     51     │ - ····},
+     52     │ - ··},
+         37 │ + ····"group/item·flex·w-full·flex-wrap·items-center·rounded-2xl·border·text-sm·transition-colors·duration-100·outline-none·focus-visible:border-ring·focus-visible:ring-[3px]·focus-visible:ring-ring/50·[a]:transition-colors·[a]:hover:bg-muted",
+         38 │ + ····{
+         39 │ + ········variants:·{
+         40 │ + ············variant:·{
+         41 │ + ················default:·"border-transparent·bg-card/30·backdrop-blur",
+         42 │ + ················outline:·"border-border",
+         43 │ + ················muted:·"border-transparent·bg-muted/50",
+         44 │ + ············},
+         45 │ + ············size:·{
+         46 │ + ················default:·"gap-3.5·px-4·py-3.5",
+         47 │ + ················sm:·"gap-3.5·px-3.5·py-3",
+         48 │ + ················xs:·"gap-2.5·px-3·py-2.5·in-data-[slot=dropdown-menu-content]:p-0",
+         49 │ + ············},
+         50 │ + ········},
+         51 │ + ········defaultVariants:·{
+         52 │ + ············variant:·"default",
+         53 │ + ············size:·"default",
+         54 │ + ········},
+         55 │ + ····},
+     53  56 │   );
+     54  57 │   
+     55  58 │   function Item({
+     56     │ - ··className,
+     57     │ - ··variant·=·"default",
+     58     │ - ··size·=·"default",
+     59     │ - ··render,
+     60     │ - ··...props
+         59 │ + ····className,
+         60 │ + ····variant·=·"default",
+         61 │ + ····size·=·"default",
+         62 │ + ····render,
+         63 │ + ····...props
+     61  64 │   }: useRender.ComponentProps<"div"> & VariantProps<typeof itemVariants>) {
+     62     │ - ··return·useRender({
+     63     │ - ····defaultTagName:·"div",
+     64     │ - ····props:·mergeProps<"div">(
+     65     │ - ······{
+     66     │ - ········className:·cn(itemVariants({·variant,·size,·className·})),
+     67     │ - ······},
+     68     │ - ······props,
+     69     │ - ····),
+     70     │ - ····render,
+     71     │ - ····state:·{
+     72     │ - ······slot:·"item",
+     73     │ - ······variant,
+     74     │ - ······size,
+     75     │ - ····},
+     76     │ - ··});
+         65 │ + ····return·useRender({
+         66 │ + ········defaultTagName:·"div",
+         67 │ + ········props:·mergeProps<"div">(
+         68 │ + ············{
+         69 │ + ················className:·cn(itemVariants({·variant,·size,·className·})),
+         70 │ + ············},
+         71 │ + ············props,
+         72 │ + ········),
+         73 │ + ········render,
+         74 │ + ········state:·{
+         75 │ + ············slot:·"item",
+         76 │ + ············variant,
+         77 │ + ············size,
+         78 │ + ········},
+         79 │ + ····});
+     77  80 │   }
+     78  81 │   
+     79  82 │   const itemMediaVariants = cva(
+     80     │ - ··"flex·shrink-0·items-center·justify-center·gap-2·group-has-data-[slot=item-description]/item:translate-y-0.5·group-has-data-[slot=item-description]/item:self-start·[&_svg]:pointer-events-none",
+     81     │ - ··{
+     82     │ - ····variants:·{
+     83     │ - ······variant:·{
+     84     │ - ········default:·"bg-transparent",
+     85     │ - ········icon:·"[&_svg:not([class*='size-'])]:size-4",
+     86     │ - ········image:
+     87     │ - ··········"size-10·overflow-hidden·rounded-xl·group-data-[size=sm]/item:size-8·group-data-[size=xs]/item:size-6·group-data-[size=xs]/item:rounded-lg·[&_img]:size-full·[&_img]:object-cover",
+     88     │ - ······},
+     89     │ - ····},
+     90     │ - ····defaultVariants:·{
+     91     │ - ······variant:·"default",
+     92     │ - ····},
+     93     │ - ··},
+         83 │ + ····"flex·shrink-0·items-center·justify-center·gap-2·group-has-data-[slot=item-description]/item:translate-y-0.5·group-has-data-[slot=item-description]/item:self-start·[&_svg]:pointer-events-none",
+  185 more lines truncated
+  
+
+src/components/workbench-shell/analyzed-company-list.tsx format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+     11  11 │   import { LoadErrorBoundary } from "@/components/load-error-boundary";
+     12  12 │   import { Button, buttonVariants } from "@/components/ui/button";
+     13     │ - import·{·NestedMenu,·type·NestedMenuSectionProps·}·from·"@/components/ui/nested-menu";
+         13 │ + import·{
+         14 │ + ····NestedMenu,
+         15 │ + ····type·NestedMenuSectionProps,
+         16 │ + }·from·"@/components/ui/nested-menu";
+     14  17 │   import { Separator } from "@/components/ui/separator";
+     15  18 │   import { Skeleton } from "@/components/ui/skeleton";
+    ······· │ 
+     20  23 │   
+     21  24 │   export interface AnalyzedCompanyListProps {
+     22     │ - ··activeRunId?:·string;
+     23     │ - ··className?:·string;
+     24     │ - ··enabled?:·boolean;
+     25     │ - ··isAdmissionLoading?:·boolean;
+         25 │ + ····activeRunId?:·string;
+         26 │ + ····className?:·string;
+         27 │ + ····enabled?:·boolean;
+         28 │ + ····isAdmissionLoading?:·boolean;
+     26  29 │   }
+     27  30 │   
+     28  31 │   /** Owner-scoped run navigation with explicit loading and empty states. */
+     29  32 │   export function AnalyzedCompanyList(props: AnalyzedCompanyListProps) {
+     30     │ - ··return·(
+     31     │ - ····<LoadErrorBoundary
+     32     │ - ······title="Research·dossiers·are·temporarily·unavailable"
+     33     │ - ······description="The·dossier·navigation·could·not·be·loaded."
+     34     │ - ······retryLabel="Retry"
+     35     │ - ······variant="compact"
+     36     │ - ······className={props.className}
+     37     │ - ····>
+     38     │ - ······<AnalyzedCompanyListContent·{...props}·/>
+     39     │ - ····</LoadErrorBoundary>
+     40     │ - ··);
+         33 │ + ····return·(
+         34 │ + ········<LoadErrorBoundary
+         35 │ + ············title="Research·dossiers·are·temporarily·unavailable"
+         36 │ + ············description="The·dossier·navigation·could·not·be·loaded."
+         37 │ + ············retryLabel="Retry"
+         38 │ + ············variant="compact"
+         39 │ + ············className={props.className}>
+         40 │ + ············<AnalyzedCompanyListContent·{...props}·/>
+         41 │ + ········</LoadErrorBoundary>
+         42 │ + ····);
+     41  43 │   }
+     42  44 │   
+     43  45 │   function DossiersButton({
+     44     │ - ··className,
+     45     │ - ··view·=·"compact",
+         46 │ + ····className,
+         47 │ + ····view·=·"compact",
+     46  48 │   }: {
+     47     │ - ··className?:·string;
+     48     │ - ··view?:·"compact"·|·"label"·|·"full";
+         49 │ + ····className?:·string;
+         50 │ + ····view?:·"compact"·|·"label"·|·"full";
+     49  51 │   }) {
+     50     │ - ··return·(
+     51     │ - ····<Button
+     52     │ - ······render={<Link·to="/workspace/dossiers"·/>}
+     53     │ - ······nativeButton={false}
+     54     │ - ······variant={view·===·"label"·?·"link"·:·"secondary"}
+     55     │ - ······size="sm"
+     56     │ - ······aria-label="Go·to·dossiers"
+     57     │ - ······title="Go·to·dossiers"
+     58     │ - ······className={cn("gap-1·text-xs·font-medium",·className)}
+     59     │ - ····>
+     60     │ - ······{view·===·"compact"·?·(
+     61     │ - ········<Icon·iconNode={Folder02Icon}·data-icon="inline-start"·className="text-muted-foreground"·/>
+     62     │ - ······)·:·(
+     63     │ - ········<>
+     64     │ - ··········<span>All·dossiers</span>
+     65     │ - ··········<Icon·iconNode={ArrowRight02Icon}·/>
+     66     │ - ········</>
+     67     │ - ······)}
+     68     │ - ····</Button>
+     69     │ - ··);
+         52 │ + ····return·(
+         53 │ + ········<Button
+         54 │ + ············render={<Link·to="/workspace/dossiers"·/>}
+         55 │ + ············nativeButton={false}
+         56 │ + ············variant={view·===·"label"·?·"link"·:·"secondary"}
+         57 │ + ············size="sm"
+         58 │ + ············aria-label="Go·to·dossiers"
+         59 │ + ············title="Go·to·dossiers"
+         60 │ + ············className={cn("gap-1·text-xs·font-medium",·className)}>
+         61 │ + ············{view·===·"compact"·?·(
+         62 │ + ················<Icon
+         63 │ + ····················iconNode={Folder02Icon}
+         64 │ + ····················data-icon="inline-start"
+         65 │ + ····················className="text-muted-foreground"
+         66 │ + ················/>
+         67 │ + ············)·:·(
+         68 │ + ················<>
+         69 │ + ····················<span>All·dossiers</span>
+         70 │ + ····················<Icon·iconNode={ArrowRight02Icon}·/>
+         71 │ + ················</>
+         72 │ + ············)}
+         73 │ + ········</Button>
+         74 │ + ····);
+     70  75 │   }
+     71  76 │   
+     72  77 │   function AnalyzedCompanyListContent({
+     73     │ - ··activeRunId,
+     74     │ - ··className,
+     75     │ - ··enabled·=·true,
+     76     │ - ··isAdmissionLoading·=·false,
+         78 │ + ····activeRunId,
+         79 │ + ····className,
+         80 │ + ····enabled·=·true,
+         81 │ + ····isAdmissionLoading·=·false,
+     77  82 │   }: AnalyzedCompanyListProps) {
+     78     │ - ··const·{·isMobile·}·=·useResponsive();
+     79     │ - ··const·navigate·=·useNavigate();
+     80     │ - ··const·{·results:·runs,·workspace,·isLoading·}·=·useWorkspaceDossiers(enabled);
+     81     │ - ··const·ensureRunCompanyWebsite·=·useAction(api.companyResolution.ensureRunCompanyWebsite);
+     82     │ - ··const·requestedWebsiteBackfills·=·useRef(new·Set<string>());
+     83     │ - ··const·availableRuns·=·runs·??·[];
+         83 │ + ····const·{·isMobile·}·=·useResponsive();
+         84 │ + ····const·navigate·=·useNavigate();
+         85 │ + ····const·{
+         86 │ + ········results:·runs,
+         87 │ + ········workspace,
+         88 │ + ········isLoading,
+         89 │ + ····}·=·useWorkspaceDossiers(enabled);
+         90 │ + ····const·ensureRunCompanyWebsite·=·useAction(
+         91 │ + ········api.companyResolution.ensureRunCompanyWebsite,
+         92 │ + ····);
+         93 │ + ····const·requestedWebsiteBackfills·=·useRef(new·Set<string>());
+         94 │ + ····const·availableRuns·=·runs·??·[];
+     84  95 │   
+     85     │ - ··useEffect(()·=>·{
+     86     │ - ····if·(!enabled·||·isAdmissionLoading·||·isLoading·||·workspace?.isTestData)·{
+     87     │ - ······return;
+     88     │ - ····}
+     89     │ - ····const·legacyRun·=·availableRuns.find(
+     90     │ - ······(run)·=>
+     91     │ - ········run.company·&&·!run.company.websiteUrl·&&·!requestedWebsiteBackfills.current.has(run.runId),
+     92     │ - ····);
+     93     │ - ····if·(!legacyRun)·{
+     94     │ - ······return;
+     95     │ - ····}
+         96 │ + ····useEffect(()·=>·{
+         97 │ + ········if·(
+         98 │ + ············!enabled·||
+         99 │ + ············isAdmissionLoading·||
+        100 │ + ············isLoading·||
+        101 │ + ············workspace?.isTestData
+        102 │ + ········)·{
+        103 │ + ············return;
+  449 more lines truncated
+  
+
+src/components/workspace/invitation-access-drawer.tsx format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+     11  11 │   import { Button } from "@/components/ui/button";
+     12  12 │   import {
+     13     │ - ··Drawer,
+     14     │ - ··DrawerClose,
+     15     │ - ··DrawerContent,
+     16     │ - ··DrawerDescription,
+     17     │ - ··DrawerFooter,
+     18     │ - ··DrawerHeader,
+     19     │ - ··DrawerTitle,
+         13 │ + ····Drawer,
+         14 │ + ····DrawerClose,
+         15 │ + ····DrawerContent,
+         16 │ + ····DrawerDescription,
+         17 │ + ····DrawerFooter,
+         18 │ + ····DrawerHeader,
+         19 │ + ····DrawerTitle,
+     20  20 │   } from "@/components/ui/drawer";
+     21     │ - import·{·InputOTP,·InputOTPGroup,·InputOTPSlot·}·from·"@/components/ui/input-otp";
+         21 │ + import·{
+         22 │ + ····InputOTP,
+         23 │ + ····InputOTPGroup,
+         24 │ + ····InputOTPSlot,
+         25 │ + }·from·"@/components/ui/input-otp";
+     22  26 │   import { Label } from "@/components/ui/label";
+     23  27 │   import { accessCodeErrorMessage } from "@/lib/presentation/research-copy";
+    ······· │ 
+     27  31 │   
+     28  32 │   export interface InvitationAccessDrawerProps {
+     29     │ - ··open:·boolean;
+     30     │ - ··onOpenChange:·(open:·boolean)·=>·void;
+     31     │ - ··onAdmitted:·(admission:·Admission)·=>·void·|·Promise<void>;
+         33 │ + ····open:·boolean;
+         34 │ + ····onOpenChange:·(open:·boolean)·=>·void;
+         35 │ + ····onAdmitted:·(admission:·Admission)·=>·void·|·Promise<void>;
+     32  36 │   }
+     33  37 │   
+     34  38 │   /** Collects a reusable workspace access code without displacing route state. */
+     35  39 │   export function InvitationAccessDrawer({
+     36     │ - ··open,
+     37     │ - ··onOpenChange,
+     38     │ - ··onAdmitted,
+         40 │ + ····open,
+         41 │ + ····onOpenChange,
+         42 │ + ····onAdmitted,
+     39  43 │   }: InvitationAccessDrawerProps) {
+     40     │ - ··const·claimInvitation·=·useAction(api.invitations.claim);
+     41     │ - ··const·[code,·setCode]·=·useState("");
+     42     │ - ··const·[error,·setError]·=·useState<string·|·null>(null);
+     43     │ - ··const·[isSubmitting,·setIsSubmitting]·=·useState(false);
+         44 │ + ····const·claimInvitation·=·useAction(api.invitations.claim);
+         45 │ + ····const·[code,·setCode]·=·useState("");
+         46 │ + ····const·[error,·setError]·=·useState<string·|·null>(null);
+         47 │ + ····const·[isSubmitting,·setIsSubmitting]·=·useState(false);
+     44  48 │   
+     45     │ - ··const·submit·=·async·(event:·FormEvent<HTMLFormElement>)·=>·{
+     46     │ - ····event.preventDefault();
+     47     │ - ····const·normalizedCode·=·code.trim();
+     48     │ - ····if·(!/^\d{4}$/.test(normalizedCode))·{
+     49     │ - ······setError("Enter·the·four-digit·access·code.");
+     50     │ - ······return;
+     51     │ - ····}
+         49 │ + ····const·submit·=·async·(event:·FormEvent<HTMLFormElement>)·=>·{
+         50 │ + ········event.preventDefault();
+         51 │ + ········const·normalizedCode·=·code.trim();
+         52 │ + ········if·(!/^\d{4}$/.test(normalizedCode))·{
+         53 │ + ············setError("Enter·the·four-digit·access·code.");
+         54 │ + ············return;
+         55 │ + ········}
+     52  56 │   
+     53     │ - ····setError(null);
+     54     │ - ····setIsSubmitting(true);
+     55     │ - ····try·{
+     56     │ - ······const·admission·=·await·claimInvitation({·code:·normalizedCode·});
+     57     │ - ······await·onAdmitted(admission);
+     58     │ - ······setCode("");
+     59     │ - ····}·catch·(caughtError)·{
+     60     │ - ······setError(accessCodeErrorMessage(caughtError));
+     61     │ - ····}·finally·{
+     62     │ - ······setIsSubmitting(false);
+     63     │ - ····}
+     64     │ - ··};
+         57 │ + ········setError(null);
+         58 │ + ········setIsSubmitting(true);
+         59 │ + ········try·{
+         60 │ + ············const·admission·=·await·claimInvitation({·code:·normalizedCode·});
+         61 │ + ············await·onAdmitted(admission);
+         62 │ + ············setCode("");
+         63 │ + ········}·catch·(caughtError)·{
+         64 │ + ············setError(accessCodeErrorMessage(caughtError));
+         65 │ + ········}·finally·{
+         66 │ + ············setIsSubmitting(false);
+         67 │ + ········}
+         68 │ + ····};
+     65  69 │   
+     66     │ - ··return·(
+     67     │ - ····<Drawer·open={open}·onOpenChange={onOpenChange}·swipeDirection="up"·showSwipeHandle>
+     68     │ - ······<DrawerContent·className="mx-auto·w-full·max-w-3xl">
+     69     │ - ········<DrawerHeader·className="mx-auto·w-full·max-w-xl·px-5·pt-6·text-left">
+     70     │ - ··········<DrawerTitle·className="text-micro">Protected·access</DrawerTitle>
+     71     │ - ··········<DrawerDescription>
+     72     │ - ············Enter·your·access·code·to·continue·to·the·research·workspace.
+     73     │ - ··········</DrawerDescription>
+     74     │ - ········</DrawerHeader>
+         70 │ + ····return·(
+         71 │ + ········<Drawer
+         72 │ + ············open={open}
+         73 │ + ············onOpenChange={onOpenChange}
+         74 │ + ············swipeDirection="up"
+         75 │ + ············showSwipeHandle>
+         76 │ + ············<DrawerContent·className="mx-auto·w-full·max-w-3xl">
+         77 │ + ················<DrawerHeader·className="mx-auto·w-full·max-w-xl·px-5·pt-6·text-left">
+         78 │ + ····················<DrawerTitle·className="text-micro">
+         79 │ + ························Protected·access
+         80 │ + ····················</DrawerTitle>
+         81 │ + ····················<DrawerDescription>
+         82 │ + ························Enter·your·access·code·to·continue·to·the·research
+         83 │ + ························workspace.
+         84 │ + ····················</DrawerDescription>
+         85 │ + ················</DrawerHeader>
+     75  86 │   
+     76     │ - ········<form
+     77     │ - ··········aria-label="Workspace·access"
+     78     │ - ··········className="mx-auto·w-full·max-w-xl·space-y-4·px-5·pt-5"
+     79     │ - ··········onSubmit={submit}
+     80     │ - ········>
+     81     │ - ··········<div·className="flex·flex-col·gap-1·items-center">
+     82     │ - ············<Label·htmlFor="invitation-code"·className="text-sm">
+     83     │ - ··············Access·code
+     84     │ - ············</Label>
+     85     │ - ············<InputOTP
+     86     │ - ··············id="invitation-code"
+     87     │ - ··············value={code}
+     88     │ - ··············onChange={(nextCode)·=>·{
+     89     │ - ················setCode(nextCode);
+     90     │ - ················setError(null);
+     91     │ - ··············}}
+     92     │ - ··············maxLength={4}
+     93     │ - ··············pattern={REGEXP_ONLY_DIGITS}
+     94     │ - ··············inputMode="numeric"
+     95     │ - ··············autoComplete="one-time-code"
+     96     │ - ··············aria-invalid={Boolean(error)}
+     97     │ - ··············aria-describedby={error·?·"invitation-code-error"·:·undefined}
+     98     │ - ··············containerClassName="justify-start"
+     99     │ - ············>
+    100     │ - ··············<InputOTPGroup>
+    101     │ - ················{invitationOtpSlots.map((slot)·=>·(
+    102     │ - ··················<InputOTPSlot
+    103     │ - ····················key={`invitation-otp-${slot}`}
+    104     │ - ····················index={slot}
+    105     │ - ····················className="size-16·font-mono·text-2xl"
+    106     │ - ··················/>
+  102 more lines truncated
+  
+
+src/components/workspace/start/start-screens.module.css format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+       1    1 │   .entry {
+       2      │ - ··width:·min(610px,·calc(100%·-·32px));
+       3      │ - ··margin:·0·auto;
+       4      │ - ··padding:·56px·0·40px;
+       5      │ - ··display:·flex;
+       6      │ - ··flex-direction:·column;
+       7      │ - ··gap:·24px;
+            2 │ + ····width:·min(610px,·calc(100%·-·32px));
+            3 │ + ····margin:·0·auto;
+            4 │ + ····padding:·56px·0·40px;
+            5 │ + ····display:·flex;
+            6 │ + ····flex-direction:·column;
+            7 │ + ····gap:·24px;
+       8    8 │   }
+       9    9 │   .entry > :first-child {
+      10      │ - ··margin-bottom:·0;
+           10 │ + ····margin-bottom:·0;
+      11   11 │   }
+      12   12 │   .composer {
+      13      │ - ··border-radius:·var(--radius-2xl);
+      14      │ - ··background:·var(--card);
+      15      │ - ··box-shadow:·var(--shadow-raised);
+           13 │ + ····border-radius:·var(--radius-2xl);
+           14 │ + ····background:·var(--card);
+           15 │ + ····box-shadow:·var(--shadow-raised);
+      16   16 │   }
+      17   17 │   .label,
+      18   18 │   .identityLabel {
+      19      │ - ··font:·500·11px·/·1.5·var(--font-mono);
+      20      │ - ··letter-spacing:·0.12em;
+      21      │ - ··text-transform:·uppercase;
+      22      │ - ··color:·var(--muted-foreground);
+           19 │ + ····font:·500·11px·/·1.5·var(--font-mono);
+           20 │ + ····letter-spacing:·0.12em;
+           21 │ + ····text-transform:·uppercase;
+           22 │ + ····color:·var(--muted-foreground);
+      23   23 │   }
+      24   24 │   .identityLabel {
+      25      │ - ··color:·var(--brand-purple);
+           25 │ + ····color:·var(--brand-purple);
+      26   26 │   }
+      27   27 │   .angles {
+      28      │ - ··display:·flex;
+      29      │ - ··flex-direction:·column;
+      30      │ - ··gap:·10px;
+           28 │ + ····display:·flex;
+           29 │ + ····flex-direction:·column;
+           30 │ + ····gap:·10px;
+      31   31 │   }
+      32   32 │   .angles > .label {
+      33      │ - ··padding-left:·4px;
+           33 │ + ····padding-left:·4px;
+      34   34 │   }
+      35   35 │   .angles button {
+      36      │ - ··display:·flex;
+      37      │ - ··justify-content:·flex-start;
+      38      │ - ··gap:·10px;
+      39      │ - ··padding:·11px·14px;
+      40      │ - ··border-radius:·14px;
+      41      │ - ··border:·0;
+      42      │ - ··height:·auto;
+      43      │ - ··background:·color-mix(in·oklab,·var(--card)·70%,·transparent);
+      44      │ - ··box-shadow:·0·0·0·1px·color-mix(in·oklab,·var(--foreground)·8%,·transparent);
+      45      │ - ··font:·400·14px·/·19px·var(--font-sans);
+      46      │ - ··white-space:·normal;
+      47      │ - ··text-align:·left;
+           36 │ + ····display:·flex;
+           37 │ + ····justify-content:·flex-start;
+           38 │ + ····gap:·10px;
+           39 │ + ····padding:·11px·14px;
+           40 │ + ····border-radius:·14px;
+           41 │ + ····border:·0;
+           42 │ + ····height:·auto;
+           43 │ + ····background:·color-mix(in·oklab,·var(--card)·70%,·transparent);
+           44 │ + ····box-shadow:·0·0·0·1px·color-mix(in·oklab,·var(--foreground)·8%,·transparent);
+           45 │ + ····font:·400·14px·/·19px·var(--font-sans);
+           46 │ + ····white-space:·normal;
+           47 │ + ····text-align:·left;
+      48   48 │   }
+      49   49 │   .angles svg {
+      50      │ - ··flex-shrink:·0;
+      51      │ - ··color:·var(--brand-purple);
+           50 │ + ····flex-shrink:·0;
+           51 │ + ····color:·var(--brand-purple);
+      52   52 │   }
+      53   53 │   .showcase {
+      54      │ - ··display:·flex;
+      55      │ - ··flex-direction:·column;
+      56      │ - ··align-items:·stretch;
+      57      │ - ··justify-content:·initial;
+      58      │ - ··gap:·14px;
+      59      │ - ··margin-top:·6px;
+      60      │ - ··padding:·20px·22px;
+      61      │ - ··width:·100%;
+      62      │ - ··height:·auto;
+      63      │ - ··white-space:·normal;
+      64      │ - ··text-align:·left;
+      65      │ - ··border:·0;
+      66      │ - ··border-radius:·24px;
+      67      │ - ··background:·color-mix(in·oklab,·var(--card)·70%,·transparent);
+      68      │ - ··backdrop-filter:·blur(24px);
+      69      │ - ··color:·var(--foreground);
+      70      │ - ··font-weight:·400;
+      71      │ - ··box-shadow:
+      72      │ - ····inset·0·1px·0·color-mix(in·oklab,·var(--popover)·90%,·transparent),
+      73      │ - ····0·0·0·1px·color-mix(in·oklab,·var(--brand-purple)·26%,·transparent),
+      74      │ - ····0·24px·56px·-30px·color-mix(in·oklab,·var(--brand-purple)·55%,·transparent);
+           54 │ + ····display:·flex;
+           55 │ + ····flex-direction:·column;
+           56 │ + ····align-items:·stretch;
+           57 │ + ····justify-content:·initial;
+           58 │ + ····gap:·14px;
+           59 │ + ····margin-top:·6px;
+           60 │ + ····padding:·20px·22px;
+           61 │ + ····width:·100%;
+           62 │ + ····height:·auto;
+           63 │ + ····white-space:·normal;
+           64 │ + ····text-align:·left;
+           65 │ + ····border:·0;
+           66 │ + ····border-radius:·24px;
+           67 │ + ····background:·color-mix(in·oklab,·var(--card)·70%,·transparent);
+           68 │ + ····backdrop-filter:·blur(24px);
+           69 │ + ····color:·var(--foreground);
+           70 │ + ····font-weight:·400;
+           71 │ + ····box-shadow:
+           72 │ + ········inset·0·1px·0·color-mix(in·oklab,·var(--popover)·90%,·transparent),
+           73 │ + ········0·0·0·1px·color-mix(in·oklab,·var(--brand-purple)·26%,·transparent),
+           74 │ + ········0·24px·56px·-30px
+           75 │ + ········color-mix(in·oklab,·var(--brand-purple)·55%,·transparent);
+      75   76 │   }
+      76   77 │   .showcaseHeader {
+      77      │ - ··display:·flex;
+      78      │ - ··align-items:·center;
+      79      │ - ··gap:·10px;
+           78 │ + ····display:·flex;
+           79 │ + ····align-items:·center;
+           80 │ + ····gap:·10px;
+      80   81 │   }
+      81   82 │   .curated {
+      82      │ - ··padding:·4px·8px;
+      83      │ - ··border-radius:·4px;
+      84      │ - ··box-shadow:·inset·0·0·0·1px·var(--foreground);
+      85      │ - ··font:·500·11px·/·1.5·var(--font-mono);
+      86      │ - ··letter-spacing:·0.12em;
+      87      │ - ··text-transform:·uppercase;
+           83 │ + ····padding:·4px·8px;
+           84 │ + ····border-radius:·4px;
+           85 │ + ····box-shadow:·inset·0·0·0·1px·var(--foreground);
+           86 │ + ····font:·500·11px·/·1.5·var(--font-mono);
+           87 │ + ····letter-spacing:·0.12em;
+  1747 more lines truncated
+  
+
+Checked 824 files in 1375ms. No fixes applied.
+Found 8 errors.
+format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Some errors were emitted while running checks.
+  
+
+ ELIFECYCLE  Command failed with exit code 1.

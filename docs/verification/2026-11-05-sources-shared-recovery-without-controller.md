@@ -1,0 +1,68 @@
+# Sources shared-recovery qualification without Jev — 2026-11-05
+
+The protected local CCC and Adobe lot completed its exercised browser path but failed documentary task acceptance: both Sources missions stopped with `repetition_stop`, zero controlled contributions and explicit unfinished needs. Four captures remain searchable. Workbench answered both follow-ups without restarting research or changing the fixed framing. Containment and conversation continuity worked; this is not successful documentary preparation or permission to activate Sources.
+
+## Frozen conditions
+
+Explicit approval covered one local two-case lot, at most 40 model attempts, four Exa searches, twelve captures and USD 2 combined. Workbench used GLM-5.3-Flash with recommended High reasoning; Sources and mandatory documentary control were assigned GPT-OSS-120B with recommended Medium. Jev was disabled; mandatory controls remained active. CCC and Adobe are previously exposed development cases, not held-out robustness evidence. Investigator-authored protocol questions replaced the initial model proposals through the authenticated framing owner before explicit browser Start; those fixed questions are not counted as model success.
+
+Actual serialized requests confirm 25 Sources generations on GPT-OSS-120B Medium and ten Workbench generations on GLM High. OpenRouter received no pinned provider; existing price and required-parameter constraints remained. Workbench instructions occupied system messages and Sources instructions developer messages, as serialized by the installed adapter. Required state was compact; requested passages and mission history were recovered on demand. Both follow-up inputs contained a blocked result, zero prepared documents and zero contributions per need. No documentary examiner ran because no submission passed deterministic admission. Four protected turn audits confirm disabled Jev policy and no controller checks.
+
+The dispatched candidate hash was `b5d36d2b3da34cfb3dd1e6568de13cd6d62d3b6bce305add25e8df3883cf892c`. Exact uncommitted application bytes and provider payloads are retained. Final application fingerprints match; only the temporary manifest differs because its original bytes were restored.
+
+## Causal findings and next actions
+
+**CCC — underexplained validation constraint.** The first qualification grouped two contributions under the annual-report capture, while the second cited only the separate help-document capture. `reconstructQualification` requires each contribution to cite the primary capture. Neither the actual tool description nor the returned `qualification_invalid` diagnostic explained that condition or identified the offending contribution. The real owner rejects the recorded proposal; removing only that foreign-only contribution allows reconstruction. This isolates the first rejection before quotation validation. Correct the existing domain diagnostic contract to expose the exact contribution, failed condition and correction, with coverage through native and mission dispatch. Preserve evidence policy; do not add model-specific phrase filters.
+
+**Model errors remain distinct.** CCC repeated its rejected proposal and then invented `expectedTaskId=qual1`. Adobe invented an existing contribution identity/version for an initial submission, then corrected those fields after refusal. Adobe next changed quotation bytes despite receiving the exact passage and copy instruction. Real production reconstruction and quotation-matcher probes isolate those errors: the captured quotation passes the unchanged matcher, while the submitted quotation fails. Keep strict identity and exact-evidence controls. These failures are not unavailable examiner findings.
+
+**Adobe — recovery read exhausted the nonprogress allowance.** Two rejected submissions were followed by a successful reread of passage 1, as requested by the quote-error feedback. This repeated observation added no new progress key; settlement raised `noProgressTurns` to three and blocked before another generation could propose corrected evidence. A registered invocation/dispatch/settlement probe reproduces a successful repeated read ending in `repetition_stop` after two prior nonprogress turns. This is a confirmed recovery-policy limit, not loss of a paid result or proof that another generation would succeed. The bounded next correction should make existing recovery/progress owners distinguish restoration after a particular refusal from repeated business attempts, while retaining a finite bound and replay idempotency. Merely increasing the global threshold or granting unlimited credit for rereads is not justified.
+
+**Workbench — preparation failure understated.** Both replies usefully explain captured content, company attribution and missing independent evidence; neither restarts research. Neither plainly states that Sources stopped with zero controlled contributions. The blocked/zero state was present in the actual provider input, so this omission is model/publication quality rather than missing-context evidence. Preserve the distinction between raw consultable sources and qualified material in the existing status/presentation contract. The previous Adobe suggestion to Start already-started research did not recur, but that observation does not exercise every guard or establish general prose reliability.
+
+**Evaluation exporter — measured local timeout.** Final `inspectSourcesQualification` exceeded the backend's one-second function limit. Bounded read-only CLI inspection recovered the final 35 invocations, 70 payloads, 45 receipts and 357 events, retaining only this lot's records. No context was reopened or paid grant renewed. Its internal bottleneck remains unprofiled; the next discriminating check is phase timing around the existing exporter's row and payload reads with the same retained volume. No query optimization or limit change is established by this timeout alone. This is tooling/runtime evidence, not a model failure. An unauthorized subscription during context revocation is preserved as teardown evidence.
+
+## Results and cost
+
+CCC used 17 model calls, two Exa searches and two captures, for USD 0.0247566105 recorded cost. Its SEC annual report downloaded successfully; the report capture was partially indexed, with 440 omitted passages, so searches cannot establish absence from the whole filing. Adobe used 18 model calls, two Exa searches and two complete captures, for USD 0.02431638. Both had zero controlled contributions and honest blocked handoffs. Follow-up framing IDs still match the fixed IDs.
+
+Total: 35 model calls, four Exa searches, four captures, zero Jev calls, USD 0.0490729905 recorded cost, no unknown outcomes and no started receipts remaining. Receipt-declared amounts are not an independently reconciled provider invoice. Model-provider latency totals 212.282 seconds across 35 calls; the 703.081-second lot interval also includes browser actions, pause/reconnection, operator inspection and orchestration.
+
+## Verification and restoration
+
+The first unpaid preparation failed because the temporary manifest was not formatted; its failed stage is preserved separately. Formatting that configuration changed no application behavior. Final preparation passed all six mandatory gates: typecheck, protocol tests, selected domain regressions, scoped lint, imports and ownership. Executed commands used the existing `pnpm workbench:qualify --sources-phase prepare|inspect|close --output <lot>/run` entry point through its Node script. Shared T3 preview performed genuine anonymous admission, explicit Start for both cases, CCC pause/reconnection/Resume and same-conversation follow-ups. Five desktop/mobile screenshots are retained. Fresh anonymous readmission after pause, a complete accessibility/console audit and real crash/OCC recovery were not qualified.
+
+Four free isolation probes passed with `pnpm exec vitest run --config <lot>/isolation/vitest.config.mjs --maxWorkers=1`. They import production modules and exercise registered Convex boundaries for repetition settlement. Temporary probe setup errors remain retained. No production correction, dependency change, synchronization or global suite occurred during this lot.
+
+Original model assignments, reasoning preferences, availability, controller fields and manifest bytes were restored and compared. The context is closed, fixture/Workbench test flags are removed, Sources remains globally disabled, and publication is released with no active workers. The next useful slice is the bounded diagnostic/recovery correction and deterministic regression coverage. Another paid lot is neither necessary for this diagnosis nor automatically authorized.
+
+## Retained evidence
+
+The lot directory contains approval, dispatched manifest, actual dispatch summary, accounting, causal traces, inspection diagnostics, restored runtime state, protected response-control audits, failed/passing prerequisite logs, immutable capture text, browser history/screenshots, exact application snapshots, final scoped read-only export and executable isolation probes. The repository report links the verified archive record after capture. Archiving preserves bytes locally; it does not establish documentary quality or off-machine backup.
+
+## Verified archive
+
+[Verified archive record](../../scripts/evaluations/archives/20261105T100455034Z-sources-shared-recovery-no-jev/record.json) preserves 1,851 files and 42,824,471 bytes, including the pre-link report. Storage is local-only. The final scoped CLI export supplies the follow-up payloads missing from the timed-out fixture export. No experiment originals were removed.
+
+Exact verification entry points used for this lot:
+
+```sh
+node --experimental-strip-types scripts/evaluations/workbench-browser/qualify.ts --sources-phase prepare --output /tmp/workbench-quality-no-jev-proposal-20261105-p417linv/run
+node --experimental-strip-types scripts/evaluations/workbench-browser/qualify.ts --sources-phase inspect --output /tmp/workbench-quality-no-jev-proposal-20261105-p417linv/run
+node --experimental-strip-types scripts/evaluations/workbench-browser/qualify.ts --sources-phase close --output /tmp/workbench-quality-no-jev-proposal-20261105-p417linv/run
+pnpm exec vitest run --config /tmp/workbench-quality-no-jev-proposal-20261105-p417linv/isolation/vitest.config.mjs --maxWorkers=1
+```
+
+## Subsequent bounded-refusal correction — 2026-11-05
+
+The paid observations above remain unchanged. The subsequent correction retains domain-authored field guidance through unavailable outcomes, identifies the contribution missing primary-capture evidence, and explains separate initial/correction identities in the existing qualification operation. Registered native and mission regressions prove refusal before documentary allowance consumption.
+
+Shared invocation settlement now permits one successful restoration of retained material after a refusal without resetting the failure count or replenishing the allowance on another refusal. Registered Sources and saved-material inspection tests cover honest completion afterward, idempotent settlement and the unchanged third-failure stop. Private audit-only history and effectful operations cannot claim this restoration. The architecture checker enforces that only invocation lifecycle may write the restoration state. Current obligations are in [TECH](../../context/TECH.md#shared-execution-structure).
+
+The existing local inspection owner separates documentary inventory from one-invocation transcript pages. Six large transcript fixtures preserve inventory availability and bounded authorized paging. Real published queries exported seven invocations and twelve available payloads; individual page latency ranged from 143 to 908 ms. This is a bounded observed sample, not a production-latency guarantee. Native pagination exposed a terminal empty-page difference from convex-test; the collector was corrected with a focused RED/GREEN regression and still refuses excess invocations.
+
+The full CI aggregate passed 2,586 tests in 314 files, types, lint/ownership, formatting, documentation/design checks and client/server build. Its existing 24 lint warnings and chunk-size warning remain. The later collector-only amendment passed three additional focused tests, full frontend/backend types and scoped lint/import/ownership checks; the global suite was not repeated after that tooling change. Backend/frontend source bytes match the published runtime snapshot.
+
+All eight required protected simulated browser scenarios passed execution checks; two real-relay adversarial cases were not run, and the overall semantic review remains inconclusive. Five configured model profile sets were refreshed without inference, retaining assignments, revisions, preferences, availability and response-control settings. The browser automation wait timed out during that refresh, but later reads confirmed the original callback completed without redispatch. The local context is closed, test flags are removed, Sources remains disabled and no paid provider call occurred in this correction batch. The previous paid lot does not authorize another lot; the next identical bounded protocol is prepared separately for authorization.
+
+The [verified correction archive](../../scripts/evaluations/archives/20261105T111257601Z-bounded-refusal-recovery/record.json) preserves 991 files and 12339593 bytes, including the pre-link report, original failures, final source stages, regression logs, runtime observations and the unadmitted next-lot proposal. Configured credential bytes were checked absent. Storage remains local only.

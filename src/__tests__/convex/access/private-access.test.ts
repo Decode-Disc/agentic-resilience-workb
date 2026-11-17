@@ -1,5 +1,5 @@
-import { digestInvitationCode } from "@convex/domain/invitationCodes";
 import type { Id } from "@convex/_generated/dataModel";
+import { digestInvitationCode } from "@convex/domain/invitationCodes";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
@@ -96,6 +96,7 @@ async function createUnusedReservationFixture(
         }
         const now = Date.now();
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             ownerVisitorId: visitorId,
             reservationKey,
             reservationStatus: "consumed",

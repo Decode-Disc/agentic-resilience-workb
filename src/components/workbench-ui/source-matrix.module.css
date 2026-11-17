@@ -1,0 +1,249 @@
+@reference "../../styles.css";
+
+.panel {
+    @apply rounded-[26px] overflow-hidden;
+}
+.scroll {
+    @apply relative overflow-x-auto;
+}
+/* Signals columns beyond the right edge while they remain hidden. */
+.scroll[data-more] {
+    mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent);
+}
+.table {
+    --sticky-surface:
+        linear-gradient(var(--surface-glass), var(--surface-glass)),
+        var(--background);
+    width: max(100%, 1100px);
+    @apply table-fixed border-separate border-spacing-0 text-[13px] text-left;
+}
+.table th,
+.table td {
+    @apply py-[12px] px-[7px] align-middle;
+}
+.table th:first-child,
+.table td:first-child {
+    @apply pl-[24px];
+}
+.table th:last-child,
+.table td:last-child {
+    @apply pr-[24px];
+}
+/* The source stays in view while the other columns scroll. */
+.table th:first-child,
+.table td:first-child {
+    @apply sticky left-0 z-[1];
+    background: var(--sticky-surface);
+}
+.scroll[data-scrolled] .table th:first-child,
+.scroll[data-scrolled] .table td:first-child {
+    box-shadow: 8px 0 12px -10px
+        color-mix(in oklab, var(--foreground) 35%, transparent);
+}
+.group th {
+    @apply pt-[14px] pb-[0] [font-weight:inherit];
+}
+.groupLabel {
+    @apply block pb-[8px];
+    border-bottom: 1px solid
+        color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+.group th[data-use] .groupLabel {
+    @apply text-accent-foreground;
+    border-bottom-color: color-mix(
+        in oklab,
+        var(--brand-purple) 40%,
+        transparent
+    );
+}
+.columns th {
+    @apply pt-[10px] pb-[10px] text-[12.5px] font-normal text-muted-foreground;
+}
+.row {
+    @apply cursor-pointer;
+}
+.row td {
+    border-top: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+.row:hover td {
+    @apply bg-foreground/[2.5%] bg-none;
+}
+.row:hover td:first-child {
+    background:
+        linear-gradient(
+            color-mix(in oklab, var(--foreground) 2.5%, transparent),
+            color-mix(in oklab, var(--foreground) 2.5%, transparent)
+        ),
+        var(--sticky-surface);
+}
+.row[data-current] {
+    background: linear-gradient(
+        90deg,
+        color-mix(in oklab, var(--brand-purple) 10%, transparent),
+        color-mix(in oklab, var(--brand-purple) 3%, transparent)
+    );
+}
+.row[data-current] td:first-child {
+    background:
+        linear-gradient(
+            color-mix(in oklab, var(--brand-purple) 10%, transparent),
+            color-mix(in oklab, var(--brand-purple) 10%, transparent)
+        ),
+        var(--sticky-surface);
+}
+.row[data-current] td:not(:first-child) {
+    @apply bg-none bg-transparent;
+}
+.row[data-current] td {
+    @apply border-t-brand-purple/30;
+    border-bottom: 1px solid
+        color-mix(in oklab, var(--brand-purple) 30%, transparent);
+}
+.row[data-current] + .row td {
+    @apply border-t-transparent;
+}
+.source {
+    @apply flex items-center gap-[12px] min-w-[0];
+}
+.sourceText {
+    @apply flex flex-col gap-[2px] min-w-[0];
+}
+.title {
+    all: unset;
+    @apply text-[14px] font-medium leading-[1.4] text-foreground cursor-pointer wrap-anywhere;
+}
+.title:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px] rounded-[2px];
+}
+.row[data-quiet] .title {
+    @apply text-muted-foreground;
+}
+.doc {
+    @apply shrink-0;
+}
+.row[data-quiet] .doc:not([data-missing]) {
+    @apply opacity-[0.6];
+}
+.small {
+    @apply text-[12.5px] leading-[17px] text-muted-foreground;
+}
+.reading {
+    @apply flex items-center gap-[8px] text-[13px];
+}
+.reading[data-state="unavailable"] {
+    @apply text-muted-foreground;
+}
+.contributions {
+    @apply flex items-center gap-[10px];
+}
+.count {
+    @apply w-[22px] shrink-0 text-[14px] font-medium;
+}
+.count[data-empty] {
+    @apply text-muted-foreground;
+}
+.legend {
+    @apply py-[12px] px-[24px];
+    border-top: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
+    @apply bg-foreground/[2.5%] bg-none flex flex-wrap items-center gap-y-[8px] gap-x-[18px] text-[12.5px] text-muted-foreground;
+}
+.legendItem {
+    @apply inline-flex items-center gap-[6px];
+}
+.legendNote {
+    @apply ml-auto;
+}
+.empty {
+    @apply py-[32px] px-[24px];
+}
+.columnHead {
+    @apply inline-flex items-center gap-[4px];
+}
+.help {
+    all: unset;
+    @apply inline-flex items-center justify-center w-[20px] h-[20px] rounded-[6px] text-muted-foreground/70;
+    cursor: help;
+}
+.help:hover,
+.help:focus-visible {
+    @apply text-foreground bg-foreground/6 bg-none;
+}
+.help:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[1px];
+}
+.relationship {
+    @apply text-foreground opacity-[0.78];
+}
+.barTrigger {
+    all: unset;
+    @apply inline-flex py-[8px] px-0 rounded-[4px];
+    cursor: help;
+}
+.barTrigger:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+.breakdown {
+    @apply flex flex-col gap-[4px];
+}
+.breakdown > span {
+    @apply inline-flex items-center gap-[8px];
+}
+.scrollHint {
+    @apply m-[0] py-[8px] px-[24px] flex items-center justify-end gap-[4px] text-[12px] text-muted-foreground;
+    border-top: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+.footer {
+    @apply py-[10px] px-[24px] flex items-center justify-between flex-wrap gap-y-[8px] gap-x-[16px];
+    border-top: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+@media (max-width: 767px) {
+    .table {
+        width: 1000px;
+    }
+    .table col:first-child {
+        width: 152px;
+    }
+    .table th:first-child,
+    .table td:first-child {
+        @apply pl-[16px];
+    }
+    .doc {
+        @apply hidden;
+    }
+    .meta {
+        @apply line-clamp-2;
+    }
+    .legend,
+    .scrollHint,
+    .footer {
+        @apply px-[16px];
+    }
+    .legendNote {
+        @apply ml-0;
+    }
+}
+/* Rows of a new page or filter result arrive top to bottom, within 150ms of each other. */
+@keyframes row-arrive {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+}
+tbody[data-arriving] .row {
+    animation: row-arrive 0.22s var(--wb-ease-arrive) both;
+    animation-delay: calc(min(var(--row), 10) * 15ms);
+}
+@media (prefers-reduced-motion: reduce) {
+    tbody[data-arriving] .row {
+        animation-name: row-fade;
+        animation-delay: 0ms;
+    }
+}
+@keyframes row-fade {
+    from {
+        opacity: 0;
+    }
+}

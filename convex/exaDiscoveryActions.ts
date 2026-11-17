@@ -1,19 +1,24 @@
 "use node";
 
-import Exa from "exa-js";
 import { lookup } from "node:dns/promises";
-import { v } from "convex/values";
+import {
+    EXA_DISCOVERY_TIMEOUT_MS,
+    MAX_EXA_DISCOVERY_ATTEMPTS as MAX_EXA_ATTEMPTS,
+} from "@convex/resourcePolicy";
+import { ConvexError, v } from "convex/values";
+import Exa from "exa-js";
 
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import { paidWorkDisabledErrorData } from "./domain/providerAvailability";
 import {
     PublicSourceUrlError,
     validatePublicSourceUrl,
 } from "./domain/publicSourceUrl";
-import { createExaDiscoveryAdapter } from "./integrations/exa";
-
-const MAX_EXA_ATTEMPTS = 2;
-const EXA_DISCOVERY_TIMEOUT_MS = 10_000;
+import {
+    createExaDiscoveryAdapter,
+    exaDiscoveryDisposition,
+} from "./integrations/exa";
 
 class ExaLogicalTimeoutError extends Error {
     constructor() {
@@ -49,8 +54,10 @@ export async function validateExaCandidates<
 >(
     candidates: ReadonlyArray<Candidate>,
     resolveAddresses: (hostname: string) => Promise<ReadonlyArray<string>>,
+    signal?: AbortSignal,
 ): Promise<{ candidates: Array<Candidate>; rejected: number }> {
-    const results = await Promise.allSettled(
+    signal?.throwIfAborted();
+    const validation = Promise.allSettled(
         candidates.map(async (candidate) => {
             const validated = await validatePublicSourceUrl(
                 candidate.canonicalUrl,
@@ -62,12 +69,27 @@ export async function validateExaCandidates<
             };
         }),
     );
-    return {
-        candidates: results.flatMap((result) =>
-            result.status === "fulfilled" ? [result.value] : [],
-        ),
-        rejected: results.filter(({ status }) => status === "rejected").length,
-    };
+    let onAbort: (() => void) | undefined;
+    try {
+        const results = await (signal
+            ? Promise.race([
+                  validation,
+                  new Promise<never>((_resolve, reject) => {
+                      onAbort = () => reject(signal.reason);
+                      signal.addEventListener("abort", onAbort, { once: true });
+                  }),
+              ])
+            : validation);
+        return {
+            candidates: results.flatMap((result) =>
+                result.status === "fulfilled" ? [result.value] : [],
+            ),
+            rejected: results.filter(({ status }) => status === "rejected")
+                .length,
+        };
+    } finally {
+        if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+    }
 }
 
 export const discoverForRun = internalAction({
@@ -113,6 +135,9 @@ export const discoverForRun = internalAction({
                     },
                 );
                 if (!lease.shouldExecute) {
+                    if (lease.status === "failed") {
+                        throw new ConvexError(paidWorkDisabledErrorData());
+                    }
                     if (
                         lease.status === "succeeded" ||
                         lease.status === "partial"
@@ -138,6 +163,7 @@ export const discoverForRun = internalAction({
                         exa.search(
                             planQuery.query,
                             Math.min(4, capacity.remaining),
+                            planQuery.includeDomains,
                         ),
                         EXA_DISCOVERY_TIMEOUT_MS,
                     );
@@ -161,6 +187,7 @@ export const discoverForRun = internalAction({
                                           ...candidate,
                                           origin: "exa" as const,
                                           category: planQuery.category,
+                                          discoveryQueryIndex: index,
                                       })),
                                   async (hostname) =>
                                       (
@@ -171,7 +198,11 @@ export const discoverForRun = internalAction({
                                       ).map(({ address }) => address),
                               );
                     const rejected = batch.rejected + validated.rejected;
-                    if (validated.candidates.length === 0 && rejected > 0) {
+                    const disposition = exaDiscoveryDisposition(
+                        validated.candidates.length,
+                        rejected,
+                    );
+                    if (disposition === "failed") {
                         await ctx.runMutation(
                             internal.providerCalls.recordAttempt,
                             {
@@ -208,7 +239,7 @@ export const discoverForRun = internalAction({
                             candidates: validated.candidates,
                             providerCompletion: {
                                 providerCallId: lease.providerCallId,
-                                status: rejected > 0 ? "partial" : "succeeded",
+                                status: disposition,
                                 latencyMs: Date.now() - startedAt,
                                 accepted: validated.candidates.length,
                                 rejected,

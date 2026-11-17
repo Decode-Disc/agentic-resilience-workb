@@ -1,435 +1,249 @@
 "use client";
 
-import { XIcon } from "lucide-react";
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import {
     AnimatePresence,
+    LayoutGroup,
     MotionConfig,
     motion,
     type Transition,
-    type Variant,
+    useReducedMotion,
 } from "motion/react";
-import React, {
-    useCallback,
+import {
+    type ComponentProps,
+    createContext,
+    type ReactNode,
+    type RefObject,
     useContext,
-    useEffect,
     useId,
-    useMemo,
     useRef,
     useState,
 } from "react";
-import { createPortal } from "react-dom";
+import Icon from "@/components/icon";
+import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 
-interface DialogContextType {
-    isOpen: boolean;
-    setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    uniqueId: string;
-    triggerRef: React.RefObject<HTMLDivElement>;
-}
+const MotionTrigger = motion.create(DialogPrimitive.Trigger);
+const MotionPopup = motion.create(DialogPrimitive.Popup);
+const MotionClose = motion.create(DialogPrimitive.Close);
+const MotionTitle = motion.create(DialogPrimitive.Title);
+const MotionDescription = motion.create(DialogPrimitive.Description);
 
-const DialogContext = React.createContext<DialogContextType | null>(null);
+const DialogContext = createContext<{
+    open: boolean;
+    id: string;
+    reduced: boolean;
+    actionsRef: RefObject<DialogPrimitive.Root.Actions | null>;
+} | null>(null);
 
 function useDialog() {
     const context = useContext(DialogContext);
-    if (!context) {
-        throw new Error("useDialog must be used within a DialogProvider");
-    }
+    if (!context) throw new Error("Linear modal parts require a Dialog parent");
     return context;
 }
 
-type DialogProviderProps = {
-    children: React.ReactNode;
+/** Morphs from the trigger while Base UI owns modal semantics, focus and dismissal. */
+function Dialog({
+    children,
+    open: controlledOpen,
+    defaultOpen = false,
+    onOpenChange,
+    transition = { type: "spring", stiffness: 340, damping: 34, mass: 0.9 },
+    ...props
+}: Omit<DialogPrimitive.Root.Props, "children" | "actionsRef"> & {
+    children: ReactNode;
     transition?: Transition;
-};
-
-function DialogProvider({ children, transition }: DialogProviderProps) {
-    const [isOpen, setIsOpen] = useState(false);
-    const uniqueId = useId();
-    const triggerRef = useRef<HTMLDivElement>(null);
-
-    const contextValue = useMemo(
-        () => ({ isOpen, setIsOpen, uniqueId, triggerRef }),
-        [isOpen, uniqueId],
-    );
-
+}) {
+    const [localOpen, setLocalOpen] = useState(defaultOpen);
+    const open = controlledOpen ?? localOpen;
+    const id = useId();
+    const reduced = useReducedMotion() === true;
+    const actionsRef = useRef<DialogPrimitive.Root.Actions>(null);
     return (
-        <DialogContext.Provider
-            //@ts-expect-error
-            value={contextValue}>
-            <MotionConfig transition={transition}>{children}</MotionConfig>
-        </DialogContext.Provider>
+        <MotionConfig reducedMotion="user" transition={transition}>
+            <LayoutGroup id={id}>
+                <DialogContext.Provider
+                    value={{ open, id, reduced, actionsRef }}>
+                    <DialogPrimitive.Root
+                        {...props}
+                        open={open}
+                        actionsRef={actionsRef}
+                        onOpenChange={(next, details) => {
+                            onOpenChange?.(next, details);
+                            if (details.isCanceled) return;
+                            if (!next && !reduced)
+                                details.preventUnmountOnClose();
+                            if (controlledOpen === undefined)
+                                setLocalOpen(next);
+                        }}>
+                        {children}
+                    </DialogPrimitive.Root>
+                </DialogContext.Provider>
+            </LayoutGroup>
+        </MotionConfig>
     );
 }
-
-type DialogProps = {
-    children: React.ReactNode;
-    transition?: Transition;
-};
-
-function Dialog({ children, transition }: DialogProps) {
-    return (
-        <DialogProvider>
-            <MotionConfig transition={transition}>{children}</MotionConfig>
-        </DialogProvider>
-    );
-}
-
-type DialogTriggerProps = {
-    children: React.ReactNode;
-    className?: string;
-    style?: React.CSSProperties;
-    triggerRef?: React.RefObject<HTMLDivElement>;
-};
 
 function DialogTrigger({
-    children,
-    className,
-    style,
     triggerRef,
-}: DialogTriggerProps) {
-    const { setIsOpen, isOpen, uniqueId } = useDialog();
-
-    const handleClick = useCallback(() => {
-        setIsOpen(!isOpen);
-    }, [isOpen, setIsOpen]);
-
-    const handleKeyDown = useCallback(
-        (event: React.KeyboardEvent) => {
-            if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                setIsOpen(!isOpen);
-            }
-        },
-        [isOpen, setIsOpen],
-    );
-
+    ref,
+    style,
+    ...props
+}: ComponentProps<typeof MotionTrigger> & {
+    triggerRef?: RefObject<HTMLButtonElement | null>;
+}) {
+    const context = useDialog();
     return (
-        <motion.div
-            ref={triggerRef}
-            layoutId={`dialog-${uniqueId}`}
-            className={cn("relative cursor-pointer", className)}
-            onClick={handleClick}
-            onKeyDown={handleKeyDown}
-            style={style}
-            role="button"
-            aria-haspopup="dialog"
-            aria-expanded={isOpen}
-            aria-controls={`dialog-content-${uniqueId}`}>
-            {children}
-        </motion.div>
+        <MotionTrigger
+            {...props}
+            ref={ref ?? triggerRef}
+            style={
+                context.reduced && context.open
+                    ? { ...style, opacity: 0 }
+                    : style
+            }
+            layoutId={context.reduced ? undefined : `dialog-${context.id}`}
+        />
     );
 }
-
-type DialogContent = {
-    children: React.ReactNode;
-    className?: string;
-    style?: React.CSSProperties;
-};
-
-function DialogContent({ children, className, style }: DialogContent) {
-    const { setIsOpen, isOpen, uniqueId, triggerRef } = useDialog();
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [firstFocusableElement, setFirstFocusableElement] =
-        useState<HTMLElement | null>(null);
-    const [lastFocusableElement, setLastFocusableElement] =
-        useState<HTMLElement | null>(null);
-
-    useEffect(() => {
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                setIsOpen(false);
-            }
-            if (event.key === "Tab") {
-                if (!firstFocusableElement || !lastFocusableElement) return;
-
-                if (event.shiftKey) {
-                    if (document.activeElement === firstFocusableElement) {
-                        event.preventDefault();
-                        lastFocusableElement.focus();
-                    }
-                } else {
-                    if (document.activeElement === lastFocusableElement) {
-                        event.preventDefault();
-                        firstFocusableElement.focus();
-                    }
-                }
-            }
-        };
-
-        document.addEventListener("keydown", handleKeyDown);
-
-        return () => {
-            document.removeEventListener("keydown", handleKeyDown);
-        };
-    }, [setIsOpen, firstFocusableElement, lastFocusableElement]);
-
-    useEffect(() => {
-        if (isOpen) {
-            document.body.style.overflow = "hidden";
-
-            const focusableElements = containerRef.current?.querySelectorAll(
-                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-            );
-            if (focusableElements && focusableElements.length > 0) {
-                setFirstFocusableElement(focusableElements[0] as HTMLElement);
-                setLastFocusableElement(
-                    focusableElements[
-                        focusableElements.length - 1
-                    ] as HTMLElement,
-                );
-                // Delay focus slightly to allow animation to start
-                requestAnimationFrame(() => {
-                    (focusableElements[0] as HTMLElement).focus();
-                });
-            }
-
-            if (containerRef.current) {
-                containerRef.current.scrollTop = 0;
-            }
-        } else {
-            document.body.style.overflow = "";
-            triggerRef.current?.focus();
-        }
-    }, [isOpen, triggerRef]);
-
-    return (
-        <motion.div
-            ref={containerRef}
-            layoutId={`dialog-${uniqueId}`}
-            className={cn("overflow-hidden", className)}
-            style={{
-                ...style,
-                willChange: "transform, opacity", // GPU acceleration
-            }}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`dialog-title-${uniqueId}`}
-            aria-describedby={`dialog-description-${uniqueId}`}
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            transition={{
-                type: "spring",
-                damping: 25,
-                stiffness: 300,
-                mass: 0.8,
-            }}>
-            {children}
-        </motion.div>
-    );
-}
-type DialogContainerProps = {
-    children: React.ReactNode;
-    className?: string;
-    overlayClassName?: string;
-    style?: React.CSSProperties;
-};
 
 function DialogContainer({
     children,
     className,
     overlayClassName,
-}: DialogContainerProps) {
-    const { isOpen, setIsOpen, uniqueId } = useDialog();
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        const drawerWrapper = document.querySelectorAll("[drawer-wrapper]");
-
-        if (isOpen) {
-            document.body.classList.add("overflow-hidden");
-            for (const wrapper of drawerWrapper) {
-                wrapper?.classList.add("open");
-            }
-        } else {
-            document.body.classList.remove("overflow-hidden");
-            for (const wrapper of drawerWrapper) {
-                wrapper?.classList.remove("open");
-            }
-        }
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                setIsOpen(false);
-            }
-        };
-
-        document.addEventListener("keydown", handleKeyDown);
-        return () => {
-            document.removeEventListener("keydown", handleKeyDown);
-        };
-    }, [isOpen, setIsOpen]);
-
-    useEffect(() => {
-        setMounted(true);
-        return () => {
-            setMounted(false);
-        };
-    }, []);
-
-    if (!mounted) return null;
-
-    return createPortal(
-        <AnimatePresence initial={false} mode="wait">
-            {isOpen && (
-                <>
+    style,
+    container,
+    render,
+}: {
+    children: ReactNode;
+    className?: string;
+    overlayClassName?: string;
+    style?: ComponentProps<"div">["style"];
+    container?: DialogPrimitive.Portal.Props["container"];
+    render?: DialogPrimitive.Portal.Props["render"];
+}) {
+    const { open, id, reduced, actionsRef } = useDialog();
+    return (
+        <DialogPrimitive.Portal
+            container={container}
+            render={render}
+            keepMounted>
+            <AnimatePresence
+                initial={false}
+                onExitComplete={() => {
+                    if (!open) actionsRef.current?.unmount();
+                }}>
+                {open && (
                     <motion.div
-                        key={`backdrop-${uniqueId}`}
-                        data-lenis-prevent
+                        key={id}
                         className={cn(
-                            "fixed inset-0 h-full z-50 w-full backdrop-blur-xl dark:bg-[radial-gradient(125%_125%_at_50%_10%,#050505_40%,#243aff_100%)] bg-[radial-gradient(125%_125%_at_50%_10%,#ffffff_40%,#243aff_100%)]",
-                            overlayClassName,
-                        )}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{
-                            duration: 0.2,
-                            ease: [0.4, 0.0, 0.4, 1],
-                        }}
-                        onClick={() => setIsOpen(false)}></motion.div>
-                    <motion.div
-                        className={cn(
-                            `fixed inset-0 z-50 w-fit mx-auto`,
+                            "fixed inset-0",
+                            uiLayerClasses.modal,
                             className,
                         )}
-                        style={{ willChange: "transform" }} // GPU acceleration for transforms
-                    >
+                        style={style}>
+                        <DialogPrimitive.Backdrop
+                            className={cn(
+                                "absolute inset-0 bg-black/30",
+                                overlayClassName,
+                            )}
+                            render={
+                                <motion.div
+                                    initial={reduced ? false : { opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: reduced ? 0 : 0.2 }}
+                                />
+                            }
+                        />
                         {children}
                     </motion.div>
-                </>
-            )}
-        </AnimatePresence>,
-        document.body,
-    );
-}
-type DialogTitleProps = {
-    children: React.ReactNode;
-    className?: string;
-    style?: React.CSSProperties;
-};
-
-function DialogTitle({ children, className, style }: DialogTitleProps) {
-    const { uniqueId } = useDialog();
-
-    return (
-        <motion.h1
-            layoutId={`dialog-title-container-${uniqueId}`}
-            className={className}
-            style={style}
-            layout>
-            {children}
-        </motion.h1>
+                )}
+            </AnimatePresence>
+        </DialogPrimitive.Portal>
     );
 }
 
-type DialogSubtitleProps = {
-    children: React.ReactNode;
-    className?: string;
-    style?: React.CSSProperties;
-};
-
-function DialogSubtitle({ children, className, style }: DialogSubtitleProps) {
-    const { uniqueId } = useDialog();
-
-    return (
-        <motion.div
-            layoutId={`dialog-subtitle-container-${uniqueId}`}
-            className={className}
-            style={style}>
-            {children}
-        </motion.div>
-    );
-}
-
-type DialogDescriptionProps = {
-    children: React.ReactNode;
-    className?: string;
-    disableLayoutAnimation?: boolean;
-    variants?: {
-        initial: Variant;
-        animate: Variant;
-        exit: Variant;
-    };
-};
-
-function DialogDescription({
+function DialogContent({
     children,
     className,
-    variants,
-    disableLayoutAnimation,
-}: DialogDescriptionProps) {
-    const { uniqueId } = useDialog();
-
+    ...props
+}: ComponentProps<typeof MotionPopup>) {
+    const { id, reduced } = useDialog();
     return (
-        <motion.div
-            key={`dialog-description-${uniqueId}`}
-            layoutId={
-                disableLayoutAnimation
-                    ? undefined
-                    : `dialog-description-content-${uniqueId}`
-            }
-            variants={variants}
-            className={className}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            id={`dialog-description-${uniqueId}`}>
+        <MotionPopup
+            {...props}
+            layoutId={reduced ? undefined : `dialog-${id}`}
+            className={cn("overflow-hidden outline-none", className)}
+            initial={reduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ opacity: { duration: reduced ? 0 : 0.16 } }}>
             {children}
-        </motion.div>
+        </MotionPopup>
     );
 }
 
-type DialogImageProps = {
-    src: string;
-    alt: string;
-    className?: string;
-    style?: React.CSSProperties;
-};
-
-function DialogImage({ src, alt, className, style }: DialogImageProps) {
-    const { uniqueId } = useDialog();
-
+function DialogTitle(props: ComponentProps<typeof MotionTitle>) {
+    const { id, reduced } = useDialog();
     return (
-        <motion.img
-            src={src}
-            alt={alt}
-            className={cn(className)}
-            layoutId={`dialog-img-${uniqueId}`}
-            style={style}
+        <MotionTitle
+            {...props}
+            layoutId={reduced ? undefined : `dialog-title-${id}`}
         />
     );
 }
 
-type DialogCloseProps = {
-    children?: React.ReactNode;
-    className?: string;
-    variants?: {
-        initial: Variant;
-        animate: Variant;
-        exit: Variant;
-    };
-};
-
-function DialogClose({ children, className, variants }: DialogCloseProps) {
-    const { setIsOpen, uniqueId } = useDialog();
-
-    const handleClose = useCallback(() => {
-        setIsOpen(false);
-    }, [setIsOpen]);
-
+function DialogSubtitle(props: ComponentProps<typeof motion.div>) {
+    const { id, reduced } = useDialog();
     return (
-        <motion.button
-            onClick={handleClose}
-            type="button"
-            aria-label="Close dialog"
-            key={`dialog-close-${uniqueId}`}
-            className={cn("absolute right-6 top-6 text-white", className)}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={variants}>
-            {children || <XIcon size={24} />}
-        </motion.button>
+        <motion.div
+            {...props}
+            layoutId={reduced ? undefined : `dialog-subtitle-${id}`}
+        />
+    );
+}
+
+function DialogDescription({
+    disableLayoutAnimation = false,
+    ...props
+}: ComponentProps<typeof MotionDescription> & {
+    disableLayoutAnimation?: boolean;
+}) {
+    const { id, reduced } = useDialog();
+    return (
+        <MotionDescription
+            {...props}
+            layoutId={
+                reduced || disableLayoutAnimation
+                    ? undefined
+                    : `dialog-description-${id}`
+            }
+        />
+    );
+}
+
+function DialogImage(props: ComponentProps<typeof motion.img>) {
+    const { id, reduced } = useDialog();
+    return (
+        <motion.img
+            {...props}
+            layoutId={reduced ? undefined : `dialog-image-${id}`}
+        />
+    );
+}
+
+function DialogClose({
+    children,
+    ...props
+}: ComponentProps<typeof MotionClose>) {
+    return (
+        <MotionClose
+            aria-label={children ? undefined : "Close dialog"}
+            {...props}>
+            {children ?? <Icon iconNode={Cancel01Icon} size={24} />}
+        </MotionClose>
     );
 }
 

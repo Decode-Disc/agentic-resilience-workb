@@ -1,0 +1,459 @@
+{
+    "schemaVersion": 1,
+    "id": "20261026T105858345Z-sources-inspection-v2-focused-live",
+    "createdAt": "2026-10-26T10:58:58.345Z",
+    "git": {
+        "head": "4a9ffbcb26bc1dfcbc406da1dba63a2c8bf76200",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/SOURCES-APPROACH-EVALUATION-20261025.md",
+            "archivePath": "repository/scripts/evaluations/source-selection/SOURCES-APPROACH-EVALUATION-20261025.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/README.md",
+            "archivePath": "repository/scripts/evaluations/source-selection/README.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/sources-approach-study.ts",
+            "archivePath": "repository/scripts/evaluations/source-selection/sources-approach-study.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/source-selection/sources-approach-runner.ts",
+            "archivePath": "repository/scripts/evaluations/source-selection/sources-approach-runner.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/benchmarks/sources-approach-study.test.ts",
+            "archivePath": "repository/src/__tests__/benchmarks/sources-approach-study.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/benchmarks/sources-approach-runner.test.ts",
+            "archivePath": "repository/src/__tests__/benchmarks/sources-approach-runner.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/benchmarks/sources-approach-cli.test.ts",
+            "archivePath": "repository/src/__tests__/benchmarks/sources-approach-cli.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/benchmarks/sources-approach-report.test.ts",
+            "archivePath": "repository/src/__tests__/benchmarks/sources-approach-report.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/benchmarks/sources-inspection-retrieval.test.ts",
+            "archivePath": "repository/src/__tests__/benchmarks/sources-inspection-retrieval.test.ts"
+        },
+        {
+            "origin": "/tmp/sources-inspection-v2-focused-ready-20261026",
+            "archivePath": "external/study"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/study/analysis/adobe.agent.off.1-changes.json",
+            "bytes": 3,
+            "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+            "path": "external/study/analysis/adobe.agent.off.2-changes.json",
+            "bytes": 3,
+            "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+            "path": "external/study/analysis/adobe.fixed.off.1-changes.json",
+            "bytes": 3,
+            "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+            "path": "external/study/analysis/adobe.fixed.off.2-changes.json",
+            "bytes": 3,
+            "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+            "path": "external/study/analysis/executor-receipts.json",
+            "bytes": 13637,
+            "sha256": "a829034e7927c3d35595d0b4445ff709ffd79753835ad7a05d11f1ee522708be"
+        },
+        {
+            "path": "external/study/analysis/live-metrics.json",
+            "bytes": 344,
+            "sha256": "9dd45969429d9d55136d52d41e3800bda660001d813f41549230150cb27bc4e6"
+        },
+        {
+            "path": "external/study/analysis/lot-closure.json",
+            "bytes": 291,
+            "sha256": "30001d42abc4f0b75bd2204903cf1a9e8685333fd31eb653089eaa1bfc3e66d8"
+        },
+        {
+            "path": "external/study/analysis/mission-metrics.json",
+            "bytes": 8138,
+            "sha256": "5379538afe3216f1976dea7d3f162c09a1ddcfbd7c9a8eb2f1d54815e745323e"
+        },
+        {
+            "path": "external/study/analysis/post-run-code-final.json",
+            "bytes": 918,
+            "sha256": "39b0598880e96484ea54c2fa0ac99cca604762ddcae1717a1114ec959539a55e"
+        },
+        {
+            "path": "external/study/analysis/post-run-code-final/scripts/evaluations/source-selection/sources-approach-runner.ts",
+            "bytes": 43430,
+            "sha256": "f0ca64473f4cef083eb92915fc2a728cf6b2404414c7838dda64cbfe9e6a7e7c"
+        },
+        {
+            "path": "external/study/analysis/post-run-code-final/scripts/evaluations/source-selection/sources-approach-study.ts",
+            "bytes": 48595,
+            "sha256": "deb52c842dc2c6451c7f10865f3387576346302bb309a5ee20f42fcbd00eadad"
+        },
+        {
+            "path": "external/study/analysis/post-run-code-final/src/__tests__/benchmarks/sources-approach-runner.test.ts",
+            "bytes": 35698,
+            "sha256": "7ceb40683fce9772796ed310008d42a3b0080d218d92bbf04b5ca1c94e66c20a"
+        },
+        {
+            "path": "external/study/analysis/post-run-code-final/src/__tests__/benchmarks/sources-approach-study.test.ts",
+            "bytes": 25093,
+            "sha256": "824ed69340cfb91844658484df59c3d41b1e35f3783fd831ae8829ba6cc94543"
+        },
+        {
+            "path": "external/study/analysis/post-run-code.json",
+            "bytes": 974,
+            "sha256": "1c9b3c6d6806659edcc7023d220b49692ae9807d71590348d8a259abc32ea4f5"
+        },
+        {
+            "path": "external/study/analysis/post-run-code/scripts/evaluations/source-selection/sources-approach-runner.ts",
+            "bytes": 43359,
+            "sha256": "5de5d77e6de180bf715876474a23e73a956027b163aaf190f3743e14e5d0d726"
+        },
+        {
+            "path": "external/study/analysis/post-run-code/scripts/evaluations/source-selection/sources-approach-study.ts",
+            "bytes": 48595,
+            "sha256": "deb52c842dc2c6451c7f10865f3387576346302bb309a5ee20f42fcbd00eadad"
+        },
+        {
+            "path": "external/study/analysis/post-run-code/src/__tests__/benchmarks/sources-approach-runner.test.ts",
+            "bytes": 35060,
+            "sha256": "c95089d579b3b3ea0c209680a59baa34d8f35ee66c792ebde8899c9443ddd873"
+        },
+        {
+            "path": "external/study/analysis/post-run-code/src/__tests__/benchmarks/sources-approach-study.test.ts",
+            "bytes": 25093,
+            "sha256": "824ed69340cfb91844658484df59c3d41b1e35f3783fd831ae8829ba6cc94543"
+        },
+        {
+            "path": "external/study/analysis/post-run-contract-replay.json",
+            "bytes": 2786,
+            "sha256": "9c83f57c766e8cdfee95533127384a10c55c606538cff3bcfa3f24ba27a20491"
+        },
+        {
+            "path": "external/study/analysis/receipt-reconciliation.json",
+            "bytes": 277,
+            "sha256": "66c6894d085df0a0f61e8bd4023f1d6deb90112ccfa307a3893ae0cbf5a925ed"
+        },
+        {
+            "path": "external/study/analysis/searches.json",
+            "bytes": 10157,
+            "sha256": "d05e9b114270a539246a58fc7f3682df1cd3a9ab39170f3b600ea9c0404400b0"
+        },
+        {
+            "path": "external/study/analysis/semantic-adjudication.json",
+            "bytes": 7632,
+            "sha256": "74348667e3e257abd4d440038a99a291a829ec997998d788ee9d8bc71467ddbf"
+        },
+        {
+            "path": "external/study/analysis/snowflake.agent.off.1-changes.json",
+            "bytes": 3,
+            "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+            "path": "external/study/analysis/snowflake.agent.off.2-changes.json",
+            "bytes": 3,
+            "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+            "path": "external/study/analysis/snowflake.fixed.off.1-changes.json",
+            "bytes": 25429,
+            "sha256": "9960b0f1796d4f22439d179bd69176210d4ae91bb9612b0a0f4baf67d0567906"
+        },
+        {
+            "path": "external/study/analysis/snowflake.fixed.off.2-changes.json",
+            "bytes": 3,
+            "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+            "path": "external/study/authorization-context-20261026.json",
+            "bytes": 402,
+            "sha256": "1c53803d6a4261cdf7925ca43491bc5b980ec0d502304d9d1ba4d4e40b6a23b3"
+        },
+        {
+            "path": "external/study/authorization-development.json",
+            "bytes": 187,
+            "sha256": "17969b0bb1396a2a810b96b3acc6841f6e015ae425ca04fe50d9c97f7644e0c2"
+        },
+        {
+            "path": "external/study/authorization-template.json",
+            "bytes": 165,
+            "sha256": "4979c2434ade75e348d5ce1020291c5d37e35bcfcf0ee06bde8ca02995bfd6b4"
+        },
+        {
+            "path": "external/study/code/convex/domain/sourceComparison.ts",
+            "bytes": 68330,
+            "sha256": "2b71b524c732447fef0438cc8e2dafd3602277de2a5b61298221963e89d2345f"
+        },
+        {
+            "path": "external/study/code/convex/domain/sourcePassages.ts",
+            "bytes": 31546,
+            "sha256": "275d170f27e3751192ed313b25345176186b66c5275ecdda86ce6e9fcbc76404"
+        },
+        {
+            "path": "external/study/code/convex/domain/sourceQualification.ts",
+            "bytes": 32320,
+            "sha256": "51c6fd2be7ca9445f1c4e8721f8854bbe32c2b4e24379225cacdeda6000bcbde"
+        },
+        {
+            "path": "external/study/code/convex/domain/sourceRetrievalPolicy.ts",
+            "bytes": 6488,
+            "sha256": "1ab622308c069cf339ee6fef27a774ea16a65e02813819f0196f294afdece302"
+        },
+        {
+            "path": "external/study/code/convex/domain/sourceSelectionPolicy.ts",
+            "bytes": 84537,
+            "sha256": "fd32d89eeaf232c07ba564a6ade62cce332200e488ffecf7dc3a9b175e91df31"
+        },
+        {
+            "path": "external/study/code/convex/integrations/evidenceNormalization.ts",
+            "bytes": 9303,
+            "sha256": "91c1152c5ffde7fbd6b094820575267c634d00031c8d2f4e97031142accf0eb0"
+        },
+        {
+            "path": "external/study/code/convex/resourceLimits.ts",
+            "bytes": 6532,
+            "sha256": "63684d31a3d981135a050cc89457094cd346ea1990008a4adfe561263c532470"
+        },
+        {
+            "path": "external/study/code/convex/retrievalEvaluation.ts",
+            "bytes": 24977,
+            "sha256": "032b3c74955d5c4b4fcb54aa0eda4801416249c53c7f1ad3484c5a9a982f1b49"
+        },
+        {
+            "path": "external/study/code/convex/sourceRetrieval.ts",
+            "bytes": 26364,
+            "sha256": "9868df91d58a291c75773bcc15e9e959cf79acaa4c6a245e3af6961d2b5cd5fe"
+        },
+        {
+            "path": "external/study/code/convex/sourceRetrievalActions.ts",
+            "bytes": 23045,
+            "sha256": "2e85ece105e60c06a301f33beb25fb7b6f3581bd9face3fdca7a6e18b9bba5e6"
+        },
+        {
+            "path": "external/study/code/package.json",
+            "bytes": 4919,
+            "sha256": "a2738b04d5fd3fce489a8a34c933cb2fda7c8ad6b6e62c44bf3dd260b2deb1d8"
+        },
+        {
+            "path": "external/study/code/pnpm-lock.yaml",
+            "bytes": 239499,
+            "sha256": "d9cb806af863182c4caab874a102336db82cc1fe24c8adf4944d65dcb7b8489c"
+        },
+        {
+            "path": "external/study/code/scripts/evaluations/source-selection/evaluation-records.ts",
+            "bytes": 3406,
+            "sha256": "7b78b947434337a5132fc3408a0575af977075bdf7d0ad18e8b909ab7a750531"
+        },
+        {
+            "path": "external/study/code/scripts/evaluations/source-selection/sources-approach-cli.ts",
+            "bytes": 43248,
+            "sha256": "27fb1ac7029a13a4beebc40ddf790e10c196929d3162277041e16ecf17899de8"
+        },
+        {
+            "path": "external/study/code/scripts/evaluations/source-selection/sources-approach-report.ts",
+            "bytes": 31478,
+            "sha256": "c0045acd1b2cfbe09c7b3e16ba7dab00b34d6e5c5c85821815dc30def972a348"
+        },
+        {
+            "path": "external/study/code/scripts/evaluations/source-selection/sources-approach-runner.ts",
+            "bytes": 43247,
+            "sha256": "3275c172d0d516a065c81ad8e8492bd9c8f641e27999e36b6af2ce2fa9e364da"
+        },
+        {
+            "path": "external/study/code/scripts/evaluations/source-selection/sources-approach-study.ts",
+            "bytes": 48311,
+            "sha256": "02245ae3961058cb880b8facd2c69c1ba52a4caf2c25c56b9a2505c224e097d7"
+        },
+        {
+            "path": "external/study/code/scripts/evaluations/source-selection/sources-approach.ts",
+            "bytes": 654,
+            "sha256": "f88864d9982f8039b5e2483a6abf2a5302aeaa9454d1d3b45542c43e9c558a05"
+        },
+        {
+            "path": "external/study/code/scripts/evaluations/source-selection/sources-inspection-retrieval.ts",
+            "bytes": 7247,
+            "sha256": "76cccb81055d57f7004a02fa5c41c4ece178568aea6be6620e084e5737e1c9a9"
+        },
+        {
+            "path": "external/study/code/scripts/evaluations/source-selection/study-cli.ts",
+            "bytes": 53742,
+            "sha256": "21b76c6b4e1300b5d8359e1954997682630ed331fea6d88745ba1229ed9bd851"
+        },
+        {
+            "path": "external/study/fixture-teardown.log",
+            "bytes": 44,
+            "sha256": "d1cc19ce77990fc08adc924dea418d66f534055fa8deeb049c52f476bcb9c5a8"
+        },
+        {
+            "path": "external/study/inspection-baselines.json",
+            "bytes": 1333793,
+            "sha256": "5c695fc04f68d1b399634069f7a942a53a7e0dfb1428b0d49a7c8a550cfc3f13"
+        },
+        {
+            "path": "external/study/investigator-criteria.json",
+            "bytes": 2923,
+            "sha256": "ade9b314dcbbe52fc7b64cee25c0a7f55065525169f365a4dbe5b09637633331"
+        },
+        {
+            "path": "external/study/live-calls.jsonl",
+            "bytes": 6130414,
+            "sha256": "294d45ee4aa0fc7502395000e821e28793253672a27c13b3676641071aac2ef7"
+        },
+        {
+            "path": "external/study/live-comparison-review.json",
+            "bytes": 10253024,
+            "sha256": "c767f8f123b37d5aad04cb7741105bb001621f0268c9cc2bed6dbbd32231c871"
+        },
+        {
+            "path": "external/study/live-comparison.json",
+            "bytes": 399872,
+            "sha256": "cd75855ce13171f2017a4d6d08be3522311980f6e39814ac6168ff5fe7be1d93"
+        },
+        {
+            "path": "external/study/live-comparison.md",
+            "bytes": 75363,
+            "sha256": "f74d37b28c39399b142ea493e81cc870c9fe6f9d55b617ea17c110fc832ff5ef"
+        },
+        {
+            "path": "external/study/live-development.started",
+            "bytes": 24,
+            "sha256": "06461488deda4f4014fa00a93894a0a3dd0247e837d9606fbb548c74819c2087"
+        },
+        {
+            "path": "external/study/live-results.jsonl",
+            "bytes": 12307299,
+            "sha256": "0cd7079748482f274e119fa62501ff250f5680a73a09d82e3cc48494c3ae0520"
+        },
+        {
+            "path": "external/study/manifest.json",
+            "bytes": 6016,
+            "sha256": "bf284e0af9868102d79d1521862a012b943e75e090d1df11ae055680103442bc"
+        },
+        {
+            "path": "external/study/offline-all.started",
+            "bytes": 24,
+            "sha256": "f4a13618b05a5788abd4ebd539989e487b9efe5630281bbbf31379b4b27cf3ee"
+        },
+        {
+            "path": "external/study/offline-calls.jsonl",
+            "bytes": 4539224,
+            "sha256": "b8270abd2a84bf385e35201e2f50a00185d60ac6eb201180bae4f497a6adafde"
+        },
+        {
+            "path": "external/study/offline-readiness-metrics.json",
+            "bytes": 552,
+            "sha256": "4014b2191e77da7312eda623128d34f2d336df275fd0390ab91dbe717b511e91"
+        },
+        {
+            "path": "external/study/offline-readiness-review.json",
+            "bytes": 9811471,
+            "sha256": "ca1748ba913f23f3e1224a6469bfb1ba5f15e2d21fa56f06bb80baa4f4ed0f08"
+        },
+        {
+            "path": "external/study/offline-readiness.json",
+            "bytes": 375425,
+            "sha256": "961765c9619b79aad321ff098d5f9bd908c2a9c69b7b5c3893f45dcb3183d96f"
+        },
+        {
+            "path": "external/study/offline-readiness.md",
+            "bytes": 71532,
+            "sha256": "251d9662b935e5961aad25fb7e2bbb858b14e30e8d87300c15dfa884a8ff35ad"
+        },
+        {
+            "path": "external/study/offline-responses.json",
+            "bytes": 39367,
+            "sha256": "333a82a9868567fb58b2ebc48ea9ab9aa58632f164655290f960370a3e139d0e"
+        },
+        {
+            "path": "external/study/offline-results.jsonl",
+            "bytes": 11976717,
+            "sha256": "7aad15317cd78f3f492dc1f45a8f334b87e23564640d189b094883036d1df13a"
+        },
+        {
+            "path": "external/study/preflight-development.json",
+            "bytes": 347,
+            "sha256": "4e87193ee937806640fce0dd3fc3ad0aa06506c214cf37953e19090d52f49178"
+        },
+        {
+            "path": "external/study/prepared-inputs.json",
+            "bytes": 2771347,
+            "sha256": "1dafda526e3990a206019ee4d17c70452305f37ef6b67d82fb29d851a147f919"
+        },
+        {
+            "path": "external/study/scenarios.json",
+            "bytes": 1936626,
+            "sha256": "571e57bf4e4e6a462ca33bdd3c85f3db5d31a3943858131b6c8b511e20061b1a"
+        },
+        {
+            "path": "external/study/user-approved-20261026.json",
+            "bytes": 187,
+            "sha256": "17969b0bb1396a2a810b96b3acc6841f6e015ae425ca04fe50d9c97f7644e0c2"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/README.md",
+            "bytes": 24826,
+            "sha256": "9540f77a089fa33c95b51a298e207f33fb1eacbda45589f32a7cb2b725f4fac8"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/SOURCES-APPROACH-EVALUATION-20261025.md",
+            "bytes": 77424,
+            "sha256": "c252899dfc587060f0f0c71aab022cbd10fed7343ae1d67e3c0facda42e86102"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/sources-approach-runner.ts",
+            "bytes": 43430,
+            "sha256": "f0ca64473f4cef083eb92915fc2a728cf6b2404414c7838dda64cbfe9e6a7e7c"
+        },
+        {
+            "path": "repository/scripts/evaluations/source-selection/sources-approach-study.ts",
+            "bytes": 48595,
+            "sha256": "deb52c842dc2c6451c7f10865f3387576346302bb309a5ee20f42fcbd00eadad"
+        },
+        {
+            "path": "repository/src/__tests__/benchmarks/sources-approach-cli.test.ts",
+            "bytes": 15108,
+            "sha256": "66b8d54dbba1ab2a78d4b502f1116661b389e573c50932008a5fa637a8b8dfd9"
+        },
+        {
+            "path": "repository/src/__tests__/benchmarks/sources-approach-report.test.ts",
+            "bytes": 17143,
+            "sha256": "2feea728f7e9d86e5b3780df4f30e2587791450a73410dda726bd38448eaad55"
+        },
+        {
+            "path": "repository/src/__tests__/benchmarks/sources-approach-runner.test.ts",
+            "bytes": 35698,
+            "sha256": "7ceb40683fce9772796ed310008d42a3b0080d218d92bbf04b5ca1c94e66c20a"
+        },
+        {
+            "path": "repository/src/__tests__/benchmarks/sources-approach-study.test.ts",
+            "bytes": 25093,
+            "sha256": "824ed69340cfb91844658484df59c3d41b1e35f3783fd831ae8829ba6cc94543"
+        },
+        {
+            "path": "repository/src/__tests__/benchmarks/sources-inspection-retrieval.test.ts",
+            "bytes": 2827,
+            "sha256": "5ce82e9c6b3461d29a60bd83a2aa09272610a271d7c5182822c234164279a037"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261026T105858345Z-sources-inspection-v2-focused-live.tar.gz",
+        "bytes": 10861069,
+        "sha256": "fd7c55cf30d3f3151c6008090c909d8c656f6f8ceac5be60281417afeaf0b586"
+    },
+    "verification": "restored_and_verified"
+}

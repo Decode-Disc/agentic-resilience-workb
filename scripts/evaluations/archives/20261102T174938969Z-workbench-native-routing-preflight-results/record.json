@@ -1,0 +1,177 @@
+{
+    "schemaVersion": 1,
+    "id": "20261102T174938969Z-workbench-native-routing-preflight-results",
+    "createdAt": "2026-11-02T17:49:38.969Z",
+    "git": {
+        "head": "289a1df5ba70fbf843fc927cee82701058d85e8a",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-02-workbench-native-routing-qualification.md",
+            "archivePath": "repository/docs/verification/2026-11-02-workbench-native-routing-qualification.md"
+        },
+        {
+            "origin": "/tmp/workbench-native-routing-20261102/public-results",
+            "archivePath": "external/results"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/results/admin-after-desktop.png",
+            "bytes": 835343,
+            "sha256": "202d4990d7313c56aee0a94cce8f1c8df96f30145d646811adf8b3b86ae851e9"
+        },
+        {
+            "path": "external/results/admin-after-mobile.png",
+            "bytes": 244860,
+            "sha256": "ae85630175d4339993c0ac13ab2d462bf4394dc7287007b681cdbbe49507f1f9"
+        },
+        {
+            "path": "external/results/admin-before-desktop.png",
+            "bytes": 841084,
+            "sha256": "9ba9f4de38f867af390bea3e3e8829f537eff6da33ca6c308a5cfb5a6cc9fc13"
+        },
+        {
+            "path": "external/results/admin-before-mobile.png",
+            "bytes": 246707,
+            "sha256": "db17c193c452a66d90922af3287257fe268067b91287542068553e5f75852ea1"
+        },
+        {
+            "path": "external/results/admin-before.json",
+            "bytes": 111,
+            "sha256": "d834c93e1ad5c1e29680f8cc99f849de92af14b3f0cead5ca3a8a7c1b55b9692"
+        },
+        {
+            "path": "external/results/admin-preparation.json",
+            "bytes": 192,
+            "sha256": "e261131c27e2da4ee153a6d0d0b11962a7271a410288300c641d9369c0a03393"
+        },
+        {
+            "path": "external/results/assessment.json",
+            "bytes": 405,
+            "sha256": "13922c7db518544d7aa202fb1359ee56c40583996afc82c873acef64d2c48ade"
+        },
+        {
+            "path": "external/results/browser-errors.json",
+            "bytes": 78,
+            "sha256": "cb3e2b35f78f84cfec72b25ff938ed20a369e6a781df780e1b23eac8984e51ab"
+        },
+        {
+            "path": "external/results/browser-failure.json",
+            "bytes": 261,
+            "sha256": "84a80aa519851e6f2acbb2e0c8bae6b34b339eae53116913375833cd7e996d34"
+        },
+        {
+            "path": "external/results/browser.mjs",
+            "bytes": 9910,
+            "sha256": "8bdd1e6d566eaa3ba915de643edec9256d24211e9699216a7bca66616e65c62b"
+        },
+        {
+            "path": "external/results/case-progress.json",
+            "bytes": 99,
+            "sha256": "1bc844f34a1edc698dc482cd4b98c83e3f79db550290ffa46145d66ac6b3ab65"
+        },
+        {
+            "path": "external/results/cleanup-verification.json",
+            "bytes": 392,
+            "sha256": "9675f5b43a19325cf2a6479d19665f67ebbe518f326c00ec32bca0666dc4a0ee"
+        },
+        {
+            "path": "external/results/cleanup.log",
+            "bytes": 94,
+            "sha256": "4a54b42c2aa1304c7e19422750d9300f4293ab7483258922267545f2d791b5ca"
+        },
+        {
+            "path": "external/results/cleanup.mjs",
+            "bytes": 3638,
+            "sha256": "5f8bfe2506f255c5a70b711969b25cf5562c2c6672c78a75a5427eee1900f95b"
+        },
+        {
+            "path": "external/results/failure.png",
+            "bytes": 77194,
+            "sha256": "f75ce9f759cac25827425e95ff56ba3277407663b256029a764b5b90dc80b356"
+        },
+        {
+            "path": "external/results/final-imports.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "external/results/final-lint.log",
+            "bytes": 45,
+            "sha256": "b76e2c1c895940ee7c6cf64cb011504f5ff22a3260c6f08f57fd9f080750c341"
+        },
+        {
+            "path": "external/results/final-state.json",
+            "bytes": 20401,
+            "sha256": "ced11f90c30c2c65b58b1fc3c24cb438930a435a493f44461d30537fef64ec07"
+        },
+        {
+            "path": "external/results/final-typecheck.log",
+            "bytes": 179,
+            "sha256": "2c6e8f1464873a7d48d5ccecf4cb963ed29621d216d2d57bab6295f891c75d73"
+        },
+        {
+            "path": "external/results/focused-tests.log",
+            "bytes": 273,
+            "sha256": "c29cba91c1541363f796a7720eb0f6db9f305cbfce60ebe682510643f9f72e95"
+        },
+        {
+            "path": "external/results/initial-paid.json",
+            "bytes": 20401,
+            "sha256": "6d89dafbe975b0b16bd44561050b08ee59722bc906d7038e34a2f26d90f4f830"
+        },
+        {
+            "path": "external/results/initial-pre-dispatch-block.json",
+            "bytes": 18529,
+            "sha256": "620dbb79791537a00587a69e4a397e7d26e7fc950bcb739a379b9f1a9e5f06da"
+        },
+        {
+            "path": "external/results/local.mjs",
+            "bytes": 1166,
+            "sha256": "4909cdccc6fb3b9554ad3963cb628fc8da70d2defa3d752a9d7fd74c8bfa8947"
+        },
+        {
+            "path": "external/results/paid-control-enable.json",
+            "bytes": 100,
+            "sha256": "254be189c429f66df0c0bfbb0ecce827185d10acee7028f0b782b382ab566aa4"
+        },
+        {
+            "path": "external/results/paid-control.mjs",
+            "bytes": 2107,
+            "sha256": "2ae2b1e71edf9a2806de2f02bfb84fa2d17e43975a3e90de469ca11c2eeec55d"
+        },
+        {
+            "path": "external/results/preflight-paid-disabled.json",
+            "bytes": 18529,
+            "sha256": "620dbb79791537a00587a69e4a397e7d26e7fc950bcb739a379b9f1a9e5f06da"
+        },
+        {
+            "path": "external/results/prepared.json",
+            "bytes": 177,
+            "sha256": "d90f87241fcaefcfdc5273e741c0fec2d0fe0b7a155fda4f66e417d4fad35495"
+        },
+        {
+            "path": "external/results/protocol.json",
+            "bytes": 1986,
+            "sha256": "65801d3214c8d7611ec2e558ad925a9641f7bc212eb3469c7fd956d6506cd309"
+        },
+        {
+            "path": "external/results/relay-tests-final.log",
+            "bytes": 883,
+            "sha256": "4d1c948834c9d38fe1c9f457e23fd3ffe8acb308b62b683cef107f5024d4827c"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-02-workbench-native-routing-qualification.md",
+            "bytes": 6471,
+            "sha256": "3f744ff912f8aee7e3a83ef308eb63c9d30123413b5a5ccf8eb5f475dc1c7b22"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261102T174938969Z-workbench-native-routing-preflight-results.tar.gz",
+        "bytes": 2253675,
+        "sha256": "fa3caf9880f4000e66fa534265993ba047327d68317faa1f81de1f52241f2cb3"
+    },
+    "verification": "restored_and_verified"
+}

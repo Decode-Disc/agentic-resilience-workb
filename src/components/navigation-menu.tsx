@@ -1,9 +1,9 @@
 import { NavigationMenu as NavigationMenuPrimitive } from "@base-ui/react/navigation-menu";
 import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import type { ComponentProps, ComponentType, SVGProps } from "react";
-
 import Icon from "@/components/icon";
 import { GridCard } from "@/components/ui/grid-card";
+import { uiLayerClasses } from "@/lib/ui-layers";
 import { cn } from "@/lib/utils";
 
 type NavItemType = {
@@ -31,7 +31,7 @@ function NavigationMenu({
                 <NavigationMenuPrimitive.Positioner
                     sideOffset={12}
                     collisionPadding={16}
-                    className="z-50 outline-none">
+                    className={cn("outline-none", uiLayerClasses.popup)}>
                     <NavigationMenuPrimitive.Popup
                         data-slot="navigation-menu-popup"
                         className="origin-[var(--transform-origin)] rounded-lg border border-border bg-popover/94 text-popover-foreground shadow-floating backdrop-blur-xl transition-[opacity,transform,width,height] duration-200 ease-out data-ending-style:scale-[.98] data-ending-style:opacity-0 data-starting-style:scale-[.98] data-starting-style:opacity-0">

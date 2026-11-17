@@ -1,0 +1,51 @@
+@reference "../../styles.css";
+.section {
+    @apply flex flex-col gap-[10px];
+}
+.section h2 {
+    @apply m-[0] text-[19px] leading-[26px] font-semibold tracking-[-0.02em];
+}
+.section p {
+    @apply m-[0] text-[15.5px] leading-[26px];
+}
+.mechanismReference {
+    @apply inline-flex items-center gap-[5px] py-0 px-[6px] rounded-(--radius-chip) bg-accent bg-none text-accent-foreground text-[14px] font-medium;
+    text-decoration: none;
+    @apply whitespace-nowrap;
+}
+.evidenceReference {
+    @apply font-mono text-[11.5px] text-muted-foreground;
+    text-decoration: underline;
+    text-decoration-color: color-mix(
+        in oklab,
+        var(--foreground) 25%,
+        transparent
+    );
+    @apply underline-offset-[3px];
+}
+.note {
+    @apply rounded-(--radius-lg) py-[14px] px-[16px] flex flex-col gap-[8px];
+    align-self: start;
+}
+.mechanismReference,
+.evidenceReference {
+    border: 0;
+    @apply cursor-pointer;
+}
+.evidenceReference {
+    @apply p-[0] bg-transparent bg-none;
+}
+.note > [data-slot="badge"] {
+    @apply w-auto justify-start;
+}
+.evidenceReference {
+    @apply font-normal;
+}
+
+.statusDot {
+    @apply w-[5px] h-[5px];
+}
+
+.referenceText {
+    @apply text-[13px] leading-[19px];
+}

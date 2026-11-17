@@ -1,0 +1,5 @@
+# Recorded Adobe utility replay
+
+`adobe-recorded-replay.json.gz` contains the eight unchanged Adobe qualification calls and observations selected from the local `scripts/evaluations/source-selection/fixtures/cross-company-20261020/runs/batch2-grouped-20261021` manifest and final results. It retains the original full manifest SHA-256 and the original wire bodies, request hashes, prepared inputs, outputs, and recorded costs. It contains no provider credentials and makes no new provider calls.
+
+This deterministic gzip snapshot uses timestamp zero. The utility CLI consumes it only with `--phase audit --recorded-replay <path>`. The snapshot also retains the selected study metadata, scenario, and original capture bytes because those captures are local-only. The producer verifies their original content and preparation hashes. The replay covers the Adobe overview scenario, including the recorded annual-report qualification failure; it does not establish current model quality or support other companies. Regeneration must select those same eight keys from the original archive without changing their values.

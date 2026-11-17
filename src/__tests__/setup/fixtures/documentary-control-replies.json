@@ -1,0 +1,53 @@
+{
+    "provenance": {
+        "campaign": "native-settlement-qualification-20261108-134603",
+        "evidenceHash": "2e9d7584aace2f447df8d92956d7ecddaf5e81f16a0de8c80154db6907e0a477",
+        "scope": "Exact observable documentary-control replies and submitted identities only; no hidden reasoning or credentials."
+    },
+    "cases": [
+        {
+            "id": "jn712404qzq0wdr5myp355wq658htmb1",
+            "finishReason": "length",
+            "text": "{\n  \"findings\": [\n    {\n      \"contributionId\": \"aa2be859ecf3c780df0edb70de85b40bbb72c45307dfdad3ee67d1d3f6205397\",\n      \"conclusion\": \"supported\",\n      \"permittedUse\": \"documentary\",\n      \"diagnostic\": \"The product descriptions match the quoted passages: CCC Estimating, CCC Workflow, CCC First Look, and CCC Network Management are each described with the stated photo, estimating, workflow, and DRP functions. The statement is useful for common-context. Limitation: 'photo intake' is a cross-product description rather than a single named module, and the filing is a company self-description.\"\n    },\n    {\n      \"contributionId\": \"f27bb9d3d7b17f11c819d8147dbfb46e22df42d951d28ba7d4dc6178f7cdd2fa\",\n      \"conclusion\": \"supported\",\n      \"permittedUse\": \"documentary\",\n      \"diagnostic\": \"The customer counts and DRP statements are supported by the quoted passages: more than 300 insurance customers, 27 of the top 30 automotive insurers by DWP, approximately 30,500 collision repair customers, more than 35,000 total customers, majority DRP facilitation, and the 'architectural backbone' statement. Limitation: the 'architectural backbone' statement is expressly framed as company belief, and 'facilitates the majority' is a company assertion without an independent metric.\"\n    },\n    {\n      \"contributionId\": \"2ebbd94267303756611c6ce24a3531637723f399d48a3328203836f64a72172b\",\n      \"conclusion\": \"supported\",\n      \"permittedUse\": \"documentary\",\n      \"diagnostic\": \"The quoted passages support CCC's described coordination role: Network Management for repair assignments and insurer collaboration, Estimating for repairer access to insurer requirements, network management powering DRPs, and the 'many-to-many' and network-effect framing. Limitation: this contribution establishes the coordination role but does not itself establish which participants retain effective action rights; that is addressed separately.\"\n    },\n    {\n      \"contributionId\": \"227d16384ae958f8a6db33763fb81a5321e92b19d7ec0d2450329578fd81bbe6\",\n      \"conclusion\": \"supported\",\n      \"permittedUse\": \"documentary\",\n      \"diagnostic\": \"The quoted passages support the stated allocation of practical control: insurers customize and configure workflows, reinspection reason codes are based on insurer rules, total-loss determinations are made by insurers, claim handling is typically performed by adjusters, and First Look AI informs routing and workflow decisions. Limitation: 'decision rights' is an interpretive synthesis; the filing does not use that",
+            "contributionIds": [
+                "aa2be859ecf3c780df0edb70de85b40bbb72c45307dfdad3ee67d1d3f6205397",
+                "f27bb9d3d7b17f11c819d8147dbfb46e22df42d951d28ba7d4dc6178f7cdd2fa",
+                "2ebbd94267303756611c6ce24a3531637723f399d48a3328203836f64a72172b",
+                "227d16384ae958f8a6db33763fb81a5321e92b19d7ec0d2450329578fd81bbe6",
+                "b4c605e43e61d1ecffa7e7724d9ca9f59146f6f119f0af97a3dbe65313d7d8b2",
+                "09f80480f45b7a2f5634d1a9543b95c044f9ab9c497b55cc53acd27a635ed1c2",
+                "23bd138d520cb3d562d82ffe50809a09cfd20e507bb9bdfda88e8b8d6c9584b4"
+            ]
+        },
+        {
+            "id": "jn7fwf38ph40hsb0k873k6gkn58htwvt",
+            "finishReason": "length",
+            "text": "",
+            "contributionIds": [
+                "aa2be859ecf3c780df0edb70de85b40bbb72c45307dfdad3ee67d1d3f6205397",
+                "f27bb9d3d7b17f11c819d8147dbfb46e22df42d951d28ba7d4dc6178f7cdd2fa",
+                "2ebbd94267303756611c6ce24a3531637723f399d48a3328203836f64a72172b",
+                "227d16384ae958f8a6db33763fb81a5321e92b19d7ec0d2450329578fd81bbe6",
+                "b4c605e43e61d1ecffa7e7724d9ca9f59146f6f119f0af97a3dbe65313d7d8b2",
+                "09f80480f45b7a2f5634d1a9543b95c044f9ab9c497b55cc53acd27a635ed1c2",
+                "23bd138d520cb3d562d82ffe50809a09cfd20e507bb9bdfda88e8b8d6c9584b4"
+            ]
+        },
+        {
+            "id": "jn70vt304qfw2qv84rt9g7rckx8hvvq1",
+            "finishReason": "stop",
+            "text": "{\n  \"coherence\": \ttrue,\n  \"findings\": [\n    {\n      \"conclusion\": \"supported\",\n      \"contributionId\": \"b1984ce42ac01ae0ff46dcbd880fb07aa1a628d85d705554193f087b1a38a640\",\n      \"diagnostic\": \"The quotation supports CCC's self-description as a SaaS/AI platform for the insurance economy, its two pillars (automotive insurance claims and automotive collision repair), and DRP connections between insurers and collision repair shops. It also supports 'more than 35,000 businesses' connected by CCC cloud technology, but not the contribution's wording 'business customers'; that should be corrected to 'businesses' unless another passage establishes customer status. The passage does not mention photo intake, estimate review, or repair coordination, so it cannot establish the specific photo-led claims workflow.\",\n      \"permittedUse\": \"documentary\"\n      },\n      {\n      \"conclusion\": \"not_established\",\n      \"contributionId\": \"b1984ce42ac01ae0ff46dcbd880fb07aa1a628d85d705554193f087b1a38a640\",\n      \"diagnostic\": \"The contribution does not establish the specific studied activity: photo-led US auto physical-damage claims, from photo intake through estimate review and repair coordination. It only establishes broader company context and involvement in automotive insurance claims and collision repair.\",\n      \"permittedUse\": \"documentary\"\n      }\n  ]\n  ,\n  \"limitations\": [\n    \"Use only for general company/industry context within the scope.\",\n    \"Do not use to prove that CCC operates photo-led US auto physical-damage claims or any specific photo-intake, estimate-review, or repair-coordination process.\",\n    \"Period is the filing's current description (FY2025 10-K), not a historical metric.\",\n    \"Modality is asserted company self-description, not independent verification.\"\n  ]\n}",
+            "contributionIds": [
+                "b1984ce42ac01ae0ff46dcbd880fb07aa1a628d85d705554193f087b1a38a640"
+            ]
+        },
+        {
+            "id": "jn79z3sgmpe23pyw9qbe8vap1h8hv7qn",
+            "finishReason": "stop",
+            "text": "{\n  \"coherence\": true,\n  \"findings\": [\n    {\n      \"conclusion\": \"supported\",\n      \"contributionId\": \"421d14cead2928b667a4dd7c63f7093527d1e96fb910b56116a290c8c3f41d75\",\n      \"diagnostic\": \"The quotation directly states that CCC estimating innovations have enabled virtual inspections using consumer photos integrated to CCC's portal, and that estimates are further automated by AI that combines machine learning and estimating logic to predict repair requirements, suggest estimate lines, and generate fast baseline estimates. The contribution is a faithful paraphrase and is usable for common-context documentation of CCC's described photo-led estimating activity.\",\n      \"permittedUse\": \"documentary\"\n      },\n      {\n      \"conclusion\": \"supported\",\n      \"contributionId\": \"421d14cead2928b667a4dd7c63f7093527d1e96fb910b56116a290c8c3f41d75\",\n      \"diagnostic\": \"The quotation directly states that CCC estimating innovations have enabled virtual inspections using consumer photos integrated to CCC's portal, and that estimates are further automated by AI that combines machine learning and estimating logic to predict repair requirements, suggest estimate lines, and generate fast baseline estimates. The contribution is a faithful paraphrase and is usable for common-context documentation of CCC's described photo-led estimating activity.\",\n      \"permittedUse\": \"documentary\"\n      }\n  ],\n  \"limitations\": [\n    \"The passage is CCC's self-description in a Form 10-K; it does not independently establish performance, adoption, or market impact.\",\n    \"The excerpt supports CCC's described estimating and virtual-inspection capabilities, but it does not establish US-only scope, full end-to-end repair coordination, or that the capabilities are used in every photo-led claim workflow.\",\n    \"The excerpt itself does not display the fiscal year; the FY2025 period is taken from the contribution metadata rather than the quoted passage.\"\n  ]\n}",
+            "contributionIds": [
+                "421d14cead2928b667a4dd7c63f7093527d1e96fb910b56116a290c8c3f41d75"
+            ]
+        }
+    ]
+}

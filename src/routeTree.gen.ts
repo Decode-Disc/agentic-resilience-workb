@@ -13,7 +13,6 @@ import { Route as WorkspaceRouteRouteImport } from './routes/workspace/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkspaceStartRouteImport } from './routes/workspace/start'
 import { Route as PrototypeWorkspaceRouteImport } from './routes/prototype.workspace'
-import { Route as PrototypeSourceReviewRouteImport } from './routes/prototype.source-review'
 import { Route as WorkspaceProtectedRouteRouteImport } from './routes/workspace/_protected/route'
 import { Route as WorkspaceProtectedDossiersRouteImport } from './routes/workspace/_protected/dossiers'
 import { Route as WorkspaceProtectedAdminRouteImport } from './routes/workspace/_protected/admin'
@@ -37,11 +36,6 @@ const WorkspaceStartRoute = WorkspaceStartRouteImport.update({
 const PrototypeWorkspaceRoute = PrototypeWorkspaceRouteImport.update({
   id: '/prototype/workspace',
   path: '/prototype/workspace',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrototypeSourceReviewRoute = PrototypeSourceReviewRouteImport.update({
-  id: '/prototype/source-review',
-  path: '/prototype/source-review',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WorkspaceProtectedRouteRoute = WorkspaceProtectedRouteRouteImport.update({
@@ -68,7 +62,6 @@ const WorkspaceProtectedRunIdRoute = WorkspaceProtectedRunIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/workspace': typeof WorkspaceRouteRouteWithChildren
-  '/prototype/source-review': typeof PrototypeSourceReviewRoute
   '/prototype/workspace': typeof PrototypeWorkspaceRoute
   '/workspace/start': typeof WorkspaceStartRoute
   '/workspace/$runId': typeof WorkspaceProtectedRunIdRoute
@@ -78,7 +71,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/workspace': typeof WorkspaceRouteRouteWithChildren
-  '/prototype/source-review': typeof PrototypeSourceReviewRoute
   '/prototype/workspace': typeof PrototypeWorkspaceRoute
   '/workspace/start': typeof WorkspaceStartRoute
   '/workspace/$runId': typeof WorkspaceProtectedRunIdRoute
@@ -90,7 +82,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/workspace': typeof WorkspaceRouteRouteWithChildren
   '/workspace/_protected': typeof WorkspaceProtectedRouteRouteWithChildren
-  '/prototype/source-review': typeof PrototypeSourceReviewRoute
   '/prototype/workspace': typeof PrototypeWorkspaceRoute
   '/workspace/start': typeof WorkspaceStartRoute
   '/workspace/_protected/$runId': typeof WorkspaceProtectedRunIdRoute
@@ -102,7 +93,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/workspace'
-    | '/prototype/source-review'
     | '/prototype/workspace'
     | '/workspace/start'
     | '/workspace/$runId'
@@ -112,7 +102,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/workspace'
-    | '/prototype/source-review'
     | '/prototype/workspace'
     | '/workspace/start'
     | '/workspace/$runId'
@@ -123,7 +112,6 @@ export interface FileRouteTypes {
     | '/'
     | '/workspace'
     | '/workspace/_protected'
-    | '/prototype/source-review'
     | '/prototype/workspace'
     | '/workspace/start'
     | '/workspace/_protected/$runId'
@@ -134,7 +122,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   WorkspaceRouteRoute: typeof WorkspaceRouteRouteWithChildren
-  PrototypeSourceReviewRoute: typeof PrototypeSourceReviewRoute
   PrototypeWorkspaceRoute: typeof PrototypeWorkspaceRoute
 }
 
@@ -166,13 +153,6 @@ declare module '@tanstack/react-router' {
       path: '/prototype/workspace'
       fullPath: '/prototype/workspace'
       preLoaderRoute: typeof PrototypeWorkspaceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/prototype/source-review': {
-      id: '/prototype/source-review'
-      path: '/prototype/source-review'
-      fullPath: '/prototype/source-review'
-      preLoaderRoute: typeof PrototypeSourceReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/workspace/_protected': {
@@ -241,7 +221,6 @@ const WorkspaceRouteRouteWithChildren = WorkspaceRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   WorkspaceRouteRoute: WorkspaceRouteRouteWithChildren,
-  PrototypeSourceReviewRoute: PrototypeSourceReviewRoute,
   PrototypeWorkspaceRoute: PrototypeWorkspaceRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,0 +1,29 @@
+packages:
+  - .
+
+minimumReleaseAge: 10080
+# Existing locked release approved for the 2026-11-03 toolchain migration.
+minimumReleaseAgeExclude:
+  - '@convex-dev/agent@0.7.9'
+blockExoticSubdeps: true
+trustPolicy: no-downgrade
+# Exact historical lockfile releases; newer versions still require verification.
+trustPolicyExclude:
+  - reselect@5.1.1
+  - semver@6.3.1
+  - undici-types@6.21.0
+saveExact: true
+strictPeerDependencies: true
+engineStrict: true
+
+allowBuilds:
+  '@google/genai': false
+  esbuild: true
+  lightningcss: true
+  protobufjs: false
+
+peerDependencyRules:
+  allowedVersions:
+    convex-helpers>typescript: '>=5.5'
+patchedDependencies:
+  convex@1.47.0: patches/convex-cli-activity-ping-nonfatal.patch

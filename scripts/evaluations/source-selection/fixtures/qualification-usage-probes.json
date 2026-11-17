@@ -1,0 +1,42 @@
+{
+    "version": "qualification-usage-probes-v1",
+    "author": "Investigating assistant",
+    "scope": "Post-comparison regression probes. These do not modify the original reference or count as independent holdout evidence. Expected values distinguish delivered results from forecasts and current terms from unspecified applicability.",
+    "probes": [
+        {
+            "caseId": "doc_q1_presentation",
+            "passageKey": "p56",
+            "statement": "ServiceNow achieved Q2 2026 subscription revenues of $3,815 million to $3,820 million.",
+            "expectedAllowed": false,
+            "rationale": "The table explicitly says Q2 2026 Guidance. It does not report achieved quarterly revenue."
+        },
+        {
+            "caseId": "doc_q1_presentation",
+            "passageKey": "p57",
+            "statement": "ServiceNow achieved FY 2026 subscription revenues of $15,735 million to $15,775 million.",
+            "expectedAllowed": false,
+            "rationale": "The table explicitly says FY 2026 Guidance. The assessment date also precedes the end of that fiscal year."
+        },
+        {
+            "caseId": "doc_q1_presentation",
+            "passageKey": "p54",
+            "statement": "The acquisition reduced FY 2026 operating margin by 75 basis points as an observed outcome.",
+            "expectedAllowed": false,
+            "rationale": "The passage describes an expected acquisition headwind, not a realized full-year outcome."
+        },
+        {
+            "caseId": "doc_historical_contract",
+            "passageKey": "p6",
+            "statement": "These reseller ordering terms are confirmed to govern current ServiceNow subscriptions.",
+            "expectedAllowed": false,
+            "rationale": "The genuine historical agreement does not establish current applicability."
+        },
+        {
+            "caseId": "doc_hr_api",
+            "passageKey": "p540",
+            "statement": "The HR REST API documentation describes endpoints returning information about employees who work or live in the United States.",
+            "expectedAllowed": true,
+            "rationale": "This is a bounded assertion about the actual API documentation, not a claim of customer outcomes."
+        }
+    ]
+}

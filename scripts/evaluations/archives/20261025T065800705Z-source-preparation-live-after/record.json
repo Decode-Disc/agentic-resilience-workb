@@ -1,0 +1,1620 @@
+{
+    "schemaVersion": 1,
+    "id": "20261025T065800705Z-source-preparation-live-after",
+    "createdAt": "2026-10-25T06:58:00.705Z",
+    "git": {
+        "head": "1a22469b3e0bc0494aebcfa92506aee049578c7a",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-10-25-source-preparation-live-comparison.md",
+            "archivePath": "repository/docs/verification/2026-10-25-source-preparation-live-comparison.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/artifacts/2026-10-25-source-preparation-live-comparison.json",
+            "archivePath": "repository/docs/verification/artifacts/2026-10-25-source-preparation-live-comparison.json"
+        },
+        {
+            "origin": "/tmp/real-preparation-20261025",
+            "archivePath": "external/experiment"
+        },
+        {
+            "origin": "/tmp/real-preparation-20261024",
+            "archivePath": "external/baseline"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/baseline/add-evidence.mjs",
+            "bytes": 2179,
+            "sha256": "76066235fa1ee5e307ce06b8ab000a1c8193f3da53064c5bc5ed81d40cd45e0e"
+        },
+        {
+            "path": "external/baseline/after.json",
+            "bytes": 1761129,
+            "sha256": "ff3ed0b7d9939f266526bdc5058994f2f29973358b8c43ca0c6c70c2ccab52c9"
+        },
+        {
+            "path": "external/baseline/analysis.json",
+            "bytes": 29714,
+            "sha256": "e60e3387b219bb5a8eac8a951f7eaf003ab7b55597f8cb96a9ac06ee316af1c0"
+        },
+        {
+            "path": "external/baseline/analyze.mjs",
+            "bytes": 4266,
+            "sha256": "e16a9c3504b0b029a412b39a921261d98bee9167d5712768b1b6f83402652bc1"
+        },
+        {
+            "path": "external/baseline/capture-manifest.json",
+            "bytes": 7442,
+            "sha256": "e5331521fe46452d5089e42e3b7463833670c0bdaac60282789e5d8e87c43890"
+        },
+        {
+            "path": "external/baseline/captures/qd7083gf78q8s2w5y53ezgxe3h8gwg08.txt",
+            "bytes": 37287,
+            "sha256": "b5d7b5ebadfa5069a42cd56ccfc2b6a82a15e2212bbe4456178b68c4b768cb86"
+        },
+        {
+            "path": "external/baseline/captures/qd70fsgdcdxd8746mjfrp94e418gwnam.txt",
+            "bytes": 38913,
+            "sha256": "328ea00af9454d460bf02cf6a8c26e3de273ea4a5dcd8128b0f6502ddf0e5df2"
+        },
+        {
+            "path": "external/baseline/captures/qd70xqve8605gkgt3rtymwr5ds8gwsw0.txt",
+            "bytes": 8017,
+            "sha256": "cfcb9874e5b280c03c712b1534838cc44ddace56cf416c0d026e50b093119d98"
+        },
+        {
+            "path": "external/baseline/captures/qd70yjczxx5qznef7rd21nvwad8gxph4.txt",
+            "bytes": 64530,
+            "sha256": "2fb896ff9716985ca9f94566f33b38b6775c5d5c69538b28e38efdbcb584be49"
+        },
+        {
+            "path": "external/baseline/captures/qd723r1jgryqpj6rd59zx9txgh8gwerf.txt",
+            "bytes": 25397,
+            "sha256": "3afbe90d70b68a60c9338553bd2faa1449a77e0eb9bffdc7a12ae4aa35b3c702"
+        },
+        {
+            "path": "external/baseline/captures/qd72gsakbab2jtgnq4ah86z6qd8gwzjt.txt",
+            "bytes": 71056,
+            "sha256": "d1b9c0dc38b2330b141814b4d7f331a82d614717f1958547bfd5b26796876507"
+        },
+        {
+            "path": "external/baseline/captures/qd757584aycxnqtsvk49x20vjn8gxm6j.txt",
+            "bytes": 1877,
+            "sha256": "7d622bc96a7a021f316d8388a5dc1c79af580fd3506857225da68388eb1953de"
+        },
+        {
+            "path": "external/baseline/captures/qd75k456j4k2jj02tgevaw56rn8gx8n2.txt",
+            "bytes": 66768,
+            "sha256": "32ee3a44eb251d2facf59e965fcdcc69242ef6c77d673d2caa6731f8098ea3f7"
+        },
+        {
+            "path": "external/baseline/captures/qd75s1nq5ak2jxhjtg896jyc5n8gwqav.txt",
+            "bytes": 1309,
+            "sha256": "53bdf88a9db5088281ec538ebefb170330dd6c9c8694c62be79e120f6b7b6109"
+        },
+        {
+            "path": "external/baseline/captures/qd762xs1t0hdcp8yssye7cb9q98gx89a.txt",
+            "bytes": 66768,
+            "sha256": "32ee3a44eb251d2facf59e965fcdcc69242ef6c77d673d2caa6731f8098ea3f7"
+        },
+        {
+            "path": "external/baseline/captures/qd76agchq6s8hcqtbtys1zawa18gx4hg.txt",
+            "bytes": 4355,
+            "sha256": "e32609b1e1c987c894976392bc0299e452b416ca76d4ed7dc13500b8d10d7ea7"
+        },
+        {
+            "path": "external/baseline/captures/qd784rvr6hpxcxhejzzp27h3zn8gw5dx.txt",
+            "bytes": 10842,
+            "sha256": "141733586aa92be7d7cd03ed66187bf67681d6723507e1dfbc26f15ccf60a757"
+        },
+        {
+            "path": "external/baseline/captures/qd79d41qxfn1gk2dvk61x34nj18gxgjt.txt",
+            "bytes": 58570,
+            "sha256": "fd15da37af957c8d83be285405d56aec7c7774dd0fa61a30d62cf289111a4ced"
+        },
+        {
+            "path": "external/baseline/captures/qd79d5zr8yhhk87jcdjanbb96x8gxr2v.txt",
+            "bytes": 65599,
+            "sha256": "b14443552db531039b0f74e3d222b0689714d818480af7332bf40b170a08d149"
+        },
+        {
+            "path": "external/baseline/captures/qd79sgtsr705cja0b4f4mszc1d8gx7yj.txt",
+            "bytes": 2049,
+            "sha256": "43226f29722b4b36411ecb87750d1bcf2f39481fb84f48a89ea545f43adc0158"
+        },
+        {
+            "path": "external/baseline/captures/qd7a2142y3ec0rrr1gp3nadfyd8gwmxm.txt",
+            "bytes": 72696,
+            "sha256": "0ce00a0ad4c617d98e814d6d87f8d61014f9d0fd72419492bf1d6b76601022a3"
+        },
+        {
+            "path": "external/baseline/captures/qd7a40qpw4362twk7hm3w83mas8gw54d.txt",
+            "bytes": 4195,
+            "sha256": "48c64d12654f8036eee9355640688ff69d6073271bdde75df481089b984a754c"
+        },
+        {
+            "path": "external/baseline/captures/qd7bk89khghq7qth1bqyd7wmpx8gw46t.txt",
+            "bytes": 39139,
+            "sha256": "5282338f00e8c747cf592948fd40797a633e55d15373059f993daee8df54c511"
+        },
+        {
+            "path": "external/baseline/captures/qd7c1qcw7b9eymj1tfx3jh8hj58gw70z.txt",
+            "bytes": 418,
+            "sha256": "1c1f871f454c5b8aae52179c93cf3f67113133e78133cf42051c4ad4445e965b"
+        },
+        {
+            "path": "external/baseline/captures/qd7c4ta9d7zpgdeyk0jx74bykn8gxyt3.txt",
+            "bytes": 34961,
+            "sha256": "03b12158ab8e9c0744b7496dc7d3ec9a734020a8c13d7d1faa57dce55a101d81"
+        },
+        {
+            "path": "external/baseline/captures/qd7ca1gx9kz6qrsk9dcp6kr9en8gxvvh.txt",
+            "bytes": 31848,
+            "sha256": "6eb8bb442b8f8490533be7bde6d5d0e3eb89f8e0bf454ab274ec059b2322ef92"
+        },
+        {
+            "path": "external/baseline/captures/qd7cc4zr73e8b2pa1erxemjjn18gw1c1.txt",
+            "bytes": 1637,
+            "sha256": "c92cf15e6fb4231a2b8526a6fd4ab74b4b654f53261ba3ed88ab6f5c8b366321"
+        },
+        {
+            "path": "external/baseline/captures/qd7dr3yb42fjxf0zpdry95mfah8gwsv9.txt",
+            "bytes": 89361,
+            "sha256": "6ccf53893c1c8f86dfdc020f2d8251317ad03e530f08c083c1fa90a522b60de5"
+        },
+        {
+            "path": "external/baseline/captures/qd7e23xh8ermd9hw3653nphq1d8gw7gs.txt",
+            "bytes": 44265,
+            "sha256": "134a9b3030e997df538265e03786f12c35b7e90cf190d201f3594a4b9981d195"
+        },
+        {
+            "path": "external/baseline/captures/qd7e36cwcw6250yrq64c51bh5n8gx53t.txt",
+            "bytes": 7311,
+            "sha256": "5c7466e2be234f23d8977c648e0f7e87e1991ef1b790146485296cd4314d7a73"
+        },
+        {
+            "path": "external/baseline/checkpoint-screen.txt",
+            "bytes": 8158,
+            "sha256": "bbacee5309652b5d12a93c08519de31b6e90d4547e35fc13998d328ed12de1a6"
+        },
+        {
+            "path": "external/baseline/checkpoint.png",
+            "bytes": 1696971,
+            "sha256": "e8934cca9eb512056a402344a0db4b4416f00ee5a7896b18696cc36b223971f7"
+        },
+        {
+            "path": "external/baseline/code-manifest.json",
+            "bytes": 16630,
+            "sha256": "c1ca181c98fe5cb89f5b2f15a10720bf44f4b34ddf2f6e61404bf59fa6a13ad0"
+        },
+        {
+            "path": "external/baseline/code/convex/admin.ts",
+            "bytes": 2276,
+            "sha256": "bebf4d52afea9467767e6a912cf2bcfd104d475dcb72b219dc5349bec415a2db"
+        },
+        {
+            "path": "external/baseline/code/convex/adminOperations.ts",
+            "bytes": 22850,
+            "sha256": "005c3153e99d0a69387a75cf78c90b5845672c69b90b2f870bfda0bbe9d93652"
+        },
+        {
+            "path": "external/baseline/code/convex/audit.ts",
+            "bytes": 1014,
+            "sha256": "4ecd325e8cc3fc0f1570462e51fc19eb1c1297c7a50a42cb3a3fd0b4e261c399"
+        },
+        {
+            "path": "external/baseline/code/convex/auth.config.ts",
+            "bytes": 151,
+            "sha256": "9f733fef6c753526cf58933194937909f7be2c64d131a2d8ccc355c932180371"
+        },
+        {
+            "path": "external/baseline/code/convex/auth.ts",
+            "bytes": 231,
+            "sha256": "3d330ae4fdcf7341e910125b3d53c0f547facdccb08abb845b99888c40d18d5c"
+        },
+        {
+            "path": "external/baseline/code/convex/browserPreview.ts",
+            "bytes": 6161,
+            "sha256": "a9a5ae47227f2a378ce0b5a1539c71b1ee1ed5d693ce9a4f3887a817698b6c16"
+        },
+        {
+            "path": "external/baseline/code/convex/browserPreviewInternals.ts",
+            "bytes": 5797,
+            "sha256": "426ebc8e528df6f8f9a141508acc42fb62409da75367dce8ceb6313f15d169b9"
+        },
+        {
+            "path": "external/baseline/code/convex/claimGeneration.ts",
+            "bytes": 44147,
+            "sha256": "f5b81ac72ca566c3f4b0d460fa106361ffed84669744a9d950c0985e8cd218ad"
+        },
+        {
+            "path": "external/baseline/code/convex/companyCoverImage.ts",
+            "bytes": 3761,
+            "sha256": "11cdf344decaca69432aae319f1f4c94054cdab64bdff476331a9a214297f756"
+        },
+        {
+            "path": "external/baseline/code/convex/companyResolution.ts",
+            "bytes": 35362,
+            "sha256": "aee832b79a520e34bbcc78c9ca40e379d0d9e892e7ae69bdae606fa0d0b9254b"
+        },
+        {
+            "path": "external/baseline/code/convex/convex.config.ts",
+            "bytes": 1070,
+            "sha256": "8fbba176deb1e8ecff9fe3fe3d31d24ae4a07ba0e7652fd2c9cdc245eaf37089"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/claimCanonicalization.ts",
+            "bytes": 3855,
+            "sha256": "5c8eb1942d60fff2ed7bb7149732a61116125809a5de2188401c45ee0d64c75a"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/claims.ts",
+            "bytes": 1215,
+            "sha256": "9ec3cca5ccc246b5d96fc3c878fde098b6ed22c7e6e592e5e98e0a8fe1c412bb"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/claimValidation.ts",
+            "bytes": 7218,
+            "sha256": "72b223519c66b137ef316d21a6360b8a6455e075cc410a079b901bdff8e05ddc"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/companyMetadata.ts",
+            "bytes": 1438,
+            "sha256": "eeb3daeb5a8bb1f9beda73ce7365763c65e7f0241d526b80098d78e00ae552b7"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/coverImageUrl.ts",
+            "bytes": 1687,
+            "sha256": "271678c312fb93238c7b1f4f547230ca13da0c438d98e474aa46e417f7adc048"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/evidenceArtifacts.ts",
+            "bytes": 963,
+            "sha256": "6c36885cfaabc1e0909be15d0f1b530d269d97874cce6aeec06cbbb55b0e4b9a"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/evidenceAuthority.ts",
+            "bytes": 5979,
+            "sha256": "34ddc44f3c917679b824ac3155f38caac4a43769ff8103cbc97c34616fd8aba2"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/evidenceAvailabilityPolicy.ts",
+            "bytes": 1322,
+            "sha256": "810691ce66a064951f2703d5650406d86631963226986b1001c2ae301f7b0d61"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/evidenceFailure.ts",
+            "bytes": 2143,
+            "sha256": "ab076a823da9c324b5a3587535d13567512a5d7e0d193d39542fae165d713517"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/evidenceFanout.ts",
+            "bytes": 3147,
+            "sha256": "118d80ed8221e92c93607b62a862bbfcf3305d7177e460767986539c31fd02f7"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/evidenceLimits.ts",
+            "bytes": 1342,
+            "sha256": "cf12a2a7c083e7577dd7c2686e6a064a512f927c95bb9c3639b6489974300bb3"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/evidencePolicy.ts",
+            "bytes": 11598,
+            "sha256": "a884bb4f303c4cdcf98c6132710458e110e4190904b17b0978e74c355db5c7cf"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/executionClaim.ts",
+            "bytes": 6959,
+            "sha256": "1346fdac948934b714e407b18e85e1fec6c5a760223c1261a3cb3a3497a1ccef"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/invitationCodes.ts",
+            "bytes": 486,
+            "sha256": "6c5bc2d4ee8aeecd863e26f628c5e20ec216a04cb1bdb7572d8377b92f98f383"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/manualSourceIntake.ts",
+            "bytes": 3960,
+            "sha256": "314d64fe1281e5484053c784bc4393ae99ae273dda4cf60f95210b5433199eed"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/previewCache.ts",
+            "bytes": 965,
+            "sha256": "6ac51711acf63e38a4fcb9c83e4771ff1ab6820878b395f2ed6030783334d0ce"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/providerAvailability.ts",
+            "bytes": 569,
+            "sha256": "0c1ca891f984961992fb2e8279df4038e9f0b41224da75540396261478035e43"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/publicSourceUrl.ts",
+            "bytes": 4915,
+            "sha256": "5fdef79a131f0ad048476ccaa464e996a013eb083a6a53f819c21a42fae32a7c"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/researchPlan.ts",
+            "bytes": 6060,
+            "sha256": "d24dabbaa5c327db3f4245baead26e0b25bcbe987188fe90cf5dc8bb59cd2938"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/showcaseManifest.ts",
+            "bytes": 7344,
+            "sha256": "c3250e898cf690d9e2272407ccf6f0276f36986db50780f5a172e13fd1b1aa9f"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceCandidateCapacity.ts",
+            "bytes": 1654,
+            "sha256": "7fecfff7ff4cdbe9c7a615bc4608bdec4ca7c7c37c2847d92540e598d79a76ab"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceComparison.ts",
+            "bytes": 53628,
+            "sha256": "d91b51b2767e241d4f61d876ccb548509c870a2b7d331c362bec02f5af28411e"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceComparisonContext.ts",
+            "bytes": 10417,
+            "sha256": "3ce5168cc7c08722a1d3789da98632251bf0d8283c496b9c0da7c1370f36c4ef"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceDiscoveryRecovery.ts",
+            "bytes": 7738,
+            "sha256": "f6ab252ad9f01f060f20b12dc3557c13e864740581e6dc5f083604492c224bd7"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourcePassages.ts",
+            "bytes": 31546,
+            "sha256": "275d170f27e3751192ed313b25345176186b66c5275ecdda86ce6e9fcbc76404"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourcePreparationAuthority.ts",
+            "bytes": 19147,
+            "sha256": "8a8061b937849cca837d5df4f2698223831335c791c0bc1df9dbd823c8217da8"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourcePreparationReview.ts",
+            "bytes": 21205,
+            "sha256": "786f1a8e00b0b7751fa488fa0b709ada352640e2578dee1160d6c2ca7f026008"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceQualification.ts",
+            "bytes": 21786,
+            "sha256": "35bc5ec1ac77581a365b402c29e8920ca7308cb60614fe06e996ffce4829329c"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceRetrievalPolicy.ts",
+            "bytes": 5081,
+            "sha256": "b26fed7d2675b85154e4f51958956c3128ef3cc780826e039de9f6679c1a9ced"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceReviewProjection.ts",
+            "bytes": 1380,
+            "sha256": "f94ec0aeccea4c1b84b5510ce58568bf310c7bb9a5543927a2c287fdca3dbcc5"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceReviewReads.ts",
+            "bytes": 6490,
+            "sha256": "549a10e527b9d29b26cd59776c2795957628e37f93c44928225f5dbac6264d6f"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceSelectionPolicy.ts",
+            "bytes": 81340,
+            "sha256": "5ba25777cbc7337aa4602e6708b88475f0e52010059cd873c4d5218594479163"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/sourceUsage.ts",
+            "bytes": 25759,
+            "sha256": "cc148e2ab8fc457547d96a0193aed1edd9f00e7a912046ba558f1ddac9e38d50"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/transitions.ts",
+            "bytes": 2381,
+            "sha256": "636a1ec6b3b678811e761c4f1ded397443a037d9ec579f3992ef3f09c96d103d"
+        },
+        {
+            "path": "external/baseline/code/convex/domain/validators.ts",
+            "bytes": 4512,
+            "sha256": "9a2a19aff5c9419721611ebe026b807f6a7eb5d7c36aec611c5e04c17588e1f7"
+        },
+        {
+            "path": "external/baseline/code/convex/e2eFixtures.ts",
+            "bytes": 109952,
+            "sha256": "982d2818ef6eee4117ab63fb44c0d8574fe05bfad752b69687d24f9698428578"
+        },
+        {
+            "path": "external/baseline/code/convex/evidenceActions.ts",
+            "bytes": 36146,
+            "sha256": "7dc6e7932e60d5d5f52183499a86b674e24c63e9b0f81a4693d9ac3a15599170"
+        },
+        {
+            "path": "external/baseline/code/convex/evidenceArtifacts.ts",
+            "bytes": 45058,
+            "sha256": "561cd81674f36e4038f41d9a55ee6a83711a0082a19eb26a00cc8a677bc3b260"
+        },
+        {
+            "path": "external/baseline/code/convex/evidenceExecution.ts",
+            "bytes": 22479,
+            "sha256": "3133f515992ece7e01f6a559c5acea9c8a9b3af703768476cf5f3eaad9dde827"
+        },
+        {
+            "path": "external/baseline/code/convex/evidenceMatrix.ts",
+            "bytes": 28108,
+            "sha256": "039e0923657cf398b7427a0adf6525686c702b479afac895787939561ab6652f"
+        },
+        {
+            "path": "external/baseline/code/convex/evidenceSufficiency.ts",
+            "bytes": 8913,
+            "sha256": "bbbfa61292676db37da33e3e1567886be80a121c97151bb941b61c8e7c442195"
+        },
+        {
+            "path": "external/baseline/code/convex/evidenceWorkflow.ts",
+            "bytes": 19298,
+            "sha256": "c7b2a09a58eea1a6bcfc5fbe0f44e2ac1add12130eba8bda33eeb5135604bc02"
+        },
+        {
+            "path": "external/baseline/code/convex/exaDiscoveryActions.ts",
+            "bytes": 12217,
+            "sha256": "39d5874cc9ea54a09ce1b2b27b15c7577dcb92cf6257db01a5c5a012ef361918"
+        },
+        {
+            "path": "external/baseline/code/convex/fixtureManifestStore.ts",
+            "bytes": 6203,
+            "sha256": "b36255d994247545d39841eb41c993a1a5a023790d1b82f0e50fe3770387c9b8"
+        },
+        {
+            "path": "external/baseline/code/convex/fixtures/cccShowcase.ts",
+            "bytes": 5615,
+            "sha256": "312442a2b0dc8764ed061b52c6966c2f2294c418d21b205ed6cb6ff043e4b768"
+        },
+        {
+            "path": "external/baseline/code/convex/http.ts",
+            "bytes": 153,
+            "sha256": "7694f7c76d47610b8040675ef1a4451b5c0debb3f162abb49ca0650710c6c997"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/approvedSourceRetrieval.ts",
+            "bytes": 1132,
+            "sha256": "0536ed9cf2eb1c7b2bffab288dfb6d81dcfdbf57bb9cd0410091f1cf7656831f"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/evidenceNormalization.ts",
+            "bytes": 9303,
+            "sha256": "91c1152c5ffde7fbd6b094820575267c634d00031c8d2f4e97031142accf0eb0"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/exa.ts",
+            "bytes": 21294,
+            "sha256": "3c15973694405e83efa1198af97b47c5fc9221b98285d0881a1d278596381ca6"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/exaContentsClient.ts",
+            "bytes": 3364,
+            "sha256": "6152ff8ac35f47fe55f5bba5fdab302b5ab5b1874f60eb4b016b744375a5133a"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/exaEvidence.ts",
+            "bytes": 2736,
+            "sha256": "f5a18532da3f163b2b261f7c3cbd7241647e14686ad4190966db7ee773ee4105"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/publicPdfEvidence.ts",
+            "bytes": 17730,
+            "sha256": "9214afea99f144c95b46b226a6ac269b89a464a5e48e1b8e33958c2bcfabf1f5"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/sec.ts",
+            "bytes": 28016,
+            "sha256": "c09c9b15df30f5758aca342c894c3aaf5c87ebf4bf8456241668d12ff02e5fbe"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/secEvidence.ts",
+            "bytes": 4403,
+            "sha256": "9a99d71c6bbb1ed97cb4a13c983bc0d2fd05471cdabe6025eaafff5e75ba31f9"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/showcaseClaimAdapter.ts",
+            "bytes": 7204,
+            "sha256": "2fbe50dff24affcaddc0328315f84369a247ebeb02c0dd54a7e47f37f86f4883"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/showcaseVerifierAdapter.ts",
+            "bytes": 7516,
+            "sha256": "fe51fe7f27396c3c97652d66f12ffafafa37c3a906d80a324d562dbc04e92b6c"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/sourceEmbeddings.ts",
+            "bytes": 5414,
+            "sha256": "4f2f9440f4d653038802ad7d700d1cde28bf35bc5e746d912c14cc8a467da9f0"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/sourceQualification.ts",
+            "bytes": 14067,
+            "sha256": "7480331672c13b1c6fe5630f7c15a72c750cafbea510db2f0312cafca88d0434"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/sourceQualificationConfig.ts",
+            "bytes": 674,
+            "sha256": "b634df12445e109bc617c7fc7afa084f3f681746420fc6886360bf2c0ae05874"
+        },
+        {
+            "path": "external/baseline/code/convex/integrations/websiteResolver.ts",
+            "bytes": 7318,
+            "sha256": "7e6843c5e1955154995fdc27e306eef06ef78a4a6e39b00ed7474a73f9a6249d"
+        },
+        {
+            "path": "external/baseline/code/convex/invitations.ts",
+            "bytes": 14998,
+            "sha256": "1bbc663daf8b7974fd79093a88c55dae40ed8c8fcaf8e95a7a9add7d2747c26f"
+        },
+        {
+            "path": "external/baseline/code/convex/policyEvaluations.ts",
+            "bytes": 41606,
+            "sha256": "e84ddb489cdee605370e48e131f2fcdedfb8dccffcb34d4c813067e3e0f1a19b"
+        },
+        {
+            "path": "external/baseline/code/convex/providerCalls.ts",
+            "bytes": 34410,
+            "sha256": "3df979115268115e16dffee3060d6bb1097a019dd8a41f707ad56f89d6c7c9e4"
+        },
+        {
+            "path": "external/baseline/code/convex/rateLimiter.ts",
+            "bytes": 1033,
+            "sha256": "3f6a3d66992a5e26aebd7d47ff57914159c96a407a041b8fbb8aef5b85f27b3b"
+        },
+        {
+            "path": "external/baseline/code/convex/researchLaunch.ts",
+            "bytes": 10476,
+            "sha256": "436f19dd472f2e06449ed12ada91639ec7847971ea969bc4a0cd1cc007cbe1c1"
+        },
+        {
+            "path": "external/baseline/code/convex/researchPlanning.ts",
+            "bytes": 6127,
+            "sha256": "8729a7f1202f0f5907feb016c0613538fb082163158089e6bf8798f0a13cb74e"
+        },
+        {
+            "path": "external/baseline/code/convex/researchRuns.ts",
+            "bytes": 12592,
+            "sha256": "6effeac630a309c519189dc83460dcc21cf2c84f018399abaa1c4ec146defced"
+        },
+        {
+            "path": "external/baseline/code/convex/researchWorkflow.ts",
+            "bytes": 8856,
+            "sha256": "a918244486a7bbc3c8603eb5468fee52eeadff36f6326dcb4206dd6e71f3d9af"
+        },
+        {
+            "path": "external/baseline/code/convex/resourceLimits.ts",
+            "bytes": 5858,
+            "sha256": "8046290011f09e928032a1f6f511ebcdab7515e487e361ffb91c81c1062084e9"
+        },
+        {
+            "path": "external/baseline/code/convex/retrievalEvaluation.ts",
+            "bytes": 24970,
+            "sha256": "7adc36cf73581627baa878994d2b782dfdf7da7ea1bf5cc5e1e8d3e3b9cf4f97"
+        },
+        {
+            "path": "external/baseline/code/convex/schema.ts",
+            "bytes": 48593,
+            "sha256": "095b14137d850061a46899d4766308b1f52ec0d6c13f467c6600fdd8f42660fc"
+        },
+        {
+            "path": "external/baseline/code/convex/sourceActions.ts",
+            "bytes": 27556,
+            "sha256": "6ecdbd487530d60f2013c9e2d208e5cf01732ad709da3f865ed7a9a03f40522f"
+        },
+        {
+            "path": "external/baseline/code/convex/sourceCaptures.ts",
+            "bytes": 15432,
+            "sha256": "93218121ad714fbe65def06093445ac269801ab49f22780b65ad47d8621c1a32"
+        },
+        {
+            "path": "external/baseline/code/convex/sourceDiscovery.ts",
+            "bytes": 12315,
+            "sha256": "3516171c00467011c344938ca1423b10e9c2335f8d9c2487b2c4580ba14a37eb"
+        },
+        {
+            "path": "external/baseline/code/convex/sourceDiscoveryActions.ts",
+            "bytes": 6736,
+            "sha256": "dbd0907d8aa8a6fd590ce5bdcfe9b9c7124758ceb933f2c4c6aefc5a927cec61"
+        },
+        {
+            "path": "external/baseline/code/convex/sourceIntake.ts",
+            "bytes": 5298,
+            "sha256": "7e6ea21c93768f5699862cf5612d79174980b12e659af7348073608057aa761c"
+        },
+        {
+            "path": "external/baseline/code/convex/sourcePreparation.ts",
+            "bytes": 90335,
+            "sha256": "222c2991761c5d77fb3be53f311b2f6d0de2bd78a62b1e467f1b2add5271dfef"
+        },
+        {
+            "path": "external/baseline/code/convex/sourcePreparationActions.ts",
+            "bytes": 68696,
+            "sha256": "da5387ab93eb85cdbfa09a9186a258f44297f83ea3cf863ce542794abfecd2dc"
+        },
+        {
+            "path": "external/baseline/code/convex/sourcePreparationWorkflow.ts",
+            "bytes": 9481,
+            "sha256": "8abe927c6176ea1519bc3c7942188b40243f2f192c34158e55df40c2711a4fbb"
+        },
+        {
+            "path": "external/baseline/code/convex/sourceRetrieval.ts",
+            "bytes": 26364,
+            "sha256": "9868df91d58a291c75773bcc15e9e959cf79acaa4c6a245e3af6961d2b5cd5fe"
+        },
+        {
+            "path": "external/baseline/code/convex/sourceRetrievalActions.ts",
+            "bytes": 20660,
+            "sha256": "36aeff89098e5349475d210f144a25ad52bc792d1394c145afbc142ed2226619"
+        },
+        {
+            "path": "external/baseline/code/convex/sources.ts",
+            "bytes": 28711,
+            "sha256": "3720beb2c8d5bd54ad3d8fffeb48f1694b3510dc7786adff4f6d742c8f59aaf8"
+        },
+        {
+            "path": "external/baseline/code/convex/sourceSelectionProposalActions.ts",
+            "bytes": 26481,
+            "sha256": "32d234bcef555c6299fdf6cdac53df45de03699e6254e1781b0eeefd89668492"
+        },
+        {
+            "path": "external/baseline/code/convex/sourceSelectionProposals.ts",
+            "bytes": 95236,
+            "sha256": "1683745af931099259e51e6c298a406eb6da4253e7205586f505d960e65aaa2d"
+        },
+        {
+            "path": "external/baseline/code/convex/visitors.ts",
+            "bytes": 504,
+            "sha256": "bc0e3b4709e869f9fd2ccbf30a6289599f9fdff3bc27600f518cec4d744920cd"
+        },
+        {
+            "path": "external/baseline/code/convex/workflow.ts",
+            "bytes": 1717,
+            "sha256": "66b2846de2178289841296acc7ecbfe3fbf564ecd25f6da5382985d3fced469f"
+        },
+        {
+            "path": "external/baseline/code/convex/workflowControls.ts",
+            "bytes": 11392,
+            "sha256": "4cc4cab0316f9cb249e2173969419115cb2231ca55e2f9d3e74af4d512b3eb1d"
+        },
+        {
+            "path": "external/baseline/code/package.json",
+            "bytes": 4867,
+            "sha256": "f061b18fc93069bf98d8fb26e8f9d433de32ce97fb3f61b6cb62a393ea360e5d"
+        },
+        {
+            "path": "external/baseline/code/pnpm-lock.yaml",
+            "bytes": 238548,
+            "sha256": "a43ac58693d8e8a10d23576c562a7078f448f3a7db653e455a9482625502457c"
+        },
+        {
+            "path": "external/baseline/drive.mjs",
+            "bytes": 3689,
+            "sha256": "b5f8fc3783076a117013096b7d537cff678ba921024a7f7e21b47fe57a7220f2"
+        },
+        {
+            "path": "external/baseline/endpoints-preflight.json",
+            "bytes": 154022,
+            "sha256": "cef2e9d78e3d2de62fbec5ab0e96f76c6bb88f2a2f91fa9e97fbc10fd6dddadb"
+        },
+        {
+            "path": "external/baseline/existing-dossier-after.json",
+            "bytes": 306694,
+            "sha256": "5129e6534014f387101de81155a37d2195feee72601f5d8f4c097f0f7e1e7b16"
+        },
+        {
+            "path": "external/baseline/existing-dossier-before.json",
+            "bytes": 320752,
+            "sha256": "f7277130d202d2779639e671c3d40a8493ad4b58004eea95522ebfc16d8c5c1e"
+        },
+        {
+            "path": "external/baseline/export-captures.mjs",
+            "bytes": 2172,
+            "sha256": "6e410c33336ee86720daaff146dcdc7c9a2bb81a0f81537d3c2171fa45826362"
+        },
+        {
+            "path": "external/baseline/finalize-analysis.mjs",
+            "bytes": 4424,
+            "sha256": "810a248f876683b2a9acb82b39bf976cc47105b49b28ecd137178f354e7120db"
+        },
+        {
+            "path": "external/baseline/inspect-query.txt",
+            "bytes": 400,
+            "sha256": "27e7b366f65fcaf71ea8f151741cbb9576991cfb27cb14d116f7972bd15b525b"
+        },
+        {
+            "path": "external/baseline/interim-calls.json",
+            "bytes": 12628,
+            "sha256": "c7d935c9bde8953ee37405a2c2afdbe6b3160597d9876c0228071113f3f02243"
+        },
+        {
+            "path": "external/baseline/interim-shapes.json",
+            "bytes": 118631,
+            "sha256": "0af6acf5eabf5934afb18677d6335da7b8372e996944ed2333e127eb842f068b"
+        },
+        {
+            "path": "external/baseline/launch-click.json",
+            "bytes": 66,
+            "sha256": "495f4a0e3feec0a8617bb5f1c8fa40651e71e43bc538aa23fcefd9a3e2583c9b"
+        },
+        {
+            "path": "external/baseline/logs.mjs",
+            "bytes": 1319,
+            "sha256": "6ce3526891ae32b95672bd9a234824a5c65ab8167c8d14685529f592817fe3b4"
+        },
+        {
+            "path": "external/baseline/models-preflight.json",
+            "bytes": 8417,
+            "sha256": "3a749b1db4b967fc7e350f6f56b4b708908dde57fecf1a6bcd68409a1ef3e85f"
+        },
+        {
+            "path": "external/baseline/native-log-cursor.json",
+            "bytes": 55,
+            "sha256": "17cbabb0cfa2551bd7a81231c179a43bfdd2acd8138cf81cc76bf3f7247d3ceb"
+        },
+        {
+            "path": "external/baseline/native-timings.jsonl",
+            "bytes": 4915844,
+            "sha256": "05f5c49b17f42f72ace7f6bb0a53d5b2c370828c47ee0384532e110202c5f9ac"
+        },
+        {
+            "path": "external/baseline/observations.jsonl",
+            "bytes": 86810,
+            "sha256": "6e28880b40555e920b6a7fb5686113d40e0044b430a874f74a22d8e57a7a4c2b"
+        },
+        {
+            "path": "external/baseline/observe.mjs",
+            "bytes": 3850,
+            "sha256": "3f9359639fa50fa4c9fa47ac79c458b4cf8d66190eea410ccb0d3817d335d53e"
+        },
+        {
+            "path": "external/baseline/original-after-query.txt",
+            "bytes": 581,
+            "sha256": "de48b6adf1565bd1f8b6d52ffa4fe30a98f4d86406854faad5ce07714ca3626f"
+        },
+        {
+            "path": "external/baseline/progress-screen.txt",
+            "bytes": 2514,
+            "sha256": "53f5ec9f4cd24fda11ab5c5a455b01abecb0bda7e8dde0fa7ec7a7bb192ea36a"
+        },
+        {
+            "path": "external/baseline/progress.png",
+            "bytes": 1134178,
+            "sha256": "355b008cbf41b1ab1be7e9ecf14c078e8d46c15d86bfa7c52220c40933a05d70"
+        },
+        {
+            "path": "external/baseline/protocol.json",
+            "bytes": 1653,
+            "sha256": "7b717005e191bbee77ba73273362283d7d108078040c30114c7957b9bbeefb49"
+        },
+        {
+            "path": "external/baseline/query.mjs",
+            "bytes": 997,
+            "sha256": "67ef9117525ac3b4f5c8a9839a55a56a16bf6393afad1101280e755aae9b11e9"
+        },
+        {
+            "path": "external/baseline/report.md",
+            "bytes": 6019,
+            "sha256": "f5c5112991927beb5999d891771ca67adc2a0adb370ab86f7a8f4c1c00d850b1"
+        },
+        {
+            "path": "external/baseline/run.json",
+            "bytes": 166,
+            "sha256": "96ebe2c61c6f1ecc699b0e3f0d99ca17d37a6cee333853a2ba9fd8d248fb9024"
+        },
+        {
+            "path": "external/baseline/shape-query.txt",
+            "bytes": 494,
+            "sha256": "c9abbd4f817590c965847ef381d122fe9ef0df52014eaa8a6b5fbbc3093d3cc0"
+        },
+        {
+            "path": "external/baseline/step.mjs",
+            "bytes": 492,
+            "sha256": "2194f66e64ac6b0e46c3846b0d25b2be5b5f920027299483bc7976f982d9cc4f"
+        },
+        {
+            "path": "external/experiment/admission-before.json",
+            "bytes": 441,
+            "sha256": "b77265d05f6a958ef3a61a992501fcb9ae0fa770ae3afbb081f8c50c52ab1496"
+        },
+        {
+            "path": "external/experiment/admission-query.txt",
+            "bytes": 406,
+            "sha256": "31444c9b1f619a95b48a62e8407d10ccfc25ebc0aa261e2c68f68cf917519ef3"
+        },
+        {
+            "path": "external/experiment/after.json",
+            "bytes": 1039553,
+            "sha256": "3cbc3ae6ccadb14c2752de73c5c02d978ef3412e28acbca6fde9a946e8d2e764"
+        },
+        {
+            "path": "external/experiment/analysis.json",
+            "bytes": 31371,
+            "sha256": "0195f71c720f8446f604e54b65565873050b755537efd7ce49fafed63e31c8d6"
+        },
+        {
+            "path": "external/experiment/analyze.mjs",
+            "bytes": 5456,
+            "sha256": "f7ffc39621b7581550ee8316efc4f5bdef18e7bd5f7d00c043404790830290b9"
+        },
+        {
+            "path": "external/experiment/capture-manifest.json",
+            "bytes": 7142,
+            "sha256": "54dbc61e1bacb533183eaa77fb4b89b08da483ff385d3f60e0b7792b06b79ff9"
+        },
+        {
+            "path": "external/experiment/captures/qd705hk88fpqc9z0bhq1vw25998gzb4w.txt",
+            "bytes": 7311,
+            "sha256": "5c7466e2be234f23d8977c648e0f7e87e1991ef1b790146485296cd4314d7a73"
+        },
+        {
+            "path": "external/experiment/captures/qd708md8g5sx68brj8ejw1832s8gzgce.txt",
+            "bytes": 37287,
+            "sha256": "b5d7b5ebadfa5069a42cd56ccfc2b6a82a15e2212bbe4456178b68c4b768cb86"
+        },
+        {
+            "path": "external/experiment/captures/qd709rxvxbbvxcwzhm3a3ny9d58gy6bb.txt",
+            "bytes": 2259,
+            "sha256": "24efb596cef0e0592342f7f5f28602609b5b970ca5e2492a23f5116b74241a71"
+        },
+        {
+            "path": "external/experiment/captures/qd70rprvtbzcyzs01mrd60g2bd8gz67e.txt",
+            "bytes": 58570,
+            "sha256": "fd15da37af957c8d83be285405d56aec7c7774dd0fa61a30d62cf289111a4ced"
+        },
+        {
+            "path": "external/experiment/captures/qd72k6t3gj3xcpabdyf65s8xqs8gy978.txt",
+            "bytes": 71056,
+            "sha256": "d1b9c0dc38b2330b141814b4d7f331a82d614717f1958547bfd5b26796876507"
+        },
+        {
+            "path": "external/experiment/captures/qd734yvmcszdkp073yby60dr8d8gzez3.txt",
+            "bytes": 36376,
+            "sha256": "3296b2af2ce030f500ec2e79ab6e7605daadb90d52a9d07976b8461da17d94f0"
+        },
+        {
+            "path": "external/experiment/captures/qd73at1n2h8va1g1q37t3ejm8s8gzp12.txt",
+            "bytes": 39139,
+            "sha256": "5282338f00e8c747cf592948fd40797a633e55d15373059f993daee8df54c511"
+        },
+        {
+            "path": "external/experiment/captures/qd73gz4ewyr9ekev58730eywkh8gy77q.txt",
+            "bytes": 72696,
+            "sha256": "0ce00a0ad4c617d98e814d6d87f8d61014f9d0fd72419492bf1d6b76601022a3"
+        },
+        {
+            "path": "external/experiment/captures/qd73wmx0d9ewx47hf72zawea7n8gypsg.txt",
+            "bytes": 1309,
+            "sha256": "53bdf88a9db5088281ec538ebefb170330dd6c9c8694c62be79e120f6b7b6109"
+        },
+        {
+            "path": "external/experiment/captures/qd743mpz1cnvbadmk63wgtjkc98gzama.txt",
+            "bytes": 10842,
+            "sha256": "141733586aa92be7d7cd03ed66187bf67681d6723507e1dfbc26f15ccf60a757"
+        },
+        {
+            "path": "external/experiment/captures/qd75g4b4pgm2q78zpasezw3m6x8gzssz.txt",
+            "bytes": 1637,
+            "sha256": "c92cf15e6fb4231a2b8526a6fd4ab74b4b654f53261ba3ed88ab6f5c8b366321"
+        },
+        {
+            "path": "external/experiment/captures/qd78wgbhg731mwxpwj6qvwad2x8gyxpg.txt",
+            "bytes": 432,
+            "sha256": "65d84fae01a584efb653e6b825e09806dab4e42268a6e0982c039f83cddf5228"
+        },
+        {
+            "path": "external/experiment/captures/qd794qbqdv6de0b549pz8zr4j98gzqgr.txt",
+            "bytes": 44265,
+            "sha256": "134a9b3030e997df538265e03786f12c35b7e90cf190d201f3594a4b9981d195"
+        },
+        {
+            "path": "external/experiment/captures/qd797tdjc3r3wz5c9wq6579tb98gyqak.txt",
+            "bytes": 186,
+            "sha256": "20ae5c2f18b4db95b3717d17fe76337446aaaad4fd66853b15ce2eb0124db982"
+        },
+        {
+            "path": "external/experiment/captures/qd7b6swqbt8bz04wntnhcjtkhx8gyzy8.txt",
+            "bytes": 25397,
+            "sha256": "3afbe90d70b68a60c9338553bd2faa1449a77e0eb9bffdc7a12ae4aa35b3c702"
+        },
+        {
+            "path": "external/experiment/captures/qd7bgjk3vrxcskxsy7ycna57k98gzpkr.txt",
+            "bytes": 31848,
+            "sha256": "6eb8bb442b8f8490533be7bde6d5d0e3eb89f8e0bf454ab274ec059b2322ef92"
+        },
+        {
+            "path": "external/experiment/captures/qd7cct2cv6fqzpb9qjwhh19r1n8gywyx.txt",
+            "bytes": 655,
+            "sha256": "7d36780d4c89863252bcae8ed784422aaafab28d161d6011e752bc95a368e954"
+        },
+        {
+            "path": "external/experiment/captures/qd7czatdy67pemvr6n0cp52h5d8gzcjq.txt",
+            "bytes": 34961,
+            "sha256": "03b12158ab8e9c0744b7496dc7d3ec9a734020a8c13d7d1faa57dce55a101d81"
+        },
+        {
+            "path": "external/experiment/captures/qd7d2x9mgcn102hzc51hswm7t58gzww0.txt",
+            "bytes": 65599,
+            "sha256": "b14443552db531039b0f74e3d222b0689714d818480af7332bf40b170a08d149"
+        },
+        {
+            "path": "external/experiment/captures/qd7djyggvhmg7rn5jtvfh11kfh8gy4p3.txt",
+            "bytes": 49837,
+            "sha256": "c9e4b0027ca13422f4263be5e2dc17fab44c0781bc5048bc18503ae44757ed45"
+        },
+        {
+            "path": "external/experiment/captures/qd7e3bh74ktgmcfpprjtf6pgps8gy2xr.txt",
+            "bytes": 1894,
+            "sha256": "3af4d782f3ffb2928a338fd02b944ce99931f302fb30a3a2ad16f6c2454bd249"
+        },
+        {
+            "path": "external/experiment/captures/qd7epwf97crr856d3msje8chbs8gy1j0.txt",
+            "bytes": 1009,
+            "sha256": "f45846b86823c4e73381ce307eb91cda4da4d9c32fda89adfe68a7327d31f36b"
+        },
+        {
+            "path": "external/experiment/captures/qd7f0akx72g7xq65d36tfqz7f98gy4y2.txt",
+            "bytes": 66768,
+            "sha256": "32ee3a44eb251d2facf59e965fcdcc69242ef6c77d673d2caa6731f8098ea3f7"
+        },
+        {
+            "path": "external/experiment/captures/qd7fd2dv0eqy78qnqkbr5ekeqn8gzj8h.txt",
+            "bytes": 89361,
+            "sha256": "6ccf53893c1c8f86dfdc020f2d8251317ad03e530f08c083c1fa90a522b60de5"
+        },
+        {
+            "path": "external/experiment/check-runtime-query.txt",
+            "bytes": 477,
+            "sha256": "0055903c73df31511def8bbcd7d5a315fc3550bbecc42ec5a6f1395ac66a768d"
+        },
+        {
+            "path": "external/experiment/checkpoint-screen.txt",
+            "bytes": 4771,
+            "sha256": "7f65081f81dc39285150a2841e3bbfcb842f0474fc5da518fb1e18a890bbadfd"
+        },
+        {
+            "path": "external/experiment/checkpoint.png",
+            "bytes": 825973,
+            "sha256": "a34cda2c4c7ce7f460a5f8826bcad649301cf919ded251b3085456984cc3dd88"
+        },
+        {
+            "path": "external/experiment/code-manifest.json",
+            "bytes": 16741,
+            "sha256": "e3da7c526fd609bda1ddaeb11f409dabad584bc1f28cf0606cce77acebf05149"
+        },
+        {
+            "path": "external/experiment/code/convex/admin.ts",
+            "bytes": 2276,
+            "sha256": "bebf4d52afea9467767e6a912cf2bcfd104d475dcb72b219dc5349bec415a2db"
+        },
+        {
+            "path": "external/experiment/code/convex/adminOperations.ts",
+            "bytes": 22850,
+            "sha256": "005c3153e99d0a69387a75cf78c90b5845672c69b90b2f870bfda0bbe9d93652"
+        },
+        {
+            "path": "external/experiment/code/convex/audit.ts",
+            "bytes": 1014,
+            "sha256": "4ecd325e8cc3fc0f1570462e51fc19eb1c1297c7a50a42cb3a3fd0b4e261c399"
+        },
+        {
+            "path": "external/experiment/code/convex/auth.config.ts",
+            "bytes": 151,
+            "sha256": "9f733fef6c753526cf58933194937909f7be2c64d131a2d8ccc355c932180371"
+        },
+        {
+            "path": "external/experiment/code/convex/auth.ts",
+            "bytes": 231,
+            "sha256": "3d330ae4fdcf7341e910125b3d53c0f547facdccb08abb845b99888c40d18d5c"
+        },
+        {
+            "path": "external/experiment/code/convex/browserPreview.ts",
+            "bytes": 6161,
+            "sha256": "a9a5ae47227f2a378ce0b5a1539c71b1ee1ed5d693ce9a4f3887a817698b6c16"
+        },
+        {
+            "path": "external/experiment/code/convex/browserPreviewInternals.ts",
+            "bytes": 5797,
+            "sha256": "426ebc8e528df6f8f9a141508acc42fb62409da75367dce8ceb6313f15d169b9"
+        },
+        {
+            "path": "external/experiment/code/convex/claimGeneration.ts",
+            "bytes": 44147,
+            "sha256": "f5b81ac72ca566c3f4b0d460fa106361ffed84669744a9d950c0985e8cd218ad"
+        },
+        {
+            "path": "external/experiment/code/convex/companyCoverImage.ts",
+            "bytes": 3761,
+            "sha256": "11cdf344decaca69432aae319f1f4c94054cdab64bdff476331a9a214297f756"
+        },
+        {
+            "path": "external/experiment/code/convex/companyResolution.ts",
+            "bytes": 35362,
+            "sha256": "aee832b79a520e34bbcc78c9ca40e379d0d9e892e7ae69bdae606fa0d0b9254b"
+        },
+        {
+            "path": "external/experiment/code/convex/convex.config.ts",
+            "bytes": 1070,
+            "sha256": "8fbba176deb1e8ecff9fe3fe3d31d24ae4a07ba0e7652fd2c9cdc245eaf37089"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/claimCanonicalization.ts",
+            "bytes": 3855,
+            "sha256": "5c8eb1942d60fff2ed7bb7149732a61116125809a5de2188401c45ee0d64c75a"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/claims.ts",
+            "bytes": 1215,
+            "sha256": "9ec3cca5ccc246b5d96fc3c878fde098b6ed22c7e6e592e5e98e0a8fe1c412bb"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/claimValidation.ts",
+            "bytes": 7218,
+            "sha256": "72b223519c66b137ef316d21a6360b8a6455e075cc410a079b901bdff8e05ddc"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/companyMetadata.ts",
+            "bytes": 1438,
+            "sha256": "eeb3daeb5a8bb1f9beda73ce7365763c65e7f0241d526b80098d78e00ae552b7"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/coverImageUrl.ts",
+            "bytes": 1687,
+            "sha256": "271678c312fb93238c7b1f4f547230ca13da0c438d98e474aa46e417f7adc048"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/evidenceArtifacts.ts",
+            "bytes": 963,
+            "sha256": "6c36885cfaabc1e0909be15d0f1b530d269d97874cce6aeec06cbbb55b0e4b9a"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/evidenceAuthority.ts",
+            "bytes": 5979,
+            "sha256": "34ddc44f3c917679b824ac3155f38caac4a43769ff8103cbc97c34616fd8aba2"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/evidenceAvailabilityPolicy.ts",
+            "bytes": 1322,
+            "sha256": "810691ce66a064951f2703d5650406d86631963226986b1001c2ae301f7b0d61"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/evidenceFailure.ts",
+            "bytes": 2143,
+            "sha256": "ab076a823da9c324b5a3587535d13567512a5d7e0d193d39542fae165d713517"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/evidenceFanout.ts",
+            "bytes": 3147,
+            "sha256": "118d80ed8221e92c93607b62a862bbfcf3305d7177e460767986539c31fd02f7"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/evidenceLimits.ts",
+            "bytes": 1342,
+            "sha256": "cf12a2a7c083e7577dd7c2686e6a064a512f927c95bb9c3639b6489974300bb3"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/evidencePolicy.ts",
+            "bytes": 11598,
+            "sha256": "a884bb4f303c4cdcf98c6132710458e110e4190904b17b0978e74c355db5c7cf"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/executionClaim.ts",
+            "bytes": 6959,
+            "sha256": "1346fdac948934b714e407b18e85e1fec6c5a760223c1261a3cb3a3497a1ccef"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/invitationCodes.ts",
+            "bytes": 486,
+            "sha256": "6c5bc2d4ee8aeecd863e26f628c5e20ec216a04cb1bdb7572d8377b92f98f383"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/manualSourceIntake.ts",
+            "bytes": 3960,
+            "sha256": "314d64fe1281e5484053c784bc4393ae99ae273dda4cf60f95210b5433199eed"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/previewCache.ts",
+            "bytes": 965,
+            "sha256": "6ac51711acf63e38a4fcb9c83e4771ff1ab6820878b395f2ed6030783334d0ce"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/providerAvailability.ts",
+            "bytes": 569,
+            "sha256": "0c1ca891f984961992fb2e8279df4038e9f0b41224da75540396261478035e43"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/publicSourceUrl.ts",
+            "bytes": 4915,
+            "sha256": "5fdef79a131f0ad048476ccaa464e996a013eb083a6a53f819c21a42fae32a7c"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/researchPlan.ts",
+            "bytes": 6060,
+            "sha256": "d24dabbaa5c327db3f4245baead26e0b25bcbe987188fe90cf5dc8bb59cd2938"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/showcaseManifest.ts",
+            "bytes": 7344,
+            "sha256": "c3250e898cf690d9e2272407ccf6f0276f36986db50780f5a172e13fd1b1aa9f"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceCandidateCapacity.ts",
+            "bytes": 1654,
+            "sha256": "7fecfff7ff4cdbe9c7a615bc4608bdec4ca7c7c37c2847d92540e598d79a76ab"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceComparison.ts",
+            "bytes": 53628,
+            "sha256": "d91b51b2767e241d4f61d876ccb548509c870a2b7d331c362bec02f5af28411e"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceComparisonContext.ts",
+            "bytes": 10417,
+            "sha256": "3ce5168cc7c08722a1d3789da98632251bf0d8283c496b9c0da7c1370f36c4ef"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceDiscoveryRecovery.ts",
+            "bytes": 7738,
+            "sha256": "f6ab252ad9f01f060f20b12dc3557c13e864740581e6dc5f083604492c224bd7"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourcePassages.ts",
+            "bytes": 31546,
+            "sha256": "275d170f27e3751192ed313b25345176186b66c5275ecdda86ce6e9fcbc76404"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourcePreparationAuthority.ts",
+            "bytes": 19147,
+            "sha256": "8a8061b937849cca837d5df4f2698223831335c791c0bc1df9dbd823c8217da8"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourcePreparationReview.ts",
+            "bytes": 21205,
+            "sha256": "786f1a8e00b0b7751fa488fa0b709ada352640e2578dee1160d6c2ca7f026008"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceQualification.ts",
+            "bytes": 22634,
+            "sha256": "79b8db00b778f20fde25ec6758efc6435901b99ced05cc1850752aeb8faa5b70"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceRetrievalPolicy.ts",
+            "bytes": 5081,
+            "sha256": "b26fed7d2675b85154e4f51958956c3128ef3cc780826e039de9f6679c1a9ced"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceReviewProjection.ts",
+            "bytes": 1380,
+            "sha256": "f94ec0aeccea4c1b84b5510ce58568bf310c7bb9a5543927a2c287fdca3dbcc5"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceReviewReads.ts",
+            "bytes": 6490,
+            "sha256": "549a10e527b9d29b26cd59776c2795957628e37f93c44928225f5dbac6264d6f"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceSelectionPolicy.ts",
+            "bytes": 82642,
+            "sha256": "18a03b111dacbbfa546e97b183fa65670aefed917316e20b7e0a78eb0932db08"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/sourceUsage.ts",
+            "bytes": 25759,
+            "sha256": "cc148e2ab8fc457547d96a0193aed1edd9f00e7a912046ba558f1ddac9e38d50"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/transitions.ts",
+            "bytes": 2381,
+            "sha256": "636a1ec6b3b678811e761c4f1ded397443a037d9ec579f3992ef3f09c96d103d"
+        },
+        {
+            "path": "external/experiment/code/convex/domain/validators.ts",
+            "bytes": 4512,
+            "sha256": "9a2a19aff5c9419721611ebe026b807f6a7eb5d7c36aec611c5e04c17588e1f7"
+        },
+        {
+            "path": "external/experiment/code/convex/e2eFixtures.ts",
+            "bytes": 109952,
+            "sha256": "982d2818ef6eee4117ab63fb44c0d8574fe05bfad752b69687d24f9698428578"
+        },
+        {
+            "path": "external/experiment/code/convex/evidenceActions.ts",
+            "bytes": 36146,
+            "sha256": "7dc6e7932e60d5d5f52183499a86b674e24c63e9b0f81a4693d9ac3a15599170"
+        },
+        {
+            "path": "external/experiment/code/convex/evidenceArtifacts.ts",
+            "bytes": 45058,
+            "sha256": "561cd81674f36e4038f41d9a55ee6a83711a0082a19eb26a00cc8a677bc3b260"
+        },
+        {
+            "path": "external/experiment/code/convex/evidenceExecution.ts",
+            "bytes": 22479,
+            "sha256": "3133f515992ece7e01f6a559c5acea9c8a9b3af703768476cf5f3eaad9dde827"
+        },
+        {
+            "path": "external/experiment/code/convex/evidenceMatrix.ts",
+            "bytes": 28108,
+            "sha256": "039e0923657cf398b7427a0adf6525686c702b479afac895787939561ab6652f"
+        },
+        {
+            "path": "external/experiment/code/convex/evidenceSufficiency.ts",
+            "bytes": 8913,
+            "sha256": "bbbfa61292676db37da33e3e1567886be80a121c97151bb941b61c8e7c442195"
+        },
+        {
+            "path": "external/experiment/code/convex/evidenceWorkflow.ts",
+            "bytes": 19298,
+            "sha256": "c7b2a09a58eea1a6bcfc5fbe0f44e2ac1add12130eba8bda33eeb5135604bc02"
+        },
+        {
+            "path": "external/experiment/code/convex/exaDiscoveryActions.ts",
+            "bytes": 12217,
+            "sha256": "39d5874cc9ea54a09ce1b2b27b15c7577dcb92cf6257db01a5c5a012ef361918"
+        },
+        {
+            "path": "external/experiment/code/convex/fixtureManifestStore.ts",
+            "bytes": 6203,
+            "sha256": "b36255d994247545d39841eb41c993a1a5a023790d1b82f0e50fe3770387c9b8"
+        },
+        {
+            "path": "external/experiment/code/convex/fixtures/cccShowcase.ts",
+            "bytes": 5615,
+            "sha256": "312442a2b0dc8764ed061b52c6966c2f2294c418d21b205ed6cb6ff043e4b768"
+        },
+        {
+            "path": "external/experiment/code/convex/http.ts",
+            "bytes": 153,
+            "sha256": "7694f7c76d47610b8040675ef1a4451b5c0debb3f162abb49ca0650710c6c997"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/approvedSourceRetrieval.ts",
+            "bytes": 1132,
+            "sha256": "0536ed9cf2eb1c7b2bffab288dfb6d81dcfdbf57bb9cd0410091f1cf7656831f"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/evidenceNormalization.ts",
+            "bytes": 9303,
+            "sha256": "91c1152c5ffde7fbd6b094820575267c634d00031c8d2f4e97031142accf0eb0"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/exa.ts",
+            "bytes": 21294,
+            "sha256": "3c15973694405e83efa1198af97b47c5fc9221b98285d0881a1d278596381ca6"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/exaContentsClient.ts",
+            "bytes": 3364,
+            "sha256": "6152ff8ac35f47fe55f5bba5fdab302b5ab5b1874f60eb4b016b744375a5133a"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/exaEvidence.ts",
+            "bytes": 2736,
+            "sha256": "f5a18532da3f163b2b261f7c3cbd7241647e14686ad4190966db7ee773ee4105"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/publicPdfEvidence.ts",
+            "bytes": 17730,
+            "sha256": "9214afea99f144c95b46b226a6ac269b89a464a5e48e1b8e33958c2bcfabf1f5"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/sec.ts",
+            "bytes": 28016,
+            "sha256": "c09c9b15df30f5758aca342c894c3aaf5c87ebf4bf8456241668d12ff02e5fbe"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/secEvidence.ts",
+            "bytes": 4403,
+            "sha256": "9a99d71c6bbb1ed97cb4a13c983bc0d2fd05471cdabe6025eaafff5e75ba31f9"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/showcaseClaimAdapter.ts",
+            "bytes": 7204,
+            "sha256": "2fbe50dff24affcaddc0328315f84369a247ebeb02c0dd54a7e47f37f86f4883"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/showcaseVerifierAdapter.ts",
+            "bytes": 7516,
+            "sha256": "fe51fe7f27396c3c97652d66f12ffafafa37c3a906d80a324d562dbc04e92b6c"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/sourceEmbeddings.ts",
+            "bytes": 5414,
+            "sha256": "4f2f9440f4d653038802ad7d700d1cde28bf35bc5e746d912c14cc8a467da9f0"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/sourceQualification.ts",
+            "bytes": 14067,
+            "sha256": "7480331672c13b1c6fe5630f7c15a72c750cafbea510db2f0312cafca88d0434"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/sourceQualificationConfig.ts",
+            "bytes": 674,
+            "sha256": "b634df12445e109bc617c7fc7afa084f3f681746420fc6886360bf2c0ae05874"
+        },
+        {
+            "path": "external/experiment/code/convex/integrations/websiteResolver.ts",
+            "bytes": 7318,
+            "sha256": "7e6843c5e1955154995fdc27e306eef06ef78a4a6e39b00ed7474a73f9a6249d"
+        },
+        {
+            "path": "external/experiment/code/convex/invitations.ts",
+            "bytes": 14998,
+            "sha256": "1bbc663daf8b7974fd79093a88c55dae40ed8c8fcaf8e95a7a9add7d2747c26f"
+        },
+        {
+            "path": "external/experiment/code/convex/policyEvaluations.ts",
+            "bytes": 41606,
+            "sha256": "e84ddb489cdee605370e48e131f2fcdedfb8dccffcb34d4c813067e3e0f1a19b"
+        },
+        {
+            "path": "external/experiment/code/convex/providerCalls.ts",
+            "bytes": 34410,
+            "sha256": "3df979115268115e16dffee3060d6bb1097a019dd8a41f707ad56f89d6c7c9e4"
+        },
+        {
+            "path": "external/experiment/code/convex/rateLimiter.ts",
+            "bytes": 1033,
+            "sha256": "3f6a3d66992a5e26aebd7d47ff57914159c96a407a041b8fbb8aef5b85f27b3b"
+        },
+        {
+            "path": "external/experiment/code/convex/researchLaunch.ts",
+            "bytes": 10476,
+            "sha256": "436f19dd472f2e06449ed12ada91639ec7847971ea969bc4a0cd1cc007cbe1c1"
+        },
+        {
+            "path": "external/experiment/code/convex/researchPlanning.ts",
+            "bytes": 6127,
+            "sha256": "8729a7f1202f0f5907feb016c0613538fb082163158089e6bf8798f0a13cb74e"
+        },
+        {
+            "path": "external/experiment/code/convex/researchRuns.ts",
+            "bytes": 12592,
+            "sha256": "6effeac630a309c519189dc83460dcc21cf2c84f018399abaa1c4ec146defced"
+        },
+        {
+            "path": "external/experiment/code/convex/researchWorkflow.ts",
+            "bytes": 8856,
+            "sha256": "a918244486a7bbc3c8603eb5468fee52eeadff36f6326dcb4206dd6e71f3d9af"
+        },
+        {
+            "path": "external/experiment/code/convex/resourceLimits.ts",
+            "bytes": 6036,
+            "sha256": "69ee25e73c6356597b6c3ea56524cd9f274707e09bab4333bd4a716ae0952532"
+        },
+        {
+            "path": "external/experiment/code/convex/retrievalEvaluation.ts",
+            "bytes": 24970,
+            "sha256": "7adc36cf73581627baa878994d2b782dfdf7da7ea1bf5cc5e1e8d3e3b9cf4f97"
+        },
+        {
+            "path": "external/experiment/code/convex/schema.ts",
+            "bytes": 49244,
+            "sha256": "da41e088fe551c818433ecf3ee12af35634c766eae9ae2e7596d3f6c06edb3ee"
+        },
+        {
+            "path": "external/experiment/code/convex/sourceActions.ts",
+            "bytes": 27556,
+            "sha256": "6ecdbd487530d60f2013c9e2d208e5cf01732ad709da3f865ed7a9a03f40522f"
+        },
+        {
+            "path": "external/experiment/code/convex/sourceCaptures.ts",
+            "bytes": 15767,
+            "sha256": "d0de38184c1f348d9805a5a21855025c085206211fee2d947c3247980899d916"
+        },
+        {
+            "path": "external/experiment/code/convex/sourceDiscovery.ts",
+            "bytes": 12315,
+            "sha256": "3516171c00467011c344938ca1423b10e9c2335f8d9c2487b2c4580ba14a37eb"
+        },
+        {
+            "path": "external/experiment/code/convex/sourceDiscoveryActions.ts",
+            "bytes": 6736,
+            "sha256": "dbd0907d8aa8a6fd590ce5bdcfe9b9c7124758ceb933f2c4c6aefc5a927cec61"
+        },
+        {
+            "path": "external/experiment/code/convex/sourceIntake.ts",
+            "bytes": 5298,
+            "sha256": "7e6ea21c93768f5699862cf5612d79174980b12e659af7348073608057aa761c"
+        },
+        {
+            "path": "external/experiment/code/convex/sourcePreparation.ts",
+            "bytes": 91285,
+            "sha256": "04efc73b8a668dcc388527d584d0a8cce4beb9f84ae4a36c8cf00d4864bf1cdb"
+        },
+        {
+            "path": "external/experiment/code/convex/sourcePreparationActions.ts",
+            "bytes": 69476,
+            "sha256": "0671d56e9a639e00245308665d01bf7342ebf57d19fbd69c859fe8c0cf363c71"
+        },
+        {
+            "path": "external/experiment/code/convex/sourcePreparationWorkflow.ts",
+            "bytes": 10303,
+            "sha256": "fbffee54d406ed215880877977424e907dd761e79ed8b426e41a67ca3b61abe3"
+        },
+        {
+            "path": "external/experiment/code/convex/sourceRetrieval.ts",
+            "bytes": 26364,
+            "sha256": "9868df91d58a291c75773bcc15e9e959cf79acaa4c6a245e3af6961d2b5cd5fe"
+        },
+        {
+            "path": "external/experiment/code/convex/sourceRetrievalActions.ts",
+            "bytes": 21881,
+            "sha256": "7db3c0347c5a0e50ffac2b94ad7d4b82b6b67b83706f1cd4394adecdd3082a2c"
+        },
+        {
+            "path": "external/experiment/code/convex/sources.ts",
+            "bytes": 28711,
+            "sha256": "3720beb2c8d5bd54ad3d8fffeb48f1694b3510dc7786adff4f6d742c8f59aaf8"
+        },
+        {
+            "path": "external/experiment/code/convex/sourceSelectionProposalActions.ts",
+            "bytes": 26481,
+            "sha256": "32d234bcef555c6299fdf6cdac53df45de03699e6254e1781b0eeefd89668492"
+        },
+        {
+            "path": "external/experiment/code/convex/sourceSelectionProposals.ts",
+            "bytes": 95301,
+            "sha256": "e3fce96ada06a437dd2398e68bfae1e2c81d9b9da4ff32a7991372d101e6e5b9"
+        },
+        {
+            "path": "external/experiment/code/convex/tsconfig.json",
+            "bytes": 545,
+            "sha256": "801f484f1b80fcf3e9ccf69bf66c065df4b137cf4b56c617c8ba7abb17b4161c"
+        },
+        {
+            "path": "external/experiment/code/convex/visitors.ts",
+            "bytes": 504,
+            "sha256": "bc0e3b4709e869f9fd2ccbf30a6289599f9fdff3bc27600f518cec4d744920cd"
+        },
+        {
+            "path": "external/experiment/code/convex/workflow.ts",
+            "bytes": 1717,
+            "sha256": "66b2846de2178289841296acc7ecbfe3fbf564ecd25f6da5382985d3fced469f"
+        },
+        {
+            "path": "external/experiment/code/convex/workflowControls.ts",
+            "bytes": 11392,
+            "sha256": "4cc4cab0316f9cb249e2173969419115cb2231ca55e2f9d3e74af4d512b3eb1d"
+        },
+        {
+            "path": "external/experiment/code/package.json",
+            "bytes": 4867,
+            "sha256": "f061b18fc93069bf98d8fb26e8f9d433de32ce97fb3f61b6cb62a393ea360e5d"
+        },
+        {
+            "path": "external/experiment/code/pnpm-lock.yaml",
+            "bytes": 238548,
+            "sha256": "a43ac58693d8e8a10d23576c562a7078f448f3a7db653e455a9482625502457c"
+        },
+        {
+            "path": "external/experiment/configuration.json",
+            "bytes": 339,
+            "sha256": "c87fbdf99a9385aca87861feec17ecdecd583fa96fe66947c85df78516f2bb2e"
+        },
+        {
+            "path": "external/experiment/drive.mjs",
+            "bytes": 3733,
+            "sha256": "9d1260a7c04f03824e699bf37072dd18fa4800b65fa34cb5312e93a2c412e52d"
+        },
+        {
+            "path": "external/experiment/endpoints-preflight.json",
+            "bytes": 153972,
+            "sha256": "f0edbcbc0b7784864a550f8a399fbf547c2e5e2e08443d466d2721b507a3f4cb"
+        },
+        {
+            "path": "external/experiment/export-captures.mjs",
+            "bytes": 2172,
+            "sha256": "39755230b4a8bc3385b92ed7d4835d161267b382ece0b5bd53d73cb8df3a068d"
+        },
+        {
+            "path": "external/experiment/interim-failures-query.txt",
+            "bytes": 335,
+            "sha256": "0c98a49d4c341fe1d5eb44f1d026fa766c5bd0fac78d9f06722397d999050f87"
+        },
+        {
+            "path": "external/experiment/interim-failures.json",
+            "bytes": 1195,
+            "sha256": "62ffc5289e2d438e7de1b24a080d99388b9ab39f2b963835212ab0d2378bc08a"
+        },
+        {
+            "path": "external/experiment/launch-click.json",
+            "bytes": 66,
+            "sha256": "1183b2eb31ddd27bab7cd97068bf5f67da95b5795771bab524b5ef04097b15c5"
+        },
+        {
+            "path": "external/experiment/logs.mjs",
+            "bytes": 1241,
+            "sha256": "83a289ba319d1966cb3c1780ead001f6cd8b1e029805fed9fc41bc57301228ae"
+        },
+        {
+            "path": "external/experiment/models-preflight.json",
+            "bytes": 8419,
+            "sha256": "3ff2cd5fea36b7d09959e5867ce79cfd8083a226f9903eb4274615729a11de65"
+        },
+        {
+            "path": "external/experiment/native-log-cursor.json",
+            "bytes": 55,
+            "sha256": "52665a481c8d2e5d0c455c09f689ef393c81669f2b7c33ef0c78c5247da0beb9"
+        },
+        {
+            "path": "external/experiment/native-timings.jsonl",
+            "bytes": 3552128,
+            "sha256": "6cef5b4f9f63036c9dd92d93a708bac206ebbe1a034ad318c1f59dd8174c3bc0"
+        },
+        {
+            "path": "external/experiment/observations.jsonl",
+            "bytes": 50500,
+            "sha256": "96ea458e3f09587d64243ad3e84ff558f0875e9623359f323e951f45f8539e7c"
+        },
+        {
+            "path": "external/experiment/observe.mjs",
+            "bytes": 3949,
+            "sha256": "fba0a5e5d5ee3fdaa43c82953740421288b52cbe7970b67e606ec6661ad653ba"
+        },
+        {
+            "path": "external/experiment/preflight.mjs",
+            "bytes": 2515,
+            "sha256": "f96eda53344fdaf401f5a330db9254d535dadf6c058a352756a3a091011f0606"
+        },
+        {
+            "path": "external/experiment/previous-runs-after.json",
+            "bytes": 477205,
+            "sha256": "0c012d262bdb3b633e0c4d927fcbcbdc857a8b3549d46b0aabb76e43c64b5104"
+        },
+        {
+            "path": "external/experiment/previous-runs-before.json",
+            "bytes": 477205,
+            "sha256": "0c012d262bdb3b633e0c4d927fcbcbdc857a8b3549d46b0aabb76e43c64b5104"
+        },
+        {
+            "path": "external/experiment/protocol.json",
+            "bytes": 1918,
+            "sha256": "b097ca8fe6909c4f71099e49e5af32e26296dc317991ccc044b67f05289868b7"
+        },
+        {
+            "path": "external/experiment/query.mjs",
+            "bytes": 997,
+            "sha256": "67ef9117525ac3b4f5c8a9839a55a56a16bf6393afad1101280e755aae9b11e9"
+        },
+        {
+            "path": "external/experiment/run.json",
+            "bytes": 166,
+            "sha256": "5b4eee10d0192d92fb123d7e077df62dd39e29d3b0846e270d8580d2a299c0f3"
+        },
+        {
+            "path": "external/experiment/runtime-confirmation.json",
+            "bytes": 1262,
+            "sha256": "34b3ece7e147cf06fad375c5fa05efcfdaf72e16e2fee09d6a08a940619c35eb"
+        },
+        {
+            "path": "external/experiment/step.mjs",
+            "bytes": 386,
+            "sha256": "cf79a7700bc8712325a6cb603f9433b1f9b3b55b61c3ef4845eeb032bd76c2e3"
+        },
+        {
+            "path": "external/experiment/supplement-analysis.mjs",
+            "bytes": 3887,
+            "sha256": "e967557dec44be243a7f4c1bbac0acf8db22ddfd1a5af606725bfdb4d74afc09"
+        },
+        {
+            "path": "repository/docs/verification/2026-10-25-source-preparation-live-comparison.md",
+            "bytes": 6363,
+            "sha256": "26b2cb2d52fdb13236428365f2ca18189db8a947ef39fc3fe588be796c69a961"
+        },
+        {
+            "path": "repository/docs/verification/artifacts/2026-10-25-source-preparation-live-comparison.json",
+            "bytes": 24036,
+            "sha256": "f0f27bacc5389573c977facee6e2d496a9d72a7980da91999097b3bd09639cc5"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261025T065800705Z-source-preparation-live-after.tar.gz",
+        "bytes": 6329492,
+        "sha256": "0d8649ba3bb5a41d966b28b52f21ffba9cd9d92372c667484aa03cbafdde5352"
+    },
+    "verification": "restored_and_verified"
+}

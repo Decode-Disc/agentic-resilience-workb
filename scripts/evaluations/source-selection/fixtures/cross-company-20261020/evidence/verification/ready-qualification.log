@@ -1,0 +1,26 @@
+{
+  "studyId": "cross-company-source-quality-20261020",
+  "status": "prepared",
+  "mode": "offline",
+  "entrypoint": "qualification",
+  "manifestSha256": "8ce2324406b1a651d54ff29a594a53b21adff252edc5a86e143cb4f5f1d306be",
+  "plannedCalls": 416,
+  "byTask": {
+    "choices": 320,
+    "qualification": 64,
+    "comparison": 32
+  },
+  "documents": 32,
+  "controls": 16,
+  "blockers": [],
+  "quoteBlockers": [],
+  "maximumReservationUsd": 2.905615338,
+  "actualAttempts": 0,
+  "unresolvedAttempts": 0,
+  "conservativeCostUsd": 0,
+  "providerRequests": 0,
+  "appWrites": 0,
+  "integrationExcludedModels": [
+    "openai/gpt-6-luna-decisions"
+  ]
+}

@@ -14,7 +14,7 @@ export function CompanyResolutionCard({
     company: ResolvedCompany;
 }) {
     return (
-        <article className="surface-panel rounded-xl p-4" aria-live="polite">
+        <article className="surface-panel p-4" aria-live="polite">
             <div className="flex min-w-0 gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                     <CompanyFaviconAvatar company={company} size="sm" />

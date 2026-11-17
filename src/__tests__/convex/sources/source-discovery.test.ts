@@ -27,7 +27,12 @@ const discoverForRun = makeFunctionReference<
     {
         runId: Id<"researchRuns">;
         cik: string;
-        filings: [];
+        filings: Array<{
+            accessionNumber: string;
+            form: string;
+            filingDate: string;
+            primaryDocument: string;
+        }>;
     },
     { total: number }
 >("sourceDiscoveryActions:discoverForRun");
@@ -51,6 +56,7 @@ test("persists unique candidates with pending decisions", async () => {
     const t = convexTest(schema, modules);
     const { runId, corpusRevisionId } = await t.run(async (ctx) => {
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             lifecycleState: "discovering_sources",
             executionStatus: "running",
             executionGeneration: 1,
@@ -121,6 +127,7 @@ test("rejects candidates from a stale or cancelled generation", async () => {
     const t = convexTest(schema, modules);
     const { runId, corpusRevisionId } = await t.run(async (ctx) => {
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             lifecycleState: "discovering_sources",
             executionStatus: "cancelled",
             executionGeneration: 2,
@@ -164,6 +171,7 @@ test("atomically truncates new discovery candidates to the remaining dossier cap
     const t = convexTest(schema, modules);
     const { runId, corpusRevisionId } = await t.run(async (ctx) => {
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             lifecycleState: "discovering_sources",
             executionStatus: "running",
             executionGeneration: 1,
@@ -236,6 +244,7 @@ test("persists an actionable failure when Exa is not configured", async () => {
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",
@@ -255,7 +264,7 @@ test("persists an actionable failure when Exa is not configured", async () => {
         });
         await ctx.db.insert("researchPlans", {
             runId,
-            version: 1,
+            version: 2,
             coveragePreset: "balanced",
             queries: [],
             createdAt: 1,
@@ -295,6 +304,7 @@ test("stops discovery before the next provider call when the dossier is full", a
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",
@@ -314,7 +324,7 @@ test("stops discovery before the next provider call when the dossier is full", a
         });
         await ctx.db.insert("researchPlans", {
             runId,
-            version: 1,
+            version: 2,
             coveragePreset: "balanced",
             queries: [
                 {
@@ -353,3 +363,144 @@ test("stops discovery before the next provider call when the dossier is full", a
         t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).resolves.toHaveLength(0);
 });
+
+test("prioritizes material SEC filings over recent ownership and equity forms", async () => {
+    delete process.env.EXA_API_KEY;
+    const t = convexTest(schema, modules);
+    const runId = await t.run(async (ctx) => {
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1373715",
+            legalName: "ServiceNow, Inc.",
+            ticker: "NOW",
+            exchange: "NYSE",
+            canonicalizedAt: 1,
+        });
+        const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
+            companyId,
+            coveragePreset: "balanced",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+            executionGeneration: 1,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const corpusRevisionId = await ctx.db.insert("corpusRevisions", {
+            runId,
+            revision: 1,
+            status: "draft",
+            createdAt: 1,
+        });
+        await ctx.db.patch(runId, {
+            activeCorpusRevisionId: corpusRevisionId,
+        });
+        await ctx.db.insert("researchPlans", {
+            runId,
+            version: 2,
+            coveragePreset: "balanced",
+            queries: [],
+            createdAt: 1,
+        });
+        return runId;
+    });
+
+    await t.action(discoverForRun, {
+        runId,
+        cik: "1373715",
+        filings: [
+            filing("4", "2026-08-06", "0001"),
+            filing("144", "2026-08-05", "0002"),
+            filing("S-8", "2026-08-04", "0003"),
+            filing("3", "2026-08-03", "0004"),
+            filing("4", "2026-08-02", "0005"),
+            filing("8-K", "2026-08-01", "0006"),
+            filing("10-Q", "2026-07-23", "0007"),
+            filing("8-K", "2026-07-22", "0008"),
+            filing("10-K", "2026-01-29", "0009"),
+            filing("DEF 14A", "2026-04-10", "0010"),
+        ],
+    });
+
+    const sources = await t.run((ctx) => ctx.db.query("sources").collect());
+    expect(sources.map(({ secForm }) => secForm)).toEqual([
+        "10-K",
+        "10-Q",
+        "8-K",
+        "8-K",
+    ]);
+    expect(sources.map(({ providerReference }) => providerReference)).toEqual([
+        "0009",
+        "0007",
+        "0006",
+        "0008",
+    ]);
+});
+
+test("admits relevant specialized SEC forms only for an explicit research angle", async () => {
+    delete process.env.EXA_API_KEY;
+    const t = convexTest(schema, modules);
+    const runId = await t.run(async (ctx) => {
+        const companyId = await ctx.db.insert("companies", {
+            cik: "1373715",
+            legalName: "ServiceNow, Inc.",
+            ticker: "NOW",
+            exchange: "NYSE",
+            canonicalizedAt: 1,
+        });
+        const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
+            companyId,
+            coveragePreset: "balanced",
+            researchAngle: "governance, executive compensation and ownership",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+            executionGeneration: 1,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const corpusRevisionId = await ctx.db.insert("corpusRevisions", {
+            runId,
+            revision: 1,
+            status: "draft",
+            createdAt: 1,
+        });
+        await ctx.db.patch(runId, { activeCorpusRevisionId: corpusRevisionId });
+        await ctx.db.insert("researchPlans", {
+            runId,
+            version: 2,
+            coveragePreset: "balanced",
+            queries: [],
+            createdAt: 1,
+        });
+        return runId;
+    });
+
+    await t.action(discoverForRun, {
+        runId,
+        cik: "1373715",
+        filings: [
+            filing("10-K", "2026-01-29", "annual"),
+            filing("DEF 14A", "2026-04-10", "proxy"),
+            filing("4", "2026-08-06", "ownership"),
+            filing("S-8", "2026-08-04", "financing"),
+        ],
+    });
+
+    const sources = await t.run((ctx) => ctx.db.query("sources").collect());
+    expect(sources.map(({ secForm }) => secForm)).toEqual([
+        "10-K",
+        "4",
+        "DEF 14A",
+    ]);
+});
+
+function filing(form: string, filingDate: string, accessionNumber: string) {
+    return {
+        accessionNumber,
+        form,
+        filingDate,
+        primaryDocument: `${accessionNumber}.htm`,
+    };
+}

@@ -22,11 +22,28 @@ import {
 import type { DataModel } from "./dataModel.js";
 
 /**
- * Typesafe environment variables declared in `convex.config.ts`.
+ * Typesafe environment variables.
+ *
+ * This includes platform-provided env vars and any variables declared in
+ * `convex.config.ts`.
  */
 type Env = {
+  readonly CONVEX_CLOUD_URL: string;
+  readonly CONVEX_SITE_URL: string;
+  readonly CLOUDFLARE_ACCOUNT_ID: string | undefined;
+  readonly CLOUDFLARE_AI_TOKEN: string | undefined;
   readonly COMPANY_SEARCH_RESULT_LIMIT: string | undefined;
+  readonly E2E_FIXTURES_ENABLED: string | undefined;
+  readonly OPENROUTER_API_KEY: string | undefined;
+  readonly PREVIEW_CACHE_TTL_MS: string | undefined;
+  readonly SOURCES_PREPARATION_WINDOW_MINUTES: string | undefined;
   readonly SOURCE_CANDIDATE_LIMIT: string | undefined;
+  readonly SOURCE_PREPARATION_INCIDENT_LIMIT: string | undefined;
+  readonly SOURCE_PREPARATION_MAX_CONCURRENCY: string | undefined;
+  readonly SOURCE_PREPARATION_WORK_LIMIT: string | undefined;
+  readonly SOURCE_QUALIFICATION_ENABLED: string | undefined;
+  readonly SOURCE_RECOMMENDATION_CEILING: string | undefined;
+  readonly SOURCE_RETRIEVAL_MODE: "lexical" | "hybrid" | undefined;
 };
 
 /**
@@ -104,7 +121,10 @@ export declare const internalAction: ActionBuilder<DataModel, "internal">;
 export declare const httpAction: HttpActionBuilder;
 
 /**
- * Typesafe environment variables declared in `convex.config.ts`.
+ * Typesafe environment variables.
+ *
+ * This includes platform-provided env vars and any variables declared in
+ * `convex.config.ts`.
  */
 export declare const env: Env;
 

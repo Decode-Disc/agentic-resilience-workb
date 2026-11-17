@@ -66,54 +66,6 @@ describe("WorkspacePrototype", () => {
         vi.unstubAllGlobals();
     });
 
-    it("uses the global evidence workbench design system", () => {
-        renderWithInvitationAccess(
-            <WorkspacePrototype variant="a" onVariantChange={vi.fn()} />,
-        );
-
-        expect(
-            screen
-                .getByText("Throwaway UI prototype")
-                .closest(".theme-evidence-workbench"),
-        ).toBeNull();
-    });
-
-    it("places the research rail on a liquid-glass surface", () => {
-        renderWithInvitationAccess(
-            <WorkspacePrototype variant="a" onVariantChange={vi.fn()} />,
-        );
-
-        expect(
-            screen
-                .getByRole("navigation", { name: "Research dossier" })
-                .closest('[data-slot="liquid-glass-card"]'),
-        ).toBeTruthy();
-    });
-
-    it("scrolls each workspace column independently", () => {
-        renderWithInvitationAccess(
-            <WorkspacePrototype variant="a" onVariantChange={vi.fn()} />,
-        );
-
-        const researchNavigation = screen.getByRole("navigation", {
-            name: "Research dossier",
-        });
-        const evidenceMatrix = screen.getByRole("region", {
-            name: "Evidence matrix",
-        });
-        const dimensionContext = screen
-            .getByRole("heading", { name: "Dimension context" })
-            .closest("aside");
-
-        for (const column of [
-            researchNavigation,
-            evidenceMatrix,
-            dimensionContext,
-        ]) {
-            expect(column?.closest('[data-slot="scroll-area"]')).toBeTruthy();
-        }
-    });
-
     it("expands and collapses the compact dossier heading", async () => {
         renderWithInvitationAccess(
             <WorkspacePrototype variant="a" onVariantChange={vi.fn()} />,
@@ -122,12 +74,8 @@ describe("WorkspacePrototype", () => {
         const trigger = screen.getByRole("button", {
             name: "Expand dossier details",
         });
-        const stickyHeading = trigger.closest("header");
 
         expect(trigger.getAttribute("aria-expanded")).toBe("false");
-        expect(stickyHeading?.className).toContain("sticky");
-        expect(stickyHeading?.className).toContain("top-0");
-        expect(stickyHeading?.className).toContain("rounded-b-lg");
         expect(
             screen.queryByText(/Evidence-led review of workflow control/i),
         ).toBeNull();
@@ -151,39 +99,5 @@ describe("WorkspacePrototype", () => {
                 screen.queryByText(/Evidence-led review of workflow control/i),
             ).toBeNull();
         });
-    });
-
-    it("resizes the evidence and dimension panels", () => {
-        const onVariantChange = vi.fn();
-        const { container } = renderWithInvitationAccess(
-            <WorkspacePrototype
-                variant="a"
-                onVariantChange={onVariantChange}
-            />,
-        );
-
-        const panelGroup = container.querySelector(
-            '[data-slot="resizable-panel-group"]',
-        );
-
-        expect(panelGroup).toBeTruthy();
-        expect(
-            panelGroup?.querySelectorAll('[data-slot="resizable-panel"]')
-                .length,
-        ).toBe(2);
-        const handle = panelGroup?.querySelector(
-            '[data-slot="resizable-handle"]',
-        );
-
-        expect(handle).toBeTruthy();
-
-        const keyboardSeparator = document.createElement("div");
-        keyboardSeparator.setAttribute("role", "separator");
-        document.body.append(keyboardSeparator);
-
-        fireEvent.keyDown(keyboardSeparator, { key: "ArrowLeft" });
-
-        expect(onVariantChange).not.toHaveBeenCalled();
-        keyboardSeparator.remove();
     });
 });

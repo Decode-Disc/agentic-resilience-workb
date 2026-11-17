@@ -1,9 +1,9 @@
 "use client";
 
+import { Slot } from "@radix-ui/react-slot";
 import { Sparkles } from "lucide-react";
 import type React from "react";
-import { cloneElement, useEffect, useMemo, useRef, useState } from "react";
-import { Slot } from "@radix-ui/react-slot";
+import { cloneElement, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export interface LiquidMetalBorderButtonProps {
@@ -32,55 +32,11 @@ export function LiquidMetalBorderButton({
     const [ripples, setRipples] = useState<
         Array<{ x: number; y: number; id: number }>
     >([]);
-    const [contentWidth, setContentWidth] = useState<number>(0);
-    const contentRef = useRef<HTMLSpanElement>(null);
     const shaderRef = useRef<HTMLDivElement>(null);
     // biome-ignore lint/suspicious/noExplicitAny: External library without types
     const shaderMount = useRef<any>(null);
     const buttonRef = useRef<HTMLElement>(null);
     const rippleId = useRef(0);
-
-    useEffect(() => {
-        if (!contentRef.current) return;
-        const updateWidth = () => {
-            if (contentRef.current) {
-                setContentWidth(
-                    contentRef.current.offsetWidth ||
-                        contentRef.current.getBoundingClientRect().width,
-                );
-            }
-        };
-        updateWidth();
-        const observer = new ResizeObserver(updateWidth);
-        observer.observe(contentRef.current);
-        return () => observer.disconnect();
-    }, [children, label, viewMode]);
-
-    const dimensions = useMemo(() => {
-        if (viewMode === "icon") {
-            return {
-                width: 46,
-                height: 46,
-                innerWidth: 42,
-                innerHeight: 42,
-                shaderWidth: 46,
-                shaderHeight: 46,
-            };
-        } else {
-            const calculatedWidth =
-                contentWidth > 0
-                    ? Math.max(142, Math.ceil(contentWidth + 36))
-                    : 142;
-            return {
-                width: calculatedWidth,
-                height: 46,
-                innerWidth: calculatedWidth - 4,
-                innerHeight: 42,
-                shaderWidth: calculatedWidth,
-                shaderHeight: 46,
-            };
-        }
-    }, [viewMode, contentWidth]);
 
     useEffect(() => {
         const styleId = "shader-canvas-style-exploded";
@@ -111,45 +67,67 @@ export function LiquidMetalBorderButton({
             document.head.appendChild(style);
         }
 
+        let cancelled = false;
+        let idleHandle: number | null = null;
+        let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
         const loadShader = async () => {
             try {
                 const { liquidMetalFragmentShader, ShaderMount } = await import(
                     "@paper-design/shaders"
                 );
+                if (cancelled || !shaderRef.current) return;
 
-                if (shaderRef.current) {
-                    if (shaderMount.current?.destroy) {
-                        shaderMount.current.destroy();
-                    }
-
-                    shaderMount.current = new ShaderMount(
-                        shaderRef.current,
-                        liquidMetalFragmentShader,
-                        {
-                            u_repetition: 4,
-                            u_softness: 0.5,
-                            u_shiftRed: 0.3,
-                            u_shiftBlue: 0.3,
-                            u_distortion: 0,
-                            u_contour: 0,
-                            u_angle: 45,
-                            u_scale: 8,
-                            u_shape: 1,
-                            u_offsetX: 0.1,
-                            u_offsetY: -0.1,
-                        },
-                        undefined,
-                        0.6,
-                    );
+                if (shaderMount.current?.destroy) {
+                    shaderMount.current.destroy();
                 }
+
+                shaderMount.current = new ShaderMount(
+                    shaderRef.current,
+                    liquidMetalFragmentShader,
+                    {
+                        u_repetition: 4,
+                        u_softness: 0.5,
+                        u_shiftRed: 0.3,
+                        u_shiftBlue: 0.3,
+                        u_distortion: 0,
+                        u_contour: 0,
+                        u_angle: 45,
+                        u_scale: 8,
+                        u_shape: 1,
+                        u_offsetX: 0.1,
+                        u_offsetY: -0.1,
+                    },
+                    undefined,
+                    0.6,
+                );
             } catch (error) {
                 console.error("[v0] Failed to load shader:", error);
             }
         };
 
-        loadShader();
+        if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+            idleHandle = window.requestIdleCallback(() => {
+                void loadShader();
+            });
+        } else {
+            timeoutHandle = setTimeout(() => {
+                void loadShader();
+            }, 100);
+        }
 
         return () => {
+            cancelled = true;
+            if (
+                idleHandle !== null &&
+                typeof window !== "undefined" &&
+                "cancelIdleCallback" in window
+            ) {
+                window.cancelIdleCallback(idleHandle);
+            }
+            if (timeoutHandle !== null) {
+                clearTimeout(timeoutHandle);
+            }
             if (shaderMount.current?.destroy) {
                 shaderMount.current.destroy();
                 shaderMount.current = null;
@@ -238,6 +216,8 @@ export function LiquidMetalBorderButton({
         />
     ));
 
+    const isIconMode = viewMode === "icon";
+
     const interactiveProps = {
         ref: (node: HTMLElement | null) => {
             buttonRef.current = node;
@@ -249,10 +229,9 @@ export function LiquidMetalBorderButton({
         onMouseUp: () => setIsPressed(false),
         style: {
             position: "absolute",
-            top: 0,
-            left: 0,
-            width: `${dimensions.width}px`,
-            height: `${dimensions.height}px`,
+            inset: 0,
+            width: "100%",
+            height: "100%",
             background: "transparent",
             border: "none",
             cursor: "pointer",
@@ -260,8 +239,6 @@ export function LiquidMetalBorderButton({
             zIndex: 40,
             transformStyle: "preserve-3d",
             transform: "translateZ(25px)",
-            transition:
-                "all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, height 0.4s ease",
             overflow: "hidden",
             borderRadius: "100px",
         } satisfies React.CSSProperties,
@@ -278,32 +255,28 @@ export function LiquidMetalBorderButton({
                 <div
                     style={{
                         position: "relative",
-                        width: `${dimensions.width}px`,
-                        height: `${dimensions.height}px`,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minWidth: isIconMode ? "46px" : "142px",
+                        width: isIconMode ? "46px" : undefined,
+                        height: "46px",
+                        padding: isIconMode ? "0px" : "0px 18px",
                         transformStyle: "preserve-3d",
-                        transition:
-                            "all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, height 0.4s ease",
                         transform: "none",
                     }}>
                     <div
                         style={{
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            width: `${dimensions.width}px`,
-                            height: `${dimensions.height}px`,
+                            position: "relative",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             transformStyle: "preserve-3d",
-                            transition:
-                                "all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, height 0.4s ease",
                             transform: "translateZ(20px)",
                             zIndex: 30,
                             pointerEvents: "none",
                         }}>
                         <span
-                            ref={contentRef}
                             style={{
                                 display: "inline-flex",
                                 alignItems: "center",
@@ -311,9 +284,9 @@ export function LiquidMetalBorderButton({
                                 gap: "8px",
                                 fontSize: "14px",
                                 fontWeight: 400,
-                                color: isHovered ? "#ffffff" : "#d7d7d7",
+                                color: isHovered ? "#d7d7d7" : "#ffffff",
                                 textShadow: "0px 1px 2px rgba(0, 0, 0, 0.5)",
-                                transition: "all 0.3s ease",
+                                transition: "color 0.3s ease",
                                 whiteSpace: "nowrap",
                                 userSelect: "none",
                             }}>
@@ -324,21 +297,18 @@ export function LiquidMetalBorderButton({
                     <div
                         style={{
                             position: "absolute",
-                            top: 0,
-                            left: 0,
-                            width: `${dimensions.width}px`,
-                            height: `${dimensions.height}px`,
+                            inset: 0,
                             transformStyle: "preserve-3d",
                             transition:
-                                "all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, height 0.4s ease",
+                                "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)",
                             transform: `translateZ(10px) ${isPressed ? "translateY(1px) scale(0.98)" : "translateY(0) scale(1)"}`,
                             zIndex: 20,
+                            pointerEvents: "none",
                         }}>
                         <div
                             style={{
-                                width: `${dimensions.innerWidth}px`,
-                                height: `${dimensions.innerHeight}px`,
-                                margin: "2px",
+                                position: "absolute",
+                                inset: "2px",
                                 borderRadius: "100px",
                                 background:
                                     "linear-gradient(180deg, #202020 0%, #000000 100%)",
@@ -346,7 +316,7 @@ export function LiquidMetalBorderButton({
                                     ? "inset 0px 2px 4px rgba(0, 0, 0, 0.4), inset 0px 1px 2px rgba(0, 0, 0, 0.3)"
                                     : "none",
                                 transition:
-                                    "all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, height 0.4s ease, box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
+                                    "box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
                             }}
                         />
                     </div>
@@ -354,20 +324,18 @@ export function LiquidMetalBorderButton({
                     <div
                         style={{
                             position: "absolute",
-                            top: 0,
-                            left: 0,
-                            width: `${dimensions.width}px`,
-                            height: `${dimensions.height}px`,
+                            inset: 0,
                             transformStyle: "preserve-3d",
                             transition:
-                                "all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, height 0.4s ease",
+                                "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)",
                             transform: `translateZ(0px) ${isPressed ? "translateY(1px) scale(0.98)" : "translateY(0) scale(1)"}`,
                             zIndex: 10,
+                            pointerEvents: "none",
                         }}>
                         <div
                             style={{
-                                height: `${dimensions.height}px`,
-                                width: `${dimensions.width}px`,
+                                position: "absolute",
+                                inset: 0,
                                 borderRadius: "100px",
                                 boxShadow: isPressed
                                     ? "0px 0px 0px 1px rgba(0, 0, 0, 0.5), 0px 1px 2px 0px rgba(0, 0, 0, 0.3)"
@@ -375,8 +343,9 @@ export function LiquidMetalBorderButton({
                                       ? "0px 0px 0px 1px rgba(0, 0, 0, 0.4), 0px 12px 6px 0px rgba(0, 0, 0, 0.05), 0px 8px 5px 0px rgba(0, 0, 0, 0.1), 0px 4px 4px 0px rgba(0, 0, 0, 0.15), 0px 1px 2px 0px rgba(0, 0, 0, 0.2)"
                                       : "0px 0px 0px 1px rgba(0, 0, 0, 0.3), 0px 36px 14px 0px rgba(0, 0, 0, 0.02), 0px 20px 12px 0px rgba(0, 0, 0, 0.08), 0px 9px 9px 0px rgba(0, 0, 0, 0.12), 0px 2px 5px 0px rgba(0, 0, 0, 0.15)",
                                 transition:
-                                    "all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, height 0.4s ease, box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
-                                background: "rgb(0 0 0 / 0)",
+                                    "box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
+                                background:
+                                    "linear-gradient(135deg, #71717a 0%, #f4f4f5 32%, #27272a 66%, #a1a1aa 100%)",
                             }}>
                             <div
                                 ref={shaderRef}
@@ -384,12 +353,8 @@ export function LiquidMetalBorderButton({
                                 style={{
                                     borderRadius: "100px",
                                     overflow: "hidden",
-                                    position: "relative",
-                                    width: `${dimensions.shaderWidth}px`,
-                                    maxWidth: `${dimensions.shaderWidth}px`,
-                                    height: `${dimensions.shaderHeight}px`,
-                                    transition:
-                                        "width 0.4s ease, height 0.4s ease",
+                                    position: "absolute",
+                                    inset: 0,
                                 }}
                             />
                         </div>

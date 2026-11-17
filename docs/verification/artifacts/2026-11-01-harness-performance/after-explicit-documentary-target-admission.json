@@ -1,0 +1,62 @@
+{
+  "node": "v24.18.0",
+  "results": [
+    {
+      "workload": "admission",
+      "sources": 1,
+      "messages": 1,
+      "milliseconds": {
+        "samples": 7,
+        "median": 15.672391000000061,
+        "p95": 23.939797
+      },
+      "captureQueries": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "workload": "admission",
+      "sources": 60,
+      "messages": 1,
+      "milliseconds": {
+        "samples": 7,
+        "median": 54.9692500000001,
+        "p95": 71.63357700000051
+      },
+      "captureQueries": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "workload": "admission",
+      "sources": 60,
+      "messages": 20,
+      "milliseconds": {
+        "samples": 7,
+        "median": 1004.6380709999994,
+        "p95": 1231.5293250000013
+      },
+      "captureQueries": [
+        20,
+        20,
+        20,
+        20,
+        20,
+        20,
+        20
+      ]
+    }
+  ]
+}

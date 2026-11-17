@@ -1,0 +1,31 @@
+{
+  "title": "Choose the composer surface",
+  "question": "Compare the same composer in light and dark. Only the surface and elevation differ.",
+  "options": [
+    {
+      "id": "bordered",
+      "label": "Bordered neutral",
+      "thesis": "A quiet input surface separated by a fine outline.",
+      "materials": [
+        "Opaque neutral surface",
+        "Fine border"
+      ],
+      "viewport": "The existing compact composer, unchanged in size and behavior, in both themes.",
+      "risk": "Quieter separation from the surrounding chat.",
+      "comp": ".impeccable/mocks/composer-surfaces/bordered.png"
+    },
+    {
+      "id": "raised",
+      "label": "Raised neutral",
+      "thesis": "A more distinct input surface with a short shadow.",
+      "materials": [
+        "Opaque neutral surface",
+        "Short shadow"
+      ],
+      "viewport": "The same compact composer, unchanged in size and behavior, in both themes.",
+      "risk": "More visually prominent than the bordered variant.",
+      "comp": ".impeccable/mocks/composer-surfaces/raised.png"
+    }
+  ],
+  "steer": true
+}

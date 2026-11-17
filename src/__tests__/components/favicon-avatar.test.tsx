@@ -1,4 +1,4 @@
-import { Building2Icon } from "@hugeicons/core-free-icons";
+import { Building02Icon } from "@hugeicons/core-free-icons";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -75,7 +75,7 @@ describe("FaviconAvatar", () => {
             <FaviconAvatar
                 canonicalUrl=""
                 entityName="Example Holdings Ltd"
-                fallbackIcon={Building2Icon}
+                fallbackIcon={Building02Icon}
             />,
         );
 

@@ -1,0 +1,41 @@
+
+> agentic-resilience-evidence-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/benchmarks/source-quality-study.test.ts
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/benchmarks/source-quality-study.test.ts (17 tests | 1 failed) 5493ms
+   × separates unrun and unusable observations from wrong semantic answers 402ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/benchmarks/source-quality-study.test.ts > separates unrun and unusable observations from wrong semantic answers
+AssertionError: expected { …(14) } to match object { count: 1, available: +0, …(3) }
+(11 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "available": 0,
+-   "count": 1,
+-   "incorrect": 0,
+-   "notRun": 1,
+-   "unusable": 0,
++   "count": 8,
++   "incorrect": 1,
+  }
+
+ ❯ src/__tests__/benchmarks/source-quality-study.test.ts:514:53
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 passed (17)
+   Start at  22:53:36
+   Duration  7.56s (transform 679ms, setup 353ms, import 1.23s, tests 5.49s, environment 0ms)
+
+ ELIFECYCLE  Test failed. See above for more details.

@@ -1,0 +1,404 @@
+@reference "../../styles.css";
+
+.wrap {
+    @apply grid grid-cols-[minmax(0,_1fr)_300px] gap-[16px] max-w-[1000px];
+}
+/* The document's two panels sit directly in the reader grid. */
+.document {
+    @apply contents;
+}
+.main {
+    @apply rounded-(--radius-2xl) overflow-hidden flex flex-col;
+}
+.header {
+    @apply pt-[18px] px-[22px] pb-[16px] flex items-center gap-[14px];
+    border-bottom: 1px solid var(--divider);
+}
+.headerTitle {
+    @apply flex-[1] flex flex-col gap-[4px] min-w-[0];
+}
+.headerTitleRow {
+    @apply flex items-center justify-between gap-[12px];
+}
+.iconButton {
+    @apply w-[32px] h-[32px] rounded-[9px];
+    border: 0;
+    @apply bg-transparent bg-none;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 14%, transparent);
+    @apply text-foreground inline-flex items-center justify-center cursor-pointer;
+}
+.desk {
+    @apply pt-[24px] px-[24px] pb-0 bg-foreground/3 bg-none;
+}
+.page {
+    @apply relative ml-[130px] max-w-[440px] pt-[28px] px-[32px] pb-[36px] bg-card bg-none;
+    border-radius: 6px 6px 0 0;
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent),
+        0 20px 40px -24px
+        color-mix(in oklab, var(--foreground) 35%, transparent);
+    @apply flex flex-col gap-[16px];
+}
+.passage {
+    @apply relative m-[0] text-[15.5px] leading-[27px];
+}
+.mark {
+    @apply absolute left-[-162px] top-[3px] w-[124px] flex flex-col items-end gap-[4px] text-right;
+}
+.side {
+    @apply relative rounded-(--radius-2xl) py-[20px] px-[22px] flex flex-col gap-[6px];
+}
+.contributions {
+    @apply flex flex-col gap-[8px] py-[14px] px-0;
+    border-top: 1px solid var(--divider);
+}
+.contributionLink {
+    all: unset;
+    @apply box-border flex flex-col gap-[8px] my-0 -mx-[10px] py-[14px] px-[10px];
+    border-top: 1px solid var(--divider);
+    @apply rounded-[12px] cursor-pointer;
+    transition:
+        background-color 0.15s ease-out,
+        box-shadow 0.15s ease-out;
+}
+.contributionLink:hover {
+    @apply bg-foreground/[3.5%] bg-none;
+}
+.contributionLink:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply -outline-offset-[2px];
+}
+.contributionLink[aria-current="true"] {
+    @apply bg-brand-purple/8 bg-none;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--brand-purple) 30%, transparent);
+}
+.contributionHeader {
+    @apply flex items-center flex-wrap gap-y-[6px] gap-x-[8px];
+}
+.contributionText {
+    @apply text-[13.5px] leading-[19px];
+}
+.contributionNote {
+    @apply text-[12.5px] leading-[17px] text-muted-foreground;
+}
+.contributionAction {
+    @apply inline-flex items-center gap-[4px] text-[12.5px] font-medium text-accent-foreground opacity-0;
+    transition: opacity 0.15s ease-out;
+}
+.contributionLink:hover .contributionAction,
+.contributionLink:focus-visible .contributionAction,
+.contributionLink[aria-current="true"] .contributionAction {
+    @apply opacity-[1];
+}
+@media (hover: none) {
+    .contributionAction {
+        @apply opacity-[1];
+    }
+}
+.sideHead {
+    @apply flex flex-col gap-[4px] pb-[8px];
+}
+.questions {
+    @apply m-[0];
+    border: 0;
+    @apply min-w-[0] flex flex-wrap gap-[6px] pb-[6px];
+}
+.question {
+    all: unset;
+    @apply relative isolate inline-flex items-center gap-[6px] h-[28px] py-0 px-[10px] rounded-[999px] text-[12.5px] font-medium text-muted-foreground;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 12%, transparent);
+    @apply cursor-pointer;
+}
+.question:hover {
+    @apply text-foreground;
+}
+.question:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[1px];
+}
+.question[aria-pressed="true"] {
+    @apply text-foreground;
+}
+/* Glides to the chosen question while the list below re-forms. */
+.questionMarker {
+    @apply absolute inset-0 -z-[1] rounded-[inherit] bg-card bg-none;
+    box-shadow:
+        inset 0 0 0 1px
+        color-mix(in oklab, var(--brand-purple) 45%, transparent),
+        0 4px 10px -6px
+        color-mix(in oklab, var(--brand-purple) 50%, transparent);
+}
+.questionCount {
+    @apply font-mono text-[11px] text-muted-foreground;
+}
+.markLink {
+    all: unset;
+    @apply inline-flex rounded-[6px] cursor-pointer;
+}
+.markLink:hover {
+    filter: brightness(0.96);
+}
+.markLink:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+.passage[data-passage-active] {
+    @apply rounded-[6px];
+    outline: 2px solid color-mix(in oklab, var(--brand-purple) 50%, transparent);
+    @apply outline-offset-[6px];
+    animation: passage-arrive 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes passage-arrive {
+    from {
+        outline-offset: 16px;
+        outline-color: transparent;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .passage[data-passage-active] {
+        animation: none;
+    }
+}
+.passage {
+    @apply scroll-m-[96px];
+}
+.noPassages {
+    @apply m-[0] py-[12px] px-0 text-[13.5px] text-muted-foreground;
+}
+.tabbed {
+    @apply flex flex-col h-[100%] min-h-[0];
+}
+/* Tabs serve narrow containers: the title takes its own line above the page controls. */
+.tabbed .header {
+    border-bottom: 0;
+    @apply flex-wrap pt-[14px] pr-[16px] pb-[12px] pl-[20px];
+}
+.tabbed .headerTitle {
+    @apply basis-[100%];
+}
+.tabs {
+    @apply flex-[1] min-h-[0] gap-[0];
+}
+.tabList {
+    @apply mt-0 mx-[20px] mb-[12px];
+    width: calc(100% - 40px);
+}
+.tabList > * {
+    @apply flex-[1];
+}
+.tabScroll {
+    @apply flex-[1] min-h-[0];
+}
+.tabViewport {
+    @apply h-[100%] overscroll-contain;
+}
+.tabbed .desk {
+    @apply pt-[4px] px-[16px] pb-[28px] bg-transparent bg-none;
+}
+.tabbed .page {
+    @apply mx-auto max-w-[620px] min-h-[0] pt-[28px] px-[28px] pb-[36px];
+}
+.tabbed .mark {
+    @apply static w-auto flex-row items-center mb-[6px] text-left;
+}
+.tabbedSide {
+    @apply pt-0 px-[20px] pb-[24px];
+}
+.tabActions {
+    @apply shrink-0;
+    padding: 14px 20px calc(16px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--divider);
+}
+.tabActions > * {
+    @apply max-w-[620px] mx-auto;
+}
+.sideBody {
+    @apply relative flex flex-col gap-[10px];
+}
+.tabbedSide .sideBody {
+    @apply max-w-[620px] mx-auto;
+}
+.heading {
+    @apply m-[0] text-[19px] leading-[24px] font-semibold tracking-[-0.02em];
+}
+.original {
+    @apply h-[32px] rounded-[9px] gap-[6px] text-[13px];
+}
+.links {
+    @apply flex flex-col gap-[8px] pt-[12px];
+    border-top: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent);
+}
+.links ul {
+    @apply m-[0] p-[0];
+    list-style: none;
+    @apply flex flex-col gap-[8px];
+}
+.links li {
+    @apply flex items-center gap-[10px] text-[13px] text-muted-foreground;
+}
+.links li[data-captured] {
+    @apply text-foreground;
+}
+.actions {
+    @apply mt-auto pt-[12px] flex flex-col gap-[8px];
+}
+.fade {
+    @apply absolute left-[0] right-[0] bottom-[0] h-[90px] pointer-events-none;
+    background: linear-gradient(
+        180deg,
+        transparent,
+        color-mix(in oklab, var(--background) 92%, transparent)
+    );
+}
+
+/* Workspace geometry from the Sources reader reference. */
+.workspace {
+    @apply grid-cols-[260px_minmax(0,_1fr)_380px] gap-[18px] max-w-none;
+}
+.workspace .main {
+    @apply rounded-[22px];
+}
+.workspace .desk {
+    @apply relative flex-[1] pt-[26px] px-[26px] pb-0 overflow-hidden;
+}
+.workspace .page {
+    @apply ml-[150px] max-w-[520px] min-h-[640px] pt-[34px] px-[40px] pb-[60px] gap-[18px];
+}
+.workspace .mark {
+    @apply left-[-142px] w-[120px];
+}
+.workspace .side {
+    @apply rounded-[22px] gap-[14px];
+}
+@media (max-width: 1180px) {
+    .workspace {
+        @apply grid-cols-[minmax(0,_1fr)];
+    }
+}
+@media (max-width: 760px) {
+    .wrap {
+        @apply grid-cols-[minmax(0,_1fr)];
+    }
+    .header {
+        @apply flex-wrap;
+    }
+    .headerTitle {
+        @apply basis-[100%];
+    }
+    .desk,
+    .workspace .desk {
+        @apply pt-[16px] px-[12px] pb-0;
+    }
+    .page,
+    .workspace .page {
+        @apply ml-[0] min-h-[0] pt-[24px] px-[20px] pb-[40px];
+    }
+    .mark,
+    .workspace .mark {
+        @apply static w-auto flex-row items-center mb-[6px] text-left;
+    }
+}
+
+.title {
+    @apply text-[18px] tracking-[-.02em];
+}
+
+.headingText {
+    @apply text-foreground;
+}
+
+.pageNavigation {
+    @apply flex justify-between;
+}
+
+.quietPassage {
+    @apply text-muted-foreground;
+}
+
+.accentLabel {
+    @apply text-accent-foreground;
+}
+
+.contributionTitle {
+    @apply text-[16px] tracking-[-.02em];
+}
+
+.flexibleContent {
+    @apply flex-[1];
+}
+
+.selectedHighlight {
+    @apply bg-brand-purple/14 bg-none;
+    box-shadow: 0 2px 0 var(--brand-purple);
+    @apply py-[1px] px-[2px];
+}
+.conflictHighlight {
+    @apply bg-counter-evidence/11 bg-none;
+    box-shadow: 0 2px 0 var(--counter-evidence);
+    @apply py-[1px] px-[2px];
+}
+.projectionHighlight {
+    border-bottom: 2px dotted var(--evidence-hypothesis);
+}
+
+/* A newly selected source settles into place: its title, page and contributions arrive in reading order. */
+@keyframes reader-arrive {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+        filter: blur(3px);
+    }
+}
+.wrap[data-arriving] .headerTitle,
+.tabbed[data-arriving] .headerTitle,
+.wrap[data-arriving] .page:not([data-turn]),
+.tabbed[data-arriving] .page:not([data-turn]),
+.wrap[data-arriving] .side,
+.tabbed[data-arriving] .sideBody {
+    animation: reader-arrive 0.34s var(--wb-ease-arrive) both;
+}
+.wrap[data-arriving] .page:not([data-turn]),
+.tabbed[data-arriving] .page:not([data-turn]) {
+    animation-delay: 40ms;
+}
+.wrap[data-arriving] .side {
+    animation-delay: 80ms;
+}
+/* Page turns slide in from the side the reader moved toward. */
+@keyframes page-from-next {
+    from {
+        opacity: 0.35;
+        transform: translateX(14px);
+    }
+}
+@keyframes page-from-previous {
+    from {
+        opacity: 0.35;
+        transform: translateX(-14px);
+    }
+}
+.page[data-turn="next"] {
+    animation: page-from-next 0.26s var(--wb-ease-arrive);
+}
+.page[data-turn="previous"] {
+    animation: page-from-previous 0.26s var(--wb-ease-arrive);
+}
+@keyframes reader-fade {
+    from {
+        opacity: 0;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .wrap[data-arriving] .headerTitle,
+    .tabbed[data-arriving] .headerTitle,
+    .wrap[data-arriving] .page:not([data-turn]),
+    .tabbed[data-arriving] .page:not([data-turn]),
+    .wrap[data-arriving] .side,
+    .tabbed[data-arriving] .sideBody,
+    .page[data-turn] {
+        animation: reader-fade 0.16s ease-out both;
+    }
+}

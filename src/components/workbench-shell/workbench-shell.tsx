@@ -2,7 +2,8 @@ import { api } from "@convex/_generated/api";
 import { useAuthActions } from "@convex-dev/auth/react";
 import {
     ChevronDownIcon,
-    Home01Icon,
+    Folder02Icon,
+    Home02Icon,
     Login02Icon,
     Logout01Icon,
     Settings02Icon,
@@ -12,25 +13,37 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
-
 import Icon from "@/components/icon";
-import { BackgroundImageTexture } from "@/components/ui/bg-image-texture";
+import { LoadErrorBoundary } from "@/components/load-error-boundary";
+import { AppLogo } from "@/components/logo-icon";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
     NestedMenu,
     type NestedMenuSectionProps,
 } from "@/components/ui/nested-menu";
-import { Separator } from "@/components/ui/separator";
-import { AnalyzedCompanyList } from "@/components/workbench-shell/analyzed-company-list";
+import { DossierSwitcher } from "@/components/workbench-shell/dossier-switcher";
 import { useInvitationAccess } from "@/components/workspace/invitation-access-context";
+import { useResponsive } from "@/hooks/use-responsive";
+import { uiLayerClasses } from "@/lib/ui-layers";
+import { cn } from "@/lib/utils";
 import { getWorkspaceDestination } from "@/lib/workspace/access-destination";
+import { NewDossierButton } from "./new-dossier-button";
+import styles from "./workbench-shell.module.css";
+import { WorkbenchShellSurface } from "./workbench-shell-surface";
 
 export interface WorkbenchShellProps {
     children: ReactNode;
     activeRunId?: string;
 }
 
-function OperationsMenuIcon({ className }: { className?: string }) {
+function AdministrationMenuIcon({ className }: { className?: string }) {
     return <Icon iconNode={Settings02Icon} className={className} />;
 }
 
@@ -39,10 +52,35 @@ function LogoutMenuIcon({ className }: { className?: string }) {
 }
 
 export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
+    return (
+        <WorkbenchShellSurface
+            header={
+                <LoadErrorBoundary
+                    title="Workspace navigation unavailable"
+                    description="We couldn’t load the workspace navigation. Try again."
+                    retryLabel="Retry"
+                    variant="compact"
+                    className="max-width-container py-2.5">
+                    <WorkbenchHeader activeRunId={activeRunId} />
+                </LoadErrorBoundary>
+            }>
+            <main
+                className={cn(
+                    "max-width-container min-h-[calc(100svh-var(--bar-height))] py-4",
+                    styles.main,
+                )}>
+                {children}
+            </main>
+        </WorkbenchShellSurface>
+    );
+}
+
+function WorkbenchHeader({ activeRunId }: { activeRunId?: string }) {
     const visitor = useQuery(api.visitors.current);
     const navigate = useNavigate();
     const { signOut } = useAuthActions();
     const { openInvitationDrawer } = useInvitationAccess();
+    const { isMobile } = useResponsive();
     const [isSigningOut, setIsSigningOut] = useState(false);
 
     const logout = async () => {
@@ -65,9 +103,9 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
                 ...(visitor?.role === "admin"
                     ? [
                           {
-                            key: "operations",
-                            label: "Operations",
-                              icon: OperationsMenuIcon,
+                              key: "administration",
+                              label: "Administration",
+                              icon: AdministrationMenuIcon,
                               onSelect: () => {
                                   void navigate({
                                       to: "/workspace/admin",
@@ -90,107 +128,101 @@ export function WorkbenchShell({ children, activeRunId }: WorkbenchShellProps) {
     ];
 
     return (
-        <div className="min-h-svh bg-background text-foreground">
-            <header className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-md">
-                <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
-                    <div className="flex min-w-0 items-center gap-3">
-                        {/* Home Button / Link using shadcn Button */}
-                        <Button
-                            render={<Link to="/" />}
-                            nativeButton={false}
-                            variant="secondary"
-                            size="sm"
-                            aria-label="Go to Home"
-                            title="Go to Home">
-                            <Icon
-                                iconNode={Home01Icon}
-                                data-icon="inline-start"
-                                className="text-muted-foreground"
-                            />
-                            <span className="hidden font-medium sm:inline">
+        <header
+            className={cn(
+                "sticky top-0 z-30 border-b border-divider bg-surface-bar backdrop-blur-bar",
+                uiLayerClasses.workbenchShellHeader,
+            )}>
+            <div className="max-width-container grid min-h-(--bar-height) grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2">
+                <div className="min-w-0 flex items-center gap-3">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                            render={
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-10 gap-2 px-2"
+                                />
+                            }
+                            aria-label="Workbench navigation">
+                            <AppLogo />
+                            <span className="hidden sm:inline">Workbench</span>
+                            <Icon iconNode={ChevronDownIcon} />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuItem render={<Link to="/" />}>
+                                <Icon iconNode={Home02Icon} />
                                 Home
-                            </span>
-                        </Button>
-
-                        <Button
-                            render={<Link to="/workspace/start" />}
-                            nativeButton={false}
-                            variant="default"
-                            size="sm"
-                            aria-label="Start a company dossier"
-                            title="Start a company dossier"
-                            className="rounded-sm">
-                            <span className="start-double-slash">{"//"}</span>
-                            <span className="start-label">start</span>
-                        </Button>
-
-                        <Separator
-                            orientation="vertical"
-                            className="shrink-0"
-                        />
-
-                        {/* Horizontal Analyzed Companies List */}
-                        <AnalyzedCompanyList
-                            activeRunId={activeRunId}
-                            enabled={visitor !== undefined && visitor !== null}
-                            isAdmissionLoading={visitor === undefined}
-                        />
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                        {visitor?.status === "active" ? (
-                            <NestedMenu
-                                sections={sessionMenuSections}
-                                side="bottom"
-                                align="end"
-                                trigger={
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        className="border border-primary"
-                                        size="sm"
-                                        aria-label="Workspace menu">
-                                        <Icon iconNode={UserCircleIcon} />
-                                        <span className="hidden sm:inline">
-                                            Account
-                                        </span>
-                                        <Icon
-                                            iconNode={ChevronDownIcon}
-                                            data-icon="inline-end"
-                                        />
-                                    </Button>
-                                }
-                            />
-                        ) : visitor === null ? (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="secondary"
-                                className="border border-primary"
-                                onClick={() =>
-                                    openInvitationDrawer({
-                                        onSuccess: ({ role }) => {
-                                            void navigate({
-                                                to: getWorkspaceDestination(
-                                                    role,
-                                                ),
-                                            });
-                                        },
-                                    })
-                                }>
-                                <Icon iconNode={Login02Icon} />
-                                Workspace
-                            </Button>
-                        ) : null}
-                    </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                render={<Link to="/workspace/dossiers" />}>
+                                <Icon iconNode={Folder02Icon} />
+                                Dossiers
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    {!isMobile &&
+                    visitor?.workspace?.canStartDossier !== false ? (
+                        <NewDossierButton size="default" />
+                    ) : null}
                 </div>
-            </header>
-
-            <BackgroundImageTexture opacity={0.7} variant="fabric-of-squares">
-                <main className="mx-auto w-full min-h-screen max-w-8xl px-4 py-4 sm:px-6">
-                    {children}
-                </main>
-            </BackgroundImageTexture>
-        </div>
+                <div className="flex min-w-0 flex-col items-center gap-1 md:flex-row">
+                    {activeRunId && visitor?.workspace?.isTestData ? (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                            Test data — not live
+                        </span>
+                    ) : null}
+                    <DossierSwitcher
+                        activeRunId={activeRunId}
+                        enabled={visitor !== undefined && visitor !== null}
+                        isAdmissionLoading={visitor === undefined}
+                        className="min-w-0 w-full justify-center md:justify-start"
+                    />
+                </div>
+                <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                    <ThemeToggle />
+                    {visitor?.status === "active" ? (
+                        <NestedMenu
+                            sections={sessionMenuSections}
+                            side="bottom"
+                            align="end"
+                            trigger={
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="rounded-tile bg-fill-quiet"
+                                    aria-label="Workspace menu">
+                                    <Icon iconNode={UserCircleIcon} />
+                                    <span className="hidden sm:inline">
+                                        Account
+                                    </span>
+                                    <Icon
+                                        iconNode={ChevronDownIcon}
+                                        data-icon="inline-end"
+                                    />
+                                </Button>
+                            }
+                        />
+                    ) : visitor === null ? (
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            className="border border-primary"
+                            onClick={() =>
+                                openInvitationDrawer({
+                                    onSuccess: ({ role }) => {
+                                        void navigate({
+                                            to: getWorkspaceDestination(role),
+                                        });
+                                    },
+                                })
+                            }>
+                            <Icon iconNode={Login02Icon} />
+                            Go to Workspace
+                        </Button>
+                    ) : null}
+                </div>
+            </div>
+        </header>
     );
 }

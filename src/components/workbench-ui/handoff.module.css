@@ -1,0 +1,79 @@
+@reference "../../styles.css";
+
+.card {
+    @apply w-[560px] rounded-(--radius-3xl) py-[26px] px-[28px] flex flex-col gap-[18px] bg-surface-float bg-none;
+    -webkit-backdrop-filter: blur(var(--blur-glass));
+    backdrop-filter: blur(var(--blur-glass));
+    box-shadow: var(--shadow-focal);
+}
+.icon {
+    @apply shrink-0 w-[38px] h-[38px] rounded-(--radius-tile) bg-foreground bg-none text-card inline-flex items-center justify-center;
+}
+.ring {
+    animation: ds-count 3s linear forwards;
+}
+@keyframes ds-count {
+    from {
+        stroke-dashoffset: 0;
+    }
+    to {
+        stroke-dashoffset: 113;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ring {
+        animation: none;
+    }
+}
+.button {
+    @apply h-[38px] py-0 px-[12px] rounded-(--radius-tile);
+    @apply text-[13.5px] font-medium cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap;
+    text-decoration: none;
+}
+
+.header {
+    @apply flex items-center gap-[12px];
+}
+
+.heading {
+    @apply flex-[1] flex flex-col gap-[2px];
+}
+
+.title {
+    @apply text-[17px];
+}
+
+.description {
+    @apply text-[13px] text-muted-foreground;
+}
+
+.actions {
+    @apply flex items-center gap-[16px] pt-[16px];
+}
+
+.countdown {
+    @apply relative shrink-0 w-[44px] h-[44px] inline-flex items-center justify-center;
+}
+
+.countdownTrack {
+    @apply absolute inset-0;
+    transform: rotate(-90deg);
+}
+
+.countdownValue {
+    @apply text-[16px];
+}
+
+.countdownLabel {
+    @apply text-[15px];
+}
+
+.stayAction {
+    @apply bg-transparent bg-none text-foreground;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+
+.continueAction {
+    @apply py-0 px-[14px];
+}

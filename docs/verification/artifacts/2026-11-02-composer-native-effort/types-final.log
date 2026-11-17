@@ -1,0 +1,4 @@
+
+> agentic-resilience-workbench@ typecheck /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> tsc --noEmit && tsc --noEmit -p convex/tsconfig.json
+

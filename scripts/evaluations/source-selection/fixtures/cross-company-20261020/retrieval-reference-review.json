@@ -1,0 +1,194 @@
+{
+  "version": "retrieval-reference-review-v1",
+  "reviewer": "Investigating assistant",
+  "independentHumanGroundTruth": false,
+  "historicallyObservedCorpus": true,
+  "studySha256": "b44639265de2f4c519a4fdaff65b9a643ad67ac997759425283194de5ec84825",
+  "historicalReferenceSha256": "19ddad62cc8a62ca0a4f5cd74aea9c855810136297ed5e8d3024fe19049417e8",
+  "controls": [
+    {
+      "id": "adobe-numeric",
+      "status": "comparable",
+      "assessmentScope": "Reported fiscal 2025 total revenue, reporting years and currency units only. Other claims in the multi-claim target require separate evidence.",
+      "rationale": "The revenue table directly permits comparison of the target revenue estimate. Digital Media ARR is optional context and is not required to verify total revenue.",
+      "references": [
+        {
+          "documentId": "adobe-annual",
+          "startOffset": 190787,
+          "endOffset": 191310
+        }
+      ]
+    },
+    {
+      "id": "adobe-forecast",
+      "status": "context_only",
+      "assessmentScope": "Historical Digital Media ARR and segment revenue baseline.",
+      "rationale": "A historical baseline informs the forecast but cannot verify FY2027 outcomes or AI attach-rate assumptions.",
+      "references": [
+        {
+          "documentId": "adobe-annual",
+          "startOffset": 182927,
+          "endOffset": 183265
+        }
+      ]
+    },
+    {
+      "id": "adobe-capability",
+      "status": "context_only",
+      "assessmentScope": "Firefly integration with Creative Cloud applications.",
+      "rationale": "The passage establishes cross-application compatibility, not the specific Premiere assistant sorting and marker features asserted.",
+      "references": [
+        {
+          "documentId": "adobe-product",
+          "startOffset": 11592,
+          "endOffset": 11823
+        }
+      ]
+    },
+    {
+      "id": "adobe-unresolved",
+      "status": "unresolved",
+      "assessmentScope": "Firefly commercial indemnification and its alleged competitive effect.",
+      "rationale": "General contractual applicability does not establish Firefly indemnification or a deployment moat. No adequate positive reference has been adjudicated in this control.",
+      "references": [],
+      "expectedDisposition": "inconclusive",
+      "dispositionMeasured": false
+    },
+    {
+      "id": "nvidia-numeric",
+      "status": "unresolved",
+      "assessmentScope": "Percentages in a third-party network-importance survey.",
+      "rationale": "An accelerated-computing platform description cannot corroborate survey percentages or respondent identity.",
+      "references": [],
+      "expectedDisposition": "inconclusive",
+      "dispositionMeasured": false
+    },
+    {
+      "id": "nvidia-forecast",
+      "status": "unresolved",
+      "assessmentScope": "Integration effects on deployment complexity, time to value and switching costs.",
+      "rationale": "Product-transition inventory and adoption risks are not direct evidence of customer switching cost or time-to-value effects.",
+      "references": [],
+      "expectedDisposition": "inconclusive",
+      "dispositionMeasured": false
+    },
+    {
+      "id": "nvidia-capability",
+      "status": "comparable",
+      "assessmentScope": "An integrated platform spanning GPUs, CPUs, DPUs, networking and software.",
+      "rationale": "The primary paragraph directly describes the platform and processing-unit integration. It does not independently verify every named branded component in the target.",
+      "references": [
+        {
+          "documentId": "nvidia-annual",
+          "startOffset": 49100,
+          "endOffset": 49658
+        }
+      ]
+    },
+    {
+      "id": "nvidia-unresolved",
+      "status": "context_only",
+      "assessmentScope": "License transfer restrictions as a possible source of switching constraints.",
+      "rationale": "The license grant is relevant context, but does not establish harmful lock-in or quantify switching costs.",
+      "references": [
+        {
+          "documentId": "nvidia-terms",
+          "startOffset": 22361,
+          "endOffset": 22733
+        }
+      ]
+    },
+    {
+      "id": "snowflake-numeric",
+      "status": "comparable",
+      "assessmentScope": "Quarterly revenue and year-over-year growth for the reported July 2026 quarter.",
+      "rationale": "The quarterly table contains both reporting dates, units and comparative revenue. Matching values alone must not substitute for period alignment.",
+      "references": [
+        {
+          "documentId": "snowflake-quarterly",
+          "startOffset": 53212,
+          "endOffset": 53433
+        }
+      ]
+    },
+    {
+      "id": "snowflake-forecast",
+      "status": "context_only",
+      "assessmentScope": "Current agent and platform capabilities relevant to a proposed future architecture.",
+      "rationale": "Existing Snowflake Intelligence and Postgres features provide background, not proof that clients will become the future workplace described.",
+      "references": [
+        {
+          "documentId": "snowflake-annual",
+          "startOffset": 59543,
+          "endOffset": 61450
+        }
+      ]
+    },
+    {
+      "id": "snowflake-capability",
+      "status": "comparable",
+      "assessmentScope": "Public-cloud deployment and the storage, compute and services architecture.",
+      "rationale": "The primary paragraph directly describes public-cloud deployment and the three integrated architecture layers.",
+      "references": [
+        {
+          "documentId": "snowflake-annual",
+          "startOffset": 58586,
+          "endOffset": 59541
+        }
+      ]
+    },
+    {
+      "id": "snowflake-unresolved",
+      "status": "unresolved",
+      "assessmentScope": "Relative maturity across five proposed System of Intelligence layers.",
+      "rationale": "The shared-disk/shared-nothing architecture paragraph does not verify this maturity assessment or its listed governance and agent products.",
+      "references": [],
+      "expectedDisposition": "inconclusive",
+      "dispositionMeasured": false
+    },
+    {
+      "id": "crowdstrike-numeric",
+      "status": "comparable",
+      "assessmentScope": "Ending ARR, its definition, reporting date and comparative growth.",
+      "rationale": "The ARR definition and dated table directly permit comparison of the numeric target. Four consecutive quarters of acceleration require additional periods.",
+      "references": [
+        {
+          "documentId": "crowdstrike-quarterly",
+          "startOffset": 169016,
+          "endOffset": 169770
+        }
+      ]
+    },
+    {
+      "id": "crowdstrike-forecast",
+      "status": "unresolved",
+      "assessmentScope": "Timing of reaching a USD 10 billion ARR target by FY2031.",
+      "rationale": "Historical profitability and accumulated deficit do not corroborate an ARR target date or its expected acceleration.",
+      "references": [],
+      "expectedDisposition": "inconclusive",
+      "dispositionMeasured": false
+    },
+    {
+      "id": "crowdstrike-capability",
+      "status": "comparable",
+      "assessmentScope": "The July 19 update causing crashes on Windows systems.",
+      "rationale": "The incident disclosure directly identifies the update, affected systems and date. It does not establish every broader consequence in other sources.",
+      "references": [
+        {
+          "documentId": "crowdstrike-annual",
+          "startOffset": 314857,
+          "endOffset": 316591
+        }
+      ]
+    },
+    {
+      "id": "crowdstrike-unresolved",
+      "status": "unresolved",
+      "assessmentScope": "Consolidation increasing AI authority and operational blast radius.",
+      "rationale": "File-upload and crash-report processing terms do not establish delegated AI authority or the asserted blast-radius relationship.",
+      "references": [],
+      "expectedDisposition": "inconclusive",
+      "dispositionMeasured": false
+    }
+  ]
+}

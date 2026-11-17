@@ -27,6 +27,9 @@ export interface DirectionAwareTabsProps {
     roundedInner?: string;
     onChange?: (tabId: string | number) => void;
     defaultTabId?: string | number;
+    value?: string | number;
+    /** Fill an explicitly constrained parent instead of measuring content height. */
+    contentSizing?: "content" | "fill";
 }
 
 function DirectionAwareTabs({
@@ -37,11 +40,14 @@ function DirectionAwareTabs({
     roundedInner,
     onChange,
     defaultTabId,
+    value,
+    contentSizing = "content",
 }: DirectionAwareTabsProps) {
     const uniqueLayoutId = useId();
-    const [activeTab, setActiveTab] = useState<string | number>(
+    const [internalTab, setActiveTab] = useState<string | number>(
         defaultTabId ?? tabs[0]?.id ?? 0,
     );
+    const activeTab = value ?? internalTab;
     const [direction, setDirection] = useState(0);
     const [ref, bounds] = useMeasure();
     const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -65,7 +71,7 @@ function DirectionAwareTabs({
             const newDirection =
                 newIndex > (activeTabIndex >= 0 ? activeTabIndex : 0) ? 1 : -1;
             setDirection(newDirection);
-            setActiveTab(newTabId);
+            if (value === undefined) setActiveTab(newTabId);
             onChange?.(newTabId);
         }
     };
@@ -188,10 +194,18 @@ function DirectionAwareTabs({
                     bounce: 0.2,
                 }}>
                 <motion.div
-                    className="relative mx-auto w-full h-full overflow-hidden mt-2"
+                    className={cn(
+                        "relative mx-auto w-full overflow-hidden mt-2",
+                        contentSizing === "fill" ? "flex-1 min-h-0" : "h-full",
+                    )}
                     initial={false}
                     animate={{
-                        height: bounds.height > 0 ? bounds.height : "auto",
+                        height:
+                            contentSizing === "fill"
+                                ? "auto"
+                                : bounds.height > 0
+                                  ? bounds.height
+                                  : "auto",
                     }}>
                     <div className="p-1 h-full w-full" ref={ref}>
                         <AnimatePresence custom={direction} mode="popLayout">
@@ -206,7 +220,10 @@ function DirectionAwareTabs({
                                 animate="active"
                                 exit="exit"
                                 custom={direction}
-                                className="w-full">
+                                className={cn(
+                                    "w-full",
+                                    contentSizing === "fill" && "h-full",
+                                )}>
                                 {content}
                             </motion.div>
                         </AnimatePresence>

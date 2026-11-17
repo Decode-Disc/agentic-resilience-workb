@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workbench — recommandations après analyse de t3code</title>
+<style>
+:root{color-scheme:dark;font-family:"Geist Variable",Geist,system-ui,sans-serif;background:#1e1c20;color:#f0edf2;font-size:16px}
+*{box-sizing:border-box}body{margin:0}a{color:#dcc3ef;text-underline-offset:4px}a:hover{color:#fff}a:focus-visible{outline:2px solid #caa4ec;outline-offset:5px}::selection{background:#714a8a;color:white}
+header{padding:32px max(24px,calc((100vw - 1440px)/2));border-bottom:1px solid #403a45}h1{font-size:clamp(1.6rem,3vw,2.25rem);font-weight:550;letter-spacing:-.025em;margin:0 0 16px;max-width:34ch}header p{color:#c5bdca;max-width:78ch;line-height:1.6;margin:8px 0}
+nav{display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:24px}nav a{font-size:.9rem}
+main{max-width:1488px;margin:auto;padding:0 24px 48px}section{padding-top:48px;scroll-margin-top:20px}h2{font-size:1.4rem;letter-spacing:-.02em;font-weight:550;margin:0 0 20px}
+.explanation{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-bottom:20px;max-width:1160px}.explanation p{margin:0;color:#d0c8d5;line-height:1.6;max-width:66ch}.explanation strong{display:block;margin-bottom:6px;color:#f3eff5;font-weight:550}
+figure{margin:0}figure>a{display:block}img{display:block;width:100%;height:auto;border:1px solid #454049;border-radius:10px;background:#242126}figcaption{font-size:.875rem;color:#bbb3c1;margin-top:12px;line-height:1.6}
+.inspection{display:flex;flex-wrap:wrap;gap:10px 36px;margin:18px 0 0;padding-left:20px;color:#d2cbd7;font-size:.9rem;line-height:1.6}.inspection li{max-width:45ch}footer{margin-top:48px;padding-top:24px;border-top:1px solid #403a45;color:#bdb5c4;line-height:1.6;max-width:78ch}
+@media(max-width:700px){header{padding:24px 18px}.explanation{grid-template-columns:1fr;gap:16px}main{padding:0 16px 32px}section{padding-top:36px}nav{gap:12px 18px}h2{font-size:1.2rem}.inspection{display:block}.inspection li{margin-bottom:8px}}
+</style>
+<header>
+<h1>Les recommandations après analyse de t3code, illustrées</h1>
+<p>Une seule proposition, montrée dans ses différents états. Les images illustrent les recommandations discutées : elles ne sont ni des compositions concurrentes, ni une reproduction de t3code.</p>
+<p>Les vues montrent la structure et les états ; ce sont des images statiques, pas une démonstration du défilement, des animations ou d’un raccord au backend. Aucune implémentation du chat n’est lancée.</p>
+<nav aria-label="Moments du parcours"><a href="#programme">Parcourir les questions de recherche</a><a href="#ajout">Add research question</a><a href="#modification">Edit question</a><a href="#clarification">Demander une clarification, une à la fois</a><a href="#tour">Suivre le travail, puis lire la réponse</a></nav>
+</header>
+<main>
+<section id="programme" aria-labelledby="programme-title">
+<h2 id="programme-title">Parcourir les questions de recherche</h2>
+<div class="explanation"><p><strong>Observé dans t3code</strong>T3code affiche une seule question de clarification active et conserve les réponses pendant la navigation. <a href="https://github.com/pingdotgg/t3code/blob/50c1c5dc536493826fc66e220598f38b831d5bde/apps/web/src/components/chat/ComposerPendingUserInputPanel.tsx#L98" target="_blank" rel="noopener">Question active dans t3code</a>.</p><p><strong>Adaptation recommandée pour Workbench</strong>Pour notre programme de recherche : une question développée à la fois, avec un aperçu compact et un accès libre aux autres. Ce sont des sujets à investiguer ; aucune réponse ni confirmation n’est exigée pour chaque question.</p></div>
+<figure><a href="01-program.png" target="_blank" rel="noopener" aria-label="Agrandir : Parcourir les questions de recherche"><img src="01-program.png" alt="Une question de recherche développée avec accès direct aux quatre thèmes."></a><figcaption>Ouvrir l’image pour examiner les détails. Les libellés de l’application restent en anglais.</figcaption></figure>
+<ul class="inspection"><li>Une question en détail ; les autres restent accessibles.</li><li>Modifier ou ajouter utilise le composer.</li><li>Start research reste l’engagement explicite.</li></ul>
+</section>
+<section id="ajout" aria-labelledby="ajout-title">
+<h2 id="ajout-title">Add research question : du brouillon à la question ajoutée</h2>
+<div class="explanation"><p><strong>Observé dans t3code</strong>T3code adapte le rôle du composer : réponse libre à une question ou retour pour modifier un plan. <a href="https://github.com/pingdotgg/t3code/blob/50c1c5dc536493826fc66e220598f38b831d5bde/apps/web/src/components/chat/ChatComposer.tsx#L3352" target="_blank" rel="noopener">Composer contextuel dans t3code</a>.</p><p><strong>Adaptation recommandée pour Workbench</strong>Le raccourci Add question place le composer en mode ajout. Le brouillon reste visible, avec Add question et Cancel. Le lancement attend que ce brouillon soit ajouté ou annulé.</p></div>
+<figure><a href="05-add-question-flow.png" target="_blank" rel="noopener" aria-label="Agrandir : Add research question, avant et après"><img src="05-add-question-flow.png" alt="À gauche, le brouillon de la nouvelle question dans le composer. À droite, après Add question, la cinquième question est sélectionnée et le composer retrouve son état habituel."></a><figcaption>À gauche : saisie. À droite : résultat proposé après Add question. Ouvrir l’image pour lire les détails ; les boutons dessinés sont illustratifs.</figcaption></figure>
+<ul class="inspection"><li>Un seul champ de saisie, aucun formulaire supplémentaire.</li><li>Add question ajoute une cinquième question et l’affiche ; le composer revient au mode habituel.</li><li>Cancel conserve les quatre questions initiales et quitte le mode ajout.</li><li>L’ajout direct d’une question claire ne nécessite pas un appel IA ; il ne lance pas la recherche.</li></ul>
+</section>
+<section id="modification" aria-labelledby="modification-title">
+<h2 id="modification-title">Edit question : modifier Q2, puis enregistrer</h2>
+<div class="explanation"><p><strong>Point de départ</strong>La question affichée est « What makes switching difficult? ». Edit question reprend son texte dans le composer existant. Cette édition directe est l’adaptation proposée pour Workbench, pas une fonction de recherche attribuée à t3code.</p><p><strong>Résultat proposé</strong>Save changes remplace uniquement le texte de Q2 par « Which integrations make switching away from CCC difficult? ». Le programme conserve quatre questions et la sélection reste sur Q2. Le composer revient ensuite au mode habituel.</p></div>
+<figure><a href="06-edit-question-flow.png" target="_blank" rel="noopener" aria-label="Agrandir : Edit question, avant et après"><img src="06-edit-question-flow.png" alt="À gauche, modification de Q2 dans le composer avec Save changes et Cancel. À droite, Q2 contient le nouveau texte, le compteur reste à quatre questions et le composer retrouve son état habituel."></a><figcaption>À gauche : texte en cours de modification. À droite : résultat proposé après Save changes. Ouvrir l’image pour lire les détails ; les boutons dessinés sont illustratifs.</figcaption></figure>
+<ul class="inspection"><li>Le texte actuel est prérempli ; il ne faut pas le recopier.</li><li>Save changes remplace Q2 ; aucune cinquième question n’est créée.</li><li>Cancel laisse Q2 inchangée et quitte le mode édition.</li><li>La validation du brouillon reste distincte de Start research.</li></ul>
+</section>
+<section id="clarification" aria-labelledby="clarification-title">
+<h2 id="clarification-title">Demander une clarification, une à la fois</h2>
+<div class="explanation"><p><strong>Observé dans t3code</strong>Le questionnaire t3code expose une question active, ses choix, une réponse libre lorsque permise, puis Next ou Submit. <a href="https://github.com/pingdotgg/t3code/blob/50c1c5dc536493826fc66e220598f38b831d5bde/apps/web/src/components/chat/ComposerPrimaryActions.tsx#L154" target="_blank" rel="noopener">Navigation et soumission dans t3code</a>.</p><p><strong>Adaptation recommandée pour Workbench</strong>Ce composant intervient seulement lorsqu’une précision de l’analyste peut changer matériellement le périmètre. Le système propose une option ; le composer permet une réponse personnelle.</p></div>
+<figure><a href="03-clarification.png" target="_blank" rel="noopener" aria-label="Agrandir : Demander une clarification, une à la fois"><img src="03-clarification.png" alt="Une clarification active, des choix et la possibilité de répondre librement dans le composer."></a><figcaption>Ouvrir l’image pour examiner les détails. Les libellés de l’application restent en anglais.</figcaption></figure>
+<ul class="inspection"><li>Une seule demande de réponse active.</li><li>Un choix proposé et une réponse libre dans le même ensemble.</li><li>Le compteur concerne cette clarification, pas la progression de recherche.</li></ul>
+</section>
+<section id="tour" aria-labelledby="tour-title">
+<h2 id="tour-title">Suivre le travail, puis lire la réponse</h2>
+<div class="explanation"><p><strong>Observé dans t3code</strong>T3code distingue messages, opérations, demandes et plans dans sa chronologie. Un tour encore actif ne se replie pas comme un tour terminé. <a href="https://github.com/pingdotgg/t3code/blob/50c1c5dc536493826fc66e220598f38b831d5bde/apps/web/src/components/chat/MessagesTimeline.logic.ts#L1106" target="_blank" rel="noopener">Regroupement des tours dans t3code</a>.</p><p><strong>Adaptation recommandée pour Workbench</strong>Pendant le tour, commentaires publics, opérations observables et texte généré restent dans le fil continu. À la fin du tour, les opérations se regroupent au-dessus de la réponse finale. Les listes et tableaux appartiennent à cette réponse, pas à une activité générique.</p></div>
+<figure><a href="04-turn.png" target="_blank" rel="noopener" aria-label="Agrandir : Suivre le travail, puis lire la réponse"><img src="04-turn.png" alt="Comparaison du même tour en cours, avec opérations continues, et terminé, avec opérations regroupées et réponse finale visible."></a><figcaption>Ouvrir l’image pour examiner les détails. Les libellés de l’application restent en anglais.</figcaption></figure>
+<ul class="inspection"><li>À gauche : opérations lisibles et état en cours explicite.</li><li>À droite : groupe repliable, réponse finale toujours visible.</li><li>Sources dans la carte flottante du dossier ; fin du tour distincte de la fin de recherche.</li></ul>
+</section>
+<footer>Les mécanismes observés dans t3code sont reliés à leurs sources. Le transfert à Workbench reste une recommandation à valider. Les références demeurent dans la carte flottante ; le système ne demande une clarification que si elle est utile. Aucun choix entre des organisations nouvelles n’est demandé ici.</footer>
+</main></html>

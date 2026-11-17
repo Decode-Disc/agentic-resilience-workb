@@ -3,10 +3,17 @@ import {
     HeadContent,
     Scripts,
 } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { lazy, type ReactNode, Suspense } from "react";
+import { ThemeProvider } from "next-themes";
+import { InvitationAccessProvider } from "@/components/workspace/invitation-access-context";
+import { PRODUCT_NAME } from "@/config/product";
 import favicon from "@/favicon.svg?url";
 import type { AppRouterContext } from "@/integrations/convex/router-context";
 import appCss from "@/styles.css?url";
+
+const ImpeccableLiveRoot = import.meta.env.DEV
+    ? lazy(() => import("@/components/development/impeccable-live-root"))
+    : null;
 
 export const Route = createRootRouteWithContext<AppRouterContext>()({
     head: () => ({
@@ -17,7 +24,7 @@ export const Route = createRootRouteWithContext<AppRouterContext>()({
                 content: "width=device-width, initial-scale=1",
             },
             {
-                title: "Agentic Resilience Evidence Workbench",
+                title: PRODUCT_NAME,
             },
             {
                 name: "description",
@@ -45,12 +52,24 @@ export const Route = createRootRouteWithContext<AppRouterContext>()({
 
 function RootDocument({ children }: { children: ReactNode }) {
     return (
-        <html lang="en">
+        <html lang="en" suppressHydrationWarning>
             <head>
                 <HeadContent />
             </head>
             <body suppressHydrationWarning>
-                {children}
+                <ThemeProvider
+                    attribute="class"
+                    defaultTheme="light"
+                    enableSystem={false}>
+                    <InvitationAccessProvider>
+                        {children}
+                        {ImpeccableLiveRoot ? (
+                            <Suspense fallback={null}>
+                                <ImpeccableLiveRoot />
+                            </Suspense>
+                        ) : null}
+                    </InvitationAccessProvider>
+                </ThemeProvider>
                 <Scripts />
             </body>
         </html>

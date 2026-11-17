@@ -2,16 +2,29 @@ import type {
     SecCompanyMatch,
     SecCompanyResolver,
 } from "@convex/companyResolution";
+import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
 import { companySearchResultLimit } from "@convex/resourceLimits";
+import {
+    DEFAULT_SEC_TIMEOUT_MS,
+    MAX_APPROVED_SOURCE_BYTES,
+    MAX_SEC_ATTEMPTS,
+    SEC_COMPANY_INDEX_CACHE_TTL_MS,
+} from "@convex/resourcePolicy";
 import Fuse from "fuse.js";
 
 type ProviderAttempt = {
-    operation: "resolve_company" | "revalidate_company";
+    operation:
+        | "resolve_company"
+        | "revalidate_company"
+        | "retrieve_filing_html";
     operationKey: string;
     status: "started" | "succeeded" | "failed";
     attempt: number;
     latencyMs?: number;
     errorCode?: string;
+    dispatchOutcome?: "response_received" | "unknown";
+    httpStatus?: number;
+    retryAfterAt?: number;
 };
 
 type SecCompanyResolverDependencies = {
@@ -24,14 +37,29 @@ type SecCompanyResolverDependencies = {
     ) => Promise<{ shouldExecute: boolean }>;
     operationScope?: string;
     timeoutMs?: number;
+    maxAttempts?: 1 | 2 | 3;
+    firstAttempt?: 1 | 2 | 3;
+    retryPolicy?: "confirmed_response";
+    companyIndexCacheTtlMs?: number;
 };
 
-const MAX_SEC_ATTEMPTS = 2;
-const SEC_TIMEOUT_MS = 10_000;
 const MAX_FUZZY_COMPANY_SCORE = 0.45;
 
-class SecRetryableError extends Error {
-    constructor(message: string) {
+function secTimeoutMs(custom?: number): number {
+    if (typeof custom === "number") return custom;
+    if (process.env.SEC_TIMEOUT_MS) {
+        const parsed = Number(process.env.SEC_TIMEOUT_MS);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    return DEFAULT_SEC_TIMEOUT_MS;
+}
+
+export class SecRetryableError extends Error {
+    constructor(
+        message: string,
+        readonly httpStatus?: number,
+        readonly retryAfterAt?: number,
+    ) {
         super(message);
         this.name = "SecRetryableError";
     }
@@ -51,6 +79,24 @@ type CompanyIndexEntry = {
     exchange: string;
 };
 
+type CachedCompanyIndex = {
+    fetchRef: typeof globalThis.fetch;
+    expiresAt: number;
+    companies: ReadonlyArray<CompanyIndexEntry>;
+    fuse: Fuse<CompanyIndexEntry>;
+};
+
+let cachedCompanyIndex: CachedCompanyIndex | null = null;
+let inFlightCompanyIndex: {
+    fetchRef: typeof globalThis.fetch;
+    promise: Promise<CachedCompanyIndex>;
+} | null = null;
+
+export function resetSecCompanyIndexCache(): void {
+    cachedCompanyIndex = null;
+    inFlightCompanyIndex = null;
+}
+
 export type SecEvidenceSnapshot = {
     company: SecCompanyMatch;
     filingCount: number;
@@ -64,6 +110,10 @@ export type SecEvidenceSnapshot = {
 
 export type SecCompanyEvidenceResolver = SecCompanyResolver & {
     inspectEvidence(cik: string): Promise<SecEvidenceSnapshot>;
+    retrieveDocumentHtml(
+        url: string,
+        options?: { maxBytes?: number },
+    ): Promise<string>;
 };
 
 function normalizeCik(value: string | number): string {
@@ -333,12 +383,17 @@ export function createSecCompanyResolver(
     dependencies: SecCompanyResolverDependencies,
 ): SecCompanyEvidenceResolver {
     const resultLimit = companySearchResultLimit();
+    const maxAttempts = dependencies.maxAttempts ?? MAX_SEC_ATTEMPTS;
     async function requestJson(
         operation: ProviderAttempt["operation"],
         url: string,
     ): Promise<unknown> {
         const operationKey = `${dependencies.operationScope ?? "sec"}:${operation}:${url}`;
-        for (let attempt = 1; attempt <= MAX_SEC_ATTEMPTS; attempt += 1) {
+        for (
+            let attempt = dependencies.firstAttempt ?? 1;
+            attempt <= maxAttempts;
+            attempt += 1
+        ) {
             await dependencies.reserveRequest();
             const startedAt = dependencies.now();
             const lease = await dependencies.recordAttempt({
@@ -348,13 +403,17 @@ export function createSecCompanyResolver(
                 attempt,
             });
             if (!lease.shouldExecute) {
-                throw new Error("SEC provider attempt was already recorded");
+                throw new SecRetryableError(
+                    "SEC provider attempt was already recorded",
+                );
             }
+            let responseStatus: number | undefined;
+            let retryAfterAt: number | undefined;
             try {
                 const controller = new AbortController();
                 const timeout = setTimeout(
                     () => controller.abort(),
-                    dependencies.timeoutMs ?? SEC_TIMEOUT_MS,
+                    secTimeoutMs(dependencies.timeoutMs),
                 );
                 let response: Response;
                 try {
@@ -373,10 +432,17 @@ export function createSecCompanyResolver(
                 } finally {
                     clearTimeout(timeout);
                 }
+                responseStatus = response.status;
+                retryAfterAt = providerRetryAfterAt(
+                    response.headers.get("retry-after"),
+                    dependencies.now(),
+                );
                 if (!response.ok) {
                     if (response.status === 429 || response.status >= 500) {
                         throw new SecRetryableError(
                             `SEC request failed with ${response.status}`,
+                            response.status,
+                            retryAfterAt,
                         );
                     }
                     throw new Error(
@@ -400,14 +466,29 @@ export function createSecCompanyResolver(
                     attempt,
                     latencyMs: Math.max(0, dependencies.now() - startedAt),
                     errorCode:
-                        error instanceof Error
-                            ? error.name
-                            : "UnknownProviderError",
+                        responseStatus && responseStatus >= 400
+                            ? `http_${responseStatus}`
+                            : error instanceof Error
+                              ? error.name
+                              : "UnknownProviderError",
+                    dispatchOutcome:
+                        responseStatus === undefined
+                            ? "unknown"
+                            : "response_received",
+                    httpStatus: responseStatus,
+                    retryAfterAt,
                 });
                 const retryable =
                     error instanceof TypeError ||
                     error instanceof SecRetryableError;
-                if (!retryable || attempt === MAX_SEC_ATTEMPTS) {
+                if (
+                    !retryable ||
+                    (dependencies.retryPolicy === "confirmed_response" &&
+                        ![408, 429, 500, 502, 503, 504].includes(
+                            responseStatus ?? 0,
+                        )) ||
+                    attempt === maxAttempts
+                ) {
                     throw error;
                 }
             }
@@ -424,19 +505,296 @@ export function createSecCompanyResolver(
         return parseEvidenceSnapshot(value);
     }
 
+    async function retrieveDocumentHtml(
+        url: string,
+        options: { maxBytes?: number } = {},
+    ): Promise<string> {
+        const maxBytes = options.maxBytes ?? MAX_APPROVED_SOURCE_BYTES;
+        const operation: ProviderAttempt["operation"] = "retrieve_filing_html";
+        const operationKey = `${dependencies.operationScope ?? "sec"}:${operation}:${url}`;
+
+        for (
+            let attempt = dependencies.firstAttempt ?? 1;
+            attempt <= maxAttempts;
+            attempt += 1
+        ) {
+            await dependencies.reserveRequest();
+            const startedAt = dependencies.now();
+            const lease = await dependencies.recordAttempt({
+                operation,
+                operationKey,
+                status: "started",
+                attempt,
+            });
+            if (!lease.shouldExecute) {
+                throw new SecRetryableError(
+                    "SEC provider attempt was already recorded",
+                );
+            }
+
+            const controller = new AbortController();
+            const timeout = setTimeout(
+                () => controller.abort(),
+                secTimeoutMs(dependencies.timeoutMs),
+            );
+
+            let responseStatus: number | undefined;
+            let retryAfterAt: number | undefined;
+            try {
+                let response: Response;
+                try {
+                    response = await dependencies.fetch(url, {
+                        headers: {
+                            Accept: "text/html,application/xhtml+xml,text/plain,*/*",
+                            "User-Agent": dependencies.userAgent,
+                        },
+                        signal: controller.signal,
+                    });
+                } catch (error) {
+                    if (controller.signal.aborted) {
+                        throw new SecTimeoutError();
+                    }
+                    throw error;
+                }
+
+                responseStatus = response.status;
+                retryAfterAt = providerRetryAfterAt(
+                    response.headers.get("retry-after"),
+                    dependencies.now(),
+                );
+                if (!response.ok) {
+                    if (response.status === 429 || response.status >= 500) {
+                        throw new SecRetryableError(
+                            `SEC request failed with ${response.status}`,
+                            response.status,
+                            retryAfterAt,
+                        );
+                    }
+                    throw new Error(
+                        `SEC request failed with ${response.status}`,
+                    );
+                }
+
+                const contentType = response.headers
+                    .get("content-type")
+                    ?.toLowerCase();
+                if (contentType) {
+                    const isSupported =
+                        contentType.startsWith("text/html") ||
+                        contentType.startsWith("application/xhtml+xml") ||
+                        contentType.startsWith("text/plain") ||
+                        contentType.startsWith("text/xml") ||
+                        contentType.startsWith("application/xml");
+                    if (!isSupported) {
+                        throw new Error(
+                            `Unsupported media type from SEC provider: ${contentType}`,
+                        );
+                    }
+                }
+
+                const declaredLength = response.headers.get("content-length");
+                if (declaredLength) {
+                    const parsedLength = Number.parseInt(declaredLength, 10);
+                    if (
+                        Number.isFinite(parsedLength) &&
+                        parsedLength > maxBytes
+                    ) {
+                        throw new Error(
+                            `Document exceeds declared limit of ${maxBytes} bytes (got ${parsedLength})`,
+                        );
+                    }
+                }
+
+                let html: string;
+                let onAbort: (() => void) | undefined;
+                const abortPromise = new Promise<never>((_, reject) => {
+                    onAbort = () => reject(new SecTimeoutError());
+                    if (controller.signal.aborted) {
+                        onAbort();
+                    } else {
+                        controller.signal.addEventListener("abort", onAbort);
+                    }
+                });
+
+                try {
+                    if (!response.body) {
+                        const buffer = await Promise.race([
+                            response.arrayBuffer(),
+                            abortPromise,
+                        ]);
+                        if (buffer.byteLength > maxBytes) {
+                            throw new Error(
+                                `Document exceeds limit of ${maxBytes} bytes (got ${buffer.byteLength})`,
+                            );
+                        }
+                        html = new TextDecoder().decode(buffer);
+                    } else {
+                        const reader = response.body.getReader();
+                        const chunks: Uint8Array[] = [];
+                        let totalBytes = 0;
+                        try {
+                            while (true) {
+                                const { done, value } = await Promise.race([
+                                    reader.read(),
+                                    abortPromise,
+                                ]);
+                                if (done) break;
+                                if (value) {
+                                    totalBytes += value.byteLength;
+                                    if (totalBytes > maxBytes) {
+                                        await reader.cancel();
+                                        throw new Error(
+                                            `Document exceeds limit of ${maxBytes} bytes during streaming`,
+                                        );
+                                    }
+                                    chunks.push(value);
+                                }
+                            }
+                        } finally {
+                            reader.releaseLock();
+                        }
+                        const merged = new Uint8Array(totalBytes);
+                        let offset = 0;
+                        for (const chunk of chunks) {
+                            merged.set(chunk, offset);
+                            offset += chunk.byteLength;
+                        }
+                        html = new TextDecoder().decode(merged);
+                    }
+                } finally {
+                    if (onAbort) {
+                        controller.signal.removeEventListener("abort", onAbort);
+                    }
+                }
+
+                if (new TextEncoder().encode(html).byteLength > maxBytes) {
+                    throw new Error(
+                        `Document exceeds limit of ${maxBytes} bytes after decoding`,
+                    );
+                }
+
+                await dependencies.recordAttempt({
+                    operation,
+                    operationKey,
+                    status: "succeeded",
+                    attempt,
+                    latencyMs: Math.max(0, dependencies.now() - startedAt),
+                });
+                return html;
+            } catch (error) {
+                await dependencies.recordAttempt({
+                    operation,
+                    operationKey,
+                    status: "failed",
+                    attempt,
+                    latencyMs: Math.max(0, dependencies.now() - startedAt),
+                    errorCode:
+                        responseStatus && responseStatus >= 400
+                            ? `http_${responseStatus}`
+                            : error instanceof Error
+                              ? error.name
+                              : "UnknownProviderError",
+                    dispatchOutcome:
+                        responseStatus === undefined
+                            ? "unknown"
+                            : "response_received",
+                    httpStatus: responseStatus,
+                    retryAfterAt,
+                });
+                const retryable =
+                    error instanceof TypeError ||
+                    error instanceof SecRetryableError;
+                if (
+                    !retryable ||
+                    (dependencies.retryPolicy === "confirmed_response" &&
+                        ![408, 429, 500, 502, 503, 504].includes(
+                            responseStatus ?? 0,
+                        )) ||
+                    attempt === maxAttempts
+                ) {
+                    throw error;
+                }
+            } finally {
+                clearTimeout(timeout);
+            }
+        }
+        throw new Error("SEC request exhausted its retry budget");
+    }
+
     async function revalidate(cik: string): Promise<SecCompanyMatch> {
         return (await inspectEvidence(cik)).company;
     }
 
-    return {
-        async search(query) {
+    async function loadCompanyIndex(): Promise<CachedCompanyIndex> {
+        const ttlMs =
+            dependencies.companyIndexCacheTtlMs ??
+            SEC_COMPANY_INDEX_CACHE_TTL_MS;
+        const now = dependencies.now();
+        if (
+            ttlMs > 0 &&
+            cachedCompanyIndex !== null &&
+            cachedCompanyIndex.fetchRef === dependencies.fetch &&
+            now < cachedCompanyIndex.expiresAt
+        ) {
+            return cachedCompanyIndex;
+        }
+        if (
+            ttlMs > 0 &&
+            inFlightCompanyIndex !== null &&
+            inFlightCompanyIndex.fetchRef === dependencies.fetch
+        ) {
+            return inFlightCompanyIndex.promise;
+        }
+        const loadPromise = (async () => {
             const value = await requestJson(
                 "resolve_company",
                 "https://www.sec.gov/files/company_tickers_exchange.json",
             );
+            const companies = parseCompanyIndex(value);
+            const fuse = new Fuse(companies, {
+                keys: ["legalName"],
+                includeScore: true,
+                threshold: 0.3,
+                ignoreLocation: true,
+                ignoreDiacritics: true,
+                minMatchCharLength: 2,
+                useTokenSearch: true,
+                tokenMatch: "all",
+            });
+            const entry: CachedCompanyIndex = {
+                fetchRef: dependencies.fetch,
+                expiresAt: dependencies.now() + Math.max(0, ttlMs),
+                companies,
+                fuse,
+            };
+            if (ttlMs > 0) {
+                cachedCompanyIndex = entry;
+            }
+            return entry;
+        })();
+        if (ttlMs > 0) {
+            inFlightCompanyIndex = {
+                fetchRef: dependencies.fetch,
+                promise: loadPromise,
+            };
+        }
+        try {
+            return await loadPromise;
+        } finally {
+            if (inFlightCompanyIndex?.promise === loadPromise) {
+                inFlightCompanyIndex = null;
+            }
+        }
+    }
+
+    return {
+        inspectEvidence,
+        retrieveDocumentHtml,
+        revalidate,
+        async search(query) {
+            const { companies, fuse } = await loadCompanyIndex();
             const normalizedQuery = normalizeSearchText(query);
             const searchedCik = extractCikSearch(query);
-            const companies = parseCompanyIndex(value);
             const deterministicMatches = companies
                 .flatMap((entry) => {
                     const score = deterministicSearchScore(
@@ -464,16 +822,7 @@ export function createSecCompanyResolver(
                     }));
             }
 
-            const fuzzyMatches = new Fuse(companies, {
-                keys: ["legalName"],
-                includeScore: true,
-                threshold: 0.3,
-                ignoreLocation: true,
-                ignoreDiacritics: true,
-                minMatchCharLength: 2,
-                useTokenSearch: true,
-                tokenMatch: "all",
-            })
+            const fuzzyMatches = fuse
                 .search(normalizedQuery, {
                     limit: resultLimit,
                 })
@@ -490,7 +839,5 @@ export function createSecCompanyResolver(
                 websiteUrlSource: undefined,
             }));
         },
-        revalidate,
-        inspectEvidence,
     };
 }

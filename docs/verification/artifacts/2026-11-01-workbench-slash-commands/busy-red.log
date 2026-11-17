@@ -1,0 +1,32 @@
+
+> agentic-resilience-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/convex/execution/workbench-native-interface.test.ts -t 'a command received during a tool reply' --environment=node --maxWorkers=1
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/convex/execution/workbench-native-interface.test.ts (20 tests | 1 failed | 19 skipped) 5068ms
+   × a command received during a tool reply does not deadlock the native response or trigger another generation 5066ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/convex/execution/workbench-native-interface.test.ts > a command received during a tool reply does not deadlock the native response or trigger another generation
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/__tests__/convex/execution/workbench-native-interface.test.ts:1042:1
+    1040| });
+    1041|
+    1042| test("a command received during a tool reply does not deadlock the nat…
+       | ^
+    1043|     const { t, client, runId } = await seedWorkbench();
+    1044|     let calls = 0;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 skipped (20)
+   Start at  21:09:50
+   Duration  7.13s (transform 1.46s, setup 153ms, import 1.76s, tests 5.07s, environment 0ms)
+
+ ELIFECYCLE  Test failed. See above for more details.

@@ -1,35 +1,15 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { getFunctionName } from "convex/server";
+import { api } from "@convex/_generated/api";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
-const {
-    useQuery,
-    usePaginatedQuery,
-    useMutation,
-    useAction,
-    decideSource,
-    approveCorpus,
-    decideSufficiency,
-    addManualUrl,
-    navigate,
-} = vi.hoisted(() => ({
-    useQuery: vi.fn(),
-    usePaginatedQuery: vi.fn(),
-    useMutation: vi.fn(),
-    useAction: vi.fn(),
-    decideSource: vi.fn(),
-    approveCorpus: vi.fn(),
-    decideSufficiency: vi.fn(),
-    addManualUrl: vi.fn(),
-    navigate: vi.fn(),
-}));
+const { navigate } = vi.hoisted(() => ({ navigate: vi.fn() }));
 
-vi.mock("convex/react", () => ({
-    useQuery,
-    usePaginatedQuery,
-    useMutation,
-    useAction,
-}));
+vi.mock("convex/react", async () => {
+    const { convexReactHarness } = await import(
+        "@/__tests__/helpers/convex-react-harness"
+    );
+    return convexReactHarness.module;
+});
 vi.mock("@tanstack/react-router", () => ({
     useNavigate: () => navigate,
     Link: ({ children, ...props }: React.ComponentProps<"a">) => (
@@ -37,279 +17,186 @@ vi.mock("@tanstack/react-router", () => ({
     ),
 }));
 
+import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { RunRouteComponent } from "@/components/workspace/run-route-component";
 
 beforeEach(() => {
-    useQuery.mockReset();
-    usePaginatedQuery.mockReset();
-    useMutation.mockReset();
-    useAction.mockReset();
-    decideSource.mockReset();
-    approveCorpus.mockReset();
-    decideSufficiency.mockReset();
-    addManualUrl.mockReset();
+    convexReactHarness.reset();
+    convexReactHarness.query(api.evidenceMatrix.getSummary).returns(undefined);
     navigate.mockReset();
-    useMutation.mockImplementation(() => {
-        const index = (useMutation.mock.calls.length - 1) % 3;
-        return [decideSource, approveCorpus, decideSufficiency][index];
-    });
-    useAction.mockReturnValue(addManualUrl);
-    usePaginatedQuery.mockReturnValue({
-        results: [],
-        status: "Exhausted",
-        loadMore: vi.fn(),
-    });
+    convexReactHarness.query(api.researchRuns.listMyEvents).returns([]);
 });
 
-test("wires the evidence sufficiency checkpoint", async () => {
-    useQuery.mockImplementation(() => {
-        const index = (useQuery.mock.calls.length - 1) % 3;
-        return [
-            {
-                runId: "run-1",
-                company: {
-                    legalName: "Example Corp",
-                    ticker: "EXM",
-                    exchange: "NASDAQ",
-                    cik: "123",
-                },
-                lifecycleState: "awaiting_evidence_sufficiency_review",
-                executionStatus: "paused",
-                pauseReason: "evidence_sufficiency_review",
-                activeCorpusRevisionId: "revision-1",
-                providerFailures: [],
-                updatedAt: 1,
-            },
-            [],
-            undefined,
-        ][index];
-    });
-    addManualUrl.mockResolvedValue({ sourceId: "source-1" });
-    decideSufficiency.mockResolvedValue({ accepted: true });
-
-    render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
-
-    fireEvent.click(
-        screen.getByRole("button", { name: /Add public source link/i }),
-    );
-    fireEvent.change(screen.getByLabelText(/Public source link/i), {
-        target: { value: "https://example.com/report" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^Add$/i }));
-    await waitFor(() =>
-        expect(addManualUrl).toHaveBeenCalledWith({
-            runId: "run-1",
-            corpusRevisionId: "revision-1",
-            url: "https://example.com/report",
-        }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: /Done/i }));
-
-    fireEvent.click(screen.getByRole("button", { name: /Recheck evidence/i }));
-    await waitFor(() =>
-        expect(decideSufficiency).toHaveBeenCalledWith({
-            runId: "run-1",
-            decision: expect.objectContaining({ kind: "recheck" }),
-        }),
-    );
-
-    fireEvent.change(screen.getByLabelText(/Reason for this decision/i), {
-        target: {
-            value: "Public evidence remains too limited for a credible review.",
+test("opens inventory from the current workspace without starting research", () => {
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
         },
+        lifecycleState: "evidence_ready",
+        executionStatus: "idle",
+        providerFailures: [],
     });
+    convexReactHarness
+        .query(api.evidenceMatrix.getSummary)
+        .returns({ claimCount: 4 });
+    const onInventoryOpenChange = vi.fn();
+    render(
+        <RunRouteComponent
+            runId={"run-1" as never}
+            section="progress"
+            onInventoryOpenChange={onInventoryOpenChange}
+        />,
+    );
+    expect(screen.getByText("4")).toBeTruthy();
     fireEvent.click(
-        screen.getByRole("button", { name: /Finish with limited evidence/i }),
+        screen.getByRole("button", { name: "Open evidence inventory" }),
     );
-    await waitFor(() =>
-        expect(decideSufficiency).toHaveBeenCalledWith({
-            runId: "run-1",
-            decision: expect.objectContaining({
-                kind: "complete_insufficient",
-                reason: "Public evidence remains too limited for a credible review.",
-            }),
-        }),
-    );
+    expect(onInventoryOpenChange).toHaveBeenCalledWith(true);
+    // The workspace route owns no mutation: the harness rejects any unconfigured call.
+    expect(navigate).not.toHaveBeenCalled();
 });
 
-test("does not expose corpus approval while discovery is running", () => {
-    useQuery.mockImplementation(() => {
-        const index = (useQuery.mock.calls.length - 1) % 3;
-        return [
-            {
-                runId: "run-1",
-                company: {
-                    legalName: "Example Corp",
-                    ticker: "EXM",
-                    exchange: "NASDAQ",
-                    cik: "123",
-                },
-                lifecycleState: "discovering_sources",
-                executionStatus: "running",
-                activeCorpusRevisionId: "revision-1",
-                providerFailures: [],
-                updatedAt: 1,
-            },
-            [],
-            {
-                revision: 1,
-                status: "draft",
-                counts: { accepted: 0, rejected: 0, pending: 0 },
-                sources: [],
-            },
-        ][index];
+test("does not turn unavailable investigation into an analytical outcome", () => {
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "evidence_ready",
+        executionStatus: "idle",
+        providerFailures: [],
     });
-
-    render(<RunRouteComponent runId={"run-1" as never} section="sources" />);
-
-    expect(
-        screen.getByText(/We’re gathering public sources for your review/i),
-    ).toBeTruthy();
-    expect(
-        screen.queryByRole("button", { name: /Approve corpus/i }),
-    ).toBeNull();
-});
-
-test("routes the analyst to the active source-review checkpoint", async () => {
-    useQuery.mockImplementation(() => {
-        const index = (useQuery.mock.calls.length - 1) % 3;
-        return [
-            {
-                runId: "run-1",
-                company: {
-                    legalName: "Example Corp",
-                    ticker: "EXM",
-                    exchange: "NASDAQ",
-                    cik: "123",
-                },
-                lifecycleState: "awaiting_source_review",
-                executionStatus: "paused",
-                pauseReason: "source_review",
-                activeCorpusRevisionId: "revision-1",
-                providerFailures: [
-                    {
-                        service: "exa",
-                        operation: "search",
-                        errorCode: "exa_not_configured",
-                        occurredAt: 1,
-                    },
-                ],
-                updatedAt: 1,
-            },
-            [],
-            {
-                revision: 1,
-                status: "draft",
-                counts: { accepted: 0, rejected: 0, pending: 0 },
-                sources: [],
-            },
-        ][index];
-    });
-
-    render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
-
-    await waitFor(() =>
-        expect(navigate).toHaveBeenCalledWith({
-            to: "/workspace/$runId",
-            params: { runId: "run-1" },
-            search: { section: "sources" },
-            replace: true,
-        }),
+    render(
+        <RunRouteComponent
+            runId={"run-1" as never}
+            section="investigation"
+            subsection="review"
+        />,
     );
     expect(
-        screen.getAllByText(
-            /Independent web discovery is unavailable.*filing sources remain available/i,
-        ).length,
+        screen.getByRole("heading", {
+            name: "Investigation is not available yet",
+        }),
     ).toBeTruthy();
-    expect(screen.getByText(/Review source set/i)).toBeTruthy();
     expect(
         screen.queryByText(
-            /EXA_API_KEY|Convex deployment|awaiting_source_review|exa_not_configured/i,
+            /justified insufficiency|no retained appraisal|not established/i,
         ),
     ).toBeNull();
 });
 
-test("keeps the approved source set visible for inspection", () => {
-    usePaginatedQuery.mockReturnValue({
-        results: [
+test("does not advertise manual source intake after corpus approval", () => {
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "corpus_approved",
+        executionStatus: "idle",
+        activeCorpusRevisionId: "revision-1",
+        providerFailures: [
             {
-                sourceId: "source-1",
-                canonicalUrl: "https://example.com/report",
-                title: "Approved report",
-                origin: "exa",
-                category: "independent_analysis",
-                decision: "accepted",
-                publishedAt: undefined,
-                reason: undefined,
+                service: "exa",
+                operation: "search",
+                errorCode: "exa_not_configured",
+                occurredAt: 1,
             },
         ],
-        status: "Exhausted",
-        loadMore: vi.fn(),
-    });
-    useQuery.mockImplementation((reference) => {
-        const functionName = getFunctionName(reference);
-        if (functionName === "researchRuns:getMine") {
-            return {
-                runId: "run-1",
-                company: {
-                    legalName: "Example Corp",
-                    ticker: "EXM",
-                    exchange: "NASDAQ",
-                    cik: "123",
-                },
-                lifecycleState: "corpus_approved",
-                executionStatus: "idle",
-                activeCorpusRevisionId: "revision-1",
-                providerFailures: [],
-                updatedAt: 2,
-            };
-        }
-        if (functionName === "researchRuns:listMyEvents") {
-            return [];
-        }
-        if (functionName === "sources:getReviewSummary") {
-            return {
-                revision: 1,
-                status: "approved",
-                counts: { accepted: 1, rejected: 0, pending: 0 },
-                total: 1,
-                candidateLimit: 48,
-            };
-        }
-        if (functionName === "sources:getReviewSource") {
-            return {
-                sourceId: "source-1",
-                canonicalUrl: "https://example.com/report",
-                title: "Approved report",
-                origin: "exa",
-                category: "independent_analysis",
-                decision: "accepted",
-                publishedAt: undefined,
-                reason: undefined,
-            };
-        }
-        return undefined;
-    });
+        updatedAt: 2,
+    } as never);
 
-    render(<RunRouteComponent runId={"run-1" as never} section="sources" />);
+    render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
 
-    expect(screen.getAllByText("Source set approved").length).toBeGreaterThan(
-        0,
-    );
     expect(
-        screen.getByRole("button", {
-            name: /Open Approved report for review/i,
-        }),
+        screen.queryByText(/you can add a public source manually/i),
+    ).toBeNull();
+    expect(
+        screen.getByText(
+            /Independent web discovery was unavailable.*filing sources remain available in this approved source set/i,
+        ),
+    ).toBeTruthy();
+});
+
+test.each([
+    ["running", undefined, "Evidence is being prepared"],
+    [
+        "paused",
+        "claim_generation_unavailable",
+        "Evidence is temporarily unavailable",
+    ],
+    ["failed", undefined, "Evidence could not be prepared"],
+] as const)("explains persisted evidence preparation state %s", (executionStatus, pauseReason, title) => {
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "extracting_evidence",
+        executionStatus,
+        pauseReason,
+        activeCorpusRevisionId: "revision-1",
+        corpusRevisionStatus: "approved",
+        canStartNewCorpusRevision: false,
+        executionGeneration: 1,
+        sourcesPhase: "collecting",
+        providerFailures: [{ service: "exa", errorCode: "http_503" }],
+        updatedAt: 2,
+    });
+    render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
+    expect(screen.getByText(title)).toBeTruthy();
+    expect(
+        screen.getByText(
+            "Some research sources were unavailable. Inspect the approved set in Sources and consider any evidence gaps during review.",
+        ),
     ).toBeTruthy();
     expect(
-        screen
-            .getByRole("button", {
-                name: /Accepted Approved report as accepted/i,
-            })
-            .hasAttribute("disabled"),
-    ).toBe(true);
-    expect(screen.queryByRole("button", { name: /Add source/i })).toBeNull();
+        screen.queryByText(/Independent web discovery is unavailable/),
+    ).toBeNull();
     expect(
-        screen.queryByText(/Sources will appear here when discovery is ready/i),
+        screen.getByRole("region", { name: "Research progress" }).textContent,
+    ).not.toMatch(
+        /claim_generation_unavailable|EXA_API_KEY|evidenceExecution|extracting_evidence/,
+    );
+});
+
+test("a run that failed before Sources prepared material is reported as stopped, not still preparing", () => {
+    convexReactHarness.query(api.researchRuns.getMine).returns({
+        runId: "run-1",
+        startMode: "framed",
+        sourcesProtocol: "sources_mission_v1",
+        company: {
+            legalName: "Example Corp",
+            ticker: "EXM",
+            exchange: "NASDAQ",
+            cik: "123",
+        },
+        lifecycleState: "discovering_sources",
+        executionStatus: "failed",
+        sourcesPhase: "failed",
+        providerFailures: [],
+        updatedAt: 2,
+    });
+    render(<RunRouteComponent runId={"run-1" as never} section="sources" />);
+    expect(
+        screen.getByRole("heading", {
+            name: "Documentary preparation stopped",
+        }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Preparing documentary sources/)).toBeNull();
+    expect(
+        screen.queryByText(/discovering_sources|failed|sources_need_capacity/),
     ).toBeNull();
 });

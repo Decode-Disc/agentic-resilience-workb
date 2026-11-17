@@ -25,6 +25,7 @@ test("requests metadata-only Exa results", async () => {
                 title: "Independent analysis",
                 publishedAt: Date.parse("2026-06-01T00:00:00.000Z"),
                 providerReference: "exa-1",
+                providerResultPosition: 0,
             },
         ],
         rejected: 0,
@@ -35,6 +36,20 @@ test("requests metadata-only Exa results", async () => {
         type: "auto",
         numResults: 4,
         contents: false,
+    });
+});
+
+test("preserves contents: false when domain filters are supplied", async () => {
+    const search = vi.fn(async () => ({
+        results: [],
+    }));
+    const adapter = createExaDiscoveryAdapter({ search });
+    await adapter.search("CCC query", 5, ["example.com", "sec.gov"]);
+    expect(search).toHaveBeenCalledWith("CCC query", {
+        type: "auto",
+        numResults: 5,
+        contents: false,
+        includeDomains: ["example.com", "sec.gov"],
     });
 });
 
@@ -63,6 +78,7 @@ test("keeps valid results when another Exa URL is invalid", async () => {
                 title: "Valid result",
                 publishedAt: undefined,
                 providerReference: "valid",
+                providerResultPosition: 0,
             },
         ],
         rejected: 1,

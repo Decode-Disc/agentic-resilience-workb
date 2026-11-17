@@ -1,0 +1,11 @@
+@reference "../../styles.css";
+
+.tip {
+    @apply w-auto;
+    max-width: min(280px, calc(100vw - 32px));
+    @apply gap-[6px] py-[10px] px-[12px] rounded-[12px] bg-popover bg-none text-foreground text-[12.5px] leading-[1.45];
+    box-shadow:
+        0 0 0 1px var(--chip-edge),
+        0 16px 32px -16px
+        color-mix(in oklab, var(--foreground) 40%, transparent);
+}

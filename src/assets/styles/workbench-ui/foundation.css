@@ -1,0 +1,64 @@
+/* Reference materials shared only by the question-led component library. */
+.wb-ui {
+    /* Confident deceleration for arrivals; Motion uses the same curve from motion.ts. */
+    --wb-ease-arrive: cubic-bezier(0.16, 1, 0.3, 1);
+    @apply font-sans text-[16px] leading-[normal] tracking-[normal] text-foreground;
+    -webkit-font-smoothing: antialiased;
+    @apply box-border;
+}
+@layer base {
+    .wb-ui *,
+    .wb-ui *::before,
+    .wb-ui *::after {
+        @apply box-border;
+    }
+}
+@layer base {
+    .wb-ui b {
+        @apply font-semibold;
+    }
+}
+.wb-ui p {
+    @apply m-0;
+}
+@layer base {
+    :where(.wb-ui) :where(button, input) {
+        font-family: inherit;
+    }
+}
+.wb-ui button {
+    @apply cursor-pointer;
+}
+.wb-ui button:disabled {
+    @apply cursor-default;
+}
+.wb-ui button:focus-visible,
+.wb-ui a:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+@layer base {
+    .wb-ui input:focus-visible {
+        outline: 2px solid var(--ring);
+        @apply outline-offset-[2px];
+    }
+}
+.wb-ui table {
+    @apply border-spacing-0;
+}
+.wb-ui [data-wb-disabled="true"] {
+    @apply opacity-[0.5] pointer-events-none;
+}
+.wb-label {
+    @apply font-mono text-[0.6875rem] font-medium tracking-[0.12em] leading-[1.5] uppercase text-muted-foreground;
+}
+.wb-meta {
+    @apply font-mono text-[0.71875rem] leading-[1.5] text-muted-foreground;
+}
+.wb-slash {
+    @apply text-brand-purple -tracking-[0.06em];
+}
+
+.wb-live-dot {
+    @apply inline-block size-[7px] rounded-[50%] bg-brand-purple bg-none;
+}

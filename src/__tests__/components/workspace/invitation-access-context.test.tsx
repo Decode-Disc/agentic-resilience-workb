@@ -1,4 +1,12 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { Id } from "@convex/_generated/dataModel";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
+import { useEffect } from "react";
 import {
     afterAll,
     afterEach,
@@ -28,8 +36,24 @@ class ResizeObserverMock {
     disconnect() {}
 }
 
-function TestConsumer({ onSuccess }: { onSuccess?: () => void }) {
-    const { openInvitationDrawer, isOpen } = useInvitationAccess();
+function TestConsumer({
+    onSuccess,
+    onCancel,
+    restored = false,
+}: {
+    onSuccess?: () => void;
+    onCancel?: () => void;
+    restored?: boolean;
+}) {
+    const { openInvitationDrawer, resolveInvitationDrawer, isOpen } =
+        useInvitationAccess();
+    useEffect(() => {
+        if (restored)
+            void resolveInvitationDrawer(
+                { visitorId: "visitor-1" as Id<"visitors">, role: "analyst" },
+                "session",
+            );
+    }, [restored, resolveInvitationDrawer]);
     return (
         <div>
             <span data-testid="drawer-status">
@@ -37,7 +61,7 @@ function TestConsumer({ onSuccess }: { onSuccess?: () => void }) {
             </span>
             <button
                 type="button"
-                onClick={() => openInvitationDrawer({ onSuccess })}>
+                onClick={() => openInvitationDrawer({ onSuccess, onCancel })}>
                 Open Access Drawer
             </button>
         </div>
@@ -63,8 +87,9 @@ describe("InvitationAccessContext", () => {
         vi.unstubAllGlobals();
     });
 
-    test("opens drawer and handles admission via context provider", async () => {
+    test("successful admission closes the drawer without invoking cancellation", async () => {
         const onSuccess = vi.fn();
+        const onCancel = vi.fn();
         claimInvitation.mockResolvedValue({
             visitorId: "visitor-1",
             role: "analyst",
@@ -72,7 +97,7 @@ describe("InvitationAccessContext", () => {
 
         render(
             <InvitationAccessProvider>
-                <TestConsumer onSuccess={onSuccess} />
+                <TestConsumer onSuccess={onSuccess} onCancel={onCancel} />
             </InvitationAccessProvider>,
         );
 
@@ -84,13 +109,13 @@ describe("InvitationAccessContext", () => {
 
         expect(screen.getByTestId("drawer-status").textContent).toBe("Open");
 
-        const accessCode = screen.getByLabelText(/Access code/i);
-        fireEvent.change(accessCode, {
+        const accessCodeForm = screen.getByRole("form", {
+            name: /Workspace access/i,
+        });
+        fireEvent.change(within(accessCodeForm).getByRole("textbox"), {
             target: { value: "4207" },
         });
-        fireEvent.submit(
-            screen.getByRole("form", { name: /Workspace access/i }),
-        );
+        fireEvent.submit(accessCodeForm);
 
         await waitFor(() =>
             expect(claimInvitation).toHaveBeenCalledWith({
@@ -99,5 +124,73 @@ describe("InvitationAccessContext", () => {
         );
         expect(onSuccess).toHaveBeenCalled();
         expect(screen.getByTestId("drawer-status").textContent).toBe("Closed");
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("form", { name: /Workspace access/i }),
+            ).toBeNull(),
+        );
+        expect(onSuccess).toHaveBeenCalledOnce();
+        expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    test("restored access resumes the pending action once without cancellation or a code claim", async () => {
+        const onSuccess = vi.fn();
+        const onCancel = vi.fn();
+        const { rerender } = render(
+            <InvitationAccessProvider>
+                <TestConsumer onSuccess={onSuccess} onCancel={onCancel} />
+            </InvitationAccessProvider>,
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Open Access Drawer" }),
+        );
+        rerender(
+            <InvitationAccessProvider>
+                <TestConsumer
+                    onSuccess={onSuccess}
+                    onCancel={onCancel}
+                    restored
+                />
+            </InvitationAccessProvider>,
+        );
+        await waitFor(() =>
+            expect(screen.getByTestId("drawer-status").textContent).toBe(
+                "Closed",
+            ),
+        );
+        rerender(
+            <InvitationAccessProvider>
+                <TestConsumer onSuccess={onSuccess} onCancel={onCancel} />
+            </InvitationAccessProvider>,
+        );
+        rerender(
+            <InvitationAccessProvider>
+                <TestConsumer
+                    onSuccess={onSuccess}
+                    onCancel={onCancel}
+                    restored
+                />
+            </InvitationAccessProvider>,
+        );
+        expect(onSuccess).toHaveBeenCalledOnce();
+        expect(onCancel).not.toHaveBeenCalled();
+        expect(claimInvitation).not.toHaveBeenCalled();
+    });
+
+    test("explicit cancellation still invokes the cancellation callback once", async () => {
+        const onCancel = vi.fn();
+        const onSuccess = vi.fn();
+        render(
+            <InvitationAccessProvider>
+                <TestConsumer onSuccess={onSuccess} onCancel={onCancel} />
+            </InvitationAccessProvider>,
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: /Open Access Drawer/i }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        await waitFor(() => expect(onCancel).toHaveBeenCalledOnce());
+        expect(onSuccess).not.toHaveBeenCalled();
+        expect(claimInvitation).not.toHaveBeenCalled();
     });
 });

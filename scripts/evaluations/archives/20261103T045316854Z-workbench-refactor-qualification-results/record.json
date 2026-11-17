@@ -1,0 +1,243 @@
+{
+    "schemaVersion": 1,
+    "id": "20261103T045316854Z-workbench-refactor-qualification-results",
+    "createdAt": "2026-11-03T04:53:16.854Z",
+    "git": {
+        "head": "daf13869f35fc19365604aee9eb2ca73d0940a86",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/tmp/workbench-shared-execution-refactor-20261102/docs/verification/2026-11-03-workbench-shared-execution-qualification.md",
+            "archivePath": "repository/docs/verification/2026-11-03-workbench-shared-execution-qualification.md"
+        },
+        {
+            "origin": "/tmp/workbench-refactor-qualification-20261103/authorization.json",
+            "archivePath": "external/authorization/authorization.json"
+        },
+        {
+            "origin": "/tmp/workbench-refactor-qualification-20261103/live",
+            "archivePath": "external/paid-results"
+        },
+        {
+            "origin": "/tmp/workbench-refactor-qualification-20261103/live-run.log",
+            "archivePath": "external/paid-log/live-run.log"
+        },
+        {
+            "origin": "/tmp/workbench-refactor-qualification-20261103/cost-reconciliation.json",
+            "archivePath": "external/reconciliation/cost-reconciliation.json"
+        },
+        {
+            "origin": "/tmp/workbench-refactor-qualification-20261103/semantic-review.json",
+            "archivePath": "external/semantic-review/semantic-review.json"
+        },
+        {
+            "origin": "/tmp/workbench-refactor-qualification-20261103/deterministic-preflight.log",
+            "archivePath": "external/deterministic-checks/deterministic-preflight.log"
+        },
+        {
+            "origin": "/tmp/workbench-refactor-qualification-20261103/dry-run.log",
+            "archivePath": "external/dry-log/dry-run.log"
+        },
+        {
+            "origin": "/tmp/workbench-refactor-qualification-20261103/protocol.json",
+            "archivePath": "external/protocol/protocol.json"
+        },
+        {
+            "origin": "/tmp/workbench-refactor-qualification-20261103/qualification.test.ts",
+            "archivePath": "external/driver/qualification.test.ts"
+        },
+        {
+            "origin": "/tmp/workbench-refactor-qualification-20261103/qualification.config.ts",
+            "archivePath": "external/config/qualification.config.ts"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/authorization/authorization.json",
+            "bytes": 508,
+            "sha256": "0d38a8b0bf646889de57af872354fa4eb6bb4da316712e3122d1f77af4aecbf6"
+        },
+        {
+            "path": "external/config/qualification.config.ts",
+            "bytes": 1382,
+            "sha256": "06ef2a968a943b7f32ec292db2b276cb90a2257ff2edc062ddd0b92d6d01f35f"
+        },
+        {
+            "path": "external/deterministic-checks/deterministic-preflight.log",
+            "bytes": 602,
+            "sha256": "02c97c96e533bdc261e912deb08a8cde5d672e289cdcd24c4d4ab5368001c899"
+        },
+        {
+            "path": "external/driver/qualification.test.ts",
+            "bytes": 19296,
+            "sha256": "7a98e1cc7586f0217c4923f015c943be25898d8dbb4a4d336cb4c212ff62a936"
+        },
+        {
+            "path": "external/dry-log/dry-run.log",
+            "bytes": 234,
+            "sha256": "e4fc079643598af545639b0d3d7091422160009845214772f83582355d908aed"
+        },
+        {
+            "path": "external/paid-log/live-run.log",
+            "bytes": 236,
+            "sha256": "e860827e8bf0db5f4505424f825e7e0c38c39b72e6da6a16a666090c35d71163"
+        },
+        {
+            "path": "external/paid-results/authorship-and-switching-after-compaction.json",
+            "bytes": 115458,
+            "sha256": "a5a26d2dd5e94a77559a6308fa4bf0fb327f58a1e37e0d7491eadb8df1dc1c3f"
+        },
+        {
+            "path": "external/paid-results/authorship-and-switching-exact-history.json",
+            "bytes": 1652,
+            "sha256": "1905f4c1b2388517c99fda98d7381e949e522ff03323f1d146601dc28358e679"
+        },
+        {
+            "path": "external/paid-results/authorship-and-switching-final.json",
+            "bytes": 123931,
+            "sha256": "0bdedfad4e1886fc6cff8c1579a9632f74e827fbe35612bfb0dad4b065fa89c7"
+        },
+        {
+            "path": "external/paid-results/authorship-and-switching-model.json",
+            "bytes": 413,
+            "sha256": "786968a83e777e52c5f49c7bf5e97f608778fd08c75fd3bd158c127837d19b4c"
+        },
+        {
+            "path": "external/paid-results/latest-scope-and-negation-after-compaction.json",
+            "bytes": 133323,
+            "sha256": "670aa89180fa2a663e0c3db744ecd7ac7ee94858932318b9ca9a689591bc35ce"
+        },
+        {
+            "path": "external/paid-results/latest-scope-and-negation-exact-history.json",
+            "bytes": 971,
+            "sha256": "e0c6d35dbf45d85b38424cf0570636479e506c256d23d232d7f8fc0033a7a8fe"
+        },
+        {
+            "path": "external/paid-results/latest-scope-and-negation-final.json",
+            "bytes": 140812,
+            "sha256": "b1725a0a15fb01ecde3f3294060b7c554515788c6e536b4cafef3e76ea9ac0a5"
+        },
+        {
+            "path": "external/paid-results/latest-scope-and-negation-model.json",
+            "bytes": 413,
+            "sha256": "786968a83e777e52c5f49c7bf5e97f608778fd08c75fd3bd158c127837d19b4c"
+        },
+        {
+            "path": "external/paid-results/ledger.jsonl",
+            "bytes": 3383,
+            "sha256": "7107755bb590a9d47024dc7861ed1a85decc1239dc21c50086910d512e934a3d"
+        },
+        {
+            "path": "external/paid-results/progress.json",
+            "bytes": 3198,
+            "sha256": "6f1970c26307de181a50779afdf30492c3c54c3dd2547b26f4ca00115ac9c692"
+        },
+        {
+            "path": "external/paid-results/request-1.json",
+            "bytes": 17083,
+            "sha256": "35f66410e5286bf3d2876c3b90812129e2581243fea4fc210b79509389ecb093"
+        },
+        {
+            "path": "external/paid-results/request-2.json",
+            "bytes": 50452,
+            "sha256": "18ff7c1da4bd8546f82e8098790b42f4043a2b539928c6d691c79a8f13b87283"
+        },
+        {
+            "path": "external/paid-results/request-3.json",
+            "bytes": 16474,
+            "sha256": "12e0f0e1cd8d354efce99a2b1a7babfa8f85a6e95cda60c8a2ef81699a709205"
+        },
+        {
+            "path": "external/paid-results/request-4.json",
+            "bytes": 50226,
+            "sha256": "ea9ccf0697edba8014dd095ed7d06c015faefcaa9b06d8154bf5d0b763c76b2d"
+        },
+        {
+            "path": "external/paid-results/request-5.json",
+            "bytes": 51788,
+            "sha256": "47cdeab93adb1c7b63f1525b137b705a0e311e1db44b01c68b2d81df9f0d1a3e"
+        },
+        {
+            "path": "external/paid-results/response-1-headers.json",
+            "bytes": 98,
+            "sha256": "6def350a3767cd51500361428b5d7deb1c5f2e17bcf489f228d5fecc6e7e3db9"
+        },
+        {
+            "path": "external/paid-results/response-1.txt",
+            "bytes": 40319,
+            "sha256": "db2195370e4bb4076b0af0acb4f058738720b6b8bddec78d64fd14920f920033"
+        },
+        {
+            "path": "external/paid-results/response-2-headers.json",
+            "bytes": 98,
+            "sha256": "61e35c1cc50177ea506299012099b31372a262fb1f2356b142c9ba8fa4f80a49"
+        },
+        {
+            "path": "external/paid-results/response-2.txt",
+            "bytes": 22178,
+            "sha256": "6a86e77f3d55f65066293e63bd8fe8fc8c0558747522d92e02b876376f0e08cc"
+        },
+        {
+            "path": "external/paid-results/response-3-headers.json",
+            "bytes": 98,
+            "sha256": "a34611e6ecf57adb7c4dc59a5ef08076ff11691db2fc6cc1df8502f0babddfe1"
+        },
+        {
+            "path": "external/paid-results/response-3.txt",
+            "bytes": 37978,
+            "sha256": "e8b3229319247a465250752ba2f35c12d0c085e7c7be1163843feb68c6db74b1"
+        },
+        {
+            "path": "external/paid-results/response-4-headers.json",
+            "bytes": 98,
+            "sha256": "1923f12d938fdf1b649d532cd12f3d72ec74bcb318de6548cee70099c430e7a2"
+        },
+        {
+            "path": "external/paid-results/response-4.txt",
+            "bytes": 6503,
+            "sha256": "3795096f101eabbbff2f06e215628dad42d95a940718c3de7025895df4e81bca"
+        },
+        {
+            "path": "external/paid-results/response-5-headers.json",
+            "bytes": 98,
+            "sha256": "20bda58b9839022c414fe37db9010d5961af99d27ba93a61d7492d9e03766f7b"
+        },
+        {
+            "path": "external/paid-results/response-5.txt",
+            "bytes": 80199,
+            "sha256": "682322178d5283e9493ba6d6738978aac4b41c87443af17903029b80c44122b4"
+        },
+        {
+            "path": "external/paid-results/summary.json",
+            "bytes": 3265,
+            "sha256": "b59d4fc687bfa641ce75809fcd3eb7d93c9a40fa692fa870be0ddf6652729122"
+        },
+        {
+            "path": "external/protocol/protocol.json",
+            "bytes": 1230,
+            "sha256": "f9f04e6cd9e0fdde7fb065b41d3904952f967f124b4f786c6fb514cd6018ef3c"
+        },
+        {
+            "path": "external/reconciliation/cost-reconciliation.json",
+            "bytes": 2564,
+            "sha256": "57b6a2ec2d0af2ce50e5d5e1d9e80fa9bb6c55a0e0c1606887c068f1acf4d6c3"
+        },
+        {
+            "path": "external/semantic-review/semantic-review.json",
+            "bytes": 2592,
+            "sha256": "4080fff882edc9c975ec93f00402cae9f30b5eed803cef19f7906577e42f3513"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-03-workbench-shared-execution-qualification.md",
+            "bytes": 8106,
+            "sha256": "361a92a4867402017b681c2a9f649ad612ec4de59b6b842519682d7288fdc694"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261103T045316854Z-workbench-refactor-qualification-results.tar.gz",
+        "bytes": 91048,
+        "sha256": "1fc1f0ddf118923fd462f0b1cf09133f06233ab6b393770f15bd114a0e84cd03"
+    },
+    "verification": "restored_and_verified"
+}

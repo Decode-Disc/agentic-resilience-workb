@@ -1,0 +1,94 @@
+@reference "../../styles.css";
+
+.popup {
+    width: min(416px, calc(100vw - 32px));
+    max-height: min(85dvh, var(--available-height, 85dvh));
+    @apply rounded-[20px] pt-[16px] px-[18px] pb-[14px] gap-[12px] bg-popover bg-none text-foreground text-left font-normal;
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklab, var(--popover) 90%, transparent),
+        0 0 0 1px var(--chip-edge),
+        0 28px 60px -20px
+        color-mix(in oklab, var(--foreground) 45%, transparent);
+}
+.arrow {
+    @apply w-[12px] h-[12px];
+    rotate: 45deg;
+    @apply bg-popover bg-none;
+}
+.arrow[data-side="right"] {
+    @apply left-[-6px];
+    box-shadow: -1px 1px 0 var(--chip-edge);
+}
+.arrow[data-side="left"] {
+    @apply right-[-6px];
+    box-shadow: 1px -1px 0 var(--chip-edge);
+}
+.arrow[data-side="bottom"] {
+    @apply top-[-6px];
+    box-shadow: -1px -1px 0 var(--chip-edge);
+}
+.arrow[data-side="top"] {
+    @apply bottom-[-6px];
+    box-shadow: 1px 1px 0 var(--chip-edge);
+}
+.header {
+    @apply flex items-center gap-[8px] shrink-0;
+}
+.identity {
+    @apply font-mono text-[11px] leading-[1.5] font-medium tracking-[0.12em] uppercase text-brand-purple;
+}
+.useTag {
+    @apply flex-[0_0_auto] h-[24px] py-0 px-[9px] rounded-[7px] gap-[5px] text-[11.5px];
+}
+.close {
+    @apply ml-auto w-[26px] h-[26px] rounded-[8px] p-[0] text-muted-foreground;
+}
+.body {
+    @apply flex flex-col gap-[12px] min-h-[0] overflow-y-auto;
+}
+.rationale {
+    @apply text-[15px] leading-[21px] font-medium tracking-[-0.01em] text-foreground;
+}
+.quote {
+    @apply flex flex-col gap-[7px] m-[0] py-[10px] px-[12px] rounded-[14px] bg-foreground/[3.5%] bg-none text-[13px] leading-[19px];
+}
+.quote footer {
+    @apply flex items-center flex-wrap gap-[8px];
+}
+.quote cite {
+    @apply font-mono not-italic text-[11px] text-muted-foreground;
+}
+.facts {
+    @apply grid grid-cols-[72px_minmax(0,_1fr)] gap-y-[9px] gap-x-[10px] items-baseline m-[0] text-[12.5px] leading-[18px];
+}
+.facts dt {
+    @apply font-mono text-[10px] tracking-[0.12em] uppercase text-muted-foreground;
+}
+.facts dd {
+    @apply m-[0];
+}
+.limitation {
+    @apply flex items-start gap-[7px];
+}
+.limitation > svg {
+    @apply text-counter-evidence shrink-0 mt-[4px];
+}
+.actions {
+    @apply flex items-center flex-wrap gap-[8px] pt-[12px];
+    border-top: 1px solid var(--divider);
+}
+.action,
+.challenge {
+    @apply text-[12.5px];
+}
+.challenge {
+    @apply mr-auto p-[0] text-muted-foreground;
+}
+.missing {
+    @apply text-[13px] leading-[19px] text-muted-foreground;
+}
+@media (prefers-reduced-motion: reduce) {
+    .popup {
+        animation: none;
+    }
+}

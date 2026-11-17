@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  21:48:17
+   Duration  794ms (transform 125ms, setup 310ms, import 73ms, tests 145ms, environment 0ms)
+

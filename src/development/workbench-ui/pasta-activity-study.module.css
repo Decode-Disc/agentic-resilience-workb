@@ -1,0 +1,32 @@
+.root {
+    width: 100%;
+    max-width: 720px;
+}
+.preview {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--foreground);
+}
+.disclosure,
+.caption {
+    color: var(--muted-foreground);
+    font-size: 11px;
+    line-height: 1.65;
+    margin: 0;
+}
+.caption {
+    margin-top: 18px;
+}
+.controls {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 14px 0 24px;
+}
+.controls label {
+    display: grid;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted-foreground);
+}

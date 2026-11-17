@@ -1,0 +1,14 @@
+{
+  "id": "initial-smoke",
+  "status": "succeeded",
+  "acceptedForIndex": false,
+  "purpose": "Shape and platform access smoke only",
+  "inputBytes": 50,
+  "inputHash": "19ccf82a8d9914174fa45014e639325c7eed26fdad009d2776a5e2554e26bbcf",
+  "shape": [
+    1,
+    1024
+  ],
+  "actualVectorDimensions": 1024,
+  "responseSha256": "f413eb12a43990f078629514c5ea4356e3a1b92b95fe383881f5ff46e928b424"
+}

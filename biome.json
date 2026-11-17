@@ -11,11 +11,14 @@
             "src/**",
             "convex/**",
             "scripts/**",
+            "!scripts/evaluations/source-selection/runs",
+            "!scripts/evaluations/source-selection/fixtures",
             "*.ts",
             "*.json",
             "!src/routeTree.gen.ts",
             "!convex/_generated",
-            "!docs/*"
+            "!docs/*",
+            "!src/__tests__/design-system/workbench-ui/references"
         ]
     },
     "formatter": {
@@ -56,6 +59,9 @@
                 "recommended": true,
                 "useButtonType": "error",
                 "useAnchorContent": "error"
+            },
+            "performance": {
+                "noAccumulatingSpread": "error"
             }
         }
     },
@@ -82,6 +88,14 @@
     },
     "overrides": [
         {
+            "includes": ["**/*", "!src/__tests__/**"],
+            "plugins": ["./tools/biome/no-chained-type-assertions-error.grit"]
+        },
+        {
+            "includes": ["src/__tests__/**"],
+            "plugins": ["./tools/biome/no-chained-type-assertions.grit"]
+        },
+        {
             "includes": ["src/**/*.{js,jsx,ts,tsx}"],
             "linter": {
                 "rules": {
@@ -91,22 +105,8 @@
                             "options": {
                                 "patterns": [
                                     {
-                                        "group": [
-                                            "../*",
-                                            "../../*",
-                                            "../../../*",
-                                            "../../../../*"
-                                        ],
-                                        "message": "Use '@/' alias."
-                                    },
-                                    {
-                                        "group": [
-                                            "../convex/*",
-                                            "../../convex/*",
-                                            "../../../convex/*",
-                                            "../../../../convex/*"
-                                        ],
-                                        "message": "Use '@convex/' alias."
+                                        "group": ["../**"],
+                                        "message": "Use the '@/...' or '@convex/...' alias instead of relative parent imports ('../...')."
                                     }
                                 ]
                             }
@@ -125,12 +125,7 @@
                             "options": {
                                 "patterns": [
                                     {
-                                        "group": [
-                                            "../*",
-                                            "../../*",
-                                            "../../../*",
-                                            "../../../../*"
-                                        ],
+                                        "group": ["../**", "!../_generated/**"],
                                         "message": "Use '@convex/' alias."
                                     }
                                 ]
@@ -146,12 +141,19 @@
                 "rules": {
                     "suspicious": {
                         "noExplicitAny": "off"
+                    },
+                    "style": {
+                        "noRestrictedImports": "off"
                     }
                 }
             }
         },
         {
-            "includes": ["src/components/ui/**/*.{ts,tsx}"],
+            "includes": [
+                "src/components/ui/**/*.{ts,tsx}",
+                "src/components/chat/agent-question.tsx",
+                "src/components/chat/message.tsx"
+            ],
             "linter": {
                 "rules": {
                     "correctness": {

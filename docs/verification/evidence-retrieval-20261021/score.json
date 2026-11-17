@@ -1,0 +1,114 @@
+{
+  "metrics": [
+    {
+      "company": "adobe",
+      "mode": "lexical",
+      "cases": 8,
+      "complete": 6,
+      "matched": 8,
+      "required": 10,
+      "degraded": 0,
+      "provenanceFailures": 0
+    },
+    {
+      "company": "adobe",
+      "mode": "hybrid",
+      "cases": 8,
+      "complete": 2,
+      "matched": 2,
+      "required": 10,
+      "degraded": 0,
+      "provenanceFailures": 0
+    },
+    {
+      "company": "nvidia",
+      "mode": "lexical",
+      "cases": 8,
+      "complete": 3,
+      "matched": 3,
+      "required": 8,
+      "degraded": 0,
+      "provenanceFailures": 0
+    },
+    {
+      "company": "nvidia",
+      "mode": "hybrid",
+      "cases": 8,
+      "complete": 2,
+      "matched": 2,
+      "required": 8,
+      "degraded": 0,
+      "provenanceFailures": 0
+    },
+    {
+      "company": "snowflake",
+      "mode": "lexical",
+      "cases": 8,
+      "complete": 4,
+      "matched": 4,
+      "required": 8,
+      "degraded": 0,
+      "provenanceFailures": 0
+    },
+    {
+      "company": "snowflake",
+      "mode": "hybrid",
+      "cases": 8,
+      "complete": 4,
+      "matched": 4,
+      "required": 8,
+      "degraded": 0,
+      "provenanceFailures": 0
+    },
+    {
+      "company": "crowdstrike",
+      "mode": "lexical",
+      "cases": 8,
+      "complete": 4,
+      "matched": 4,
+      "required": 8,
+      "degraded": 0,
+      "provenanceFailures": 0
+    },
+    {
+      "company": "crowdstrike",
+      "mode": "hybrid",
+      "cases": 8,
+      "complete": 4,
+      "matched": 4,
+      "required": 8,
+      "degraded": 0,
+      "provenanceFailures": 0
+    }
+  ],
+  "qualificationMetrics": [
+    {
+      "mode": "lexical",
+      "documents": 32,
+      "legacyAvailable": 24,
+      "referenceAvailable": 25,
+      "legacyLosses": [],
+      "degraded": 0
+    },
+    {
+      "mode": "hybrid",
+      "documents": 32,
+      "legacyAvailable": 24,
+      "referenceAvailable": 25,
+      "legacyLosses": [],
+      "degraded": 0
+    }
+  ],
+  "qualificationPreserved": true,
+  "conservativeCostUsd": 0.051473688000000004,
+  "withinBudget": true,
+  "providerAttempts": 537,
+  "comparable": true,
+  "noRegression": false,
+  "heldoutImprovement": true,
+  "provenanceFailures": 0,
+  "partial": false,
+  "winner": "lexical",
+  "groundTruth": "Investigator-authored historical references, not independent blinded human ground truth",
+  "frozenReferenceHash": "19ddad62cc8a62ca0a4f5cd74aea9c855810136297ed5e8d3024fe19049417e8"
+}

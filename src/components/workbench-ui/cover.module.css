@@ -1,0 +1,80 @@
+@reference "../../styles.css";
+
+.cover {
+    @apply relative w-[960px] h-[336px] overflow-hidden box-border py-[40px] px-[48px] flex gap-[40px] items-center bg-background;
+    background-image:
+        radial-gradient(
+            ellipse 36% 46% at 74% 50%,
+            var(--glow),
+            transparent 70%
+        ),
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size:
+        100% 100%,
+        var(--grid-pitch) var(--grid-pitch),
+        var(--grid-pitch) var(--grid-pitch);
+}
+.left {
+    @apply flex-[1] flex flex-col gap-[18px] items-start;
+}
+.mark {
+    @apply w-[52px] h-[52px] block;
+}
+.cover h1 {
+    @apply m-[0] text-[40px] leading-[44px] font-medium tracking-[-0.04em];
+}
+.subtitle {
+    @apply text-[15px] leading-[22px] text-muted-foreground max-w-[400px];
+}
+.card {
+    @apply w-[360px] box-border rounded-(--radius-3xl) py-[22px] px-[24px] flex flex-col gap-[14px];
+    background: linear-gradient(
+        170deg,
+        var(--tint-violet),
+        var(--surface-glass) 55%
+    );
+    -webkit-backdrop-filter: blur(var(--blur-glass));
+    backdrop-filter: blur(var(--blur-glass));
+    box-shadow: var(--shadow-focal);
+}
+.reading {
+    @apply text-[18px] leading-[25px] font-medium tracking-[-0.02em];
+}
+.row {
+    @apply flex flex-wrap gap-[8px];
+}
+.balance {
+    @apply flex h-[7px] rounded-[4px] overflow-hidden gap-[2px];
+}
+
+.lightMark {
+    display: var(--wb-mark-light-display);
+}
+
+.darkMark {
+    display: var(--wb-mark-dark-display);
+    @apply rounded-[12px];
+}
+
+.cardHeader {
+    @apply flex justify-between items-center;
+}
+
+.accentLabel {
+    @apply text-accent-foreground;
+}
+
+.statusDot {
+    @apply w-[7px] h-[7px];
+}
+
+.balanceSegment:nth-child(1) {
+    @apply bg-foreground bg-none;
+}
+.balanceSegment:nth-child(2) {
+    @apply bg-counter-evidence bg-none;
+}
+.balanceSegment:nth-child(3) {
+    @apply bg-foreground/18 bg-none;
+}

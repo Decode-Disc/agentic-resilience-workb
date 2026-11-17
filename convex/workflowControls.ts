@@ -1,9 +1,12 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { recordContextObservation } from "@convex/execution/journal";
+import { recordResearchObservation } from "@convex/execution/researchControl";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
-
 import { internal } from "./_generated/api";
 import { internalMutation, mutation } from "./_generated/server";
+import { cancelRunExecution } from "./domain/runCancellation";
+import { sourcePreparationEnabled } from "./resourceLimits";
+import { requireWorkspaceRun } from "./runWorkspace";
 import {
     assessmentReviewApproved,
     sourceReviewApproved,
@@ -15,6 +18,9 @@ export const startReserved = internalMutation({
     returns: v.string(),
     handler: async (ctx, args): Promise<string> => {
         const run = await ctx.db.get(args.runId);
+        if (run?.withdrawnAt) {
+            throw new Error("A withdrawn dossier cannot be resumed");
+        }
         if (run?.reservationStatus !== "consumed") {
             throw new Error("Active analysis reservation not found");
         }
@@ -47,7 +53,11 @@ export const startReserved = internalMutation({
         const workflowId = await workflow.start(
             ctx,
             internal.researchWorkflow.run,
-            { runId: run._id, executionGeneration },
+            {
+                runId: run._id,
+                executionGeneration,
+                prepareSources: sourcePreparationEnabled(),
+            },
             {
                 onComplete: internal.researchWorkflow.onComplete,
                 context: { runId: run._id },
@@ -75,23 +85,7 @@ export const approveCheckpoint = mutation({
     },
     returns: v.object({ accepted: v.boolean() }),
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
+        const { visitor, run } = await requireWorkspaceRun(ctx, args.runId);
         if (
             !run.workflowId ||
             run.executionStatus !== "paused" ||
@@ -152,6 +146,17 @@ export const approveCheckpoint = mutation({
             targetId: run._id,
             occurredAt: now,
         });
+        await recordContextObservation(ctx, run._id, {
+            key: `checkpoint-decision:${decisionId}`,
+            topic: "analyst_decision",
+            actor: { type: "visitor", visitorId: visitor._id },
+            value: {
+                event: "checkpoint_approved",
+                decisionId,
+                checkpoint: args.checkpoint,
+                decision: "approved",
+            },
+        });
         return { accepted: true };
     },
 });
@@ -160,51 +165,8 @@ export const cancel = mutation({
     args: { runId: v.id("researchRuns") },
     returns: v.object({ cancelled: v.boolean() }),
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
-        }
-        if (run.executionStatus === "cancelled") {
-            return { cancelled: false };
-        }
-        if (
-            !run.workflowId ||
-            run.executionStatus === "completed" ||
-            run.reservationStatus === "restored"
-        ) {
-            throw new Error("Research run cannot be cancelled");
-        }
-
-        await workflow.cancel(ctx, run.workflowId as WorkflowId);
-        const now = Date.now();
-        await ctx.db.patch(run._id, {
-            executionStatus: "cancelled",
-            executionGeneration: run.executionGeneration + 1,
-            nextEventSequence: run.nextEventSequence + 1,
-            updatedAt: now,
-        });
-        await ctx.db.insert("runEvents", {
-            runId: run._id,
-            sequence: run.nextEventSequence + 1,
-            type: "run_cancelled",
-            lifecycleState: run.lifecycleState,
-            executionStatus: "cancelled",
-            occurredAt: now,
-        });
-        return { cancelled: true };
+        const { run } = await requireWorkspaceRun(ctx, args.runId);
+        return cancelRunExecution(ctx, run);
     },
 });
 
@@ -244,22 +206,9 @@ export const retry = mutation({
     args: { runId: v.id("researchRuns") },
     returns: v.object({ retryCount: v.number() }),
     handler: async (ctx, args) => {
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) {
-            throw new Error("Not authenticated");
-        }
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (query) =>
-                query.eq("authUserId", authUserId),
-            )
-            .unique();
-        const run = await ctx.db.get(args.runId);
-        if (
-            visitor?.status !== "active" ||
-            run?.ownerVisitorId !== visitor._id
-        ) {
-            throw new Error("Unauthorized");
+        const { run, visitor } = await requireWorkspaceRun(ctx, args.runId);
+        if (run.withdrawnAt) {
+            throw new Error("A withdrawn dossier cannot be resumed");
         }
         if (
             run.executionStatus !== "failed" ||
@@ -296,6 +245,10 @@ export const retry = mutation({
             lifecycleState: run.lifecycleState,
             executionStatus: "paused",
             occurredAt: now,
+        });
+        await recordResearchObservation(ctx, run._id, "research_retried", {
+            type: "visitor",
+            visitorId: visitor._id,
         });
         return { retryCount: retryCount + 1 };
     },

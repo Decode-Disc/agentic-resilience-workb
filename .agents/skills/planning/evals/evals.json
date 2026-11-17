@@ -1,0 +1,145 @@
+{
+  "skill_name": "planning",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Plan a bounded retrieval and claim-extraction change for the existing source-review compatibility path. Inspect the actual workflow and providers before choosing files. Preserve the workspace and persistent rail, use existing Convex owners and durable execution, and identify the current corpus restriction without extending it to the question-led target. Draft in the conversation only; do not save a plan or implement anything.",
+      "expected_output": "A bounded plan grounded in current reference owners and implementation, preserving existing surfaces and compatibility retrieval guards while separating the target transition, specifying applicable functional TDD and durable-I/O checks, and leaving live execution separately authorized.",
+      "assertions": [
+        "Applies planning without loading writing-plans or requiring that skill as a dependency",
+        "Includes current-state evidence and identifies preserved and changed surfaces without requiring a fixed table or section count",
+        "Preserves the existing rail and source-review UI instead of redesigning them",
+        "Specifies authorization before I/O, execution leases, generation checks, cancellation, and late-result rejection",
+        "Identifies the actual owners of durable execution, persistence, and provider transport from the inspected implementation",
+        "Keeps the exercised compatibility path's approved-corpus restriction and stable passage locators without making manual corpus approval a target-wide requirement",
+        "Includes audience copy and the admitted browser gate needed for the affected protected journey, without forcing unrelated global or live checks",
+        "Does not save a plan, implement production code or activate providers"
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Inspect and revise company-entry and durable-access planning against current code and references. Check public search before confirmation, reusable access codes, mutable company tickers, retained public HTTPS references and actual protected admin routes. Treat older phase descriptions as historical rather than assuming the current journey. Draft in the conversation; do not create a plan or change application code.",
+      "expected_output": "A scoped planning revision grounded in current routes and reference authority, with stable identity, preserved public references and access behavior, and verification proportional to the affected journey.",
+      "assertions": [
+        "Treats CIK as canonical and ticker as mutable",
+        "Separates search candidates, explicit selection, and preflight",
+        "Preserves public HTTPS references while excluding local uploads",
+        "Inspects and uses the actual protected admin route rather than assuming an old route path remains current",
+        "Covers reusable access-code logout and reconnection",
+        "Honors the explicit conversation-only instruction without creating a file or changing application code"
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Plan how to connect the existing research dossier cards to live Convex data. The cards already use CutoutCard with a generated cover, pin, inset label, footer, hover/focus action, staggered content, and a matching skeleton. Keep the visual design exactly as it is. Draft in the conversation only; do not save or implement the plan.",
+      "expected_output": "A narrow integration plan that marks the existing card and skeleton composition as preserved, changes only data ownership and navigation, tests observable loading/empty/error/live states, and requires desktop/mobile/keyboard/hover visual verification without changing shared CutoutCard defaults.",
+      "assertions": [
+        "Marks the existing card structure and motion as preserved",
+        "Does not interpret data integration as redesign authorization",
+        "Preserves the matching skeleton geometry",
+        "Keeps shared CutoutCard primitives neutral",
+        "Adds live Convex data and typed navigation only",
+        "Includes desktop, mobile, keyboard, hover, focus, and console gates"
+      ],
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Plan verification for a small spacing and icon-placement correction in an existing header, plus a documentation-only wording correction. Neither changes state, interaction or text meaning. Keep this in the conversation; do not edit anything.",
+      "expected_output": "A proportionate plan using affected browser comparisons for presentation and link, structure and consistency checks for documentation, without manufactured RED tests or an automatic project-wide build.",
+      "assertions": [
+        "Classifies the observable changes before choosing checks and preserves functional TDD for any separately discovered functional contract",
+        "Does not require failing CSS-class, pixel, SVG or unchanged-label tests for the presentation correction",
+        "Uses scoped browser states and documentation checks without replaying admission, provider preparation or unrelated protected journeys",
+        "Does not require the full project suite or build without a repository obligation, explicit request or demonstrated transversal risk",
+        "Creates no persistent plan and performs no implementation"
+      ],
+      "files": [
+        "../../../AGENTS.md",
+        "../../../PRODUCT.md"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Plan the next framing slice: useful model-assisted scope and question suggestions before source acquisition, followed by explicit research launch. Explain the current-to-target transition without removing any existing checkpoint. Draft only; no implementation, provider calls or saved plan.",
+      "expected_output": "A current-state-grounded framing plan that justifies bounded semantic assistance, keeps deterministic operations deterministic, preserves launch authority and records unresolved transition contracts without inventing schemas or live readiness.",
+      "assertions": [
+        "Reads current PRODUCT and TECH requirements and the roadmap instead of treating an older ADR or phase description as a current obligation",
+        "Distinguishes delivered behavior, the approved target and the authorized slice, preserving existing guards until a replacement is implemented and verified",
+        "Permits justified bounded framing assistance before acquisition while keeping reliable lookup, validation and transitions deterministic",
+        "Does not treat framing hypotheses as established facts or allow Sources and Investigation before explicit Start research",
+        "Keeps concrete unresolved mandate or persistence decisions explicit instead of freezing an invented schema into tests",
+        "Creates no persistent plan, provider activity or production change"
+      ],
+      "files": [
+        "../../../AGENTS.md",
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Plan this approved change so another engineer can resume it tomorrow: centralize publication status mapping at its current shared owner and migrate the existing callers while preserving their observable behavior. Reuse an existing active plan if one exists; otherwise choose a useful support. I have no preferred file location. Do not implement the change.",
+      "expected_output": "A resumable plan that reuses the existing active owner or selects an appropriate persistent support, states its location and remains independent of writing-plans, without a storage-approval round or application changes.",
+      "assertions": [
+        "Inspects existing active plans and reuses the workstream's plan when one exists",
+        "When no active plan exists, chooses a file suitable for the requested next-day handoff and states its location without requiring prior storage approval",
+        "Does not use a retired directory or create competing plans or a new document series",
+        "Uses PRODUCT for requirements, TECH for enforcement and the roadmap for delivery; PROJECT is optional deeper context and ADRs remain historical rationale",
+        "Does not load writing-plans, impose its fixed template, or create commits or delegates",
+        "Leaves application implementation and external execution untouched"
+      ],
+      "files": [
+        "../../../AGENTS.md",
+        "../../../PRODUCT.md",
+        "../../../context/TECH.md",
+        "../../../docs/ROADMAP.md"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Use writing-plans to draft the approved framing change in detail. Keep this draft in the conversation; do not implement or make provider calls.",
+      "expected_output": "The explicitly selected writing-plans procedure drives detailed drafting instead of the default planning procedure, while the user's conversation-only instruction and current repository contracts remain effective.",
+      "assertions": [
+        "Loads writing-plans because the user explicitly selected it",
+        "Does not load planning as a prerequisite or impose a second planning workflow",
+        "Includes the concrete tasks, interfaces, and verification required by writing-plans where applicable",
+        "Honors the explicit conversation-only instruction despite the detailed skill's default file location",
+        "Does not implement, create commits or delegates, or invoke providers"
+      ],
+      "files": [
+        "../../../AGENTS.md",
+        "../writing-plans/SKILL.md"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Correct this typo in the existing English documentation: change 'reasearch' to 'research'. The wording and placement are already decided. Do not change anything else.",
+      "expected_output": "The agent treats this as an already-decided direct correction, without invoking either planning skill, requesting a separate planning approval, or creating a plan artifact.",
+      "assertions": [
+        "Does not load planning or writing-plans merely because the request changes a repository file",
+        "Does not create a plan file or require a separate planning phase",
+        "Limits any correction and verification to the supplied typo and applicable documentation checks"
+      ],
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "Revise this active conversation plan: Task 1 is complete and records the current publication contract; Task 2 would change an agent-specific publication module; Task 3 would migrate callers to that module. Inspection now suggests publication belongs to the shared execution module. Verify the actual owner, preserve completed work, and revise the dependent tasks. Leave implementation for later.",
+      "expected_output": "A targeted revision grounded in the actual shared owner, keeping completed work and unrelated decisions intact and distinguishing verified findings from unresolved publication contracts.",
+      "assertions": [
+        "Inspects the actual publication owner rather than treating the supplied diagnosis as sufficient implementation evidence",
+        "Updates the supplied active conversation plan rather than creating a competing plan",
+        "Revises affected tasks and dependencies while preserving completed work and unaffected decisions",
+        "Flags any remaining material interface or policy uncertainty instead of encoding a guessed requirement",
+        "Separates checks already run from proposed checks and leaves production code untouched"
+      ],
+      "files": [
+        "../../../AGENTS.md"
+      ]
+    }
+  ]
+}

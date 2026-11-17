@@ -1,0 +1,157 @@
+@reference "../../styles.css";
+
+.wrap {
+    @apply grid gap-[14px] max-w-[760px];
+    container-type: inline-size;
+}
+.timeline {
+    @apply rounded-(--radius-xl) pt-[18px] px-[26px] pb-[16px] relative;
+}
+.track,
+.fill {
+    @apply absolute;
+    left: calc(26px + 10%);
+    @apply top-[33px] h-[3px] rounded-[2px];
+}
+.track {
+    right: calc(26px + 10%);
+    @apply bg-foreground/9 bg-none;
+}
+.fill {
+    width: calc((100% - 52px) * 0.4);
+    background: linear-gradient(90deg, var(--foreground), var(--brand-purple));
+}
+.steps {
+    @apply relative grid grid-cols-5 text-center;
+}
+.step {
+    @apply flex flex-col items-center gap-[8px];
+}
+.stepLabel {
+    @apply text-[13px] font-medium;
+}
+.dot {
+    @apply w-[32px] h-[32px] rounded-(--radius-full) inline-flex items-center justify-center;
+}
+.done {
+    @apply bg-foreground bg-none text-card;
+}
+.now {
+    @apply bg-card bg-none;
+    border: 2px solid var(--brand-purple);
+}
+.now i {
+    @apply w-[10px] h-[10px] rounded-[50%] bg-brand-purple bg-none;
+}
+.todo {
+    @apply bg-card bg-none;
+    border: 1.5px solid color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+.inquiries {
+    @apply rounded-(--radius-2xl) py-[20px] px-[26px] flex flex-col;
+}
+.header {
+    @apply flex justify-between items-center flex-wrap gap-y-[4px] gap-x-[12px] pb-[10px];
+}
+.question {
+    @apply flex items-center gap-[14px] py-[12px] px-0;
+}
+.questionId {
+    @apply shrink-0 w-[34px] h-[34px] rounded-(--radius-tile) inline-flex items-center justify-center font-mono text-[12px] font-medium;
+}
+.balance {
+    @apply flex h-[5px] w-[min(240px,_100%)] rounded-[3px] overflow-hidden gap-[2px];
+}
+
+.currentLabel {
+    @apply font-semibold text-accent-foreground;
+}
+
+.upcomingLabel {
+    @apply text-muted-foreground font-normal;
+}
+
+.heading {
+    @apply flex items-center gap-[10px];
+}
+
+.title {
+    @apply text-[17px] tracking-[-.02em];
+}
+
+.currentQuestion {
+    @apply bg-accent bg-none text-accent-foreground;
+}
+
+.defaultQuestion {
+    @apply bg-foreground bg-none text-card;
+}
+
+.questionText {
+    @apply flex-[1] flex flex-col gap-[7px] min-w-[0];
+}
+
+.questionLabel {
+    @apply text-[14.5px] font-medium;
+}
+
+.pendingBalance {
+    @apply w-[min(160px,_100%)];
+}
+
+.sweep {
+    @apply flex-[1];
+}
+
+.balanceSegment:nth-child(1) {
+    @apply bg-foreground bg-none;
+}
+.balanceSegment:nth-child(2) {
+    @apply bg-counter-evidence bg-none;
+}
+.balanceSegment:nth-child(3) {
+    @apply bg-foreground/18 bg-none;
+}
+
+/* Five labelled steps no longer fit side by side: they stack, each joined to the next. */
+@container (max-width: 520px) {
+    .timeline {
+        @apply py-[18px] px-[20px];
+    }
+    .track,
+    .fill {
+        @apply hidden;
+    }
+    .steps {
+        @apply flex flex-col text-left;
+    }
+    .step {
+        @apply relative flex-row gap-[12px] pb-[14px];
+    }
+    .step:last-child {
+        @apply pb-0;
+    }
+    .step:not(:last-child)::after {
+        content: "";
+        @apply absolute left-[15px] top-[36px] bottom-[2px] w-[2px] rounded-[1px] bg-foreground/12 bg-none;
+    }
+    .step[data-state="done"]::after {
+        @apply bg-foreground bg-none;
+    }
+    .step[data-state="done"]:has(+ [data-state="current"])::after {
+        background: linear-gradient(
+            180deg,
+            var(--foreground),
+            var(--brand-purple)
+        );
+    }
+    .dot {
+        @apply shrink-0;
+    }
+    .inquiries {
+        @apply py-[18px] px-[18px];
+    }
+    .question {
+        @apply gap-[12px];
+    }
+}

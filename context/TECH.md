@@ -1,559 +1,766 @@
-# Technical Context
+# Technical Contract
 
-## Purpose and Authority
+## Authority and Boundaries
 
-This document consolidates the active technical contract for the Agentic Resilience Evidence Workbench. Read it before changing production code, configuration, dependencies, schemas, workflows, provider integrations, security controls, or tests.
+This document owns architecture, persistence, workflow, provenance, providers and security. [PRODUCT.md](../PRODUCT.md) owns analyst behavior and acceptance; [AGENTS.md](../AGENTS.md), development and verification; the [roadmap](../docs/ROADMAP.md), delivery evidence and activation. Unfinished contracts remain requirements, not delivery claims. ADRs preserve rationale without adding obligations. Find implementation locations in the repository; this document is not a code or test index.
 
-[PROJECT CONTEXT](./PROJECT.md) governs product purpose and framing. The product design defines the complete MVP contract. Accepted ADRs remain authoritative for the decisions they record; this file summarizes those decisions without replacing their rationale.
+TanStack Start owns web/SSR with strict TypeScript, React and shadcn. Convex owns domain policy, persistence, reactivity, artifacts, audit and quotas. Pi Durable owns new agent mission loops and technical checkpoints on Convex storage and scheduling. Convex Workflow retains documentary/research orchestration, human waits and pinned historical agent executions. Pi native transport and Vercel AI SDK adapters share the application admission and accounting boundaries. Retrieval uses native Convex search; optional hosted embeddings add no state owner.
 
-If this document conflicts with an accepted ADR, the product design, or `AGENTS.md`, stop and surface the conflict.
+Separate domain records, persistence, orchestration, acquisition/normalization, model routing, analytical policy and UI projections. Evidence policy stays out of UI and SSR; provider types and model identifiers stay behind adapters/configuration. CIK is canonical company identity. Mutable tickers, names, exchanges and provider metadata cannot identify retries, associations or duplicates unless a deterministic fixture owns them.
 
-## Current Technical Posture
+Pi replaces new agent execution machinery rather than adding another business workflow engine. The baseline excludes PostgreSQL, separate object storage and custom realtime transport. Eve or Vercel Workflow require demonstrated need and an explicit decision. Vercel Hobby is acceptable only within verified limits; free hosting is not promised. Model routes, credentials, resource settings, showcase identity and deployment URLs remain configuration.
 
-- Use TanStack Start rather than Next.js.
-- Use TypeScript with strict type checking. Avoid `any` and validate data at trust boundaries.
-- Use Convex as the authoritative database, reactive backend, artifact store, audit-event store, and quota state owner.
-- Use Convex Workflow as the default durable orchestrator, including awaited human events, retries, cancellation, and resumption.
-- Use Convex reactive queries for live progress instead of a separate SSE or WebSocket service.
-- Use shadcn components as accessible primitives composed into a restrained institutional research interface.
-- Use the Vercel AI SDK where it provides useful provider, structured-output, or streaming primitives. AI Elements may support secondary AI interactions, but the product must not become chat-first.
-- Target Vite 8 or newer when compatible with TanStack Start and the selected packages. Use Vite+ only if a concrete benefit is established without destabilizing the stack.
-- Prefer Bun only if the complete dependency and deployment stack is compatible; otherwise use pnpm. Use exactly one package manager and commit its lockfile.
-- Use Vitest for unit and integration tests. Add browser-level tests for critical user journeys when the relevant surface exists.
-- Vercel Hobby is acceptable only if its current documented limits support the prototype's runtime, workflow, and cost requirements.
+### Local development
 
-Do not add Eve, Vercel Workflow, PostgreSQL, a separate object store, or a custom realtime transport unless measured implementation evidence establishes a requirement Convex cannot satisfy cleanly and the user approves the change.
+`package.json` pins pnpm and the managed Node.js runtime. `devEngines.runtime` and the lockfile supply Node for pnpm scripts and `pnpm exec`; `.node-version` must match that runtime pin for CI. Bare `node` uses the project pin when pnpm's project-aware Node shim is on `PATH`. `pnpm-workspace.yaml` owns dependency controls: seven-day release age, no trust downgrade, blocked exotic subdependencies and explicit build-script permissions. Its approved migration exceptions select exact versions, preserving the controls for other versions.
 
-Do not hard-code model names, provider routing, prototype resource guards,
-access codes, showcase companies, or deployment URLs. These are configuration
-data.
+Convex CLI 1.47.0 has a version-scoped pnpm patch for [upstream issue 635](https://github.com/convex/convex-backend/issues/635). Activity-reporting failures warn and retain the existing reporting schedule without stopping the local backend; cleanup prevents further reporting. Required startup operations retain fatal error handling. The package patch includes the canonical CLI source changes and their regenerated bundled functions. Remove it after an official release passes the installed-CLI activity lifecycle regressions.
 
-## Architecture Boundaries
+Native configuration and instance identity identify each worktree's Convex deployment and state. A locked `local-runtime-ports.json` in the common Git directory reserves fixed ports for Convex, its site endpoint, the development frontend, build preview and Playwright capture service. Registration preserves configured native ports and verified frontend listeners, then assigns the first unreserved deterministic set. Reservations survive service shutdown, readiness cleanup and machine restart. Startup inspects the requested services' assigned ports before launching them and never selects another port on conflict. A terminal offers reuse, restart or cancellation for a healthy owned service, and explicit stop or cancellation for an identified conflicting listener. Noninteractive startup reuses compatible healthy services and refuses conflicts without stopping them.
 
-Keep these concerns separate:
+`pnpm dev:ports` lists reservations offline; `pnpm dev:status` lists actual TCP occupants with executable names, PIDs and working directories, or an explicit unavailable-owner state. `--json` exposes structured status without command arguments or secrets. These controls require Linux `ss` and `/proc`, alongside the existing `flock` requirement. `pnpm dev:stop` stops verified worktree-owned services; `pnpm dev:stop --port <port> --pid <pid>` explicitly selects a listener on an assigned port, including an unmanaged or foreign service. Kernel process birth identities are rechecked before signaling; changed owners are refused. `pnpm dev:restart` restarts the native watcher and frontend on their reserved ports, preserving an independently running capture service.
 
-- domain records and invariants;
-- Convex persistence functions;
-- durable workflow orchestration;
-- external source discovery and document retrieval;
-- document normalization and stable passage location;
-- model capability routing and provider adapters;
-- evidence extraction and assessment logic;
-- UI projections and review interactions;
-- evaluation fixtures and metrics.
+Explicit `dev:web --port` or `PORT` for `dev:browser` updates the assignment after checking reservation conflicts; port zero is invalid. Native ports are mandatory CLI arguments. Existing native deployment metadata also supplies the default backend-version CLI argument so ordinary restart cannot select a newer binary. An explicit native version argument remains user-controlled; missing version metadata on an existing deployment refuses default startup rather than upgrading silently. Initial native setup remains owned by the CLI. The local watcher preserves native isolate concurrency rather than adding a foreground serialization limit. It defaults `DATABASE_UDF_USER_TIMEOUT_SECONDS` to ten seconds and idle/congested admission waits to ten seconds, providing execution headroom for OS scheduling delays on a shared development host. The execution deadline is an upper bound, not an added delay; native worker-pool bounds remain active. Explicit native overrides, including `FUNRUN_ISOLATE_ACTIVE_THREADS`, remain effective; a configured idle wait supplies the congested default unless separately set. These process-level defaults change no cloud deployment setting. Restart the existing watcher to apply changed process settings. A repository-wide lock serializes startup, stop and restart through identity verification and readiness. Reuse does not silently apply different native watcher arguments; an explicit restart is required.
 
-UI components must not own domain rules. Provider-specific SDK types and model names must not leak into domain records or workflow business logic. Convex is the state owner; do not create competing state authorities.
+An ignored runtime manifest records verified live origins and owned processes without secrets. Full resolution verifies all recorded services. A caller may explicitly select `verificationScope: "required"` to verify its requested origins plus the native backend identity; readiness then omits unrelated frontend origins and processes instead of accepting them without verification. Development commands and protected browser tests resolve these worktree-specific origins. Stopping a recorded service requires the live process environment to match the manifest's worktree and invocation; a saved PID alone grants no control. Graceful interruption precedes bounded termination and forceful shutdown of the captured tree when necessary. Cleanup finds surviving invocation-tagged processes even after their parent crashes, then removes only that invocation's readiness entries, never reservations. A terminal interrupt is forwarded once; a command using an existing runtime preserves those preexisting services. Startup and publication have separate bounded process budgets. The native startup timeout defaults to the launcher budget. Native interruption invokes SDK cleanup.
 
-Use stable identifiers and idempotency keys at every retryable boundary. For SEC
-companies, persist CIK as the canonical identity. Treat ticker, legal name,
-exchange, and other directory metadata as mutable values that are revalidated;
-never use them as retry, association, or deduplication identities unless a
-deterministic fixture owns the value.
+For a worker-protocol transition, hold Pi worker admission through the internal publication control before changing backend contracts. Its singleton Convex record is read in the same transaction as worker admission, so holding and admission cannot race. Engaged workers may finish; deferred admissions keep a scheduled continuation without changing domain research state. Publication requires both no active writer marker and no live writer lease, checked through indexes; an expired lease alone does not clear an active marker. The local publisher serializes commands with a worktree file lock, acquires an automatic hold for an ordinary quiet push, and releases only that automatic hold after success. Failures retain the hold. Use `pnpm convex:sync --url http://127.0.0.1:<port> --hold` before protocol edits under the automatic watcher, publish and verify while held, then explicitly `--release`. An explicit hold survives a successful push. If an admitted worker disappears, `--recover` while held explicitly fences only expired leases whose mission, generation and writer still match their active markers, in a transaction bounded to sixteen markers. It advances the writer epoch and records recovery without provider calls, publication or automatic release. A live lease or unexplained marker refuses recovery. A missing guard refuses manual publication; its first installation requires a separately verified quiet backend. This operational transition preserves the mandatory mission identity in leases without an older-wire-format adapter.
 
-Persist workflow transitions and external-call metadata before presenting them
-as completed. Authorization and the active execution generation must be checked
-before external I/O and again before persistence. Cancellation must prevent
-late external results from advancing a cancelled run or opening another paid
-attempt.
+## AI Use and Deterministic Execution
 
-## Domain Model
+Model assistance may serve any explicitly defined phase, including framing or query planning before acquisition. Each task or mission needs a purpose, expected result and reason for semantic interpretation. Keep reliable lookups, validation, counts, transitions and formatting deterministic.
 
-The completed design contains these explicit concepts:
+Before activation, define allowed inputs, output use and execution conditions. All dispatch, including reasoning and controls, follows [provider boundaries](#provider-boundaries) and [cumulative accounting](#context-recovery-and-resource-accounting). Code authorizes work; no model decides whether a routine operation needs AI. Adaptive reasoning and mandatory submission controls do not require verification of every action.
 
-- `Visitor`
-- `Invitation` (compatibility persistence name for a reusable access slot)
-- `Company`
-- `ResearchRun`
-- `ResearchPlan`
-- `RunEvent`
-- `Source`
-- `SourceDecision`
-- `CorpusRevision`
-- `SourceVersion`
-- `SourcePassage`
-- `Claim`
-- `ClaimEvidence`
-- `ClaimDecision`
-- `ClaimDimensionDecision`
-- `Relationship`
-- `AssessmentDimension`
-- `ScoreProposal`
-- `AssessmentDecision`
-- `BriefRevision`
-- `ProviderCall`
-- `AITaskResult`
-- `PolicyEvaluation`
+Pre-acquisition framing and hypotheses establish no company facts. Assertions require admissible evidence and controls. Model permission neither starts Sources/Investigation before Start research nor bypasses analyst prerequisites or activates providers. Existing restrictions follow the [implementation transition](#implementation-transition).
 
-The persistence backbone also uses `WorkflowStep`, `AuditEvent`, and `CheckpointDecision` as operational support records. `RunEvent` remains exclusively the product-progress stream; security, access-code, and quota history belongs in `AuditEvent`.
+## Agentic Missions and Shared Operations
 
-This is the completed domain model, not an instruction to scaffold unused records. Introduce each concept when observable behavior requires it while preserving these boundaries and names unless an explicit design change is approved.
+Workbench is the analyst's conversational teammate and coordinates dossier requests through [its conversation contract](#workbench-conversation-steering-and-instructions); Sources conducts documentary inquiry; Investigation contributes assertions and investigates framed questions; Synthesis connects retained appraisals. The system defines authority, scope, versions, operations, resource bounds, artifacts and progression. Agents choose readings, confrontations and proposals from mission start, without a risk-trigger prerequisite. All roles use the shared harness; business workflows retain phase transitions. Generation backends implement that shared protocol; no additional workflow engine or general capability framework is selected.
 
-Use runtime validation for persisted and external data. Represent lifecycle
-states with closed unions or enums matching the design. Preserve corpus, claim,
-dimension-link, assessment, map, and brief revisions; later additions must not
-silently mutate an existing result. One canonical claim may inform several
-dimensions. Claim decisions and dimension-link decisions remain separate.
+Native calls and agent tools share domain-owned operations: input/result schemas, validation, policy, versions, persistence, effects, reuse and known dependencies. Tool bindings derive their schema and add description/execution binding. Server context grants authority; model arguments cannot. Each mission receives only its permitted operations.
 
-## Workflow and Lifecycle Contract
+| Business operation | Domain responsibility | Agent exposure | Controlled result |
+| --- | --- | --- | --- |
+| Consult mission state | Dossier and preparation | All four roles within their scope | Compact scope, versions, references, progress, restrictions and pending work. |
+| Search available material | Documentary material | All four roles within their scope | Candidate passages, reproducible references and search limitations. |
+| Read in context | Documentary material | All four roles within their scope | Exact passages, surrounding context, observed links and applicable restrictions. |
+| Adjust proposed framing | Framing | Workbench | Version-controlled draft changes preserving explicit analyst adjustments, before Start research. |
+| Transmit an analyst instruction | Workflow | Workbench | A tracked domain request linked to its original message and interpreted need. |
+| Pause or resume research | Workflow | Workbench on explicit analyst request | Controlled suspension or authorized resumption, preserving work and human prerequisites. |
+| Discover sources for a documentary need | Sources | Sources | Bounded candidates and discovery provenance, or explicit empty, unavailable or capacity outcomes within the active phase. |
+| Make a source consultable | Sources | Sources | Acquired or reused content with its own capture and provenance. |
+| Submit documentary qualification | Sources | Sources | Document contributions and restrictions with targeted diagnostics. |
+| Request a targeted documentary check | Sources | Sources | A statement's documentary support, scope and limits, including before qualification. |
+| Contribute to the inventory | Shared inventory | Investigation | Assertions, corrections and question-specific uses admitted under shared rules. |
+| Request a documentary complement | Workflow | Investigation | Grouped decisive needs transmitted within the single permitted phase. |
+| Submit appraisals | Investigation | Investigation | Controlled responses by question, proposed for grouped analyst review. |
+| Request analytical re-examination | Workflow | Synthesis | A concern or necessary new premise routed to Investigation for available-material examination. |
+| Submit synthesis | Synthesis | Synthesis | Jointly controlled mechanism diagram and argued note, or reasoned non-establishment. |
 
-Implement the research flow as deterministic, inspectable stages:
+These entries define operation responsibilities and families, not frozen SDK signatures or a generic API. Consultation, explicit-query search, exact reading and handoff authorization use deterministic checks. Search/reading enforce mission access and permitted uses. Workbench cannot directly establish inventory assertions, appraisals or synthesis, or take the analyst's Start research and appraisal-adoption decisions. Completion refers to artifacts without another coordination tool.
+
+Consultable sources require an authorized candidate or observed link with recorded origin and retained destination content. A URL, index label or guide proves no destination reading or qualification. Sources returns qualified documents; Investigation creates inventory assertions.
+
+### Shared Execution Structure
+
+The executor centralizes execution guarantees; existing domains retain business knowledge. These boundaries do not require one file per concept.
+
+| Code boundary | Single responsibility owner |
+| --- | --- |
+| `convex/execution/` | Shared execution contracts, mission lifecycle, operation requests and outcomes, suspension/continuation, repetition controls and causal trace references, with Pi Durable for new agent missions and retained Workflow drivers for historical missions. |
+| Static versioned agent definitions | Mission instructions, context construction, allowed operation references and domain-owned result/completion criteria. Concrete models remain routing configuration. |
+| Existing domains and integrations | Business operations, semantic criteria, evidence and artifact models, acquisition, provider adapters, attempt receipts and cumulative accounting. Extend these owners rather than introducing a parallel retry or budget subsystem. |
+
+Add agents through the typed `AgentDefinition` contract and static schema/runtime catalogues, without editing the execution driver. Definitions own scope/state/result schemas, instructions, context, preconditions, permitted operations, progress and completion. The executor validates their outputs and alone applies lifecycle transitions; definitions cannot return arbitrary mission patches. Completion callbacks receive the invocation’s immutable admitted input, including during retained-response replay, without rereading execution records. Native callers and generated tools share operation contracts, versions and dispatch. Mission-state/history consultation is common; corpus approval and capture integrity belong to saved-material inspection. Each compiled definition explicitly selects research-slot or conversation-turn authority through its required execution scope; optional historical record fields remain readable. Operation bindings also declare a closed effect kind: pure query, atomic domain effect, durable action or child delegation. Pure queries receive query capabilities and cannot wait; child declarations are confined to delegation. The executor validates the private observation envelope before retaining an outcome. Conversation-read membership is frozen by publication revisions assigned atomically with processed deliveries, preserving native message order. Shared history readers issue scoped continuations backed by retained receipts; domains return fact deltas and the executor alone deduplicates and caps their adoption. AST ownership checks and registry-wide conformance tests protect these boundaries; they do not certify arbitrary JavaScript or model wording. Runtime resolution, model preparation and offline calibration enumerate the same registered versioned definitions. Dynamic plugins and workflow languages are excluded.
+
+New agent missions pin `pi-durable` version 1, using `@earendil-works/pi-durable`, Pi AI and Chord 1.4.0. Pi owns the generation → tools → retained results → next generation loop, durable task checkpoints, technical conversation and automatic compaction. Convex owns persistence, scheduled host wakeups, authorization, domain operations, accounting, adoption and publication. The native Pi model transport uses the same canonical operation schemas, route restrictions, attempt admission, receipts and observable journal as one-shot generation; no second agent loop or operation catalogue surrounds it. Provider-specific types stay inside the integration.
+
+New Workbench conversations pin definition version 4 and own one append-only Pi commit log across response missions. The 2026-11-05 instruction refactor registers one current Workbench definition and Sources version 4; superseded prompt/rendering variants are removed. Stored history is retained, but unsupported definition versions refuse execution rather than reinterpret admitted inputs or responses; no import, backfill or automatic migration occurs. Stopping a retained response and fencing its expired writer use persisted session ownership without loading a retired definition. Other definitions keep mission-scoped logs. The fenced lease carries the active mission, generation, writer and epoch. A completed response alone cannot hand over the log: its native tail must settle and its settled sequence must match the retained sequence. A crashed terminal tail reopens under its original mission for technical closure, without new provider dispatch or business effects. Interrupted closure retries at one and two seconds, stopping after three failed writer epochs; replaying the same closure consumes no additional attempt. Permanent failures stop immediately, retain their protected diagnostic and block further conversation admission without changing the published result. Successful closure clears its retry accounting. Persist commits before applying the library's in-memory read projection; an acknowledgement loss recovers the identical committed key. A transient append retries that same idempotent commit once, without repeating model or business work. Claim the writer and arm its recovery wake transactionally before execution; renew its 90-second lease every 25 seconds. A replacement worker must acquire a newer epoch after expiry. Persisted sleeps and bounded host slices reopen the same Pi task history. Deferred operations yield the host with a resumable checkpoint, wake on an authorized retained result, and keep a 30-second recovery check. A result notification survives a busy wake and the preceding writer's closure. A wake delivered after the mission deadline records its explicit block and notifies any waiting parent. Drain and rebind retained operations in bounded batches without making batch size a total queue limit. Late work prevents completion; its retained proposal remains reusable after outstanding operations settle.
+
+[Mission lifecycle](#mission-lifecycle-and-operation-handoffs) defines historical driver compatibility. Qualification/comparison keep bounded one-shot AI SDK protocols and the shared journal; analyst-facing message storage remains distinct from Pi's technical log.
+
+The delivered business definitions include approved saved-material inspection and Workbench framing/follow-up. Local numeric and conversational fixtures exercise the same Pi executor, deferred operations, steering and bounded mission returns with simulated model replies. They have no paid provider receipts. Sources now has the versioned, default-disabled business binding described in [its mission contract](#sources-mission-and-prepared-material); Investigation and Synthesis remain business integrations. No live agent route is enabled by this replacement; model-backed summary fidelity and analytical quality remain separate acceptance work, recorded in the [replacement verification](../docs/verification/2026-10-30-pi-durable-replacement.md).
+
+History continuations are opaque `history:<requestId>` references to successfully adopted reads in the same run, mission, generation and instruction version. Canonical first reads omit the cursor; empty, former raw/JSON, foreign or fabricated cursors receive a retained recoverable refusal. Only the native-call adapter normalizes an explicitly empty first-page marker, never a nonempty invalid or foreign cursor. Completed old-format reads retain their bytes; pending old-version reads are refused, not reinterpreted.
+
+Immutable event observations and exact invocation parts supply history; mutable records cannot reconstruct missing historical text. Source rows are indexed at creation and read incrementally by page/fragment. Retained missions require a bounded idempotent index migration with a frozen pre-upgrade cutoff, without backfilling content. Restoration windows stay fixed until verified material progress, an effect or admitted instructions advances them; consultation mechanics and new drafts cannot renew credit. Pages atomically retain receipts, use Unicode-safe fragments and enforce a 48 KiB encoded bound before credit. Conversation lookup reads one native paginated message under 4,096-row/512 KiB storage-read ceilings and returns explicit capacity.
+
+Unexpected reads are retained incidents; unconfirmed effects block as unknown without blind retry, while confirmed effects survive acknowledgement loss. Validation/reduction failures preserve observations and block adoption. Callback, outcome-validation and progress-reduction failures retain phase, bounded redacted error name/message and cause fingerprint in administrator-only diagnostics, excluded from model history and analyst projections. The harness owns generic model diagnostics: refusal alone never proves non-execution. Definitions add domain guidance and defer unhandled codes to that owner.
+
+History tools distinguish the current mission’s observable work from prior analyst exchanges. A first read omits its cursor; subsequent reads use only the continuation returned by that same operation. Mission consultation may instead target one immutable event by its exact `historyReference`; reference and cursor are mutually exclusive on the initial read. Issued cursors retain that target and snapshot through bounded fragments, with the same mission, generation and instruction fences. Invalid cursors remain explicit refusals with a correction path, never a silent replacement read or proof that retained history is absent.
+
+Exact originals stay in the Pi log and the application's scoped observable history; common `consult_conversation` access returns earlier processed analyst exchanges in bounded exact fragments and excludes queued instructions. The authorized public conversation history also exposes each delivery's stable request key for client reconciliation. Convex's optimistic query cache displays a submitted analyst message immediately and owns rollback; the UI does not create a second transcript store. The oldest message awaiting admission is displayed in the transcript when no response is active and the queue is not paused; additional messages retain the queue view. This presentation neither admits the input to Pi nor changes its persisted delivery status, execution authority or settlement requirements.
+
+Every registered operation declares a closed object result contract. Fixed domain result contracts derive their runtime schema and static payload types from the canonical Convex validators; the shared result boundary also validates table identities with the current database before adoption. Mission-state consultation retains its explicitly extensible JSON context within a closed history envelope. Operation callbacks return object values, while the shared execution owner alone constructs journal transport. Success values reach every model as structured JSON, not a second JSON string. Result contracts and rendering participate in native preparation identity; profile calibration and execution bind projected variants through the same owner. Contract changes do not rewrite recorded requests, replies or receipts, and incompatible prepared configurations require offline profile refresh before new dispatch. Historical transport remains readable at its existing boundary.
+
+Documentary operations use `sourceId` for stable source identity and `captureId` for the immutable representation, with `contentHash` where content is available. Acquisition returns that canonical reference; search and reading select the newest committed capture retained for the source within the authorized preparation. Persisted capture/hash pins prevent substitution after admission, including when a newer capture becomes available. Documentary contracts reuse the reference validator instead of redefining identifier types. The legacy inspection interface and historical persisted `sourceCaptureId` fields are decoded only at their existing boundary; they are not aliases accepted by the new acquisition result. The changed acquisition operation uses version 2. Model-visible ID descriptions derive their table identity from the canonical input validators.
+
+An invalid tool input retains its original admission refusal and bounded field/type diagnostic. Domain-authored validation feedback also survives unavailable operation outcomes as a bounded field/expected-value pair; arbitrary exception text remains protected. Sources identifies the affected contribution when primary-capture evidence is missing and requires separately anchored contributions rather than weakening provenance. Subsequent dispatch rechecks current authority without resolving that nonexecutable input as another operation. A domain completion may request correction with structured validation feedback; this creates another invocation through the existing Pi continuation rather than adopting or rewriting the refused response. The shared return boundary preserves the received assistant content in compactable Pi history and appends its correction diagnostic; the next generation receives that proposal alongside feedback and current required state. The immutable journal keeps the original reply, and required state references it rather than copying complete historical payloads. Rejected completions follow the shared idempotent non-progress and recovery rules below; notes from completions refused for correction never enter working memory. Sources permits correction of missing or duplicate need accounting, keeping strict evidence/work validation, cancellation and authority failures blocking. No completion correction replays effects, refunds reservations or invokes a separate semantic controller.
+
+Installed shared execution limits are sequential tool dispatch, a default cumulative 15-minute dossier window (explicit campaign research uses its original grant), model-attempt deadlines and leases from the [locked limits](#locked-resource-limits), 16 KiB notes, 64 KiB operation results and 20 events per history page. Native request/output sizing follows the [native context contract](#accepted-native-context-and-compaction-design); structured qualification/comparison/documentary-control requests retain the 128 KiB complete-input bound. Preparation dispatch follows the [current resource contract](#locked-resource-limits), independently of its business workflow version. The estimate is not exact provider tokenization. The four-request response and recovery-queue limits apply only to retained Workflow missions. The configured consecutive non-progress threshold stops a mission. If a streak's first completion refusal would reach that threshold before its feedback can be used, retain the prior count and existing refusal identity so correction remains admissible within unchanged authority. This exception does not reset progress, renew on another refusal or reopen an already blocked mission. After a known refusal, one successful restoration of retained material may preserve the current non-progress count until verified progress resets the streak. This one-use restoration applies only to declared material reads with verified material keys or privately receipted restorable history; audit-only consultation, failures and effectful work cannot consume it. It neither resets failures nor replenishes on another refusal, and settlement replay cannot grant another restoration. The executor retains the refusal/restoration identities and an audit observation; model-call, deadline and cost bounds remain unchanged. Shared adoption deduplicates both under the existing 256-fact limit; overflow retains the observation and blocks without a partial state/accounting update. Search progress counts distinct inspected passages, not result-set combinations. Sources credits both shared success formats through the existing operation-progress normalizer; a new contextual read advances progress, while rereading the same passage cannot replenish the non-progress allowance. Required-context overflow blocks explicitly. Context, transaction, replay-memory and cumulative-consumption bounds are separate controls, not total queue or conversation limits. Native sizing does not enlarge historical mandate envelopes or the cumulative replay limit.
+
+Existing dossier work/incident accounting owns consumption, including compaction; resumes preserve it, repetition state and deadline. Retain confirmed observable model output before Pi or Workflow adoption for reuse without another paid call. Unknown dispatched outcomes cannot be replayed blindly. A recoverable research worker interruption suspends the supported framed run with a system-owned `execution_interrupted` reason, releases its execution slot and leaves its parent awaiting the retained mission. Public Resume atomically reclaims the slot and rebinds preparation and mission without replenishing consumption. This technical suspension is distinct from an analyst pause. Cancellation fences the dossier immediately, then schedules bounded, traceable request/mission cleanup independently of volume.
+
+### Accepted Native Conversation and Model Interface
+
+The [roadmap](../docs/ROADMAP.md#phase-7--shared-execution-and-sources) owns delivery and activation state. Mechanical qualification does not establish general economic usefulness, live long-conversation compaction or deployed-browser inference. Historical observations and unresolved causes remain in [integrated local qualification](../docs/verification/2026-11-01-workbench-integrated-nemo-qualification.md), [explicit guards](../docs/verification/2026-11-01-workbench-explicit-guards-qualification.md), [message-authority repair](../docs/verification/2026-11-01-workbench-message-authority-requalification.md), [GLM browser qualification](../docs/verification/2026-11-01-workbench-glm-browser-qualification.md), [contract repair](../docs/verification/2026-11-01-workbench-contract-repair-and-qualification.md), [continuity verification](../docs/verification/2026-11-01-native-workbench-continuity.md), [retained conception](../docs/brainstorming/question-led-workbench/2026-10-26-agentic-execution-architecture.md#native-conversation-and-harness-refinement-of-2026-11-01).
+
+Keep one native Pi conversation across successive Workbench responses in the same dossier, reusing Pi submissions, transcript, generation/tool continuation and compaction. Each Workbench response retains its bounded application mission, authority and accounting. Correlate native tasks, invocations and operations to their original mission; settle or explicitly recover prior native work before handing execution to the next response. A replacement writer cannot assign old tasks the new mission's rights. Preserve historical session identities and recovery paths during transition.
+
+Admit original analyst messages as idempotent native user submissions with their retained references. Application admission keeps queued messages outside active instructions until authorized; admitted steering uses native delivery while Convex prevents stale adoption/publication, including a steer arriving during a tool-free final answer. Application response boundaries need not coincide with native Pi run boundaries. Configure one authoritative instruction set through the definition and Pi; preserve current required state and active instructions outside lossy summaries without appending old messages as new submissions. Keep domain versions authoritative over conversation text.
+
+#### Tool inputs and framing authority
+
+Derive model-visible tool schemas from canonical operation contracts and use the same projected schemas for Pi validation. Before persisting an operation request, validate the received arguments and complete mechanical fields only from that invocation's immutable `inputJson`. New Sources invocation snapshots pin their qualification model-input format; retained snapshots without that marker keep the historical explicit task/version arguments and canonical stale-state guards. Unknown format markers refuse replay. Neither replay nor normalization substitutes current database versions for admitted observations. A framing revision never defaults to the latest database revision. Bind a unique active message automatically; multiple possible messages require explicit selection among observed references. Documentary targets and passage locators require observed authorized references. Native documentary requests must explicitly select a supported coverage role or declare no matching target; omission is invalid input, not evidence that an operation is unavailable. Preserve raw and canonical arguments separately.
+
+For native Workbench tool replies with a complete terminal response and unambiguously retained original arguments, pass those original bytes through canonical operation validation: malformed JSON becomes an explicit operation refusal that the conversation can recover from, never an executable SDK repair. Missing or ambiguous originals and incomplete terminal replies continue to refuse the generation; definitions without native conversation retain their existing acceptance policy.
+
+Select offered tools through Pi's native filters using existing domain preconditions. Offer research control only for an active message matching the existing explicit-command grammar, and restrict the action schema to its authorized pause/resume actions; documentary requests during pause do not authorize resume. Direct calls retain full server authorization and validation. For Sources qualification changes, only an omitted contributionId denotes a new contribution; a supplied blank identity is invalid. Observed identities bind versions mechanically, while the domain validates supplied identities before documentary control and returns field guidance without adopting changes.
+
+Recognize explicit whole-program preservation commands through the existing closed conversation-command grammar, in English and French. They disable framing writes for the active response at tool projection and again in the framing mutation; queued messages do not alter active authority. This mechanism does not classify arbitrary natural-language intent or interpret sentences enclosed in quotation marks or partial-field preservation as whole-program prohibitions. A later response starts from its own admitted instructions. Broader instruction interpretation remains a separately evaluated model responsibility; no additional semantic model or visible interaction mode is introduced.
+
+Each admitted analyst message retains the framing revision observed at its original receipt; replay, queue promotion and retry cannot renew that baseline. Framing operation version 2 identifies its causing active message and selects analyst-edit protection independently of native journal configuration. The existing framing mutation atomically compares intervening immutable revisions and refuses a proposal that changes scope, question content or relative order directly edited by the analyst after that message. Question identities removed by the analyst remain absent. Independent changes remain admissible, and a later message can authorize another refinement. Read at most 128 intervening revisions; missing baseline, incomplete history or excess capacity returns an explicit recoverable refusal rather than weakening precedence. Historical definition-version-1 operations retain their original contract.
+
+Before admitting a new native generation, compare its active-message identities with the original Pi input submissions actually placed at or before that task's retained cutoff. Delivery proof and business-state freshness are distinct: a direct analyst framing edit changes the turn's instruction version without rewriting or duplicating native messages. Invocation admission constructs the fresh required state returned to generation and binds the invocation to the current turn version; dispatch and adoption recheck that version. Compare the effective tool declarations in the retained transcript with the canonical schemas derived from that admitted application state, ignoring SDK-only schema metadata. A preparation mismatch admits no invocation or provider call: let Pi prepare another request with synchronized native inputs and tools. Three consecutive preparation mismatches stop explicitly with retained work rather than rescheduling the same non-progress forever; existing deadlines and consumption remain unchanged. Compaction keeps its separate technical purpose. Retained responses resume their existing invocation identity and application adoption path; only already-adopted terminal tails may return retained backend output directly. A stale refused response never becomes executable raw tool calls on reopen.
+
+#### Native commands and delivery
+
+Workbench also exposes the typed, authenticated `workbench.command` mutation for `/pause` and `/resume`, with `runId`, `requestKey` and `expectedGeneration`, independently of composer submission. It returns the recorded message references, outcome and factual text. It uses the existing button mutations and their research-generation, human-prerequisite and execution-slot checks. Command identities bind the exact token and expected generation: a replay returns the original recorded result without repeating an effect, while conflicting reuse is refused. Execute immediately without changing an active Workbench response, its instruction version, framing or queue. Persist the user command and code-owned factual confirmation atomically, including known refusals; authorization, malformed input and unsupported historical conversation contracts refuse before effects. No command creates a response mission, generation, model invocation or provider receipt. Research resumption still advances previously authorized research through its existing controls. Free text retains the existing model path; no natural-language phrase is diverted into this direct API and Start remains the explicit button action.
+
+Workbench does not offer `control_research` as a model tool; instead it offers `request_approval` against the action catalogue in `convex/execution/approvalCatalog.ts` (`pause_research`, `resume_research`, `continue_sources_preparation`, `settle_sources_preparation`). When the action is already granted for the dossier via an active `approvalGrants` record (`approvals.listGrants` / `.revokeGrant`), `request_approval` applies it immediately if available; when an equivalent pending system request already exists, it surfaces that request ID instead of duplicating it; otherwise it inserts a pending `approvalRequests` entry attached to the active turn and rendered as an interactive approval card. Card choices (`approvals.decide`) record the outcome and sync an idempotent `approval_decision` exchange into native history.
+
+Control and approval-decision exchanges remain in application conversation storage with optional indexed native-delivery metadata (`command` or `approval_decision`). Under the existing fenced Pi writer, synchronize them in bounded native pages through passive, idempotent `write` submissions containing the original analyst/card action and application confirmation, without starting generation. Display-only system approval notices (`recordApprovalNotice`) render in the conversation without generating a synthetic turn. A busy Pi conversation may queue the write: let its boundary advance rather than waiting inside the current hook, and acknowledge placement only after it is durable. Retry the same native key after acknowledgement loss; never repeat the business effect. Flush before subsequent admitted inputs and at response closure; without a writer, retain the pending exchange until the next native opening. The next response receives the exchange without another writer, transcript reconstruction or hidden omission. Composer behavior is specified under [model configuration](#administrative-model-configuration).
+
+
+
+
+
+
+
+#### Completion and publication
+
+The approved 2026-11-15 conversation refinement permits provisional analyst-facing prose before final publication. Pi Durable retains native partial state; its fenced Convex bridge derives a bounded public preview on the existing Pi session, tied to the current turn, invocation, instruction version and committed native sequence. A separate authorized query subscribes to that small view without rehydrating the full dossier on each partial; interrupted prose is archived on its turn before a subsequent turn reuses the session. This read model cannot admit operations, acknowledge instruction treatment or create analytical artifacts. Stale writers, superseded instructions and auxiliary/structured generations cannot supply public prose. Final publication and any correction remain controlled by the existing adoption and response-control owners; interrupted text remains explicitly partial. Hidden reasoning, native preparation refusals, corrective reminders, raw tool payloads and protected diagnostics are excluded. The same underlying operation/mission outcomes drive chat and dossier views, preserving conversation completion, documentary outcome and analyst adoption as separate facts.
+
+Each definition explicitly selects its completion contract. Workbench accepts a normal final text response, which the harness converts to the existing typed completion before domain validation and publication. Structured definitions retain strict structured results; there is no global invalid-JSON fallback. A received final reply that fails JSON or envelope validation, or a completion that fails the active definition’s schema, requests the existing bounded completion correction with the refused output and current required state. The executor preserves raw observations, failed receipts and consumption, and settles non-progress once per invocation; only a validated result can be adopted. Transport uncertainty, malformed tool arguments, capacity failures, lost authority and stale generations retain their existing refusal paths. Text accompanying tools is not final completion, and pending operations, stale instructions and interrupted output retain their gates.
+
+For explicit control-only Start, pause and resume messages, the Workbench domain composes the final confirmation from recorded effects and authorized state, distinguishing unstarted research, requested/effective pause, resumption and preserved human prerequisites. A control-only message grants no framing-edit authority: the mutation refuses it as an edit cause, and responses containing only recognized control commands receive no framing-write tool. A separately admitted edit request retains its own authority. Start remains an explicit analyst button action. When admitted messages also contain an independent question, preserve its explanation and include the domain confirmation. The published response becomes the next response's conversational view while raw model output remains retained.
+
+For a latest framing attempt that has a known refusal and no confirmed write effect, append a code-owned receipt stating that the change was not saved and no edit from this response is waiting. Select the latest attempt through retained admission-event sequence, including reused requests; a corrected successful write clears the earlier failure receipt. Preserve the model's prose and raw reply, with the operation outcome explicit rather than presenting response completion as a successful edit.
+
+Native Workbench publication also checks explicit current-status clauses from the application's closed English status vocabulary against the canonical research summary, including sentences within paragraphs, Markdown list items, `research program` phrasing and the explicit unstarted-research variants `No research has been started/initiated` and `Research has not/hasn't [been] started/initiated`. This finite grammar is frozen as vocabulary version 1: add no model-specific phrases, and never interpret a nonmatch as semantic validation. A conflict requests the same bounded contextual correction described below; it never replaces the free explanation with code-owned prose. Block quotations, fenced historical quotations and correctly stated independent prose are preserved. This narrow check does not verify arbitrary paraphrases, historical authorship or economic claims in free prose.
+
+#### Advisory response control
+
+Native Workbench response control is optional and disabled by default. `responseControlSettings` owns the administrator-edited global policy with optimistic revisions; each conversation turn pins its enabled state, decision model and thresholds. `workbenchResponseControlContracts` is the single owner of defaults and score decisions: initially contradiction probability at least 0.90 requests correction, while final support below 0.80 requires a visible reserve. These are provisional operating thresholds, not calibrated truth probabilities. The current global switch can stop new checks without changing a turn’s pinned thresholds. Existing turns without metadata are not reviewed retroactively.
+
+Final native Workbench explanations are eligible for semantic control after a recorded operation, including reads and refusals, or when their authoritative dossier facts differ from the last published substantive reply. The authoritative context owner fingerprints company, framing, research state, documentary material, instructions and evidence/version pins; conversation text and working notes do not change that fingerprint. Actual publication alone advances the conversation’s fact watermark, including when control is disabled. The first reply without a retained watermark is eligible. Tool-free discussion with unchanged facts and code-owned control confirmations are exempt; a confirmation does not consume the next substantive check. The host dispatches `check_response_coherence` through the shared operation lifecycle; it is hidden from model tools and rejected if submitted by a model. Jev uses OpenRouter’s native Decisions endpoint with no provider pin, a 32 KiB request/retained-response ceiling, a 30-second timeout and no inference retry. Availability and the existing model price ceiling are checked before paid admission. Receipts bind the exact review request, frozen facts, original invocation, execution generation and cumulative model budget without replacing the generation’s receipt. A local Sources qualification must separately authorize the controller model and pin the enabled policy; controller calls share the lot’s existing request and cost ceilings, and an absent or mismatched grant refuses dispatch. A factual response and cost can settle after cancellation; they cannot authorize adoption or publication. An uncertain attempt retains its reservation, never redispatches, and yields an unavailable advisory result rather than blocking the conversation.
+
+The shared Workbench fact projection supplies current status, framing, authorized material, analyst requests and recorded operation results. Each bounded review freezes that projection, its hashes and the candidate text; changes invalidate its score. At most two semantic checks and one extra Workbench generation are permitted per turn. The closed status filter remains active with semantic control disabled. Reuse already-loaded operation records and the common compact operation projection, preserving exact observation references instead of copying full result payloads. Refuse an oversized semantic review before additional material hydration; disabled or exempt replies incur no documentary reread. A known closed-status conflict requests its bounded correction before preparing semantic evidence, so advisory capacity cannot suppress factual feedback. If that correction is unavailable or refused, retain the known conflict as review-needed without inventing a score. Either a status conflict or a contradiction meeting the configured threshold requests one contextual reminder. The response-control owner supplies the exact rejected text from its retained invocation alongside current authoritative facts in the required correction context, identifying it as data to revise; the original response is never rewritten or duplicated into a second persisted draft. The revised generation has no tools, preserving earlier effects and immutable drafts. No second correction or automatic textual substitution is allowed. An unsolicited tool request when no tools were offered is a terminal structural refusal, not permission for another generation. If corrected context cannot be admitted, the control is unavailable, the budget refuses work, or facts change beyond the check allowance, publish the retained explanation with a separate reserve under the existing authority, freshness and publication gates. Residual low support exposes its numeric consistency estimate separately from the text; unavailable control exposes no invented score. The estimate concerns recorded actions and dossier state, not the accuracy of the whole economic interpretation. Private turn audit links original/final invocations, policy, reminders, vocabulary version, frozen facts, review requests, raw responses, scores, receipts and publication causes. Analyst message APIs expose only the public summary; detailed audit is administrator-only.
+
+Project canonical tool outcomes as readable objects and precise recoverable refusals, retaining originals. Expected Workbench intent, prerequisite and revision refusals settle the operation through its existing typed outcome; they do not become host failures or prevent independent authorized requests from proceeding. Documentary registration includes the current persisted receipt or limitation in the response, separately from any claim of treatment. Authority loss, cancellation and unknown technical failures retain their execution fences. A rejection raised inside the generation boundary's before-dispatch authorization is recorded as proven not dispatched; exceptions outside that boundary retain the unknown-outcome safeguards. Definition-owned consultation supplies its relevant framing, research, readable-material and analyst-request state; the shared executor does not accumulate definition-ID branches. An unavailable passage directs the model to search authorized saved material and select an observed locator, without substituting an arbitrary passage or treating a missing match as proof of absence. Actual technical failures remain explicit. Admission, dispatch and the observable journal share one construction of roles, required state and offered schemas. Recalibrate the installed escaped-JSON capacity profile for the changed rendering; a profile constant is not a substitute for serializer verification.
+
+Before delivery, verify successive responses on the same native conversation through Convex, reopen/compaction with originals retained, queue exclusion and steering during final output, stop/recovery without research interruption, original task authority, stale edits, idempotent effects and unknown-outcome blocking. Cover text versus structured completion, receipt-based confirmations, projected schema/argument consistency, exact request calibration and [journal limits](#locked-resource-limits). Distinguish experimental before-dispatch refusal from unknown external I/O. Native simulation and replay establish mechanics; model judgment and useful economic framing require separate bounded qualification.
+
+#### Instructions and domain projections
+
+Compose one shared autonomous method with each definition's domain method/rendering once at the Pi root. The common method requires inspecting state, verifying outcomes, diagnosing refusals, recovering exact observations and changing failed proposals instead of repeating them. Domains own business sequence; Sources moves from selection/reading to controlled contributions or explicit unfinished work. Canonical completion validators supply required schemas, not duplicated prompt JSON contracts. Retired prompt variants remain inspectable but not executable.
+
+`separated_v1` places dynamic business observations in `domain`, executor authority in `mission`/`constraints`, analyst instructions in `conversationInstructions` and task references in `activeWork`; domains cannot overwrite executor state. Instruction placement is independent of transport. Working notes, prior model outputs and source text keep distinct, untrusted evidentiary status. Generation, consultation and advisory review share business projections, including original analyst text and current treatment separately from transmission receipts. Required state retains authority/task identities; observations contain status, diagnostics and journal references, with full results retrievable through native results/history. Candidate lists omit storage metadata. Start/Pause/Resume readiness comes from enforcing owners, independently of active-message tool authorization. Preserve exact capture identity and distinguish capture omissions from response trimming.
+
+Sources receives needs, allowance usage, exact work references, observed outcomes and explicitly incomplete contribution previews, with exact history on demand. Consultation projects domain state once and reserves history page space; trimmed optional observations retain totals/incompleteness without losing work references or obligations. Domain validation returns bounded accounting issues together, mapping outcome indexes to exact need identities without repeated explanations. Reject need arrays beyond the pinned envelope before enumerating diagnostics. Retry, no-progress, evidence and capacity controls are unchanged.
+
+### Administrative Model Configuration
+
+Convex owns the OpenRouter catalogue and independent agent assignments. Administrators can add or reprepare a model identity, edit its display name, enable it and offer it in the Workbench selector without redeploying code. Bootstrap prepares GLM-5.3-Flash and DeepSeek V4.1 Flash 1017 and assigns GLM to every agent only where no assignment exists. It preserves saved dossier choices and subsequent administrative changes. Catalogue enablement does not activate paid work or bypass feature flags. Investigation and Synthesis settings are retained but explicitly labelled as not connected until those missions exist; Sources assignments already govern actual qualification and comparison calls.
+
+Require administrator admission and atomically claim a versioned preparation before metadata I/O. Fetch the fixed OpenRouter catalogue and, for an explicit provider pin, that model's endpoint metadata on the same host. Encode validated model identities; require matching returned identity and endpoint tag. Reject redirects; bound requests to 15 seconds, preparation to 60 seconds, responses to 8 MiB and the catalogue to 8,192 advertised rows. Validate advertised tool/structured-output support, context/output capacity and known prices against existing ceilings. Metadata advertises capacity/pricing, not guaranteed endpoint availability or settled charges. Without a pin, OpenRouter owns provider selection/failover under required-parameter and maximum-price preferences; no application provider pool or model fallback exists. Pins use that endpoint's parameters, capacity and prices. Historical pins persist; reprepare affects subsequent work only. Retain supported parameters, reasoning efforts, mandatory reasoning and model default; mandatory reasoning cannot offer Off.
+
+The shared routing owner derives provider preferences and generation options from the admitted descriptor and effective effort for native Pi, one-shot/deferred generation, retained Convex Agent adapters and offline calibration. Omit unsupported reasoning/temperature controls; apply model capacity and the applicable [output, timeout and price limits](#locked-resource-limits), with zero automatic provider retries and no model-name branches. Historical descriptors without supported-parameter metadata retain their temperature serialization until deliberate metadata preparation; dispatch never fetches or changes capabilities.
+
+Prepare native profiles offline with the installed Pi serializer for every selectable effort, without network dispatch or tool effects. Persist immutable descriptors and indexed byte profiles bound to instruction bytes, schemas, rendering, descriptor, route, installed SDKs and generated tool/instruction catalogue fingerprint. Catalogue changes block incompatible preparations until an admitted administrator refreshes profiles, from the model card's `Refresh input profiles` action or the qualification tooling; a tool or instruction change therefore requires this refresh before live Workbench turns resume. Refresh one retained revision per bounded page and follow all continuations before resuming old pins; preserve descriptors, provider pins, effort, availability, assignments, dossier choices and old profile keys. Reject measurements for a different catalogue fingerprint. Refresh performs no metadata request, inference or research launch. Preparation replay duplicates no I/O; deliberate replacement fences late results. Failure stays disabled/reviewable, never empty success or bundled-model fallback.
+
+Calibrate against real SDK serialization and required state using ASCII, quotes, backslashes and Unicode. Workbench version 2 also counts admitted user text and projected schema variants. Current definitions use separated rendering; unsupported historical variants remain inspectable without executable adapters. Missing or mismatched profiles block explicitly and require preparation through this owner before live activation.
+
+Reasoning preference is centrally configured as `recommended` or an advertised explicit level. The recommendation selects medium when supported, otherwise the nearest supported higher level, then a lower advertised level if necessary; absent capability metadata or non-reasoning models do not acquire an invented effort. Medium is a recommendation, not a minimum. Administrative changes append an immutable revision containing both preference and resolved effort; existing dossier choices and engaged mission/preparation pins remain unchanged. The ordered vocabulary has one owner shared by runtime validation and evaluation manifests. Version 3 Sources evaluation manifests freeze choices by Workbench/Sources role: quality lots use the recommendation; explicit lower/off settings belong to declared stress lots. Authorization checks those choices against the actual immutable configurations before admitting the lot. Earlier manifest versions retain their interpretation.
+
+Research and chat composers share field materials, toolbar separation, a single tools menu and the Pasta UI-adapted model picker in `src/components/composer`. Chat retains its compact resting state and expands into the research composition on focus. The tools menu preserves commands and active-response queue/steering controls; Stop remains directly reachable. The model-and-effort picker exposes only prepared reasoning capabilities. Authenticated visitors can read its bounded public catalogue metadata before a dossier exists, without provider access or dossier authority. Company confirmation validates an explicit initial choice atomically and saves it before admitting the first framing message. Both choices persist in the dossier until explicitly changed. Historical descriptors without effort metadata retain their fixed default until administrator preparation refreshes them. When no initial choice is supplied, new dossiers snapshot the current Workbench default. Resolve and pin the immutable configuration and effective effort when admitting each response or mission; steering and recovery retain that pin and the same native Pi conversation. Source preparations pin their Sources configuration before model I/O. Later assignments or disabling a catalogue entry affect subsequent work; they do not rewrite engaged work. Missing, disabled, incompatible or unavailable configurations, including a retained effort removed by later preparation, block explicitly without substitution or a stranded active turn. Global paid-work authorization, generation fences, attempt accounting and unknown-outcome rules remain authoritative. Strict structured-output agents reject models without that capability.
+
+The native Workbench version 2 composer uses the installed assistant-ui TriggerPopover and slash adapter for matching, item selection, dismissal and keyboard handling. The compact palette above the field offers only commands projected as available for the current conversation and research state. Command failures remain local to the composer and preserve the draft. A slash-only draft activates inline suggestions; ordinary sentences remain conversational. The Commands tool opens the same catalogue in a Base UI command picker with independent search, selection and dismissal, preserving the existing draft. This explicit picker does not insert a slash or submit the draft. Selecting `/pause` or `/resume` executes the typed command immediately, while `/model` opens the model-and-effort menu. Unknown slash commands are reported without inference; unsupported arguments remain explicit errors. Native trigger consumption preserves acknowledgement-loss recovery: restore the original draft only if newer typing has not replaced it. Escape closes suggestions without closing the research context. Changing models preserves the draft; transport failures retain truthful unconfirmed-action feedback. Existing queue, steering, edits and explicit Start research remain in force.
+
+Catalogue updates, assignments and dossier choices require authorization, expected revisions and idempotency identities. User-facing model choices expose display names rather than provider settings. Compatibility preparation establishes transport and capacity mechanics; it does not qualify answer quality or authorize a paid experiment.
+
+### Mission Lifecycle and Operation Handoffs
+
+| Execution concept | Retained identity and state |
+| --- | --- |
+| Agent definition | Static identifier/version, instructions, operations and result criteria. |
+| Durable mission | Stable identity, dossier, objective, authorized scope, applicable versions, obligations, result references and continuation state. |
+| Native Pi conversation | Retained transcript, compaction and technical continuation; the accepted Workbench target spans successive application response missions. |
+| Workbench turn | Active admitted messages and steering references, instruction version, correlated mission work and published response or interruption; distinct from native Pi run boundaries and the dossier's research duration. |
+| Temporary invocation | Mission or bounded-task reference, agent/task version, actual supplied context and provider-attempt reference. It ends when it returns control. |
+| Operation request | Causing invocation or system action, operation/version, validated arguments or input references, expected domain versions, logical identity and explicit outcome or pending obligation. |
+
+Missions and retained work are durable; JavaScript instances and hidden reasoning are not. New missions pin protocol version 3 and Pi runtime version 1, with typed scope/state/result and research-slot or conversation-turn authority. Historical protocol version 2 keeps flat inspection records, registered function paths and Workflow step names without identity rewrites, double writes or migration. Records without Pi metadata retain registered Workflow drivers and pinned generation adapters, including Convex Agent versions 1/2 and historical direct AI SDK generation; missing metadata never migrates execution. Child missions inherit their parent's backend. Unknown runtime or definition identities block before dispatch without fallback. Existing documentary/research Workflows and human checkpoints remain active; one-shot tasks keep their protocols and shared invocation tracing.
+
+Ordinary handoff suspends between operations: retain the request and its wait correlation before effects, execute, preserve the observed result or pending state, then authorize continuation. Pi wakeups or retained Workflow events trigger a state check; early or duplicate delivery cannot repeat the operation. Waits expire under the mission deadline or a fixed 15-minute native-request deadline, retaining an unknown outcome until a factual result arrives. Business operations alone grant bounded child missions, with causal request/result references and cumulative return bounds; no unrestricted spawning tool exists. A paused or recoverably interrupted child remains pending. Semantic checks remain domain-owned.
+
+Every atomic operation, including framing, research controls and documentary-instruction registration, retains its validated success receipt and exact resulting domain pin in the same transaction as the write. The shared settlement owner rejects adoption of an atomic success without that concordant receipt, retaining the observation and blocking explicitly without redispatch. Dispatch can recover that receipt without repeating the effect; adoption still checks current authority, instructions and the resulting revision. Research controls also fence intervening pause-intent changes, including changes that do not advance execution generation.
+
+Every requested operation receives an outcome. Reuse preserves the original effect identity and records the current caller and instruction references. Confirmed effects are not redispatched; only proven non-dispatch permits fresh admission. Refused adoption retains the observation for a new authorized continuation. Mutations default to sequential execution with version checks after each effect; stale/conflicting requests return diagnostics. Independent reads may use bounded concurrency. SDK tools cannot bypass dispatch or introduce implicit concurrent mutations. Completion waits for outstanding operations, including native work admitted during generation, before validating domain artifacts under the [workflow contract](#workflow-and-revision-contract).
+
+Cancellation fences adoption and future work, including late results. Research continuation uses the dossier's existing visitor execution slot. A resume that makes research running atomically claims that slot and advances execution generation. Conversational work follows [phase-aware authority](#admission-and-execution-authority) without falsely marking research running.
+
+### Sources Mission and Prepared Material
+
+Accepted design refinement, 2026-11-02; backend implementation recorded on 2026-11-03 in [Phase 7](../docs/ROADMAP.md#phase-7--shared-execution-and-sources). The [Sources conception](../docs/brainstorming/question-led-workbench/2026-10-24-source-ingestion-and-processing-conception.md#accepted-sources-refinement-of-2026-11-02) records the alternatives and rationale. Extend existing preparation, capture, retrieval, qualification, selection and accounting owners under the shared agent definition contract. The system starts and progresses Sources; Workbench remains the available conversational interlocutor and interacts through its authorized operations.
+
+Ordinary research starts require `sources_mission_v1`: `SOURCES_MISSION_ENABLED=true`, a valid version-one `SOURCES_MISSION_ENVELOPE` and a valid required `SOURCES_PREPARATION_WINDOW_MINUTES` setting (`activatedSourcesEnvelope` in `convex/domain/sources.ts`). The envelope specifies `maxNeeds`, `initialSearches`, `complementSearches`, `acquisitions` and `controls`; it cannot enlarge installed capture, candidate, model-work, concurrency or duration limits. Start pins the protocol and envelope. Shared Start readiness validates the window before workflow creation, framing fixation or analysis consumption. A missing or invalid activation or window is the typed start block `sources_configuration_unavailable`, checked after the analysis quota, and never falls back to the historical corpus-review workflow. Framing follows the same envelope: `researchQuestionCapacity` (`convex/domain/framingEditAuthority.ts`) derives the questions a Start could prepare from the qualification or activated envelope through `documentaryQuestionCapacity`, which subtracts the shared needs built by `initialDocumentaryNeeds` (also used by `initializeSources`) from `maxNeeds`, within `MAX_RESEARCH_PLAN_QUESTIONS`. `saveFraming` refuses an analyst or Workbench revision that grows the program beyond it with `framing_question_capacity` and field guidance, a recoverable `adjust_framing` refusal; edits that keep or reduce the count always apply, so a draft left over capacity by a configuration change stays repairable. Workbench context carries the capacity. `workbench.snapshot.researchStart` exposes the `researchStartBlock` verdict and capacity so the interface disables Start with its reason before any attempt; Start still refuses `sources_need_capacity` authoritatively, so admitted research cannot fail on need capacity after consuming an analysis. Dossiers started earlier without the marker keep their historical records. The Sources research definition uses the shared Pi executor and administrative Sources assignment. An optional executor-owned terminal event correlates the mission with the surrounding Workflow without another polling loop. Additive serializer profiles preserve the catalogue revision of unchanged prepared models; a missing exact Sources profile still blocks its dispatch.
+
+The preparation record owns bounded needs, capture references, work reservations, current qualification references, scoped restrictions and the frozen result. Complete per-need consultation matches effective restrictions by current contribution identity, version and need membership, including blocked contributions and restrictions retained from an earlier qualification snapshot. Complete qualification and control snapshots remain in `aiTaskResults`. Qualification submission and targeted checks select evidence with `readRequestId` and `passageOrder` from successful adopted saved-material results in the same run and mission scope (or native scope). The domain accepts only passages actually returned in the selected result, verifies the retained capture/hash and current evidence availability, and materializes exact quotation bytes before bounded semantic examination. Persisted qualifications and controls retain their canonical exact quotations. Examination loads and hashes each referenced capture once and batches its exact contextual quotations under one capture authorization. It records supplied need context and contextual readings through the existing one-shot invocation and provider-call owners. Native and mission acquisitions share the persisted preparation concurrency limit before allowance consumption. During resumable suspension an engaged control may retain its observation; progression and final handoff still require active authority. Resume rebinds the active preparation before research missions resume, preserving its allowance. Terminal receipts settle against immutable admitted attempt identities even after rebinding or cancellation; their settlement never authorizes stale material adoption.
+
+Completion proposes an outcome per need: gap, unfinished work and explicitly selected optional `readRequestIds`. Record the actual assessment author/invocation, or system authorship for fallback notices; historical missing authorship stays unrecorded. Gap/coverage/unfinished explanations are not semantically reviewed findings, and mechanical handoff proves neither sufficiency nor exhaustiveness. The domain takes revision and mandatory work references from immutable admitted context, checks current needs/late work through continuation policy, and never assigns reads to needs automatically. Reject invalid/duplicate references, unsupported gaps and unexplained unfinished work.
+
+Prepared material pins source, capture, hash and qualification per document and compact contribution/version references per need. Reference shared reading receipts without duplicating operations. Before semantic I/O, Sources work/need admission reserves result storage, completion dependency reads and response capacity, including proposed work references and explanation headroom without retained qualifications. Qualification/targeted-control reservations serialize across native and mission callers before allowance consumption. Completion checks full preparation size, batches contiguous evidence ranges and reuses transaction-local capture/task/request reads, leaving transaction headroom for authority/lifecycle work. Refuse excess work while preserving admitted material.
+
+This slice ends at `sources_prepared`, idle, with Investigation explicitly unavailable: neither corpus approval nor completed analysis. Handoff is settlement, not dispatch: `sourcesMission.finish` and the system fallback of `completeSources` read the preparation through the settlement fence (`assertPreparationSettlementFence`, `requireSettlementAuthority`), which keeps currency, generation, ownership and cancellation checks but not the dispatch deadline, lease or model budget; model-authored completion keeps them. A research mission blocked by its deadline (`execution_deadline` or `operation_outcome_unknown`) while its definition's `continuationAfterDeadline` still admits work (`sourcesContinuationAvailable`: some search, acquisition or control capacity, registered-work capacity and model budget) is reclassified in `finishChild`, before any completion notification, as the recoverable `execution_time_limit`. `suspendResearchAtTimeLimit` pauses the run with `sources_time_limit` (an analyst pause requested earlier wins) and raises, through `raiseSourcesTimeLimitDecision`, an `approvalRequests` entry (`continue_sources_preparation` with alternative `settle_sources_preparation`) surfaced as `sourcesDecisionRequestId` and in a conversation notice. If an active grant covers either action and that action is available, `raiseApproval` applies it in the same transaction and records the request as approved through the grant; the notice then states what was applied automatically, and the card is its receipt. This request offers no `Deny`: `approvals.decide` refuses it, and the generic `researchControl.resume` refuses a run paused at `sources_time_limit`, so the decision is made only through the request. `runRecovery.raiseMissingSourcesDecisions` raises the request for runs paused there before requests existed. Choosing `Continue once` or `Always continue` (via `approvals.decide`) takes the `renew_window` readiness transition: it extends the preparation deadline and lease, `executionHarnessDeadlineAt` and the mission deadline by `sourcePreparationWindowMs()` (required positive `SOURCES_PREPARATION_WINDOW_MINUTES` deployment setting, with invalid or missing values refusing new Sources work), keeps every counter and reservation, requires the execution slot and enabled paid work, and resumes the same mission without repeating unknown outcomes. Choosing `Use what's prepared` (`alternative`) calls `requestSourcesSettlement`, which records `settlementRequestedAt`, makes the stop terminal and notifies the waiting workflow, whose checkpoint then reaches the handoff without claiming the slot. Without remaining capacity the stop is notified directly and settled with limits; a mission that cannot resume after renewal is notified the same way. A settled preparation reports complete, prepared with limits, or ended without usable material from its retained outcome, independently of the mission's final status. `sourcesPreparationPhase` (`convex/domain/sources.ts`) is the single reading of Sources progress, exposed as `researchRuns.getMine.sourcesPhase` and `workbench.snapshot.sourcesPhase` alongside `sourcesDecisionRequestId`; the interface translates the phase through the shared Sources presentation and the request through `approvalCardPresentation`. The authenticated material query exposes retained results/restrictions. Required Workbench context carries bounded status, complete need identities, exact document pins, pending approval requests, active dossier grants and a hash of complete need outcomes/restrictions. `consult_prepared_material` returns one observed need's complete outcome, gaps, unfinished reasons, document references and restrictions under read-operation authority, generation, preparation/hash freshness and capacity checks; unavailable/oversized results are explicit, not truncated successes. Advisory review reuses the exact adopted consultation payload. Saved-material search/reading inspects underlying passages and effective permissions. The analyst workspace reads `convex/sourcesWorkspace.ts`: `overview` (needs with in-progress, on-hold while research can resume, unfinished once it cannot, or handed-off outcomes, framed questions, collection, reading, control and retention figures), `listSources` (one bounded row per dossier source, keeping membership, reading, documentary contribution kinds, control conclusions and restrictions separate) and `getSource` (cited excerpts with neighbouring passages or an opening excerpt from the indexed capture, contributions with effective and reported use, observed links). These projections authorize the dossier owner, mirror the persisted handoff without re-deciding retention, and return null for dossiers without the Sources protocol. Excerpt bounds belong to `convex/resourcePolicy.ts`. The complement shares scope/result types with a separate allowance, but its Investigation initiator remains pending; conversation cannot open it.
+
+The versioned mission scope references the confirmed company, fixed framing, assigned documentary needs, supplied references, reusable material, selection policy and remaining resource envelope. Required continuation context includes the confirmed company and framing even without initial candidates. It also projects up to 32 recent adopted documentary-reading references from the current mission and retained captures, including request, source, capture/hash and returned passage orders, independently of compactable conversation text. The projection shares evidence-admission checks with quotation materialization and declares incompleteness when its bounded indexed window cannot cover all readings; older exact entries remain accessible through mission history. One Sources definition serves initial preparation and the authorized Investigation complement, with distinct request/result identities and server-owned phase authority. A need has an explicit identity and sought information, optional links to several questions or common context, and separate references for work performed, prepared contributions, gaps and unfinished work. This record does not establish an inventory assertion or question outcome.
+
+Keep complete versioned qualification snapshots in the existing domain storage, with code-owned identities for individual contributions. Model-facing targeted corrections select observed contribution identities; new contributions omit that identity. The Sources definition supplies the canonical qualification task and correction versions only from the immutable admitted invocation context, never from a newer database snapshot. Canonical native operations retain `expectedTaskId` and `expectedVersion`, and the domain still rejects stale task/version conflicts before semantic examination. The domain preserves unchanged contributions, reconstructs the resulting qualification and applies its controls. Do not introduce separate contribution storage, an event-reconstruction engine or arbitrary JSON patching for this design. Results and downstream uses pin exact source, capture, qualification and contribution versions. New revisions do not silently rewrite earlier analytical bases or human decisions; current restrictions still constrain reuse of pinned material.
+
+The Sources submission tool announces its existing maximum of fifteen contributions per qualification. Oversized or empty change batches return bounded field-level guidance before model dispatch; exceeding the resulting qualification capacity preserves existing material and reports the same owning constraint.
+
+The prepared set retains documents with controlled, useful, permitted contributions under [the product selection rule](../PRODUCT.md#source-preparation-and-corpus-review), without another shortlist operation. Keep candidates and captures outside that set inspectable. Record delegated retention with the system mandate and policy versions, never a fabricated analyst approval. Preserve existing analyst exclusions and historical approval semantics. Source membership, reading availability, contribution admissibility and analytical support remain distinct.
+
+The seven Sources operation families are mission-state consultation, targeted discovery for a need, saved-material search, contextual reading, consultable-source acquisition, qualification submission and targeted documentary checking. Native code and tool bindings call the same domain contracts. Discovery reuses the existing discovery owner, binds the need and search intent to the authorized phase, retains query/provenance and logical attempt identity, and distinguishes no results from failed or unavailable discovery. An entirely rejected provider batch is invalid discovery requiring unfinished-work accounting; a mixed validated batch remains partial. Candidate capacity is checked before reservation and again before provider dispatch; the requested result count fits the remaining capacity. Provider receipts retain a confirmed response, declared search time and cost before post-response adoption checks, preserving those facts after cancellation. Mark the response as received before awaiting settlement so a lost settlement acknowledgement cannot overwrite confirmed facts with an unknown failure or authorize redispatch. All initial searches share the initial allowance; additional needs do not create allowances or consume the later complement. The [provider boundaries](#acquisition-validation-and-providers) apply before external I/O and result adoption.
+
+Extend shared reading authorization to preparation material for the permitted mission instead of removing legacy approved-corpus guards. Search and reading return exact capture identities and locators with compact qualification status and effective contribution permissions inside the final shared result-byte limit. Full snapshots stay in their existing owners. Observed destinations expose bounded URL/origin previews and exact stored indexes; acquisition resolves the full retained destination from its capture and index. Destination extraction retains at most 64 exact URLs with literal origin excerpts bounded to 128 Unicode code points; finalization rejects aggregate observed-destination metadata above 192 KiB before committing a new capture. This keeps retained-capture inspection within transaction read limits without shortening acquisition URLs. Track the representation retained separately from passages actually consulted; a complete capture is not proof of complete agent reading. Retain observed destinations with their origin and acquire their own captures. Missing observed destinations remain explicit and may motivate targeted discovery; guessed URLs or index labels cannot establish destination content. Preserve the installed PDF representation limits. Sources evidence may quote a nonempty exact contiguous excerpt of its identified indexed passage. Admission, pre-examination validation and handoff share the same capture-hash, full-passage-hash and substring check; changed or joined text is refused.
+
+Qualification submission and targeted documentary checking share the verifier and [semantic control and reuse rules](#semantic-controls-and-analytical-outputs). Qualification controls cover the reconstructed result as well as changed contributions; targeted checking can precede qualification. Retain examined scope and evidence, distinguishing semantic conclusions from technically unfinished examination. One documentary-role policy supplies legal control permissions to the examination schema, retention checks and effective-use calculation. An incompatible permission remains invalid, including when a historical control is reused; raw controls stay inspectable. Successful submission results expose effective permissions for the pinned qualified contributions, while standalone checks do not create qualified artifacts. Current contribution projections distinguish support under restrictions from inspection-only material and label a control's reported permission separately from the effective permission. Later scoped controls can narrow an exact contribution version to contextual or attributed-argument use; supported findings cannot silently widen prior restrictions. Historical restrictions without an explicit permission remain blocked. Preserve independent contributions. An unfinished revision cannot silently replace a previously usable result with an apparently verified one.
+
+Completion references persisted prepared material and accounts for every assigned need and engaged control. Preparation-owned running or waiting work settles before terminal handoff; unknown outcomes retain explicit unfinished accounting. Normal completion yields through the existing pending-operation continuation. If a retained response omits only work added after its admitted context, Sources requests a fresh invocation through the existing domain continuation; work already known at admission must still be accounted for, and duplicate references remain invalid. Fallback finalization awaits existing operation events and processes further instruction batches through durable steps. The system may hand usable partial material to Investigation while retaining unfinished preparation and preventing dependent appraisals from appearing complete. This permits independent analytical work, not use of an uncontrolled contribution, a new resource allowance or circumvention of pause, authority and global limits. Distinguish completed searches with documentary gaps from unperformed work. Shared native/agent saved-material search refuses blank queries; completion credits only successful nonblank searches as examined work, including for historical receipts. The interactive source-details empty-search state remains separate. Until Investigation's business binding exists, expose the Sources result and the unavailable next capability without pretending that analytical work started.
+
+Sources owns open/need-capacity/closed instruction admission. Workbench requests reference assigned needs through the [instruction contract](#workbench-conversation-steering-and-instructions). Apply completion-capacity checks before adding a need; insufficient capacity leaves a limited receipt. The receiving mission records work/material outcomes separately from transmission and explains unsupported phases without opening another documentary phase.
+
+Before activation, set a versioned envelope for searches, acquisitions, retained material, concurrency, duration and model calls, using existing cumulative accounting for reasoning, qualification, documentary controls and other provider work. The same preparation-owned resource calculation governs reservations and the current Sources/Workbench context; discovery allowance names its external-discovery operation and uses the active phase ceiling. Refusals distinguish external discovery, acquisition, documentary controls and registered-work capacity. Reasons come from the enforcing guard and retained operation outcome, never from a model-selected technical-stop field. A handoff preserves its historical allowance observation and assessment provenance in the existing journal, while the native required section reconstructs current state from its owners. Preserve confirmed results, unknown reservations and consumption across recovery. The administrative Sources assignment and exact serializer profiles now cover the mission as well as documentary controls and retained legacy qualification/comparison calls. Target thresholds and documentary-quality acceptance remain gates before activation; installed limits remain binding meanwhile. Verification must exercise native/tool authority equivalence, initial-versus-complement discovery, exact captures, scoped corrections/restrictions, need outcomes, partial handoff, paused instructions and recovery without repetition or counter reset. Separate deterministic mechanics, protected local inspection and bounded model-quality evaluation.
+
+## Workflow and Revision Contract
 
 ```text
-Search a bounded company-candidate set
-→ Require explicit analyst selection
-→ Preflight-revalidate the selected CIK and confirm company
-→ Reserve analysis and revalidate canonical identity
-→ Check public-evidence sufficiency
-→ Await evidence decision when insufficient
-→ Build research plan
-→ Discover sources in parallel
-→ Persist proposed CorpusRevision
-→ Await explicit corpus-revision approval
-→ Retrieve and normalize approved sources
-→ Extract passages and atomic claims
-→ Run structural validation and targeted semantic verification
-→ Search for counter-evidence inside the approved corpus
-→ Propose dimension assessments
-→ Await exception-driven analyst decisions by dimension
-→ Incrementally update derived views
-→ Finalize after all ten dimension decisions
+Company confirmation after admission → persistent framing dossier
+→ proposed activity, questions and mandate in the same dossier
+→ optional refinement → explicit Start research
+→ Sources: shared documentary preparation
+→ Investigation: common inquiry and shared inventory contributions
+→ when useful: one grouped bounded documentary complement by Sources
+→ Investigation: re-examination and appraisals
+→ grouped analyst review of identifiable appraisal versions
+→ at least one retained appraisal → autonomous Synthesis
+→ jointly controlled diagram and note, or reasoned non-establishment
 ```
 
-Valid step states are `queued`, `running`, `completed`, `needs_review`, `failed`, and `skipped`.
+Start research atomically validates the current framing, admission, analysis capacity and research execution slot, fixes the framing, consumes one analysis and launches Sources idempotently. The dossier already exists in framing and retains its identity. Sources and Investigation cannot start before this action. Target source selection follows the product mandate without routine corpus approval. Versioned authority, permitted uses, admission, rejection, integrity and audit remain mandatory. Specify the mandate, exception thresholds and persistence transition before activation.
 
-Valid research-run transitions are:
+For framed dossiers, the fixed framing is the authoritative research context for discovery, filing selection, qualification, passage retrieval and documentary complements. The original request remains history; legacy dossiers retain their existing research angle.
+
+Initial preparation cannot consume the later complement to fill source roles; observed-link following stays within initial authority. Investigation groups decisive cross-question needs into one optional dossier-wide complement with bounded searches/readings. Synthesis re-examines available material only, without another documentary phase.
+
+Grouped review binds human decisions to identifiable appraisal versions. Unreviewed proposals cannot become retained by default. With none retained, stay at review without Synthesis or documentary-insufficiency conclusions. Material changes to retained judgments require targeted human intervention; recovery or favorable controls cannot adopt them.
+
+Completion validates current artifacts, references, controls, versions and prerequisites; model termination or success messages prove nothing. Each need/check requires an outcome. Finding a passage does not complete examination; unfinished checks block dependent uses while independent work continues. Distinguish partial work, justified insufficiency, pending judgment, technical incompleteness and synthesis non-establishment. Exhaustive omission detection is not promised. Sources implements its documentary lifecycle and completion schemas; Investigation and Synthesis lifecycle/completion schemas remain implementation work.
+
+### Workbench Conversation, Steering and Instructions
+
+Workbench answers dossier questions throughout the workflow by selecting and chaining relevant authorized consultation, search and reading operations. It aggregates framing, documentary material, inventory assertions, appraisals, analyst decisions and synthesis through their existing domain-owned projections and retained references as those bindings become available. Saved framing bounds authorized research; the active analyst request determines the conversational explanation and its distinctions, participant roles and relationship directions. Preserve versions, provenance, restrictions and incomplete observations when composing an answer; retrieve needed detail through existing operations rather than treating a compact preview as the complete record. Within recorded use permissions, retained passages may support an attributed conversational explanation without a controlled contribution; distinguish source statements, interpretation and unresolved questions without implying completed documentary control. Conversation text alone never creates or amends a controlled artifact. These method instructions do not deterministically establish semantic fidelity.
+
+Workbench preserves claim authorship, analyst adoption separately from documentary support, superseded versus active instructions, and pending versus completed effects. Analyst approval of a hypothesis never establishes evidence or a saved framing change. Current framing alone describes saved program content; related wording does not imply that a specific explanation was saved. Historical attribution uses original message roles, including superseded ideas; an assistant acknowledgment cannot transfer authorship. When only a summary remains, Workbench consults exact conversation history before assigning an author, or reports that attribution is unconfirmed. Its current required research context includes code-owned status wording from the research-control owner; conversational replies must preserve the distinctions between unstarted research, running work, requested and effective pause, review prerequisites and terminal states.
+
+Workbench also chooses which permitted follow-up requests to transmit and tracks their treatment for the analyst. This conversational coordination uses the existing operation and mission owners; it does not add a scheduler, workflow engine or independent execution authority. The responsible domain owners enforce phase transitions, artifact admission and human prerequisites. The [roadmap](../docs/ROADMAP.md#phase-6--framing-and-controlled-transition) distinguishes this dossier-wide responsibility from the currently connected business capabilities.
+
+Company confirmation after admission creates the framing dossier and associates its analyst-facing conversation. Conversation and direct controls use the same versioned framing operations. Clear refinements update the visible draft with an explanation; preserve explicit analyst edits and reject stale changes. Start research fixes the framing rather than creating a replacement dossier. Messages reference domain-owned framing, requests, decisions and artifacts; conversation text and framework message status are not their authoritative state. The analyst-facing thread is distinct from technical invocation storage and journal snapshots.
+
+A Workbench turn may span several model invocations and operations through the common mission protocol. It ends when its conversational response or clarification is ready, independently of continuing research missions. Persist incoming messages and their delivery intent. During an active turn, ordinary messages queue for a following turn and do not alter its active instructions. Explicit Steer joins the active turn immediately. An already-dispatched call retains its input; the next invocation receives the steering message and retained useful work before the turn finishes. Check active-instruction and artifact versions before further operation dispatch and proposal adoption or publication. A queued message alone does not invalidate the current turn. Turns and steering never reset cumulative dossier consumption.
+
+Persist analyst instructions through domain operations: original message, Workbench's interpreted need, target, framing/phase/versions, correlation and explicit outcome. Check authority and remaining work before dispatch; distinguish registration/transmission from treatment. One shared projection resolves the linked preparation for model context and workspace, without obsolete progress or equating preparation completion with request satisfaction. The bounded Sources preparation summary supplies the same treatment limits to generation and response review under [Sources admission](#sources-mission-and-prepared-material), while execution/request-specific checks remain authoritative. Expected refusals retain outcomes; unexpected infrastructure/integrity failures reach protected diagnostics. Deliver eligible requests at controlled mission continuation. Unsupported/exhausted work returns a limitation, never another documentary phase. During pause, record requests but defer research execution until Resume. No general inter-agent bus or second operation catalogue is required.
+
+An explicit analyst pause prevents new research operations while allowing an already-engaged operation to finish and its observation to be retained. Remaining controls and current versions govern later use. Workbench can discuss existing material and record instructions during that pause. Resume requires explicit analyst intent and all remaining human prerequisites; returning research to running also requires its execution slot. Steering affects the conversational turn and does not itself pause research. Pause is distinct from cancellation and cannot erase completed work or prior decisions.
+
+## Semantic Controls and Analytical Outputs
+
+Each domain boundary checks authority, schema, references, hashes, versions and reproducible quotations. Qualification, inventory assertions/uses, appraisals and synthesis require targeted semantic controls regardless of predicted risk. Consultation, search, reading and handoff need no extra verifier. Sources also offers targeted documentary checks.
+
+Verification is bounded model work under shared capability/policy, without a permanent critic or second research pass. Record the examined object/use, evidence versions, rules, scope, conclusion and limits. Distinguish incomplete execution from insufficient support. Return precise field/reference/version/execution diagnostics to the responsible mission; verifiers cannot silently rewrite proposals. Successful partial checks confer no authority on unexamined content.
+
+Preparations pinned to `source_actions_v4` submit documentary findings as a closed object keyed by exactly the submitted contribution identities; the integration normalizes this to the existing ordered domain array and revalidates identity before persistence. Older preparations retain their array protocol. Rejected structured replies keep their bounded output diagnostic and exact observable journal. After the existing bounded technical attempts, Sources receives `documentary_control_unfinished` with safe validation feedback distinguishing malformed examination from unsupported evidence; no qualification is adopted from an incomplete examination.
+
+For new structured attempts, `executePreparationModel` carries the preparation version and pinned model through the existing transport. Provider admission derives and retains `reservedMaxOutputTokens` from those capabilities before I/O. The transport journals its effective output limit through the existing `beforeDispatch` metadata, and final dispatch refuses missing, invalid or excessive limits. Under `known_final_v1`, reservation covers the structured input envelope and admitted output ceiling; final cost settlement remains receipt-owned. Historical campaign or preparation-study envelopes cannot silently authorize enlarged structured output. Cancellation, unknown outcomes and acknowledgement recovery retain their existing no-blind-retry behavior.
+
+| Boundary | Semantic responsibility |
+| --- | --- |
+| Documentary qualification/check | Passage fidelity, period, modality and attribution; coherence of contributions and restrictions; comparison of genuinely comparable statements. Distinguish supported, documentary conflict, not established and technically unfinished. No economic interpretation is established merely by qualification. |
+| Inventory contribution | Evidence and permitted use; Fact/Inference/Hypothesis/Unknown classification and company/activity/temporal scope; rationale for each supporting, opposing or contextual question use. Admission precedes use, not appraisal submission. |
+| Appraisal submission | Reasoning from assertions through assumptions and mechanisms to possible economic consequences; rival interpretations, objections and decisive unknowns genuinely constrain the conclusion. Every assigned question receives an appraisal or justified insufficiency after inquiry. |
+| Synthesis submission | Justification of new relationships and transversal inferences; fidelity between the reference diagram and the fully reasoned note; scope, conditions, evidence and limits of an alternative non-establishment finding. |
+
+Reuse controls only for referenced, unchanged objects/uses with valid evidence versions, rules and restrictions. Recheck authority/references deterministically. New uses, modified assertions and resulting-artifact coherence need their own examination; unrelated revisions do not invalidate every control. No model adjudicates equivalence between reworded assertions. Documentary support cannot validate new inferences, nor retained appraisals new synthesis arrows.
+
+The shared company inventory separates canonical assertions from question-specific uses; useful context needs no forced link. Evidence presence, including Unknown links, does not answer questions. Documentary integrity, admissible use and human adoption are separate authorities. Assertion identity, correction propagation and freshness schemas remain open; no complete incremental dependency engine is selected.
+
+Operation owners preserve unaffected content, reconstruct changed artifacts and run known dependent checks. Callers cannot arbitrarily patch JSON or rewrite whole artifacts. Adverse findings restrict affected uses and flag known dependents; they do not invalidate the whole dossier. Positive findings retain objections and explain their resolution.
+
+Synthesis may verify evidence and explain relationships. Necessary uninstructed premises return to Investigation for inventory admission and appraisal effects: a proposed revision or reasoned maintenance. Material human revisions remain pending explicitly. A limited diagram/note may be delivered together only if the unaffected base supports coherent, useful scope; contested central premises block delivery. Non-establishment requires an instructed retained base, not empty review, technical interruption or pending judgment. No routine final approval checkpoint applies.
+
+### Analytical Control and Question Outcome Contracts
+
+[ADR-026](../docs/decisions/026-use-typed-analytical-controls-and-materialized-question-outcomes.md) records the accepted architecture. Investigation appraisal control, joint Synthesis control and the question-outcome projection remain unimplemented; this section defines their target contracts rather than claiming delivered verifier quality.
+
+Appraisal submission and Synthesis submission each expose one artifact-family operation that owns bounded input preparation, deterministic admission, semantic examination, finding validation, disposition, exact-result reuse and affected-use restrictions. Callers submit the artifact and its declared basis; they do not coordinate a chain of validators or adopt raw model output.
+
+| Contract part | Accepted specification |
+| --- | --- |
+| Authorized inputs | Submitted artifact and declared scope, exact artifact/evidence/rule/restriction versions, admissible uses and applicable human decisions. Synthesis additionally requires eligible retained appraisal versions. |
+| Deterministic checks | Check authority, schema, references, hashes, versions, prerequisites, permitted uses and applicable restrictions before any model dispatch. Reject stale or unauthorized input without inference. |
+| Model task | Examine only the semantic responsibilities left after deterministic checks and return closed, scoped findings tied to affected assertions, assumptions, objections, unknowns, relationships or output elements. The model neither rewrites the proposal nor grants workflow authority. |
+| Initial disposition | Map validated findings deterministically to `admissible` or `revision_required`. Any material unresolved finding requires revision. A limited result is admissible only when the submitted reasoning already exposes and obeys that limit. |
+| Later restriction | Reserve `restricted` for a later adverse control affecting an already retained or usable result. Restrict the affected use and flag known dependents without rewriting history or invalidating independent work. |
+| Reuse identity | Reuse only an unchanged artifact/use with unchanged evidence, rules and restrictions. Modified reasoning, new use or joint-output coherence requires examination; no model decides semantic equivalence for reuse. |
+| Technical failure | Missing route, timeout, interruption and unknown provider outcome produce technical incompleteness under existing invocation, accounting and recovery contracts. They cannot become semantic revision, justified insufficiency or admissibility. |
+| Evaluation | Cover unsupported inference, scope overreach, ignored counter-evidence or alternatives, unknowns that fail to constrain a conclusion, unjustified insufficiency, stale input, partial examination, technical failure, unsupported Synthesis relationships, unadmitted premises and diagram-to-note divergence. Keep exact findings and acceptance thresholds versioned with the implemented contract. |
+
+Appraisal findings localize defects in the path from assertions through assumptions and mechanisms to the proposed consequence, including the treatment of rival interpretations, objections, scope and decisive unknowns. Synthesis findings localize unsupported relationships or transversal inferences, necessary premises that lack Investigation admission, hidden conditions or limitations, diagram-to-note disagreement and an unsupported non-establishment basis. These responsibilities constrain the closed implementation schema without prescribing provider wording.
+
+Existing `deriveQuestionCoverage` and matrix `questionCoverage` remain evidence-presence projections, including when the only linked claim is `Unknown`. Add a separate materialized question-outcome projection owned by the Investigation domain. Rebuild the affected projection transactionally when an authoritative appraisal artifact, control result or append-only analyst review decision changes. Those source records remain authoritative; the projection is a reproducible read model, and clients do not derive workflow gates.
+
+The projection preserves evidence presence, analytical result kind, control state and human review state as separate facts. Do not store a generic `answered` boolean. A controlled substantive appraisal completes preparation and exposes a proposed answer; only its exact analyst-retained version becomes a retained answer and eligible Synthesis input. Controlled justified insufficiency also completes preparation, but is neither an answer nor a retained appraisal and contributes only a visible limitation. Technical incompleteness, unperformed work and `revision_required` do not complete preparation.
+
+Grouped review is available only when every assigned question has an admissible substantive appraisal or admissible justified-insufficiency result. Synthesis requires at least one retained substantive appraisal. An empty retained set remains at review. Retaining the evidence-presence count does not implement this projection, and the [product's answer labels and dependent transitions](../PRODUCT.md#evidence-matrix-and-analytical-review) remain blocked until the projection and its gates are verified.
+
+## Context, Recovery and Resource Accounting
+
+Compact context projects retained information; evidence and completed work stay outside the model window. Requests cannot accumulate every reading or enumerate the corpus in tool schemas. Cross-dossier learning and institutional memory remain excluded.
+
+| Context layer | Preservation and continuation |
+| --- | --- |
+| Required context | Automatically supply mission/scope, applicable human instructions and decisions, constraints, current versions, active work, open needs, the request causing suspension and its returned result. Explicitly identify changed instructions or versions. |
+| Mission working memory | Retain examined avenues, open hypotheses, rejected interpretations with reasons, pending checks and intended investigations. Working notes remain distinct from established facts and human decisions. |
+| Retrievable history | Automatically retain usable observable invocation inputs/outputs, operation requests/results, reading references and artifact versions, directly or by reproducible reference. Common scoped access also covers earlier turns of the dossier conversation. Earlier detail stays accessible when removed from the current window. |
+
+Preserve context automatically through one shared assembly owner, with domain definitions supplying their context. Supply awaited results and continuation state directly, with scoped retrieval of earlier readings/exchanges. Notes never replace exact evidence. Required-context overflow blocks explicitly; instructions and unfinished work cannot be silently dropped. Reading windows, assembly and storage remain implementation choices. Accessible context does not prove correct model use. Exclude secrets/hidden reasoning; raw rejected-provider diagnostics follow their separate bounds and truncation rules.
+
+Native sizing, compaction, FIFO admission and retained-input compatibility follow the [native context contract](#accepted-native-context-and-compaction-design). Provider diagnostics and header-only observations follow [provider boundaries](#provider-boundaries); Workbench authorship and research-status interpretation follow [its conversation contract](#workbench-conversation-steering-and-instructions).
+
+Persist confirmed results and obligations across external I/O; bounded model work is not an atomic database transaction. Compact continuation context includes agent and native results, plus referenced original instructions and their interpretation; exceeding capacity blocks explicitly. Exact history remains consultable without full conversation replay. The system schedules required follow-up checks automatically.
+
+Automatically continue confirmed recoverable interruptions only under valid mandate, authority, versions, cancellation fences and remaining bounds. Reuse confirmed work; unknown outcomes permit no blind repetition. Public research resumption and internal mission recovery use the same recoverability classification. Retention of an admitted attempt's factual observation is separate from authority to adopt it: analyst pause suspends progression without permanently disqualifying that observation. Resume rechecks current authority, scope, instructions and versions before adoption, preserving revocation and cancellation fences. One shared attempt policy owns retries; Pi/SDK/Workflow automatic model retries stay disabled. Distinguish business refusal, analytical uncertainty and technical incidents. Recovery cannot cross human prerequisites or adopt revised judgments. Persist unfinished work when continuation is unavailable. A Sources time limit with remaining capacity belongs to the same classification: the analyst renews the window (or an active `continue_sources_preparation` grant renews it automatically) or settles, and neither choice resets consumption. For eligible dossiers that failed before ADR-027's settlement separation (`run_failed` with an unsettled `started` preparation and a `blocked` mission past its deadline with `execution_deadline` or `operation_outcome_unknown`), `runRecovery.reopenAtSourcesTimeLimit` (`convex/runRecovery.ts`) idempotently advances `executionGeneration` and `researchControlRevision`, pauses the run at `sources_time_limit` without resetting counters, starts a fresh `researchWorkflow.run` with `reattachSources` (which calls `sourcesMission.reattach` and `missions.rebindCompletionEvent` before waiting in `awaitSourcesHandoff`), and either raises `continue_sources_preparation` with its settlement alternative or marks settlement requested when no capacity remains. Generation, lease, idempotency, telemetry and public-address safeguards still apply.
+
+Count all provider calls cumulatively per dossier, including pre-launch framing, Workbench reasoning, research operations and controls; tool counts are insufficient. Authorize, bound and account framing work before dispatch even though it consumes no analysis reservation. Start research and continuation preserve that consumption. No per-agent quota or finalization reserve is selected. Hard ceilings may leave work incomplete. Set target-mission parameters before activation; [installed limits](#locked-resource-limits) still govern existing execution.
+
+### Accepted Native Context and Compaction Design
+
+The [retained conception](../docs/brainstorming/question-led-workbench/2026-10-26-agentic-execution-architecture.md#native-context-and-compaction-refinement-of-2026-11-07) records evidence and alternatives; the [roadmap](../docs/ROADMAP.md#phase-7--shared-execution-and-sources) owns delivery and remaining qualification. Extend existing context assembly, domain projections, Pi integration, documentary operations, journal/storage and receipt owners. Pi retains its adaptive loop, conversation and qualitative compaction; Convex retains authoritative state, execution rights, adoption and accounting.
+
+Supply the existing Convex projection through a native Pi prompt section before native capacity estimation. Settle completed retained operations before rendering that section and capturing its checkpoint, both after tool execution and when a worker reopens. A read without a business-state change retains its result without adding a context-change instruction. Compare the prepared state and relevant business versions at admission, then freeze the admitted invocation input. The section, offered tools and serialized request must describe that same admitted state. Derive preparation proof from the durable native transcript, binding admitted state, instruction section, effective schemas and serializer identity; an in-memory marker cannot establish this after restart. Immediately before dispatch, compare the current observation and command frontiers with that proof. Admission's own status/counter changes cannot invalidate its snapshot; later authority, instruction and adoption checks retain their existing fences. A changed preparation requires fresh preparation before I/O. Projection failure blocks explicitly rather than allowing Pi's default section-error behavior to retain stale text.
+
+Commit significant confirmed state changes with immutable payloads in the existing execution journal: framing revisions and their origin; research start, requested/effective pause, resume, interruption, recovery and terminal state; documentary captures, qualification, restrictions, source decisions and handoff; instruction treatment and human checkpoints. Allocate dossier order when an input is admitted or an effect commits, preserving message submission time separately. Commands retain their paired deterministic confirmation before their effect observation. Merge admitted messages, controls and observations in that order into internal native history; queued messages remain excluded and application observations never appear as analyst messages in the public conversation. Each observation carries its origin, versions and exact history reference. Native compaction preserves qualitative history while the current required section continues to reconstruct authoritative state.
+
+Capture admitted messages, pending-command cutoff and observation frontier in one Convex transaction; construct any required legacy anchor from that same snapshot. Deliver journal observations one bounded row at a time against the captured frontier. A concurrent change remains pending and invalidates stale preparation before further I/O. Pi places queued writes before queued steering inputs at its native boundaries; withhold later observations and controls until preceding admitted inputs have a durable entry. A queued Pi write is not delivered: reconcile placement acknowledgements after the native boundary, acknowledge only durable placement and bind the acknowledged frontier and command receipt to the request's retained checkpoint. Only checkpoint-proven delivery advancement resets the local preparation-stall count; unchanged preparation still stops after three attempts, independently of domain progress and cumulative allowances. Idempotent native request identities recover lost acknowledgements without replaying effects or appending duplicate observations. New empty sessions start at their current frontier; existing sessions without delivery metadata receive one labelled current-state anchor, preserving their original history without inventing past transitions. A terminal legacy response settles without creating an anchor; its next active response creates it. Server ownership establishes the recorded effect and provenance, not the truth of documentary prose or prior model judgments.
+
+Automatically project current controlled documentary contributions with their complete statements, attribution, period, modality, contribution/version identity, permitted uses and effective restrictions, including blocking findings and applicable earlier restrictions. Retain source identity and the current analyst inclusion decision; a rejected source keeps its historical statements with effective use blocked. Reuse the same domain projection for generation, consultation and advisory review. Keep exact quotations available through versioned references and targeted reads. The working-memory layer above remains qualitative: conversational nuance, hypotheses, examined avenues, rejected interpretations with reasons, authorship and intended checks stay in native history/compaction rather than being reduced to structured dossier fields. Summaries never establish evidence, saved effects or analyst adoption.
+
+Extend existing documentary search, contextual reading and history consultation to return useful requested passages with their scope, capture/hash, exact locators, omissions and explicit continuations. One documentary metadata projection supplies saved title, form and date to source candidates, current material context and new search/read results; identify SEC filing dates separately from publication dates and retain missing dates explicitly rather than deriving them from titles, acquisition times or reporting periods. Historical observations without that metadata remain unchanged. Shared reading status preserves documentary-use restrictions for every consumer; observed acquisition destinations are supplied to missions declaring the acquisition operation and to existing native research callers. Bind continuations to the observed capture and read/search scope; a changed or unavailable reference refuses explicitly without substituting another capture or restarting a search silently. Continuations are pagination data, not documentary evidence. Recognized native cursor errors and invalid ranges yield the same typed continuation refusal; unrelated failures keep their protected incident diagnostics. Supply direct immutable observation references so recovery does not require browsing the whole journal. Distinguish capture omissions from response-page omissions. The saved-material `limitReached` flag describes passage-page pagination, not an exhausted discovery allowance or reading quota. Page-size bounds do not become consultation quotas; replayed fragments do not manufacture progress or reset consumption.
+
+Replace the fixed 128 KiB native request ceiling with the admitted model's capacity and native context management. When Pi supplies no output limit for ordinary generation, use the model/SDK native default instead of the one-shot 6,144-token fallback. Preserve explicit Pi output budgets, including compaction and context-dependent reductions, through both provider options and final payload serialization. Capacity preflight must not independently reserve the one-shot output allowance. The adapter supplies the effective output cap as typed dispatch metadata; shared admission does not inspect provider wire fields. An incomplete summary remains a failure with its original observation and known cost retained. Use native compaction sizing instead of the host's fixed reserve/recent overrides. Compact when necessary and keep background anticipation disabled for this correction; enabling concurrent anticipatory compaction requires separately verified task/receipt correlation. Required state that alone exceeds capacity blocks without silent omission or a futile compaction loop. Preserve application authorization, deadlines and retry ownership; bounded one-shot qualification/comparison keeps its separate contract.
+
+FIFO admission uses Pi estimation for required state, instructions, effective schemas and the native initial analyst lot against the selected model window, one message at a time, leaving the next oversized member queued. Missing live model configuration retains its explicit dispatch block instead of inventing a capacity estimate. Historical non-native instruction bounds remain readable and enforceable.
+
+Serializer calibration, historical rendering compatibility and profile refresh follow [administrative model configuration](#administrative-model-configuration).
+
+Installed simulation uses its own complete serialized input and calibrated profile, normalizing only model-irrelevant clock metadata while retaining the exact original Pi log; its model-context pressure still triggers native Pi compaction. Definitions may supply compaction instructions at the shared native request boundary without replacing Pi compaction.
+
+Extend journal and Pi storage owners to retain complete observable payloads and logical commits using immutable fragments where necessary. Complete publication, hashes, writer fencing and idempotent acknowledgement recovery precede use; a failed append cannot enter the in-memory projection. Persist requests before external I/O and confirmed outputs before adoption. For native replies, apply the 64 KiB business-result bound after normalization, separately from the complete observable envelope and native summary. Initial adoption and recovery both refuse a blocked compaction result; a complete retained summary is reused after an interrupted Pi commit without another provider call. Fragment/transaction limits are separate from complete model-input capacity, and storage failure is not a model-context overflow. Keep the accepted cumulative Pi replay-capacity stop until a separate storage decision changes it; compaction never deletes originals or replenishes consumption. Preserve historical inline records and frozen evidence.
+
+For future mandates using an explicitly identified accounting policy, reserve a prudent amount before dispatch from admitted model capabilities, effective request/output settings and authorized prices. Settle consumption to a known final provider-declared cost, including a late observation of an already terminal receipt; retain the full reservation for unknown or partial costs and preserve over-reservation incident handling. Confirmed finality is monotonic, while conflicting amounts remain explicit. Reuse existing provider receipts, charge reconciliation and indexed campaign usage. Admission and settlement replay cannot count twice or reset cumulative usage; releasing an unused reservation remains within the original mandate. Keep model-call counts independent from monetary settlement. Historical mandates retain their original accounting and archives. They retain the prior reservation basis and request/output envelope; an incompatible native request is refused before I/O until a new policy is explicitly authorized. Closure or expiry is not renewed by recalculation. No exact pre-call token count has been verified for the examined routes, so estimates cannot be presented as guaranteed financial bounds.
+
+Verify the real registered paths with RED/GREEN regressions: native section estimation/replacement, render failure and stale preparation; ordered state/message/control delivery, queued-write proof, legacy anchors and foreign-reference refusal; preservation of Pi options in the final wire payload and refusal of incomplete summaries; reading, compaction, reopen, direct exact-passage recovery and subsequent qualification; complete contributions/restrictions and historical attribution; large-payload retention, interrupted append, acknowledgement loss and cancellation; known final, unknown, partial and late charge settlement under both accounting policies. Exercise resulting domain outcomes rather than identifier presence alone, retaining realistic traces from the failed lots. Deterministic/simulated checks establish mechanics, not semantic summary fidelity or the cause of the GLM loop. Fresh model-quality evaluation requires a new bounded mandate; previous mandates are closed and expired.
+
+### Loop Prevention
+
+Reuse confirmed results for unchanged inputs/versions when the domain permits. New invocations/generations do not create new logical operations. Repetition policy spans objectives, operations, parameters, examined versions and prior diagnostics. Domains define observable progress: new material, changed contributions or resolved obligations, not new identifiers/events/messages. The first consultation of each distinct retained conversation fragment counts as progress within its mission; repeated, empty and refused conversation reads do not. Fragment progress retains the existing mission capacity and cumulative execution bounds. Context-restoring rereading remains valid.
+
+Mission requests retain cause/objective and obey [return bounds](#workflow-and-revision-contract). Initial inspection thresholds are binding; target-mission re-examination/non-progress thresholds still need values before activation. Cumulative ceilings also bound unrecognized semantic cycles. Once repetition without progress is confirmed, stop directly with an explanation and retained work, cause and obligations; do not grant an automatic extra strategy attempt. Compaction and new execution identifiers neither establish domain progress nor reset repetition or consumption. Later continuation requires an explicit request, authority, an admissible reason and remaining resources.
+
+### Traceability and Typed Outcomes
+
+Trace native and agent-requested operations, including rejections/blocks: actor, cause, inputs/references, versions and outcome. Correlate dossier, conversation messages, turn, mission, invocation, logical operation, provider attempts, controls and revisions. Reuse records the new caller’s cause while preserving the original logical identity. Domains retain artifacts; execution retains result references. Progress projects persisted work; deterministic actions create no provider receipts.
+
+Extend the existing invocation and operation boundaries with one shared journal, following DeepSeek Harness's reconstructable-request principle without adopting its runtime or plugin system. Cover mission reasoning and one-shot qualification/comparison. Before dispatch, persist the model-visible request after provider serialization: rendered instructions, supplied context/messages, adapted tool/output schemas and effective generation settings, excluding authentication headers. Historical pre-provider request envelopes remain inspectable in their original format. Retain original observable replies alongside normalized results and correlate existing provider and operation records.
+
+Journal calls and operations, without incremental generation-fragment persistence. Persist operation requests before effects; commit received model output and its provider receipt together before business adoption. Capture complete tool argument text before SDK repair; retain raw and normalized values separately, and validate raw JSON without repair before operation admission. Preserve malformed argument text and its parse diagnostic; unavailable originals make the journal incomplete rather than a reconstructed reply. Receipts distinguish the requested model from any reported resolved model, effective upstream provider and provider-declared cost; SDK catalogue estimates are not reported charges. Pi required context references prior replies in the inspectable journal rather than copying them outside compactable history. A crash before result persistence leaves an explicit unknown outcome, never permission for automatic replay. Journal snapshots have their own [storage limit](#locked-resource-limits); model-input and operation limits remain unchanged. Missing or oversized content must be marked incomplete; a truncated diagnostic cannot represent a complete reply. Secrets and hidden reasoning remain excluded.
+
+Provide an administrator-only, read-only timeline per dossier with paginated access to invocation, prompt, reply and tool-request/result details. Reuse existing administration and authorization boundaries. Analyst surfaces retain product-safe progress and errors. No external telemetry backend or general observability console is required.
+
+Authorized attempts may receive terminal receipts after cancellation without result adoption, mission advancement, slot claims or new calls. Closure validates the exact admitted attempt; adoption separately checks current authority, versions and generation. Preserve path-specific guards when evolving receipts. External exactly-once execution is not promised; reuse confirmed results and adopt idempotently.
+
+Typed outcomes distinguish controlled success, waiting, version conflict, missing configuration, resource/repetition stop, context-capacity block, technical interruption and unknown provider outcome. Analytical insufficiency/non-establishment remain domain conclusions. Isolate unknown effects; continue independent authorized work where possible. Translate analyst-facing outcomes under product copy rules; protected diagnostics retain boundary and cause.
+
+## Implementation Transition
+
+The following legacy contracts remain binding during transition. The roadmap distinguishes delivery from unfinished former requirements. Fixed dimensions, routine source approval and risk-triggered semantic checks are not target requirements. Existing authorization, membership checks, waits and limits remain until replacements have explicit semantics, compatibility and verification. Documentation cannot bypass controls or migrate data.
+
+Extend existing records, Workflow, acquisition, retrieval, accounting and policy owners before adding concepts. Define framing, mandate, assertion/use, appraisal, review, synthesis and revision schemas per slice; current dimensions do not imply them. Preserve immutable evidence, decisions, receipts, unresolved outcomes and readable history. Legacy fixture regressions retain their scope; the roadmap owns migration sequence and delivery.
+
+START now binds company confirmation, immutable optimistic-versioned framing edits and atomic explicit research start to one dossier and its analyst-facing thread. New framed launches retain the fixed questions and scope in initial and supplemental documentary planning; legacy dossiers retain their launch and checkpoint paths. The Workbench definition uses the shared Pi mission protocol for framing, saved-material consultation and controlled analyst instructions. Queued messages, promotion to steering, removal, response stop and queue continuation operate on retained deliveries; research runs independently. Shared operation and invocation admission immediately suspend new research dispatch when pause is requested; engaged operations drain before the effective analyst pause advances generation. Framed documentary workflows wait durably for Resume, which atomically reclaims the execution slot without replenishing deadlines or allowances. Pause controls are exposed only while the framed documentary continuation is implemented; later analytical stages do not inherit unsupported controls. New starts always use the Sources protocol; on 2026-11-15 the corpus-approval interface was retired to `archive/legacy-source-review/`. Its Convex workflow, revisions, proposals, decisions and evidence-sufficiency checkpoint remain for historical test, evaluation and showcase dossiers until a separate cleanup. Operators remove analyst research dossiers only through the internal `dossierPurge.purgeResearchDossiers`: it refuses non-research purposes, stops execution through `cancelRunExecution` (which cancels only workflows still in progress), restores a consumed analysis, records a `dossier_purged` audit event with its reason, then deletes owned records children-first in index-bounded batches and releases stored captures no other record references. Retained texts, companies and component state are left in place. New protocol starts use the Sources binding and controlled material handoff above; analytical mission bindings remain pending. Workbench now resolves its pinned model through administrative configuration; the live Workbench feature remains disabled until separately authorized activation.
+
+The [native-interface contract](#accepted-native-conversation-and-model-interface) is implemented for current Workbench conversations with continuity across response missions, projected tools, definition-owned completion and deterministic control confirmations. The 2026-11-05 instruction refactor replaces superseded Workbench and Sources prompt variants with one current composition per agent. Existing records remain immutable and inspectable; unsupported definition versions cannot replay through the new definition. This refactor enables no live model route.
+
+Protocol acceptance covers native/tool authorization equivalence; interruption before dispatch, after confirmed effects and before agent return; context/obligation/counter continuity; conflicting requests and stale versions; late receipts without adoption; repetition/cross-mission bounds after restart; and refusal of incomplete artifacts/controls. The Sources binding extends these deterministic and simulated-control regressions through its existing domain owners; protected runtime inspection and fresh documentary-quality qualification remain separate gates. Durable integration and semantic quality remain separate gates; specification grants no activation.
+
+## Domain and Persistence
+
+The table records legacy persistence contracts and compatibility invariants, not the final question-led schema or a delivery inventory.
+
+| Records | Ownership and invariants |
+| --- | --- |
+| `Visitor`, `Invitation`, `Company`, `ResearchRun` | Stable admitted identity, compatible access-slot storage, canonical company identity and revision-aware execution. |
+| `ResearchPlan`, `ResearchPlanQuestion` | Versioned plan and immutable questions, each with a stable key, bounded text, dimension, template version and creation provenance. Coverage is derived, not written back into questions. |
+| `Source`, `CorpusRevision`, `SourceDecision` | Candidate provenance, immutable approved membership and append-only analyst choices. Multiple edits may share a draft. |
+| `SourceSelectionProposal`, `SourceSelectionProposalItem` | Immutable recommendation snapshot, policy/input identity, disposition, reasons and pinned preparation. No analyst decision is created by generation. |
+| `SourceCapture`, `SourceVersion`, `SourcePassage` | Immutable prepared content, approved analytical representation and exact reproducible quotations. Preparation does not confer analytical authority. |
+| `Claim`, `ClaimEvidence`, `ClaimDimensionLink` | Atomic canonical proposal, sole claim-to-passage relation, and separate claim-revision-to-dimension proposal. No effective analyst decision or final confidence lives in a generated proposal. |
+| `ClaimDecision`, `ClaimDimensionDecision`, `AssessmentDecision` | Append-only decisions on claims, links and atomic dimension outputs, including justified overrides. |
+| `AssessmentDimension`, `ScoreProposal`, `Relationship`, `BriefRevision` | Dimension proposals and versioned derived outputs subject to the product's approved-evidence constraints. |
+| `AITaskResult`, `PolicyEvaluation`, `ProviderCall` | Typed versioned inputs/results, deterministic gate rationale and actual external-attempt telemetry. |
+| `WorkflowStep`, `CheckpointDecision`, `RunEvent`, `AuditEvent` | Durable execution/checkpoints, product progress, and separate security/access/quota history. |
+| `EvidenceSourceStatus`, `ArtifactUploadLease` | Mutable execution projection and artifact-upload lifecycle; neither replaces immutable evidence. |
+
+Validate persisted/external data at runtime with closed lifecycle values. Preserve corpus, source, claim, link, assessment, map and brief revisions without silent mutation. Introduce target concepts only for required observable behavior.
+
+`SourceVersion` retains canonical URL, hash, media type, byte/page counts, retrieval/normalizer versions, metadata and normalized storage identity. Changed content creates a version; matching logical operation/hash reuses it. `SourcePassage` binds one version, exact quotation, normalized quotation hash, stable order and typed web/PDF locator. Unreproducible quotations are structurally invalid.
+
+Only `ClaimEvidence` assigns `supporting`, `counter` or `context`; discovery, recommendation, family and company linkage confer no relationship. `ClaimDimensionLink` binds claim revision, dimension, extraction/corpus revision, `generated`/`analyst` origin, bounded rationale and any generating task. Every `Unknown` references an unresolved plan question and context passage. Protected, paginated, idempotent question backfills use persisted company identity, dimension keys and bounded angle without changing plans or inventing provider questions.
+
+`EvidenceSourceStatus` binds frozen accepted source and generation, with `queued`, `running`, `succeeded`, `partial` or `failed`, bounded reasons and counts. Decisions transactionally maintain derived `sourceReviewItems` per source/revision; an idempotent admin backfill can rebuild it. Summaries use bounded indexed reads; collections, native cursor pagination. Approval checks effective decision heads, not historical accepted rows.
+
+Workspace URLs use `section=progress|sources|investigation|synthesis`, validated mission-specific `subsection` and optional `inventory=1`. Legacy destinations map as follows: `evidence` → Inventory over Progress; `assessment` → Investigation/Review; `map` → Synthesis/Mechanism; `brief` → Synthesis/Full brief. Navigation grants no authority or capability and triggers no execution. Legacy lifecycle values cannot enable unavailable missions.
+
+Inventory reuses authorized evidence queries and preserves matrix state after first opening. Dock opening adds history; closing returns to the previous entry. Closing a directly linked sheet removes only `inventory`. Source-review context survives overlays, refresh and history.
+
+Under `section=sources`, validated `view` selects overview (absent), adjustment (`adjust`) or inspection (`inspect`). Canonical `coverage` keys apply only during inspection; all-candidate view removes that parameter, overview removes both. Refresh/direct links/history restore context without discovery, decisions or approval. Illustrative consumers retain local component navigation. Overview counts/membership and adjustment share one bounded decision projection.
+
+Large artifacts use Convex File Storage. Upload leases progress through `reserved`, `uploaded`, `committed` or `orphaned`, attaching storage IDs when available. Upload/commit are non-atomic: require one committed referenced artifact per logical operation, allowing transient uploads. Failed finalization marks an orphan and attempts deletion. Protected paginated cleanup reconciles old leases/storage after a safety interval, covering pre-attachment crashes and protecting preparation captures and analytical versions.
+
+## Legacy Workflow and Revision Contract
+
+The installed path retains human source approval and fixture-gated evidence handoff. Planned dimension review and derived outputs were never certified and are superseded by the question-led target. Lifecycle values alone prove no implemented path.
 
 ```text
-draft
-→ checking_public_evidence
-→ awaiting_evidence_sufficiency_review (when required)
-→ discovering_sources
-→ awaiting_source_review
-→ corpus_approved
-→ extracting_evidence
-→ assessing_dimensions
-→ awaiting_assessment_review
-→ completed
+Existing path (claim generation is fixture-gated):
+Explicit company selection → preflight confirmation → atomic analysis reservation
+→ authoritative identity revalidation → public-evidence sufficiency review when needed
+→ research plan → discovery → bounded capture/qualification/comparison
+→ inspect alternatives and one finite supplement → source proposal → corpus approval
+→ exact approved materialization → analytical claims → structural/policy validation
+→ evidence_ready (arbitrary live inputs pause before claim generation)
+
+Formerly planned continuation (not certified as delivered; superseded):
+Counter-evidence within approved corpus → dimension review → derived views
+→ finalization after all ten dimension decisions
 ```
 
-`completionOutcome` is `completed_assessment` or
-`insufficient_public_evidence`. The insufficiency branch is a human checkpoint,
-not a generic failure: the analyst may add public HTTPS URLs and re-evaluate,
-complete with insufficient evidence, or force continuation with an audited
-reason. Force continuation does not weaken any later provenance or confidence
-rule.
-
-`corpus_approved` is the persisted handoff between the Phase 4 and Phase 5
-vertical slices. Phase 4 may finish its workflow execution with
-`executionStatus = idle` in that lifecycle state; it must not emit extraction
-progress until a later workflow version actually starts extraction.
-
-Enforce transitions server-side. A client must not bypass checkpoints or directly mark workflow stages complete.
-
-Track execution separately from the analytical lifecycle with `idle`, `running`, `paused`, `failed`, `cancelled`, and `completed`. A paused run records whether it awaits source review or assessment review. This separation keeps failure and cancellation from inventing analytical stages.
-
-Retries, resumptions, and cancellation must be durable and idempotent. They
-must not duplicate claims, quota reservations, provider-call records, or
-external side effects. Retryable operation keys include run ID, workflow
-version, execution generation, corpus revision, step key, and attempt. Any
-resume that can make work `running` atomically claims the visitor's single
-running slot and advances the execution generation. Recheck that generation
-immediately before external I/O and before persisting its result; reject stale
-or cancelled work without advancing state or issuing another paid call.
-Persisted `RunEvent` records are the only source of UI progress.
-
-## Evidence Acquisition and Provenance
-
-Source discovery and evidence extraction are separate phases. The durable
-corpus-revision approval event is mandatory before retrieval and extraction
-proceed.
-
-Follow the source priority order in the product design and the acquisition boundaries in ADR-004. Source relevance is an estimate, not a truth score. Establish support at claim level through exact provenance, corroboration, and counter-evidence.
-
-Represent source-scope choice as one of three bounded presets: `balanced`,
-`first_party_depth`, or `independent_scrutiny`. Presets alter query priority and
-budgets only. They never disable required workflow stages, regulatory coverage,
-provenance enforcement, or counter-evidence handling.
-
-Every accepted passage needs a stable, reproducible locator appropriate to its
-source, such as page and bounding text for a public PDF or URL plus anchored
-text or section for a web document. Reject passages that cannot be located
-reproducibly.
-
-An approved `CorpusRevision` includes accepted sources only. A candidate may
-remain `pending`, but it is excluded from all downstream work. Accepting a
-pending source or an external counter-evidence lead later creates a new corpus
-revision and another durable checkpoint.
-
-`SourceDecision` remains the append-only authority for analyst choices.
-`sourceReviewItems` is a mutable, derived read model for one source and corpus
-revision: insertions and decisions update it in the same transaction, while an
-idempotent admin backfill reconstructs it from source and decision history.
-Review summaries use bounded indexed reads, collection pages use native Convex
-cursor pagination, and approval checks the first indexed accepted projection.
-The projection must never replace, rewrite, or relax the decision history.
-
-Analysts may add public HTTPS URLs only. Treat them as proposed sources and
-apply server-side URL canonicalization, DNS and redirect validation, SSRF
-protection, bounded timeout/content type/size/decompression, and the normal
-corpus decision flow. Authorize the caller and run before DNS or HTTP work.
-Validate every redirect destination and connect to the public address that was
-validated while preserving the original host for HTTP Host and TLS SNI; do not
-validate one DNS result and then permit an unrelated resolution for the actual
-connection. Local file and PDF upload is outside the MVP. Public PDFs reachable
-through an approved HTTPS URL remain supported after approval.
-
-Preserve source retrieval and extraction failures as visible structured states. Failure of one source must not erase it or terminate unrelated retrieval work.
-
-Treat retrieved documents and model output as untrusted input. Generated structured output must pass schema validation before persistence as usable evidence. Bound retries. If validation or evidentiary support remains inadequate, downgrade the result rather than laundering it into a fact.
-
-Rejected sources cannot contribute to passages, claims, assessments, maps, or briefs.
-
-## Assessment Contract
-
-Support these ten dimensions:
-
-1. Context ownership
-2. Workflow control
-3. System-of-action capability
-4. Orchestration position
-5. Model and platform dependency
-6. Data defensibility
-7. Switching costs
-8. Pricing resilience
-9. Learning loops
-10. Abstraction exposure
-
-Position is `-2`, `-1`, `0`, `+1`, or `+2`. Confidence is `Low`, `Medium`, or `High`. Direction is `Declining`, `Stable`, or `Improving` over three years.
-
-`Orchestration position` means economic orchestration position: control of intent, operational context, workflow execution, and business outcomes. Never derive it from the sophistication of a company's internal LLM harness alone.
-
-Confidence must remain inspectable and tied to question coverage, source authority, recency, independent corroboration, unresolved counter-evidence, and the ratio of facts to inferences. Do not ask a model to invent a confidence label without those inputs.
-
-Represent model work as versioned typed tasks. Generated task results are
-proposals and cannot directly set `approved`, final confidence, quality gates,
-or workflow authority.
-
-Apply two evaluation layers:
-
-1. non-overridable structural validation for schema, approved-source
-   membership, required provenance, and stable locators;
-2. an application-owned, code-defined, versioned policy that deterministically
-   combines observable evidence characteristics and typed semantic-verifier
-   results into `pass`, `needs_review`, or `blocked`.
-
-Deterministic rules trigger semantic verifier tasks only where mechanical
-checks are insufficient. Persist policy version, normalized inputs, executed
-rules, outcomes, and any verifier task references. A policy change requires
-tests and an explicit evaluation revision; it never silently rewrites history.
-
-The default analyst experience is exception-driven. The UI may approve a
-reviewed group in one action while the server persists individual claim and
-dimension-link decisions. Corrections create a cited replacement claim and
-visible diff. Each dimension decision atomically records position, confidence,
-three-year direction, and any justified override.
-
-## Provider and Model Architecture
-
-Implement a provider-agnostic `ModelRouter`. Workflow code requests capabilities rather than named models:
-
-- `source-relevance`
-- `claim-extraction`
-- `contradiction-search`
-- `claim-entailment`
-- `contradiction-verification`
-- `dimension-relevance`
-- `claim-correction`
-- `dimension-assessment`
-- `brief-generation`
-
-Routing considers capability, quality, approximate cost, configured resource guards, availability, and prior failures. Model names are configuration data.
-
-Required provider boundaries are:
-
-- a Codex subscription provider option;
-- OpenRouter;
-- an extension contract for future providers.
-
-Use the upstream CLIProxyAPI distribution as the prototype-only experimental Codex subscription transport defined by ADR-003. It is a pragmatic infrastructure adapter, not the application-level router, a permanent production architecture, or an officially endorsed OpenAI integration. Keep credentials and management surfaces private.
-
-Use `ai` with `@openrouter/ai-sdk-provider` for OpenRouter. Use `ai` with
-`@ai-sdk/openai-compatible` only for the private CLIProxyAPI inference surface.
-Do not route OpenRouter through CLIProxyAPI.
-
-Use `exa-js` for source discovery with `contents: false`; call `getContents`
-only with URLs or search results belonging to an approved corpus revision.
-Query SEC EDGAR directly over HTTP with an identifying `User-Agent` and a
-shared aggregate request limiter below the SEC maximum. Use direct HTTP for the
-current Unstructured Pipeline Jobs API; the available JavaScript client targets
-the legacy Partition endpoint and is not an MVP dependency.
-
-The provider-SDK preference applies where a current SDK owns the selected API
-surface. SEC EDGAR is an intentional direct-HTTP institutional-source boundary,
-and Unstructured remains a direct-HTTP exception until its JavaScript client
-adds material value for the current Pipeline Jobs API.
-
-Treat DeepSeek V4 Pro and Momo 2.5 Pro only as candidate configuration examples when they are verified as available. Never assume their identifiers, capabilities, availability, or pricing.
-
-For each provider call, persist the requested capability, resolved provider and
-model, task/prompt/input/output schema versions, available usage and cost data,
-latency, status, retry number, fallback reason, and references to structured
-input and output. Do not store secrets or unnecessary sensitive prompt data.
-
-The application owns bounded retries and fallback. Each task configuration
-declares one primary and at most one explicit fallback. OpenRouter may route
-infrastructure for the same configured model under explicit parameter and
-privacy constraints, but it may not silently substitute the application model.
-Validate every fallback result through the same task schema and policy.
-
-Missing provider configuration, disabled paid work, exhausted application
-limits, and partial provider failure are explicit typed outcomes with an
-analyst-relevant consequence and next action. They must not be persisted or
-rendered as an empty successful result. Raw provider errors, configuration
-names, and internal workflow state remain outside analyst-facing copy.
-
-Neither CLIProxyAPI production readiness nor precise dossier economics is a prerequisite for the candidature implementation or demonstration.
-
-## Access, Quotas, and Resource Guards
-
-- Create exactly five stable access-slot records through an idempotent seed or
-  administrative setup path. They remain persisted as `Invitation` records for
-  compatibility.
-- Use Convex Auth anonymous sessions with reusable, server-digested four-digit
-  access codes as defined by ADR-014. Keep one slot as administrator and four
-  as analysts.
-- The first valid use creates the slot's stable `Visitor`. A later valid use
-  atomically rebinds that visitor to the new anonymous Auth user, preserves its
-  role, quota, dossiers, and audit history, and removes protected access from
-  the previous Auth identity.
-- Consume access-code attempts atomically before digest verification:
-  allow at most five attempts per anonymous Auth identity and 25 attempts
-  deployment-wide in a 15-minute window.
-- As defined by ADR-012, allow an anonymous Auth identity to use the public
-  Start surface and non-billable company preflight before workspace access.
-  Require an active admitted `Visitor` before quota reservation, workflow
-  creation, dossier access, or administrative operations.
-- As defined by ADR-015, preflight may use bounded Exa search only to resolve visual company website metadata. This may consume provider credits but never reserves visitor analysis quota, changes SEC CIK identity, or blocks a valid SEC preflight. Consult the CIK cache first, retain stale cache entries on refresh failure, and fall back to SEC investor-relations metadata and then the existing company icon.
-- Maintain at most five stable visitors in total.
-- Allow each admitted visitor to reserve at most three analyses in total.
-- Enforce both limits atomically in server-side Convex mutations and persist them across sessions.
-- Allow at most one `running` workflow per visitor. Runs paused at a human
-  checkpoint do not block another launch.
-- Consume a launch reservation once. Retries and resumes consume no additional analysis; abandoned or voluntarily deleted analyses remain counted.
-- Require an append-only audited reason for administrative quota restoration.
-- Bound workflow retries and research breadth through configuration, including source, document-page, and provider-call limits where appropriate.
-- Set `COMPANY_SEARCH_RESULT_LIMIT` to the maximum ranked SEC candidate set
-  returned by one search (40 for the prototype), then paginate that immutable
-  result locally in the composer. Set `SOURCE_CANDIDATE_LIMIT` to the explicit
-  per-dossier candidate scope (48 for the prototype). Enforce source capacity
-  before external URL inspection or discovery, again inside persistence, and
-  stop later provider calls when no capacity remains. Never truncate an
-  existing dossier during migration.
-- Use provider-side spending controls when available and provide an emergency server-side switch that prevents new paid work.
-- Record provider-reported usage, latency, and cost when available.
-- Provide an admin-only operational projection for running workflows,
-  checkpoints, failures, provider calls, available usage/cost, audited quota
-  restoration, and the emergency paid-work switch.
-
-Do not build transactional dollar reservations, a settlement ledger, list-price-equivalent accounting for free tiers, or precise per-dossier cost enforcement. ADR-006 supersedes ADR-005 on this point.
-
-Never rely on disabled UI controls for access, analysis, or resource-limit enforcement.
-
-## UI Engineering Constraints
-
-Build an institutional analyst workbench: dense enough for serious research, calm, legible, and provenance-forward. Prioritize matrices, citations, review state, unknowns, counter-evidence, and audit history over decorative AI effects.
-
-The required screens are listed in the product design. The selected production
-direction is Prototype A's persistent navigation rail, folded into real
-`/workspace` routes rather than promoted with static prototype data.
-
-Existing user-authored surfaces are the implementation baseline, not disposable
-scaffolding. Connecting live Convex data or workflow behavior does not authorize
-recomposing the Start page, research composer, toolbar, Workbench Shell,
-analyzed-company navigation, dossier cards and card-shaped skeletons, source
-review, persistent rail, or their established responsive, keyboard, motion,
-loading, hover, and focus behavior. Preserve public HTTPS reference controls
-even though local upload is excluded. Shared primitives remain neutral;
-consumer-specific stacking, sizing, motion, and copy stay at the consumer unless
-they become a documented shared contract. Any material visual or structural
-change requires an explicit product decision before implementation.
-
-Keep `Progress`, `Sources`, `Evidence`, `Assessment`, `Map`, and `Brief`
-visible. Derive active, completed, and locked states from persisted workflow
-state; locked items explain their prerequisite. Use a retractable contextual
-panel on desktop and a drawer on smaller screens. Source review is a dedicated
-mode. The architecture map and brief update incrementally from approved claims,
-show incomplete coverage, and never simulate progress.
-
-Implement responsive, keyboard-accessible layouts with semantic HTML, visible focus, sufficient color contrast, explicit labels, and non-color status cues. Treat loading, empty, partial-failure, needs-review, cancelled, and insufficient-evidence states as first-class UI states.
-
-The summary may emphasize at most five priority dimensions while preserving access to all ten. Architecture visualizations must communicate uncertainty and evidence coverage rather than imply complete knowledge of an internal architecture.
-
-Do not make chat the primary interface. Do not add automatic translation until the English MVP is complete and verified.
-
-## Security Boundaries
-
-- Keep secrets server-side and out of logs, client bundles, fixtures, and version control.
-- Validate authorization and access-slot state in every protected server operation.
-- For external I/O, validate the caller and every applicable ownership, active
-  workflow generation, resource-limit, and operation-lease condition before
-  DNS, SDK, or HTTP work. Revalidate generation and cancellation before
-  persistence; unauthorized, stale, cancelled, or duplicate attempts perform no
-  provider I/O.
-- Enforce access-code format and attempt limits on the server; the OTP
-  input is not a security boundary.
-- Validate URLs, redirects, response types, sizes, decompression, and parsed
-  content. Local file upload is not exposed in the MVP.
-- Treat source content as evidence, never as system instruction; defend tools and model prompts against embedded instructions.
-- Restrict outbound fetching to safe protocols and mitigate SSRF, redirects to private networks, oversized responses, and decompression bombs.
-- Escape or sanitize rendered source content and generated text.
-- Apply least privilege to Convex functions and provider credentials.
-- Preserve an audit trail without recording credentials, session secrets, or unnecessary personal data.
-
-Security controls are required in proportion to the features actually exposed; they are not permission to build an unrelated enterprise security platform before the relevant slice exists.
-
-## Test and Verification Contract
-
-All production behavior changes follow the TDD policy in `AGENTS.md`. The detailed cycle is:
-
-1. Write one minimal test that expresses the next observable behavior through its public boundary.
-2. Run the narrowest relevant Vitest target and verify that it fails for the expected missing behavior, not because of broken setup.
-3. Implement the smallest coherent production change that makes it pass.
-4. Run the focused test and confirm it passes without unexpected errors or warnings.
-5. Refactor without adding behavior, rerunning the focused test after meaningful changes.
-6. Run the affected suite, the full project suite, type checking, linting, and formatting.
-7. For user-visible critical flows, run the relevant browser-level test against
-   the real application boundary and intended role/access state. A public page,
-   mocked component, or unauthenticated rejection is not a substitute for the
-   protected workflow.
-
-Record the RED command and expected failure in the implementation handoff. If a test passes on its first run, strengthen or correct it; it does not prove new behavior.
-
-Critical browser gates cover the complete access-code admission, protected
-route, logout, and reconnection journey for the relevant analyst and
-administrator roles. Verify meaningful desktop and narrow-mobile states,
-keyboard navigation, visible focus, action-revealing hover/focus behavior,
-reduced motion when animation changes, loading and partial-failure states, and
-the browser console. Use fresh post-action observations. If the required role
-or admitted session is unavailable, report the gate as incomplete rather than
-substituting a nearby public surface.
-
-### Test Boundaries
-
-- Test domain invariants with fast deterministic unit tests.
-- Test Convex queries, mutations, actions, authorization, atomic reservations, and transitions at their real server boundary where practical.
-- Test workflows with deterministic source and provider adapters, persisted events, retries, checkpoint resumption, cancellation, and idempotency.
-- Use contract tests for each real model or retrieval adapter. Keep live-provider tests explicit, opt-in, and budget-limited.
-- Test UI behavior through observable outcomes and accessibility semantics, not component implementation details.
-- Maintain at least one integration or import test that loads each important production module through its real export path.
-- Use concurrency tests for quotas, idempotency, and race-sensitive audit behavior.
-
-Mock only nondeterministic or external boundaries. Do not copy production logic into tests, mock the domain behavior being tested, rely solely on snapshots for core rules, or assert only mock call counts when a real result is observable.
-
-### Minimum Automated Coverage
-
-Cover at minimum:
-
-- atomic access-code attempt limits, visitor rebinding, and analysis
-  reservation under concurrency;
-- persistent five-visitor and three-analysis limits;
-- configured research and provider-call guards;
-- valid and invalid workflow transitions;
-- workflow resumption, cancellation, retries, and idempotency;
-- mandatory source approval before extraction;
-- exclusion of rejected sources everywhere downstream;
-- stable passage and citation validation;
-- provider output schema rejection and bounded retry;
-- non-overridable structural validation and versioned policy outcomes;
-- targeted semantic-verifier triggering and typed result persistence;
-- claim classification and evidence linkage;
-- grouped review writing individual decisions;
-- canonical-claim and dimension-link decision separation;
-- counter-evidence preservation;
-- analyst-decision preservation across retries and revisions;
-- map relationships backed by validated claims;
-- brief generation from approved claims only;
-- progressive map and brief revisions preserving incomplete coverage;
-- one-running-workflow-per-visitor enforcement;
-- evidence-sufficiency URL, completion, and justified-override paths;
-- partial source and provider failures;
-- access control for protected queries, mutations, and actions.
-
-Use deterministic fixtures. Default and CI suites must not call paid or nondeterministic providers. Before completion, report exact commands and results. If a check cannot run, state why and what remains unverified.
-
-Documentation-only changes do not require a failing automated test. Validate links, structure, and consistency directly.
-
-Pure tooling or configuration changes require executable before-and-after validation when feasible. Verify generated files through their generator or consumer rather than by inspection alone.
-
-## Implementation Sequence
-
-Build runnable vertical slices in this order unless measured evidence justifies a change:
-
-1. Initialize the project, quality tooling, environment validation, and institutional shell.
-2. Define typed domain schemas, lifecycle transitions, audit events, and Convex persistence.
-3. Implement access-code admission, stable visitor rebinding, and atomic
-   analysis reservations.
-4. Implement a provider-independent workflow skeleton with persisted progress and durable checkpoints, using deterministic fake adapters in tests only.
-5. Build the Phase 4 vertical slice: bounded company-candidate search, explicit
-   CIK selection, preflight confirmation, reservation, authoritative CIK
-   revalidation, evidence-sufficiency checkpoint, research plan, real SEC and
-   Exa source discovery, HTTPS URL entry, and `CorpusRevision` approval.
-6. Build normalization, stable passages, typed claim tasks, structural
-   validation, versioned policy evaluation, claim evidence, and
-   counter-evidence handling.
-7. Build exception-driven grouped claim review, canonical claim and
-   dimension-link decisions, per-dimension proposals, confidence inputs,
-   atomic assessment decisions, overrides, and revision history.
-8. Build progressive architecture-map and approved-claims-only brief revisions
-   with persisted contribution previews.
-9. Complete the remaining model and retrieval adapters, application-owned
-   routing and fallback, best-effort telemetry, admin operations, bounded
-   retries, and partial-failure behavior. This step does not defer the real SEC
-   and Exa boundaries required by the Phase 4 slice.
-10. Curate the CCC showcase corpus, then derive expected evaluation material
-    after manual approval. Add deterministic policy fixtures.
-11. Verify the complete access-code-admission-to-brief journey and document
-    measured limitations before the candidature demo.
-
-Do not postpone core invariants until a final hardening phase. Do not scaffold every final-state abstraction before its vertical slice needs it.
-
-## Evaluation and Demo Verification
-
-Curate CCC first under its accepted showcase scope. Define expected claims,
-known contradictions, and deliberately unresolved questions only after manual
-corpus approval, then reuse that same dossier as the first regression corpus.
-Use small deterministic fixtures for isolated policy rules. Add ServiceNow or
-another company only when it closes a measured gap; do not make multiple
-completed dossiers an implementation prerequisite.
-
-Measure citation validity, entailment, classification, contradiction retrieval, question coverage, unsupported-claim rate, duration, available provider usage or cost, and analyst corrections.
-
-The demo has two honest paths:
-
-1. a completed, carefully evaluated showcase dossier;
-2. a genuinely new run showing live company resolution, source discovery, persisted progress, and the corpus checkpoint.
-
-Never present cached, seeded, or precomputed output as live. Label showcase and fixture data clearly.
-
-## Decision Index
-
-- ADR-001: evidence-first analyst workbench and mandatory human review.
-- ADR-002: Convex reactive persistence and durable workflows.
-- ADR-003: upstream CLIProxyAPI as the experimental Codex subscription transport.
-- ADR-004: SEC, Exa, and Unstructured source-acquisition boundaries.
-- ADR-005: retained historical cost-ceiling decision, superseded by ADR-006.
-- ADR-006: lightweight prototype usage guards.
-- ADR-007: anonymous Convex Auth and the original one-time invitation contract,
-  superseded in part by ADR-014.
-- ADR-008: versioned research revisions and exception-driven analyst review.
-- ADR-009: typed AI tasks and deterministic, versioned policy adjudication.
-- ADR-010: application-controlled provider routing, retries, and fallback.
-- ADR-011: public HTTPS URL-only manual source intake for the MVP.
-- ADR-012: public company preflight before access-code-gated research launch,
-  with reuse semantics amended by ADR-014.
-- ADR-013: four-digit access-code format and rate limits; its original
-  single-use property is superseded by ADR-014.
-- ADR-014: reusable access codes for stable visitor sessions.
-- ADR-015: bounded Exa company website enrichment before admission.
-
-Read the corresponding record in `docs/decisions/` before revisiting any of these decisions.
+| State family | Values |
+| --- | --- |
+| Research lifecycle | `draft`, `checking_public_evidence`, `awaiting_evidence_sufficiency_review`, `discovering_sources`, `awaiting_source_review`, `corpus_approved`, `extracting_evidence`, `evidence_ready`, `assessing_dimensions`, `awaiting_assessment_review`, `completed`. |
+| Execution | `idle`, `running`, `paused`, `failed`, `cancelled`, `completed`. |
+| Workflow step | `queued`, `running`, `completed`, `needs_review`, `failed`, `skipped`. |
+| Completion outcome | `completed_assessment` or `insufficient_public_evidence`. |
+
+Enforce transitions server-side. Execution status is separate from analytical lifecycle; failures/cancellation invent no stages. Pauses identify a source/assessment checkpoint or `claim_generation_unavailable`. Only persisted `RunEvent` records drive progress.
+
+Preparation requires `SOURCE_QUALIFICATION_ENABLED=true`; disabled public starts reject. New workflows snapshot optional `prepareSources`; absence preserves discovery-to-review behavior. Legacy refresh is explicit, never render-triggered. Preparation may retain a separate handle beside the main workflow awaiting approval, on the same engine. Activation requires the roadmap's bounded model and protected-journey acceptance.
+
+Drafts accept multiple additions/decisions. Approved membership changes require a new draft and approval. Reuse unchanged captures and exact-input qualifications without promising full incremental claim/brief recomputation. Draft proposals use the persisted run pointing at that revision, never stale snapshots.
+
+Approval atomically verifies ownership, approved revision, generation and visitor capacity; freezes current accepted decision heads/IDs; claims the slot; advances generation; and starts analytical execution with a revision-bound idempotency key. Superseded accepted decisions confer no authority. Historical `corpus_approved + idle` and reopened corpora without waiting discovery workflows use the same protected execution owner. Emit extraction progress only after start; sources remain inspectable read-only during/after extraction.
+
+Store active workflow IDs only while running; completion compare-and-clears its own handle. Retryable operations bind run, workflow version, generation, corpus revision, step and attempt. Running resumes atomically claim the visitor slot and advance generation. Check ownership, lease, generation and cancellation before I/O and persistence. Stale/duplicate/cancelled work cannot advance state or trigger paid attempts. Retries duplicate no evidence, reservations, call records or effects.
+
+`evidence_ready + idle` requires terminal frozen source branches, a reproducible structurally valid passage, a terminal claim pipeline and a valid matrix-visible claim. Individual source failures or visible `needs_review`/`blocked` outcomes alone do not prevent handoff.
+
+Without a claim adapter authorized for live passage hashes, pause at `extracting_evidence + paused + claim_generation_unavailable`, mark the claim step `needs_review` and release execution/slot. Fabricate no Unknown, success or assessment access. Owner/admin retry checks capability first; unavailability changes no state/generation, claims no slot and issues no call. Valid retry claims the slot, advances generation and starts a current-version workflow for incomplete claim/policy steps only. Cancellation requires explicit resume before retry.
+
+## Source Preparation and Selection
+
+These preparation/recovery contracts govern existing executions. Their pre-Investigation supplement is legacy compatibility, not the target complement. Reuse integrity/accounting without carrying forward obsolete progression or human stops.
+
+### Captures and qualification
+
+Before qualification, retain normalized content with source, requested/resolved URLs, retrieval time, representation, hash and retrieval/normalization versions. Pin captures and exact quotation/offset references on proposals. Approved reuse validates decision authority, hashes and locators. Missing/corrupt artifacts fail explicitly without substitute retrieval.
+
+Retained captures, search candidates, model inputs and analytical passages are distinct. Passage limits do not delete captures; storage alone does not make omitted content reachable. Materialization preserves required qualification and applicable pinned-comparison primary references or fails. Shared source-use policy determines applicability; only revision-accepted sources qualify. Before reuse, verify quotations against captured bytes and persisted passages. Report incomplete historical materializations without rewriting them. Public PDF preparation uses Exa text and representation-relative locators, separately from page-aware parsing.
+
+Qualification records purpose, company relationship, period, forecasts, attributed arguments, facts and outcomes with reproducible references. Authority is deterministic. Preserve restrictions; unavailable reading is not irrelevance. Contextual, opposing and restricted arguments confer no factual authority/corroboration. Unavailable required verification stays blocked or unknown.
+
+Protocol 4 remains the default: one grouped call, at most fifteen findings, unchanged request/schema and grouped role contributions. Protocol 5 requires explicit evaluation selection; its live quality check retained material errors. It permits absent roles or at most two contributions per role. Each states assertion, analytical relevance, scope, kind, period, dependency and at most three exact inspected references. Prefer concrete architectural contributions over generic descriptions or role filling.
+
+Distinct assertions may share mixed passages; classify the assertion while preserving the full quotation. Mixed/uncertain assertions retain restrictions, and ambiguous attributed hypotheses identify their intended contribution. Reading, claim creation and policy share one finding-use rule. New restrictions explicitly target the document, named roles, or inspected passages with named/all roles; justification references are separate. Scoped `no_substantive_content` withholds only conflicting contributions from coverage, documentary presence, comparison and factual use. Preserve independent contributions without automatic retry. Validate contribution basis and restriction scope at materialization/persistence.
+
+Protocol-2 captures/approved pins stay readable. Resumed protocol-3/4 executions retain request/schema and comparison-policy identities; cached responses retain input identity. New captures pin input policy. Use all structured passages without indexing/search when they and the schema fit 128 KiB; otherwise use retrieved passages. Selection strategy enters input identity/provenance. Partial captures and historical policies, including unknown outcomes, remain unchanged.
+
+New preparations snapshot `source_actions_v4`; retained preparations preserve their pinned execution version. Both `source_actions_v3` and `source_actions_v4` use the existing source-action sequence: one durable action per source inspects then qualifies through shared Node code. Captures/receipts persist independently; automatic action retries stay disabled. Reading/qualification may overlap across sources within snapshotted concurrency. Existing journals preserve step order and inline controls; absent snapshots preserve historical sequencing.
+
+`collect_then_compare_v1` completes capture, qualification and permitted supplementation before comparison/publication. Inspect non-rejected alternatives before the single dossier-wide supplement; later primary content can then inform earlier contributions. Supplement planning shares classifier identity, period, purpose, authority and independence rules. Documentary presence is separate from use restrictions: pending comparison alone is no gap; rejected sources cannot satisfy presence.
+
+Persist initial-reading completion with its progress event across supplementation/recovery. Review distinguishes that milestone, current work and proposal publication; later batches do not restart the initial stage. Explicit recovery opens another configured preparation window without resetting supplement/counters. Availability is `available`, `limited` or `not established`, with a reason.
+
+Protected review preparation accepts current metadata-only drafts; staleness is not required. Its query reports start/resume availability without execution. Targeted searches share the supplement ledger and immutable search indexes with automatic searches, at most one per explicit request. Topic results remain visible independently of remaining allowance, including after the last search. Start/resume/targeting cannot add supplements, replenish calls or bypass atomic visitor slots. Missing configuration/exhausted allowances return typed blocks.
+
+Before acquisition, read activation/model credentials from current invocation `process.env`, not generated module snapshots. Review combines pinned qualifications, committed captures and recent outcomes; targeted searches cannot replace dossier totals. Drafts expose completed qualifications immediately with the same capture/task/hash validation as published pins. Metadata, roles and uses share that qualification/classifier. Approved review uses immutable pins only; metadata-only review skips capture projections, and source details reuse validated qualification.
+
+Status reflects unresolved non-rejected readings; interruption reasons include affecting operations and later additions. Missing configuration before acquisition means unprocessed; retained content without qualification means assessment unavailable. Query/mutation recovery eligibility is shared. Expiry fences its operation's I/O/persistence without blocking fresh explicit recovery. Targeted resumptions retain narrow scope; zero additions cannot trap unfinished original preparation in an empty scope.
+
+Regulatory coverage searches use confirmed CIK and requested SEC form family; web searches use Exa. Each consumes one shared reservation, returns at most four candidates and respects the active deadline. Successful recovery clears only the searched family, even with no additions; partial/failure retains it. Later recovery addresses remaining failures without ledger reset.
+
+This SEC path allows one attempt; transient HTTP/timeouts remain transport unavailability. Other callers keep their retry policy. Use public-address validation and pinned HTTPS with authorization before/after DNS and before persistence, bounded timeout/bytes, cancellation and no redirects. Initial/targeted discovery share identity/provenance mapping. Coverage distinguishes eligible/declared roles and document-type matches within a family; inclusion alone establishes no coverage.
+
+Targeted additions retain their review operation and remain pending outside recommendations until analyst inclusion. They cannot displace existing recommendations through deduplication. Retrieval/qualification covers new IDs only. Comparison may reuse exact earlier pins for non-rejected sources under revision/execution fences, without reopening their retrieval/qualification or silently clearing earlier issues.
+
+New manual sources get a new-content-only reading window, without reopening old work, resetting limits or adding supplements. Group links received while another dossier runs; start their window on slot claim. Explicit recovery opens a new window for that scope. Intake identity excludes generation; authenticated replay lookup precedes paused-state checks, preserving replay after automatic preparation starts. Reuse captures/qualifications only for matching inputs/versions. Preserve paragraph identities, offsets and omissions. When input is full, prioritize prose/tables/examples over navigation; formatting grants no factual authority.
+
+### Targeted comparison
+
+Compare eligible arguments/forecasts against relevant primary captures in the same run and active revision. Protocol-5 secondary factual premises/reported outcomes also require comparison. Search by assertion/scope, not unrelated quotation context. Older captures may support new manual content without requalification. Keep raw qualification/comparison separate; retain target/primary identities, hashes, spans, quotations, omissions and completeness.
+
+Reuse before input reconstruction requires matching versioned instructions, schema, selection/retrieval policy, capture metadata and index state. Revalidate authority, references, hashes and quotations, then confirm context transactionally. Historical identities require exact-input revalidation before the derived checkpoint. Without eligible contributions, retain an idempotent local not-run result without retrieval/model work. Share immutable reads/validated reviews within one transaction only; distinguish approved pins from recent draft qualifications.
+
+`No conflict observed` requires comparable primary references and covers only the stated contribution. Protocol 5 returns explained premise assessments with exact primary references; the application derives disposition. Possible conflict stays visible; unresolved premises mean inconclusive; only fully aligned premises permit no-conflict. Availability proves neither adoption, monetization nor superiority.
+
+Conflict/inconclusive results restrict affected automatic arguments without asserting proven error. Match later issues by target capture/hash and overlapping span; positive output cannot silently clear them. Pin status/issue history into proposal fingerprints and approval. Missing/stale checks grant no new attributed-hypothesis permission; independent contributions retain permitted uses.
+
+Reference aliases resolve only within exact prepared input; persisted results retain full identity. Every contribution may cite all primary passages in its grouped request; shortlists suggest relevance without limiting authority. Reject foreign/omitted keys and enforce citation bounds. Alias/input changes alter cache identity without rewriting history.
+
+Versioned retrieval ranks covering quotations at their best contained-unit rank, then fills spare context. Soft expansion includes schema bytes and preserves priority context; hard passage/request limits still apply. Unversioned inputs keep previous selection. Explanations remain complete/non-empty within token/byte bounds, without editorial character limits or repair calls. Schema changes alter new input hashes; historical comparisons stay readable without migration.
+
+### Scoped retrieval
+
+New preparations may snapshot `structured-v1` with `lexical`/`hybrid` retrieval; absent configuration preserves historical behavior. Derived captures, passages and embedding caches remain preparation artifacts. Convex owns text search and a 1024-dimensional vector index. Search binds run, revision, capture hash and policy; caches bind exact text and opaque embedding-profile version.
+
+Parsing overflow returns explicit unavailability before index writes. Apply eligibility before search limits and recheck on hydration. Lexical search uses capture-scoped hits and reciprocal-rank fusion. Actions prefetch at most two queries, each covering at most two captures and 64 hits per capture; consume bounded ordered results without retaining all combinations.
+
+New preparations snapshot `stable-passages-v1`: fusion ties use captured URL, hash and passage position rather than row identity. Ranking enters request/comparison-context identity. Existing/resumed preparations retain recorded ranking, or historical policy without a snapshot; native scores/limits stay unchanged. Vector search prefilters run/revision/retrieval-version/profile/capture. Older scope keys explicitly degrade to lexical until reindexing relinks exact-text caches, without new models or embedding calls. Historical inputs remain unchanged.
+
+Approved-source search shares the derived index under separate read authority. `ensureApprovedSourceIndex`/`searchApprovedSource` accept run/revision/source; the server resolves the approved capture. Check ownership/membership before storage, each batch and completion. Index identity binds run/revision/capture/hash/retrieval version. Publish completion after all batches; retries reuse rows. Reads require no active preparation or workflow resume and authorize no provider/model/embedding calls. Missing, corrupt, legacy-without-capture and incomplete-index outcomes stay explicit.
+
+Source-details search is lexical/debounced: 512 characters, 16 terms, 64 results, with capture parsing/byte limits. Return source/capture/revision identity, content hash, retrieval time, exact quotation/hash and offsets. Results create no analytical passages/claims. Analyst copy exposes context, quotations and availability without internal IDs. Analytical limits remain 512 passages/source and 4,096/claim input. Materialization follows pinned extraction versions; unversioned qualifications preserve paragraph identities and required references within the same limit.
+
+Workers AI is optional and direct. `SOURCE_RETRIEVAL_MODE` accepts `lexical`/`hybrid`; uncached embeddings require secure action-side `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN`. No local model, Worker deployment, Vectorize index, new subscription or persistence owner is required. Snapshot configuration into new preparations only.
+
+Missing configuration/partial embeddings explicitly degrade to lexical with requested/effective modes and reason. Forbid truncation, redirects and automatic retries. Cumulative submitted-byte allowance uses one token per UTF-8 byte at the accepted price ceiling; unknown outcomes retain reservations. Historical evaluation allowances neither renew nor authorize activation.
+
+### Deterministic proposals and legacy compatibility
+
+Presets `balanced`, `first_party_depth` and `independent_scrutiny` adjust priorities/budgets only. Immutable proposals record active draft, policy version, candidate fingerprint, ceiling, disposition, rank and reasons. Optional versioned rationale distinguishes inspected contributions from metadata. Legacy items stay readable; authorized draft recomputation uses saved inputs without I/O or rewriting approvals. `recommended`, `needs_attention` and `alternative` are recommendations, not decisions. Add reliable distinct contributions without filling the ceiling.
+
+Legacy linkage is `structural`, `discovery_metadata`, `unverified` or `not_evaluated`. Structural checks use confirmed CIK, official domain or approved decoded-path domain/full-name sequences, never query parameters, partial/generic names or ticker alone. Only declared institutional publishers/shared IR hosts may use discovery titles matching full normalized legal names or exact confirmed domain aliases of at least five characters. This supports recommendation only, never structural identity, kind, duplication, evidence or automatic coverage. Analyst/historical items use `not_evaluated` without invented proof.
+
+Separate declared publisher capabilities from candidate-eligible roles. Non-structural metadata candidates have no eligible roles. Inspected content may establish relevance/purpose without promoting authority. Classify from authority-compatible decoded-path tokens, SEC form/accession, period/event identity and confirmed domain, never arbitrary substrings/titles. Institutional publishers retain independent/news roles; partners cannot fill first-party roles. Unverified company-matched counter-evidence remains inspectable alternatives. Reseller terms are corroborative, not canonical commercial terms.
+
+Deduplication requires stable canonical/metadata-proven identity. Preserve analyst references; cover required roles, then distinct periods, events, producers or angle contributions. Metadata recommendations are separate from coverage; old items hydrate empty recommendation lists without reinterpretation. Version 13 preserves metadata-established identity/distinct utility when reading is unavailable/partial absent documented contrary findings. Retention grants no factual authority or content coverage; reasons cannot claim additional verified coverage. Preserve valid references, periodic novelty and multiple qualified ordinary roles per document. Independent-perspective roles require distinct producers.
+
+Scoped caveats restrict explicit targets; legacy located caveats retain passage boundaries. Version 14 treats unknown-scope legacy `no_substantive_content` conservatively: withhold matching contributions when located, all when unlocated, with explicit scope uncertainty rather than inferred absence. Other unlocated caveats remain global. Approved policies/decisions stay immutable. Refreshing v10/v11/v12/v13 drafts applies current policy to saved candidates/qualification without discovery, calls, automatic requalification or rewritten decisions. Other migrations retain behavior.
+
+Order by authority, provider order, recency, angle, then canonical URL before row identity. Recreating identical records cannot change recommendations. Analyst references precede and sit outside the discovered ceiling. Attention/coverage gaps do not block approval; an accepted source, fresh proposal, integrity and authorization are required.
+
+Include/remove/undo append accepted/rejected/superseding-pending decisions. Group approval atomically checks ownership, generation, draft, policy, proposal version/fingerprint; preserves overrides; accepts pending recommendations individually; leaves others pending; records approval/audit and resumes execution. Candidate/policy changes stale drafts; older policies require explicit rebuild. Approved revisions remain immutable.
+
+Rebuild serializes external work under a durable run/revision/generation/proposal/policy lease and checks the current pointer before dispatch/persistence. Return `complete`, `partial` or `blocked` with affected families. Partial results stay reviewable; blocks preserve drafts/decisions and permit fenced retry after persisted cooldown.
+
+Current-policy recovery retries failed discovery families or searches one unconfirmed role. Bind stable request/target, preserve terminal replay, reject expired redispatch and fence approval, cancellation, supersession and lease expiry. Search remains metadata-only at the human checkpoint. Preserve failures until actual recovery resolves them. Coverage projects bounded effective inclusion/immutable eligibility without new decision authority.
+
+## Acquisition, Validation and Providers
+
+Acquisition safety and provider isolation span the transition. Accepted-decision authority and fixture-only analysis below describe installed paths; replacements follow the transition contract.
+
+### Public URL intake and analytical materialization
+
+One intake owner handles analyst URLs before/after launch, authorizing target and limits before DNS/HTTP. In the installed launch path, pre-launch inspection creates short-lived owned metadata receipts, not sources/evidence. Launch atomically consumes valid receipts with initial pending sources; invalid, missing, expired or foreign receipts create no run or quota use. Active-run intake rechecks revision/generation, then atomically creates source, pending decision, review projection and audit. Preserve these receipts and safeguards when separating target framing-dossier creation from Start research.
+
+Canonicalize public HTTPS URLs. Reject credentials, unsupported ports/schemes and fragment-based identity; block private, loopback, link-local, reserved and metadata destinations. Validate every redirect and connect to that validated numeric address with original Host/TLS SNI. Bound content type, transfer, decompression and time. Retry timeout, connection, upstream rate-limit or unavailability once, never validation, authorization, duplicates, capacity, unsupported content or other client failures. Structured codes define retryability and safe presentation.
+
+Materialization validates exact captured bytes and required pins under accepted-decision authority. Legacy unpinned approvals use SEC direct HTTP for confirmed CIK/accession, Exa Contents for general web. Web locators need anchored text/section; page-aware PDFs need page and bounding text. Reject unreproducible passages. Fan-out follows accepted-source count, not recommendation ceiling. Partial failures remain explicit without terminating independent branches.
+
+The Unstructured page-aware normalizer and general live analytical adapters remain unfinished. Fixtures cannot appear live: deterministic claim/policy execution requires a full normalized-input match to the approved fixture manifest, records `showcase` provenance and creates no provider receipt. Other live inputs stop explicitly for unavailable capability.
+
+### Typed analytical tasks and policy
+
+Installed capabilities are source relevance, claim extraction, contradiction search, entailment, contradiction verification, dimension relevance, claim correction, dimension assessment and brief generation. Target missions extend existing routing/validation without adopting this dimension-based task list. Deterministic composition does not call source relevance. Qualification/comparison are separate preparation tasks with no inclusion or analyst authority.
+
+Tasks have versioned application-owned input/output schemas. Generated results cannot grant approval, final confidence, quality or workflow permission. Non-overridable checks enforce schema, approved membership, provenance and locators. Versioned code policy combines observable evidence and separately recorded, selectively triggered verifier labels into reasoned `pass`, `needs_review` or `blocked` outcomes. Existing paths retain this policy; targets use mandatory submission controls and explicit reuse.
+
+Persist normalized inputs, rules, verifier references and outcomes. Policy changes create evaluation revisions without rewriting history. Product rules govern assessments and justified overrides; structural failures remain non-overridable.
+
+### Provider boundaries
+
+The application router selects routes by capability, quality, cost, availability and failure. Required boundaries are OpenRouter and experimental Codex subscription access, with a future-provider extension contract. Use AI SDK's OpenRouter adapter for OpenRouter; its OpenAI-compatible adapter serves private CLIProxyAPI only. Never proxy OpenRouter through CLIProxyAPI or replace subscription access with API-key billing.
+
+CLIProxyAPI uses an immutable upstream release/digest; the local fork is behavioral reference only. Begin with one instance/account unless measured need justifies expansion. Expose authenticated inference only; keep management/credentials private. Record version and available usage without invented subscription cost. This experimental transport is neither official OpenAI integration nor a permanent production commitment; production readiness is not a candidature gate.
+
+SEC uses identifying direct HTTP with a shared aggregate limiter below its maximum. Exa discovery is metadata-only and omits `contents`. Separately authorized Exa Contents respects its 1,000,000-character and application byte bounds. Unstructured uses direct Pipeline Jobs HTTP, not legacy Partition.
+
+Configuration owns primary/fallback routes, hard limits and retries. Provider-internal routing must preserve model, task semantics, authority and explicit privacy/parameter constraints. Persist logical operation/idempotency before I/O. Record every retry/fallback separately: capability, task/prompt/schema versions, exact input/output references, resolved route, attempt, latency, usage, reported cost when available and typed outcome.
+
+Invalid structured output retains its exact parsing, schema, documentary-validation or termination reason separately from retry category. Receipt diagnostics retain rejected assistant output only: at most 64 KiB UTF-8, original size and explicit truncation. Admin summaries show the reason; full observable replies belong in protected [journal detail](#traceability-and-typed-outcomes). Analysts see neither. Historical failures without output remain undiagnosed. Exclude secrets/hidden reasoning. Missing configuration, disabled work and unavailability return explicit blocked/reviewable outcomes, never empty success.
+
+Native and structured one-shot transport failures retain a bounded, redacted SDK diagnostic and observed abort cause in the existing provider receipt, including DOM timeout exceptions. HTTP status and request/generation identifiers are recorded when headers arrive, before reading the body. One-shot admission pins its logical preparation input hash separately from the exact examination content hash; provider observation and accounting verify that pinned receipt identity without granting execution or adoption authority. Header-only generation identity can use the existing billing lookup; absent identity cannot start that lookup. Header observations alone do not settle an uncertain outcome, authorize adoption or release its reservation.
+
+The shared bounded HTTP transport delivers native SSE incrementally under a 1 MiB cumulative response limit, propagates cancellation upstream and observes a complete body only after EOF. Pi's existing stream hook retains the provider generation identity against the admitted invocation before terminal observation; partial frames never establish a completed answer or authorize effects. Qualification relays preserve streaming except for explicitly labelled fault or hold scenarios. Native and structured generation use remaining absolute authority admitted under `authority_native_v1`, not a separate 60-second or five-minute completion estimate. Cancellation still propagates upstream. Model receipt leases derive from the admitted deadline plus shared settlement grace; expiry never proves that dispatch or billing did not occur.
+
+After an interrupted generation with a retained identity and no reported charge, schedule one accounting-only OpenRouter generation lookup after five seconds: fixed HTTPS endpoint, no redirects or transport retries, 15-second timeout and 64 KiB response limit. The receipt owner atomically claims each lookup and fences settlement by receipt, generation identity and lookup attempt. Failed or expired lookups allow explicit administrator recovery no sooner than the persisted 30-second retry deadline; no automatic retry loop runs. Missing configuration and invalid or unavailable metadata remain explicit, never zero-cost success. Keep the reported cost as the sole accounting amount, preserving it against later omissions and exposing contradictory amounts. Late accounting alone can settle after cancellation or a new turn without adopting the old output, replaying inference or effects, or releasing unknown-outcome execution reservations. From 2026-11-10, a failed pure documentary examination with an identity-matched provider cancellation and a confirmed, nonconflicting bill is a known terminal technical failure. The receipt transaction moves its preparation reservation to incident consumption and clears qualification execution uncertainty, preserving the failed examination, original error and monetary policy without forcing `reportedCostFinal`. This does not adopt partial output, reopen missions or authorize another attempt. Missing or invalid cancellation evidence and other uncertain operations remain fenced; a later cost conflict restores the execution reservation. Historical receipts without provider identity are not backfilled. Accounting reads are distinct from the inference attempts below.
+
+Preparation disables automatic SDK/Workflow model retries and preserves structured-output/route-price ceilings. Attempt eligibility is:
+
+| State | Allowed attempt policy |
+| --- | --- |
+| Never dispatched | Initial primary route plus one technical fallback. |
+| Confirmed HTTP 408, 429, 500, 502, 503 or 504; received invalid model output | Each explicit recovery permits one additional attempt per operation/exact logical input, on the primary route without fallback. Further recoveries require remaining dossier allowances. |
+| Unknown outcome: dispatched timeout, ambiguous disconnect, expired started receipt | No automatic or additional attempt. Generic historical transport errors stay unknown unless receipts prove otherwise. |
+| Valid uncertainty, missing configuration, cancellation, disabled paid work or billing error | No fallback. Terminal failure remains distinct from recoverable and unknown outcomes. |
+
+Persist at least fifteen seconds of cooldown, honoring longer valid Retry-After. Attempt identity excludes generation, request and route position; atomic reservations survive recovery. Preparation acquisition allows two initial attempts plus one admissible explicit recovery; other consumers/embeddings keep their policies. A failed supplement query permits one retry using an unconsumed reservation, within three cumulative calls.
+
+Comparison shares preparation allowances, concurrency, telemetry and fences. `inline_controls_v2`/`source_actions_v3`/`source_actions_v4` journal inline controls; first batch lookup, comparison-target reads and final proposal remain scheduled. After three consecutive inline source-result saves, schedule the fourth to yield. Earlier journals preserve sequencing. Transaction/request bounds remain independent of fan-out. Check configuration before I/O and record failures on preparation, without fictitious provider calls.
+
+Validate transport changes deterministically before authorized local trials. General acceptance requires fresh usefulness across companies/dossier types, not synthetic annotation of old output. Experiments alone select no runtime model and grant no activation. Deployment activation enables controls without starting drafts; the initial local trial uses structured lexical retrieval.
+
+## Access, Resources and Security
+
+### Admission and execution authority
+
+Keep five stable slots, stored as `Invitation`: one admin, three human analysts (`analyst-1` through `analyst-3`) and local browser-validation `analyst-4`. The latter requires loopback deployment and `E2E_FIXTURES_ENABLED=true`. Anonymous Convex Auth uses reusable four-digit codes, stored only as HMAC-SHA-256 digests with server pepper. Atomically consume attempts before digest verification.
+
+First admission creates a stable visitor. Reuse atomically rebinds it while preserving role, quota, dossiers and audit, revoking old Auth identity. Rotation revokes the session and later reactivates the same visitor; sign-out remains available. Never log plaintext codes.
+
+Client readiness waits for Convex server-confirmed authentication, not merely a locally available token. Visitor access remains unresolved while its query loads; unresolved access cannot open the code drawer or confirm company preparation. A pending admission request can settle from either a successful code claim or an observed active visitor, consuming its continuation once. Session restoration dismisses obsolete admission without invoking cancellation or redirecting an already protected route; pending confirmation actions retain their continuation.
+
+Public Start/preflight permits anonymous Auth before admission. Dossiers, reservations, workflows and admin operations require active admission and role. Each visitor gets at most three lifetime analyses and one active research workflow; human research pauses free that slot. In the target path, Start research consumes one reservation; framing-dossier creation consumes none. Retries/resumes consume none, and abandoning launched research refunds none.
+
+Research pause/resume primitives require `agentExecutionVersion: 3`; framed documentary continuations opt into these controls while retained legacy workflows keep their existing checkpoints. An effective pause advances research generation and releases its slot. Resume compares the expected generation; returning research to running atomically reclaims the slot and restores eligible missions without renewing consumption or deadlines. Existing mission provenance remains authoritative, including real missions in a paid browser context; only historical unpinned browser missions default to simulation. After documentary preparation has ended, Resume restores its required source-review checkpoint without claiming a running slot. Conversation generations and active-instruction versions are independent. Engaged results retain their original attempt generation; adoption requires current authority. A blocked conversational mission remains visible through the conversation follow-up projection.
+
+One kernel policy derives authority from the admitted visitor, workspace, dossier, role, operation, phase and current versions for both native and agent callers. Framing permits bounded conversation and draft changes; active research permits its authorized progression and conversational follow-up; an analyst pause permits discussion of existing material and request registration without new research dispatch. Only research start/resumption claims the research execution slot. Backend identity, model arguments or client delivery mode cannot grant authority, and conversation cannot cross human decision prerequisites. The shared lifecycle schemas and framing/Workbench operations implement these boundaries; Sources uses the same authority and admission owners. Workbench and Sources qualification and activation, the complete target mandate, and the Investigation and Synthesis bindings remain pending.
+
+Capacity changes retain append-only rationale. Restoration returns unused reservations only. Admin withdrawal stops unfinished research through shared cancellation, releases exactly one consumed reservation, forbids later execution and preserves records/receipts/audit. Transactions enforce limits; UI state grants no authority.
+
+Only server creation assigns `researchRuns.purpose`: `research`, `evaluation` or `browser_test`. Shared server authorization enforces workspace scope across dossier, source, evidence, decisions and actions; ownership alone grants no ordinary access to technical runs. Ordinary lists show non-withdrawn research only. Withdrawn dossiers remain directly readable/admin-inspectable; benchmarks and archived fixtures remain admin-only without ownership, quota, capture or audit changes.
+
+Native pagination uses purpose/owner/context indexes. Client workspace keys reset pagination, never authority. Admin categories, unused reservations and per-run provider receipts paginate independently.
+
+Browser fixtures require finite-lived private `browserTestContext`, bound to the reserved slot's current principal after real anonymous admission. Derive identity from the claimed invitation, never supplied identities. Only active contexts access their labelled dossiers; fresh admission needs explicit private rebinding. Teardown closes/fences/cancels through normal cancellation; scheduled expiry handles crashes. Historical contextless fixtures remain admin-only.
+
+### Qualification campaigns
+
+Test principals cannot initiate company resolution, manual acquisition or uncached rendering; browser runs reserve no provider calls by default. Historical standalone/version-1 Workbench grants bind one dossier and immutable model revision to its finite browser context, allowing only framing calls: at most twenty OpenRouter requests and USD0.50 conservative reservations. Acquisition/research remain prohibited. Lower frozen request allowances are enforced by the relay before I/O; infeasible minimums are refused before setup, without arbitrary per-turn margins. The grant cannot be renewed or replayed to reset the lot, including after exhaustion. Reservation and final dispatch check context, model, mission generation and global paid-work authority, including any immutable numeric-loopback relay origin. Unknown outcomes retain reservations and concurrent admissions share the ledger. Context closure/expiry revokes the grant and fences the dossier; cached artifacts and deterministic fixtures remain available.
+
+`pnpm workbench:qualify` runs the existing harness against verified services in deterministic or explicitly selected live mode. Freeze code and the actual case manifest; retain scenario intent before effects and never automatically replay unfinished lots. Sequential types, focused tests, lint and architecture checks must pass on those exact bytes before setup; the version-2 relay verifies this before inference. Before live authorization, a separately admitted administrator checks the selected model and refreshes stale input profiles offline with bounded continuation, preserving revision, assignments and availability. Cleanup attempts context revocation, transport closure and temporary-flag restoration independently of evidence-write failure; ordinary E2E setup owns its separate fixture flag. Retain execution and semantic outcomes separately and invoke the existing archive owner. Verdicts require scenario-specific receipts; untriggered injections are unproven. Missing mandatory cases, unresolved judgments/history coverage or unknown charges remain inconclusive. Offline assessment binds every expectation to retained source/before/after/published evidence as a new immutable result. The browser battery covers framing, refinement and reconnection, not the separate unimplemented semantic-history and process-crash qualification.
+
+Historical standalone/version-1 Sources grants pin exactly two owned, initially empty dossiers and approved per-role model revisions. An administrator chooses compatible catalogue routes; the frozen protocol records model, provider and effort, without another model-name allowlist. Explicit lot/campaign route and spending authority is mandatory. Cumulative limits are forty model attempts, four Exa searches, twelve acquisitions and USD2 conservative reservations; per-dossier limits are twenty, two and six respectively. Frozen lower limits apply before dispatch, and authorization replay cannot enlarge them. Unknown outcomes or charges above reservation stop admission. Only those dossiers enter the fixed qualification Sources envelope at explicit Start, without consuming/refunding ordinary visitor analysis quota; ordinary research quota and one-running-workflow enforcement remain unchanged. Global activation stays disabled. Native documentary dispatch rechecks the exact preparation/model grant; before granting work, the fixture owner independently verifies the exact Sources serializer profile. The browser command's prepare/inspect/close phases use an explicit output directory, freeze code/cases/validation before the grant and start research through the admitted browser. Bounded inspection retains exact requests, replies, receipts and capture hashes. Closure revokes the lot without renewal; fixture bounds do not select production activation parameters.
+
+An approved immutable campaign mandate fixes capability, battery/expectations, per-role routes/reasoning, optional controller, correction paths, per-lot/cumulative allowances, maximum lots, repetitions and expiry. Preparation grants no authority. Admission atomically reserves a whole lot with only one unresolved lot; retries cannot renew it. Frozen descriptors/effective effort must match actual configuration, and every dispatch requires active campaign plus dossier/lot authority. Historical policies retain their recorded accounting interpretation without renewed dispatch authority. New qualification grants use `known_final_v1`; an explicitly selected `conservative_v1` mandate is refused rather than silently rewritten. The current [accounting contract](#accepted-native-context-and-compaction-design) requires: reserve admitted context, effective wire output and authorized price bounds; settle complete responses or confirmed bills. Unknown/partial/conflicting costs retain reservation, counters and overrun fences. Unknown outcomes, over-reservation charges or incomplete cleanup block further lots; release only demonstrably unused allocation.
+
+Keep candidates/results distinct. Corrections must be identified within the mandate; unchanged candidates consume only declared repetitions, and the runner never edits code. Recovery performs cleanup/reconciliation without replaying uncertain effects. Freeze a new content-addressed evidence index/template after completed recovery, retaining prior revisions/archives. Assessment pins that revision and refuses changed files/stale judgments; finalization cannot replace a frozen index. Restore temporary configuration under expected revisions without overwriting concurrent edits. Reuse checks only for identical source, check and tool identities. Missing judgments remain inconclusive and simulation proves no provider quality. Stop when all expectations pass; new routes, batteries, correction scope or larger allowances need a new mandate. Historical single-lot grants keep their semantics.
+
+Automated review uses `@earendil-works/pi-coding-agent@1.5.0` inside the existing runner. Version-3 mandates separately authorize analysis routes/allowances, OpenAI-first with optional OpenCode Go fallback; versions 1/2 remain manual. `analysis.accounting: "native_subscription"` selects one native Codex route, native OAuth, finite per-lot/campaign request counts and one absolute analysis deadline. Pi manages native model context and automatic compaction; the historical `maxInputTokens` byte proxy is ignored for this accounting mode, not converted to another guessed token ratio. Record subscription tokens without dollar reservations, `costMicros` settlement or an invented arbitrary output-token cap. Omission preserves historical API cost/output requirements; mandates are never rewritten.
+
+Pi owns provider/model authentication, adapters, serialization, streaming, generation/tools, compaction and usage/cost observations through the supplied `ModelRuntime` or normal agent-directory discovery, including `PI_CODING_AGENT_DIR`. Fresh preparation resolves `OPENAI_API_KEY` from process override, then the Git-reported main worktree `.env.local`, then native Pi API credentials. Shared keys are registered through Pi's in-memory credential API, never copied or loaded into global environment. Configured API credentials require an exact `openai` model and explicit `api_cost` grant; only genuine absence permits an `openai-codex`/`native_subscription` draft. Empty/malformed settings, configured but unresolved stored/runtime API keys, read failures and rejected credentials fail explicitly without subscription fallback; failed native resolution is not proof of configuration absence. Prepared/authorized routes and accounting never change with later configuration. Missing pinned-route credentials block before reservation/inference. Codex retains native OAuth, SSE/compression and quota handling without unsupported output-cap fields or API-dollar receipts. OpenCode Go remains blocked without its pre-dispatch subscription-only guarantee.
+
+New `analysis.accounting: "api_cost"` grants pin operator-verified official pricing provenance (`sourceUrl`, `verifiedAt`), exact provider/model/API, native context/output capacity, complete Pi cost metadata including tiers and default billing tier. Preparation and each request admission refuse mismatching model/pricing snapshots. The policy owner derives a conservative per-request dollar quote from full native context/output capacities and maximum input/cache/output rates across pricing tiers; insufficient or unrepresentable authority fails validation rather than shrinking capacity or inventing another limit. A declared supported output ceiling is optional; legacy input proxies are refused in this new mode. Pi1.5.0's native payload hook pins `service_tier: "default"` because its simple-stream options omit that field; serialization and actual cost calculation stay native. Each investigation and compaction request reserves before I/O, retains response bytes/hash, then records Pi's uncached input, cached reads/writes, output, native dollars, safe integer micros and pricing identity. `costBasis: "sdk_estimate"` distinguishes catalogue estimates from `provider_reported`, selected only by Pi's `totalFromProvider` flag. Estimates never become asserted invoices or release conservative allocation. Pi's provider-event hook validates mandatory raw input/output counters and optional cache, total and reasoning consistency before SDK normalization; absent, negative or inconsistent counters cannot become known receipts. Missing usage/cost evidence stays unresolved, not zero; valid explicit zero counters remain representable. Raw responses and useful diagnostics remain retained when settlement is blocked. HTTP401/429 stop without retry or fallback; unknown attempts retain their fences. Historical implicit API grants, numeric settlements and legacy receipt representations retain their interpretation but gain no live dispatch authority.
+
+The reviewer investigates captured failures and archived source through paginated inventory, bounded UTF-8 reads and literal, optionally case-insensitive search. All returned evidence is indexed and complete-file hash-verified; search exposes bounded previews, read-ready byte locators and explicit continuation. A trusted first-pass mission and compact objective/scenario/outcome/accounting context are pinned with the review. Current pins bind the resource contract, original absolute deadline and model snapshot. Native summary calls share the existing reservation, durable intent, observation and settlement boundary and original analysis allowance; they cannot become developer reports or renew authority. Captured instructions remain untrusted data. New `investigator_v2` pins additionally offer Pi's native `write` definition restricted to `automated-review-report.md`; its operations delegate to the runner's report owner outside frozen inputs. No arbitrary filesystem write, shell, source edit or live-service tool is exposed. Retained `investigator_v1` pins remain read-only with unchanged request identities. Each new investigation request exposes its ordinal, remaining original lot-call ceiling when supplied, and original absolute deadline; cumulative campaign admission may refuse earlier, and this context grants no additional authority. Source-supported hypotheses identify their uncertainty and the smallest discriminating check rather than claiming unperformed verification.
+
+For a new reviewer, `WORKBENCH_REVIEW_REASONING` resolves from the process environment, then the Git-reported main worktree's `.env.local`, then defaults to `high`. The shared-settings owner selects reasoning and the separate API credential only for their respective boundaries; unrelated values are neither loaded into the environment nor disclosed. The current worktree's file is not another fallback tier. Missing file/value permits the default; other discovery/read failures remain explicit. Empty, unknown or unsupported selections block reservation/inference rather than silently downgrading; use Pi's model-supported levels. Pi's injected `PI_REASONING_LEVEL` is unrelated parent-session metadata. Before dispatch, the existing mission pin retains requested and effective SDK reasoning; actual wire captures establish provider effort, including a final native `configuration_update` on models where Pi keeps top-level `reasoning.effort` at `medium`. Recovery reuses the pin without rereading environment configuration. Historical pins without reasoning preserve the recorded `off` request and native legacy clamping for interpretation, without rewriting bytes or request hashes. They cannot authorize further dispatch without the current resource contract. Completed-result adoption remains independent of current environment settings. Configuration changes neither workflow-agent effort nor routes, allowances, deadlines, authentication or reconciliation authority.
+
+The runner retains immutable diagnostic responses and a readable developer handoff outside frozen inputs before assessment parsing. Version-2 investigators publish provisional findings during investigation rather than waiting for a terminal response; content-addressed revisions preserve multiple updates within one turn and remain explicitly incomplete/pending. A known tool response may publish local findings despite a lost settlement acknowledgement, but the next model request and finalization must await that settlement. Publication neither adopts an assessment nor replays an unknown call. Known truncated text remains available as an explicitly incomplete report, never an accepted assessment. New investigator responses require a nonempty handoff followed by the fenced assessment appendix; parsing is linear and formatting feedback stays in the same Pi session under the original cumulative allowance and deadline. Invalid judgments are not normalized into acceptance. Report availability is independent of financial reconciliation; command/status expose its path, summary, completeness and pending/assessed projection. Matching acknowledged assessment artifacts repair a stale report projection without inference. Evidence-integrity/I/O failures remain distinct from correctable format errors. Existing archive machinery preserves diagnostic inputs while assessment is pending and reuses unchanged archive receipts.
+
+Known-response recovery settles identity- and response-hash-verified completed journal receipts before inference admission, including after expiry, unsupported retained pins or missing current login; acknowledgement recovery is idempotent and never renews dispatch authority. Review adoption uses the investigator's pinned evidence revision even after cleanup freezes a newer revision; unknown dispatches retain reservations and cannot replay. Accepted legacy JSON reviews retain their historical serialized assessment identity, including property order and accepted extra fields. Interrupted observations without the pinned investigator protocol remain pending rather than being reinterpreted. Reconciled `run`/`close` adopts validated results, including lost acknowledgements, without replaying scenarios or replacing mechanical evidence.
+
+The [backend verification](../docs/verification/2026-11-10-pi-subscription-campaign-backend.md) distinguishes mocked reviewer HTTP from the selected [live Codex review](../docs/verification/2026-11-10-pi-subscription-live-review.md) on a labelled framing fixture. The investigator's source search, report preservation and validation feedback are covered offline through real Pi serialization and mocked-HTTP campaign integration; independent diagnostic usefulness and broader workloads remain unqualified. The [accepted design](../docs/brainstorming/2026-11-09-automated-qualification-analysis.md) retains rationale/prerequisites and original mandate/archive authority.
+
+For new configurable version-2 campaigns, the external manifest replaces sample-specific limits/cases without migrating version-1 grants. It declares named scenarios (CIK, framing, ordered steps), model/effort configurations, mandatory expectations, shared lot/campaign budgets, optional scenario caps, repetitions, maximum lots, expiry and correction paths. `convex/qualificationCampaignPolicy.ts` owns validation. `--campaign prepare --manifest FILE --output DIRECTORY` freezes the resolved surface; explicit browser campaigns may use the default batteries for omitted scenarios. Custom IDs, companies, questions and paths require no runner edits. Quality uses recommended reasoning; explicit efforts are declared stress conditions. For a shared model, Sources owns the temporary catalogue default and Workbench its per-conversation initial effort; restore the default once. `--configuration ID` selects a declared configuration; otherwise choose the next one still unqualified on the candidate. One lot runs one configuration sequentially across scenarios, with fresh dossiers and shared per-scenario conversation. Every configuration must pass on the same candidate; corrections inherit no coverage and historical results remain intact.
+
+New version-2 preparation defaults `executionSurface` to `"backend"`; UI qualification explicitly selects `executionSurface: "browser"`. Historical prepared/authorized manifests without this field retain browser execution and original authority. Backend campaigns require explicit scenarios, real anonymous sign-in/public access-code admission, in-memory session refresh and sign-out. They exercise the same finite interpreter, production operations/agents, grants, accounting, export, assessment and cleanup on the verified local backend, without browser/web service; navigation, reload and viewport steps refuse before setup. Stop at the first failed scenario, retaining partial evidence. Research waits stop on failed/cancelled research independently of conversation settlement, allowing Workbench to discuss failure. A blocked Workbench mission with active turn and no native writer stops the wait immediately with its block code; engaged writers may finish. A Sources wait also returns the original block when research is paused, Sources is blocked, its original deadline has expired and no native writer remains. Active writers may still finish a partial handoff; the observer adds no independent completion timer. Retain unresolved sessions as failure, not settlement or a reason to poll until deadline.
+
+Framing/start/message request keys use bounded digests of frozen fixture/step identity, preserving retry identity within production limits even for longest manifest IDs. Backend persistence/publication evidence does not qualify browser rendering, subscriptions, responsiveness or reconnection. Surface selection grants no paid authority or weaker preflight and deterministic runs establish no live quality. Before fresh live activation/admission, check inference credentials plus SEC identification/retrieval credentials for research starts; retain required/missing names only. Deterministic and cleanup-only runs need no live credentials. Prepare selected serializer profiles before admitting a paid lot without changing assignments/revisions: automatic selection prepares declared profiles, explicit selection its chosen profile. Recheck catalogue after reasoning changes before assignment. Preparation failure consumes no lot; retain successful readiness with admission.
+
+Sources scenarios may declare an `initialFixture` identity and content digest to start at a retained documentary mission boundary: a correctable qualification, completed partial preparation, or interrupted preparation with usable material. Preparation freezes the exact fixture bytes; the internal installer rechecks the digest and declared run binding under active local campaign authority, loopback deployment and the fixture flag before storage I/O. It uses existing capture, indexing, reading, qualification reconstruction, mission lifecycle and prepared-material handoff owners. Imported qualification/control records are explicitly illustrative showcase fixtures with no provider receipt or fresh semantic judgment. The correctable fixture resumes only its native Sources mission; its finite runner invokes the existing handoff after terminal settlement. These fixtures do not exercise the human Start action or initial discovery and never constitute live company evidence. An untouched conversation may have no native session; after any recorded turn, a missing session remains unresolved. Full-start scenarios remain available in the same battery vocabulary.
+
+The finite interpreter admits framing saves, messages, research start/pause/resume, response stop, fixed navigation, reload/reconnection, viewports, waits and retained fault recipes—not scripts, shell or caller selectors. Reject unsupported capability/mode/fault combinations before setup. Transport faults require the live Workbench relay: concurrent-edit holds delivery during the declared framing save; stop-before-generation holds publication until response stop. Untriggered injections fail mechanical qualification. Real anonymous admission/public operations still enforce analyst decisions. Failed scenarios stay failed; independent scenarios may continue only once conversation/Sources work is terminal, native execution quiet and backend accounting has no pending/unknown/over-reservation outcome. Interruption or unavailable evidence stops continuation; any failed scenario makes the lot failed. Bind every scenario exactly once to an owned unlaunched dossier with matching CIK for live or unpaid execution; bindings cannot change or renew.
+
+Version-2 provider admission atomically reserves the actual lot/optional scenario allowance and updates indexed context/scenario usage with every receipt transaction, including late generation/billing/discovery facts. Replays never double-count. Pending, expired, unknown or over-reservation outcomes remain fenced with a distinct unresolved-outcome refusal, not quota exhaustion. Reconciliation releases only proven unused allocation after context cleanup. Close/recovery preserves original execution failure and adds an evidence revision through the index owner. An unresolved receipt keeps the lot financially closing after campaign/context shutdown. Export receipts, invocations, messages and documentary inventories by cursor; page size is no spending cap. Cleanup follows every cursor and rejects non-advancement, without a host page-count cap.
+
+Version 2 replaces the sample 20/40-call, two-dossier, search/acquisition and dollar limits, not engine constraints: prepared routes/profiles, global paid controls/model policy, bounded turns/context, request deadlines/retries, one running research workflow and finite local contexts still apply. Contexts last at most two hours; `contextDurationMs` can shorten this, otherwise use remaining mandate up to that maximum. Fresh configurable Sources mandates must declare positive safe-integer `researchDurationMs` in milliseconds. For qualification-funded research, `runWorkspace.ts` derives the original deadline from research Start plus this immutable duration, bounded by context and campaign expiry; preparation, mission, operation and provider admission consume that same bound instead of adding another fifteen-minute window. Replays and recoveries cannot renew it. Previously authorized manifests without the field retain their historical clocks and hashes; adding duration requires a new mandate, not reinterpretation of an old grant. Sources envelopes use declared per-scenario bounds or derive searches/acquisitions from campaign budget within 160 work units/60 acquisitions; exhaustion is explicit. Budgets neither activate providers nor waive guards. Read-only inspection after closure/expiry validates dossier/context/owner/fixture-key provenance without renewing authority; loopback plus fixture flag remain mandatory. Export capture metadata before content, verify hashes and fail explicitly on unavailable committed bodies.
+
+
+
+Frozen study imports preserve the original qualification input hash when replayInputHash is omitted. A supplied replay hash must be a lowercase SHA-256 digest and is permitted only in the replay phase. Repeated copies enforce the same effective hash, including when an override is later omitted; cached results cannot bypass these checks.
+
+Zero-provider Sources campaigns use the same protected local browser, workflow, mission executor and documentary operations with fixed external responses. An active local fixture context must be bound to an active deterministic Sources campaign; expiration, closure or disabled fixtures refuse further work before any live fallback. Company revalidation, discovery, Contents and documentary-control responses are simulated. Candidate admission checks the frozen fixture and its reserved request; capture normalization, storage, indexing, exact reading, evidence materialization, qualification and prepared-material handoff retain their production owners. Fixed controls are labelled showcase tasks with a simulation fixture identity and no provider receipt. The returned material preserves unfinished real needs as a partial outcome. Qualification uses its own scope without consuming ordinary analysis quota, while the single-running-workflow rule remains enforced. These checks establish execution mechanics and evidence provenance; they do not qualify discovery relevance, real model judgment or analytical usefulness.
+
+
+Purpose migration widens schema, previews provenance classifications, backfills purpose only with append-only audits, verifies preservation, then requires the field. Private local preview/apply reject ambiguous fixture markers and never transfer owners or refund reservations.
+
+Website enrichment is visual only. Use CIK cache, retain stale entries after refresh failure, then fall back to SEC IR metadata/company icon. Deduplicate by CIK, resolver version and cache window; check paid-work switch before SDK construction. Discard responses after timeout, cancellation, lease expiry or generation change. Failure neither invalidates SEC preflight nor consumes analysis quota. Record bounded accepted/rejected counts, latency and available usage without raw queries/errors. A supplied websiteUrl must be a nonblank absolute HTTPS URL without credentials; absence alone preserves existing metadata. The metadata domain validates the effective URL and keeps its provenance selection consistent. All website persistence paths refuse invalid replacements before writes; explicit valid enrichment can replace a legacy invalid value, while reads report an invalid effective value rather than silently treating it as absent.
+
+Use configurable breadth, retry and provider guards, available provider spending controls and an emergency paid-work switch. Protected administration exposes operations, failures, calls, reported usage/cost and audited restoration. No transactional dollar settlement, invented free-tier accounting or exact dossier-cost enforcement is selected. Embedding bytes bound operations, not a financial ledger.
+
+A versioned dossier summary tracks valid responses, confirmed incidents, unresolved reservations and dispatches atomically with receipts. Before dispatch, reserve both possible outcome allowances and dispatch capacity. Structurally/reference-valid responses consume productive capacity; confirmed dispatched failures, including invalid output, consume incident capacity. Neither proves semantic quality or zero cost.
+
+Settle receipts once, releasing the unused outcome reservation. Proved non-dispatch releases both and dispatch capacity; unknown outcomes retain both and permit no repetition. Cached reuse/deterministic comparison revalidation consumes no model capacity. Review and dispatch share policy.
+
+`SOURCE_PREPARATION_WORK_LIMIT` and `SOURCE_PREPARATION_INCIDENT_LIMIT` configure the defaults in the [limits table](#locked-resource-limits). Snapshot current invocation settings at explicit start; reject non-positive/unsafe integers or unsafe sums. Running execution retains its snapshot. Later explicit start/recovery may adopt new ceilings without resetting consumption; dispatch ceiling is their sum.
+
+Initialize editable dossiers once before dispatch from bounded receipts and conservative maxima of legacy counters, without rewriting receipts/approved revisions. Reserve unexplained consumption or missing identity. Review interprets the same history without writing. Acquisition, supplement and embedding allowances remain separate.
+
+### Locked resource limits
+
+`convex/resourcePolicy.ts` is the pure authored owner for application resource defaults, unit-specific capacities, clocks and effective-authority derivation. `convex/resourceLimits.ts` validates Convex environment overrides without another defaults table. Client and tooling consumers import the pure owner. The standalone preview service consumes its generated JSON subset; `pnpm resource-policy:sync` regenerates it and `pnpm resource-policy:check` refuses stale output without modifying it. Frozen study conditions, protocol identities, domain-derived invariants, verified provider capabilities and immutable grants are not interchangeable application defaults. Existing numeric safeguards below remain enforced, but centralization does not establish workload adequacy.
+
+New missions, preparations, qualification grants/campaigns and reviewer pins identify `authority_native_v1`. Missing or unsupported metadata blocks further dispatch, not inspection or settlement of known observations. Unfinished historical work requires explicit new authorization; deadlines, consumption, reservations and evidence are never reset by cutover. Model calls use remaining absolute authority and prepared model/native output capacity. The effective qualification deadline includes the explicitly declared new Sources research duration, or the historical window for grants without that field; admission, provider leases and qualification-funded result adoption enforce that same absolute boundary. Live provenance alone does not impose paid-qualification prerequisites on unpaid dialogue, inspection or recovery. Node action entries separately capture the standard ten-minute host lifetime before preparation and leave the existing ten-second receipt-settlement grace outside generation. This runtime bound neither renews mission authority nor extends provider/writer leases. A host interruption retains unknown receipt facts, records `node_action_deadline` diagnostically and uses existing `execution_interrupted` recovery. A larger mission grant or renewed lease cannot extend the host lifetime; a single request beyond it needs execution/result ownership that survives worker rollover. Non-generative I/O clocks, worker yields, writer leases, byte safety and cursor pages retain separate scopes.
+
+The AST check in `scripts/check-resource-policy.ts`, included in lint, discovers authored Convex, application, tooling and service sources. It rejects known timer, transport/token-capacity and pagination defaults, including shorthand settings, same-file scalar/record aliases and resource parameter defaults, and the demonstrated byte/token comparison/addition error. It preserves authority-derived clocks, capabilities, singleton reads and UI animation timing. A `// resource-policy-exception: concrete reason` comment can justify a frozen condition only on the immediately following resource-default finding; blank, misplaced and redundant annotations fail. This is not universal dimensional analysis: cross-module aliases, arbitrary function results, dynamic assignments/computed keys and runtime configuration still require review and executable tests. It verifies neither numeric justification nor provider accounting.
+
+| Boundary | Accepted limit |
+| --- | --- |
+| Access attempts | 5 per anonymous Auth identity and 25 deployment-wide per 15 minutes. |
+| Ranked company search | 40 candidates, locally paginated from one immutable result. |
+| Website enrichment | 30-day cache; at most 5 metadata results; 3 displayed candidates plus selected company per search session; 12 calls per anonymous session and 25 deployment-wide per 15 minutes; one attempt, 5-second logical timeout. |
+| Candidate scope | 48 initial candidates; one supplement of at most 3 searches, 4 additions each and 12 total; 60 retained/frozen sources for prepared dossiers, 48 for legacy acquisition. Never truncate an existing dossier during migration. |
+| Discovered recommendations | Default `ceil(initial candidate limit / 2)`, currently 24; positive integer no greater than initial candidate limit; analyst references excluded from this ceiling. |
+| Distinct contributions | 2 annual/interim periods, 3 material events, 4 per official family, 4 independent producers or 6 for independent scrutiny. |
+| Acquisition and normalized artifacts | 16 MiB each, including declared/decompressed limits; at most 400 PDF pages and 5 redirects. |
+| Analytical passages | 512 per source, quotations at most 4,000 characters; preserve all required pins or fail explicitly. |
+| Source acquisition attempts | 2 initial; preparation alone permits one additional admissible explicit recovery attempt; SEC/direct HTTP 10-second abortable timeout; Exa Contents 120-second abortable outer timeout. |
+| Qualification/comparison/documentary-control requests | One-shot serialized-input safety remains 128 KiB, separate from native conversation context. Current output uses prepared capability and effective SDK/context capacity, without a live 6,144-token fallback. Generation uses remaining approved mission/preparation authority; the provider lease uses its admitted deadline plus 10-second settlement grace. Historical input/output fields remain inspectable but do not select an executable legacy policy. |
+| Invocation journal | Native complete snapshots, admitted inputs and recovery bytes use immutable fragments above 512 KiB; recovery bytes also leave room for bounded lifecycle results in the invocation document; each fragment contains at most 60 Ki UTF-16 code units without splitting surrogate pairs. Hashes and complete publication precede use. Administrator/history/export reads page exact content; partial loading is explicit. Non-native snapshots retain their 512 KiB bound. |
+| Pi persistence projection | Inline commits remain bounded at 512 KiB; larger logical commits use immutable fragments. The cumulative limit remains 32 MiB retained log per native Workbench version 2 conversation across all responses, or per mission-scoped session for historical Workbench version 1 and other definitions. Stop explicitly before exceeding replay capacity, without deleting/truncating originals or resetting consumption. Newly staged bytes, including unfinished stages, consume capacity once; publication and acknowledgement retries do not charge them again. Replay pages request at most 256 commits with a 2 MiB database-read limit; replay checks cancellation and the shared 25-second lease-renewal clock between fragment reads as well as commit pages. Reconsider the storage bound if trials show insufficient conversation capacity; compaction reduces model context, not retained originals. |
+| Preparation concurrency | Snapshot `SOURCE_PREPARATION_MAX_CONCURRENCY` at start/explicit recovery: default 2, positive safe integer, bounded by remaining sources. Reading/comparison share it; historical missing snapshots retain 2. The Workflow queue's global capacity is independent of dossier fan-out. |
+| Preparation accounting | Default 120 valid responses and 40 confirmed incidents; unresolved calls reserve both allowances. Dispatch ceiling is their sum: 160 by default. Invalid configuration blocks execution before provider work. |
+| Preparation execution | Ordinary preparations and explicit continuations read the required positive `SOURCES_PREPARATION_WINDOW_MINUTES` setting through `sourcePreparationWindowMs()`; existing pinned deadlines remain unchanged until authorized continuation. Qualification-funded claims retain the original explicit campaign research deadline. Manual content and targeted operations retain narrow scope. |
+| Sources qualification research | New configurable mandates declare `researchDurationMs`, anchored to research Start and bounded by original context/campaign expiry. Historical grants without it retain the fixed fifteen-minute window. Dispatch never restarts either bound. |
+| Preparation route ceiling | USD 0.15 per million input tokens and USD 0.60 per million output tokens. These are accepted limits, not a claim about current market prices. |
+| Comparison retrieval | 60 metadata candidates, 8 primary captures, 16 MiB per capture and 32 MiB aggregate reads; 6 priority passages plus up to 2 structural context passages per finding. |
+| Shared comparison context | 32 KiB soft serialized expansion allowance; hard 64 passages/128 KiB; at most 8 output citations per finding; complete non-empty explanations within the preparation's versioned output allowance and 700 KiB materialized output. |
+| Structured parsing | 100,000 blocks and 20,000 searchable units per capture. |
+| Native retrieval | 64 lexical hits per capture/query transaction, fused to 64 per research query; vector top 256 after capture scope filtering. |
+| Embeddings | At most 32 inputs per request, 2 active attempts per dossier, 30 seconds, 1 MiB response, no retry/redirect/truncation. |
+| Embedding allowance | 833,333 cumulative submitted UTF-8 bytes per dossier, conservatively USD 0.01 at the accepted USD 0.012/million-token ceiling; unknown outcomes retain allowance. The historical frozen evaluation ceiling was USD 0.10 and is not renewed. |
+
+Check capacity before inspection/discovery and transactionally at persistence; stop further calls once exhausted. Resource changes require explicit decision and contract/evaluation updates.
+
+### External I/O and transient preview
+
+Authorize protected operations and leases/generations before DNS, SDK or HTTP; revalidate before persistence. Enforce least privilege, server-only secrets, safe logs, sanitization and bounded parsing/decompression. Source text/model output is untrusted evidence, never instructions. Defend against prompt injection and SSRF, including redirects/DNS rebinding.
+
+Visual preview uses a separate Playwright service through authorized Convex actions only. Authenticated `POST /render` creates a fresh context without prior cookies/storage/credentials/downloads, returns only 1280×720 PNG and always tears down. Return no HTML, scraped text or OCR. Log hostname, duration, status/error type, never full URLs, content or screenshots.
+
+Cache reads/rendering require active owned run access, visitor-bound claimed invitation and pending source decision. Check before I/O, after response and atomically before caching. Cache by source with bounded bytes and server TTL, default one hour. Expired entries are absent; oversized images may return uncached. Accept/reject purges preview; cache hits never render. Limit attempts to two per visitor/run/source per 30 seconds. Screenshots never enter evidence/analysis paths.
+
+Chromium uses a per-render authenticated loopback CONNECT proxy to validated numeric public addresses, preserving end-to-end TLS. Pause redirects and validate destinations/subresources within five hops. Block service workers, WebSockets, downloads and non-GET requests. Bound context lifetime, queue/concurrency, connections and aggregate transfer. Service/backend private-address and redirect policies must stay equivalent; local fixes prove no remote deployment.

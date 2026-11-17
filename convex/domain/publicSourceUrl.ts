@@ -2,14 +2,21 @@
 
 import { isIP } from "node:net";
 
+import {
+    ManualSourceIntakeError,
+    type ManualSourceIntakeErrorCode,
+} from "./manualSourceIntake";
+
 export type PublicSourceUrl = {
     canonicalUrl: string;
     hostname: string;
+    addresses: ReadonlyArray<string>;
 };
 
-export class PublicSourceUrlError extends Error {
-    constructor(message: string) {
-        super(message);
+export class PublicSourceUrlError extends ManualSourceIntakeError {
+    constructor(code: ManualSourceIntakeErrorCode, message: string) {
+        super(code, { field: "url" });
+        this.message = message;
         this.name = "PublicSourceUrlError";
     }
 }
@@ -100,17 +107,26 @@ export async function validatePublicSourceUrl(
     try {
         url = new URL(rawUrl);
     } catch {
-        throw new PublicSourceUrlError("Invalid source URL");
+        throw new PublicSourceUrlError("invalid_url", "Invalid source URL");
     }
 
     if (url.protocol !== "https:") {
-        throw new PublicSourceUrlError("Source URL must use HTTPS");
+        throw new PublicSourceUrlError(
+            "https_required",
+            "Source URL must use HTTPS",
+        );
     }
     if (url.username || url.password) {
-        throw new PublicSourceUrlError("Source URL cannot contain credentials");
+        throw new PublicSourceUrlError(
+            "credentials_not_allowed",
+            "Source URL cannot contain credentials",
+        );
     }
     if (url.port && url.port !== "443") {
-        throw new PublicSourceUrlError("Source URL cannot use a custom port");
+        throw new PublicSourceUrlError(
+            "custom_port_not_allowed",
+            "Source URL cannot use a custom port",
+        );
     }
 
     const hostname = url.hostname
@@ -119,18 +135,28 @@ export async function validatePublicSourceUrl(
         .toLowerCase();
     if (hostname === "localhost" || hostname.endsWith(".localhost")) {
         throw new PublicSourceUrlError(
+            "non_public_destination",
             "Source URL must resolve to a public network",
         );
     }
 
-    const addresses = isIP(hostname)
-        ? [hostname]
-        : await resolveAddresses(hostname);
+    let addresses: ReadonlyArray<string>;
+    try {
+        addresses = isIP(hostname)
+            ? [hostname]
+            : await resolveAddresses(hostname);
+    } catch {
+        throw new PublicSourceUrlError(
+            "dns_failed",
+            "Source URL could not be resolved",
+        );
+    }
     if (
         addresses.length === 0 ||
         addresses.some((address) => !isPublicAddress(address))
     ) {
         throw new PublicSourceUrlError(
+            "non_public_destination",
             "Source URL must resolve to a public network",
         );
     }
@@ -141,5 +167,6 @@ export async function validatePublicSourceUrl(
     return {
         canonicalUrl: url.toString(),
         hostname,
+        addresses,
     };
 }

@@ -11,6 +11,13 @@ import {
 import { digestInvitationCode } from "./domain/invitationCodes";
 import { visitorRoleValidator } from "./domain/validators";
 import { rateLimiter } from "./rateLimiter";
+import {
+    BROWSER_TEST_SLOT,
+    isBrowserTestSlot,
+    isE2EWorkerSlot,
+    isLoopbackDeployment,
+    localBrowserFixturesEnabled,
+} from "./runWorkspace";
 
 const seedEntryValidator = v.object({
     slotKey: v.string(),
@@ -260,6 +267,12 @@ export const claimDigest = internalMutation({
                 existingVisitor.invitationId,
             );
             if (
+                (isBrowserTestSlot(existingInvitation?.slotKey) ||
+                    isE2EWorkerSlot(existingInvitation?.slotKey)) &&
+                !localBrowserFixturesEnabled()
+            )
+                throw new Error("Access code is not available");
+            if (
                 existingInvitation?.codeDigest === args.codeDigest &&
                 existingVisitor.status === "active"
             ) {
@@ -279,7 +292,12 @@ export const claimDigest = internalMutation({
                 query.eq("codeDigest", args.codeDigest),
             )
             .unique();
-        if (!invitation) {
+        if (
+            !invitation ||
+            ((invitation.slotKey === BROWSER_TEST_SLOT ||
+                isE2EWorkerSlot(invitation.slotKey)) &&
+                !localBrowserFixturesEnabled())
+        ) {
             throw new Error("Access code is not available");
         }
 
@@ -415,6 +433,156 @@ export const rotateAdminDigest = internalMutation({
             reason: "Break-glass admin invitation rotation",
             occurredAt: now,
         });
+        return null;
+    },
+});
+
+export const applyE2EWorkerSlots = internalMutation({
+    args: {
+        slots: v.array(seedEntryValidator),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        if (!isLoopbackDeployment()) {
+            throw new Error("Local deployment required");
+        }
+        if (args.slots.length > 0 && !localBrowserFixturesEnabled()) {
+            throw new Error("Local browser fixtures are disabled");
+        }
+        const desiredKeys = new Set(args.slots.map((entry) => entry.slotKey));
+        for (const entry of args.slots) {
+            if (!isE2EWorkerSlot(entry.slotKey)) {
+                throw new Error(`Invalid E2E worker slot: ${entry.slotKey}`);
+            }
+            const expectedRole = entry.slotKey.startsWith("admin-")
+                ? "admin"
+                : "analyst";
+            if (entry.role !== expectedRole) {
+                throw new Error(
+                    `Role mismatch for E2E worker slot: ${entry.slotKey}`,
+                );
+            }
+        }
+
+        const now = Date.now();
+        const existingInvitations = await ctx.db.query("invitations").collect();
+        for (const existing of existingInvitations) {
+            if (!isE2EWorkerSlot(existing.slotKey)) continue;
+            if (!desiredKeys.has(existing.slotKey)) {
+                if (existing.claimedByVisitorId) {
+                    const visitor = await ctx.db.get(
+                        existing.claimedByVisitorId,
+                    );
+                    if (visitor) {
+                        const contexts = await ctx.db
+                            .query("browserTestContexts")
+                            .withIndex("by_auth_user_id_and_status", (q) =>
+                                q
+                                    .eq("authUserId", visitor.authUserId)
+                                    .eq("status", "active"),
+                            )
+                            .collect();
+                        for (const context of contexts) {
+                            await ctx.db.patch(context._id, {
+                                status: "closed",
+                                closedAt: now,
+                            });
+                        }
+                        if (visitor.status === "active") {
+                            await ctx.db.patch(visitor._id, {
+                                status: "revoked",
+                                revokedAt: now,
+                            });
+                        }
+                    }
+                }
+                await ctx.db.delete(existing._id);
+            }
+        }
+
+        for (const entry of args.slots) {
+            const existing = await ctx.db
+                .query("invitations")
+                .withIndex("by_slot_key", (q) => q.eq("slotKey", entry.slotKey))
+                .unique();
+            if (existing) {
+                if (existing.codeDigest !== entry.codeDigest) {
+                    if (existing.claimedByVisitorId) {
+                        const visitor = await ctx.db.get(
+                            existing.claimedByVisitorId,
+                        );
+                        if (visitor?.status === "active") {
+                            await ctx.db.patch(visitor._id, {
+                                status: "revoked",
+                                revokedAt: now,
+                            });
+                        }
+                    }
+                    await ctx.db.patch(existing._id, {
+                        codeDigest: entry.codeDigest,
+                        status: "available",
+                        claimedByVisitorId: undefined,
+                        claimedAt: undefined,
+                    });
+                }
+                continue;
+            }
+            await ctx.db.insert("invitations", {
+                slotKey: entry.slotKey,
+                role: entry.role,
+                codeDigest: entry.codeDigest,
+                status: "available",
+                createdAt: now,
+            });
+        }
+        return null;
+    },
+});
+
+export const syncE2EWorkerSlots = internalAction({
+    args: {
+        slots: v.array(
+            v.object({
+                slotKey: v.string(),
+                role: visitorRoleValidator,
+                code: v.string(),
+            }),
+        ),
+    },
+    returns: v.null(),
+    handler: async (ctx, args): Promise<null> => {
+        if (args.slots.length === 0) {
+            await ctx.runMutation(internal.invitations.applyE2EWorkerSlots, {
+                slots: [],
+            });
+            if (isLoopbackDeployment() && localBrowserFixturesEnabled()) {
+                await rateLimiter.reset(ctx, "invitationClaimGlobal");
+            }
+            return null;
+        }
+        if (!isLoopbackDeployment() || !localBrowserFixturesEnabled()) {
+            throw new Error("Local browser fixtures are disabled");
+        }
+        const pepper = process.env.INVITATION_CODE_PEPPER;
+        if (!pepper) {
+            throw new Error("Invitation bootstrap is not configured");
+        }
+        const hashed = await Promise.all(
+            args.slots.map(async (entry) => {
+                if (!invitationCodePattern.test(entry.code)) {
+                    throw new Error("Worker code must contain four digits");
+                }
+                return {
+                    slotKey: entry.slotKey,
+                    role: entry.role,
+                    codeDigest: await digestInvitationCode(entry.code, pepper),
+                };
+            }),
+        );
+        await ctx.runMutation(internal.invitations.applyE2EWorkerSlots, {
+            slots: hashed,
+        });
+        await rateLimiter.reset(ctx, "invitationClaimGlobal");
         return null;
     },
 });

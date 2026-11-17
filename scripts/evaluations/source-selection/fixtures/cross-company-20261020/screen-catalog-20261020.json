@@ -1,0 +1,45 @@
+{
+  "observedAt": "2026-10-20T22:12:29.315Z",
+  "models": [
+    {
+      "id": "deepseek/deepseek-v4-flash-0731",
+      "inputPricePerToken": 2.1e-08,
+      "outputPricePerToken": 5.28e-07,
+      "contextLength": 262144,
+      "provider": "reka",
+      "sourceUrl": "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4-flash-0731/endpoints"
+    },
+    {
+      "id": "xiaomi/mimo-v2.6-flash",
+      "inputPricePerToken": 1.33e-07,
+      "outputPricePerToken": 2.66e-07,
+      "contextLength": 1048576,
+      "provider": "deepinfra/fp8",
+      "sourceUrl": "https://openrouter.ai/api/v1/models/xiaomi/mimo-v2.6-flash/endpoints"
+    },
+    {
+      "id": "microsoft/microsoft-decision-1",
+      "inputPricePerToken": 4.2e-08,
+      "outputPricePerToken": 0.0,
+      "contextLength": 32768,
+      "provider": "azure",
+      "sourceUrl": "https://openrouter.ai/api/v1/models?output_modalities=decisions"
+    },
+    {
+      "id": "openai/gpt-6-luna-decisions",
+      "inputPricePerToken": 1e-07,
+      "outputPricePerToken": 0.0,
+      "contextLength": 1050000,
+      "provider": "openai",
+      "sourceUrl": "https://openrouter.ai/api/v1/models?output_modalities=decisions"
+    },
+    {
+      "id": "jev-1.14.0",
+      "inputPricePerToken": 4.2000000000000006e-08,
+      "outputPricePerToken": 0,
+      "contextLength": 32768,
+      "provider": "typesafe",
+      "sourceUrl": "https://docs.typesafe.ai/models"
+    }
+  ]
+}

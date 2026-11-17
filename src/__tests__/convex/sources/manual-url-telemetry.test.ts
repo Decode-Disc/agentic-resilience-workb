@@ -1,124 +1,103 @@
-import type { Id } from "@convex/_generated/dataModel";
-import type { ActionCtx } from "@convex/_generated/server";
+import { manualSourceIntakeError } from "@convex/domain/manualSourceIntake";
 import { addManualUrlWithInspector } from "@convex/sourceActions";
 import { expect, test, vi } from "vitest";
+import { seedManualSource } from "@/__tests__/setup/manual-source";
 
-const args = {
-    runId: "run-1" as Id<"researchRuns">,
-    corpusRevisionId: "revision-1" as Id<"corpusRevisions">,
-    url: "https://example.com/report",
+const metadata = {
+    canonicalUrl: "https://example.com/report",
+    title: "Public report",
 };
 
-test("records success around manual URL metadata and persists once", async () => {
-    const runQuery = vi.fn(async () => ({
-        executionGeneration: 3,
-        stepKey: "source_review",
-    }));
-    const runMutation = vi
-        .fn()
-        .mockResolvedValueOnce({
-            shouldExecute: true,
-            status: "started",
-        })
-        .mockResolvedValueOnce("source-1")
-        .mockResolvedValueOnce({
-            shouldExecute: false,
-            status: "succeeded",
-        });
-    const inspect = vi.fn(async () => ({
-        canonicalUrl: "https://example.com/report",
-        title: "Public report",
-    }));
-
-    await expect(
-        addManualUrlWithInspector(
-            { runQuery, runMutation } as unknown as Pick<
-                ActionCtx,
-                "runMutation" | "runQuery"
-            >,
-            args,
-            inspect,
-        ),
-    ).resolves.toEqual({ sourceId: "source-1" });
-
+test("persists source and successful manual URL metadata telemetry", async () => {
+    const { t, owned, args } = await seedManualSource();
+    const inspect = vi.fn(async () => metadata);
+    const result = await owned.action((ctx) =>
+        addManualUrlWithInspector(ctx, args, inspect),
+    );
+    expect(result).toMatchObject(metadata);
     expect(inspect).toHaveBeenCalledOnce();
-    expect(runMutation.mock.calls[0]?.[1]).toMatchObject({
-        service: "url_metadata",
-        status: "started",
-        attempt: 1,
-        executionGeneration: 3,
-    });
-    expect(runMutation.mock.calls[1]?.[1]).toMatchObject({
+    expect(await t.run((ctx) => ctx.db.get(result.sourceId))).toMatchObject({
+        ...metadata,
         providerReference: expect.stringContaining("url_metadata:"),
     });
-    expect(runMutation.mock.calls[2]?.[1]).toMatchObject({
-        service: "url_metadata",
-        status: "succeeded",
-        attempt: 1,
-    });
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([
+        expect.objectContaining({
+            service: "url_metadata",
+            status: "succeeded",
+            attempt: 1,
+            executionGeneration: 3,
+        }),
+    ]);
 });
 
 test("replays a completed URL operation without another external request", async () => {
-    const runQuery = vi
-        .fn()
-        .mockResolvedValueOnce({
-            executionGeneration: 3,
-            stepKey: "source_review",
-        })
-        .mockResolvedValueOnce("source-existing");
-    const runMutation = vi.fn(async () => ({
-        shouldExecute: false,
-        status: "succeeded",
-    }));
-    const inspect = vi.fn();
-
-    await expect(
-        addManualUrlWithInspector(
-            { runQuery, runMutation } as unknown as Pick<
-                ActionCtx,
-                "runMutation" | "runQuery"
-            >,
-            args,
-            inspect,
+    const { t, owned, args } = await seedManualSource();
+    const inspect = vi.fn(async () => metadata);
+    const first = await owned.action((ctx) =>
+        addManualUrlWithInspector(ctx, args, inspect),
+    );
+    expect(
+        await owned.action((ctx) =>
+            addManualUrlWithInspector(ctx, args, inspect),
         ),
-    ).resolves.toEqual({ sourceId: "source-existing" });
-
-    expect(inspect).not.toHaveBeenCalled();
-    expect(runMutation).toHaveBeenCalledOnce();
+    ).toEqual(first);
+    expect(inspect).toHaveBeenCalledOnce();
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toHaveLength(1);
 });
 
-test("records failed manual URL metadata inspection", async () => {
-    const runQuery = vi.fn(async () => ({
-        executionGeneration: 3,
-        stepKey: "source_review",
-    }));
-    const runMutation = vi
-        .fn()
-        .mockResolvedValueOnce({
-            shouldExecute: true,
-            status: "started",
-        })
-        .mockResolvedValueOnce({
-            shouldExecute: false,
-            status: "failed",
-        });
+test("records failed manual URL metadata inspection attempts", async () => {
+    const { t, owned, args } = await seedManualSource();
     const inspect = vi.fn(async () => {
         throw new TypeError("network failed");
     });
-
     await expect(
-        addManualUrlWithInspector(
-            { runQuery, runMutation } as unknown as Pick<
-                ActionCtx,
-                "runMutation" | "runQuery"
-            >,
-            args,
-            inspect,
-        ),
-    ).rejects.toThrow("network failed");
-    expect(runMutation.mock.calls[1]?.[1]).toMatchObject({
-        service: "url_metadata",
-        status: "failed",
-        errorCode: "TypeError",
+        owned.action((ctx) => addManualUrlWithInspector(ctx, args, inspect)),
+    ).rejects.toMatchObject({
+        data: { code: "connection_failed", retryable: true },
     });
+    expect(inspect).toHaveBeenCalledTimes(2);
+    const calls = await t.run((ctx) => ctx.db.query("providerCalls").collect());
+    expect(calls).toHaveLength(2);
+    expect(
+        calls.map(({ status, attempt, errorCode }) => ({
+            status,
+            attempt,
+            errorCode,
+        })),
+    ).toEqual([
+        { status: "failed", attempt: 1, errorCode: "connection_failed" },
+        { status: "failed", attempt: 2, errorCode: "connection_failed" },
+    ]);
+});
+
+test("retries one typed timeout and records both attempts", async () => {
+    const { t, owned, args } = await seedManualSource();
+    const inspect = vi
+        .fn()
+        .mockRejectedValueOnce(manualSourceIntakeError("request_timeout"))
+        .mockResolvedValueOnce(metadata);
+    const result = await owned.action((ctx) =>
+        addManualUrlWithInspector(ctx, args, inspect),
+    );
+    expect(result).toMatchObject(metadata);
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(await t.run((ctx) => ctx.db.get(result.sourceId))).toMatchObject(
+        metadata,
+    );
+    const calls = await t.run((ctx) => ctx.db.query("providerCalls").collect());
+    expect(calls).toHaveLength(2);
+    expect(
+        calls.map(({ status, attempt, errorCode }) => ({
+            status,
+            attempt,
+            errorCode,
+        })),
+    ).toEqual([
+        { status: "failed", attempt: 1, errorCode: "request_timeout" },
+        { status: "succeeded", attempt: 2, errorCode: undefined },
+    ]);
 });

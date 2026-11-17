@@ -1,0 +1,70 @@
+@reference "../../styles.css";
+
+.stage {
+    @apply rounded-[24px] p-[22px] flex flex-col gap-[16px] min-w-[0];
+}
+.header {
+    @apply flex items-center gap-[12px];
+}
+.step {
+    @apply shrink-0 w-[36px] h-[36px] rounded-(--radius-tile) inline-flex items-center justify-center font-mono text-[12px] font-medium bg-primary bg-none text-primary-foreground;
+    box-shadow: inset 0 1px 0 color-mix(in oklab, white 20%, transparent);
+}
+.focal .step {
+    @apply bg-brand-purple bg-none;
+}
+.titles {
+    @apply flex flex-col gap-[2px] min-w-[0];
+}
+.title {
+    @apply m-[0] text-[17px] leading-[1.3] font-semibold tracking-[-0.02em];
+}
+.description {
+    @apply text-[12.5px] leading-[1.4] text-muted-foreground;
+}
+.metrics {
+    @apply flex gap-[28px] m-[0];
+}
+.metric {
+    @apply flex flex-col-reverse m-[0];
+}
+.metric dd {
+    @apply m-[0] text-[34px] leading-[36px] font-medium tracking-[-0.045em] tabular-nums;
+}
+.metric[data-quiet] dd {
+    @apply text-muted-foreground;
+}
+.footnote {
+    @apply mt-auto;
+}
+.rows {
+    @apply flex flex-col m-[0] p-[0];
+    list-style: none;
+}
+.row {
+    @apply flex items-center gap-[10px] text-[13px] leading-[18px] py-[7px] px-0;
+    border-top: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+.row[data-muted] {
+    @apply text-muted-foreground;
+}
+.rowText {
+    @apply flex-[1] min-w-[0];
+}
+.limitation {
+    @apply rounded-(--radius-item) py-[12px] px-[14px] bg-card bg-none;
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
+    @apply flex flex-col gap-[6px];
+}
+.limitation[data-unfinished] {
+    @apply bg-transparent bg-none;
+    box-shadow: none;
+    border: 1.5px dashed color-mix(in oklab, var(--foreground) 22%, transparent);
+    @apply text-muted-foreground;
+}
+.limitationHead {
+    @apply flex items-center gap-[8px];
+}
+.limitationText {
+    @apply text-[13.5px] leading-[19px];
+}

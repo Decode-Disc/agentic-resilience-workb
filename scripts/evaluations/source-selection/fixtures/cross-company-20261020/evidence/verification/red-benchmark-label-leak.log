@@ -1,0 +1,44 @@
+
+> agentic-resilience-evidence-workbench@ test /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+> TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run src/__tests__/benchmarks/source-quality-study.test.ts
+
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/benchmarks/source-quality-study.test.ts (16 tests | 1 failed) 3601ms
+   × keeps development and holdout labels out of production-adapter inputs 386ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/benchmarks/source-quality-study.test.ts > keeps development and holdout labels out of production-adapter inputs
+AssertionError: expected { id: 'adobe', cik: '1', …(4) } to deeply equal { cik: '1', …(2) }
+
+- Expected
++ Received
+
+  {
+    "cik": "1",
++   "id": "adobe",
+    "legalName": "Example adobe",
++   "split": "development",
+    "ticker": "ADOBE",
++   "websiteUrl": "https://example.com/",
+  }
+
+ ❯ src/__tests__/benchmarks/source-quality-study.test.ts:500:51
+    498|         for (const call of manifest.calls.filter((item: {task:string})…
+    499|             const expected = fixture.study.companies.find(company => c…
+    500|             expect(call.prepared.request.company).toEqual({cik:expecte…
+       |                                                   ^
+    501|         }
+    502|     } finally {rmSync(fixture.directory,{recursive:true,force:true});}
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+   Start at  22:49:30
+   Duration  5.58s (transform 564ms, setup 277ms, import 1.27s, tests 3.60s, environment 0ms)
+
+ ELIFECYCLE  Test failed. See above for more details.

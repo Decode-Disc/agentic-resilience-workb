@@ -1,0 +1,69 @@
+@reference "../../styles.css";
+
+.wrap {
+    @apply grid gap-[18px] max-w-[640px];
+}
+.angle {
+    @apply flex items-center gap-[10px] py-[11px] px-[14px] rounded-(--radius-item);
+    @apply bg-surface-glass bg-none;
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
+    @apply text-[14px] leading-[19px] text-foreground text-left cursor-pointer w-[100%] whitespace-nowrap;
+}
+.angle svg {
+    @apply shrink-0 text-brand-purple;
+}
+.identity {
+    @apply flex items-center gap-[8px] text-[13px] font-medium;
+}
+.user {
+    @apply self-end max-w-[80%] py-[12px] px-[16px];
+    border-radius: var(--radius-2xl) var(--radius-2xl) 6px var(--radius-2xl);
+    @apply bg-tint-ink bg-none text-[14.5px] leading-[21px];
+}
+.option {
+    @apply rounded-(--radius-tile);
+    @apply bg-card bg-none;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 14%, transparent);
+    @apply text-[13.5px] font-medium text-foreground inline-flex items-center justify-center gap-[7px] cursor-pointer text-center whitespace-nowrap;
+}
+.option[aria-pressed="true"] {
+    box-shadow:
+        inset 0 0 0 1.5px var(--brand-purple),
+        0 0 0 3px color-mix(in oklab, var(--brand-purple) 16%, transparent);
+    background: color-mix(in oklab, var(--brand-purple) 7%, var(--card));
+}
+.reply {
+    @apply inline-flex items-center justify-center gap-1.5 h-[34px] py-0 px-[14px] rounded-(--radius-full);
+    @apply bg-card bg-none;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 14%, transparent);
+    @apply text-[13.5px] font-medium text-foreground cursor-pointer text-center whitespace-nowrap;
+}
+.row {
+    @apply flex flex-wrap gap-[8px] items-center;
+}
+
+.suggestions {
+    @apply flex flex-col gap-[10px];
+}
+
+.suggestionLabel {
+    @apply pl-[4px];
+}
+
+.request {
+    @apply flex flex-col gap-[12px];
+}
+
+.signature {
+    @apply tracking-[-.08em];
+}
+
+.requestText {
+    @apply text-[14.5px] leading-[21px];
+}
+
+.replyInput {
+    @apply flex-[1];
+}

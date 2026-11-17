@@ -1,0 +1,37 @@
+/* A page declares its layout; the shell owns its geometry and backdrop. */
+.surface:has([data-workbench-layout="viewport"]) {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    background-color: var(--card);
+    background-image: none;
+}
+
+.surface:has([data-workbench-layout="viewport"]) > [data-slot="workbench-grid"],
+.surface:has([data-workbench-layout="viewport"])
+    > .body
+    > [data-slot="bg-image-texture"] {
+    display: none;
+}
+
+.surface:has([data-workbench-layout="viewport"]) > .body,
+.surface:has([data-workbench-layout="viewport"]) > .body > .content {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+}
+
+.surface:has([data-workbench-layout="viewport"]) > .body > .content {
+    flex: 1;
+}
+
+.surface:has([data-workbench-layout="viewport"]) .main {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    flex-direction: column;
+    padding-block: 0;
+}

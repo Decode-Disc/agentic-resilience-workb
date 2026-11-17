@@ -1,18 +1,19 @@
 /**
- * Shared z-index scale for app chrome and inbox layering.
+ * Owns the named global stacking levels for application surfaces.
  */
 export const uiLayerOrder = {
     /** Full-page overlay (e.g. reload feedback) must sit above everything. */
-    pageOverlay: 49,
-    modal: 44,
+    pageOverlay: 999,
+    notification: 900,
+    contextPanel: 46,
+    popup: 60,
+    modalContent: 51,
+    modal: 50,
     expandableScreen: 43,
+    workbenchShellHeader: 30,
 
-    /**
-     * Radix portalled overlays (dialog, sheet, dropdown, select, tooltip,
-     * popover) must sit above the fullscreen inbox so they remain usable
-     * when triggered from inside the panel.
-     */
     stackedDialog: 38,
+    navigationRail: 35,
 } as const;
 
 /**

@@ -1,0 +1,249 @@
+@reference "../../styles.css";
+
+.panel {
+    @apply rounded-[24px] pt-[20px] px-[22px] pb-[14px] flex flex-col gap-[8px] min-w-[0];
+    container-type: inline-size;
+}
+.head {
+    @apply flex items-baseline justify-between flex-wrap gap-y-[6px] gap-x-[24px] pb-[6px];
+}
+.head h2 {
+    @apply m-[0] text-[16px] font-semibold tracking-[-0.02em] leading-[24px];
+}
+.lens {
+    @apply m-[0] flex-[1] min-w-[0] flex justify-end;
+}
+.lensLine {
+    @apply inline-flex flex-wrap items-baseline justify-end gap-y-[2px] gap-x-[8px] text-right text-[13.5px] leading-[20px];
+}
+.lensLine[data-active] {
+    animation: lens-in 0.24s var(--wb-ease-arrive);
+}
+@keyframes lens-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+}
+.lensLine b {
+    @apply font-mono text-[12px] font-medium text-accent-foreground;
+}
+.lens[hidden] {
+    @apply hidden;
+}
+.hint {
+    @apply text-[13px] text-muted-foreground;
+}
+
+.table {
+    @apply w-[100%] table-fixed border-separate border-spacing-0 text-left;
+}
+.questionCol {
+    @apply w-[60px];
+}
+.outcomeCol {
+    @apply w-[224px];
+}
+.table th,
+.table td {
+    @apply align-middle;
+}
+.needHead,
+.outcomeHead {
+    @apply pb-[10px] font-normal;
+}
+.outcomeHead {
+    @apply pl-[16px];
+}
+.questionHead {
+    @apply pb-[10px] text-center font-normal;
+    transition: background-color 0.16s ease-out;
+}
+.question {
+    all: unset;
+    @apply relative isolate inline-flex items-center justify-center h-[28px] min-w-[36px] px-[8px] rounded-[999px] font-mono text-[12px] font-medium text-muted-foreground cursor-pointer;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--foreground) 12%, transparent);
+    transition: color 0.15s ease-out;
+}
+.question:hover,
+.question[aria-pressed="true"] {
+    @apply text-foreground;
+}
+.question:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+/* Glides to the chosen question, like the reader's question filter. */
+.questionMarker {
+    @apply absolute inset-0 -z-[1] rounded-[inherit] bg-card bg-none;
+    box-shadow:
+        inset 0 0 0 1px
+        color-mix(in oklab, var(--brand-purple) 45%, transparent),
+        0 4px 10px -6px
+        color-mix(in oklab, var(--brand-purple) 50%, transparent);
+}
+
+.row th,
+.row td {
+    @apply py-[13px];
+    border-top: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent);
+    transition:
+        opacity 0.2s var(--wb-ease-arrive),
+        background-color 0.16s ease-out;
+}
+/* Needs that do not serve the question in view recede without disappearing. */
+.row[data-dim] th,
+.row[data-dim] td {
+    @apply opacity-[0.36];
+}
+.need {
+    @apply pr-[16px] font-normal;
+}
+.needLabel {
+    @apply block text-[14px] font-medium leading-[20px];
+}
+.detail {
+    @apply block mt-[3px] text-[12.5px] leading-[18px] text-muted-foreground;
+}
+.action {
+    @apply flex mt-[8px];
+}
+.inlineOutcome {
+    @apply hidden;
+}
+.cell {
+    @apply text-center;
+}
+/* Dashed rules keep each question's column legible down the whole table. */
+.questionHead,
+.cell,
+.context {
+    border-left: 1px dashed
+        color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+.questionHead[data-edge],
+.cell[data-edge],
+.context {
+    border-right: 1px dashed
+        color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+.cell[data-lens],
+.questionHead[data-lens] {
+    background: color-mix(in oklab, var(--brand-purple) 6%, transparent);
+}
+.context {
+    @apply text-center;
+}
+.outcome {
+    @apply pl-[16px];
+}
+.prepared {
+    @apply inline-flex flex-wrap items-center gap-[6px];
+}
+
+.mark {
+    @apply inline-block align-middle size-[12px] rounded-[50%];
+    transition: scale 0.22s var(--wb-ease-arrive);
+}
+.mark[data-outcome="prepared"] {
+    @apply bg-brand-purple bg-none;
+}
+.mark[data-outcome="gap"] {
+    box-shadow: inset 0 0 0 2px var(--review-foreground);
+}
+.mark[data-outcome="unfinished"] {
+    border: 1.5px dashed var(--muted-foreground);
+}
+/* Half filled: material is arriving, the outcome is not settled yet. */
+.mark[data-outcome="in_progress"] {
+    background: linear-gradient(
+        90deg,
+        var(--brand-purple) 50%,
+        transparent 50%
+    );
+    box-shadow: inset 0 0 0 1.5px var(--brand-purple);
+}
+.cell[data-lens] .mark {
+    scale: 1.25;
+}
+.markButton {
+    all: unset;
+    @apply inline-flex size-[28px] items-center justify-center rounded-[999px] cursor-help;
+    transition: background-color 0.15s ease-out;
+}
+.markButton:hover,
+.markButton[data-popup-open] {
+    @apply bg-foreground/6 bg-none;
+}
+.markButton:hover .mark,
+.markButton[data-popup-open] .mark {
+    scale: 1.25;
+}
+.tip {
+    @apply flex flex-col gap-[4px];
+}
+.tipNeed {
+    @apply font-semibold;
+}
+.tipOutcome {
+    @apply inline-flex items-center gap-[7px] text-muted-foreground;
+}
+
+.legend {
+    @apply flex flex-wrap gap-y-[6px] gap-x-[18px] pt-[12px] text-[12.5px] text-muted-foreground;
+    border-top: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent);
+}
+.legendItem {
+    @apply inline-flex items-center gap-[7px];
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lensLine[data-active] {
+        animation-name: lens-fade;
+    }
+    .mark {
+        transition: none;
+    }
+    .cell[data-lens] .mark {
+        scale: 1;
+    }
+}
+
+/* Narrow panels keep every question column; the outcome moves under the need. */
+@container (max-width: 620px) {
+    .panel {
+        @apply px-[14px];
+    }
+    .head {
+        @apply flex-col;
+    }
+    .lens {
+        @apply w-[100%] justify-items-start;
+    }
+    .lensLine {
+        @apply justify-start text-left;
+    }
+    .questionCol {
+        @apply w-[40px];
+    }
+    .outcomeCol,
+    .outcomeHead,
+    .outcome {
+        @apply hidden;
+    }
+    .question {
+        @apply min-w-[32px] px-[4px];
+    }
+    .inlineOutcome {
+        @apply flex mt-[6px];
+    }
+    .need {
+        @apply pr-[8px];
+    }
+}
+@keyframes lens-fade {
+    from {
+        opacity: 0;
+    }
+}

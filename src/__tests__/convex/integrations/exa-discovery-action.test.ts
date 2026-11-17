@@ -17,10 +17,17 @@ vi.mock("exa-js", () => ({
 }));
 
 vi.mock("node:dns/promises", async (importOriginal) => {
-    const dns = await importOriginal<typeof import("node:dns/promises")>();
+    const actual = await importOriginal<typeof import("node:dns/promises")>();
+    const lookupMock = vi.fn(async () => [
+        { address: "93.184.216.34", family: 4 },
+    ]);
     return {
-        ...dns,
-        lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
+        ...actual,
+        default: {
+            ...((actual as any).default ?? {}),
+            lookup: lookupMock,
+        },
+        lookup: lookupMock,
     };
 });
 
@@ -52,6 +59,7 @@ async function createDiscoveryFixture(t: ReturnType<typeof convexTest>) {
             canonicalizedAt: 1,
         });
         const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
             companyId,
             lifecycleState: "discovering_sources",
             executionStatus: "running",
@@ -71,7 +79,7 @@ async function createDiscoveryFixture(t: ReturnType<typeof convexTest>) {
         });
         await ctx.db.insert("researchPlans", {
             runId,
-            version: 1,
+            version: 2,
             coveragePreset: "balanced",
             queries: [
                 {
@@ -90,6 +98,10 @@ test("does not retry Exa after cancellation invalidates an in-flight result", as
     process.env.EXA_API_KEY = "test-key";
     const t = convexTest(schema, modules);
     const { runId } = await createDiscoveryFixture(t);
+    let enterSearch!: () => void;
+    const searchStarted = new Promise<void>((resolve) => {
+        enterSearch = resolve;
+    });
     let releaseSearch:
         | ((value: {
               results: Array<{
@@ -103,11 +115,13 @@ test("does not retry Exa after cancellation invalidates an in-flight result", as
         () =>
             new Promise((resolve) => {
                 releaseSearch = resolve;
+                enterSearch();
             }),
     );
 
     const discovery = t.action(discoverForRun, { runId });
-    await vi.waitFor(() => expect(exaSearch).toHaveBeenCalledOnce());
+    await searchStarted;
+    expect(exaSearch).toHaveBeenCalledOnce();
     await t.run((ctx) =>
         ctx.db.patch(runId, {
             executionStatus: "cancelled",
@@ -169,6 +183,14 @@ test("persists valid Exa candidates and records a partial provider result", asyn
         total: 1,
     });
     expect(exaSearch).toHaveBeenCalledOnce();
+    await expect(
+        t.run((ctx) => ctx.db.query("sources").collect()),
+    ).resolves.toEqual([
+        expect.objectContaining({
+            providerResultPosition: 0,
+            discoveryQueryIndex: 0,
+        }),
+    ]);
     await expect(
         t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).resolves.toEqual([

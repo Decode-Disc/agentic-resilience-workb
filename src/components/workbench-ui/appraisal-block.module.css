@@ -1,0 +1,107 @@
+@reference "../../styles.css";
+
+.appraisal {
+    --appraisal-padding: 30px;
+    @apply max-w-[760px] rounded-(--radius-3xl) py-[28px] px-[30px] flex flex-col gap-[22px];
+}
+.header {
+    @apply flex justify-between items-center flex-wrap gap-[10px];
+}
+.interpretationPanel {
+    @apply py-[20px] px-[22px] rounded-(--radius-xl) bg-tint-violet bg-none;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--brand-purple) 22%, transparent);
+    @apply flex flex-col gap-[14px];
+}
+.bars {
+    @apply flex gap-[4px];
+}
+.bars i {
+    @apply w-[28px] h-[6px] rounded-[3px] bg-brand-purple/20 bg-none;
+}
+.bars i.activeBar {
+    @apply bg-brand-purple bg-none;
+}
+.row {
+    @apply flex gap-[16px] items-start py-[14px] px-0;
+    border-top: 1px solid var(--divider);
+}
+.evidenceTextGroup {
+    @apply text-[14.5px] leading-[21px];
+}
+.unknown {
+    @apply rounded-(--radius-xl) py-[16px] px-[18px];
+    border: 1.5px dashed color-mix(in oklab, var(--foreground) 22%, transparent);
+    @apply flex items-center gap-[14px];
+}
+.unknownText {
+    @apply shrink-0 w-[38px] h-[38px] rounded-(--radius-full);
+    border: 1.5px dashed color-mix(in oklab, var(--foreground) 35%, transparent);
+    @apply inline-flex items-center justify-center text-muted-foreground text-[17px] font-medium;
+}
+.footer {
+    margin: 2px calc(-1 * var(--appraisal-padding)) -28px;
+    @apply py-[20px] px-(--appraisal-padding);
+    border-top: 1px solid var(--divider);
+    border-radius: 0 0 var(--radius-3xl) var(--radius-3xl);
+    @apply bg-fill-quiet bg-none flex items-center justify-between flex-wrap gap-[20px];
+}
+.control {
+    @apply flex flex-col items-start gap-[6px];
+}
+.actions {
+    @apply flex gap-[10px];
+}
+@media (max-width: 640px) {
+    .appraisal {
+        --appraisal-padding: 20px;
+        @apply px-(--appraisal-padding);
+    }
+    .actions {
+        @apply w-[100%] flex-col;
+    }
+}
+
+.accentLabel {
+    @apply text-accent-foreground;
+}
+
+.statusDot {
+    @apply w-[7px] h-[7px];
+}
+
+.interpretation {
+    @apply text-[19px] leading-[28px] font-medium tracking-[-.015em];
+}
+
+.confidence {
+    @apply flex items-center gap-[14px] flex-wrap;
+}
+
+.confidenceDetail {
+    @apply text-[13px] text-muted-foreground;
+}
+
+.sectionLabel {
+    @apply block pb-[6px];
+}
+
+.evidenceText {
+    @apply flex-[1] flex flex-col gap-[5px];
+}
+
+.claimGlyph {
+    @apply w-[8px] h-[8px];
+}
+
+.controlText {
+    @apply flex-[1] flex flex-col gap-[3px];
+}
+
+.controlTitle {
+    @apply text-[16px] leading-[22px] font-medium;
+}
+
+.controlStatus {
+    @apply text-right;
+}
