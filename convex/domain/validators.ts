@@ -163,3 +163,22 @@ export const runPauseReasonValidator = v.union(
     v.literal("execution_interrupted"),
     v.literal("sources_time_limit"),
 );
+
+export const sourcesPhaseValidator = v.union(
+    v.literal("collecting"),
+    v.literal("waiting"),
+    v.literal("paused"),
+    v.literal("time_limit"),
+    v.literal("completed"),
+    v.literal("completed_with_limits"),
+    v.literal("ended_without_material"),
+    v.literal("interrupted"),
+    v.literal("failed"),
+    v.literal("insufficient_evidence"),
+);
+
+export const preparedMaterialOutcomeValidator = v.union(
+    v.literal("complete"),
+    v.literal("partial"),
+    v.literal("blocked"),
+);

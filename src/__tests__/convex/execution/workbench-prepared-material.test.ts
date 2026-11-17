@@ -392,7 +392,7 @@ test("workspace and Workbench context expose the completed Sources mission indep
     assert(context.kind === "ready");
     expect(
         JSON.parse(context.inputJson).domain.documentaryPreparation,
-    ).toMatchObject({ missionStatus: "completed" });
+    ).toMatchObject({ executionStop: null, result: { outcome: "blocked" } });
 });
 
 test.each([

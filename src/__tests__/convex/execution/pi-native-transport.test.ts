@@ -1734,3 +1734,140 @@ test.each([
     expect(requests).toHaveLength(2);
     expect(JSON.stringify(requests[1]?.messages)).toContain(summary.trim());
 }, 30000);
+
+test("a fresh native turn preserves the real stop over a historical time-limit explanation", async () => {
+    const { seedResearchStateScenario } = await import(
+        "@/__tests__/setup/research-state"
+    );
+    const { readResearchState } = await import("@convex/domain/researchState");
+    vi.stubEnv("OPENROUTER_API_KEY", "offline-research-state-fixture");
+    vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
+    const requests: Array<{
+        messages: Array<{ role: string; content: unknown }>;
+    }> = [];
+    const network = vi.fn<typeof fetch>(async (_url, init) => {
+        requests.push(JSON.parse(String(init?.body)));
+        if (requests.length === 1)
+            return new Response(
+                `data: ${JSON.stringify({ id: "research-consultation", choices: [{ index: 0, delta: { role: "assistant", tool_calls: [{ index: 0, id: "consult-current-state", type: "function", function: { name: "consult_run_state", arguments: "{}" } }] }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], usage: { prompt_tokens: 10, completion_tokens: 5 } })}\n\ndata: [DONE]\n\n`,
+                { headers: { "content-type": "text/event-stream" } },
+            );
+        if (requests.length > 2)
+            throw new Error("Unexpected additional provider request");
+        return reply(
+            "Sources preparation ended with partial material. The Sources Agent's model response could not be used. Four retained documents are distinct from five consultable captures. The economic investigation remains unfinished.",
+        );
+    });
+    vi.stubGlobal("fetch", network);
+    const f = await seedResearchStateScenario(
+        {
+            outcome: "partial",
+            blockCode: "invalid_output",
+            historicalTimeLimitNote: true,
+            retainedDocumentCount: 4,
+            capturedDocumentCount: 5,
+        },
+        { route: nativePiFixtureRoute },
+    );
+    const before = await f.t.run(async (ctx) => ({
+        run: await ctx.db.get(f.runId),
+        preparation: await ctx.db.get(f.preparationId),
+        observation: await ctx.db.get(f.observationId),
+        sourceMission: await ctx.db.get(f.missionId),
+    }));
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(requests).toHaveLength(2);
+    const system = requests[0]?.messages.find(
+        (message) => message.role === "system",
+    )?.content;
+    expect(typeof system).toBe("string");
+    const text = String(system);
+    const state = JSON.parse(
+        text.slice(text.indexOf("\n") + 1, text.indexOf("\n\n<instructions>")),
+    );
+    expect(state.domain.research).toMatchObject({
+        status: "idle",
+        sources: {
+            outcome: "partial",
+            executionStop: {
+                blockCode: "invalid_output",
+                missionId: f.missionId,
+            },
+            retainedDocuments: f.sourceIds.slice(0, 4).map((sourceId, i) => ({
+                sourceId,
+                title:
+                    i === 0
+                        ? "Workflow products"
+                        : `Retained workflow document ${i + 1}`,
+            })),
+        },
+        actions: {
+            resume: { applicable: false },
+            usePrepared: { applicable: false },
+        },
+    });
+    expect(state.domain.availableMaterials).toHaveLength(5);
+    const after = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        if (!run) throw new Error("Missing run");
+        return {
+            run,
+            preparation: await ctx.db.get(f.preparationId),
+            observation: await ctx.db.get(f.observationId),
+            sourceMission: await ctx.db.get(f.missionId),
+            research: await readResearchState(ctx, run),
+            operations: await ctx.db
+                .query("agentOperationRequests")
+                .withIndex("by_mission", (q) =>
+                    q.eq("missionId", f.workbenchMissionId),
+                )
+                .collect(),
+            calls: await ctx.db.query("providerCalls").collect(),
+            messages: await ctx.db
+                .query("agentMessageDeliveries")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .collect(),
+        };
+    });
+    const consultation = after.operations.find(
+        (request) => request.input.kind === "consult_run_state",
+    );
+    expect(consultation).toMatchObject({
+        operationVersion: 2,
+        status: "completed",
+        outcome: { kind: "success" },
+    });
+    if (consultation?.outcome?.kind !== "success")
+        throw new Error("Missing retained consultation");
+    expect(JSON.parse(consultation.outcome.valueJson).research).toEqual(
+        after.research,
+    );
+    const {
+        sourcePreparationBudget: beforeBudget,
+        sourceQualificationAttemptCount: beforeAttempts,
+        ...beforeAuthority
+    } = before.run ?? {};
+    const {
+        sourcePreparationBudget: afterBudget,
+        sourceQualificationAttemptCount: afterAttempts,
+        ...afterAuthority
+    } = after.run;
+    expect(afterAuthority).toEqual(beforeAuthority);
+    expect(afterBudget).toEqual({
+        ...beforeBudget,
+        dispatches: (beforeBudget?.dispatches ?? 0) + 2,
+        work: (beforeBudget?.work ?? 0) + 2,
+    });
+    expect(afterAttempts).toBe((beforeAttempts ?? 0) + 2);
+    expect(after.preparation).toEqual(before.preparation);
+    expect(after.observation).toEqual(before.observation);
+    expect(after.sourceMission).toEqual(before.sourceMission);
+    expect(after.calls).toHaveLength(2);
+    expect(after.calls.every((call) => call.status === "succeeded")).toBe(true);
+    expect(
+        after.messages.filter((message) => message.role === "assistant"),
+    ).toHaveLength(1);
+});

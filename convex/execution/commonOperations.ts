@@ -1,4 +1,5 @@
 import { internal } from "@convex/_generated/api";
+import { readResearchState } from "@convex/domain/researchState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { v } from "convex/values";
 import { z } from "zod";
@@ -73,9 +74,9 @@ export const consultRunStateOperation: Extract<
 > = {
     effectKind: "read",
     nativeAuthority: "dossier",
-    version: 1,
+    version: 2,
     description:
-        "Consult the authorized dossier's persisted lifecycle without starting work.",
+        "Consult the authorized dossier's persisted research progress, stops and available actions without starting work.",
     inputValidator: consultRunStateInputValidator,
     resultValidator: operationResultValidator(runStateResultValidator),
     identity: operationReuseIdentity,
@@ -92,7 +93,7 @@ export const consultRunStateOperation: Extract<
                               lifecycle: run.lifecycleState,
                               status: run.executionStatus,
                               generation: run.executionGeneration,
-                              updatedAt: run.updatedAt,
+                              research: await readResearchState(ctx, run),
                           }),
                       ),
                   },

@@ -16,6 +16,7 @@ import {
     completeResponseControl,
     responseControlContext,
 } from "@convex/responseControl";
+import { readResearchState } from "./researchState";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
 import { sha256Hex } from "./sourcePassages";
 import { nativeWorkbenchOperations } from "./workbenchAgentOperations";
@@ -197,7 +198,7 @@ const workbenchResponseGuidance = [
     "The saved framing bounds authorized research; it does not prescribe the structure of every conversational answer. Organize the explanation around the active analyst request and preserve its distinctions, participant roles and relationship directions. Only current framing describes what is saved in the research program. Distinguish a hypothesis retained in conversation from content actually present in that framing. Related wording in a question or rationale does not establish that a specific explanation is saved. Describe a completed change only from its confirmed result; current framing remains authoritative for what is saved now.",
     "When explaining documentary material, distinguish the source's reported statement, your interpretation and what remains unestablished for the analyst's question. Keep the statement's subject, participants and period exact; a related relationship or time measure does not establish the consequences of the change being examined. Within the supplied permissions and restrictions, saved passages may support an attributed conversational explanation even when no controlled contribution exists. Explain the unfinished work; quoting or interpreting a passage does not complete documentary control or create a controlled dossier artifact.",
     "Verify historical authorship against original messages and their roles, not an assistant acknowledgment or summary attribution. When only a summary is available, use consult_conversation before attributing a historical idea. If the relevant original cannot be verified, say the attribution is unconfirmed; preserve any independently known current direction.",
-    "Use the exact wording of domain.research.summary when stating the current research status; explanations may follow. Preserve its distinctions between not started, running, pause requested, effective pause, pending review and terminal states. Current required state overrides older conversation wording or a compacted summary.",
+    "Use domain.research.status, retained Sources outcome, executionStop and action applicability as current authority; domain.research.summary is readable guidance. Preparation completion is not completion of the economic investigation. Current structured stop facts override historical explanations; an earlier window may separately have expired. Distinguish retained documents from consultable captures. Never infer membership or a stop cause from older prose.",
 ];
 
 /** Workbench owns its method; execution owns instruction placement and current state. */
@@ -379,35 +380,44 @@ export const workbenchDefinition: AgentDefinition & {
             .take(MAX_WORKBENCH_TURN_OPERATIONS + 1);
         if (requests.length > MAX_WORKBENCH_TURN_OPERATIONS)
             return { kind: "blocked", code: "context_capacity" };
-        const confirmations = commands.map(({ message, action }) => {
-            const targetApprovalAction =
-                action === "pause"
-                    ? "pause_research"
-                    : action === "resume"
-                      ? "resume_research"
-                      : undefined;
-            const executed = requests.some((request) => {
-                if (request.input.kind === "control_research")
-                    return (
-                        request.input.messageId === message.messageId &&
-                        request.input.action === action &&
-                        request.outcome?.kind === "success" &&
-                        !request.adoptionRefusalCode
-                    );
-                if (
-                    targetApprovalAction === undefined ||
-                    request.input.kind !== "request_approval" ||
-                    request.input.messageId !== message.messageId
-                )
-                    return false;
-                const result = requestApprovalResult(request);
-                return (
-                    result?.status === "applied" &&
-                    result.action === targetApprovalAction
-                );
-            });
-            return researchControlConfirmation(action, executed, run);
-        });
+        const research = commands.length
+            ? await readResearchState(ctx, run)
+            : null;
+        const confirmations = research
+            ? commands.map(({ message, action }) => {
+                  const targetApprovalAction =
+                      action === "pause"
+                          ? "pause_research"
+                          : action === "resume"
+                            ? "resume_research"
+                            : undefined;
+                  const executed = requests.some((request) => {
+                      if (request.input.kind === "control_research")
+                          return (
+                              request.input.messageId === message.messageId &&
+                              request.input.action === action &&
+                              request.outcome?.kind === "success" &&
+                              !request.adoptionRefusalCode
+                          );
+                      if (
+                          targetApprovalAction === undefined ||
+                          request.input.kind !== "request_approval" ||
+                          request.input.messageId !== message.messageId
+                      )
+                          return false;
+                      const result = requestApprovalResult(request);
+                      return (
+                          result?.status === "applied" &&
+                          result.action === targetApprovalAction
+                      );
+                  });
+                  return researchControlConfirmation(
+                      action,
+                      executed,
+                      research,
+                  );
+              })
+            : [];
         const framingReceipt = await framingFailureReceipt(ctx, requests);
         if (framingReceipt) confirmations.push(framingReceipt);
         for (const request of requests) {

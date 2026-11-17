@@ -2,25 +2,16 @@ import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import type { AgentDefinition } from "@convex/execution/agentDefinition";
-import { readApprovalFacts } from "@convex/execution/approvals";
 import { executionFailureCode } from "@convex/execution/errors";
-import {
-    readResearchControlReadiness,
-    researchStateSummary,
-} from "@convex/execution/researchControl";
-import {
-    researchQuestionCapacity,
-    researchStartBlock,
-} from "./framingEditAuthority";
+import { researchQuestionCapacity } from "./framingEditAuthority";
+import { formatResearchSummary, readResearchState } from "./researchState";
 import { requireSavedMaterialScope } from "./savedMaterialInspection";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
 import {
     controlledSourcesContributions,
-    readSourcesMission,
     summarizeSourcesPreparation,
 } from "./sources";
-import { supportsResearchControl } from "./transitions";
 import {
     projectWorkbenchInstructions,
     readWorkbenchInstructions,
@@ -75,47 +66,12 @@ export async function readWorkbenchFacts(
             availableMaterials = [];
         }
     }
-    const visitor = run.ownerVisitorId
-        ? await ctx.db.get(run.ownerVisitorId)
-        : null;
-    const startBlock = visitor
-        ? await researchStartBlock(ctx, run, framing, visitor)
-        : "not_authorized";
-    const { block: pauseBlock } = await readResearchControlReadiness(
-        ctx,
-        run,
-        "pause",
-    );
-    const { block: resumeBlock } = await readResearchControlReadiness(
-        ctx,
-        run,
-        "resume",
-    );
-    const actions = {
-        start: {
-            actor: "analyst_only",
-            applicable: startBlock === null,
-            reason: startBlock,
-        },
-        pause: {
-            actor: "analyst_or_authorized_workbench",
-            applicable: pauseBlock === null,
-            reason: pauseBlock,
-        },
-        resume: {
-            actor: "analyst_or_authorized_workbench",
-            applicable: resumeBlock === null,
-            reason: resumeBlock,
-        },
-    };
+    const research = await readResearchState(ctx, run);
     const instructions = await readWorkbenchInstructions(ctx, run._id);
     const preparation =
         run.sourcesProtocol === "sources_mission_v1" && run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
-    const sourcesMission = preparation
-        ? await readSourcesMission(ctx, run)
-        : null;
     const context = {
         company: run.companySnapshot ?? null,
         originalRequest: run.researchAngle ?? null,
@@ -128,21 +84,7 @@ export async function readWorkbenchFacts(
                   questionCapacity: await researchQuestionCapacity(ctx, run),
               }
             : null,
-        research: {
-            summary: researchStateSummary(run),
-            started: !!(
-                run.researchStartRequestKey ||
-                run.researchStartedAt ||
-                run.fixedFramingRevisionId
-            ),
-            actions,
-            approvals: await readApprovalFacts(ctx, run),
-            phase: run.lifecycleState,
-            controlAvailable: supportsResearchControl(run),
-            status: run.executionStatus,
-            pauseReason: run.pauseReason ?? null,
-            pauseRequested: run.researchPauseRequested ?? false,
-        },
+        research: { ...research, summary: formatResearchSummary(research) },
         availableMaterials: availableMaterials.map((material) => ({
             ...material,
             capture:
@@ -156,7 +98,7 @@ export async function readWorkbenchFacts(
                   documentaryPreparation: {
                       ...summarizeSourcesPreparation(
                           preparation,
-                          sourcesMission?.status,
+                          research.sources,
                       ),
                       controlledContributions:
                           await controlledSourcesContributions(

@@ -39,8 +39,12 @@ test("a slash command records the actual unstarted status without a response mis
     });
     expect(result).toMatchObject({
         outcome: "refused",
-        text: "Research has not started. Review the research program and choose Start research when ready.",
+        text: "Research has not started.",
     });
+    expect(
+        (await client.query(api.workbench.snapshot, { runId })).research.actions
+            .start.applicable,
+    ).toBe(false);
     const page = await client.query(api.execution.conversations.listMessages, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },

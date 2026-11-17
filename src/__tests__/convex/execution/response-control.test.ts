@@ -1598,3 +1598,120 @@ test.each([
         expect(check.factsJson).not.toContain("exactQuote");
     }
 });
+
+test("closed status verdict does not depend on summary wording", async () => {
+    const { conflictsWithResearchStatus } = await import(
+        "@convex/domain/workbenchResponseControlContracts"
+    );
+    expect(
+        conflictsWithResearchStatus("Research is running.", {
+            lifecycleState: "framing",
+            executionStatus: "running",
+        }),
+    ).toBe(false);
+    expect(
+        conflictsWithResearchStatus("Research has not started.", {
+            lifecycleState: "framing",
+            executionStatus: "running",
+        }),
+    ).toBe(true);
+    expect(
+        conflictsWithResearchStatus("Research is complete.", {
+            lifecycleState: "sources_prepared",
+            executionStatus: "idle",
+        }),
+    ).toBe(true);
+    expect(
+        conflictsWithResearchStatus(
+            "> Research is complete.\n```\nResearch is complete.\n```",
+            { lifecycleState: "sources_prepared", executionStatus: "idle" },
+        ),
+    ).toBe(false);
+});
+
+test("disabled advisory control preserves factual status correction without extra paid work", async () => {
+    const { seedResearchStateScenario } = await import(
+        "@/__tests__/setup/research-state"
+    );
+    const f = await seedResearchStateScenario(
+        {
+            outcome: "partial",
+            blockCode: "invalid_output",
+            retainedDocumentCount: 1,
+            capturedDocumentCount: 1,
+        },
+        { simulation: true },
+    );
+    const initial = await f.t.run(async (ctx) => ({
+        preparation: await ctx.db.get(f.preparationId),
+        calls: await ctx.db.query("providerCalls").collect(),
+        requests: await ctx.db.query("agentOperationRequests").collect(),
+    }));
+    const begin = async (taskKey: string) =>
+        f.t.mutation(internal.execution.invocations.begin, {
+            missionId: f.workbenchMissionId,
+            expectedGeneration: 1,
+            taskKey,
+            provenance: "simulation",
+            nativeInput: await workbenchAdmissionInput(
+                f.t,
+                f.workbenchMissionId,
+                1,
+            ),
+        });
+    const admitted = await begin("prepared-status-draft");
+    assert(admitted.kind === "ready");
+    expect(
+        await f.t.mutation(internal.execution.invocations.finish, {
+            invocationId: admitted.invocationId,
+            expectedGeneration: 1,
+            response: { kind: "complete", text: "Research is complete." },
+        }),
+    ).toMatchObject({ kind: "blocked", code: "mission_context_changed" });
+    const context = await f.t.query(internal.execution.context.build, {
+        missionId: f.workbenchMissionId,
+        expectedGeneration: 1,
+    });
+    assert(context.kind === "ready");
+    const input = JSON.parse(context.inputJson);
+    expect(input.domain.research.sources.outcome).toBe("partial");
+    expect(input.domain.responseControl.policy.enabled).toBe(false);
+    expect(input.constraints.operations).toEqual([]);
+    const corrected = await begin("prepared-status-correction");
+    assert(corrected.kind === "ready");
+    expect(
+        await f.t.mutation(internal.execution.invocations.finish, {
+            invocationId: corrected.invocationId,
+            expectedGeneration: 1,
+            response: {
+                kind: "complete",
+                text: "Sources preparation ended with partial material. The economic investigation remains unfinished.",
+            },
+        }),
+    ).toMatchObject({ kind: "completed" });
+    const after = await f.t.run(async (ctx) => ({
+        preparation: await ctx.db.get(f.preparationId),
+        calls: await ctx.db.query("providerCalls").collect(),
+        requests: await ctx.db.query("agentOperationRequests").collect(),
+        messages: await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .collect(),
+    }));
+    expect(after.preparation).toEqual(initial.preparation);
+    expect(after.calls).toEqual(initial.calls);
+    expect(after.requests).toEqual(initial.requests);
+    const messages = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.execution.conversations.listMessages, {
+            runId: f.runId,
+            paginationOpts: { numItems: 20, cursor: null },
+        });
+    expect(messages.page.filter((m) => m.role === "assistant")).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                text: "Sources preparation ended with partial material. The economic investigation remains unfinished.",
+            }),
+        ]),
+    );
+});

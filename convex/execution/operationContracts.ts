@@ -1,3 +1,4 @@
+import { researchStateValidator } from "@convex/domain/researchStateContracts";
 import {
     executionStatusValidator,
     researchRunLifecycleValidator,
@@ -146,11 +147,17 @@ export const completionFeedbackValidator = v.object({
     issues: v.array(validationFeedbackValidator),
 });
 
-export const runStateResultValidator = v.object({
+const legacyRunStateResultValidator = v.object({
     lifecycleState: researchRunLifecycleValidator,
     executionStatus: executionStatusValidator,
     executionGeneration: v.number(),
 });
+export const currentRunStateResultValidator =
+    legacyRunStateResultValidator.extend({ research: researchStateValidator });
+export const runStateResultValidator = v.union(
+    currentRunStateResultValidator,
+    legacyRunStateResultValidator,
+);
 type FeedbackSchema = Validator<unknown, "required" | "optional", string>;
 
 /** Error paths locate the canonical type; received prototype names are not expected types. */

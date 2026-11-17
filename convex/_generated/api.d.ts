@@ -47,6 +47,8 @@ import type * as domain_providerAvailability from "../domain/providerAvailabilit
 import type * as domain_publicSourceUrl from "../domain/publicSourceUrl.js";
 import type * as domain_researchContext from "../domain/researchContext.js";
 import type * as domain_researchPlan from "../domain/researchPlan.js";
+import type * as domain_researchState from "../domain/researchState.js";
+import type * as domain_researchStateContracts from "../domain/researchStateContracts.js";
 import type * as domain_runCancellation from "../domain/runCancellation.js";
 import type * as domain_runPurpose from "../domain/runPurpose.js";
 import type * as domain_runWithdrawal from "../domain/runWithdrawal.js";
@@ -252,6 +254,8 @@ declare const fullApi: ApiFromModules<{
   "domain/publicSourceUrl": typeof domain_publicSourceUrl;
   "domain/researchContext": typeof domain_researchContext;
   "domain/researchPlan": typeof domain_researchPlan;
+  "domain/researchState": typeof domain_researchState;
+  "domain/researchStateContracts": typeof domain_researchStateContracts;
   "domain/runCancellation": typeof domain_runCancellation;
   "domain/runPurpose": typeof domain_runPurpose;
   "domain/runWithdrawal": typeof domain_runWithdrawal;

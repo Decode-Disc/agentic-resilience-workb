@@ -6,12 +6,12 @@ import { recordContextObservation } from "@convex/execution/journal";
 import { suspendInterruptedResearch } from "@convex/execution/researchControl";
 import { readRetainedText } from "@convex/execution/retainedText";
 import { runPiMission } from "@convex/integrations/piMission";
-import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { createNativeInputDelivery } from "@convex/integrations/piNativeInput";
 import {
     openMissionPiStorage,
     type PiConvexStorage,
 } from "@convex/integrations/piStorage";
+import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { workflow } from "@convex/workflow";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
@@ -25,14 +25,16 @@ import {
     Harness,
 } from "@earendil-works/pi-durable";
 import { getFunctionName } from "convex/server";
-import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
+import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    activateSourcesMission,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
-import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 
 // Research starts run through the Sources mission; there is no corpus-approval fallback.
 beforeEach(() => activateSourcesMission());
@@ -1437,7 +1439,7 @@ test("native reopen and compaction preserve Sources assessment authorship and co
         ),
     );
     expect(state.domain.documentaryPreparation).toMatchObject({
-        missionStatus: "completed",
+        executionStop: null,
         allowance: {
             searches: {
                 used: 2,
@@ -2016,3 +2018,39 @@ test("a terminal legacy conversation settles before its current-state anchor is 
         await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toHaveLength(0);
 }, 30000);
+
+test("new research observations retain structured stop facts without changing historical observations", async () => {
+    const { seedResearchStateScenario } = await import(
+        "@/__tests__/setup/research-state"
+    );
+    const { recordResearchObservation } = await import(
+        "@convex/execution/researchControl"
+    );
+    const f = await seedResearchStateScenario({
+        outcome: "partial",
+        blockCode: "invalid_output",
+        historicalTimeLimitNote: true,
+        retainedDocumentCount: 1,
+        capturedDocumentCount: 1,
+    });
+    const before = await f.t.run((ctx) => ctx.db.get(f.observationId));
+    await f.t.run((ctx) =>
+        recordResearchObservation(ctx, f.runId, "state_inspected"),
+    );
+    const observed = (await observations(f.t, f.runId)).find(
+        (row) => row.value?.event === "state_inspected",
+    );
+    expect(observed).toMatchObject({
+        value: {
+            status: "idle",
+            sources: {
+                outcome: "partial",
+                executionStop: { blockCode: "invalid_output" },
+            },
+            summary: expect.stringContaining(
+                "model response could not be used",
+            ),
+        },
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(f.observationId))).toEqual(before);
+});

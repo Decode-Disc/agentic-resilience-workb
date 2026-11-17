@@ -23,6 +23,7 @@ test("the common read persists a result without research or framing effects", as
         requestId,
         expectedGeneration: 1,
     });
+    expect(outcome.kind, JSON.stringify(outcome)).toBe("success");
     assert(outcome.kind === "success");
     expect(JSON.parse(outcome.valueJson)).toMatchObject({
         executionStatus: "idle",

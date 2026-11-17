@@ -1,6 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
+import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
-import { researchStateSummary } from "@convex/execution/researchControl";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import { seedPiHistory } from "@/__tests__/setup/pi-mission";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
@@ -18,30 +18,47 @@ afterEach(() => {
 });
 
 test.each([
-    ["completed", "Research is complete."],
-    ["cancelled", "Research has been cancelled."],
+    ["completed", "awaiting_source_review", "Research is complete."],
+    ["cancelled", "sources_prepared", "Research has been cancelled."],
     [
         "failed",
-        "Research stopped because of an internal problem and cannot continue. Gathered sources remain visible in Sources. Start a new analysis to continue.",
+        "framing",
+        "Research stopped before it could finish. Retained work remains available for inspection.",
     ],
-] as const)("terminal %s state takes precedence over retained review metadata", (executionStatus, summary) => {
-    expect(
-        researchStateSummary({
-            lifecycleState: "awaiting_source_review",
+] as const)("terminal %s state takes precedence over retained %s metadata", async (executionStatus, lifecycleState, summary) => {
+    const f = await seedWorkbench(true);
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
             executionStatus,
+            lifecycleState,
             pauseReason: "source_review",
-        }),
-    ).toBe(summary);
+        });
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        const facts = await readWorkbenchFacts(ctx, run);
+        assert(facts.kind === "ready");
+        expect(facts.context.research).toMatchObject({ summary });
+    });
 });
 
-test("the sources_time_limit summary starts by naming the Sources Agent", () => {
-    expect(
-        researchStateSummary({
+test("the sources_time_limit summary starts by naming the Sources Agent", async () => {
+    const f = await seedWorkbench(true);
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
             lifecycleState: "discovering_sources",
             executionStatus: "paused",
             pauseReason: "sources_time_limit",
-        }),
-    ).toMatch(/^The Sources Agent reached its time limit\./);
+        });
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        const facts = await readWorkbenchFacts(ctx, run);
+        assert(facts.kind === "ready");
+        expect(facts.context.research).toMatchObject({
+            summary: expect.stringMatching(
+                /^The Sources Agent reached its time limit\./,
+            ),
+        });
+    });
 });
 
 test("post-preparation guidance preserves current state without an unstarted-research example", async () => {
@@ -161,7 +178,7 @@ test("Workbench context distinguishes unstarted, running, requested pause and ef
     await t.mutation(internal.execution.researchControl.checkpoint, { runId });
     expect(await research()).toMatchObject({
         status: "paused",
-        summary: "Research is paused.",
+        summary: "Research is paused. Resume research to continue.",
     });
     await client.mutation(api.execution.researchControl.resume, {
         runId,
@@ -247,5 +264,191 @@ test("the real native compaction request receives Workbench provenance and appro
     );
     expect(await t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({
         status: "completed",
+    });
+});
+
+test("partial handoff explains a model stop without claiming time exhaustion", async () => {
+    const { seedResearchStateScenario } = await import(
+        "@/__tests__/setup/research-state"
+    );
+    const f = await seedResearchStateScenario({
+        outcome: "partial",
+        blockCode: "invalid_output",
+        historicalTimeLimitNote: true,
+        retainedDocumentCount: 4,
+        capturedDocumentCount: 5,
+    });
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId),
+            mission = await ctx.db.get(f.workbenchMissionId);
+        assert(run && mission);
+        const facts = await getAgentDefinition("workbench_v1").context(
+            ctx,
+            mission,
+            run,
+        );
+        assert(facts.kind === "ready");
+        expect(facts.context.research).toMatchObject({
+            summary: expect.stringContaining(
+                "model response could not be used",
+            ),
+        });
+        const research = facts.context.research as { summary: string };
+        expect(research.summary).toContain("partial material");
+        expect(research.summary).not.toMatch(
+            /time (?:limit|window)|invalid_output|resume|use what's prepared/i,
+        );
+    });
+});
+test("failed status does not prescribe a new dossier", async () => {
+    const f = await seedWorkbench(true);
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
+            lifecycleState: "framing",
+            executionStatus: "failed",
+        });
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        const { readWorkbenchFacts } = await import(
+            "@convex/domain/workbenchContext"
+        );
+        const facts = await readWorkbenchFacts(ctx, run);
+        assert(facts.kind === "ready");
+        expect(facts.context.research).toMatchObject({
+            summary: expect.stringContaining("Research stopped"),
+        });
+        expect(
+            (facts.context.research as { summary: string }).summary,
+        ).not.toMatch(
+            /new (?:dossier|analysis)|not started|failed|internal problem/i,
+        );
+    });
+});
+test("unavailable resume does not advertise unavailable settlement", async () => {
+    const { seedResearchStateScenario } = await import(
+        "@/__tests__/setup/research-state"
+    );
+    const f = await seedResearchStateScenario({
+        outcome: "partial",
+        blockCode: "invalid_output",
+        retainedDocumentCount: 1,
+        capturedDocumentCount: 1,
+    });
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        const { _id, _creationTime, ...fields } = run;
+        await ctx.db.insert("researchRuns", {
+            ...fields,
+            executionStatus: "running",
+        });
+        await ctx.db.patch(f.runId, {
+            lifecycleState: "discovering_sources",
+            executionStatus: "paused",
+            pauseReason: "analyst",
+        });
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        await ctx.db.patch(f.preparationId, {
+            status: "started",
+            completedAt: undefined,
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                result: undefined,
+            },
+        });
+        const current = await ctx.db.get(f.runId),
+            mission = await ctx.db.get(f.workbenchMissionId);
+        assert(current && mission);
+        const facts = await getAgentDefinition("workbench_v1").context(
+            ctx,
+            mission,
+            current,
+        );
+        assert(facts.kind === "ready");
+        expect(
+            (facts.context.research as { summary: string }).summary,
+        ).not.toMatch(
+            /resume research to continue|use what's prepared|continue preparation to/i,
+        );
+    });
+});
+
+test("an unsettled preparation explains its retained model stop without inventing an outcome", async () => {
+    const { seedResearchStateScenario } = await import(
+        "@/__tests__/setup/research-state"
+    );
+    const f = await seedResearchStateScenario({
+        outcome: "partial",
+        blockCode: "invalid_output",
+        retainedDocumentCount: 1,
+        capturedDocumentCount: 1,
+    });
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        await ctx.db.patch(f.preparationId, {
+            status: "started",
+            completedAt: undefined,
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                result: undefined,
+            },
+        });
+        await ctx.db.patch(f.runId, {
+            lifecycleState: "discovering_sources",
+            executionStatus: "paused",
+            pauseReason: "execution_interrupted",
+        });
+        const run = await ctx.db.get(f.runId),
+            mission = await ctx.db.get(f.workbenchMissionId);
+        assert(run && mission);
+        const facts = await getAgentDefinition("workbench_v1").context(
+            ctx,
+            mission,
+            run,
+        );
+        assert(facts.kind === "ready");
+        expect(facts.context.research).toMatchObject({
+            sources: { outcome: null },
+            summary: expect.stringContaining(
+                "model response could not be used",
+            ),
+        });
+        expect(
+            (facts.context.research as { summary: string }).summary,
+        ).not.toMatch(
+            /ended with partial material|time limit|time window|invalid_output/,
+        );
+    });
+});
+
+test("a retained execution deadline explains time exhaustion independently of today's clock", async () => {
+    const { seedResearchStateScenario } = await import(
+        "@/__tests__/setup/research-state"
+    );
+    const f = await seedResearchStateScenario({
+        outcome: "partial",
+        blockCode: "execution_deadline",
+        retainedDocumentCount: 1,
+        capturedDocumentCount: 1,
+    });
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId),
+            mission = await ctx.db.get(f.workbenchMissionId);
+        assert(run && mission);
+        const facts = await getAgentDefinition("workbench_v1").context(
+            ctx,
+            mission,
+            run,
+        );
+        assert(facts.kind === "ready");
+        expect(facts.context.research).toMatchObject({
+            sources: { executionStop: { blockCode: "execution_deadline" } },
+            summary: expect.stringContaining("time window ended"),
+        });
+        expect(
+            (facts.context.research as { summary: string }).summary,
+        ).not.toContain("execution_deadline");
     });
 });

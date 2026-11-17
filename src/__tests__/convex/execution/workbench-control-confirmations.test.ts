@@ -1,10 +1,10 @@
 import { api, internal } from "@convex/_generated/api";
-import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
+import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import {
     seedWorkbench,
     workbenchAdmissionInput,
 } from "@/__tests__/setup/workbench";
-import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 
 // Research starts run through the Sources mission; there is no corpus-approval fallback.
 beforeEach(() => activateSourcesMission());
@@ -190,7 +190,7 @@ test("a control and an independent question retain the explanation and the actua
     expect(
         page.page.find((message) => message.role === "assistant")?.text,
     ).toBe(
-        "Switching costs can constrain substitution.\n\nResearch has not started. Review the research program and choose Start research when ready.",
+        "Switching costs can constrain substitution.\n\nResearch has not started.",
     );
 });
 
@@ -213,7 +213,7 @@ test.each([
         action: "pause",
         effective: true,
         thenResume: false,
-        expected: "Research is paused.",
+        expected: "Research is paused. Resume research to continue.",
     },
     {
         mode: "resume at source review",
