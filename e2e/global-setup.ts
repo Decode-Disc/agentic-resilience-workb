@@ -32,6 +32,7 @@ export default async function globalSetup(config: FullConfig) {
             modulusLength: 2048,
         });
         await setConvexEnvironment({
+            SOURCES_PREPARATION_WINDOW_MINUTES: "15",
             JWT_PRIVATE_KEY: privateKey
                 .export({ type: "pkcs8", format: "pem" })
                 .toString()
