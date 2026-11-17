@@ -10,14 +10,11 @@ for (const width of [1440, 390])
             await page.emulateMedia({
                 reducedMotion: width === 1440 ? "no-preference" : "reduce",
             });
-            const time = new Date("2026-10-31T12:00:00Z");
-            await page.clock.install({ time });
-            await page.clock.pauseAt(new Date(time.getTime() + 60_000));
+            // Keep native animation and JavaScript time on the same browser clock.
             await page.goto(`/?layout=start&screen=framing&theme=${theme}`);
             await page
                 .getByRole("button", { name: "Preview tools", exact: true })
                 .click();
-            await page.clock.runFor(300);
             await page
                 .getByRole("button", { name: "Work then reply", exact: true })
                 .click();
@@ -32,7 +29,12 @@ for (const width of [1440, 390])
                     name: "Inspect work for this turn",
                 }),
             ).toHaveAttribute("aria-expanded", "false");
-            await page.clock.runFor(8500);
+            await expect(
+                page.getByRole("heading", {
+                    name: "Replacing software is not replacing coordination",
+                    exact: true,
+                }),
+            ).toBeVisible({ timeout: test.info().timeout });
             const group = page.getByRole("button", {
                 name: "Inspect work for this turn",
             });
@@ -40,7 +42,6 @@ for (const width of [1440, 390])
             await expect(
                 page.getByRole("columnheader", { name: "What to test" }),
             ).toBeVisible();
-            await page.clock.resume();
             await group.click();
             await expect(
                 page.getByText(
@@ -79,47 +80,7 @@ for (const width of [1440, 390])
                         return opacity;
                     }),
                 )
-                .toBeGreaterThan(0.99)
-                .catch(async (error) => {
-                    console.error(
-                        "Progress-note visibility diagnostics",
-                        JSON.stringify(
-                            await note.evaluate((element) => {
-                                const ancestors = [];
-                                for (
-                                    let node: HTMLElement | null =
-                                        element as HTMLElement;
-                                    node;
-                                    node = node.parentElement
-                                ) {
-                                    const style = getComputedStyle(node);
-                                    if (Number(style.opacity) < 1)
-                                        ancestors.push({
-                                            tag: node.tagName,
-                                            slot: node.dataset.slot,
-                                            className: node.className,
-                                            opacity: style.opacity,
-                                            animations: node
-                                                .getAnimations()
-                                                .map((animation) => ({
-                                                    playState:
-                                                        animation.playState,
-                                                    currentTime:
-                                                        animation.currentTime,
-                                                    startTime:
-                                                        animation.startTime,
-                                                    frames: (
-                                                        animation.effect as KeyframeEffect
-                                                    )?.getKeyframes(),
-                                                })),
-                                        });
-                                }
-                                return ancestors;
-                            }),
-                        ),
-                    );
-                    throw error;
-                });
+                .toBeGreaterThan(0.99);
             await page.screenshot({
                 path: `/tmp/work-log-after-${theme}-${width}.png`,
             });
