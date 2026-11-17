@@ -8,6 +8,7 @@ import {
 import type { ConversationAgent } from "@/components/chat/conversation-agent";
 import { Button } from "@/components/ui/button";
 import type { ConversationAgents } from "./conversation-agent";
+import { conversationWorkDuration } from "./conversation-work-duration";
 
 /** A mission's supplied execution snapshot; it contains no conversational messages or dispatch policy. */
 export type ConversationMissionSnapshot = {
@@ -38,22 +39,10 @@ export function ConversationMission({
         const timer = window.setInterval(() => setNow(Date.now()), 1000);
         return () => window.clearInterval(timer);
     }, [running, mission.startedAt]);
-    const end = running
-        ? now
-        : mission.finishedAt
-          ? Date.parse(mission.finishedAt)
-          : undefined;
-    const elapsed =
-        mission.startedAt && end !== undefined
-            ? Math.max(
-                  0,
-                  Math.round((end - Date.parse(mission.startedAt)) / 1000),
-              )
-            : undefined;
-    const duration =
-        elapsed !== undefined && Number.isFinite(elapsed)
-            ? `${elapsed}s`
-            : undefined;
+    const duration = conversationWorkDuration(
+        mission.startedAt,
+        running ? now : mission.finishedAt,
+    );
     const count =
         mission.summary ??
         `${mission.operations.length} ${mission.operations.length === 1 ? "operation" : "operations"}`;
@@ -75,9 +64,9 @@ export function ConversationMission({
                             <time
                                 role="timer"
                                 className="chat-mission-duration"
-                                dateTime={`PT${elapsed}S`}
+                                dateTime={`PT${duration.seconds}S`}
                                 aria-label={`${agent.name} work duration`}>
-                                {duration}
+                                {duration.label}
                             </time>
                         )}
                     </>

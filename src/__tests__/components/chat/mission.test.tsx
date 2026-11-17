@@ -158,7 +158,7 @@ it("shows a newly started mission before its first operation is recorded", () =>
 it("refreshes a running duration and fixes it at the supplied completion time", () => {
     vi.useFakeTimers();
     try {
-        vi.setSystemTime(new Date("2026-10-31T10:00:02Z"));
+        vi.setSystemTime(new Date("2026-10-31T10:00:59Z"));
         const mission = {
             id: "clock",
             agentId: "sources",
@@ -177,28 +177,30 @@ it("refreshes a running duration and fixes it at the supplied completion time", 
         const { rerender } = render(
             <ConversationMission agent={agents.sources} mission={mission} />,
         );
-        expect(screen.getByText("2s")).toBeTruthy();
+        expect(screen.getByText("59s")).toBeTruthy();
         act(() => vi.advanceTimersByTime(2000));
-        expect(screen.getByText("4s")).toBeTruthy();
+        expect(screen.getByText("1m 01s")).toBeTruthy();
+        act(() => vi.advanceTimersByTime(3664000));
+        expect(screen.getByText("1h 02m 05s")).toBeTruthy();
         rerender(
             <ConversationMission
                 agent={agents.sources}
                 mission={{
                     ...mission,
                     state: "completed",
-                    finishedAt: "2026-10-31T10:00:03Z",
+                    finishedAt: "2026-10-31T10:01:05Z",
                 }}
             />,
         );
         expect(
             screen.getByRole("timer", { name: "Sources Agent work duration" })
                 .textContent,
-        ).toBe("3s");
+        ).toBe("1m 05s");
         act(() => vi.advanceTimersByTime(10000));
         expect(
             screen.getByRole("timer", { name: "Sources Agent work duration" })
                 .textContent,
-        ).toBe("3s");
+        ).toBe("1m 05s");
     } finally {
         vi.useRealTimers();
     }

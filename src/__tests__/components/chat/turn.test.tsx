@@ -94,3 +94,32 @@ it("keeps intermediate work inside its disclosure and the final answer outside i
     ).toBeTruthy();
     expect(screen.getByText("Final interpretation")).toBeTruthy();
 });
+
+it("formats retained response duration in hours, minutes and seconds", () => {
+    render(
+        <ConversationTurn
+            turn={{
+                id: "long-turn",
+                state: "completed",
+                startedAt: "2026-11-17T10:00:00Z",
+                finishedAt: "2026-11-17T11:02:05Z",
+                entries: [
+                    {
+                        kind: "operation",
+                        operation: {
+                            id: "op",
+                            title: "Inspect material",
+                            summary: "Retained",
+                            state: "completed",
+                        },
+                    },
+                ],
+            }}
+            renderMessage={() => null}
+        />,
+    );
+    expect(
+        screen.getByRole("button", { name: "Inspect work for this turn" })
+            .textContent,
+    ).toContain("Worked for 1h 02m 05s");
+});

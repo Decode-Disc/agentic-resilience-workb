@@ -7,6 +7,7 @@ import {
 } from "@/components/chat/conversation-activity";
 import type { ConversationAgent } from "@/components/chat/conversation-agent";
 import { ConversationActivityList } from "./conversation-activity-list";
+import { conversationWorkDuration } from "./conversation-work-duration";
 export type ConversationTurnSnapshot = {
     id: string;
     agentId?: string;
@@ -54,17 +55,7 @@ export function ConversationTurn({
                 )}
             </Fragment>
         );
-    const elapsed =
-        turn.startedAt && turn.finishedAt
-            ? Math.max(
-                  0,
-                  Math.round(
-                      (Date.parse(turn.finishedAt) -
-                          Date.parse(turn.startedAt)) /
-                          1000,
-                  ),
-              )
-            : undefined;
+    const duration = conversationWorkDuration(turn.startedAt, turn.finishedAt);
     const answerEntries = turn.entries.filter(
         (e) => e.kind === "message" && e.phase === "answer",
     );
@@ -89,8 +80,8 @@ export function ConversationTurn({
                                       ? "Work in progress"
                                       : turn.state === "interrupted"
                                         ? "Work stopped"
-                                        : Number.isFinite(elapsed)
-                                          ? `Worked for ${elapsed}s`
+                                        : duration
+                                          ? `Worked for ${duration.label}`
                                           : "Work completed"
                         }
                         summary={
