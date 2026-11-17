@@ -260,7 +260,15 @@ export function DocumentaryNeeds({
                                         className={styles.question}
                                         aria-label={`${question.label}: ${question.question}`}
                                         aria-pressed={lens === question.id}
-                                        onFocus={() => setPreview(question.id)}
+                                        // Pointer focus must not move the button before its click completes.
+                                        onFocus={(event) => {
+                                            if (
+                                                event.currentTarget.matches(
+                                                    ":focus-visible",
+                                                )
+                                            )
+                                                setPreview(question.id);
+                                        }}
                                         onBlur={() => setPreview(undefined)}
                                         onClick={() =>
                                             setLens((current) =>

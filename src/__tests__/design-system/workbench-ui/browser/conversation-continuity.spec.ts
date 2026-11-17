@@ -83,7 +83,10 @@ test("source preparation belongs to the same history and survives completion and
         .click();
     const log = page.getByRole("log");
     await expect(
-        log.getByText("Find company reporting", { exact: true }),
+        log.getByRole("button", {
+            name: "Inspect Find company reporting",
+            exact: true,
+        }),
     ).toBeVisible();
     const turn = log.locator('[data-slot="conversation-mission"]').last();
     await expect(turn).toHaveAttribute("data-state", "running");
@@ -95,7 +98,8 @@ test("source preparation belongs to the same history and survives completion and
         .click();
     await page.keyboard.press("Escape");
     await expect(
-        log.getByText("Find product and integration documentation", {
+        log.getByRole("button", {
+            name: "Inspect Find product and integration documentation",
             exact: true,
         }),
     ).toBeVisible();

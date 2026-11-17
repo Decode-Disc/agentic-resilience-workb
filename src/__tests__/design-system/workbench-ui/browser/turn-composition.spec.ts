@@ -79,7 +79,47 @@ for (const width of [1440, 390])
                         return opacity;
                     }),
                 )
-                .toBeGreaterThan(0.99);
+                .toBeGreaterThan(0.99)
+                .catch(async (error) => {
+                    console.error(
+                        "Progress-note visibility diagnostics",
+                        JSON.stringify(
+                            await note.evaluate((element) => {
+                                const ancestors = [];
+                                for (
+                                    let node: HTMLElement | null =
+                                        element as HTMLElement;
+                                    node;
+                                    node = node.parentElement
+                                ) {
+                                    const style = getComputedStyle(node);
+                                    if (Number(style.opacity) < 1)
+                                        ancestors.push({
+                                            tag: node.tagName,
+                                            slot: node.dataset.slot,
+                                            className: node.className,
+                                            opacity: style.opacity,
+                                            animations: node
+                                                .getAnimations()
+                                                .map((animation) => ({
+                                                    playState:
+                                                        animation.playState,
+                                                    currentTime:
+                                                        animation.currentTime,
+                                                    startTime:
+                                                        animation.startTime,
+                                                    frames: (
+                                                        animation.effect as KeyframeEffect
+                                                    )?.getKeyframes(),
+                                                })),
+                                        });
+                                }
+                                return ancestors;
+                            }),
+                        ),
+                    );
+                    throw error;
+                });
             await page.screenshot({
                 path: `/tmp/work-log-after-${theme}-${width}.png`,
             });

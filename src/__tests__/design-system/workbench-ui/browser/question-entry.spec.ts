@@ -82,6 +82,11 @@ for (const width of [1440, 390])
                 .getByRole("button", { name: "Cancel", exact: true })
                 .click();
             await expect(ordinary).toHaveValue("Keep my ordinary draft.");
-            await expect(ordinary).toBeFocused();
+            await expect(
+                page.getByRole("button", {
+                    name: "Add research question",
+                    exact: true,
+                }),
+            ).toBeFocused();
             expect(errors).toEqual([]);
         });

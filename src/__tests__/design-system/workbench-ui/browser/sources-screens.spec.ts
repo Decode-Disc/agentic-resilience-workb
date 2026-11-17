@@ -86,6 +86,12 @@ test("preparation maps documentary needs to the questions they serve", async ({
     await q3.click();
     await expect(q3).toHaveAttribute("aria-pressed", "false");
     await expect(firstRows.nth(0)).toContainText("Where the platform sits");
+    await q3.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(q3).toBeFocused();
+    await expect(q3).toHaveAttribute("aria-pressed", "false");
+    await expect(lens).toContainText("Could core platforms replace it?");
 
     await page.getByRole("button", { name: /How preparation ran/ }).click();
     await expect(
@@ -113,7 +119,9 @@ test("preparation needs stay readable on a phone", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/?layout=sources&screen=preparation&theme=dark");
     const needs = page.getByRole("table", { name: "Documentary needs" });
-    await needs.getByRole("button", { name: /^Q4/ }).click();
+    const question = needs.getByRole("button", { name: /^Q4/ });
+    await question.click();
+    await expect(question).toHaveAttribute("aria-pressed", "true");
     await expect(
         page
             .getByRole("status")
