@@ -101,6 +101,7 @@ test("changed stop cause invalidates facts with unchanged run metadata", async (
     expect(await f.t.run((ctx) => ctx.db.get(f.runId))).toEqual(beforeRun);
 });
 test.each([
+    "running",
     "cancelled",
     "failed",
     "paused",
@@ -121,6 +122,22 @@ test.each([
         status: executionStatus,
         sources: { outcome: "partial", phase: "completed_with_limits" },
     });
+    const overview = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.overview, { runId: f.runId });
+    expect(overview).toMatchObject({
+        materialOutcome: "partial",
+        research: {
+            status: executionStatus,
+            sources: { phase: "completed_with_limits" },
+        },
+    });
+    expect(
+        JSON.stringify(
+            (await f.t.run((ctx) => ctx.db.get(f.preparationId)))
+                ?.sourcesMission?.result,
+        ),
+    ).toBe(f.resultJson);
 });
 test.each([
     "invalid_output",
@@ -582,4 +599,371 @@ test.each([
         retainedDocumentCount,
     );
     expect(projected.summary).not.toContain("Research is complete.");
+});
+
+test("captured-only material keeps its qualification and membership distinct in both consumers", async () => {
+    const f = await seedResearchStateScenario({
+        outcome: "partial",
+        blockCode: "invalid_output",
+        historicalTimeLimitNote: true,
+        retainedDocumentCount: 4,
+        capturedDocumentCount: 5,
+        uncapturedDocumentCount: 4,
+    });
+    const fifthId = f.sourceIds[4];
+    assert(fifthId);
+    await f.t.run((ctx) =>
+        ctx.db.patch(fifthId, { title: "8-K · 2026-10-28" }),
+    );
+    const owner = f.t.withIdentity({ subject: f.userId });
+    const rows = await owner.query(api.sourcesWorkspace.listSources, {
+        runId: f.runId,
+    });
+    const overview = await owner.query(api.sourcesWorkspace.overview, {
+        runId: f.runId,
+    });
+    expect(rows).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                sourceId: f.sourceIds[4],
+                reading: "full",
+                membership: "not_retained",
+                qualification: { status: "not_recorded" },
+                contributions: null,
+            }),
+        ]),
+    );
+    const context = await facts(f);
+    expect(context.availableMaterials).toHaveLength(5);
+    expect(context.availableMaterials).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                sourceId: f.sourceIds[4],
+                documentaryState: expect.objectContaining({
+                    membership: "not_retained",
+                    qualification: { status: "not_recorded" },
+                    contributions: null,
+                }),
+            }),
+        ]),
+    );
+    expect(overview).toMatchObject({
+        collect: { candidates: 9 },
+        reading: { captured: 5 },
+        organize: {
+            retained: 4,
+            notRetainedCaptured: 1,
+            notRetainedWithoutAvailableCapture: 4,
+        },
+    });
+    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    expect(JSON.stringify(preparation?.sourcesMission?.result)).toBe(
+        f.resultJson,
+    );
+});
+
+test("same-source capture does not inherit another capture's qualification", async () => {
+    const f = await scenario();
+    const captureId = await f.t.run(async (ctx) => {
+        const capture = await ctx.db.get(f.captureId);
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(capture && preparation?.sourcesMission);
+        const { _id, _creationTime, ...fields } = capture;
+        const nextId = await ctx.db.insert("sourceCaptures", {
+            ...fields,
+            captureKey: "later-unqualified",
+            contentHash: "another-hash",
+            updatedAt: capture.updatedAt + 1,
+        });
+        await ctx.db.patch(f.preparationId, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                captureIds: [...preparation.sourcesMission.captureIds, nextId],
+            },
+        });
+        return nextId;
+    });
+    const owner = f.t.withIdentity({ subject: f.userId });
+    const rows = await owner.query(api.sourcesWorkspace.listSources, {
+        runId: f.runId,
+    });
+    expect(rows?.find((row) => row.sourceId === f.sourceId)).toMatchObject({
+        capture: { captureId, contentHash: "another-hash" },
+        qualification: { status: "not_recorded" },
+        contributions: null,
+        retainedSnapshot: { captureId: f.captureId, needsRevision: 1 },
+    });
+    expect((await facts(f)).availableMaterials).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                sourceId: f.sourceId,
+                capture: expect.objectContaining({ captureId }),
+                documentaryState: expect.objectContaining({
+                    qualification: { status: "not_recorded" },
+                    contributions: null,
+                    retainedSnapshot: expect.objectContaining({
+                        captureId: f.captureId,
+                    }),
+                }),
+            }),
+        ]),
+    );
+    const reader = await owner.query(api.sourcesWorkspace.getSource, {
+        runId: f.runId,
+        sourceId: f.sourceId,
+    });
+    expect(reader).toMatchObject({
+        capture: { captureId: f.captureId },
+        source: {
+            capture: { captureId: f.captureId },
+            qualification: { status: "recorded", captureId: f.captureId },
+        },
+    });
+    expect(
+        JSON.stringify(
+            (await f.t.run((ctx) => ctx.db.get(f.preparationId)))
+                ?.sourcesMission?.result,
+        ),
+    ).toBe(f.resultJson);
+});
+
+test("a qualification from another preparation is rejected", async () => {
+    const f = await scenario();
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        const { _id, _creationTime, ...fields } = preparation;
+        const otherId = await ctx.db.insert(
+            "sourceSelectionProposalRebuilds",
+            fields,
+        );
+        const taskId = preparation.sourcesMission.qualifications[0];
+        assert(taskId);
+        const task = await ctx.db.get(taskId);
+        assert(task?.output.kind === "documentary_qualification");
+        await ctx.db.patch(taskId, {
+            output: { ...task.output, preparationId: otherId },
+        });
+    });
+    const owner = f.t.withIdentity({ subject: f.userId });
+    await expect(
+        owner.query(api.sourcesWorkspace.listSources, { runId: f.runId }),
+    ).rejects.toThrow(/qualification_invalid/);
+    await expect(facts(f)).rejects.toThrow(/qualification_invalid/);
+});
+
+test("retained aggregate refuses a mismatched frozen qualification pin", async () => {
+    const f = await scenario();
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission?.result);
+        const data = preparation.sourcesMission;
+        const result = data.result;
+        assert(result);
+        const second = result.documents[1];
+        assert(second);
+        await ctx.db.patch(f.preparationId, {
+            sourcesMission: {
+                ...data,
+                result: {
+                    ...result,
+                    documents: result.documents.map((document, i) =>
+                        i === 0
+                            ? {
+                                  ...document,
+                                  qualificationTaskId:
+                                      second.qualificationTaskId,
+                              }
+                            : document,
+                    ),
+                },
+            },
+        });
+    });
+    await expect(
+        f.t
+            .withIdentity({ subject: f.userId })
+            .query(api.sourcesWorkspace.overview, { runId: f.runId }),
+    ).rejects.toThrow(/qualification_invalid/);
+});
+
+test("current Sources summary preserves an older handoff explanation as recorded history", async () => {
+    const f = await scenario();
+    const overview = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.overview, { runId: f.runId });
+    expect(overview).toMatchObject({
+        research: {
+            sources: {
+                outcome: "partial",
+                executionStop: { blockCode: "invalid_output" },
+                settledAt: 2,
+            },
+        },
+    });
+    const context = await facts(f);
+    const research = context.research as { summary: string };
+    expect(overview).toHaveProperty("researchSummary", research.summary);
+    expect(research.summary).toContain("model response could not be used");
+    expect(
+        JSON.stringify(
+            (await f.t.run((ctx) => ctx.db.get(f.preparationId)))
+                ?.sourcesMission?.result,
+        ),
+    ).toBe(f.resultJson);
+});
+
+test("not-retained unavailable and in-progress captures do not become never-captured claims", async () => {
+    const f = await seedResearchStateScenario({
+        outcome: "partial",
+        retainedDocumentCount: 4,
+        capturedDocumentCount: 5,
+        uncapturedDocumentCount: 4,
+    });
+    const acquisitions = await f.t.run(async (ctx) => {
+        const source = await ctx.db.get(f.sourceId),
+            capture = await ctx.db.get(f.captureId);
+        assert(source && capture);
+        const {
+            _id: sourceId,
+            _creationTime: sourceTime,
+            ...sourceFields
+        } = source;
+        const {
+            _id: captureId,
+            _creationTime: captureTime,
+            ...captureFields
+        } = capture;
+        const acquisitions = [];
+        for (const status of ["unavailable", "reserved"] as const) {
+            const id = await ctx.db.insert("sources", {
+                ...sourceFields,
+                title: status,
+                canonicalUrl: `https://example.com/${status}`,
+            });
+            await ctx.db.insert("sourceCaptures", {
+                ...captureFields,
+                sourceId: id,
+                captureKey: status,
+                status,
+            });
+            acquisitions.push({ sourceId: id, status });
+        }
+        return acquisitions;
+    });
+    const overview = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.overview, { runId: f.runId });
+    expect(overview).toMatchObject({
+        collect: { candidates: 11 },
+        reading: { captured: 5, notCaptured: 4, unavailable: 1, capturing: 1 },
+        organize: {
+            retained: 4,
+            notRetainedCaptured: 1,
+            notRetainedWithoutAvailableCapture: 6,
+        },
+    });
+    const client = f.t.withIdentity({ subject: f.userId });
+    const rows = await client.query(api.sourcesWorkspace.listSources, {
+        runId: f.runId,
+    });
+    for (const acquisition of acquisitions) {
+        const expected =
+            acquisition.status === "reserved" ? "capturing" : "unavailable";
+        expect(
+            rows?.find((row) => row.sourceId === acquisition.sourceId),
+        ).toMatchObject({ reading: expected });
+        const reader = await client.query(api.sourcesWorkspace.getSource, {
+            runId: f.runId,
+            sourceId: acquisition.sourceId,
+        });
+        expect(reader).toMatchObject({
+            source: { reading: expected, capture: null },
+            capture: null,
+            excerpts: "none",
+        });
+    }
+});
+
+test("native material state does not expose a workspace-only capture", async () => {
+    const f = await scenario();
+    const sourceId = await f.t.run(async (ctx) => {
+        const source = await ctx.db.get(f.sourceId),
+            capture = await ctx.db.get(f.captureId);
+        assert(source && capture);
+        const {
+            _id: oldSourceId,
+            _creationTime: sourceTime,
+            ...sourceFields
+        } = source;
+        const {
+            _id: captureId,
+            _creationTime: captureTime,
+            ...captureFields
+        } = capture;
+        const id = await ctx.db.insert("sources", {
+            ...sourceFields,
+            title: "Workspace-only capture",
+            canonicalUrl: "https://example.com/workspace-only",
+        });
+        await ctx.db.insert("sourceCaptures", {
+            ...captureFields,
+            sourceId: id,
+            captureKey: "workspace-only",
+        });
+        return id;
+    });
+    const rows = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.listSources, { runId: f.runId });
+    expect(rows).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                sourceId,
+                reading: "full",
+                qualification: { status: "not_recorded" },
+            }),
+        ]),
+    );
+    expect((await facts(f)).availableMaterials).toHaveLength(5);
+    expect((await facts(f)).availableMaterials).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ sourceId })]),
+    );
+});
+
+test("an analyst exclusion keeps an unqualified capture visible only to the workspace", async () => {
+    const f = await scenario();
+    const sourceId = f.sourceIds[4];
+    assert(sourceId);
+    await f.t.withIdentity({ subject: f.userId }).mutation(api.sources.decide, {
+        runId: f.runId,
+        corpusRevisionId: f.corpusRevisionId,
+        sourceId,
+        decision: "rejected",
+        decisionKey: "exclude-unqualified",
+    });
+    const rows = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.listSources, { runId: f.runId });
+    expect(rows?.find((row) => row.sourceId === sourceId)).toMatchObject({
+        membership: "excluded",
+    });
+    expect((await facts(f)).availableMaterials).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ sourceId })]),
+    );
+});
+
+test("a saved capture without indexed passages does not claim an opening excerpt", async () => {
+    const f = await scenario();
+    const sourceId = f.sourceIds[4];
+    assert(sourceId);
+    const reader = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.getSource, { runId: f.runId, sourceId });
+    expect(reader).toMatchObject({
+        sections: [],
+        excerpts: "none",
+        source: { qualification: { status: "not_recorded" } },
+    });
+    expect(reader?.capture).not.toBeNull();
 });

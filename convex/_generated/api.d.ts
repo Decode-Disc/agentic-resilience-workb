@@ -131,6 +131,7 @@ import type * as execution_simulation from "../execution/simulation.js";
 import type * as fixtureManifestStore from "../fixtureManifestStore.js";
 import type * as fixtures_browserModelMetadata from "../fixtures/browserModelMetadata.js";
 import type * as fixtures_cccShowcase from "../fixtures/cccShowcase.js";
+import type * as fixtures_researchState from "../fixtures/researchState.js";
 import type * as framing from "../framing.js";
 import type * as http from "../http.js";
 import type * as integrations_agentBackends from "../integrations/agentBackends.js";
@@ -338,6 +339,7 @@ declare const fullApi: ApiFromModules<{
   fixtureManifestStore: typeof fixtureManifestStore;
   "fixtures/browserModelMetadata": typeof fixtures_browserModelMetadata;
   "fixtures/cccShowcase": typeof fixtures_cccShowcase;
+  "fixtures/researchState": typeof fixtures_researchState;
   framing: typeof framing;
   http: typeof http;
   "integrations/agentBackends": typeof integrations_agentBackends;

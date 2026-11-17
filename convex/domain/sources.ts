@@ -35,9 +35,12 @@ import { SourceReviewReads } from "./sourceReviewReads";
 import { controlledDocumentaryUse } from "./sourceSelectionPolicy";
 import {
     type DocumentaryContribution,
+    type DocumentaryContributionTally,
     type documentaryAssessmentAuthorValidator,
     type materializedQualificationInput,
     SOURCES_PROTOCOL,
+    type SourceCaptureIdentity,
+    type SourceDocumentState,
     type SourcesPreparation,
     type sourcesCompletionValidator,
     sourcesEnvelopeValidator,
@@ -462,7 +465,7 @@ export function sourcesInstructionTreatment(
         return {
             status: "closed" as const,
             description:
-                "This preparation cannot treat additional documentary instructions. Recording a request cannot reopen it or start another documentary phase. Existing material remains available for inspection.",
+                "This preparation is not accepting additional documentary requests. Existing material remains available for inspection. Recording a request does not authorize further preparation.",
         };
     if (data.needs.length >= data.envelope.maxNeeds)
         return {
@@ -781,7 +784,8 @@ export async function controlledSourcesContributions(
             if (
                 !task ||
                 task.runId !== runId ||
-                task.output.kind !== "documentary_qualification"
+                task.output.kind !== "documentary_qualification" ||
+                task.output.preparationId !== preparation._id
             )
                 throw executionError("qualification_invalid");
             const qualification = task.output;
@@ -1436,4 +1440,135 @@ export async function completeSources(
         throw executionError("sources_result_capacity");
     await ctx.db.patch(preparationId, { sourcesMission: { ...data, result } });
     return result;
+}
+
+type ControlledSourceQualification = Awaited<
+    ReturnType<typeof controlledSourcesContributions>
+>[number];
+/** The latest qualification per source; earlier versions stay with their owners. */
+export function latestSourceQualifications(
+    controlled: readonly ControlledSourceQualification[],
+) {
+    const bySource = new Map<Id<"sources">, ControlledSourceQualification>();
+    for (const qualification of controlled) {
+        const current = bySource.get(qualification.sourceId);
+        if (!current || current.version < qualification.version)
+            bySource.set(qualification.sourceId, qualification);
+    }
+    return bySource;
+}
+
+/** Counts effective permissions independently from the control's evidentiary conclusions. */
+export function tallyDocumentaryContributions(
+    contributions: ControlledSourceQualification["contributions"],
+): DocumentaryContributionTally {
+    const into: DocumentaryContributionTally = {
+        total: 0,
+        kinds: {
+            asserted_fact: 0,
+            attributed_argument: 0,
+            forecast: 0,
+            context: 0,
+        },
+        supported: 0,
+        conflict: 0,
+        notEstablished: 0,
+        unchecked: 0,
+        restricted: 0,
+        effectiveUses: {
+            documentary: 0,
+            attributed_argument_only: 0,
+            context_only: 0,
+            blocked: 0,
+        },
+        inspectionOnly: 0,
+    };
+    for (const contribution of contributions) {
+        into.total++;
+        into.kinds[contribution.kind]++;
+        const found = contribution.finding?.conclusion;
+        if (found === "supported") into.supported++;
+        else if (found === "documentary_conflict") into.conflict++;
+        else if (found === "not_established") into.notEstablished++;
+        else into.unchecked++;
+        if (contribution.restrictions.length) into.restricted++;
+        into.effectiveUses[contribution.permittedUse]++;
+        if (contribution.permittedUse === "blocked") into.inspectionOnly++;
+    }
+    return into;
+}
+
+/** Qualification belongs to one saved representation; retention separately describes the frozen handoff. */
+export function projectSourceDocumentState(input: {
+    preparationId: Id<"sourceSelectionProposalRebuilds">;
+    sourceId: Id<"sources">;
+    capture: SourceCaptureIdentity | null;
+    result: SourcesPreparation["result"] | undefined;
+    decision: ControlledSourceQualification["sourceDecision"] | null;
+    qualifications: readonly ControlledSourceQualification[];
+}): SourceDocumentState {
+    const {
+        preparationId,
+        sourceId,
+        capture,
+        result,
+        decision,
+        qualifications,
+    } = input;
+    const retained = result?.documents.find(
+        (document) => document.sourceId === sourceId,
+    );
+    const qualification = latestSourceQualifications(
+        qualifications.filter(
+            (item) =>
+                item.sourceId === sourceId &&
+                capture?.contentHash !== null &&
+                item.captureId === capture?.captureId &&
+                item.contentHash === capture?.contentHash,
+        ),
+    ).get(sourceId);
+    return {
+        preparationId,
+        capture,
+        membership:
+            decision === "rejected"
+                ? "excluded"
+                : !result
+                  ? "pending"
+                  : retained
+                    ? "retained"
+                    : "not_retained",
+        retainedSnapshot:
+            retained && result
+                ? {
+                      needsRevision: result.needsRevision,
+                      captureId: retained.captureId,
+                      contentHash: retained.contentHash,
+                      qualificationTaskId: retained.qualificationTaskId,
+                      qualificationVersion: retained.qualificationVersion,
+                  }
+                : null,
+        qualification: qualification
+            ? {
+                  status: "recorded",
+                  taskId: qualification.taskId,
+                  version: qualification.version,
+                  captureId: qualification.captureId,
+                  contentHash: qualification.contentHash,
+              }
+            : { status: "not_recorded" },
+        contextOnly:
+            !!qualification?.contributions.some(
+                (item) => item.permittedUse === "context_only",
+            ) &&
+            qualification.contributions.every(
+                (item) =>
+                    item.permittedUse === "context_only" ||
+                    item.permittedUse === "blocked",
+            ),
+        contributions: qualification
+            ? tallyDocumentaryContributions(qualification.contributions)
+            : null,
+        limitations: qualification?.limitations ?? [],
+    };
 }

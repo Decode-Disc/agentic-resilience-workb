@@ -10,6 +10,7 @@ import { sha256Hex, stableStringify } from "./sourcePassages";
 import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
 import {
     controlledSourcesContributions,
+    projectSourceDocumentState,
     summarizeSourcesPreparation,
 } from "./sources";
 import {
@@ -72,6 +73,9 @@ export async function readWorkbenchFacts(
         run.sourcesProtocol === "sources_mission_v1" && run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
+    const controlled = preparation?.sourcesMission
+        ? await controlledSourcesContributions(ctx, preparation)
+        : [];
     const context = {
         company: run.companySnapshot ?? null,
         originalRequest: run.researchAngle ?? null,
@@ -85,13 +89,34 @@ export async function readWorkbenchFacts(
               }
             : null,
         research: { ...research, summary: formatResearchSummary(research) },
-        availableMaterials: availableMaterials.map((material) => ({
-            ...material,
-            capture:
+        availableMaterials: availableMaterials.map((material) => {
+            const capture =
                 captureMetadata.find(
-                    (capture) => capture.sourceId === material.sourceId,
-                ) ?? null,
-        })),
+                    (item) => item.sourceId === material.sourceId,
+                ) ?? null;
+            return {
+                ...material,
+                capture,
+                documentaryState: preparation?.sourcesMission
+                    ? projectSourceDocumentState({
+                          preparationId: preparation._id,
+                          sourceId: material.sourceId,
+                          capture: capture
+                              ? {
+                                    captureId: capture.captureId,
+                                    contentHash: capture.contentHash ?? null,
+                                }
+                              : null,
+                          result: preparation.sourcesMission.result,
+                          decision:
+                              controlled.find(
+                                  (item) => item.sourceId === material.sourceId,
+                              )?.sourceDecision ?? null,
+                          qualifications: controlled,
+                      })
+                    : null,
+            };
+        }),
         analystRequests: await projectWorkbenchInstructions(ctx, instructions),
         ...(preparation?.sourcesMission
             ? {
@@ -100,11 +125,7 @@ export async function readWorkbenchFacts(
                           preparation,
                           research.sources,
                       ),
-                      controlledContributions:
-                          await controlledSourcesContributions(
-                              ctx,
-                              preparation,
-                          ),
+                      controlledContributions: controlled,
                   },
               }
             : {}),

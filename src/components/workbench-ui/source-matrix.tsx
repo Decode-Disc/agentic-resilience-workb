@@ -46,6 +46,7 @@ export interface SourceMatrixRow {
         }[];
         note?: string;
     };
+    emptyContributionsLabel?: string;
     restriction?: string;
     control?: ReactNode;
     selection: ReactNode;
@@ -68,6 +69,7 @@ export interface SourceMatrixProps {
     footer?: ReactNode;
     /** Replaces the claim-class wording of the contributions column help and legend. */
     contributionTerms?: { help: string; legend: string };
+    availabilityHelp?: string;
 }
 
 const columns = [
@@ -118,6 +120,7 @@ export function SourceMatrix({
     empty,
     footer,
     contributionTerms,
+    availabilityHelp,
 }: SourceMatrixProps) {
     const helpId = useId();
     const { hiddenColumns, scrolled, scrollRef, onScroll } =
@@ -171,7 +174,10 @@ export function SourceMatrix({
                                     label === "Contributions" &&
                                     contributionTerms
                                         ? contributionTerms.help
-                                        : defaultHelp;
+                                        : label === "Availability" &&
+                                            availabilityHelp
+                                          ? availabilityHelp
+                                          : defaultHelp;
                                 return (
                                     <th key={label} scope="col">
                                         <span className={styles.columnHead}>
@@ -276,6 +282,7 @@ export function SourceMatrix({
                                 </td>
                                 <td>
                                     <Contributions
+                                        emptyLabel={row.emptyContributionsLabel}
                                         value={row.contributions}
                                         scale={contributionScale}
                                     />
@@ -377,11 +384,14 @@ function segmentLabel(
 function Contributions({
     value,
     scale,
+    emptyLabel,
 }: {
     value: SourceMatrixRow["contributions"];
     scale: number;
+    emptyLabel?: string;
 }) {
-    if (!value) return <span className={styles.small}>{dash}</span>;
+    if (!value)
+        return <span className={styles.small}>{emptyLabel ?? dash}</span>;
     const used = value.segments?.reduce((sum, s) => sum + s.count, 0) ?? 0;
     const segments: { kind: DistributionSegmentKind; count: number }[] = [
         ...(value.segments ?? []),

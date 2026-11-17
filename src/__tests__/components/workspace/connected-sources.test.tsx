@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import type { FunctionReturnType } from "convex/server";
 import type { ComponentProps } from "react";
-import { beforeEach, expect, test, vi } from "vitest";
+import { assert, beforeEach, expect, test, vi } from "vitest";
 import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
 import { ConnectedSources } from "@/components/workspace/sources/connected-sources";
 
@@ -46,9 +46,40 @@ const tally = {
     notEstablished: 0,
     unchecked: 0,
     restricted: 0,
+    effectiveUses: {
+        documentary: 1,
+        attributed_argument_only: 0,
+        context_only: 0,
+        blocked: 1,
+    },
     inspectionOnly: 1,
 };
+const unavailableAction: Overview["research"]["actions"]["resume"] = {
+    actor: "analyst_or_authorized_workbench",
+    applicable: false,
+    reason: "unavailable",
+};
 const overview: Overview = {
+    research: {
+        phase: "discovering_sources",
+        status: "running",
+        executionGeneration: 4,
+        started: true,
+        controlAvailable: true,
+        pauseReason: null,
+        pauseRequested: false,
+        approvals: { pending: [], grants: [] },
+        actions: {
+            start: { ...unavailableAction, actor: "analyst_only" },
+            pause: { ...unavailableAction, applicable: true, reason: null },
+            resume: unavailableAction,
+            continuePreparation: unavailableAction,
+            usePrepared: unavailableAction,
+        },
+        sources: null,
+        nextCapability: null,
+    },
+    researchSummary: "Research is running.",
     preparationId: "prep-1" as Overview["preparationId"],
     preparationStatus: "started",
     missionStatus: "running",
@@ -100,14 +131,18 @@ const overview: Overview = {
         retained: 0,
         contextOnly: 0,
         notRetained: 0,
-        notRetainedRead: 0,
-        notRetainedUnread: 0,
+        notRetainedCaptured: 0,
+        notRetainedWithoutAvailableCapture: 0,
         excluded: 0,
         restricted: 0,
     },
 };
 const rows: Row[] = [
     {
+        preparationId: overview.preparationId,
+        capture: null,
+        retainedSnapshot: null,
+        qualification: { status: "not_recorded" },
         sourceId,
         title: "Form 10-K · FY2025",
         url: "https://www.sec.gov/annual",
@@ -124,6 +159,10 @@ const rows: Row[] = [
         limitations: [],
     },
     {
+        preparationId: overview.preparationId,
+        capture: null,
+        retainedSnapshot: null,
+        qualification: { status: "not_recorded" },
         sourceId: otherId,
         title: "Industry blog post",
         url: "https://blog.example.com/post",
@@ -292,8 +331,8 @@ test("how preparation ran accounts for every candidate and names conflicts and l
             retained: 4,
             contextOnly: 0,
             notRetained: 5,
-            notRetainedRead: 1,
-            notRetainedUnread: 4,
+            notRetainedCaptured: 1,
+            notRetainedWithoutAvailableCapture: 4,
             excluded: 0,
             restricted: 0,
         },
@@ -314,8 +353,10 @@ test("how preparation ran accounts for every candidate and names conflicts and l
     expect(
         screen.getByText("Controls on 29 retained contributions"),
     ).toBeTruthy();
-    expect(screen.getByText("1 read, nothing usable")).toBeTruthy();
-    expect(screen.getByText("4 candidates never captured")).toBeTruthy();
+    expect(screen.getByText("1 captured, not retained")).toBeTruthy();
+    expect(
+        screen.getByText("4 candidates without an available capture"),
+    ).toBeTruthy();
     expect(
         screen.getByText("1 contribution in documentary conflict"),
     ).toBeTruthy();
@@ -378,6 +419,25 @@ test("the matrix keeps reading, documentary contributions and selection separate
         sourcesView: "reader",
         source: sourceId,
     });
+});
+
+test.each([
+    "capturing",
+    "unavailable",
+] as const)("the reader preserves %s acquisition metadata without a saved capture", (status) => {
+    convexReactHarness.query(api.sourcesWorkspace.getSource).returns({
+        ...reading,
+        source: { ...reading.source, reading: status, capture: null },
+        capture: null,
+        excerpts: "none",
+        sections: [],
+        contributions: [],
+    });
+    renderSources({ search: { sourcesView: "reader", source: sourceId } });
+    expect(
+        screen.getAllByText(new RegExp(`sec.gov · ${status}`)).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/sec.gov · not captured/)).toBeNull();
 });
 
 test("the reader shows effective use apart from the reported one and hands a follow-up to Workbench", () => {
@@ -571,4 +631,153 @@ test("the Sources preparation view exposes the same recorded settlement action f
             expectedGeneration: 4,
         }),
     );
+});
+
+test("captured-only row does not imply qualification", () => {
+    const captured = rows[0];
+    assert(captured);
+    convexReactHarness.query(api.sourcesWorkspace.listSources).returns([
+        {
+            ...captured,
+            membership: "not_retained",
+            contributions: null,
+            qualification: { status: "not_recorded" },
+        },
+    ]);
+    renderSources({ search: { sourcesView: "matrix" } });
+    expect(screen.getByText("Complete capture")).toBeTruthy();
+    expect(screen.getByText("Not retained")).toBeTruthy();
+    expect(screen.getByText("No qualification recorded")).toBeTruthy();
+    expect(screen.queryByText(/nothing usable|0 contributions/)).toBeNull();
+});
+
+test("supported attribution-only use stays visible without an additional restriction record", () => {
+    const captured = rows[0];
+    assert(captured);
+    convexReactHarness.query(api.sourcesWorkspace.listSources).returns([
+        {
+            ...captured,
+            contributions: {
+                ...tally,
+                total: 1,
+                supported: 1,
+                conflict: 0,
+                inspectionOnly: 0,
+                restricted: 0,
+                effectiveUses: {
+                    documentary: 0,
+                    attributed_argument_only: 1,
+                    context_only: 0,
+                    blocked: 0,
+                },
+            },
+        },
+    ]);
+    renderSources({ search: { sourcesView: "matrix" } });
+    expect(screen.getByText("1 attribution only")).toBeTruthy();
+});
+
+test("conflict leaves every effective-use restriction and the retained capture distinction visible", () => {
+    const captured = rows[0];
+    assert(captured);
+    convexReactHarness.query(api.sourcesWorkspace.listSources).returns([
+        {
+            ...captured,
+            membership: "retained",
+            capture: {
+                captureId: "capture-new" as Id<"sourceCaptures">,
+                contentHash: "new-hash",
+            },
+            retainedSnapshot: {
+                needsRevision: 1,
+                captureId: "capture-retained" as Id<"sourceCaptures">,
+                contentHash: "retained-hash",
+                qualificationTaskId:
+                    "qualification-retained" as Id<"aiTaskResults">,
+                qualificationVersion: 1,
+            },
+            contributions: {
+                ...tally,
+                total: 3,
+                supported: 2,
+                kinds: {
+                    asserted_fact: 1,
+                    attributed_argument: 1,
+                    forecast: 0,
+                    context: 1,
+                },
+                effectiveUses: {
+                    documentary: 0,
+                    attributed_argument_only: 1,
+                    context_only: 1,
+                    blocked: 1,
+                },
+            },
+        },
+    ]);
+    renderSources({ search: { sourcesView: "matrix" } });
+    expect(screen.getByText("Conflict 1")).toBeTruthy();
+    expect(
+        screen.getByText(
+            /1 for inspection only.*1 attribution only.*1 context only/,
+        ),
+    ).toBeTruthy();
+    expect(screen.getByText("Retained from another capture")).toBeTruthy();
+});
+
+test("Sources labels an older handoff explanation as recorded history", () => {
+    convexReactHarness.query(api.sourcesWorkspace.overview).returns({
+        ...overview,
+        materialOutcome: "partial",
+        research: { ...overview.research, status: "paused" },
+        researchSummary: "Recorded stop: the model response could not be used.",
+        needs: overview.needs.map((need) => ({
+            ...need,
+            outcome: "unfinished",
+            unfinished: ["The time window ended."],
+        })),
+    });
+    renderSources({ run: { ...run, sourcesPhase: "completed_with_limits" } });
+    expect(
+        screen.getByText(/Dossier status:.*model response could not be used/),
+    ).toBeTruthy();
+    expect(
+        screen.getByText(/Recorded at handoff:.*time window ended/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Start a new analysis/)).toBeNull();
+});
+
+test.each([
+    "running",
+    "paused",
+    "failed",
+    "cancelled",
+] as const)("later dossier activity keeps Sources completion and global status separate (%s)", (status) => {
+    convexReactHarness.query(api.sourcesWorkspace.overview).returns({
+        ...overview,
+        materialOutcome: "partial",
+        research: {
+            ...overview.research,
+            phase: "extracting_evidence",
+            status,
+        },
+        researchSummary: "The dossier needs attention.",
+    });
+    renderSources({
+        run: {
+            ...run,
+            sourcesPhase: "completed_with_limits",
+            executionStatus: status,
+            lifecycleState: "extracting_evidence",
+        },
+    });
+    expect(
+        screen.getByRole("heading", {
+            name: "Documentary preparation completed with limits",
+        }),
+    ).toBeTruthy();
+    if (status !== "running")
+        expect(
+            screen.getByText("Dossier status: The dossier needs attention."),
+        ).toBeTruthy();
 });

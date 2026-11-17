@@ -1,5 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
 import { completeSources } from "@convex/domain/sources";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
@@ -16,7 +17,58 @@ afterEach(() => {
 
 type Fixture = Awaited<ReturnType<typeof seedCapturedSources>>;
 
-async function qualifyWithConflict(f: Fixture) {
+async function workbenchFacts(f: Fixture) {
+    await f.t.run((ctx) => ctx.db.patch(f.runId, { startMode: "framed" }));
+    await f.t
+        .withIdentity({ subject: f.userId })
+        .mutation(api.execution.conversations.submit, {
+            runId: f.runId,
+            requestKey: "controlled-source-consultation",
+            text: "Explain the saved documentary material.",
+            delivery: "queue",
+        });
+    await f.t.run(async (ctx) => {
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .unique();
+        assert(conversation);
+        await ctx.db.patch(conversation._id, {
+            definitionId: "workbench_v1",
+            definitionVersion: getAgentDefinition("workbench_v1").version,
+        });
+    });
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const facts = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId),
+            mission = await ctx.db.get(active.missionId);
+        assert(run && mission);
+        return getAgentDefinition("workbench_v1").context(ctx, mission, run);
+    });
+    assert(facts.kind === "ready");
+    return facts.context;
+}
+
+async function qualifyWithConflict(
+    f: Fixture,
+    conclusions: (
+        | "supported"
+        | "documentary_conflict"
+        | "not_established"
+    )[] = ["documentary_conflict"],
+    permittedUse:
+        | "attributed_argument_only"
+        | "context_only" = "attributed_argument_only",
+) {
     vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
     await installModel(
         f.t,
@@ -38,12 +90,14 @@ async function qualifyWithConflict(f: Fixture) {
                 limitations: [
                     "The filing and the call define scope differently.",
                 ],
-                findings: input.contributions.map((c: { id: string }) => ({
-                    contributionId: c.id,
-                    conclusion: "documentary_conflict",
-                    permittedUse: "attributed_argument_only",
-                    diagnostic: "Another filing states a different scope.",
-                })),
+                findings: input.contributions.map(
+                    (c: { id: string }, index: number) => ({
+                        contributionId: c.id,
+                        conclusion: conclusions[index],
+                        permittedUse,
+                        diagnostic: "Another filing states a different scope.",
+                    }),
+                ),
             },
         };
     });
@@ -58,25 +112,22 @@ async function qualifyWithConflict(f: Fixture) {
                 sourceId: f.sourceId,
                 captureId: f.captureId,
                 expectedTaskId: null,
-                changes: [
-                    {
-                        contribution: {
-                            needIds: ["common-context"],
-                            statement:
-                                "The publisher describes workflow software.",
-                            period: "undated",
-                            modality: "publisher statement",
-                            attribution: "ServiceNow",
-                            kind: "attributed_argument",
-                            evidence: [
-                                {
-                                    readRequestId: f.readRequestId,
-                                    passageOrder: f.passage.order,
-                                },
-                            ],
-                        },
+                changes: conclusions.map((_, index) => ({
+                    contribution: {
+                        needIds: ["common-context"],
+                        statement: `The publisher describes workflow software scope ${index}.`,
+                        period: "undated",
+                        modality: "publisher statement",
+                        attribution: "ServiceNow",
+                        kind: "attributed_argument" as const,
+                        evidence: [
+                            {
+                                readRequestId: f.readRequestId,
+                                passageOrder: f.passage.order,
+                            },
+                        ],
                     },
-                ],
+                })),
             },
         },
     );
@@ -174,7 +225,7 @@ test("the Sources workspace keeps reading, contribution, control and membership 
             handed.reading.notCaptured,
     ).toBe(handed.collect.candidates);
     // Not retained separates read documents with nothing usable from leads never read.
-    expect(handed.organize.notRetainedRead).toBe(
+    expect(handed.organize.notRetainedCaptured).toBe(
         tallyOf(
             (entry) =>
                 entry.membership === "not_retained" &&
@@ -182,7 +233,8 @@ test("the Sources workspace keeps reading, contribution, control and membership 
         ),
     );
     expect(
-        handed.organize.notRetainedRead + handed.organize.notRetainedUnread,
+        handed.organize.notRetainedCaptured +
+            handed.organize.notRetainedWithoutAvailableCapture,
     ).toBe(handed.organize.notRetained);
     // Controls on retained material are reported separately from every control performed.
     expect(handed.retainedContributions.total).toBe(
@@ -202,7 +254,17 @@ test("the Sources workspace keeps reading, contribution, control and membership 
         );
     expect(rows?.find((entry) => entry.sourceId === f.sourceId)).toMatchObject({
         reading: "full",
-        contributions: { total: 1, conflict: 1, supported: 0 },
+        contributions: {
+            total: 1,
+            conflict: 1,
+            supported: 0,
+            effectiveUses: {
+                documentary: 0,
+                attributed_argument_only: 0,
+                context_only: 0,
+                blocked: 1,
+            },
+        },
         limitations: ["The filing and the call define scope differently."],
     });
 
@@ -287,4 +349,239 @@ test("the conversation exposes the same recorded Sources operation and keeps its
         },
     });
     expect(JSON.stringify(snapshot)).not.toContain('"valueJson"');
+});
+
+test("retention preserves per-contribution conflict and non-establishment limits", async () => {
+    const f = await seedCapturedSources();
+    const requestId = await qualifyWithConflict(f, [
+        "supported",
+        "documentary_conflict",
+        "not_established",
+    ]);
+    await f.t.run((ctx) =>
+        completeSources(ctx, f.preparationId, {
+            kind: "complete",
+            needsRevision: 1,
+            needs: [
+                {
+                    needId: "common-context",
+                    unfinished: [],
+                    workRequestIds: [requestId],
+                },
+            ],
+        }),
+    );
+    const rows = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.listSources, { runId: f.runId });
+    expect(rows?.find((row) => row.sourceId === f.sourceId)).toMatchObject({
+        membership: "retained",
+        contributions: {
+            total: 3,
+            supported: 1,
+            conflict: 1,
+            notEstablished: 1,
+            inspectionOnly: 2,
+            effectiveUses: {
+                documentary: 0,
+                attributed_argument_only: 1,
+                context_only: 0,
+                blocked: 2,
+            },
+        },
+    });
+    expect((await workbenchFacts(f)).availableMaterials).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                sourceId: f.sourceId,
+                documentaryState: expect.objectContaining({
+                    membership: "retained",
+                    contributions: expect.objectContaining({
+                        total: 3,
+                        supported: 1,
+                        conflict: 1,
+                        notEstablished: 1,
+                        inspectionOnly: 2,
+                        effectiveUses: {
+                            documentary: 0,
+                            attributed_argument_only: 1,
+                            context_only: 0,
+                            blocked: 2,
+                        },
+                    }),
+                }),
+            }),
+        ]),
+    );
+});
+
+test("supported attribution-only use stays restricted without an additional restriction record", async () => {
+    const f = await seedCapturedSources();
+    await qualifyWithConflict(f, ["supported"]);
+    const rows = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.listSources, { runId: f.runId });
+    expect(rows?.find((row) => row.sourceId === f.sourceId)).toMatchObject({
+        contributions: {
+            supported: 1,
+            restricted: 0,
+            effectiveUses: {
+                documentary: 0,
+                attributed_argument_only: 1,
+                context_only: 0,
+                blocked: 0,
+            },
+        },
+    });
+    expect((await workbenchFacts(f)).availableMaterials).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                sourceId: f.sourceId,
+                documentaryState: expect.objectContaining({
+                    contributions: expect.objectContaining({
+                        supported: 1,
+                        restricted: 0,
+                        effectiveUses: {
+                            documentary: 0,
+                            attributed_argument_only: 1,
+                            context_only: 0,
+                            blocked: 0,
+                        },
+                    }),
+                }),
+            }),
+        ]),
+    );
+});
+
+test("context-only effective permission reaches Sources and Workbench without an extra restriction", async () => {
+    const f = await seedCapturedSources();
+    await qualifyWithConflict(f, ["supported"], "context_only");
+    const rows = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.listSources, { runId: f.runId });
+    expect(rows?.find((row) => row.sourceId === f.sourceId)).toMatchObject({
+        contextOnly: true,
+        contributions: {
+            supported: 1,
+            restricted: 0,
+            effectiveUses: {
+                documentary: 0,
+                attributed_argument_only: 0,
+                context_only: 1,
+                blocked: 0,
+            },
+        },
+    });
+    const context = await workbenchFacts(f);
+    expect(context.availableMaterials).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                sourceId: f.sourceId,
+                documentaryState: expect.objectContaining({
+                    contextOnly: true,
+                    contributions: expect.objectContaining({
+                        supported: 1,
+                        restricted: 0,
+                        effectiveUses: {
+                            documentary: 0,
+                            attributed_argument_only: 0,
+                            context_only: 1,
+                            blocked: 0,
+                        },
+                    }),
+                }),
+            }),
+        ]),
+    );
+    expect(context.documentaryPreparation).toMatchObject({
+        controlledContributions: [
+            expect.objectContaining({
+                sourceId: f.sourceId,
+                contributions: [
+                    expect.objectContaining({
+                        permittedUse: "context_only",
+                        restrictions: [],
+                    }),
+                ],
+            }),
+        ],
+    });
+});
+
+test("retained context counts follow the frozen capture when a newer capture is unqualified", async () => {
+    const f = await seedCapturedSources();
+    const requestId = await qualifyWithConflict(
+        f,
+        ["supported"],
+        "context_only",
+    );
+    await f.t.run((ctx) =>
+        completeSources(ctx, f.preparationId, {
+            kind: "complete",
+            needsRevision: 1,
+            needs: [
+                {
+                    needId: "common-context",
+                    unfinished: [],
+                    workRequestIds: [requestId],
+                },
+            ],
+        }),
+    );
+    await f.t.run(async (ctx) => {
+        const capture = await ctx.db.get(f.captureId);
+        assert(capture);
+        const { _id, _creationTime, ...fields } = capture;
+        await ctx.db.insert("sourceCaptures", {
+            ...fields,
+            captureKey: "newer-unqualified-context",
+            contentHash: "newer-capture-hash",
+            updatedAt: capture.updatedAt + 1,
+        });
+    });
+    const owner = f.t.withIdentity({ subject: f.userId });
+    expect(
+        await owner.query(api.sourcesWorkspace.overview, { runId: f.runId }),
+    ).toMatchObject({
+        organize: { retained: 1, contextOnly: 1 },
+        retainedContributions: { effectiveUses: { context_only: 1 } },
+    });
+    const rows = await owner.query(api.sourcesWorkspace.listSources, {
+        runId: f.runId,
+    });
+    expect(rows?.find((row) => row.sourceId === f.sourceId)).toMatchObject({
+        contextOnly: false,
+        qualification: { status: "not_recorded" },
+        contributions: null,
+        retainedSnapshot: { captureId: f.captureId },
+    });
+    const frozen = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    await owner.mutation(api.sources.decide, {
+        runId: f.runId,
+        corpusRevisionId: f.corpusRevisionId,
+        sourceId: f.sourceId,
+        decision: "rejected",
+        decisionKey: "exclude-frozen-context",
+    });
+    expect(
+        await owner.query(api.sourcesWorkspace.overview, { runId: f.runId }),
+    ).toMatchObject({
+        organize: { retained: 0, contextOnly: 0, excluded: 1 },
+        retainedContributions: { total: 0 },
+    });
+    expect(
+        (
+            await owner.query(api.sourcesWorkspace.listSources, {
+                runId: f.runId,
+            })
+        )?.find((row) => row.sourceId === f.sourceId),
+    ).toMatchObject({
+        membership: "excluded",
+        retainedSnapshot: { captureId: f.captureId },
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.result,
+    ).toEqual(frozen?.sourcesMission?.result);
 });

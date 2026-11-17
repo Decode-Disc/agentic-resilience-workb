@@ -737,7 +737,8 @@ export const snapshot = query({
                 ? {
                       missionId: sourcesMission._id,
                       interruptionDetail:
-                          sourcesPhase === "interrupted"
+                          sourcesPhase === "interrupted" ||
+                          sourcesPhase === "failed"
                               ? formatResearchSummary(research)
                               : undefined,
                       startedAt: sourcesMission.createdAt,

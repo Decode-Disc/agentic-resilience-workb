@@ -1,7 +1,16 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { type QueryCtx, query } from "@convex/_generated/server";
 import { mergeRunCompanyMetadata } from "@convex/domain/companyMetadata";
-import { sourceCaptureState } from "@convex/domain/sourceCaptureState";
+import {
+    formatResearchSummary,
+    readResearchState,
+} from "@convex/domain/researchState";
+import { researchStateValidator } from "@convex/domain/researchStateContracts";
+import {
+    captureAvailability,
+    sourceCaptureAvailabilityValidator as readingValidator,
+    sourceCaptureState,
+} from "@convex/domain/sourceCaptureState";
 import { SOURCE_RETRIEVAL_VERSION } from "@convex/domain/sourceRetrievalPolicy";
 import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
 import {
@@ -12,14 +21,21 @@ import {
 } from "@convex/domain/sourceSelectionPolicy";
 import {
     controlledSourcesContributions,
+    latestSourceQualifications,
+    projectSourceDocumentState,
     readSourcesMission,
     sourcesPreparationPhase,
+    tallyDocumentaryContributions,
 } from "@convex/domain/sources";
 import {
+    documentaryContributionTallyValidator as contributionTallyValidator,
+    type DocumentaryContributionTally,
     documentaryContributionValidator,
     documentaryFindingValidator,
+    sourceDocumentStateValidator,
 } from "@convex/domain/sourcesContracts";
 import { isResumableResearchPause } from "@convex/domain/transitions";
+import { executionError } from "@convex/execution/errors";
 import { missionStatusValidator } from "@convex/execution/executionProtocol";
 import { sourceDossierCandidateLimit } from "@convex/resourceLimits";
 import {
@@ -29,7 +45,7 @@ import {
 } from "@convex/resourcePolicy";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
-import { type Infer, v } from "convex/values";
+import { v } from "convex/values";
 
 const preparationStatus =
     schema.tables.sourceSelectionProposalRebuilds.validator.fields.status;
@@ -45,38 +61,9 @@ export const needOutcomeValidator = v.union(
     v.literal("gap"),
     v.literal("unfinished"),
 );
-/** Inclusion is separate from reading and contribution: pending until Sources hands off. */
-const membershipValidator = v.union(
-    v.literal("pending"),
-    v.literal("retained"),
-    v.literal("not_retained"),
-    v.literal("excluded"),
-);
-const readingValidator = v.union(
-    v.literal("full"),
-    v.literal("partial"),
-    v.literal("capturing"),
-    v.literal("unavailable"),
-    v.literal("not_captured"),
-);
-const contributionTallyValidator = v.object({
-    total: v.number(),
-    kinds: v.object({
-        asserted_fact: v.number(),
-        attributed_argument: v.number(),
-        forecast: v.number(),
-        context: v.number(),
-    }),
-    supported: v.number(),
-    conflict: v.number(),
-    notEstablished: v.number(),
-    unchecked: v.number(),
-    restricted: v.number(),
-    inspectionOnly: v.number(),
-});
-type ContributionTally = Infer<typeof contributionTallyValidator>;
-
 const overviewValidator = v.object({
+    research: researchStateValidator,
+    researchSummary: v.string(),
     preparationId: v.id("sourceSelectionProposalRebuilds"),
     preparationStatus,
     missionStatus: v.optional(missionStatusValidator),
@@ -129,10 +116,10 @@ const overviewValidator = v.object({
         retained: v.number(),
         contextOnly: v.number(),
         notRetained: v.number(),
-        /** Not retained after a capture: read, with nothing usable. */
-        notRetainedRead: v.number(),
-        /** Not retained and never captured. */
-        notRetainedUnread: v.number(),
+        /** A saved capture is available; qualification and usefulness remain separate facts. */
+        notRetainedCaptured: v.number(),
+        /** No committed capture is currently available, including failed or ongoing acquisition. */
+        notRetainedWithoutAvailableCapture: v.number(),
         excluded: v.number(),
         restricted: v.number(),
     }),
@@ -158,10 +145,7 @@ const sourceRowValidator = v.object({
     documentKind: sourceDocumentKindValidator,
     authorityTier: sourceAuthorityTierValidator,
     reading: readingValidator,
-    membership: membershipValidator,
-    contextOnly: v.boolean(),
-    contributions: v.union(contributionTallyValidator, v.null()),
-    limitations: v.array(v.string()),
+    ...sourceDocumentStateValidator.fields,
 });
 
 const readerValidator = v.object({
@@ -219,8 +203,6 @@ const readerValidator = v.object({
     ),
 });
 
-type Controlled = Awaited<ReturnType<typeof controlledSourcesContributions>>;
-
 /** Authorizes the owner and loads the mission preparation; legacy dossiers return null. */
 async function missionContext(ctx: QueryCtx, runId: Id<"researchRuns">) {
     const { run } = await requireWorkspaceRun(ctx, runId);
@@ -252,59 +234,15 @@ async function missionContext(ctx: QueryCtx, runId: Id<"researchRuns">) {
     };
 }
 
-/** The latest qualification per source; earlier versions stay with their owners. */
-function latestQualifications(controlled: Controlled) {
-    const bySource = new Map<Id<"sources">, Controlled[number]>();
-    for (const qualification of controlled) {
-        const current = bySource.get(qualification.sourceId);
-        if (!current || current.version < qualification.version)
-            bySource.set(qualification.sourceId, qualification);
-    }
-    return bySource;
-}
-
-function emptyTally(): ContributionTally {
-    return {
-        total: 0,
-        kinds: {
-            asserted_fact: 0,
-            attributed_argument: 0,
-            forecast: 0,
-            context: 0,
-        },
-        supported: 0,
-        conflict: 0,
-        notEstablished: 0,
-        unchecked: 0,
-        restricted: 0,
-        inspectionOnly: 0,
-    };
-}
-
-function tally(
-    contributions: Controlled[number]["contributions"],
-    into = emptyTally(),
+function addTally(
+    into: DocumentaryContributionTally,
+    from: DocumentaryContributionTally | null,
 ) {
-    for (const contribution of contributions) {
-        into.total++;
-        into.kinds[contribution.kind]++;
-        const found = contribution.finding?.conclusion;
-        if (found === "supported") into.supported++;
-        else if (found === "documentary_conflict") into.conflict++;
-        else if (found === "not_established") into.notEstablished++;
-        else into.unchecked++;
-        if (contribution.restrictions.length) into.restricted++;
-        if (contribution.useStatus === "inspection_only") into.inspectionOnly++;
-    }
-    return into;
-}
-
-function addTally(into: ContributionTally, from: ContributionTally | null) {
     if (!from) return into;
     into.total += from.total;
     for (const kind of Object.keys(
         into.kinds,
-    ) as (keyof ContributionTally["kinds"])[])
+    ) as (keyof DocumentaryContributionTally["kinds"])[])
         into.kinds[kind] += from.kinds[kind];
     into.supported += from.supported;
     into.conflict += from.conflict;
@@ -312,21 +250,11 @@ function addTally(into: ContributionTally, from: ContributionTally | null) {
     into.unchecked += from.unchecked;
     into.restricted += from.restricted;
     into.inspectionOnly += from.inspectionOnly;
+    for (const use of Object.keys(
+        into.effectiveUses,
+    ) as (keyof DocumentaryContributionTally["effectiveUses"])[])
+        into.effectiveUses[use] += from.effectiveUses[use];
     return into;
-}
-
-function membership(
-    sourceId: Id<"sources">,
-    decision: Controlled[number]["sourceDecision"] | null,
-    result: NonNullable<
-        Doc<"sourceSelectionProposalRebuilds">["sourcesMission"]
-    >["result"],
-) {
-    if (decision === "rejected") return "excluded" as const;
-    if (!result) return "pending" as const;
-    return result.documents.some((document) => document.sourceId === sourceId)
-        ? ("retained" as const)
-        : ("not_retained" as const);
 }
 
 function hostOf(url: string) {
@@ -353,7 +281,7 @@ async function sourceRows(
         run.companySnapshot,
         run.companyId ? await ctx.db.get(run.companyId) : null,
     );
-    const qualifications = latestQualifications(controlled);
+    const qualifications = latestSourceQualifications(controlled);
     return Promise.all(
         records.map(async (source) => {
             const capture = await sourceCaptureState(ctx, source._id);
@@ -381,9 +309,7 @@ async function sourceRows(
                 },
                 company,
             );
-            const contributions = qualification
-                ? tally(qualification.contributions)
-                : null;
+
             return {
                 sourceId: source._id,
                 title: source.title,
@@ -397,30 +323,21 @@ async function sourceRows(
                 family: classified.sourceFamily,
                 documentKind: classified.documentKind,
                 authorityTier: classified.authorityTier,
-                reading: capture.committed
-                    ? capture.committed.readingCompleteness === "partial" ||
-                      capture.committed.representationCompleteness === "partial"
-                        ? ("partial" as const)
-                        : ("full" as const)
-                    : capture.capturing
-                      ? ("capturing" as const)
-                      : capture.unavailable
-                        ? ("unavailable" as const)
-                        : ("not_captured" as const),
-                membership: membership(source._id, decision, data.result),
-                contextOnly:
-                    !!qualification?.contributions.length &&
-                    qualification.contributions.every(
-                        (contribution) =>
-                            contribution.permittedUse === "context_only" ||
-                            contribution.permittedUse === "blocked",
-                    ) &&
-                    qualification.contributions.some(
-                        (contribution) =>
-                            contribution.permittedUse === "context_only",
-                    ),
-                contributions,
-                limitations: qualification?.limitations ?? [],
+                reading: captureAvailability(capture),
+                ...projectSourceDocumentState({
+                    preparationId: preparation._id,
+                    sourceId: source._id,
+                    capture: capture.committed
+                        ? {
+                              captureId: capture.committed._id,
+                              contentHash:
+                                  capture.committed.contentHash ?? null,
+                          }
+                        : null,
+                    result: data.result,
+                    decision,
+                    qualifications: controlled,
+                }),
             };
         }),
     );
@@ -434,6 +351,7 @@ export const overview = query({
         const context = await missionContext(ctx, args.runId);
         if (!context) return null;
         const { run, preparation, data, controlled } = context;
+        const research = await readResearchState(ctx, run);
         const mission = await readSourcesMission(ctx, run);
         const phase = sourcesPreparationPhase(run, preparation, mission);
         // Needs without a handed-off result are on hold only while research can still resume.
@@ -451,6 +369,31 @@ export const overview = query({
             (qualification) => qualification.contributions,
         );
         const result = data.result;
+        const retainedStates = (result?.documents ?? [])
+            .map((document) => {
+                const qualification = controlled.find(
+                    (item) =>
+                        item.taskId === document.qualificationTaskId &&
+                        item.version === document.qualificationVersion &&
+                        item.sourceId === document.sourceId &&
+                        item.captureId === document.captureId &&
+                        item.contentHash === document.contentHash,
+                );
+                if (!qualification)
+                    throw executionError("qualification_invalid");
+                return projectSourceDocumentState({
+                    preparationId: preparation._id,
+                    sourceId: document.sourceId,
+                    capture: {
+                        captureId: document.captureId,
+                        contentHash: document.contentHash,
+                    },
+                    result,
+                    decision: qualification.sourceDecision,
+                    qualifications: [qualification],
+                });
+            })
+            .filter((state) => state.membership === "retained");
         const needs = data.needs.map((need) => {
             const served = contributions.filter((contribution) =>
                 contribution.needIds.includes(need.id),
@@ -512,6 +455,8 @@ export const overview = query({
         const count = (predicate: (row: (typeof rows)[number]) => boolean) =>
             rows.filter(predicate).length;
         return {
+            research,
+            researchSummary: formatResearchSummary(research),
             preparationId: preparation._id,
             preparationStatus: preparation.status,
             ...(mission ? { missionStatus: mission.status } : {}),
@@ -540,25 +485,22 @@ export const overview = query({
                 capturing: count((row) => row.reading === "capturing"),
                 notCaptured: count((row) => row.reading === "not_captured"),
             },
-            contributions: tally(contributions),
-            retainedContributions: rows
-                .filter((row) => row.membership === "retained")
-                .reduce(
-                    (into, row) => addTally(into, row.contributions),
-                    emptyTally(),
-                ),
+            contributions: tallyDocumentaryContributions(contributions),
+            retainedContributions: retainedStates.reduce(
+                (into, state) => addTally(into, state.contributions),
+                tallyDocumentaryContributions([]),
+            ),
             organize: {
                 retained: count((row) => row.membership === "retained"),
-                contextOnly: count(
-                    (row) => row.membership === "retained" && row.contextOnly,
-                ),
+                contextOnly: retainedStates.filter((state) => state.contextOnly)
+                    .length,
                 notRetained: count((row) => row.membership === "not_retained"),
-                notRetainedRead: count(
+                notRetainedCaptured: count(
                     (row) =>
                         row.membership === "not_retained" &&
                         (row.reading === "full" || row.reading === "partial"),
                 ),
-                notRetainedUnread: count(
+                notRetainedWithoutAvailableCapture: count(
                     (row) =>
                         row.membership === "not_retained" &&
                         row.reading !== "full" &&
@@ -593,7 +535,7 @@ export const getSource = query({
         );
         if (!row) return null;
         const { run, preparation, controlled } = context;
-        const qualification = latestQualifications(controlled).get(
+        const qualification = latestSourceQualifications(controlled).get(
             args.sourceId,
         );
         const state = await sourceCaptureState(ctx, args.sourceId);
@@ -691,7 +633,36 @@ export const getSource = query({
             }),
         );
         return {
-            source: row,
+            source: {
+                ...row,
+                reading: captureAvailability(
+                    capture
+                        ? {
+                              committed: capture,
+                              capturing: false,
+                              unavailable: false,
+                          }
+                        : state,
+                ),
+                ...projectSourceDocumentState({
+                    preparationId: preparation._id,
+                    sourceId: args.sourceId,
+                    capture: capture
+                        ? {
+                              captureId: capture._id,
+                              contentHash: capture.contentHash ?? null,
+                          }
+                        : null,
+                    result: preparation.sourcesMission?.result,
+                    decision:
+                        qualification?.sourceDecision ??
+                        (await context.reads.decision(
+                            preparation.corpusRevisionId,
+                            args.sourceId,
+                        )),
+                    qualifications: controlled,
+                }),
+            },
             capture: capture
                 ? {
                       captureId: capture._id,
@@ -706,7 +677,7 @@ export const getSource = query({
                           : {}),
                   }
                 : null,
-            excerpts: !capture
+            excerpts: !passages.length
                 ? ("none" as const)
                 : cited.size
                   ? ("cited" as const)

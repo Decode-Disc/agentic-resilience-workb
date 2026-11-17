@@ -200,6 +200,9 @@ test("a run that failed before Sources prepared material is reported as stopped,
     ).toBeTruthy();
     expect(screen.queryByText(/Preparing documentary sources/)).toBeNull();
     expect(
+        screen.queryByText(/Start a new analysis|nothing to inspect here/),
+    ).toBeNull();
+    expect(
         screen.queryByText(/discovering_sources|failed|sources_need_capacity/),
     ).toBeNull();
 });

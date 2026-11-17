@@ -474,3 +474,78 @@ export const documentarySubmissionValue = v.object({
 export const documentarySubmissionResult = operationResultValidator(
     documentarySubmissionValue,
 );
+
+export const sourceMembershipValidator = v.union(
+    v.literal("pending"),
+    v.literal("retained"),
+    v.literal("not_retained"),
+    v.literal("excluded"),
+);
+export const documentaryContributionTallyValidator = v.object({
+    total: v.number(),
+    kinds: v.object({
+        asserted_fact: v.number(),
+        attributed_argument: v.number(),
+        forecast: v.number(),
+        context: v.number(),
+    }),
+    supported: v.number(),
+    conflict: v.number(),
+    notEstablished: v.number(),
+    unchecked: v.number(),
+    restricted: v.number(),
+    effectiveUses: v.object({
+        documentary: v.number(),
+        attributed_argument_only: v.number(),
+        context_only: v.number(),
+        blocked: v.number(),
+    }),
+    inspectionOnly: v.number(),
+});
+
+export type SourceMembership = Infer<typeof sourceMembershipValidator>;
+export type DocumentaryContributionTally = Infer<
+    typeof documentaryContributionTallyValidator
+>;
+
+export const sourceCaptureIdentityValidator = v.object({
+    captureId: preparedDocumentValidator.fields.captureId,
+    contentHash: v.union(
+        preparedDocumentValidator.fields.contentHash,
+        v.null(),
+    ),
+});
+export type SourceCaptureIdentity = Infer<
+    typeof sourceCaptureIdentityValidator
+>;
+export const sourceDocumentStateValidator = v.object({
+    preparationId: v.id("sourceSelectionProposalRebuilds"),
+    capture: v.union(sourceCaptureIdentityValidator, v.null()),
+    membership: sourceMembershipValidator,
+    retainedSnapshot: v.union(
+        v.object({
+            needsRevision: v.number(),
+            captureId: preparedDocumentValidator.fields.captureId,
+            contentHash: preparedDocumentValidator.fields.contentHash,
+            qualificationTaskId:
+                preparedDocumentValidator.fields.qualificationTaskId,
+            qualificationVersion:
+                preparedDocumentValidator.fields.qualificationVersion,
+        }),
+        v.null(),
+    ),
+    qualification: v.union(
+        v.object({ status: v.literal("not_recorded") }),
+        v.object({
+            status: v.literal("recorded"),
+            taskId: preparedDocumentValidator.fields.qualificationTaskId,
+            version: preparedDocumentValidator.fields.qualificationVersion,
+            captureId: preparedDocumentValidator.fields.captureId,
+            contentHash: preparedDocumentValidator.fields.contentHash,
+        }),
+    ),
+    contextOnly: v.boolean(),
+    contributions: v.union(documentaryContributionTallyValidator, v.null()),
+    limitations: v.array(v.string()),
+});
+export type SourceDocumentState = Infer<typeof sourceDocumentStateValidator>;

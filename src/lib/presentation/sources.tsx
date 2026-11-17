@@ -86,7 +86,7 @@ const phaseCopy: Record<
         label: "Waiting",
         outcome: "Waiting",
         title: "Documentary preparation is waiting",
-        detail: `${sourcesAgent} continues when its current step can proceed. Material read so far remains inspectable.`,
+        detail: `${sourcesAgent} is waiting before its next step. Captured material remains inspectable.`,
     },
     paused: {
         workState: "paused",
@@ -95,7 +95,7 @@ const phaseCopy: Record<
         label: "Paused",
         outcome: "Paused",
         title: "Documentary preparation paused",
-        detail: "Research is paused. Material read so far remains inspectable. Resume research to continue.",
+        detail: "Research is paused. Captured material remains inspectable.",
     },
     time_limit: {
         workState: "paused",
@@ -104,7 +104,7 @@ const phaseCopy: Record<
         label: "Decision needed",
         outcome: "Decision needed",
         title: `${sourcesAgent} reached its time limit`,
-        detail: `${sourcesAgent} used its time window before finishing. Decide in the conversation whether to continue preparation or use what's prepared.`,
+        detail: `${sourcesAgent} used its time window before finishing.`,
     },
     completed: {
         workState: "completed",
@@ -140,7 +140,7 @@ const phaseCopy: Record<
         label: "Interrupted",
         outcome: "Interrupted",
         title: "Documentary preparation interrupted",
-        detail: `${sourcesAgent} stopped before handing off its material. Documents read so far remain visible.`,
+        detail: `${sourcesAgent} stopped before handing off its material. Captured documents remain visible.`,
     },
     failed: {
         workState: "interrupted",
@@ -149,7 +149,7 @@ const phaseCopy: Record<
         label: "Stopped",
         outcome: "Stopped",
         title: "Documentary preparation stopped",
-        detail: "Preparation stopped because of an internal problem and cannot continue. Gathered sources remain visible in Sources. Start a new analysis to continue.",
+        detail: "Preparation stopped before handing off its material. Captured documents remain available for inspection.",
     },
     insufficient_evidence: {
         workState: "blocked",
@@ -327,11 +327,22 @@ function controlBadge(tally: NonNullable<SourcesRow["contributions"]>) {
 function restrictionText(row: SourcesRow) {
     const tally = row.contributions;
     if (!tally) return undefined;
-    if (tally.inspectionOnly)
-        return `${tally.inspectionOnly} for inspection only`;
-    if (tally.restricted) return `${tally.restricted} with narrowed use`;
-    if (row.contextOnly) return "Context only";
-    return undefined;
+    return (
+        [
+            tally.effectiveUses.blocked
+                ? `${tally.effectiveUses.blocked} for inspection only`
+                : null,
+            tally.effectiveUses.attributed_argument_only
+                ? `${tally.effectiveUses.attributed_argument_only} attribution only`
+                : null,
+            tally.effectiveUses.context_only
+                ? `${tally.effectiveUses.context_only} context only`
+                : null,
+            tally.restricted ? `${tally.restricted} with narrowed use` : null,
+        ]
+            .filter(Boolean)
+            .join(" · ") || undefined
+    );
 }
 
 /** One matrix row; inclusion, reading, contribution and control remain separate columns. */
@@ -363,9 +374,21 @@ export function sourcesMatrixRow(row: SourcesRow): SourceMatrixRow {
                       })),
               }
             : undefined,
+        emptyContributionsLabel:
+            row.qualification.status === "not_recorded"
+                ? "No qualification recorded"
+                : undefined,
         restriction: restrictionText(row),
         control: tally ? controlBadge(tally) : undefined,
-        selection: membershipBadge(row),
+        selection: (
+            <>
+                {membershipBadge(row)}
+                {row.retainedSnapshot &&
+                row.capture?.captureId !== row.retainedSnapshot.captureId ? (
+                    <span>Retained from another capture</span>
+                ) : null}
+            </>
+        ),
     };
 }
 
@@ -547,10 +570,11 @@ function questionLabels(overview: Overview | null | undefined) {
 const familyOrder = Object.keys(familyLabels) as SourcesRow["family"][];
 
 /** Preparation figures for the overview; the outcome label follows the shared Sources mission state. */
-function needReason(need: Overview["needs"][number]) {
-    return (
-        [need.gap, ...need.unfinished].filter(Boolean).join(" ") || undefined
-    );
+function needReason(need: Overview["needs"][number], recorded = false) {
+    const reason = [need.gap, ...need.unfinished].filter(Boolean).join(" ");
+    return reason
+        ? `${recorded ? "Recorded at handoff: " : ""}${reason}`
+        : undefined;
 }
 
 function controlCounts(tally: Overview["contributions"]) {
@@ -567,7 +591,9 @@ export function sourcesPreparationView(
     run: Run,
     rows: readonly SourcesRow[],
 ): SourcesPreparationView {
-    const presentation = sourcesPhasePresentation(run.sourcesPhase);
+    const presentation = sourcesPhasePresentation(
+        overview.research.sources?.phase ?? run.sourcesPhase,
+    );
     const state = presentation.workState;
     const labels = questionLabels(overview);
     const settled = state === "completed";
@@ -593,17 +619,19 @@ export function sourcesPreparationView(
               .filter(Boolean)
               .join(" ")
         : run.sourcesPhase === "time_limit"
-          ? `${sourcesAgent} used its time window with ${plural(overview.reading.captured, ["document", "documents"])} read for ${needs}. Decide in the conversation whether to continue preparation or use what's prepared.`
+          ? `${sourcesAgent} used its time window with ${plural(overview.reading.captured, ["document", "documents"])} captured for ${needs}.`
           : state === "paused"
-            ? `${sourcesAgent} is paused with ${plural(overview.reading.captured, ["document", "documents"])} read so far for ${needs}.`
+            ? `${sourcesAgent} is paused with ${plural(overview.reading.captured, ["document", "documents"])} captured so far for ${needs}.`
             : run.sourcesPhase === "failed"
-              ? `Preparation stopped because of an internal problem and cannot continue. ${plural(overview.reading.captured, ["document", "documents"])} read so far remain visible. Start a new analysis to continue.`
+              ? `Preparation stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} captured so far remain available.`
               : state === "interrupted"
-                ? `${sourcesAgent} stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} read so far remain available.`
+                ? `${sourcesAgent} stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} captured so far remain available.`
                 : `${sourcesAgent} is collecting and reading material for ${needs}. Outcomes settle when it hands off.`;
     const rowsById = new Map(rows.map((row) => [row.sourceId as string, row]));
     // A reason repeated on several needs, such as the time window ending, is stated once.
-    const reasons = overview.needs.map(needReason).filter(Boolean);
+    const reasons = overview.needs
+        .map((need) => needReason(need, !!overview.materialOutcome))
+        .filter(Boolean);
     const needsNotice = reasons.find(
         (reason) => reasons.filter((entry) => entry === reason).length > 1,
     );
@@ -680,21 +708,21 @@ export function sourcesPreparationView(
                           },
                       ]
                     : []),
-                ...(overview.organize.notRetainedRead
+                ...(overview.organize.notRetainedCaptured
                     ? [
                           {
                               id: "unused",
                               role: "unused" as const,
-                              text: `${overview.organize.notRetainedRead} read, nothing usable`,
+                              text: `${overview.organize.notRetainedCaptured} captured, not retained`,
                           },
                       ]
                     : []),
-                ...(overview.organize.notRetainedUnread
+                ...(overview.organize.notRetainedWithoutAvailableCapture
                     ? [
                           {
                               id: "lead",
                               role: "lead" as const,
-                              text: `${plural(overview.organize.notRetainedUnread, ["candidate", "candidates"])} never captured`,
+                              text: `${plural(overview.organize.notRetainedWithoutAvailableCapture, ["candidate", "candidates"])} without an available capture`,
                           },
                       ]
                     : []),
@@ -736,6 +764,15 @@ export function sourcesPreparationView(
                         : question.text,
             };
         }),
+        researchNotice:
+            ["paused", "failed", "cancelled"].includes(
+                overview.research.status,
+            ) ||
+            overview.research.sources?.executionStop ||
+            run.sourcesPhase === "interrupted" ||
+            run.sourcesPhase === "failed"
+                ? `Dossier status: ${overview.researchSummary}`
+                : undefined,
         needsNotice,
         needs: overview.needs.map(
             (need): DocumentaryNeed => ({
@@ -758,8 +795,9 @@ export function sourcesPreparationView(
                           ),
                       }
                     : {}),
-                ...(needReason(need) && needReason(need) !== needsNotice
-                    ? { detail: needReason(need) }
+                ...(needReason(need, !!overview.materialOutcome) &&
+                needReason(need, !!overview.materialOutcome) !== needsNotice
+                    ? { detail: needReason(need, !!overview.materialOutcome) }
                     : {}),
                 sources: need.sourceIds.flatMap((sourceId) => {
                     const row = rowsById.get(sourceId);

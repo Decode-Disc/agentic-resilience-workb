@@ -130,7 +130,9 @@ test("closed instruction treatment reaches Workbench and its review without reop
     expect(projected.context.documentaryPreparation).toMatchObject({
         instructionTreatment: {
             status: "closed",
-            description: expect.stringContaining("cannot reopen"),
+            description: expect.stringContaining(
+                "not accepting additional documentary requests",
+            ),
         },
     });
     const invocation = await f.t.mutation(

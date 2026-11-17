@@ -17,6 +17,10 @@ type Row = NonNullable<
 const row = (
     patch: Omit<Partial<Row>, "sourceId"> & { sourceId: string },
 ): SourcesRow => ({
+    preparationId: "prep" as Row["preparationId"],
+    capture: null,
+    retainedSnapshot: null,
+    qualification: { status: "not_recorded" },
     title: patch.sourceId,
     url: `https://example.com/${patch.sourceId}`,
     host: "example.com",
@@ -110,11 +114,9 @@ test.each(
     for (const text of [copy.label, copy.outcome, copy.title, copy.detail])
         expect(text).not.toMatch(/_|sources_prepared|execution|mission/i);
     if (phase === "failed")
-        expect(copy.detail).toContain("Start a new analysis");
+        expect(copy.detail).not.toMatch(/Start a new analysis|cannot continue/);
     if (phase === "time_limit")
-        expect(copy.detail).toMatch(
-            /Decide in the conversation.*continue preparation.*use what's prepared/,
-        );
+        expect(copy.detail).toContain("used its time window");
 });
 
 test("Sources copy names the agent and never shows raw codes", () => {
@@ -156,6 +158,12 @@ const tallied = (total: number) => ({
     notEstablished: 0,
     unchecked: 0,
     restricted: 0,
+    effectiveUses: {
+        documentary: total,
+        attributed_argument_only: 0,
+        context_only: 0,
+        blocked: 0,
+    },
     inspectionOnly: 0,
 });
 

@@ -63,7 +63,7 @@ function sourcesFallbackCopy(
     return {
         title: "Documentary preparation stopped",
         description:
-            "Research stopped before Sources could prepare any material, so there is nothing to inspect here. Start a new analysis to try again.",
+            "Documentary preparation stopped. Available material and permitted next actions are shown when the Sources view can be loaded.",
     };
 }
 

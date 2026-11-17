@@ -131,7 +131,7 @@ export interface SourcesPreparationView {
         context: number;
         uses: readonly {
             id: string;
-            /** `conflict`: sources disagree; `unused`: read, nothing usable; `lead`: never captured; `excluded`: removed by the analyst. */
+            /** `conflict`: sources disagree; `unused`: captured but not retained; `lead`: no available capture; `excluded`: removed by the analyst. */
             role:
                 | "primary"
                 | "opposing"
@@ -147,6 +147,7 @@ export interface SourcesPreparationView {
     needs: readonly DocumentaryNeed[];
     /** A reason shared by several needs, shown once above them. */
     needsNotice?: string;
+    researchNotice?: string;
 }
 
 const discoveryMeta: Record<DiscoveryOutcome, string> = {
@@ -281,6 +282,7 @@ export function SourcesPreparationScreen({
                 </div>
             }>
             {notices}
+            {view.researchNotice ? <p>{view.researchNotice}</p> : null}
             <DocumentaryNeeds
                 questions={view.questions}
                 needs={view.needs}
@@ -635,7 +637,7 @@ export function SourcesMatrixScreen({
             {...frame}
             trail={trail}
             eyebrow="Source matrix"
-            title="Every source, what was read, what it gives"
+            title="Sources, captures and contributions"
             headingAside={
                 <span className={styles.matrixActions}>
                     {headingActions}
@@ -745,6 +747,7 @@ export function SourcesMatrixScreen({
                 rows={pageItems}
                 currentId={currentId}
                 onOpen={onOpenSource}
+                availabilityHelp="The extent of the saved capture. A complete capture does not establish that its contents were read or qualified."
                 contributionTerms={contributionTerms}
                 contributionScale={18}
                 note="Included, read, contributing and usable are four separate facts."

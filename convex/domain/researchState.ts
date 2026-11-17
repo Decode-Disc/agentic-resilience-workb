@@ -211,7 +211,7 @@ export function formatResearchSummary(state: ResearchState): string {
                       : stop.blockCode === null
                         ? `The reason for the ${agentName("sources")}'s stop was not recorded.`
                         : `${sourcesActor} stopped before it could finish. Retained work remains available for inspection.`;
-        summary += ` ${detail}`;
+        summary += ` Recorded stop: ${detail}`;
     }
     if (
         state.nextCapability === "investigation_unavailable" ||

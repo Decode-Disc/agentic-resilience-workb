@@ -2057,3 +2057,353 @@ test("new research observations retain structured stop facts without changing hi
     });
     expect(await f.t.run((ctx) => ctx.db.get(f.observationId))).toEqual(before);
 });
+
+test("native Workbench consultation preserves captured and retained sets through serialization", async () => {
+    vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
+    const { seedResearchStateScenario } = await import(
+        "@/__tests__/setup/research-state"
+    );
+    const requests: NativeWireRequest[] = [];
+    let needId = "";
+    vi.stubEnv("OPENROUTER_API_KEY", "offline-fixture-only");
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            requests.push(JSON.parse(String(init?.body)));
+            return requests.length === 1
+                ? toolResponse("consult_run_state", {}, "inspect-source-state")
+                : requests.length === 2
+                  ? toolResponse(
+                        "consult_prepared_material",
+                        { needId },
+                        "inspect-handoff-note",
+                    )
+                  : response(
+                        "The captured set and retained material remain distinct.",
+                    );
+        }),
+    );
+    const f = await seedResearchStateScenario(
+        {
+            outcome: "partial",
+            blockCode: "invalid_output",
+            historicalTimeLimitNote: true,
+            retainedDocumentCount: 4,
+            capturedDocumentCount: 5,
+        },
+        { route: nativePiFixtureRoute },
+    );
+    const retained = await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission?.result);
+        const firstNeed = preparation.sourcesMission.needs[0];
+        assert(firstNeed);
+        const document = preparation?.sourcesMission?.result?.documents[0];
+        assert(document);
+        const qualification = await ctx.db.get(document.qualificationTaskId);
+        assert(qualification?.output.kind === "documentary_qualification");
+        const control = await ctx.db.get(qualification.output.controlTaskId);
+        assert(control?.output.kind === "documentary_control");
+        const contributions = [
+            {
+                id: "attribution",
+                kind: "attributed_argument",
+                use: "attributed_argument_only",
+                conclusion: "supported",
+            },
+            {
+                id: "context",
+                kind: "context",
+                use: "context_only",
+                conclusion: "supported",
+            },
+            {
+                id: "conflict",
+                kind: "asserted_fact",
+                use: "blocked",
+                conclusion: "documentary_conflict",
+            },
+        ] as const;
+        await ctx.db.patch(qualification._id, {
+            output: {
+                ...qualification.output,
+                contributions: contributions.map((entry) => ({
+                    id: entry.id,
+                    version: 1,
+                    needIds: [firstNeed.id],
+                    statement: `Historical ${entry.id} contribution`,
+                    kind: entry.kind,
+                    period: "Historical fixture",
+                    modality: "recorded",
+                    attribution: "Fixture source",
+                    evidence: [],
+                })),
+            },
+        });
+        await ctx.db.patch(control._id, {
+            output: {
+                ...control.output,
+                control: {
+                    ...control.output.control,
+                    findings: contributions.map((entry) => ({
+                        contributionId: entry.id,
+                        conclusion: entry.conclusion,
+                        permittedUse: entry.use,
+                        diagnostic: `Recorded ${entry.id} limit`,
+                    })),
+                },
+            },
+        });
+        await ctx.db.patch(preparation._id, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                result: {
+                    ...preparation.sourcesMission.result,
+                    documents: preparation.sourcesMission.result.documents.map(
+                        (entry) =>
+                            entry.sourceId === document.sourceId
+                                ? {
+                                      ...entry,
+                                      contributions: contributions.map(
+                                          ({ id }) => ({ id, version: 1 }),
+                                      ),
+                                  }
+                                : entry,
+                    ),
+                    needs: preparation.sourcesMission.result.needs.map(
+                        (entry) =>
+                            entry.needId === firstNeed.id
+                                ? {
+                                      ...entry,
+                                      contributions: contributions.map(
+                                          ({ id }) => ({
+                                              qualificationTaskId:
+                                                  document.qualificationTaskId,
+                                              contributionId: id,
+                                              version: 1,
+                                          }),
+                                      ),
+                                  }
+                                : entry,
+                    ),
+                },
+            },
+        });
+        return document;
+    });
+    const before = await f.t.run(async (ctx) => ({
+        preparation: await ctx.db.get(f.preparationId),
+        run: await ctx.db.get(f.runId),
+        sourcesMission: await ctx.db.get(f.missionId),
+        approvals: await ctx.db.query("approvalRequests").collect(),
+        grants: await ctx.db.query("approvalGrants").collect(),
+        captures: await ctx.db.query("sourceCaptures").collect(),
+        observation: await ctx.db.get(f.observationId),
+    }));
+    const mission = await f.t.run((ctx) => ctx.db.get(f.workbenchMissionId));
+    assert(mission);
+    const need = before.preparation?.sourcesMission?.needs[0];
+    assert(need);
+    needId = need.id;
+    await f.t.action((ctx) =>
+        runPiMission(
+            ctx,
+            {
+                missionId: f.workbenchMissionId,
+                expectedGeneration: mission.generation,
+            },
+            "capture-scoped-consultation",
+            nodeActionGenerationDeadline(Date.now()),
+        ),
+    );
+    expect(requests).toHaveLength(3);
+    const required = requests[0]?.messages.find((message) =>
+        message.content?.startsWith("Required current mission state:\n"),
+    )?.content;
+    assert(required);
+    const state = JSON.parse(
+        required
+            .slice("Required current mission state:\n".length)
+            .split("\n\n")[0] ?? "",
+    );
+    expect(state.domain.availableMaterials).toHaveLength(5);
+    const frozen = before.preparation?.sourcesMission?.result;
+    assert(frozen);
+    expect(frozen.documents).toHaveLength(4);
+    for (const document of frozen.documents) {
+        expect(state.domain.availableMaterials).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    sourceId: document.sourceId,
+                    documentaryState: expect.objectContaining({
+                        preparationId: f.preparationId,
+                        membership: "retained",
+                        capture: {
+                            captureId: document.captureId,
+                            contentHash: document.contentHash,
+                        },
+                        retainedSnapshot: {
+                            needsRevision: frozen.needsRevision,
+                            captureId: document.captureId,
+                            contentHash: document.contentHash,
+                            qualificationTaskId: document.qualificationTaskId,
+                            qualificationVersion: document.qualificationVersion,
+                        },
+                        qualification: {
+                            status: "recorded",
+                            taskId: document.qualificationTaskId,
+                            version: document.qualificationVersion,
+                            captureId: document.captureId,
+                            contentHash: document.contentHash,
+                        },
+                    }),
+                }),
+            ]),
+        );
+    }
+    const unqualified = before.captures.find(
+        (capture) => capture.sourceId === f.sourceIds[4],
+    );
+    assert(unqualified);
+    expect(state.domain.availableMaterials).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                sourceId: retained.sourceId,
+                documentaryState: expect.objectContaining({
+                    contributions: expect.objectContaining({
+                        total: 3,
+                        supported: 2,
+                        conflict: 1,
+                        restricted: 0,
+                        effectiveUses: {
+                            documentary: 0,
+                            attributed_argument_only: 1,
+                            context_only: 1,
+                            blocked: 1,
+                        },
+                    }),
+                }),
+            }),
+            expect.objectContaining({
+                sourceId: f.sourceIds[4],
+                documentaryState: expect.objectContaining({
+                    preparationId: f.preparationId,
+                    membership: "not_retained",
+                    capture: {
+                        captureId: unqualified._id,
+                        contentHash: unqualified.contentHash,
+                    },
+                    qualification: { status: "not_recorded" },
+                    retainedSnapshot: null,
+                    contributions: null,
+                }),
+            }),
+        ]),
+    );
+    expect(state.domain.research).toMatchObject({
+        sources: {
+            settledAt: 2,
+            executionStop: { blockCode: "invalid_output" },
+        },
+        summary: expect.stringContaining("model response could not be used"),
+    });
+    expect(state.domain.research.summary).toContain("Recorded stop:");
+    expect(state.domain.research.summary).not.toContain("time window ended");
+    const historicalReceipt = requests[2]?.messages.find(
+        (message) =>
+            message.role === "tool" &&
+            message.content?.includes('"unfinished"'),
+    );
+    assert(historicalReceipt?.content);
+    expect(JSON.parse(historicalReceipt.content)).toMatchObject({
+        kind: "success",
+        value: {
+            preparationId: f.preparationId,
+            needsRevision: before.preparation?.sourcesMission?.needsRevision,
+            outcome: {
+                needId,
+                unfinished: [
+                    "The Sources Agent stopped here because its time window ended.",
+                ],
+            },
+        },
+    });
+    const tools = requests[1]?.messages.filter(
+        (message) => message.role === "tool",
+    );
+    expect(tools).toHaveLength(1);
+    const receipt = JSON.parse(tools?.[0]?.content ?? "null");
+    expect(receipt).toMatchObject({
+        kind: "success",
+        value: {
+            research: {
+                sources: {
+                    outcome: "partial",
+                    settledAt: 2,
+                    executionStop: { blockCode: "invalid_output" },
+                },
+            },
+        },
+    });
+    expect(receipt.value.research.sources.retainedDocuments).toHaveLength(4);
+    expect(
+        receipt.value.research.sources.retainedDocuments.map(
+            (item: { sourceId: string }) => item.sourceId,
+        ),
+    ).not.toContain(f.sourceIds[4]);
+    const operations = await f.t.run((ctx) =>
+        ctx.db.query("agentOperationRequests").collect(),
+    );
+    expect(
+        operations.find((item) => item.input.kind === "consult_run_state"),
+    ).toMatchObject({ operationVersion: 2, status: "completed" });
+    const after = await f.t.run(async (ctx) => ({
+        preparation: await ctx.db.get(f.preparationId),
+        run: await ctx.db.get(f.runId),
+        sourcesMission: await ctx.db.get(f.missionId),
+        approvals: await ctx.db.query("approvalRequests").collect(),
+        grants: await ctx.db.query("approvalGrants").collect(),
+        workbenchMission: await ctx.db.get(f.workbenchMissionId),
+        calls: await ctx.db.query("providerCalls").collect(),
+        observation: await ctx.db.get(f.observationId),
+    }));
+    expect(after.preparation).toEqual(before.preparation);
+    expect(after.sourcesMission).toEqual(before.sourcesMission);
+    expect(after.approvals).toEqual(before.approvals);
+    expect(after.grants).toEqual(before.grants);
+    expect(after.observation).toEqual(before.observation);
+    expect({
+        executionGeneration: after.run?.executionGeneration,
+        executionHarnessDeadlineAt: after.run?.executionHarnessDeadlineAt,
+        researchControlRevision: after.run?.researchControlRevision,
+        reservationStatus: after.run?.reservationStatus,
+        automaticSupplementOperationId:
+            after.run?.automaticSupplementOperationId,
+    }).toEqual({
+        executionGeneration: before.run?.executionGeneration,
+        executionHarnessDeadlineAt: before.run?.executionHarnessDeadlineAt,
+        researchControlRevision: before.run?.researchControlRevision,
+        reservationStatus: before.run?.reservationStatus,
+        automaticSupplementOperationId:
+            before.run?.automaticSupplementOperationId,
+    });
+    expect(after.run?.sourcePreparationBudget).toEqual({
+        ...before.run?.sourcePreparationBudget,
+        dispatches: (before.run?.sourcePreparationBudget?.dispatches ?? 0) + 3,
+        work: (before.run?.sourcePreparationBudget?.work ?? 0) + 3,
+    });
+    expect({
+        generation: after.workbenchMission?.generation,
+        deadlineAt: after.workbenchMission?.deadlineAt,
+        resourcePolicy: after.workbenchMission?.resourcePolicy,
+        modelLimits: after.workbenchMission?.modelLimits,
+        executionScope: after.workbenchMission?.executionScope,
+    }).toEqual({
+        generation: mission.generation,
+        deadlineAt: mission.deadlineAt,
+        resourcePolicy: mission.resourcePolicy,
+        modelLimits: mission.modelLimits,
+        executionScope: mission.executionScope,
+    });
+    expect(after.calls).toHaveLength(3);
+}, 30000);
