@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
 
-test("the framing panel receives pointer input above overlapping conversation work", async ({
+test("the framing dock receives pointer input beside conversation work in a short viewport", async ({
     page,
 }) => {
     await page.setViewportSize({ width: 1440, height: 440 });
@@ -8,52 +9,48 @@ test("the framing panel receives pointer input above overlapping conversation wo
     await page
         .getByRole("button", { name: "Close research context", exact: true })
         .click();
-    await page
-        .getByRole("region", { name: "Conversation scroll area" })
-        .evaluate((node) => {
-            node.scrollTop = 0;
-            node.dispatchEvent(new Event("scroll"));
-        });
-    const activity = await page
-        .getByRole("button", {
-            name: "Inspect framing preparation",
-            exact: true,
-        })
-        .boundingBox();
-    const panel = await page
-        .getByRole("region", { name: "Proposed framing", exact: true })
-        .boundingBox();
-    if (!activity || !panel) throw new Error("Missing framing surface");
-    const point = {
-        x: Math.max(activity.x, panel.x) + 20,
-        y: Math.max(activity.y, panel.y) + 8,
-    };
-    expect(point.y).toBeLessThan(
-        Math.min(activity.y + activity.height, panel.y + panel.height),
-    );
+    await reviewResearchProgram(page);
+    const edit = page.getByRole("button", {
+        name: "Edit question",
+        exact: true,
+    });
+    await edit.scrollIntoViewIfNeeded();
+    const bounds = await edit.boundingBox();
+    if (!bounds) throw new Error("Missing framing edit control");
     expect(
         await page.evaluate(
             ({ x, y }) =>
-                Boolean(
-                    document
-                        .elementFromPoint(x, y)
-                        ?.closest('[aria-label="Proposed framing"]'),
-                ),
-            point,
+                document
+                    .elementFromPoint(x, y)
+                    ?.closest("button")
+                    ?.getAttribute("aria-label"),
+            {
+                x: bounds.x + bounds.width / 2,
+                y: bounds.y + bounds.height / 2,
+            },
         ),
-    ).toBe(true);
+    ).toBe("Edit question");
+    await edit.click();
+    await expect(
+        page.getByRole("textbox", {
+            name: "Edit research question",
+            exact: true,
+        }),
+    ).toBeFocused();
 });
 
-test("context disclosures stay usable while their details scroll under the close action", async ({
+test("context navigation stays usable while details scroll under the close action", async ({
     page,
 }) => {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.setViewportSize({ width: 390, height: 600 });
+    await page.setViewportSize({ width: 390, height: 360 });
     await page.goto("/?layout=start&screen=framing&theme=light");
-    await page
-        .getByRole("button", { name: "Research context", exact: true })
-        .click();
+    const trigger = page.getByRole("button", {
+        name: "Research context",
+        exact: true,
+    });
+    await trigger.click();
     const details = page.getByRole("region", {
         name: "Research context details",
         exact: true,
@@ -63,24 +60,19 @@ test("context disclosures stay usable while their details scroll under the close
         exact: true,
     });
     const card = page.getByRole("dialog").filter({ has: close });
-    await expect(close).toBeVisible();
     const plan = details.getByRole("button", {
-        name: "Inspect research plan",
+        name: "Research program",
         exact: true,
     });
-    await expect(plan).toHaveAttribute("aria-expanded", "false");
     await plan.focus();
     await page.keyboard.press("Enter");
-    await expect(plan).toHaveAttribute("aria-expanded", "true");
-    await details
-        .getByRole("button", {
-            name: "Inspect reference: Investor day 2025 deck",
-            exact: true,
-        })
+    await expect(
+        details.getByRole("region", { name: "Plan", exact: true }),
+    ).toBeVisible();
+    await page
+        .getByRole("button", { name: "Back to research context", exact: true })
         .click();
-    await details
-        .getByRole("button", { name: "Completed work", exact: true })
-        .click();
+    await expect(plan).toBeFocused();
     await expect
         .poll(() =>
             details.evaluate((node) => node.scrollHeight > node.clientHeight),
@@ -91,22 +83,15 @@ test("context disclosures stay usable while their details scroll under the close
     await details.evaluate((node) => {
         node.scrollTop = node.scrollHeight;
     });
-    await expect(
-        details.getByText("Prepare research framing", { exact: true }),
-    ).toBeVisible();
     const after = await close.boundingBox();
     const cardAfter = await card.boundingBox();
+    if (!before || !after || !cardBefore || !cardAfter)
+        throw new Error("Missing context geometry");
     expect(
-        before &&
-            after &&
-            cardBefore &&
-            cardAfter &&
-            Math.abs(before.y - cardBefore.y - (after.y - cardAfter.y)),
+        Math.abs(before.y - cardBefore.y - (after.y - cardAfter.y)),
     ).toBeLessThan(1);
-    await expect(close).toBeVisible();
+    await expect(close).toBeInViewport();
     await page.keyboard.press("Escape");
-    await expect(
-        page.getByRole("button", { name: "Research context", exact: true }),
-    ).toHaveAttribute("aria-expanded", "false");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(errors).toEqual([]);
 });

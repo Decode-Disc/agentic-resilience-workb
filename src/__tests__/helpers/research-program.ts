@@ -19,16 +19,21 @@ export async function changeResearchScope(page: Page) {
         name: "Change scope",
         exact: true,
     });
-    if (!(await change.isVisible())) {
-        const context = page.getByRole("button", {
-            name: "Research context",
-            exact: true,
-        });
-        if ((await context.getAttribute("aria-expanded")) !== "true")
-            await context.click();
-        await page
-            .getByRole("button", { name: "Research program", exact: true })
-            .click();
-    }
+    if (!(await change.isVisible())) await inspectResearchProgram(page);
     await change.click();
+}
+
+/** Opens the saved program within the persistent research-context inspector. */
+export async function inspectResearchProgram(page: Page) {
+    const context = page.getByRole("button", {
+        name: "Research context",
+        exact: true,
+    });
+    if ((await context.getAttribute("aria-expanded")) !== "true")
+        await context.click();
+    const program = page.getByRole("button", {
+        name: "Research program",
+        exact: true,
+    });
+    if (await program.isVisible()) await program.click();
 }
