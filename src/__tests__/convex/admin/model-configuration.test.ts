@@ -880,3 +880,72 @@ test("a failed preparation can change its preference before reprepare without en
         reasoning: { preference: "recommended", effective: "medium" },
     });
 });
+
+test("loopback browser metadata initializes real model settings without external requests", async () => {
+    const { admin } = await setup();
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("E2E_MODEL_METADATA_FIXTURE", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    const external = vi.fn(() => {
+        throw new Error("External requests forbidden");
+    });
+    vi.stubGlobal("fetch", external);
+    try {
+        expect(
+            await admin.action(api.modelConfigurationActions.initialize, {}),
+        ).toEqual({ ready: true });
+        const view = await admin.query(api.modelConfiguration.list, {});
+        expect(
+            view.models.map((model) => ({
+                label: model.label,
+                enabled: model.enabled,
+                compatible: model.compatible,
+            })),
+        ).toEqual([
+            { label: "GLM-5.3-Flash", enabled: true, compatible: true },
+            {
+                label: "DeepSeek V4.1 Flash 1017",
+                enabled: true,
+                compatible: true,
+            },
+        ]);
+        expect(
+            view.assignments.some(
+                (assignment) => assignment.agent === "workbench",
+            ),
+        ).toBe(true);
+        expect(external).not.toHaveBeenCalled();
+    } finally {
+        vi.unstubAllEnvs();
+    }
+});
+
+test.each([
+    { fixtures: "false", origin: "http://127.0.0.1:3210" },
+    { fixtures: "true", origin: "https://example.convex.cloud" },
+])("browser metadata refuses fixture configuration outside enabled loopback: $fixtures $origin", async ({
+    fixtures,
+    origin,
+}) => {
+    const { admin } = await setup();
+    vi.stubEnv("E2E_FIXTURES_ENABLED", fixtures);
+    vi.stubEnv("E2E_MODEL_METADATA_FIXTURE", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", origin);
+    const external = vi.fn(() => {
+        throw new Error("External requests forbidden");
+    });
+    vi.stubGlobal("fetch", external);
+    try {
+        expect(
+            await admin.action(api.modelConfigurationActions.initialize, {}),
+        ).toEqual({ ready: false });
+        const view = await admin.query(api.modelConfiguration.list, {});
+        expect(view.assignments).toEqual([]);
+        expect(
+            view.models.every((model) => !model.enabled && !model.compatible),
+        ).toBe(true);
+        expect(external).not.toHaveBeenCalled();
+    } finally {
+        vi.unstubAllEnvs();
+    }
+});

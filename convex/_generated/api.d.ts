@@ -127,6 +127,7 @@ import type * as execution_researchControl from "../execution/researchControl.js
 import type * as execution_retainedText from "../execution/retainedText.js";
 import type * as execution_simulation from "../execution/simulation.js";
 import type * as fixtureManifestStore from "../fixtureManifestStore.js";
+import type * as fixtures_browserModelMetadata from "../fixtures/browserModelMetadata.js";
 import type * as fixtures_cccShowcase from "../fixtures/cccShowcase.js";
 import type * as framing from "../framing.js";
 import type * as http from "../http.js";
@@ -331,6 +332,7 @@ declare const fullApi: ApiFromModules<{
   "execution/retainedText": typeof execution_retainedText;
   "execution/simulation": typeof execution_simulation;
   fixtureManifestStore: typeof fixtureManifestStore;
+  "fixtures/browserModelMetadata": typeof fixtures_browserModelMetadata;
   "fixtures/cccShowcase": typeof fixtures_cccShowcase;
   framing: typeof framing;
   http: typeof http;

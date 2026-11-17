@@ -3,7 +3,8 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import type { FullConfig } from "@playwright/test";
+import { chromium, expect, type FullConfig } from "@playwright/test";
+import { admitAdministrator } from "./support/admission";
 
 import { workerSlotsFilePath } from "./support/browser-workspace";
 import { runConvexJson, setConvexEnvironment } from "./support/convex-admin";
@@ -34,6 +35,7 @@ export default async function globalSetup(config: FullConfig) {
         await setConvexEnvironment({
             SOURCES_PREPARATION_WINDOW_MINUTES: "15",
             SOURCES_MISSION_ENABLED: "true",
+            E2E_MODEL_METADATA_FIXTURE: "true",
             SOURCES_MISSION_ENVELOPE: JSON.stringify({
                 version: 1,
                 maxNeeds: 12,
@@ -110,5 +112,36 @@ export default async function globalSetup(config: FullConfig) {
         writeFileSync(slotsPath, JSON.stringify({ workers }, null, 2));
     } else if (slotsPath) {
         rmSync(slotsPath, { force: true });
+    }
+    if (process.env.GITHUB_ACTIONS === "true") {
+        const browser = await chromium.launch();
+        try {
+            const page = await browser.newPage({
+                baseURL: config.projects[0]?.use.baseURL,
+            });
+            await admitAdministrator(page);
+            await page
+                .getByRole("tab", { name: "Models & agents", exact: true })
+                .click();
+            await page.getByRole("tab", { name: /^Model catalogue/ }).click();
+            await page
+                .getByRole("button", {
+                    name: "Set up default models",
+                    exact: true,
+                })
+                .click();
+            await expect(
+                page.getByRole("combobox", {
+                    name: "Availability of GLM-5.3-Flash",
+                }),
+            ).not.toContainText("Off", { timeout: 90_000 });
+            await expect(
+                page.getByRole("combobox", {
+                    name: "Availability of DeepSeek V4.1 Flash 1017",
+                }),
+            ).not.toContainText("Off");
+        } finally {
+            await browser.close();
+        }
     }
 }

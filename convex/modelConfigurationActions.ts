@@ -1,5 +1,6 @@
 "use node";
 
+import { browserModelMetadata } from "@convex/fixtures/browserModelMetadata";
 import {
     MODEL_CATALOG_MAX_ENDPOINTS,
     MODEL_CATALOG_MAX_RESPONSE_BYTES,
@@ -37,6 +38,8 @@ async function readMetadata(
     url: string,
     signal: AbortSignal,
 ): Promise<unknown> {
+    const fixture = browserModelMetadata(url);
+    if (fixture !== undefined) return fixture;
     const response = await fetch(url, {
         redirect: "error",
         signal: AbortSignal.any([

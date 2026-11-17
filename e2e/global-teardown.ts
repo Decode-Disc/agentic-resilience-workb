@@ -8,5 +8,8 @@ export default async function globalTeardown(_config: FullConfig) {
     await runConvexJson("invitations:syncE2EWorkerSlots", { slots: [] });
     const slotsPath = workerSlotsFilePath();
     if (slotsPath) rmSync(slotsPath, { force: true });
-    await setConvexEnvironment({ E2E_FIXTURES_ENABLED: null });
+    await setConvexEnvironment({
+        E2E_FIXTURES_ENABLED: null,
+        E2E_MODEL_METADATA_FIXTURE: null,
+    });
 }
