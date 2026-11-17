@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { gunzipSync } from "node:zlib";
 import type { internal } from "@convex/_generated/api";
 import { ConvexHttpClient } from "convex/browser";
 import {
@@ -35,6 +36,7 @@ for (let i = 2; i < process.argv.length; i += 2) {
         key &&
             [
                 "--phase",
+                "--recorded-replay",
                 "--out-dir",
                 "--scenario",
                 "--scenarios",
@@ -55,12 +57,18 @@ assert(
 );
 const out = resolve(options.get("--out-dir") ?? "/tmp/source-utility-20261021");
 mkdirSync(out, { recursive: true });
-const scenarios = read(
-    options.get("--scenarios") ?? `${root}/utility-scenarios-v2.json`,
-);
-const study = read(`${root}/study.json`);
-const manifest = read(`${run}/manifest.json`);
-const results = read(`${run}/final-results.json`);
+const replayPath = options.get("--recorded-replay");
+const replay = replayPath
+    ? JSON.parse(gunzipSync(readFileSync(replayPath)).toString("utf8"))
+    : undefined;
+assert(!replay || phase === "audit", "Recorded replay is audit-only");
+const scenariosPath = options.get("--scenarios");
+const scenarios = scenariosPath
+    ? read(scenariosPath)
+    : (replay?.scenarios ?? read(`${root}/utility-scenarios-v2.json`));
+const study = replay?.study ?? read(`${root}/study.json`);
+const manifest = replay?.manifest ?? read(`${run}/manifest.json`);
+const results = replay?.results ?? read(`${run}/final-results.json`);
 const selected = scenarios.scenarios.filter(
     (s: { id: string }) =>
         !options.get("--scenario") ||
@@ -101,7 +109,9 @@ try {
             (o: { key: string }) => o.key === call?.key,
         );
         assert(call && observed, "Missing historical qualification");
-        const text = readFileSync(`${root}/${doc.textFile}`, "utf8");
+        const text = replay
+            ? replay.captures[doc.textFile]
+            : readFileSync(`${root}/${doc.textFile}`, "utf8");
         assert.equal(hash(text), doc.contentHash, "Capture bytes changed");
         assert.equal(
             hash(JSON.stringify(call.body)),
@@ -197,9 +207,9 @@ try {
         `${JSON.stringify(
             {
                 basis: scenarios.basis,
-                originalManifestSha256: hash(
-                    readFileSync(`${run}/manifest.json`, "utf8"),
-                ),
+                originalManifestSha256:
+                    replay?.originalManifestSha256 ??
+                    hash(readFileSync(`${run}/manifest.json`, "utf8")),
                 scenarios: audit,
                 newProviderCalls: 0,
             },

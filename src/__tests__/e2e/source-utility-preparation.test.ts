@@ -7,6 +7,9 @@ import { expect, test } from "vitest";
 
 // Each child has a 30-second bound; this integration check covers two real CLI invocations.
 test("the recorded utility producer validates a selected viewport without seeding or overwriting an archive", () => {
+    const replayPath =
+        "src/__tests__/fixtures/source-utility/adobe-recorded-replay.json.gz";
+    const originalReplay = readFileSync(replayPath);
     const out = mkdtempSync(join(tmpdir(), "utility-replay-inputs-"));
     try {
         const result = spawnSync(
@@ -14,6 +17,8 @@ test("the recorded utility producer validates a selected viewport without seedin
             [
                 "--experimental-strip-types",
                 "scripts/evaluations/source-selection/source-utility.ts",
+                "--recorded-replay",
+                "src/__tests__/fixtures/source-utility/adobe-recorded-replay.json.gz",
                 "--phase",
                 "audit",
                 "--out-dir",
@@ -33,11 +38,14 @@ test("the recorded utility producer validates a selected viewport without seedin
             audit.scenarios.map((scenario: { id: string }) => scenario.id),
         ).toEqual(["adobe-overview"]);
         expect(audit.newProviderCalls).toBe(0);
+        expect(readFileSync(replayPath)).toEqual(originalReplay);
         const invalid = spawnSync(
             process.execPath,
             [
                 "--experimental-strip-types",
                 "scripts/evaluations/source-selection/source-utility.ts",
+                "--recorded-replay",
+                "src/__tests__/fixtures/source-utility/adobe-recorded-replay.json.gz",
                 "--phase",
                 "audit",
                 "--out-dir",

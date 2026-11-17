@@ -16,7 +16,7 @@ import {
     writeFileSync,
 } from "node:fs";
 import type { Server } from "node:http";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { type Browser, chromium, expect, type Page } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
 import {
@@ -2836,6 +2836,7 @@ async function runSourcesBrowser(
 
 /** Holds the OS lock throughout configuration, execution and cleanup; process death releases it. */
 export async function acquireCampaignLock(path: string) {
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     const child = spawn(
         "flock",
         [

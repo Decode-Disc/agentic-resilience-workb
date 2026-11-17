@@ -4370,7 +4370,7 @@ test("an interrupted simulated dispatch remains pending and is never replayed", 
 
 test("the qualification lock stays held until cleanup releases it", async () => {
     const root = mkdtempSync(join(tmpdir(), "campaign-lock-"));
-    const lock = join(root, "lock");
+    const lock = join(root, "new-runtime", "lock");
     const release = await acquireCampaignLock(lock);
     await assert.rejects(acquireCampaignLock(lock), /active/);
     await release();
