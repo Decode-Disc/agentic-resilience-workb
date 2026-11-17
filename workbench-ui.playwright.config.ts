@@ -3,7 +3,7 @@ export default defineConfig({
     testDir: "./src/__tests__/design-system/workbench-ui/browser",
     outputDir: "test-results/workbench-ui",
     fullyParallel: false,
-    workers: 1,
+    workers: process.env.CI ? 2 : 1,
     retries: 0,
     timeout: 30000,
     use: {

@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -57,3 +58,39 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Check reusable component interactions
         run: pnpm workbench-ui:check
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      CONVEX_AGENT_MODE: anonymous
+      WORKBENCH_E2E_WORKERS: 2
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 12.16.0
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Generate disposable invitation material
+        run: pnpm invitations:generate --output=invitation-otp-codes.local
+      - name: Initialize isolated anonymous local backend
+        run: pnpm exec convex dev --once --typecheck disable
+      - name: Run application browser tests
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/4
+      - name: Stop owned local services
+        if: always()
+        run: pnpm dev:stop
