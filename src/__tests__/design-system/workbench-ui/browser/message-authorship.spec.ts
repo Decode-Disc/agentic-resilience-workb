@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { changeResearchScope } from "@/__tests__/helpers/research-program";
 
 for (const screen of ["framing", "launched"] as const) {
     for (const width of [1440, 390]) {
@@ -36,9 +37,7 @@ for (const screen of ["framing", "launched"] as const) {
                             exact: true,
                         })
                         .click();
-                await page
-                    .getByRole("button", { name: "Change scope", exact: true })
-                    .click();
+                await changeResearchScope(page);
                 await page
                     .getByRole("button", { name: "Continue", exact: true })
                     .click();

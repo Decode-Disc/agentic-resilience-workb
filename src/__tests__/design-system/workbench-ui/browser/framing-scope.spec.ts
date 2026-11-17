@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
+import {
+    changeResearchScope,
+    reviewResearchProgram,
+} from "@/__tests__/helpers/research-program";
 
 for (const width of [1440, 390]) {
     test(`scope clarification stays separate from research questions ${width}`, async ({
@@ -25,9 +28,7 @@ for (const width of [1440, 390]) {
             await page
                 .getByRole("button", { name: "Research context", exact: true })
                 .click();
-        await page
-            .getByRole("button", { name: "Change scope", exact: true })
-            .click();
+        await changeResearchScope(page);
         await expect(
             page.getByRole("region", { name: "Clarify research context" }),
         ).toBeVisible();
@@ -36,10 +37,12 @@ for (const width of [1440, 390]) {
                 page.getByRole("region", { name: "Plan", exact: true }),
             ).toBeVisible();
         await expect(
-            page.getByRole("combobox", {
-                name: "Research question",
-                exact: true,
-            }),
+            page
+                .getByRole("region", { name: "Clarify research context" })
+                .getByRole("combobox", {
+                    name: "Research question",
+                    exact: true,
+                }),
         ).toHaveCount(0);
         await page
             .getByRole("radio", { name: /Repair network management/ })
@@ -51,16 +54,25 @@ for (const width of [1440, 390]) {
         await expect(
             page.getByRole("region", { name: "Clarify research context" }),
         ).toHaveCount(0);
+        await reviewResearchProgram(page);
         await expect(
-            page.getByRole("combobox", {
-                name: "Research question",
-                exact: true,
-            }),
+            page
+                .getByRole("region", { name: "Research framing" })
+                .getByRole("combobox", {
+                    name: "Research question",
+                    exact: true,
+                }),
         ).toBeVisible();
         if (width === 390)
             await page
                 .getByRole("button", { name: "Research context", exact: true })
                 .click();
+        await page
+            .getByRole("button", {
+                name: "Back to research context",
+                exact: true,
+            })
+            .click();
         await expect(
             page.getByRole("region", { name: "Plan", exact: true }),
         ).toContainText("Repair network management");
@@ -83,9 +95,7 @@ test("changing scope keeps an analyst-added question and the ordinary draft", as
     await page
         .getByRole("button", { name: "Add question", exact: true })
         .click();
-    await page
-        .getByRole("button", { name: "Change scope", exact: true })
-        .click();
+    await changeResearchScope(page);
     await page
         .getByRole("radio", { name: "Repair network management", exact: true })
         .click();

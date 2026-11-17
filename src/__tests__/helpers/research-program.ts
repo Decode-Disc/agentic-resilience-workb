@@ -12,3 +12,23 @@ export async function reviewResearchProgram(page: Page) {
         await panel.locator(":scope > summary").click();
     }
 }
+
+/** Enters the program inspector before requesting its scope correction. */
+export async function changeResearchScope(page: Page) {
+    const change = page.getByRole("button", {
+        name: "Change scope",
+        exact: true,
+    });
+    if (!(await change.isVisible())) {
+        const context = page.getByRole("button", {
+            name: "Research context",
+            exact: true,
+        });
+        if ((await context.getAttribute("aria-expanded")) !== "true")
+            await context.click();
+        await page
+            .getByRole("button", { name: "Research program", exact: true })
+            .click();
+    }
+    await change.click();
+}

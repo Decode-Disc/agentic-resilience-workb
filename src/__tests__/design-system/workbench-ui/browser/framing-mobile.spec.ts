@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
+import {
+    changeResearchScope,
+    reviewResearchProgram,
+} from "@/__tests__/helpers/research-program";
 
 test("mobile framing leaves the context closed and preserves the reader's choice on resize", async ({
     page,
@@ -89,9 +92,7 @@ for (const viewport of [
         await page
             .getByRole("button", { name: "Research context", exact: true })
             .click();
-        await page
-            .getByRole("button", { name: "Change scope", exact: true })
-            .click();
+        await changeResearchScope(page);
         await expect(
             page.getByRole("region", {
                 name: "Clarify research context",
