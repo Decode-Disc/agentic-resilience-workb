@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { changeResearchScope } from "@/__tests__/helpers/research-program";
 
 for (const width of [1440, 390]) {
     test(`one scope action submits a selected proposal and preserves the ordinary draft ${width}`, async ({
@@ -16,14 +17,14 @@ for (const width of [1440, 390]) {
             await page
                 .getByRole("button", { name: "Research context", exact: true })
                 .click();
-        await page
-            .getByRole("button", { name: "Change scope", exact: true })
-            .click();
+        await changeResearchScope(page);
         const program = page.getByRole("region", {
             name: "Proposed framing",
             exact: true,
         });
-        await expect(program.getByRole("button")).toHaveCount(1);
+        await expect(
+            program.getByRole("button", { name: "Continue", exact: true }),
+        ).toHaveCount(1);
         const proceed = program.getByRole("button", {
             name: "Continue",
             exact: true,
@@ -41,10 +42,12 @@ for (const width of [1440, 390]) {
             page.getByRole("region", { name: "Clarify research context" }),
         ).toHaveCount(0);
         await expect(
-            page.getByRole("heading", {
-                name: "Who controls access to the repair network?",
-                exact: true,
-            }),
+            page
+                .getByRole("region", { name: "Proposed framing", exact: true })
+                .getByRole("heading", {
+                    name: "Who controls access to the repair network?",
+                    exact: true,
+                }),
         ).toBeVisible();
         await expect(page.getByRole("textbox")).toHaveValue(
             "Keep my unsent message.",
@@ -61,9 +64,7 @@ test("typing a scope replaces the choice and choosing an option clears the alter
     await page.goto("/?layout=start&screen=framing&theme=dark", {
         waitUntil: "domcontentloaded",
     });
-    await page
-        .getByRole("button", { name: "Change scope", exact: true })
-        .click();
+    await changeResearchScope(page);
     const input = page.getByRole("textbox");
     await input.fill("Claims intake");
     await expect(
@@ -75,9 +76,9 @@ test("typing a scope replaces the choice and choosing an option clears the alter
     await expect(input).toHaveValue("");
     await input.fill("Claims intake");
     await input.press("Enter");
-    await expect(
-        page.getByRole("region", { name: "Plan", exact: true }),
-    ).toContainText("Claims intake");
+    await expect(page.getByRole("log")).toContainText(
+        "Activity selected: Claims intake",
+    );
     await expect(
         page.getByRole("region", { name: "Clarify research context" }),
     ).toHaveCount(0);
@@ -89,9 +90,7 @@ test("failed scope selection stays retryable without leaking the selection key i
     await page.goto("/?layout=start&screen=framing&theme=dark", {
         waitUntil: "domcontentloaded",
     });
-    await page
-        .getByRole("button", { name: "Change scope", exact: true })
-        .click();
+    await changeResearchScope(page);
     await page
         .getByRole("radio", { name: "Repair network management", exact: true })
         .click();

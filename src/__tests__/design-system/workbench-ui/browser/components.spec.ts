@@ -42,7 +42,7 @@ test("START company picker closes with Escape and restores keyboard focus", asyn
     await page.keyboard.press("Tab");
     await expect(
         page.getByRole("button", {
-            name: "Add a public reference",
+            name: "Composer tools",
             exact: true,
         }),
     ).toBeFocused();
@@ -104,7 +104,10 @@ test("START public reference controls stage and remove links locally", async ({
 }) => {
     await page.goto("/?layout=start&screen=composer&theme=light");
     await page
-        .getByRole("button", { name: "Add a public reference", exact: true })
+        .getByRole("button", { name: "Composer tools", exact: true })
+        .click();
+    await page
+        .getByRole("menuitem", { name: "Attach references", exact: true })
         .click();
     const dialog = page.getByRole("dialog", {
         name: "Add public sources",
@@ -121,15 +124,18 @@ test("START public reference controls stage and remove links locally", async ({
     await dialog.getByRole("button", { name: "Done", exact: true }).click();
     await expect(
         page.getByRole("button", {
-            name: "Add a public reference (1)",
+            name: "Composer tools (1)",
             exact: true,
         }),
     ).toBeVisible();
     await page
         .getByRole("button", {
-            name: "Add a public reference (1)",
+            name: "Composer tools (1)",
             exact: true,
         })
+        .click();
+    await page
+        .getByRole("menuitem", { name: "Attach references", exact: true })
         .click();
     await dialog
         .getByRole("button", {
@@ -140,7 +146,7 @@ test("START public reference controls stage and remove links locally", async ({
     await dialog.getByRole("button", { name: "Done", exact: true }).click();
     await expect(
         page.getByRole("button", {
-            name: "Add a public reference",
+            name: "Composer tools",
             exact: true,
         }),
     ).toBeVisible();
