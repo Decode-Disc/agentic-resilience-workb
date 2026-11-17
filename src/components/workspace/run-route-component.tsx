@@ -252,6 +252,13 @@ export function RunRouteComponent({
             navigation={navigation}
             fallback={generic}
             dock={inventory}
+            onOpenDecision={() =>
+                void navigate({
+                    to: "/workspace/$runId",
+                    params: { runId },
+                    search: { section: "progress" },
+                })
+            }
             onFollowUp={
                 run.startMode === "framed"
                     ? (draft) => {

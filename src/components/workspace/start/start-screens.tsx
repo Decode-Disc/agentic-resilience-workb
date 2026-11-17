@@ -7,8 +7,11 @@ import {
     PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import {
+    createContext,
     type ReactNode,
     type RefObject,
+    use,
+    useCallback,
     useEffect,
     useId,
     useLayoutEffect,
@@ -238,6 +241,27 @@ function ResearchConversation({
 }
 
 /** Conversation and documentary progress remain supplied independently of workflow state. */
+const RevealInConversationContext = createContext<
+    ((elementId: string) => void) | null
+>(null);
+
+/** The control to focus when revealing an element: its first enabled button, or the element itself. */
+function revealTarget(elementId: string): HTMLElement | null {
+    const element = document.getElementById(elementId);
+    return (
+        element?.querySelector<HTMLElement>("button:not(:disabled)") ?? element
+    );
+}
+
+function prefersReducedMotion() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Brings an element of the research conversation into view and focus, opening the compact conversation first. */
+export function useRevealInConversation() {
+    return use(RevealInConversationContext);
+}
+
 export function StartResearchScreen({
     context,
     runtime,
@@ -265,6 +289,24 @@ export function StartResearchScreen({
 }) {
     const [conversationOpen, setConversationOpen] = useState(false);
     const compact = useMediaQuery("(width < 52rem)");
+    const pendingReveal = useRef<string | null>(null);
+    const reveal = useCallback(
+        (elementId: string) => {
+            if (compact) {
+                // The sheet stays mounted; its opening focus lands on the target.
+                pendingReveal.current = elementId;
+                setConversationOpen(true);
+                return;
+            }
+            const target = revealTarget(elementId);
+            target?.scrollIntoView?.({
+                block: "center",
+                behavior: prefersReducedMotion() ? "auto" : "smooth",
+            });
+            target?.focus({ preventScroll: true });
+        },
+        [compact],
+    );
     const conversationScroll = useRef<number | null>(null);
     const askAiRef = useRef<HTMLButtonElement>(null);
     const group = useRef<GroupImperativeHandle | null>(null);
@@ -308,109 +350,134 @@ export function StartResearchScreen({
         </ResearchConversation>
     );
     return (
-        <section
-            data-compact={compact}
-            data-mobile-view={conversationOpen ? "conversation" : "progress"}
-            className={styles.research}
-            aria-label="Research preparation">
-            <Sheet
-                open={compact && conversationOpen}
-                onOpenChange={setConversationOpen}>
-                <ResizablePanelGroup
-                    groupRef={group}
-                    orientation="horizontal"
-                    disabled={compact}
-                    defaultLayout={desktopLayout.current}
-                    onLayoutChanged={(layout, { isUserInteraction }) => {
-                        if (!compact && isUserInteraction)
-                            desktopLayout.current = layout;
-                    }}
-                    className={styles.researchPanels}>
-                    <ResizablePanel
-                        id={conversationId}
-                        minSize={compact ? 0 : "22rem"}
-                        maxSize={compact ? 0 : "100%"}
-                        className={styles.researchPane}
-                        style={{
-                            display: compact ? "none" : undefined,
-                            overflow: "hidden",
-                        }}>
-                        {!compact && conversationPane}
-                    </ResizablePanel>
-                    <ResizableHandle
-                        withHandle
+        <RevealInConversationContext value={reveal}>
+            <section
+                data-compact={compact}
+                data-mobile-view={
+                    conversationOpen ? "conversation" : "progress"
+                }
+                className={styles.research}
+                aria-label="Research preparation">
+                <Sheet
+                    open={compact && conversationOpen}
+                    onOpenChange={setConversationOpen}>
+                    <ResizablePanelGroup
+                        groupRef={group}
+                        orientation="horizontal"
                         disabled={compact}
-                        className={compact ? styles.compactHandle : undefined}
-                        aria-label="Resize conversation and progress"
-                    />
-                    <ResizablePanel
-                        id={progressId}
-                        minSize={compact ? 0 : "26rem"}
-                        className={styles.researchPane}
-                        style={{ overflow: "hidden" }}>
-                        <section
-                            className={styles.progress}
-                            aria-label="Documentary progress">
-                            <header
-                                className={handoff ? styles.muted : undefined}>
-                                {heading}
-                            </header>
-                            {notice}
-                            <GlassPanel className={styles.summaryPanel}>
+                        defaultLayout={desktopLayout.current}
+                        onLayoutChanged={(layout, { isUserInteraction }) => {
+                            if (!compact && isUserInteraction)
+                                desktopLayout.current = layout;
+                        }}
+                        className={styles.researchPanels}>
+                        <ResizablePanel
+                            id={conversationId}
+                            minSize={compact ? 0 : "22rem"}
+                            maxSize={compact ? 0 : "100%"}
+                            className={styles.researchPane}
+                            style={{
+                                display: compact ? "none" : undefined,
+                                overflow: "hidden",
+                            }}>
+                            {!compact && conversationPane}
+                        </ResizablePanel>
+                        <ResizableHandle
+                            withHandle
+                            disabled={compact}
+                            className={
+                                compact ? styles.compactHandle : undefined
+                            }
+                            aria-label="Resize conversation and progress"
+                        />
+                        <ResizablePanel
+                            id={progressId}
+                            minSize={compact ? 0 : "26rem"}
+                            className={styles.researchPane}
+                            style={{ overflow: "hidden" }}>
+                            <section
+                                className={styles.progress}
+                                aria-label="Documentary progress">
+                                <header
+                                    className={
+                                        handoff ? styles.muted : undefined
+                                    }>
+                                    {heading}
+                                </header>
+                                {notice}
+                                <GlassPanel className={styles.summaryPanel}>
+                                    <div
+                                        className={
+                                            handoff
+                                                ? `${styles.summaryOverview} ${styles.muted}`
+                                                : styles.summaryOverview
+                                        }>
+                                        {summary}
+                                        {stages && (
+                                            <div className={styles.stages}>
+                                                {stages}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {limitations}
+                                </GlassPanel>
                                 <div
                                     className={
                                         handoff
-                                            ? `${styles.summaryOverview} ${styles.muted}`
-                                            : styles.summaryOverview
+                                            ? styles.completed
+                                            : styles.lanes
                                     }>
-                                    {summary}
-                                    {stages && (
-                                        <div className={styles.stages}>
-                                            {stages}
-                                        </div>
-                                    )}
+                                    {lanes}
                                 </div>
-                                {limitations}
-                            </GlassPanel>
-                            <div
-                                className={
-                                    handoff ? styles.completed : styles.lanes
-                                }>
-                                {lanes}
-                            </div>
-                            {handoff && (
-                                <div className={styles.handoff}>{handoff}</div>
-                            )}
-                        </section>
-                    </ResizablePanel>
-                </ResizablePanelGroup>
-                {compact && (
-                    <>
-                        <SheetTrigger
-                            render={<Button ref={askAiRef} variant="default" />}
-                            className={styles.askAi}>
-                            <Icon iconNode={AiChat02Icon} size={19} />
-                            Ask AI
-                        </SheetTrigger>
-                        <SheetContent
-                            side="right"
-                            keepMounted
-                            showCloseButton={false}
-                            finalFocus={askAiRef}
-                            className={styles.mobileConversation}>
-                            <SheetTitle className="sr-only">
-                                Conversation
-                            </SheetTitle>
-                            <SheetDescription className="sr-only">
-                                Ask about the research and return to its
-                                progress.
-                            </SheetDescription>
-                            {conversationPane}
-                        </SheetContent>
-                    </>
-                )}
-            </Sheet>
-        </section>
+                                {handoff && (
+                                    <div className={styles.handoff}>
+                                        {handoff}
+                                    </div>
+                                )}
+                            </section>
+                        </ResizablePanel>
+                    </ResizablePanelGroup>
+                    {compact && (
+                        <>
+                            <SheetTrigger
+                                render={
+                                    <Button ref={askAiRef} variant="default" />
+                                }
+                                className={styles.askAi}>
+                                <Icon iconNode={AiChat02Icon} size={19} />
+                                Ask AI
+                            </SheetTrigger>
+                            <SheetContent
+                                side="right"
+                                keepMounted
+                                showCloseButton={false}
+                                finalFocus={askAiRef}
+                                initialFocus={() => {
+                                    const elementId = pendingReveal.current;
+                                    pendingReveal.current = null;
+                                    const target = elementId
+                                        ? revealTarget(elementId)
+                                        : null;
+                                    target?.scrollIntoView?.({
+                                        block: "center",
+                                    });
+                                    return target ?? true;
+                                }}
+                                className={styles.mobileConversation}>
+                                <SheetTitle className="sr-only">
+                                    Conversation
+                                </SheetTitle>
+                                <SheetDescription className="sr-only">
+                                    Ask about the research and return to its
+                                    progress.
+                                </SheetDescription>
+                                {conversationPane}
+                            </SheetContent>
+                        </>
+                    )}
+                </Sheet>
+            </section>
+        </RevealInConversationContext>
     );
 }
 export interface StartFramingQuestion {

@@ -4,8 +4,9 @@ import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { type ReactNode, useState } from "react";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ConnectedApprovalCard } from "@/components/workspace/approvals/connected-approval-card";
+import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import {
     SourcesMatrixScreen,
     SourcesPreparationScreen,
@@ -46,6 +47,7 @@ export function ConnectedSources({
     fallback,
     dock,
     onFollowUp,
+    onOpenDecision,
 }: {
     runId: Id<"researchRuns">;
     run: Run;
@@ -58,6 +60,8 @@ export function ConnectedSources({
     dock?: ReactNode;
     /** Opens the Workbench composer with this draft; absent when Workbench cannot receive it. */
     onFollowUp?: (draft: string) => void;
+    /** Opens the conversation that holds the dossier's pending time-limit decision. */
+    onOpenDecision?: () => void;
 }) {
     const frame: SourcesScreenFrame = { navigation };
     return (
@@ -74,6 +78,7 @@ export function ConnectedSources({
                 fallback={fallback}
                 dock={dock}
                 onFollowUp={onFollowUp}
+                onOpenDecision={onOpenDecision}
             />
         </LoadErrorBoundary>
     );
@@ -86,6 +91,7 @@ type ScreenProps = {
     onSearchChange: (patch: SourcesSearch, replace?: boolean) => void;
     frame: SourcesScreenFrame;
     onFollowUp?: (draft: string) => void;
+    onOpenDecision?: () => void;
 };
 
 /** Decides the path once: the corpus-approval fallback, or the Sources screens with the dock. */
@@ -124,6 +130,7 @@ function SourcesContent({
     onSearchChange,
     frame,
     onFollowUp,
+    onOpenDecision,
     overview,
     rows,
 }: ScreenProps & {
@@ -236,11 +243,18 @@ function SourcesContent({
                     : "primary"
             }
             actions={
+                // The decision itself is made on its card in the conversation.
                 run.sourcesPhase === "time_limit" &&
-                run.sourcesDecisionRequestId ? (
-                    <ConnectedApprovalCard
-                        requestId={run.sourcesDecisionRequestId}
-                    />
+                run.sourcesDecisionRequestId &&
+                onOpenDecision ? (
+                    <Button size="lg" onClick={onOpenDecision}>
+                        Open decision
+                        <WorkbenchIcon
+                            name="chevron"
+                            size={14}
+                            strokeWidth={2}
+                        />
+                    </Button>
                 ) : undefined
             }
         />

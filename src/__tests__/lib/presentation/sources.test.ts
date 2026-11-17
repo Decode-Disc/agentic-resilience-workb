@@ -112,7 +112,7 @@ test.each(
         expect(copy.detail).toContain("Start a new analysis");
     if (phase === "time_limit")
         expect(copy.detail).toMatch(
-            /Continue preparation.*use what's prepared/,
+            /Decide in the conversation.*continue preparation.*use what's prepared/,
         );
 });
 

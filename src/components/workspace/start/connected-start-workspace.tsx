@@ -42,7 +42,10 @@ import { LoadErrorAlert } from "@/components/ui/load-error-alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WorkbenchUiRoot } from "@/components/workbench-ui/root";
 import { SourcingLane } from "@/components/workbench-ui/sourcing-lane";
-import { ConnectedApprovalCard } from "@/components/workspace/approvals/connected-approval-card";
+import {
+    approvalCardElementId,
+    ConnectedApprovalCard,
+} from "@/components/workspace/approvals/connected-approval-card";
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
 import { useResponsive } from "@/hooks/use-responsive";
 import { sourcesPhasePresentation } from "@/lib/presentation/sources";
@@ -66,6 +69,7 @@ import {
     StartResearchScreen,
     StartSourceCounts,
     StartSourcesHeader,
+    useRevealInConversation,
 } from "./start-screens";
 
 import { WorkbenchTurnDetails } from "./workbench-turn-details";
@@ -82,6 +86,22 @@ type Edit = {
 };
 
 /** The typed code a Convex operation refused with, if any. */
+/** Points from the progress header to the decision card in the conversation instead of repeating its choices. */
+function OpenDecisionButton({
+    requestId,
+}: {
+    requestId: Id<"approvalRequests">;
+}) {
+    const reveal = useRevealInConversation();
+    return (
+        <Button
+            variant="outline"
+            onClick={() => reveal?.(approvalCardElementId(requestId))}>
+            Open decision
+        </Button>
+    );
+}
+
 function convexErrorCode(error: unknown) {
     return error instanceof ConvexError &&
         typeof error.data === "object" &&
@@ -709,9 +729,9 @@ function StartWorkspaceContent({
                         </Button>
                     </>
                 ) : snapshot.sourcesPhase === "time_limit" ? (
-                    // The time-limit decision is only made on its approval card; a generic Resume would renew the window unasked.
+                    // The time-limit decision is only made on its approval card in the conversation; a generic Resume would renew the window unasked.
                     snapshot.sourcesDecisionRequestId ? (
-                        <ConnectedApprovalCard
+                        <OpenDecisionButton
                             requestId={snapshot.sourcesDecisionRequestId}
                         />
                     ) : null

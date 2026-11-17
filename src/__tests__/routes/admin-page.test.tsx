@@ -8,13 +8,13 @@ import {
 } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
-const { setPaidWorkEnabled, restoreQuota, withdrawDossier } = vi.hoisted(
-    () => ({
+const { setPaidWorkEnabled, restoreQuota, withdrawDossier, reopenDossier } =
+    vi.hoisted(() => ({
         setPaidWorkEnabled: vi.fn(),
         restoreQuota: vi.fn(),
         withdrawDossier: vi.fn(),
-    }),
-);
+        reopenDossier: vi.fn(),
+    }));
 
 vi.mock("convex/react", async () => {
     const { convexReactHarness } = await import(
@@ -201,6 +201,7 @@ beforeEach(() => {
     setPaidWorkEnabled.mockReset();
     restoreQuota.mockReset();
     withdrawDossier.mockReset();
+    reopenDossier.mockReset();
     refreshProfiles.mockReset();
     refreshProfiles.mockResolvedValue({ isDone: true, continueCursor: null });
     convexReactHarness.query(api.visitors.current).returns(adminVisitor);
@@ -276,6 +277,9 @@ beforeEach(() => {
     convexReactHarness
         .mutation(api.admin.withdrawDossier)
         .uses(withdrawDossier);
+    convexReactHarness
+        .mutation(api.admin.reopenAtSourcesTimeLimit)
+        .uses(reopenDossier);
 });
 
 test("presents dossier identity, dates and filters by purpose", async () => {
@@ -770,6 +774,73 @@ test("a withdrawable dossier is withdrawn from its panel only with a reason", as
             reason: "Failed by the time-limit defect.",
         }),
     );
+});
+
+test("a dossier failed at its Sources deadline is reopened from its panel only with a reason", async () => {
+    reopenDossier.mockResolvedValue({ reopened: true });
+    convexReactHarness.query(api.adminOperations.inspectRun).returns({
+        run: {
+            _id: "run-research",
+            purpose: "research",
+            lifecycleState: "discovering_sources",
+            executionStatus: "failed",
+            ownerVisitorId: "v1",
+            reservationStatus: "consumed",
+            createdAt: 1,
+        },
+        company: { legalName: "ServiceNow, Inc." },
+        reopenable: true,
+    } as never);
+    render(
+        <>
+            <AdminPage
+                search={{ ...dossiers, dossier: "run-research" as never }}
+            />
+            <Toaster />
+        </>,
+    );
+    const panel = await screen.findByRole("dialog", {
+        name: "ServiceNow, Inc.",
+    });
+    fireEvent.click(
+        within(panel).getByRole("button", { name: "Reopen at time limit" }),
+    );
+    const confirm = await screen.findByRole("button", {
+        name: "Confirm reopening",
+    });
+    fireEvent.change(screen.getByLabelText("Reason for reopening"), {
+        target: { value: "short" },
+    });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Reason for reopening"), {
+        target: { value: "  Analyst asked to keep the sources.  " },
+    });
+    fireEvent.click(confirm);
+    await waitFor(() =>
+        expect(reopenDossier).toHaveBeenCalledWith({
+            runId: "run-research",
+            reason: "Analyst asked to keep the sources.",
+        }),
+    );
+    expect(
+        await screen.findByText(
+            "Dossier reopened. The analyst can now continue preparation or use what's prepared.",
+        ),
+    ).toBeTruthy();
+});
+
+test("a dossier that cannot be reopened offers no reopening", async () => {
+    render(
+        <AdminPage
+            search={{ ...dossiers, dossier: "run-research" as never }}
+        />,
+    );
+    const panel = await screen.findByRole("dialog", {
+        name: "ServiceNow, Inc.",
+    });
+    expect(
+        within(panel).queryByRole("button", { name: "Reopen at time limit" }),
+    ).toBeNull();
 });
 
 test("the overview sends reservations to their own view", async () => {

@@ -38,7 +38,7 @@ export const approvalActionCopy: Record<ApprovalAction, ApprovalActionCopy> = {
     continue_sources_preparation: {
         label: "Continue preparation",
         consequence:
-            "Opens another preparation window using the remaining capacity for this dossier.",
+            "Keeps gathering sources in another preparation window, using more of this dossier's research capacity.",
         onceLabel: "Continue once",
         alwaysLabel: "Always continue",
         grantedLabel: "Continue preparation automatically",
@@ -47,7 +47,7 @@ export const approvalActionCopy: Record<ApprovalAction, ApprovalActionCopy> = {
     settle_sources_preparation: {
         label: "Use what's prepared",
         consequence:
-            "Hands off the prepared material with its recorded limits without opening another window.",
+            "Finishes preparation with the sources already captured and records what it did not cover.",
         onceLabel: "Use once",
         alwaysLabel: "Always use what's prepared",
         grantedLabel: "Use what's prepared automatically",

@@ -320,22 +320,9 @@ test("without a Workbench conversation the reader offers no follow-up it cannot 
     ).toBeNull();
 });
 
-test("the time-limit card replaces the old decision buttons on the Sources page", async () => {
+test("the Sources page points to the conversation's time-limit decision", () => {
     const requestId = "approval-sources-1" as Id<"approvalRequests">;
-    const decide = vi.fn().mockResolvedValue(null);
-    convexReactHarness.query(api.execution.approvals.get).returns({
-        id: requestId,
-        runId,
-        action: "continue_sources_preparation",
-        alternative: "settle_sources_preparation",
-        requestedBy: { type: "system" },
-        status: "pending",
-        block: null,
-        decision: null,
-        grantActive: false,
-        createdAt: 1,
-    });
-    convexReactHarness.mutation(api.execution.approvals.decide).uses(decide);
+    const onOpenDecision = vi.fn();
     renderSources({
         run: {
             ...run,
@@ -345,6 +332,7 @@ test("the time-limit card replaces the old decision buttons on the Sources page"
             sourcesPhase: "time_limit",
             sourcesDecisionRequestId: requestId,
         },
+        onOpenDecision,
     });
     expect(
         screen.getByRole("heading", {
@@ -352,27 +340,10 @@ test("the time-limit card replaces the old decision buttons on the Sources page"
         }),
     ).toBeTruthy();
     expect(screen.getAllByText("Decision needed").length).toBeGreaterThan(0);
-    expect(
-        screen.getByRole("group", {
-            name: "The Sources Agent reached its time limit",
-        }),
-    ).toBeTruthy();
-    expect(
-        screen.queryByRole("button", { name: "Continue preparation" }),
-    ).toBeNull();
-    expect(screen.getByRole("button", { name: "Continue once" })).toBeTruthy();
-    expect(
-        screen.getByRole("button", { name: "Always continue" }),
-    ).toBeTruthy();
-    fireEvent.click(
-        screen.getByRole("button", { name: "Use what's prepared" }),
-    );
-    await vi.waitFor(() =>
-        expect(decide).toHaveBeenCalledWith({
-            requestId,
-            choice: "alternative",
-        }),
-    );
+    expect(screen.queryByRole("group")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Continue once" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open decision" }));
+    expect(onOpenDecision).toHaveBeenCalledOnce();
     expect(document.body.textContent).not.toMatch(
         /sources_time_limit|time_limit/,
     );

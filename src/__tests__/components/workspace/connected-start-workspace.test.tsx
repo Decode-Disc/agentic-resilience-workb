@@ -1223,6 +1223,59 @@ const timeLimitView = (
 const timeLimitRaw =
     /sources_time_limit|time_limit|execution_slot_unavailable|paid_work_disabled|stale_execution|approval_already_decided|continue_sources_preparation|settle_sources_preparation/;
 
+const timeLimitNotice = () => ({
+    results: [
+        {
+            _id: "notice-1" as Id<"agentMessageDeliveries">,
+            runId,
+            requestKey: `approval-notice:${approvalRequestId}`,
+            role: "assistant",
+            delivery: "notice",
+            status: "processed",
+            createdAt: 10,
+            approvalRequestId,
+            text: "The Sources Agent reached its time limit. Choose whether to continue preparation or use what's prepared.",
+            work: null,
+        },
+    ],
+    status: "Exhausted",
+    loadMore: vi.fn(),
+});
+
+test("the progress header points to the conversation's decision instead of repeating it", async () => {
+    convexReactHarness
+        .query(api.workbench.snapshot)
+        .returns(timeLimitSnapshot());
+    convexReactHarness
+        .paginatedQuery(api.workbench.history)
+        .returns(timeLimitNotice());
+    convexReactHarness
+        .query(api.execution.approvals.get)
+        .returns(timeLimitView());
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const progress = screen.getByRole("region", {
+        name: "Documentary progress",
+    });
+    expect(
+        screen.getAllByRole("group", {
+            name: "The Sources Agent reached its time limit",
+        }),
+    ).toHaveLength(1);
+    expect(within(progress).queryByRole("group")).toBeNull();
+    expect(
+        within(progress).queryByRole("button", { name: "Continue once" }),
+    ).toBeNull();
+    fireEvent.click(
+        within(progress).getByRole("button", { name: "Open decision" }),
+    );
+    await waitFor(() =>
+        expect(document.activeElement).toBe(
+            screen.getByRole("button", { name: "Use what's prepared" }),
+        ),
+    );
+    expect(document.body.textContent).not.toMatch(timeLimitRaw);
+});
+
 test("a notice in the conversation renders its approval card", () => {
     convexReactHarness.query(api.workbench.snapshot).returns({
         ...readySnapshot,
@@ -1280,6 +1333,9 @@ test("Continue once decides through approvals with the request id", async () => 
     convexReactHarness
         .query(api.workbench.snapshot)
         .returns(timeLimitSnapshot());
+    convexReactHarness
+        .paginatedQuery(api.workbench.history)
+        .returns(timeLimitNotice());
     render(<ConnectedStartWorkspace runId={runId} />);
     expect(
         screen.getByRole("group", {
@@ -1306,6 +1362,9 @@ test("Continue preparation is disabled with its reason before any attempt, while
     convexReactHarness
         .query(api.workbench.snapshot)
         .returns(timeLimitSnapshot());
+    convexReactHarness
+        .paginatedQuery(api.workbench.history)
+        .returns(timeLimitNotice());
     render(<ConnectedStartWorkspace runId={runId} />);
     const once = screen.getByRole("button", { name: "Continue once" });
     const always = screen.getByRole("button", { name: "Always continue" });
@@ -1339,6 +1398,9 @@ test("a refused decision shows that it was already decided", async () => {
     convexReactHarness
         .query(api.workbench.snapshot)
         .returns(timeLimitSnapshot());
+    convexReactHarness
+        .paginatedQuery(api.workbench.history)
+        .returns(timeLimitNotice());
     render(<ConnectedStartWorkspace runId={runId} />);
     fireEvent.click(
         screen.getByRole("button", { name: "Use what's prepared" }),

@@ -772,7 +772,7 @@ export function researchStateSummary(
     if (run.pauseReason === "execution_interrupted")
         return "Research was interrupted. Retained work remains available. Resume research to continue.";
     if (run.pauseReason === "sources_time_limit")
-        return `The ${agentName("sources")} reached its time limit. Material read so far remains inspectable. Continue preparation to use the remaining capacity, or use what's prepared to hand it off with its limits.`;
+        return `The ${agentName("sources")} reached its time limit. Material read so far remains inspectable. The decision card in the conversation offers to continue preparation or use what's prepared.`;
     if (run.pauseReason && run.pauseReason !== "analyst")
         return "Research is waiting for an analyst decision. Complete the pending review to continue.";
     if (run.executionStatus === "paused") return "Research is paused.";

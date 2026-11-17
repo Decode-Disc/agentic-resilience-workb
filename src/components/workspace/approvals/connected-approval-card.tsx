@@ -21,6 +21,11 @@ function refusalCode(error: unknown) {
         : undefined;
 }
 
+/** The DOM id of a request's card, so another surface can bring the decision into view. */
+export function approvalCardElementId(requestId: Id<"approvalRequests">) {
+    return `approval-${requestId}`;
+}
+
 /** Connects one approval request record to the neutral ApprovalCard and Convex approval actions. */
 export function ConnectedApprovalCard({
     requestId,
@@ -38,6 +43,7 @@ export function ConnectedApprovalCard({
     if (view === undefined) {
         return (
             <div
+                id={approvalCardElementId(requestId)}
                 role="status"
                 aria-label="Loading approval request"
                 className="rounded-xl border border-divider bg-card p-3.5">
@@ -117,7 +123,7 @@ export function ConnectedApprovalCard({
     };
 
     return (
-        <div className={className}>
+        <div id={approvalCardElementId(requestId)} className={className}>
             <ApprovalCard
                 title={presentation.title}
                 description={presentation.description}

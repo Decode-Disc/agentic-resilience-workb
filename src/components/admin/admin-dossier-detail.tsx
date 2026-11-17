@@ -1,7 +1,11 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { withdrawableRun } from "@convex/domain/runWithdrawal";
-import { Cancel01Icon, Delete02Icon } from "@hugeicons/core-free-icons";
+import {
+    Cancel01Icon,
+    Delete02Icon,
+    RotateLeft01Icon,
+} from "@hugeicons/core-free-icons";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { type ComponentType, type ReactNode, useEffect, useState } from "react";
@@ -150,6 +154,8 @@ function DossierDetailBody({
     const details = useQuery(api.adminOperations.inspectRun, { runId });
     const withdrawDossier = useMutation(api.admin.withdrawDossier);
     const [withdrawing, setWithdrawing] = useState(false);
+    const reopenDossier = useMutation(api.admin.reopenAtSourcesTimeLimit);
+    const [reopening, setReopening] = useState(false);
     const run = details?.run;
     const purpose = run?.purpose;
     useEffect(() => {
@@ -186,6 +192,15 @@ function DossierDetailBody({
                         {run.withdrawnAt ? (
                             <AdminMarkBadge mark="withdrawn" />
                         ) : null}
+                        {details?.reopenable ? (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setReopening(true)}>
+                                <Icon iconNode={RotateLeft01Icon} />
+                                Reopen at time limit
+                            </Button>
+                        ) : null}
                         {withdrawableRun(run) ? (
                             <Button
                                 size="sm"
@@ -206,6 +221,29 @@ function DossierDetailBody({
                     onInspectCall={onInspectCall}
                 />
             </div>
+            <AdminReasonDialog
+                open={reopening}
+                title="Reopen at time limit"
+                description="This dossier failed when Sources preparation reached its deadline. Reopening keeps the material already gathered and asks the analyst, in the dossier conversation, whether to continue preparation or use what's prepared. Nothing new runs until they decide."
+                reasonLabel="Reason for reopening"
+                confirmLabel="Confirm reopening"
+                pendingLabel="Reopening…"
+                onClose={() => setReopening(false)}
+                onConfirm={async (reason) => {
+                    try {
+                        await reopenDossier({ runId, reason });
+                        toast.success(
+                            "Dossier reopened. The analyst can now continue preparation or use what's prepared.",
+                        );
+                        return true;
+                    } catch {
+                        toast.error(
+                            "We couldn’t reopen the dossier. It may have changed; reload it and try again.",
+                        );
+                        return false;
+                    }
+                }}
+            />
             <AdminReasonDialog
                 open={withdrawing}
                 title="Withdraw dossier"

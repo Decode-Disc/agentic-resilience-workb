@@ -31,6 +31,7 @@ import { classifyRunPurpose, runPurposeValidator } from "./domain/runPurpose";
 import { withdrawableRun } from "./domain/runWithdrawal";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { sourceDossierCandidateLimit } from "./resourceLimits";
+import { readReopenBlock } from "./runRecovery";
 import { isBrowserTestSlot } from "./runWorkspace";
 import schema from "./schema";
 import { createSourceSelectionProposal } from "./sourceSelectionProposals";
@@ -736,6 +737,8 @@ export const inspectRun = query({
     returns: v.object({
         run: schema.doc("researchRuns"),
         company: v.union(schema.doc("companies"), v.null()),
+        /** Whether the run failed at its Sources deadline and can be reopened into the time-limit decision. */
+        reopenable: v.boolean(),
     }),
     handler: async (ctx, args) => {
         await requireAdmin(ctx);
@@ -744,6 +747,7 @@ export const inspectRun = query({
         return {
             run,
             company: run.companyId ? await ctx.db.get(run.companyId) : null,
+            reopenable: (await readReopenBlock(ctx, run)) === null,
         };
     },
 });

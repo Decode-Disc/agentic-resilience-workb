@@ -108,9 +108,10 @@ export function approvalCardPresentation(view: ApprovalRequestView): {
                         ...(disabledReason ? { disabledReason } : {}),
                     },
                     {
+                        // A standing permission is never the emphasized default between two outcomes.
                         value: "always",
                         label: actionCopy.alwaysLabel,
-                        variant: "default",
+                        variant: "outline",
                         ...(disabledReason ? { disabledReason } : {}),
                     },
                 ]

@@ -7,6 +7,7 @@ import {
     MAX_AUDIT_REASON_CHARS,
     MIN_AUDIT_REASON_CHARS,
 } from "./resourcePolicy";
+import { reopenAtTimeLimit } from "./runRecovery";
 
 export const restoreQuota = mutation({
     args: { runId: v.id("researchRuns"), reason: v.string() },
@@ -112,5 +113,19 @@ export const withdrawDossier = mutation({
             occurredAt: now,
         });
         return { withdrawn: true };
+    },
+});
+
+/** Reopens a dossier that failed at its Sources deadline into the analyst's time-limit decision. */
+export const reopenAtSourcesTimeLimit = mutation({
+    args: { runId: v.id("researchRuns"), reason: v.string() },
+    returns: v.object({ reopened: v.boolean() }),
+    handler: async (ctx, args) => {
+        const admin = await requireAdmin(ctx);
+        const { reopened } = await reopenAtTimeLimit(ctx, {
+            ...args,
+            actor: { type: "visitor", visitorId: admin._id },
+        });
+        return { reopened };
     },
 });

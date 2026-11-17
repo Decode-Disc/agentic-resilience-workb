@@ -74,7 +74,7 @@ const phaseCopy: Record<
         label: "Decision needed",
         outcome: "Decision needed",
         title: `${sourcesAgent} reached its time limit`,
-        detail: `${sourcesAgent} used its time window before finishing. Continue preparation to use the remaining capacity, or use what's prepared now.`,
+        detail: `${sourcesAgent} used its time window before finishing. Decide in the conversation whether to continue preparation or use what's prepared.`,
     },
     completed: {
         workState: "completed",
@@ -515,7 +515,7 @@ export function sourcesPreparationView(
               .filter(Boolean)
               .join(" ")
         : run.sourcesPhase === "time_limit"
-          ? `${sourcesAgent} used its time window with ${plural(overview.reading.captured, ["document", "documents"])} read for ${needs}. Continue preparation to use the remaining capacity, or use what's prepared now.`
+          ? `${sourcesAgent} used its time window with ${plural(overview.reading.captured, ["document", "documents"])} read for ${needs}. Decide in the conversation whether to continue preparation or use what's prepared.`
           : state === "paused"
             ? `${sourcesAgent} is paused with ${plural(overview.reading.captured, ["document", "documents"])} read so far for ${needs}.`
             : run.sourcesPhase === "failed"

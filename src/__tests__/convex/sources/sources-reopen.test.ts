@@ -405,3 +405,83 @@ test("reopening while another dossier runs succeeds and Continue shows the slot 
         block: "execution_slot_unavailable",
     });
 });
+
+async function seedAdmin(
+    f: Awaited<ReturnType<typeof seedExpiredPreparation>>,
+) {
+    const userId = await f.t.run(async (ctx) => {
+        const userId = await ctx.db.insert("users", { isAnonymous: true });
+        const invitationId = await ctx.db.insert("invitations", {
+            slotKey: "reopen-admin",
+            role: "admin",
+            codeDigest: "reopen-admin-digest",
+            status: "claimed",
+            createdAt: 1,
+        });
+        const visitorId = await ctx.db.insert("visitors", {
+            authUserId: userId,
+            invitationId,
+            role: "admin",
+            status: "active",
+            analysesReserved: 0,
+            admittedAt: 1,
+        });
+        await ctx.db.patch(invitationId, { claimedByVisitorId: visitorId });
+        return userId;
+    });
+    return f.t.withIdentity({ subject: userId });
+}
+
+test("an administrator reopens an eligible failed dossier with an audited reason", async () => {
+    const f = await seedExpiredPreparation();
+    await seedTimeLimitConversation(f);
+    await failLikeNovember15(f);
+    const admin = await seedAdmin(f);
+
+    expect(
+        (await admin.query(api.adminOperations.inspectRun, { runId: f.runId }))
+            .reopenable,
+    ).toBe(true);
+    const result = await admin.mutation(api.admin.reopenAtSourcesTimeLimit, {
+        runId: f.runId,
+        reason: "Analyst asked to keep the gathered sources",
+    });
+    expect(result).toEqual({ reopened: true });
+
+    expect(await f.t.run((ctx) => ctx.db.get(f.runId))).toMatchObject({
+        executionStatus: "paused",
+        pauseReason: "sources_time_limit",
+    });
+    const audit = await f.t.run((ctx) =>
+        ctx.db
+            .query("auditEvents")
+            .withIndex("by_target", (q) =>
+                q.eq("targetType", "research_run").eq("targetId", f.runId),
+            )
+            .collect(),
+    );
+    expect(
+        audit.find((event) => event.action === "run_reopened_at_time_limit"),
+    ).toMatchObject({
+        actor: { type: "visitor" },
+        reason: "Analyst asked to keep the gathered sources",
+    });
+    expect(
+        (await admin.query(api.adminOperations.inspectRun, { runId: f.runId }))
+            .reopenable,
+    ).toBe(false);
+});
+
+test("only an administrator can reopen a failed dossier", async () => {
+    const f = await seedExpiredPreparation();
+    await failLikeNovember15(f);
+    await expect(
+        client(f).mutation(api.admin.reopenAtSourcesTimeLimit, {
+            runId: f.runId,
+            reason: "Owner tries to reopen their own dossier",
+        }),
+    ).rejects.toThrow();
+    expect((await f.t.run((ctx) => ctx.db.get(f.runId)))?.executionStatus).toBe(
+        "failed",
+    );
+});

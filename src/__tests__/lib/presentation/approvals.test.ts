@@ -71,7 +71,7 @@ test("the time-limit request names both options in the agreed order", () => {
     ).toEqual([
         ["alternative", "Use what's prepared", "outline"],
         ["once", "Continue once", "outline"],
-        ["always", "Always continue", "default"],
+        ["always", "Always continue", "outline"],
     ]);
     expect(presentation.choices[0]?.disabledReason).toBeUndefined();
     expect(presentation.choices[1]?.disabledReason).toBeTruthy();

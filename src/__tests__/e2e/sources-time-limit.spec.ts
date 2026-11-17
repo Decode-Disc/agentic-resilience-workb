@@ -76,20 +76,24 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     const conversationCard = conversation.getByRole("group", {
         name: cardTitle,
     });
-    const progressCard = progress.getByRole("group", { name: cardTitle });
+    const openDecision = progress.getByRole("button", {
+        name: "Open decision",
+    });
     await expect(conversationCard).toBeVisible({ timeout: 30000 });
-    await expect(progressCard).toBeVisible({ timeout: 30000 });
     for (const label of timeLimitChoices) {
         await expect(
             conversationCard.getByRole("button", { name: label }),
         ).toBeEnabled();
-        await expect(
-            progressCard.getByRole("button", { name: label }),
-        ).toBeEnabled();
     }
+    // The decision is made once, in the conversation; the progress header only points to it.
+    await expect(progress.getByRole("group")).toHaveCount(0);
     await expect(
         page.getByRole("button", { name: "Resume research" }),
     ).toHaveCount(0);
+    await openDecision.click();
+    await expect(
+        conversationCard.getByRole("button", { name: timeLimitChoices[0] }),
+    ).toBeFocused();
     await expectChoiceTabOrder(page, conversationCard, timeLimitChoices);
     await expectNoRawBodyCopy(page);
     await page.screenshot({
@@ -98,20 +102,18 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     });
 
     await page.goto(`/workspace/${runId}?section=sources`);
-    const sourcesCard = page.getByRole("group", { name: cardTitle });
-    await expect(sourcesCard).toBeVisible({ timeout: 30000 });
-    for (const label of timeLimitChoices) {
-        await expect(
-            sourcesCard.getByRole("button", { name: label }),
-        ).toBeEnabled();
-    }
+    await expect(
+        page.getByRole("button", { name: "Open decision" }),
+    ).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("group", { name: cardTitle })).toHaveCount(0);
     await expectNoRawBodyCopy(page);
     await page.screenshot({
         path: `${scratch}-sources-1440.png`,
         fullPage: true,
     });
 
-    await page.goto(`/workspace/${runId}?section=progress`);
+    await page.getByRole("button", { name: "Open decision" }).click();
+    await expect(page).toHaveURL(/section=progress/);
     await expect(conversationCard).toBeVisible({ timeout: 30000 });
     await conversationCard
         .getByRole("button", { name: "Always continue" })
@@ -150,15 +152,18 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     await page.keyboard.press("Escape");
 
     await fixture("reachSourcesTimeLimit", runId, fixtureKey);
-    await expect(progressCard).toBeVisible({ timeout: 30000 });
+    await expect(openDecision).toBeVisible({ timeout: 30000 });
+    const pendingCard = conversation
+        .getByRole("group", { name: cardTitle })
+        .last();
     await expect(
-        progressCard.getByRole("button", { name: "Always continue" }),
+        pendingCard.getByRole("button", { name: "Always continue" }),
     ).toBeEnabled();
 
-    await progressCard
+    await pendingCard
         .getByRole("button", { name: "Use what's prepared" })
         .click();
-    await expect(progressCard).toHaveCount(0, { timeout: 30000 });
+    await expect(openDecision).toHaveCount(0, { timeout: 30000 });
     await fixture("settleSourcesFixture", runId, fixtureKey);
     await expect(
         page.getByText("No usable material prepared", {
@@ -215,24 +220,28 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
         "Always continue",
     ] as const;
 
-    const progressCard = progress.getByRole("group", { name: cardTitle });
-    await expect(progressCard).toBeVisible({ timeout: 30000 });
-    for (const label of timeLimitChoices) {
-        await expect(
-            progressCard.getByRole("button", { name: label }),
-        ).toBeEnabled();
-    }
+    const openDecision = progress.getByRole("button", {
+        name: "Open decision",
+    });
+    await expect(openDecision).toBeVisible({ timeout: 30000 });
+    await expect(progress.getByRole("group")).toHaveCount(0);
     await expectNoRawBodyCopy(page);
     await page.screenshot({
         path: `${scratch}-research-390.png`,
         fullPage: true,
     });
 
-    await askAi.click();
+    // On a phone the pointer opens the conversation with focus on the decision.
+    await openDecision.click();
     const conversationTimeLimitCard = conversation.getByRole("group", {
         name: cardTitle,
     });
     await expect(conversationTimeLimitCard).toBeVisible({ timeout: 30000 });
+    await expect(
+        conversationTimeLimitCard.getByRole("button", {
+            name: timeLimitChoices[0],
+        }),
+    ).toBeFocused();
     await expectChoiceTabOrder(
         page,
         conversationTimeLimitCard,
@@ -241,23 +250,26 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
     await page.getByRole("button", { name: "Back to progress" }).click();
 
     await page.goto(`/workspace/${runId}?section=sources`);
-    const sourcesCard = page.getByRole("group", { name: cardTitle });
-    await expect(sourcesCard).toBeVisible({ timeout: 30000 });
-    for (const label of timeLimitChoices) {
-        await expect(
-            sourcesCard.getByRole("button", { name: label }),
-        ).toBeEnabled();
-    }
+    await expect(
+        page.getByRole("button", { name: "Open decision" }),
+    ).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("group", { name: cardTitle })).toHaveCount(0);
     await expectNoRawBodyCopy(page);
     await page.screenshot({
         path: `${scratch}-sources-390.png`,
         fullPage: true,
     });
 
-    await sourcesCard.getByRole("button", { name: "Continue once" }).click();
-    await expect(sourcesCard).toHaveCount(0, { timeout: 30000 });
-
-    await page.goto(`/workspace/${runId}?section=progress`);
+    await page.getByRole("button", { name: "Open decision" }).click();
+    await expect(page).toHaveURL(/section=progress/);
+    await askAi.click();
+    await conversationTimeLimitCard
+        .getByRole("button", { name: "Continue once" })
+        .click();
+    await expect(
+        conversationTimeLimitCard.getByText("Applied: Continue preparation."),
+    ).toBeVisible({ timeout: 30000 });
+    await page.getByRole("button", { name: "Back to progress" }).click();
     try {
         await expect(
             progress.getByRole("button", { name: "Pause research" }),
