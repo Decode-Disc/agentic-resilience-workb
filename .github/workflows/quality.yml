@@ -40,6 +40,10 @@ jobs:
   workbench-ui:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -57,7 +61,7 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
       - name: Check reusable component interactions
-        run: pnpm workbench-ui:check
+        run: pnpm workbench-ui:check --shard=${{ matrix.shard }}/4 --reporter=list
 
   browser-e2e:
     runs-on: ubuntu-latest
