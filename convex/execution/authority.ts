@@ -1,7 +1,10 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
-import { isResumableResearchPause } from "@convex/domain/transitions";
+import {
+    isResumableResearchPause,
+    isSourcesSettlementPause,
+} from "@convex/domain/transitions";
 import { RESOURCE_POLICY_VERSION } from "@convex/resourcePolicy";
 import { runMatchesWorkspace, workspaceForVisitor } from "@convex/runWorkspace";
 import { validate } from "convex-helpers/validators";
@@ -123,10 +126,7 @@ export async function requireSettlementAuthority(
     expectedGeneration: number,
 ) {
     const authority = await requireDossierAuthority(ctx, runId);
-    if (
-        authority.run.executionStatus === "paused" &&
-        authority.run.pauseReason === "sources_time_limit"
-    ) {
+    if (isSourcesSettlementPause(authority.run)) {
         if (authority.run.executionGeneration !== expectedGeneration)
             throw executionError("stale_execution");
         return authority;

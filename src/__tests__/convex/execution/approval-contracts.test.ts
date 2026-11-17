@@ -279,9 +279,9 @@ test("approval copy provides action data and distinguishes requests from applied
     );
     expect(approvalActionCopy.pause_research.systemTitle).toBeNull();
     expect(approvalActionCopy.resume_research.systemTitle).toBeNull();
-    expect(
-        approvalActionCopy.settle_sources_preparation.systemTitle,
-    ).toBeNull();
+    expect(approvalActionCopy.settle_sources_preparation.systemTitle).toBe(
+        "The Sources Agent needs a decision",
+    );
 
     for (const action of ALL_ACTIONS) {
         const entry = approvalActionCopy[action];

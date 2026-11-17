@@ -21,6 +21,25 @@ export function isResumableResearchPause(
     );
 }
 
+/** These Sources pauses allow handing off retained material; they never authorize new execution. */
+export function isSourcesSettlementPause(
+    run: Pick<
+        Doc<"researchRuns">,
+        | "executionStatus"
+        | "pauseReason"
+        | "sourcesProtocol"
+        | "sourcePreparationId"
+    >,
+) {
+    return (
+        run.executionStatus === "paused" &&
+        (run.pauseReason === "sources_time_limit" ||
+            (run.pauseReason === "execution_interrupted" &&
+                run.sourcesProtocol === "sources_mission_v1" &&
+                !!run.sourcePreparationId))
+    );
+}
+
 /** Includes documentary discovery, preparation and their human checkpoints. */
 export function isDocumentaryResearchPhase(
     phase: ResearchRunLifecycle,

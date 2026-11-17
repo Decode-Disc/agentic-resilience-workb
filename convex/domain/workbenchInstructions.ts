@@ -14,7 +14,10 @@ import {
     hasEngagedSourcesControl,
     sourcesInstructionTreatment,
 } from "./sources";
-import { isResumableResearchPause } from "./transitions";
+import {
+    isResumableResearchPause,
+    isSourcesSettlementPause,
+} from "./transitions";
 
 /** Resolves current treatment separately from the retained transmission receipt. */
 export async function readWorkbenchInstructions(
@@ -187,16 +190,19 @@ export async function processWorkbenchInstructions(
             q.eq("runId", runId).eq("status", "waiting"),
         )
         .take(20);
+    if (!requests.length) return null;
+    const preparation = run.sourcePreparationId
+        ? await ctx.db.get(run.sourcePreparationId)
+        : null;
+    const settling =
+        isSourcesSettlementPause(run) &&
+        preparation?.settlementRequestedAt !== undefined;
     if (
-        !requests.length ||
-        isResumableResearchPause(run) ||
-        run.researchPauseRequested
+        (isResumableResearchPause(run) || run.researchPauseRequested) &&
+        !settling
     )
         return null;
     if (run.sourcesProtocol === "sources_mission_v1") {
-        const preparation = run.sourcePreparationId
-            ? await ctx.db.get(run.sourcePreparationId)
-            : null;
         let data = preparation?.sourcesMission;
         if (
             !data &&
@@ -222,6 +228,14 @@ export async function processWorkbenchInstructions(
         )
             return null;
         for (const request of requests) {
+            if (settling) {
+                await updateInstructionTreatment(ctx, request, {
+                    status: "limited",
+                    outcome:
+                        "You chose to use what's prepared. This request was not carried out before preparation ended.",
+                });
+                continue;
+            }
             const treatment = sourcesInstructionTreatment(
                 preparation
                     ? { status: preparation.status, sourcesMission: data }
@@ -301,9 +315,6 @@ export async function processWorkbenchInstructions(
         )
     )
         return null;
-    const preparation = run.sourcePreparationId
-        ? await ctx.db.get(run.sourcePreparationId)
-        : null;
     if (preparation?.status === "started") return null;
     const revision = run.activeCorpusRevisionId
         ? await ctx.db.get(run.activeCorpusRevisionId)

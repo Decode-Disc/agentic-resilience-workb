@@ -248,5 +248,5 @@ test("invalid window refuses continue while settle remains available and applies
     const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     expect(preparation?.settlementRequestedAt).toBeTypeOf("number");
     const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
-    expect(mission?.blockCode).toBe("execution_deadline");
+    expect(mission?.blockCode).toBe("execution_time_limit");
 });

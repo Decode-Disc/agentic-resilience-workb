@@ -107,7 +107,7 @@ async function registerInstructions(
 test.each([
     { documentCount: 3, needCount: 80, large: false },
     { documentCount: 48, needCount: 2, large: true },
-])("need admission preserves controlled material through fallback after context-capacity refusal: %j", async ({
+])("need admission preserves controlled material through analyst settlement after context-capacity refusal: %j", async ({
     documentCount,
     needCount,
     large,
@@ -359,23 +359,43 @@ test.each([
         [`${"研究".repeat(995)}0000000000`],
     );
     assert(lastInstruction);
-    const completion = await f.t.run((ctx) =>
-        ctx.runMutation(
-            internal.sourcesMission.finish,
-            {
-                preparationId: f.preparationId,
-                missionId: f.missionId,
-                expectedGeneration: 4,
-            },
-            {
-                transactionLimits: {
-                    bytesRead: 16 * 1024 * 1024,
-                    databaseQueries: 4096,
+    const finish = () =>
+        f.t.run(async (ctx) => {
+            const currentRun = await ctx.db.get(f.runId);
+            assert(currentRun);
+            return ctx.runMutation(
+                internal.sourcesMission.finish,
+                {
+                    preparationId: f.preparationId,
+                    missionId: f.missionId,
+                    expectedGeneration: currentRun.executionGeneration,
                 },
-            },
-        ),
-    );
-    expect(completion).toBeNull();
+                {
+                    transactionLimits: {
+                        bytesRead: 16 * 1024 * 1024,
+                        databaseQueries: 4096,
+                    },
+                },
+            );
+        });
+    expect(await finish()).toEqual({ kind: "waiting" });
+    const paused = await f.t.run((ctx) => ctx.db.get(f.runId));
+    assert(paused);
+    expect(paused).toMatchObject({
+        executionStatus: "paused",
+        pauseReason: "execution_interrupted",
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.result,
+    ).toBeUndefined();
+    await f.t
+        .withIdentity({ subject: f.userId })
+        .mutation(api.execution.approvals.usePreparedSources, {
+            runId: f.runId,
+            expectedGeneration: paused.executionGeneration,
+        });
+    expect(await finish()).toBeNull();
     expect((await f.t.run((ctx) => ctx.db.get(lastInstruction)))?.status).toBe(
         "limited",
     );

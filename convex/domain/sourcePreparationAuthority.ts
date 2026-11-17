@@ -12,7 +12,10 @@ import {
 import type { GenericDatabaseReader } from "convex/server";
 import { ConvexError, type Infer, v } from "convex/values";
 import { isExecutableQualificationVersion } from "./sourceQualification";
-import { isResumableResearchPause } from "./transitions";
+import {
+    isResumableResearchPause,
+    isSourcesSettlementPause,
+} from "./transitions";
 
 /** Preparation journal protocol identity, not a resource allowance. */
 export const SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION = "source_actions_v4";
@@ -352,8 +355,7 @@ async function readCurrentPreparation(
         run?.agentExecutionVersion === 3 &&
         (mode === "observation"
             ? isResumableResearchPause(run)
-            : run.executionStatus === "paused" &&
-              run.pauseReason === "sources_time_limit") &&
+            : isSourcesSettlementPause(run)) &&
         run.executionGeneration === preparation.executionGeneration + 1;
     const expectedLifecycle =
         preparation.entryPoint === "initial_discovery"

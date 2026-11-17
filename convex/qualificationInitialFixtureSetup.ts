@@ -432,6 +432,12 @@ export const settle = internalMutation({
                           ),
                       },
         });
+        if (fixture.id === "sources_interrupted_partial") {
+            // This labelled fixture includes the decision to hand off after interruption; it is not the pending-decision scenario.
+            await ctx.db.patch(preparation._id, {
+                settlementRequestedAt: Date.now(),
+            });
+        }
         await ctx.runMutation(internal.sourcesMission.finish, {
             preparationId: preparation._id,
             missionId: mission._id,

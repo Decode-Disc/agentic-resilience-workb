@@ -50,7 +50,11 @@ import {
     documentaryQuotationMatches,
     materializeDocumentaryEvidence,
 } from "@convex/domain/sourceUsage";
-import { isResumableResearchPause } from "@convex/domain/transitions";
+import {
+    isResumableResearchPause,
+    isSourcesSettlementPause,
+    supportsResearchControl,
+} from "@convex/domain/transitions";
 import {
     hasWaitingWorkbenchInstructions,
     processWorkbenchInstructions,
@@ -66,7 +70,11 @@ import {
 import { executionError } from "@convex/execution/errors";
 import { recordContextObservation } from "@convex/execution/journal";
 import { registerOperationWaitEvent } from "@convex/execution/operations";
-import { recordResearchObservation } from "@convex/execution/researchControl";
+import {
+    notifyResearchControlWaits,
+    recordResearchObservation,
+    suspendInterruptedResearch,
+} from "@convex/execution/researchControl";
 import { requireQualificationResultDeadline } from "@convex/providerCalls";
 import {
     SOURCES_HANDOFF_READ_CAPACITY,
@@ -1052,6 +1060,25 @@ export const finish = internalMutation({
             });
             return { kind: "waiting", ...(eventId ? { eventId } : {}) };
         }
+        if (
+            mission.status === "blocked" &&
+            mission.blockCode !== "operation_outcome_unknown" &&
+            run.startMode === "framed" &&
+            supportsResearchControl(run) &&
+            !(
+                ["execution_deadline", "operation_outcome_unknown"].includes(
+                    mission.blockCode ?? "",
+                ) &&
+                preparation.deadlineAt !== undefined &&
+                preparation.deadlineAt <= Date.now()
+            ) &&
+            preparation.settlementRequestedAt === undefined &&
+            (await sourcesContinuationAvailable(ctx, run, preparation))
+        ) {
+            if (await suspendInterruptedResearch(ctx, mission))
+                return { kind: "waiting" };
+            throw executionError("sources_mission_incomplete");
+        }
         await processWorkbenchInstructions(ctx, { runId: run._id }, reads);
         // Settlement cannot wait for instructions when no authorized continuation remains.
         if (
@@ -1078,7 +1105,10 @@ export const finish = internalMutation({
                 ? "allowance_exhausted"
                 : mission.blockCode === "operation_outcome_unknown"
                   ? "outcome_unknown"
-                  : "window_ended";
+                  : current.preparation.deadlineAt !== undefined &&
+                      current.preparation.deadlineAt <= Date.now()
+                    ? "window_ended"
+                    : "execution_interrupted";
         const settlementNote = settlementCause
             ? sourcesSettlementNote(settlementCause)
             : "";
@@ -1132,11 +1162,7 @@ export async function sourcesSettlementBlock(
     ctx: QueryCtx,
     run: Doc<"researchRuns">,
 ): Promise<string | null> {
-    if (
-        run.executionStatus !== "paused" ||
-        run.pauseReason !== "sources_time_limit" ||
-        !run.sourcePreparationId
-    )
+    if (!isSourcesSettlementPause(run) || !run.sourcePreparationId)
         return "stale_execution";
     const preparation = await ctx.db.get(run.sourcePreparationId);
     if (
@@ -1167,14 +1193,12 @@ export async function requestSourcesSettlement(
         settlementRequestedAt: Date.now(),
     });
     if (mission?.status === "blocked") {
-        // The stop becomes terminal, so the waiting handoff receives the mission and settles it.
-        await ctx.db.patch(mission._id, {
-            blockCode: "execution_deadline",
-        });
+        // Settlement eligibility comes from the recorded decision; preserve the actual stop reason.
         await ctx.runMutation(internal.execution.handoffs.finishChild, {
             missionId: mission._id,
         });
     }
+    await notifyResearchControlWaits(ctx, run._id);
     await recordResearchObservation(
         ctx,
         run._id,

@@ -235,7 +235,7 @@ export const resume = internalMutation({
                       retained.runId,
                       args.expectedGeneration,
                   );
-        const recoverable = isRecoverableInterruption(retained);
+        const recoverable = isRecoverableInterruption(retained, run);
         const observed = retained.lastInvocationId
             ? await ctx.db.get(retained.lastInvocationId)
             : null;
@@ -455,10 +455,7 @@ export const rebindCompletionEvent = internalMutation({
             completionEventId: args.eventId,
             completionNotified: false,
         });
-        if (
-            ["completed", "cancelled", "blocked"].includes(mission.status) &&
-            !isRecoverableInterruption(mission)
-        ) {
+        if (["completed", "cancelled", "blocked"].includes(mission.status)) {
             await ctx.runMutation(internal.execution.handoffs.finishChild, {
                 missionId: mission._id,
             });

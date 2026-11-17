@@ -430,7 +430,67 @@ test.each([
     expect(bodies[3]?.tools).toEqual(bodies[2]?.tools);
 }, 30000);
 
-test("SDK-repaired malformed raw JSON is retained separately and refused before operation admission", async () => {
+test("a structured mission receives an original-argument refusal and corrects without executing repaired JSON", async () => {
+    let captureId: string;
+    const original = '{"sourceId":';
+    const network = vi.fn(async () =>
+        network.mock.calls.length === 1
+            ? new Response(
+                  `data: ${JSON.stringify({ id: "invalid-tool", choices: [{ index: 0, delta: { role: "assistant", tool_calls: [{ index: 0, id: "bad-call", type: "function", function: { name: "read_in_context", arguments: original } }] }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: "invalid-tool", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] })}\n\ndata: [DONE]\n\n`,
+                  { headers: { "content-type": "text/event-stream" } },
+              )
+            : reply({ kind: "complete", captureIds: [captureId] }),
+    );
+    vi.stubGlobal("fetch", network);
+    const f = await fixture();
+    captureId = f.captureId;
+    const existing = new Set(
+        (
+            await f.t.run((ctx) =>
+                ctx.db
+                    .query("agentOperationRequests")
+                    .withIndex("by_mission", (q) =>
+                        q.eq("missionId", f.missionId),
+                    )
+                    .collect(),
+            )
+        ).map((r) => r._id),
+    );
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    const result = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(f.missionId),
+        requests: await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .collect(),
+        receipts: await ctx.db.query("providerCalls").collect(),
+    }));
+    expect(result.mission?.status).toBe("completed");
+    expect(result.requests.filter((r) => r.input.kind === "invalid")).toEqual([
+        expect.objectContaining({
+            input: expect.objectContaining({
+                kind: "invalid",
+                inputJson: original,
+            }),
+            outcome: expect.objectContaining({ kind: "refused" }),
+        }),
+    ]);
+    expect(
+        result.requests.some(
+            (r) => !existing.has(r._id) && r.input.kind === "read_in_context",
+        ),
+    ).toBe(false);
+    expect(result.receipts).toHaveLength(2);
+    expect(network).toHaveBeenCalledTimes(2);
+}, 30000);
+
+test.each([
+    "literal newline",
+    "non-JSON whitespace",
+])("SDK-repaired %s JSON is refused before effect adoption and corrected through the native loop", async (malformation) => {
     let original = "";
     let current: Awaited<ReturnType<typeof fixture>>;
     const network = vi.fn(
@@ -449,7 +509,10 @@ test("SDK-repaired malformed raw JSON is retained separately and refused before 
     );
     vi.stubGlobal("fetch", network);
     current = await fixture();
-    original = `{ "sourceId": "${current.args.sourceId}", "query": "line\nline" }`;
+    original =
+        malformation === "literal newline"
+            ? `{ "sourceId": "${current.args.sourceId}", "query": "line\nline" }`
+            : `\u00a0${JSON.stringify({ sourceId: current.args.sourceId, query: "line" })}\u00a0`;
     await current.t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,
@@ -467,15 +530,9 @@ test("SDK-repaired malformed raw JSON is retained separately and refused before 
             .collect(),
         mission: await ctx.db.get(current.missionId),
     }));
-    expect(observed.calls).toEqual([
-        expect.objectContaining({
-            status: "failed",
-            errorCode: "invalid_output",
-            dispatchOutcome: "response_received",
-            diagnostic: expect.objectContaining({
-                reason: "tool_arguments_invalid",
-            }),
-        }),
+    expect(observed.calls.map((call) => call.status)).toEqual([
+        "succeeded",
+        "succeeded",
     ]);
     const payload = observed.replies[0];
     if (payload?.state !== "complete" || payload.json === undefined)
@@ -485,17 +542,26 @@ test("SDK-repaired malformed raw JSON is retained separately and refused before 
         expect.objectContaining({
             id: "repair-call",
             rawArguments: original,
-            arguments: { sourceId: current.args.sourceId, query: "line\nline" },
+            arguments:
+                malformation === "literal newline"
+                    ? { sourceId: current.args.sourceId, query: "line\nline" }
+                    : {},
             argumentsError: expect.any(String),
         }),
     ]);
     expect(payload.json).not.toContain("NON_OBSERVABLE_REASONING");
-    expect(observed.requests).toHaveLength(1);
+    expect(observed.requests.filter((r) => r.input.kind === "invalid")).toEqual(
+        [
+            expect.objectContaining({
+                input: expect.objectContaining({ inputJson: original }),
+                outcome: expect.objectContaining({ kind: "refused" }),
+            }),
+        ],
+    );
     expect(observed.mission).toMatchObject({
-        status: "blocked",
-        blockCode: "invalid_output",
+        status: "completed",
     });
-    expect(network).toHaveBeenCalledOnce();
+    expect(network).toHaveBeenCalledTimes(2);
 }, 30000);
 
 test.each([
@@ -660,29 +726,51 @@ test.each([
             .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
             .collect(),
     }));
-    expect(observed.calls).toEqual([
-        expect.objectContaining({
-            status: "failed",
-            errorCode: "invalid_output",
-            diagnostic: expect.objectContaining({
-                reason: "tool_arguments_invalid",
+    if (complete) {
+        expect(observed.calls.length).toBeGreaterThan(1);
+        expect(
+            observed.calls.every((call) => call.status === "succeeded"),
+        ).toBe(true);
+        expect(
+            observed.requests.some(
+                (r) =>
+                    r.input.kind === "invalid" && r.outcome?.kind === "refused",
+            ),
+        ).toBe(true);
+        expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
+            status: "blocked",
+            blockCode: "repetition_stop",
+        });
+    } else {
+        expect(observed.calls).toEqual([
+            expect.objectContaining({
+                status: "failed",
+                errorCode: "invalid_output",
+                diagnostic: expect.objectContaining({
+                    reason: "tool_arguments_invalid",
+                }),
             }),
-        }),
-    ]);
-    expect(observed.requests).toHaveLength(1);
+        ]);
+        expect(observed.requests).toHaveLength(1);
+        expect(network).toHaveBeenCalledOnce();
+    }
     const payload = observed.replies[0];
     expect(payload?.state).toBe(complete ? "complete" : "incomplete");
     if (complete && payload?.json !== undefined)
         expect(JSON.parse(payload.json).content[0].rawArguments).toBe("");
     if (!complete) expect(payload?.json).toBeUndefined();
-    expect(network).toHaveBeenCalledOnce();
 }, 30000);
 
 test.each([
-    { label: "short", original: '{"sourceId":' },
-    { label: "large escaped", original: `{"sourceId":${"\\".repeat(150_000)}` },
-])("malformed original tool arguments remain inspectable and settle a confirmed invalid-output incident ($label)", async ({
+    { label: "short", original: '{"sourceId":', exceedsCapacity: false },
+    {
+        label: "large escaped",
+        original: `{"sourceId":${"\\".repeat(150_000)}`,
+        exceedsCapacity: true,
+    },
+])("malformed original tool arguments remain inspectable through correction or capacity refusal ($label)", async ({
     original,
+    exceedsCapacity,
 }) => {
     const network = vi.fn(
         async () =>
@@ -721,27 +809,47 @@ test.each([
                 throw new Error("Expected a complete observable reply");
             return JSON.parse(p.json).content[0].rawArguments;
         }),
-    ).toEqual([original]);
+    ).toEqual(Array(observed.replies.length).fill(original));
     expect(JSON.stringify(observed.replies)).toContain("argumentsError");
     expect(JSON.stringify(observed.replies)).not.toContain(
         "NON_OBSERVABLE_REASONING",
     );
-    expect(observed.calls).toEqual([
-        expect.objectContaining({
-            status: "failed",
-            errorCode: "invalid_output",
-            dispatchOutcome: "response_received",
-            diagnostic: expect.objectContaining({
-                reason: "tool_arguments_invalid",
-            }),
-        }),
-    ]);
-    expect(observed.requests).toHaveLength(1);
-    expect(observed.mission).toMatchObject({
-        status: "blocked",
-        blockCode: "invalid_output",
-    });
-    expect(network).toHaveBeenCalledOnce();
+    if (exceedsCapacity) {
+        expect(
+            observed.calls.map((call) => ({
+                status: call.status,
+                code: call.errorCode,
+                reason: call.diagnostic?.reason,
+            })),
+        ).toEqual([
+            {
+                status: "failed",
+                code: "response_capacity",
+                reason: "response_capacity",
+            },
+        ]);
+        expect(observed.requests).toHaveLength(1);
+        expect(observed.mission).toMatchObject({
+            status: "blocked",
+            blockCode: "response_capacity",
+        });
+        expect(network).toHaveBeenCalledOnce();
+    } else {
+        expect(observed.calls.length).toBeGreaterThan(1);
+        expect(
+            observed.calls.every((call) => call.status === "succeeded"),
+        ).toBe(true);
+        expect(
+            observed.requests.some(
+                (r) =>
+                    r.input.kind === "invalid" && r.outcome?.kind === "refused",
+            ),
+        ).toBe(true);
+        expect(observed.mission).toMatchObject({
+            status: "blocked",
+            blockCode: "repetition_stop",
+        });
+    }
 }, 30000);
 
 test.each([

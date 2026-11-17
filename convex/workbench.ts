@@ -60,7 +60,10 @@ import { retainOperationEffect } from "@convex/execution/operations";
 import { sessionForMission } from "@convex/execution/piStore";
 import {
     pauseResearch,
+    readResearchControlReadiness,
     researchControlConfirmation,
+    researchInterruptionDetail,
+    researchStateSummary,
     resumeResearch,
 } from "@convex/execution/researchControl";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
@@ -79,6 +82,7 @@ import {
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import { startReviewPreparation } from "@convex/sourcePreparation";
+import { sourcesSettlementBlock } from "@convex/sourcesMission";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
     paginationOptsValidator,
@@ -558,6 +562,8 @@ export const snapshot = query({
     returns: v.object({
         run: schema.doc("researchRuns"),
         researchControlAvailable: v.boolean(),
+        researchResumeAvailable: v.boolean(),
+        sourcesSettlementAvailable: v.boolean(),
         sourcesPhase: sourcesPhaseValidator,
         sourcesDecisionRequestId: v.union(v.id("approvalRequests"), v.null()),
         availableCommands: v.array(workbenchCommand),
@@ -581,6 +587,7 @@ export const snapshot = query({
             v.null(),
             v.object({
                 missionId: v.id("agentMissions"),
+                interruptionDetail: v.optional(v.string()),
                 startedAt: v.number(),
                 finishedAt: v.optional(v.number()),
                 operations: v.array(operationView),
@@ -690,9 +697,17 @@ export const snapshot = query({
                   .order("desc")
                   .first()
             : null;
+        const resumeReadiness = await readResearchControlReadiness(
+            ctx,
+            run,
+            "resume",
+        );
         return {
             run,
             researchControlAvailable: supportsResearchControl(run),
+            researchResumeAvailable: resumeReadiness.block === null,
+            sourcesSettlementAvailable:
+                (await sourcesSettlementBlock(ctx, run)) === null,
             sourcesPhase,
             sourcesDecisionRequestId: await readSourcesDecisionRequestId(
                 ctx,
@@ -704,7 +719,9 @@ export const snapshot = query({
                 supportsResearchControl(run)
                     ? run.researchPauseRequested ||
                       isResumableResearchPause(run)
-                        ? ["/resume" as const]
+                        ? resumeReadiness.block === null
+                            ? ["/resume" as const]
+                            : []
                         : run.executionStatus === "running"
                           ? ["/pause" as const]
                           : []
@@ -720,6 +737,18 @@ export const snapshot = query({
             sourcesWork: sourcesMission
                 ? {
                       missionId: sourcesMission._id,
+                      interruptionDetail:
+                          sourcesPhase === "interrupted"
+                              ? run.pauseReason === "execution_interrupted"
+                                  ? researchStateSummary(
+                                        run,
+                                        sourcesMission.blockCode,
+                                        resumeReadiness.block,
+                                    )
+                                  : researchInterruptionDetail(
+                                        sourcesMission.blockCode,
+                                    )
+                              : undefined,
                       startedAt: sourcesMission.createdAt,
                       ...(sourcesCompletion
                           ? { finishedAt: sourcesCompletion.occurredAt }

@@ -1,3 +1,4 @@
+import { sourcesSettlementBlock } from "@convex/sourcesMission";
 import type { IndexRangeBuilder } from "convex/server";
 import {
     paginationOptsValidator,
@@ -385,6 +386,8 @@ export const getMine = query({
         return {
             ...projection,
             executionGeneration: run.executionGeneration,
+            sourcesSettlementAvailable:
+                (await sourcesSettlementBlock(ctx, run)) === null,
             sourcesPhase,
             sourcesDecisionRequestId: await readSourcesDecisionRequestId(
                 ctx,

@@ -12,7 +12,10 @@ import {
     operationOutcomeValidator,
 } from "./executionProtocol";
 import { isRecoverableInterruption } from "./missionData";
-import { suspendResearchAtTimeLimit } from "./researchControl";
+import {
+    suspendInterruptedResearch,
+    suspendResearchAtTimeLimit,
+} from "./researchControl";
 
 /** Only an admitted business operation can grant a child mission; models never select a runtime. */
 export const startChild = internalMutation({
@@ -148,10 +151,14 @@ export const finishChild = internalMutation({
         // A renewable time limit is classified before notification, so the waiting owner never settles it as complete. A standing permission applied during that classification has already notified through its own settlement.
         if (await suspendResearchAtTimeLimit(ctx, child)) return null;
         if (
+            child.status === "blocked" &&
+            (await suspendInterruptedResearch(ctx, child))
+        )
+            return null;
+        if (
             child.completionEventId &&
             !child.completionNotified &&
-            ["completed", "cancelled", "blocked"].includes(child.status) &&
-            !isRecoverableInterruption(child)
+            ["completed", "cancelled", "blocked"].includes(child.status)
         ) {
             await workflow.sendEvent(ctx, {
                 id: child.completionEventId,
@@ -160,10 +167,19 @@ export const finishChild = internalMutation({
             await ctx.db.patch(child._id, { completionNotified: true });
         }
         if (!child.parentRequestId) return null;
-        if (
-            !["completed", "cancelled", "blocked"].includes(child.status) ||
-            isRecoverableInterruption(child)
-        )
+        const run = await ctx.db.get(child.runId);
+        if (run && isRecoverableInterruption(child, run)) {
+            const definition = getAgentDefinition(
+                child.definitionId,
+                child.definitionVersion,
+            );
+            if (
+                !definition.continuationAfterDeadline ||
+                (await definition.continuationAfterDeadline(ctx, child))
+            )
+                return null;
+        }
+        if (!["completed", "cancelled", "blocked"].includes(child.status))
             return null;
         const request = await ctx.db.get(child.parentRequestId);
         if (!request || request.childMissionId !== child._id)

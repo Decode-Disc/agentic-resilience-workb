@@ -1,4 +1,5 @@
 import type { Doc } from "@convex/_generated/dataModel";
+import { supportsResearchControl } from "@convex/domain/transitions";
 import type {
     AgentProgressMission,
     AgentResult,
@@ -23,12 +24,28 @@ export function operationProgressKeys(outcome: OperationOutcome): string[] {
         : [];
 }
 
-/** An interrupted executor, or a time limit the analyst may renew, can resume the same mission; neither is a terminal business result. */
-export function isRecoverableInterruption(mission: Doc<"agentMissions">) {
+/** Classifies generation failures without treating a transport uncertainty as safe to replay. */
+export function generationInterruption(code: string | undefined) {
+    return code === "invalid_output"
+        ? ("invalid_response" as const)
+        : code === "repetition_stop"
+          ? ("repeated_failure" as const)
+          : undefined;
+}
+
+/** Execution and generation interruptions retain their mission; a blocked executor is not a terminal business result. Resume still enforces receipt, authority and capacity checks. */
+export function isRecoverableInterruption(
+    mission: Doc<"agentMissions">,
+    run: Doc<"researchRuns">,
+) {
     return (
         mission.status === "blocked" &&
         (mission.blockCode === "execution_interrupted" ||
-            mission.blockCode === "execution_time_limit")
+            mission.blockCode === "execution_time_limit" ||
+            (generationInterruption(mission.blockCode) !== undefined &&
+                (mission.executionScope === "conversation" ||
+                    (run.startMode === "framed" &&
+                        supportsResearchControl(run)))))
     );
 }
 

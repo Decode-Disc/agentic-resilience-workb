@@ -101,13 +101,16 @@ test("the handoff attributes a false resource explanation to Sources while retai
     });
 });
 
-test("fallback finalization keeps its system authorship and the actual interrupted mission status", async () => {
+test("analyst-requested fallback finalization keeps its system authorship and the actual interrupted mission status", async () => {
     const f = await seedCapturedSources();
     await f.t.run((ctx) =>
         ctx.db.patch(f.missionId, {
             status: "blocked",
             blockCode: "repetition_stop",
         }),
+    );
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.preparationId, { settlementRequestedAt: Date.now() }),
     );
     await f.t.mutation(internal.sourcesMission.finish, {
         preparationId: f.preparationId,

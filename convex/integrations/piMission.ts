@@ -16,6 +16,7 @@ import {
 } from "@convex/execution/errors";
 import type { AgentGenerationBackend } from "@convex/execution/executionProtocol";
 import { invokeControlledGeneration } from "@convex/execution/invokeAgentModel";
+import { generationInterruption } from "@convex/execution/missionData";
 import { revisionRoute } from "@convex/modelConfiguration";
 import {
     NATIVE_WORKER_POLICY,
@@ -704,6 +705,23 @@ export async function runPiMission(
                   }
                 : undefined;
         let message: AssistantMessage | undefined;
+        if (
+            !auxiliary &&
+            ["blocked", "returned"].includes(retained.status) &&
+            generationInterruption(retained.blockCode) !== undefined &&
+            retained.receivedOutputJson &&
+            retained.receivedWhileAuthorized === true &&
+            retained.generation !== args.expectedGeneration &&
+            retained.adoptionGeneration === args.expectedGeneration
+        ) {
+            // Resume authorizes a new continuation, not adoption or dispatch of the refused generation.
+            preparationChanges++;
+            return fauxAssistantMessage(
+                fauxText(
+                    "The preceding response was refused and remains recorded. This mission has explicitly resumed under current authority. Continue using current required state, correct the response and do not repeat completed operations.",
+                ),
+            );
+        }
         if (retained.receivedOutputJson) {
             const response = JSON.parse(retained.receivedOutputJson);
             if (
@@ -1072,7 +1090,6 @@ export async function runPiMission(
                         throw error;
                     }
                     const validateOriginalArguments =
-                        definition.nativeConversation &&
                         toolArguments.size > 0 &&
                         [...toolArguments.values()].every(
                             (call) => call.rawArguments !== null,
@@ -1139,14 +1156,18 @@ export async function runPiMission(
                                 if (c.type !== "toolCall") return [];
                                 let inputJson = JSON.stringify(c.arguments);
                                 if (validateOriginalArguments) {
-                                    const original = toolArguments.get(
+                                    const originalCall = toolArguments.get(
                                         c.id,
-                                    )?.rawArguments;
+                                    );
+                                    const original = originalCall?.rawArguments;
                                     if (typeof original !== "string")
                                         throw executionError(
                                             "native_tool_arguments_unavailable",
                                         );
-                                    inputJson = original;
+                                    // Trim only validated JSON; invalid originals must reach canonical refusal unchanged.
+                                    inputJson = originalCall?.argumentsError
+                                        ? original
+                                        : original.trim();
                                 }
                                 return [
                                     { callId: c.id, name: c.name, inputJson },

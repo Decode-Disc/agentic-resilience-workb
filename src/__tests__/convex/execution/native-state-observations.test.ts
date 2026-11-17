@@ -6,12 +6,12 @@ import { recordContextObservation } from "@convex/execution/journal";
 import { suspendInterruptedResearch } from "@convex/execution/researchControl";
 import { readRetainedText } from "@convex/execution/retainedText";
 import { runPiMission } from "@convex/integrations/piMission";
-import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { createNativeInputDelivery } from "@convex/integrations/piNativeInput";
 import {
     openMissionPiStorage,
     type PiConvexStorage,
 } from "@convex/integrations/piStorage";
+import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { workflow } from "@convex/workflow";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
@@ -25,14 +25,16 @@ import {
     Harness,
 } from "@earendil-works/pi-durable";
 import { getFunctionName } from "convex/server";
-import { afterEach, beforeEach, assert, expect, test, vi } from "vitest";
+import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    activateSourcesMission,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
-import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 
 // Research starts run through the Sources mission; there is no corpus-approval fallback.
 beforeEach(() => activateSourcesMission());
@@ -660,6 +662,9 @@ test("an incomplete Sources handoff retains its outcome and unfinished obligatio
     vi.useFakeTimers();
     const f = await seedCapturedSources();
     await f.t.run((ctx) => ctx.db.patch(f.missionId, { status: "blocked" }));
+    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    assert(preparation?.deadlineAt);
+    vi.setSystemTime(preparation.deadlineAt + 1);
     await f.t.mutation(internal.sourcesMission.finish, {
         preparationId: f.preparationId,
         missionId: f.missionId,

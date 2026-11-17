@@ -13,6 +13,7 @@ import {
     SourcesReaderScreen,
     type SourcesScreenFrame,
 } from "@/components/workspace/sources/sources-screens";
+import { UsePreparedSourcesButton } from "@/components/workspace/use-prepared-sources-button";
 import {
     documentaryContributionTerms,
     filterSourcesRows,
@@ -255,6 +256,12 @@ function SourcesContent({
                             strokeWidth={2}
                         />
                     </Button>
+                ) : run.sourcesSettlementAvailable ? (
+                    <UsePreparedSourcesButton
+                        runId={runId}
+                        expectedGeneration={run.executionGeneration}
+                        size="lg"
+                    />
                 ) : undefined
             }
         />

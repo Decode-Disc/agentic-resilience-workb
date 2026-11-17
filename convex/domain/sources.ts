@@ -169,7 +169,8 @@ export type SourcesSettlementCause =
     | "decision"
     | "allowance_exhausted"
     | "outcome_unknown"
-    | "window_ended";
+    | "window_ended"
+    | "execution_interrupted";
 
 /** Explains why documentary work stopped on an unfinished need, naming the Sources Agent consistently. */
 export function sourcesSettlementNote(cause: SourcesSettlementCause): string {
@@ -183,6 +184,8 @@ export function sourcesSettlementNote(cause: SourcesSettlementCause): string {
             return `${actor} stopped here because the outcome of its last check is unknown.`;
         case "window_ended":
             return `${actor} stopped here because its time window ended.`;
+        case "execution_interrupted":
+            return `${actor} stopped here because of a technical interruption. Retained material remains available.`;
     }
 }
 

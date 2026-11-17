@@ -1,3 +1,4 @@
+import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     type MutationCtx,
@@ -196,7 +197,12 @@ export async function readSourcesDecisionRequestId(
         .withIndex("by_run_action_generation", (q) =>
             q
                 .eq("runId", run._id)
-                .eq("action", "continue_sources_preparation")
+                .eq(
+                    "action",
+                    run.pauseReason === "execution_interrupted"
+                        ? "settle_sources_preparation"
+                        : "continue_sources_preparation",
+                )
                 .eq("expectedGeneration", run.executionGeneration),
         )
         .collect();
@@ -347,6 +353,37 @@ export async function recordCommandApproval(
     }
     return requestId;
 }
+
+/** A named analyst button makes the same recorded settlement decision as its approval card, atomically. */
+export const usePreparedSources = mutation({
+    args: { runId: v.id("researchRuns"), expectedGeneration: v.number() },
+    returns: approvalRequestViewValidator,
+    handler: async (ctx, args): Promise<ApprovalRequestView> => {
+        const { run } = await requireWorkspaceRun(ctx, args.runId);
+        if (run.executionGeneration !== args.expectedGeneration)
+            throw executionError("stale_execution");
+        const block =
+            await approvalCatalog.settle_sources_preparation.availability(
+                ctx,
+                run,
+            );
+        if (block) throw executionError(block);
+        const { requestId, status } = await raiseApproval(ctx, {
+            run,
+            action: "settle_sources_preparation",
+            requestedBy: { type: "system" },
+        });
+        if (status === "applied") {
+            const request = await ctx.db.get(requestId);
+            if (!request) throw executionError("stale_execution");
+            return readApprovalView(ctx, request);
+        }
+        return ctx.runMutation(api.execution.approvals.decide, {
+            requestId,
+            choice: "once",
+        });
+    },
+});
 
 export const decide = mutation({
     args: {

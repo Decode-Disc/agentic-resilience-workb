@@ -1,6 +1,12 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import type { FunctionReturnType } from "convex/server";
 import type { ComponentProps } from "react";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -182,6 +188,7 @@ const run: ComponentProps<typeof ConnectedSources>["run"] = {
     executionGeneration: 4,
     sourcesPhase: "collecting",
     sourcesDecisionRequestId: null,
+    sourcesSettlementAvailable: false,
 };
 
 function renderSources(
@@ -346,5 +353,30 @@ test("the Sources page points to the conversation's time-limit decision", () => 
     expect(onOpenDecision).toHaveBeenCalledOnce();
     expect(document.body.textContent).not.toMatch(
         /sources_time_limit|time_limit/,
+    );
+});
+
+test("the Sources preparation view exposes the same recorded settlement action for a technical stop", async () => {
+    const usePrepared = vi.fn().mockResolvedValue(undefined);
+    convexReactHarness
+        .mutation(api.execution.approvals.usePreparedSources)
+        .uses(usePrepared);
+    renderSources({
+        run: {
+            ...run,
+            executionStatus: "paused",
+            pauseReason: "execution_interrupted",
+            sourcesPhase: "interrupted",
+            sourcesSettlementAvailable: true,
+        },
+    });
+    fireEvent.click(
+        screen.getByRole("button", { name: "Use what's prepared" }),
+    );
+    await waitFor(() =>
+        expect(usePrepared).toHaveBeenCalledWith({
+            runId,
+            expectedGeneration: 4,
+        }),
     );
 });

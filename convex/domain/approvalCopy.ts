@@ -11,7 +11,7 @@ export type ApprovalActionCopy = {
     onceLabel: string;
     alwaysLabel: string;
     grantedLabel: string;
-    /** Card title when the system raises this action, or null if the system never does. */
+    /** System notice title, also used by cards presenting alternative actions. */
     systemTitle: string | null;
 };
 
@@ -51,7 +51,7 @@ export const approvalActionCopy: Record<ApprovalAction, ApprovalActionCopy> = {
         onceLabel: "Use once",
         alwaysLabel: "Always use what's prepared",
         grantedLabel: "Use what's prepared automatically",
-        systemTitle: null,
+        systemTitle: `The ${agentName("sources")} needs a decision`,
     },
 };
 

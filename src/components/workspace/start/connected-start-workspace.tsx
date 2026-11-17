@@ -52,6 +52,7 @@ import {
     approvalCardElementId,
     ConnectedApprovalCard,
 } from "@/components/workspace/approvals/connected-approval-card";
+import { UsePreparedSourcesButton } from "@/components/workspace/use-prepared-sources-button";
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
 import { useResponsive } from "@/hooks/use-responsive";
 import { sourcesPhasePresentation } from "@/lib/presentation/sources";
@@ -645,6 +646,8 @@ function StartWorkspaceContent({
         (s) => s.state === "captured",
     ).length;
     const sourcePresentation = sourcesPhasePresentation(snapshot.sourcesPhase);
+    const sourceDetail =
+        snapshot.sourcesWork?.interruptionDetail ?? sourcePresentation.detail;
     const sourceState = sourcePresentation.workState;
     const sourceOperations =
         snapshot.sourcesWork?.operations.map((operation) =>
@@ -672,7 +675,7 @@ function StartWorkspaceContent({
                   summary: `${snapshot.sources.length} references · ${captured} captures`,
                   details: (
                       <>
-                          <p>{sourcePresentation.detail}</p>
+                          <p>{sourceDetail}</p>
                           <ConversationActivityList>
                               {sourceOperations.map((operation) => (
                                   <ConversationActivity
@@ -745,7 +748,8 @@ function StartWorkspaceContent({
                             requestId={snapshot.sourcesDecisionRequestId}
                         />
                     ) : null
-                ) : isResumableResearchPause(run) ? (
+                ) : isResumableResearchPause(run) &&
+                  snapshot.researchResumeAvailable ? (
                     <Button
                         onClick={() =>
                             control(
@@ -772,6 +776,13 @@ function StartWorkspaceContent({
                         <Icon iconNode={PauseIcon} size={15} />
                         Pause research
                     </Button>
+                ) : null}
+                {snapshot.sourcesSettlementAvailable &&
+                snapshot.sourcesPhase !== "time_limit" ? (
+                    <UsePreparedSourcesButton
+                        runId={runId}
+                        expectedGeneration={run.executionGeneration}
+                    />
                 ) : null}
             </div>
         ) : null;
@@ -1182,7 +1193,7 @@ function StartWorkspaceContent({
                                     tone={sourcePresentation.tone}
                                     label={sourcePresentation.label}
                                     title={sourcePresentation.title}
-                                    description={sourcePresentation.detail}
+                                    description={sourceDetail}
                                     actions={researchControls}
                                     onOpenProgress={() =>
                                         void navigate({

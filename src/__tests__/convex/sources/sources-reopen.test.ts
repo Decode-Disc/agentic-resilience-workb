@@ -2,6 +2,8 @@ import { api, internal } from "@convex/_generated/api";
 import { executionFailureCode } from "@convex/execution/errors";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { installModel } from "@/__tests__/setup/model-configuration";
+import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import {
     client,
     seedExpiredPreparation,
@@ -11,6 +13,7 @@ import {
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
 });
 
 async function failLikeNovember15(
@@ -138,6 +141,32 @@ test.each([
 ] as const)("reopening survives %s continuation before the workflow attaches", async (mode) => {
     const f = await seedExpiredPreparation();
     await failLikeNovember15(f);
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    await installModel(f.t, nativePiFixtureRoute, "sources");
+    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    assert(preparation?.sourcesMission);
+    const completion = {
+        kind: "complete",
+        needs: preparation.sourcesMission.needs.map((need) => ({
+            needId: need.id,
+            unfinished: ["No additional material prepared in this fixture."],
+        })),
+    };
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(
+            async () =>
+                new Response(
+                    [
+                        `data: ${JSON.stringify({ id: "reopened", choices: [{ index: 0, delta: { role: "assistant", content: JSON.stringify(completion) }, finish_reason: null }] })}`,
+                        `data: ${JSON.stringify({ id: "reopened", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}`,
+                        "data: [DONE]",
+                        "",
+                    ].join("\n\n"),
+                    { headers: { "content-type": "text/event-stream" } },
+                ),
+        ),
+    );
     if (mode === "grant") {
         await f.t.run((ctx) =>
             ctx.db.insert("approvalGrants", {
@@ -162,7 +191,10 @@ test.each([
             choice: "once",
         });
     }
-    await f.t.finishAllScheduledFunctions(vi.runAllTimers);
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
     expect(await f.t.run((ctx) => ctx.db.get(f.runId))).toMatchObject({
         lifecycleState: "sources_prepared",
         executionStatus: "idle",
@@ -174,6 +206,9 @@ test.each([
     });
     const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
     expect(mission?.completionEventId).toBeTruthy();
+    expect(await f.t.run((ctx) => ctx.db.get(f.preparationId))).toMatchObject({
+        status: "blocked",
+    });
 });
 
 test("Use what's prepared after reopening hands over with limits", async () => {

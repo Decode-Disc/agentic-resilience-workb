@@ -129,7 +129,11 @@ export async function readWorkbenchFacts(
               }
             : null,
         research: {
-            summary: researchStateSummary(run),
+            summary: researchStateSummary(
+                run,
+                sourcesMission?.blockCode,
+                resumeBlock,
+            ),
             started: !!(
                 run.researchStartRequestKey ||
                 run.researchStartedAt ||

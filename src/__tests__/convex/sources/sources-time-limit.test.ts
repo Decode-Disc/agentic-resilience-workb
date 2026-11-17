@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import { approvalActionCopy } from "@convex/domain/approvalCopy";
 import { sourcesSettlementNote } from "@convex/domain/sources";
+import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { executionFailureCode } from "@convex/execution/errors";
 import { researchStateSummary } from "@convex/execution/researchControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -213,7 +214,7 @@ test("Use what's prepared lets the waiting handoff settle without claiming the e
         choice: "alternative",
     });
     expect((await f.t.run((ctx) => ctx.db.get(f.missionId)))?.blockCode).toBe(
-        "execution_deadline",
+        "execution_time_limit",
     );
     expect(
         await f.t.mutation(internal.execution.researchControl.checkpoint, {
@@ -950,4 +951,122 @@ test("an invalid window setting blocks Continue but not Use what's prepared", as
             },
         },
     });
+});
+
+test.each([
+    "invalid_output",
+    "repetition_stop",
+])("a technical %s interruption preserves preparation instead of completing its handoff", async (code) => {
+    vi.useFakeTimers();
+    const f = await seedCapturedSources();
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
+            startMode: "framed",
+            agentExecutionVersion: 3,
+        });
+        await ctx.db.patch(f.missionId, { status: "blocked", blockCode: code });
+    });
+    const before = await f.t.run(async (ctx) => ({
+        preparation: await ctx.db.get(f.preparationId),
+        run: await ctx.db.get(f.runId),
+        mission: await ctx.db.get(f.missionId),
+    }));
+    await f.t.mutation(internal.execution.handoffs.finishChild, {
+        missionId: f.missionId,
+    });
+    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    expect(run).toMatchObject({
+        lifecycleState: "discovering_sources",
+        executionStatus: "paused",
+        pauseReason: "execution_interrupted",
+    });
+    const snapshot = await client(f).query(api.workbench.snapshot, {
+        runId: f.runId,
+    });
+    expect(snapshot.sourcesPhase).toBe("interrupted");
+    expect(snapshot.sourcesWork?.interruptionDetail).toBe(
+        code === "invalid_output"
+            ? "Preparation was interrupted because the agent's response could not be used. Retained material remains available."
+            : "Preparation was interrupted after repeated attempts made no progress. Retained material remains available.",
+    );
+    const facts = await f.t.run(async (ctx) => {
+        const current = await ctx.db.get(f.runId);
+        assert(current);
+        return readWorkbenchFacts(ctx, current);
+    });
+    assert(facts.kind === "ready");
+    expect(facts.context).toMatchObject({
+        research: { summary: snapshot.sourcesWork?.interruptionDetail },
+    });
+    expect(run?.sourcePreparationBudget).toEqual(
+        before.run?.sourcePreparationBudget,
+    );
+    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    expect(preparation).toMatchObject({
+        status: "started",
+        deadlineAt: before.preparation?.deadlineAt,
+        modelLimits: before.preparation?.modelLimits,
+    });
+    await expect(
+        f.t.mutation(internal.sourcesMission.finish, {
+            preparationId: f.preparationId,
+            missionId: f.missionId,
+            expectedGeneration: 4,
+        }),
+    ).rejects.toBeDefined();
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.result,
+    ).toBeUndefined();
+    assert(run);
+    const generation = await client(f).mutation(
+        api.execution.researchControl.resume,
+        { runId: f.runId, expectedGeneration: run.executionGeneration },
+    );
+    await f.t.mutation(internal.execution.researchControl.resumeMissions, {
+        runId: f.runId,
+        generation,
+        paginationOpts: { numItems: 10, cursor: null },
+    });
+    const resumed = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(f.missionId),
+        preparation: await ctx.db.get(f.preparationId),
+        run: await ctx.db.get(f.runId),
+    }));
+    expect(resumed.mission).toMatchObject({
+        generation,
+        deadlineAt: before.mission?.deadlineAt,
+    });
+    expect(resumed.mission?.blockCode).toBeUndefined();
+    expect(resumed.preparation?.deadlineAt).toBe(
+        before.preparation?.deadlineAt,
+    );
+    expect(resumed.preparation?.sourcesMission).toEqual(
+        before.preparation?.sourcesMission,
+    );
+    expect(resumed.run?.sourcePreparationBudget).toEqual(
+        before.run?.sourcePreparationBudget,
+    );
+});
+
+test("a historical unclassified failure retains its technical cause instead of expired-window copy", async () => {
+    vi.useFakeTimers();
+    const f = await seedCapturedSources();
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.missionId, {
+            status: "blocked",
+            blockCode: "configuration_unavailable",
+        }),
+    );
+    await expect(
+        f.t.mutation(internal.sourcesMission.finish, {
+            preparationId: f.preparationId,
+            missionId: f.missionId,
+            expectedGeneration: 4,
+        }),
+    ).resolves.toBeNull();
+    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    const result = JSON.stringify(preparation?.sourcesMission?.result);
+    expect(result).toContain("technical interruption");
+    expect(result).not.toContain("time window ended");
 });

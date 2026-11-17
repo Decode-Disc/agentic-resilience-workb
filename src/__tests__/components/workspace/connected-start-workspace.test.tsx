@@ -78,6 +78,8 @@ const readySnapshot = {
     },
     researchStart: { block: null, questionCapacity: 3 },
     researchControlAvailable: true,
+    researchResumeAvailable: true,
+    sourcesSettlementAvailable: false,
     sourcesPhase: "collecting",
     sourcesDecisionRequestId: null,
     availableCommands: ["/pause", "/resume"],
@@ -219,6 +221,45 @@ test("distinguishes the Sources Agent identity from the source collection", () =
         document.querySelector('[data-slot="conversation-header"]')
             ?.textContent,
     ).not.toContain("//");
+});
+
+test("the Sources context explains a model interruption without declaring documentary completion", () => {
+    const detail =
+        "Preparation was interrupted because the agent's response could not be used. Retained material remains available.";
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "discovering_sources",
+            executionStatus: "paused",
+            pauseReason: "execution_interrupted",
+        },
+        preparation: { status: "started" },
+        sourcesPhase: "interrupted",
+        sourcesWork: {
+            missionId: "sources-mission",
+            startedAt: 1,
+            operations: [],
+            interruptionDetail: detail,
+        },
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    fireEvent.click(screen.getByRole("button", { name: "Research context" }));
+    fireEvent.click(
+        screen.getByRole("button", { name: "Inspect Sources Agent work" }),
+    );
+    expect(
+        within(
+            screen.getByRole("region", { name: "Research context details" }),
+        ).getByText(detail),
+    ).toBeTruthy();
+    expect(
+        screen.queryByText("Documentary preparation completed with limits"),
+    ).toBeNull();
+    expect(
+        screen.queryByText(/invalid_output|tool_arguments_invalid/),
+    ).toBeNull();
 });
 
 test("the context identifies a launched research program as accepted", () => {
@@ -1530,6 +1571,90 @@ test("a card decided with Always offers Stop allowing while its grant is active"
         expect(revokeGrant).toHaveBeenCalledWith({
             runId,
             action: "continue_sources_preparation",
+        }),
+    );
+});
+
+test("an unrecoverable Sources stop offers Use what's prepared through its decision and hides Resume", async () => {
+    const view = {
+        ...timeLimitView(),
+        action: "settle_sources_preparation" as const,
+        alternative: null,
+    };
+    const usePrepared = vi.fn().mockResolvedValue(view);
+    convexReactHarness
+        .mutation(api.execution.approvals.usePreparedSources)
+        .uses(usePrepared);
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...timeLimitSnapshot(),
+        run: {
+            ...timeLimitSnapshot().run,
+            pauseReason: "execution_interrupted",
+        },
+        researchResumeAvailable: false,
+        sourcesSettlementAvailable: true,
+        sourcesPhase: "interrupted",
+    });
+    convexReactHarness.paginatedQuery(api.workbench.history).returns({
+        ...timeLimitNotice(),
+        results: timeLimitNotice().results.map((notice) => ({
+            ...notice,
+            text: "Source preparation was interrupted. Use what's prepared to finish with limits.",
+        })),
+    });
+    convexReactHarness.query(api.execution.approvals.get).returns(view);
+    render(<ConnectedStartWorkspace runId={runId} />);
+    expect(
+        screen.queryByRole("button", { name: "Resume research" }),
+    ).toBeNull();
+    const progress = screen.getByRole("region", {
+        name: "Documentary progress",
+    });
+    fireEvent.click(
+        within(progress).getByRole("button", { name: "Use what's prepared" }),
+    );
+    const card = screen.getByRole("group", { name: "Use what's prepared" });
+    expect(
+        within(card).getByRole("button", { name: "Allow once" }),
+    ).toBeTruthy();
+    await waitFor(() =>
+        expect(usePrepared).toHaveBeenCalledWith({
+            runId,
+            expectedGeneration: 5,
+        }),
+    );
+    expect(resumeResearch).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toMatch(
+        /configuration_unavailable|context_capacity|human_prerequisite_required/,
+    );
+});
+
+test("Use what's prepared remains actionable when an older technical pause has no decision card", async () => {
+    const usePrepared = vi.fn().mockResolvedValue(undefined);
+    convexReactHarness
+        .mutation(api.execution.approvals.usePreparedSources)
+        .uses(usePrepared);
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...timeLimitSnapshot(null),
+        run: {
+            ...timeLimitSnapshot(null).run,
+            pauseReason: "execution_interrupted",
+        },
+        sourcesPhase: "interrupted",
+        sourcesSettlementAvailable: true,
+        researchResumeAvailable: false,
+    });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    expect(
+        screen.queryByRole("button", { name: "Resume research" }),
+    ).toBeNull();
+    fireEvent.click(
+        screen.getByRole("button", { name: "Use what's prepared" }),
+    );
+    await waitFor(() =>
+        expect(usePrepared).toHaveBeenCalledWith({
+            runId,
+            expectedGeneration: 5,
         }),
     );
 });

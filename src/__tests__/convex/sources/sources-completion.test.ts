@@ -351,7 +351,7 @@ test.each([
     ).toHaveLength(2);
 });
 
-test("fallback finishing waits for native qualification and receives its existing operation event", async () => {
+test("analyst settlement waits for native qualification and receives its existing operation event", async () => {
     vi.useFakeTimers();
     vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
     const f = await seedCompletion();
@@ -439,12 +439,15 @@ test("fallback finishing waits for native qualification and receives its existin
     });
     await entered;
     try {
-        await f.t.run((ctx) =>
-            ctx.db.patch(f.missionId, {
+        await f.t.run(async (ctx) => {
+            await ctx.db.patch(f.missionId, {
                 status: "blocked",
                 blockCode: "resource_limit",
-            }),
-        );
+            });
+            await ctx.db.patch(f.preparationId, {
+                settlementRequestedAt: Date.now(),
+            });
+        });
         expect(
             await f.t.mutation(internal.sourcesMission.finish, {
                 preparationId: f.preparationId,
@@ -704,9 +707,13 @@ test("unqualified work retains storage headroom for unfinished explanations thro
             missionId: f.missionId,
             expectedGeneration: 4,
         }),
-    ).toBeNull();
+    ).toEqual({ kind: "waiting" });
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
             ?.result,
-    ).toMatchObject({ outcome: "blocked", documents: [] });
+    ).toBeUndefined();
+    expect(await f.t.run((ctx) => ctx.db.get(f.runId))).toMatchObject({
+        executionStatus: "paused",
+        pauseReason: "execution_interrupted",
+    });
 });
