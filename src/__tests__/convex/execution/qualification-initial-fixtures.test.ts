@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
@@ -10,9 +13,19 @@ import {
     initialFixtureContent,
     initialFixtureIds,
 } from "@convex/qualificationInitialFixtures";
+import { prepareCampaignScenarios } from "@evaluations/workbench-browser/scenarios";
+import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
+import {
+    CommitTsPlaceholder,
+    convexToJson,
+    type JSONValue,
+    jsonToConvex,
+    type Value,
+} from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
+import { sourcesTestEnvelope } from "@/__tests__/setup/sources-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -30,32 +43,55 @@ const install = makeFunctionReference<
     }
 >("qualificationInitialFixtureSetup:install");
 
-async function fixture(id: (typeof initialFixtureIds)[number]) {
+async function fixture(
+    id: (typeof initialFixtureIds)[number],
+    presets: readonly (
+        | "balanced"
+        | "first_party_depth"
+        | "independent_scrutiny"
+        | undefined
+    )[] = [undefined],
+) {
     const f = await seedWorkbench(true);
     const raw = configurableCampaign();
-    const scenario = raw.scenarios[0];
-    assert(scenario);
+    const baseline = raw.scenarios[0];
+    assert(baseline);
+    const scenarios = presets.map((coveragePreset) => ({
+        ...baseline,
+        ...(coveragePreset
+            ? {
+                  coveragePreset,
+                  id: `coverage-${coveragePreset.replaceAll("_", "-")}`,
+                  sourcesEnvelope: sourcesTestEnvelope,
+              }
+            : {}),
+        steps: coveragePreset
+            ? baseline.steps
+            : [
+                  {
+                      id: "prepared",
+                      action: "wait_for",
+                      state: "sources_prepared",
+                  },
+              ],
+        ...(coveragePreset
+            ? {}
+            : {
+                  initialFixture: {
+                      id,
+                      hash: sha256Hex(initialFixtureContent(id)),
+                  },
+              }),
+    }));
     const manifest = campaignManifestSchema.parse({
         ...raw,
         mode: "deterministic",
         configurations: raw.configurations.slice(0, 1),
-        scenarios: [
-            {
-                ...scenario,
-                steps: [
-                    {
-                        id: "prepared",
-                        action: "wait_for",
-                        state: "sources_prepared",
-                    },
-                ],
-                initialFixture: {
-                    id,
-                    hash: sha256Hex(initialFixtureContent(id)),
-                },
-            },
-        ],
-        expectations: raw.expectations.slice(0, 1),
+        scenarios,
+        expectations: scenarios.map((scenario) => ({
+            id: scenario.id,
+            checks: ["documentary-handoff"],
+        })),
         batteryHash: "a".repeat(64),
         perLot: emptyCampaignLimits(),
         total: emptyCampaignLimits(),
@@ -72,40 +108,138 @@ async function fixture(id: (typeof initialFixtureIds)[number]) {
     });
     const original = await f.t.run((ctx) => ctx.db.get(f.runId));
     assert(original?.browserTestContextId);
-    await f.t.mutation(internal.qualificationCampaigns.bind, {
-        lotId,
-        contextId: original.browserTestContextId,
+    await f.t.mutation(internal.runWorkspace.closeBrowserTestContext, {
+        slotKey: "analyst-4",
+        contextKey: "native-workbench",
     });
-    const fixtureKey = "documentary-initial-fixture";
-    const seeded = await f.t.mutation(
-        internal.e2eFixtures.seedSourceReviewScenario,
-        {
-            slotKey: "analyst-4",
-            fixtureKey,
-            emptyDocumentaryMaterial: true,
-            recordedScenario: {
-                companyCik: scenario.company.cik,
-                companyName: scenario.company.name,
-                ticker: scenario.company.ticker,
-                websiteUrl: scenario.company.websiteUrl,
-                researchAngle: scenario.framing.scope,
-                sources: [],
-            },
+    assert(manifest.version !== 1);
+    const root = mkdtempSync(join(tmpdir(), "workbench-campaign-fixture-"));
+    const client = new ConvexHttpClient("http://127.0.0.1:3210", {
+        fetch: async (_url, options) => {
+            assert(typeof options?.body === "string");
+            const request: { path: string; args: [JSONValue] } = JSON.parse(
+                options.body,
+            );
+            const args = jsonToConvex(request.args[0]);
+            assert(
+                args &&
+                    typeof args === "object" &&
+                    !Array.isArray(args) &&
+                    !(args instanceof ArrayBuffer) &&
+                    !(args instanceof CommitTsPlaceholder),
+            );
+            const result = await f.t.mutation(
+                makeFunctionReference<
+                    "mutation",
+                    Record<string, Value | undefined>,
+                    Value
+                >(request.path),
+                args,
+            );
+            return Response.json({
+                status: "success",
+                value: convexToJson(result),
+            });
         },
-    );
-    await f.t.mutation(internal.execution.fixtures.bindCampaignScenarios, {
-        dossiers: [
-            { runId: seeded.runId, fixtureKey, scenarioId: scenario.id },
-        ],
     });
+    let dossiers: {
+        runId: Id<"researchRuns">;
+        fixtureKey: string;
+        scenarioId: string;
+    }[];
+    try {
+        await prepareCampaignScenarios(client, root, manifest, lotId, "first");
+        const prepared = JSON.parse(
+            readFileSync(join(root, "prepared.json"), "utf8"),
+        );
+        dossiers = prepared.cases.map(
+            (entry: {
+                runId: Id<"researchRuns">;
+                fixtureKey: string;
+                id: string;
+            }) => ({
+                runId: entry.runId,
+                fixtureKey: entry.fixtureKey,
+                scenarioId: entry.id,
+            }),
+        );
+    } finally {
+        rmSync(root, { recursive: true });
+    }
+    const first = dossiers[0];
+    assert(first);
+    const firstRun = await f.t.run((ctx) => ctx.db.get(first.runId));
+    assert(firstRun?.browserTestContextId);
     return {
         ...f,
         campaignId,
-        contextId: original.browserTestContextId,
-        runId: seeded.runId,
-        args: { runId: seeded.runId, fixtureKey, scenarioId: scenario.id },
+        contextId: firstRun.browserTestContextId,
+        runId: first.runId,
+        args: first,
+        framing: baseline.framing,
+        dossiers,
     };
 }
+
+test("campaign coverage presets reach genuine Start pins on fresh dossiers", async () => {
+    const presets = [
+        "balanced",
+        "first_party_depth",
+        "independent_scrutiny",
+    ] as const;
+    const f = await fixture("sources_correction", presets);
+    expect(new Set(f.dossiers.map(({ runId }) => runId)).size).toBe(3);
+    const records = [];
+    for (const { runId, fixtureKey } of f.dossiers) {
+        await f.t.mutation(internal.execution.fixtures.activateWorkbench, {
+            runId,
+            fixtureKey,
+            researchAngle: f.framing.scope,
+        });
+        const before = await f.client.query(api.framing.get, { runId });
+        assert(before);
+        const revision = await f.client.mutation(api.framing.save, {
+            runId,
+            expectedRevision: before.revision,
+            requestKey: "frozen-framing",
+            content: f.framing,
+        });
+        await f.client.mutation(api.framing.startResearch, {
+            runId,
+            expectedRevision: revision,
+            requestKey: "coverage-start",
+        });
+        const run = await f.t.run((ctx) => ctx.db.get(runId));
+        expect(run).toMatchObject({
+            sourcesCoveragePolicyVersion: "sources_coverage_v1",
+            sourcesEnvelope: sourcesTestEnvelope,
+            researchStartRequestKey: "coverage-start",
+        });
+        expect(
+            (await f.client.query(api.framing.get, { runId }))?.content,
+        ).toEqual(f.framing);
+        for (let step = 0; step < 50; step++) {
+            const current = await f.t.run((ctx) => ctx.db.get(runId));
+            if (current?.sourcePreparationId) break;
+            await vi.advanceTimersByTimeAsync(20);
+            await f.t.finishInProgressScheduledFunctions();
+        }
+        const applied = await f.t.run(async (ctx) => {
+            const current = await ctx.db.get(runId);
+            return current?.sourcePreparationId
+                ? (await ctx.db.get(current.sourcePreparationId))
+                      ?.sourcesMission?.coveragePolicy
+                : undefined;
+        });
+        expect(applied).toEqual({
+            version: "sources_coverage_v1",
+            preset: run?.coveragePreset,
+        });
+        records.push(applied?.preset);
+        await f.client.mutation(api.workflowControls.cancel, { runId });
+    }
+    expect(records).toEqual(presets);
+});
 
 test("initial fixture retention refuses cancellation after the adopted documentary read", async () => {
     const f = await fixture("sources_correction");

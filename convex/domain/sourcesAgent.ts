@@ -199,7 +199,7 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
     operations: {
         ...savedMaterialOperations,
         discover_sources_for_need: operation(
-            "Discover candidates for an existing documentary need within the active shared allowance.",
+            "Discover candidates for an existing documentary need within the active shared allowance. Omit focus to follow the launch coverage priority. Select a focus for a targeted check based on observed gaps, and seek counter-evidence under every preset.",
             discoverSourcesInput,
             discoveryResult,
         ),

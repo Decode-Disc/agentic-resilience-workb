@@ -93,6 +93,16 @@ export interface SourcesPreparationView {
     summary: string;
     description?: string;
     outcome: { label: string; settled: boolean };
+    coverage?: {
+        label: string;
+        description: string;
+        searches: readonly { id: string; focus: string; status: string }[];
+        assessments: readonly {
+            needId: string;
+            statement: string;
+            sources: readonly { sourceId: string; label: string }[];
+        }[];
+    };
     collect: {
         candidates: number;
         /** Omitted when the preparation does not record reuse. */
@@ -294,6 +304,7 @@ export function SourcesPreparationScreen({
                 open={runOpen}
                 onOpenChange={setRunOpen}
                 triggerRef={runTrigger}
+                onOpenSource={onOpenSource}
             />
             {view.description && (
                 <p className={cn("wb-meta", styles.preparationNote)}>
@@ -310,11 +321,13 @@ function PreparationRun({
     open,
     onOpenChange,
     triggerRef,
+    onOpenSource,
 }: {
     view: SourcesPreparationView;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     triggerRef: Ref<HTMLButtonElement>;
+    onOpenSource?: (sourceId: string, needId: string) => void;
 }) {
     const { collect, reading, organize } = view;
     return (
@@ -365,6 +378,44 @@ function PreparationRun({
                 </span>
             </CollapsibleTrigger>
             <CollapsibleContent>
+                {view.coverage && (
+                    <div className="space-y-2 py-3 text-sm">
+                        <p>
+                            <strong>{view.coverage.label}</strong> ·{" "}
+                            {view.coverage.description}
+                        </p>
+                        {view.coverage.searches.length > 0 && (
+                            <ul
+                                aria-label="Coverage searches"
+                                className="max-h-36 space-y-1 overflow-y-auto">
+                                {view.coverage.searches.map((search) => (
+                                    <li key={search.id}>
+                                        {search.focus} · {search.status}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        {view.coverage.assessments.map((assessment) => (
+                            <div key={assessment.needId}>
+                                <p>{assessment.statement}</p>
+                                {onOpenSource &&
+                                    assessment.sources.map((source) => (
+                                        <Button
+                                            key={source.sourceId}
+                                            variant="link"
+                                            onClick={() =>
+                                                onOpenSource(
+                                                    source.sourceId,
+                                                    assessment.needId,
+                                                )
+                                            }>
+                                            {source.label}
+                                        </Button>
+                                    ))}
+                            </div>
+                        ))}
+                    </div>
+                )}
                 <PreparationStages view={view} />
             </CollapsibleContent>
         </Collapsible>

@@ -231,6 +231,7 @@ const apiTokenCounter = z.number().int().nonnegative().safe();
 const apiUsageEventSchema = z.object({
     type: z.enum(["response.completed", "response.incomplete"]),
     response: z.object({
+        service_tier: z.string().optional(),
         usage: z
             .object({
                 input_tokens: apiTokenCounter,
@@ -240,6 +241,12 @@ const apiUsageEventSchema = z.object({
                     .object({
                         cached_tokens: apiTokenCounter.optional(),
                         cache_write_tokens: apiTokenCounter.optional(),
+                        cache_write_tokens_details: z
+                            .object({
+                                ttl_30m_tokens: apiTokenCounter.optional(),
+                                ttl_12h_tokens: apiTokenCounter.optional(),
+                            })
+                            .nullish(),
                     })
                     .nullish(),
                 output_tokens_details: z
@@ -462,7 +469,10 @@ export async function runAccountableCampaignReview(options: {
         null
     >(getFunctionName(internal.qualificationCampaigns.reserveAnalysis));
     let responseStatus: number | undefined;
-    const usageEvidence = new Map<number, string | null>();
+    const usageEvidence = new Map<
+        number,
+        z.output<typeof apiUsageEventSchema> | null
+    >();
     const result = await runPiCampaignReview({
         root: options.evidenceRoot,
         reportRoot: root,
@@ -483,14 +493,14 @@ export async function runAccountableCampaignReview(options: {
                       )
                           return;
                       const parsed = apiUsageEventSchema.safeParse(event);
-                      const fingerprint = parsed.success
-                          ? sha256(JSON.stringify(parsed.data))
-                          : null;
+                      const observation = parsed.success ? parsed.data : null;
                       const previous = usageEvidence.get(attempt);
                       usageEvidence.set(
                           attempt,
-                          previous === undefined || previous === fingerprint
-                              ? fingerprint
+                          previous === undefined ||
+                              JSON.stringify(previous) ===
+                                  JSON.stringify(observation)
+                              ? observation
                               : null,
                       );
                   },
@@ -632,10 +642,8 @@ export async function runAccountableCampaignReview(options: {
                 "Invalid analysis usage",
             );
             if (apiCost) {
-                assert(
-                    usageEvidence.get(attempt),
-                    "Native API usage incomplete or invalid",
-                );
+                const observation = usageEvidence.get(attempt);
+                assert(observation, "Native API usage incomplete or invalid");
                 assert(
                     usage.input +
                         usage.output +
@@ -644,6 +652,27 @@ export async function runAccountableCampaignReview(options: {
                         0,
                     "Native API usage unavailable",
                 );
+                if (
+                    manifest.analysis.settlementPolicy === "verified_usage_v1"
+                ) {
+                    const { usage: raw, service_tier: tier } =
+                        observation.response;
+                    const cache = raw.input_tokens_details;
+                    const writes = cache?.cache_write_tokens_details;
+                    assert(
+                        (tier === undefined || tier === "default") &&
+                            (writes?.ttl_12h_tokens ?? 0) === 0 &&
+                            (writes?.ttl_30m_tokens ?? 0) ===
+                                usage.cacheWrite &&
+                            usage.cacheRead === (cache?.cached_tokens ?? 0) &&
+                            usage.cacheWrite ===
+                                (cache?.cache_write_tokens ?? 0) &&
+                            usage.input + usage.cacheRead + usage.cacheWrite ===
+                                raw.input_tokens &&
+                            usage.output === raw.output_tokens,
+                        "Native API usage does not match the pinned billing terms",
+                    );
+                }
             }
             const bound = identity(attempt);
             // Only the injected mock has a known zero charge; native subscriptions retain usage without dollar settlement.

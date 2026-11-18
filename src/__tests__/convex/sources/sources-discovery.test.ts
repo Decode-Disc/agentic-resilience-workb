@@ -19,7 +19,7 @@ afterEach(() => {
 test("confirmed discovery survives a committed settlement whose acknowledgement is lost without repeating provider work", async () => {
     vi.stubEnv("EXA_API_KEY", "fixture-only");
     const fetch = vi.fn(
-        async () =>
+        async (_url: string, _init: RequestInit) =>
             new Response(
                 JSON.stringify({
                     results: [],
@@ -31,6 +31,19 @@ test("confirmed discovery survives a committed settlement whose acknowledgement 
     );
     vi.stubGlobal("fetch", fetch);
     const f = await seedCapturedSources();
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        await ctx.db.patch(f.preparationId, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                coveragePolicy: {
+                    version: "sources_coverage_v1",
+                    preset: "independent_scrutiny",
+                },
+            },
+        });
+    });
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueueNative,
         {
@@ -41,6 +54,7 @@ test("confirmed discovery survives a committed settlement whose acknowledgement 
                 kind: "discover_sources_for_need",
                 needId: "common-context",
                 query: "Additional material",
+                focus: "official",
             },
         },
     );
@@ -105,6 +119,11 @@ test("confirmed discovery survives a committed settlement whose acknowledgement 
         ),
     ).toMatchObject({ kind: "unavailable", code: "operation_outcome_unknown" });
     expect(fetch).toHaveBeenCalledTimes(1);
+    const body = fetch.mock.calls[0]?.[1].body;
+    assert(typeof body === "string");
+    expect(JSON.parse(body).query).toBe(
+        "Additional material\nPrioritize relevant issuer and regulatory publications.",
+    );
 });
 
 test("mixed discovery retains usable candidates and partial provider status", async () => {

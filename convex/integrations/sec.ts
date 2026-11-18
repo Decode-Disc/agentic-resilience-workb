@@ -375,6 +375,30 @@ function parseEvidenceSnapshot(value: unknown): SecEvidenceSnapshot {
     };
 }
 
+/** The SEC filing date belongs to the matching accession, not the event described in the filing. */
+export function secFilingPublicationTime(
+    value: unknown,
+    identity: { cik: string; accession: string },
+): number | undefined {
+    const { company, filings } = parseEvidenceSnapshot(value);
+    if (company.cik !== identity.cik) return undefined;
+    const date = filings.find(
+        ({ accessionNumber }) =>
+            accessionNumber.replaceAll("-", "") === identity.accession,
+    )?.filingDate;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/u.test(date)) return undefined;
+    const timestamp = Date.parse(date);
+    return Number.isFinite(timestamp) &&
+        new Date(timestamp).toISOString().startsWith(`${date}T`)
+        ? timestamp
+        : undefined;
+}
+
+/** SEC submissions for the same CIK used to identify a filing. */
+export function secSubmissionsUrl(cik: string): string {
+    return `https://data.sec.gov/submissions/CIK${normalizeCik(cik).padStart(10, "0")}.json`;
+}
+
 /**
  * Creates the SEC transport adapter. It maps provider JSON into application
  * types and delegates rate limiting and attempt persistence to the Action.
@@ -497,10 +521,9 @@ export function createSecCompanyResolver(
     }
 
     async function inspectEvidence(cik: string): Promise<SecEvidenceSnapshot> {
-        const paddedCik = normalizeCik(cik).padStart(10, "0");
         const value = await requestJson(
             "revalidate_company",
-            `https://data.sec.gov/submissions/CIK${paddedCik}.json`,
+            secSubmissionsUrl(cik),
         );
         return parseEvidenceSnapshot(value);
     }

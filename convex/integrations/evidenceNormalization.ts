@@ -6,6 +6,73 @@ export const EXA_NORMALIZER_VERSION = "exa-text-v1";
 export const PDF_NORMALIZER_VERSION = "pdf-fixture-v1";
 export const QUALIFICATION_NORMALIZER_VERSION = "qualification-text-v1";
 
+/** Reads the publisher's explicit article publication metadata from the fetched HTML head. */
+export function extractHtmlPublicationTime(html: string): number | undefined {
+    let inHead = false;
+    let templateDepth = 0;
+    let publishedAt: number | undefined;
+    const tags =
+        /<!--[\s\S]*?(?:-->|$)|<(script|style|title|noscript)(?=\s|\/?>)(?:"[^"]*"|'[^']*'|[^'"<>])*?>[\s\S]*?(?:<\/\1\s*>|$)|<\/?([a-z][\w:-]*)(?=\s|\/?>)(?:"[^"]*"|'[^']*'|[^'"<>])*?>/giu;
+    for (const [tag, , name] of html.matchAll(tags)) {
+        const element = name?.toLowerCase();
+        const closing = tag.startsWith("</");
+        if (element === "template") {
+            templateDepth = Math.max(0, templateDepth + (closing ? -1 : 1));
+            continue;
+        }
+        if (templateDepth) continue;
+        switch (element) {
+            case "head":
+                if (closing) return publishedAt;
+                inHead = true;
+                break;
+            case "body":
+                return publishedAt;
+            case "meta": {
+                if (!inHead || closing) break;
+                const attributes = new Map<string, string>();
+                for (const [, key, double, single, bare] of tag
+                    .slice(5)
+                    .matchAll(
+                        /\s+([^\s"'<>=/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/gu,
+                    )) {
+                    if (!key) continue;
+                    const attribute = key.toLowerCase();
+                    // In HTML the first attribute of a given name takes effect.
+                    if (!attributes.has(attribute))
+                        attributes.set(
+                            attribute,
+                            double ?? single ?? bare ?? "",
+                        );
+                }
+                if (
+                    attributes.get("property")?.toLowerCase() !==
+                    "article:published_time"
+                )
+                    break;
+                const value = attributes.get("content")?.trim() ?? "";
+                const date =
+                    /^(\d{4}-\d{2}-\d{2})(?:T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-][0-2]\d:[0-5]\d))?$/u.exec(
+                        value,
+                    )?.[1];
+                if (!date) return undefined;
+                const day = Date.parse(date);
+                const timestamp = Date.parse(value);
+                if (
+                    !Number.isFinite(timestamp) ||
+                    !Number.isFinite(day) ||
+                    !new Date(day).toISOString().startsWith(`${date}T`) ||
+                    (publishedAt !== undefined && publishedAt !== timestamp)
+                )
+                    return undefined;
+                publishedAt = timestamp;
+                break;
+            }
+        }
+    }
+    return publishedAt;
+}
+
 export type NormalizedArtifact = {
     normalizedText: string;
     contentHash: string;

@@ -7,7 +7,9 @@ import {
 import { executionError } from "@convex/execution/errors";
 import { operationHistoryReference } from "@convex/execution/journal";
 import {
+    DOCUMENTARY_SEARCH_QUERY_MAX_CHARS,
     MAX_OPERATION_RESULT_BYTES,
+    MAX_POLICY_REASON_CODE_CHARS,
     SOURCES_ENVELOPE_MAX_ACQUISITIONS,
     SOURCES_ENVELOPE_MAX_COUNT,
     SOURCES_HANDOFF_BASE_READ_RESERVE_BYTES,
@@ -16,7 +18,7 @@ import {
     SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS,
     SOURCES_WORK_ENTRY_CAPACITY,
 } from "@convex/resourcePolicy";
-import { getDocumentSize, type Infer } from "convex/values";
+import { getConvexSize, getDocumentSize, type Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { agentName } from "./agentIdentities";
 import { readResearchContext } from "./researchContext";
@@ -34,15 +36,19 @@ import {
 import { SourceReviewReads } from "./sourceReviewReads";
 import { controlledDocumentaryUse } from "./sourceSelectionPolicy";
 import {
+    type authorizedDiscovery,
     type DocumentaryContribution,
     type DocumentaryContributionTally,
+    type discoverSourcesInput,
     type documentaryAssessmentAuthorValidator,
     type materializedQualificationInput,
+    type preparedMaterialValidator,
     SOURCES_PROTOCOL,
     type SourceCaptureIdentity,
     type SourceDocumentState,
     type SourcesPreparation,
     type sourcesCompletionValidator,
+    type sourcesCoverage,
     sourcesEnvelopeValidator,
 } from "./sourcesContracts";
 import {
@@ -362,6 +368,14 @@ export async function initializeSources(
         needsRevision: 1,
         needs,
         envelope,
+        ...(run.sourcesCoveragePolicyVersion && run.coveragePreset
+            ? {
+                  coveragePolicy: {
+                      version: run.sourcesCoveragePolicyVersion,
+                      preset: run.coveragePreset,
+                  },
+              }
+            : {}),
         searches: 0,
         acquisitions: 0,
         controls: 0,
@@ -372,6 +386,43 @@ export async function initializeSources(
     };
     await ctx.db.patch(preparationId, { sourcesMission: data });
     return data;
+}
+
+const presetFocus = {
+    balanced: "mixed",
+    first_party_depth: "official",
+    independent_scrutiny: "independent",
+} as const;
+
+const discoveryOrientation = {
+    mixed: "Seek official material and independent sources that can challenge it.",
+    official: "Prioritize relevant issuer and regulatory publications.",
+    independent: "Prioritize independent material that can test the account.",
+};
+
+/** Resolve the exact provider input before reserving shared search capacity. */
+export function authorizeSourcesDiscovery(
+    policy: SourcesPreparation["coveragePolicy"],
+    input: Infer<typeof discoverSourcesInput>,
+): Infer<typeof authorizedDiscovery> {
+    const focus = policy
+        ? (input.focus ?? presetFocus[policy.preset])
+        : undefined;
+    const query = focus
+        ? `${input.query.trim()}
+${discoveryOrientation[focus]}`
+        : input.query;
+    if (
+        !input.query.trim() ||
+        query.length > DOCUMENTARY_SEARCH_QUERY_MAX_CHARS
+    )
+        throw executionError("discovery_query_invalid", [
+            {
+                path: "query",
+                expected: `Use a nonblank query that fits within ${DOCUMENTARY_SEARCH_QUERY_MAX_CHARS} characters including the selected search orientation.`,
+            },
+        ]);
+    return { query, ...(focus ? { focus } : {}) };
 }
 
 /** Reconstruct an entire qualification while preserving independently identified contributions. */
@@ -562,6 +613,7 @@ export function summarizeSourcesPreparation(
         ),
         needCount: data.needs.length,
         needReferences: data.needs.map(({ id, version }) => ({ id, version })),
+        settledNeedIds: data.result?.needs.map(({ needId }) => needId) ?? [],
         instructionTreatment: sourcesInstructionTreatment(preparation),
         needsPreviewComplete: data.needs.length <= 8,
         needs: data.needs.slice(0, 8).map((need) => {
@@ -609,6 +661,91 @@ export function summarizeSourcesPreparation(
         inspection:
             "Use saved-material search and contextual reading for exact passages and current contribution permissions. Previews are incomplete status, not evidence.",
         nextCapability: "investigation_unavailable",
+    };
+}
+
+type CoverageSearch = NonNullable<
+    Infer<typeof preparedMaterialValidator>["coverageSearches"]
+>[number];
+
+async function observeCoverageSearch(
+    reads: SourceReviewReads,
+    requestId: Id<"agentOperationRequests">,
+): Promise<CoverageSearch> {
+    const request = await reads.request(requestId);
+    if (
+        request?.status === "completed" &&
+        request.adoptedAt !== undefined &&
+        request.outcome?.kind === "success" &&
+        !request.adoptionRefusalCode
+    )
+        return { requestId, outcome: "performed" };
+    const reasonCode =
+        request?.adoptionRefusalCode ??
+        (request?.outcome && "code" in request.outcome
+            ? request.outcome.code
+            : undefined) ??
+        (request?.status === "unknown"
+            ? "operation_outcome_unknown"
+            : undefined);
+    return {
+        requestId,
+        outcome: "unfinished",
+        ...(reasonCode && reasonCode.length <= MAX_POLICY_REASON_CODE_CHARS
+            ? { reasonCode }
+            : {}),
+    };
+}
+
+/** A settled preparation reports the snapshot it handed off even if a receipt arrives later. */
+export async function readSourcesCoverage(
+    ctx: QueryCtx,
+    preparation: Doc<"sourceSelectionProposalRebuilds">,
+): Promise<Infer<typeof sourcesCoverage> | undefined> {
+    const data = preparation.sourcesMission;
+    const policy = data?.result
+        ? data.result.coveragePolicy
+        : data?.coveragePolicy;
+    if (!data || !policy) return undefined;
+    const searches = new Map(data.work.map((work) => [work.requestId, work]));
+    const reads = new SourceReviewReads(
+        ctx.db,
+        preparation.runId,
+        SOURCES_HANDOFF_READ_CAPACITY,
+    );
+    const observations = data.result
+        ? (data.result.coverageSearches ?? [])
+        : await Promise.all(
+              data.work.flatMap((work) =>
+                  work.discovery
+                      ? [observeCoverageSearch(reads, work.requestId)]
+                      : [],
+              ),
+          );
+    const author = data.result?.documentaryAssessment?.author;
+    return {
+        policy,
+        assessments:
+            author?.type === "agent"
+                ? (data.result?.needs ?? []).flatMap((need) =>
+                      need.gap && need.coverageReadings?.length
+                          ? [
+                                {
+                                    needId: need.needId,
+                                    statement: need.gap,
+                                    author,
+                                    readings: need.coverageReadings,
+                                },
+                            ]
+                          : [],
+                  )
+                : [],
+        searches: observations.flatMap((observation) => {
+            const work = searches.get(observation.requestId);
+            return work?.discovery
+                ? [{ ...observation, ...work.discovery, needIds: work.needIds }]
+                : [];
+        }),
     };
 }
 
@@ -1011,6 +1148,35 @@ export async function assertSourcesCompletionCapacity(
     bytes += getDocumentSize({
         needs: needOutcomes.map((need) => ({ ...need, contributions: [] })),
     });
+    if (data.coveragePolicy) {
+        // Convex IDs share the deployment's encoding. Use an existing ID to size the two reference fields.
+        const readingReference = {
+            sourceId: preparation._id,
+            captureId: preparation._id,
+            passageOrder: 0,
+        };
+        const coverageReadings = Array.from(
+            { length: SOURCES_MAX_EVIDENCE_REFERENCES },
+            () => readingReference,
+        );
+        bytes += data.needs.length * getConvexSize({ coverageReadings });
+        bytes += getDocumentSize({
+            coveragePolicy: data.coveragePolicy,
+            coverageSearches: data.work.flatMap((work) =>
+                work.discovery
+                    ? [
+                          {
+                              requestId: work.requestId,
+                              outcome: "unfinished",
+                              reasonCode: "x".repeat(
+                                  MAX_POLICY_REASON_CODE_CHARS,
+                              ),
+                          },
+                      ]
+                    : [],
+            ),
+        });
+    }
     if (bytes > 1_048_576) throw executionError("sources_result_capacity");
     const count = (
         taskKey: string,
@@ -1309,6 +1475,14 @@ export async function completeSources(
                 })),
             });
     }
+    const coverageReadings = new Map<
+        string,
+        NonNullable<
+            Infer<
+                typeof preparedMaterialValidator
+            >["needs"][number]["coverageReadings"]
+        >
+    >();
     const issues = [...accounting.issues];
     const invalid = (
         outcome: (typeof response.needs)[number],
@@ -1325,6 +1499,11 @@ export async function completeSources(
             w.needIds.includes(outcome.needId),
         );
         let completedSearch = false;
+        const readings: NonNullable<
+            Infer<
+                typeof preparedMaterialValidator
+            >["needs"][number]["coverageReadings"]
+        > = [];
         for (const requestId of outcome.workRequestIds) {
             const request = await reads.request(requestId);
             if (!work.some((w) => w.requestId === requestId)) {
@@ -1361,6 +1540,37 @@ export async function completeSources(
                         "sources_work_invalid",
                         "Use only work belonging to this need and preparation, or exact saved-material reads within its retained captures.",
                     );
+            }
+            if (
+                data.coveragePolicy &&
+                outcome.gap &&
+                assessmentAuthor?.type === "agent" &&
+                readings.length < SOURCES_MAX_EVIDENCE_REFERENCES &&
+                request?.input.kind === "read_in_context"
+            ) {
+                const read = admittedDocumentaryReading(
+                    request,
+                    {
+                        runId: run._id,
+                        missionId: assessmentAuthor.missionId,
+                    },
+                    data,
+                );
+                const passage = read?.passages[0];
+                if (
+                    read &&
+                    passage &&
+                    !readings.some(
+                        (entry) =>
+                            entry.captureId === read.captureId &&
+                            entry.passageOrder === passage.passageOrder,
+                    )
+                )
+                    readings.push({
+                        sourceId: read.sourceId,
+                        captureId: read.captureId,
+                        passageOrder: passage.passageOrder,
+                    });
             }
             if (!request || request.runId !== run._id)
                 invalid(
@@ -1399,6 +1609,7 @@ export async function completeSources(
                 "sources_need_unresolved",
                 "Provide usable controlled material, a supported examined gap, or an explicit unfinished explanation.",
             );
+        if (readings.length) coverageReadings.set(outcome.needId, readings);
         if (outcome.gap && !completedSearch)
             invalid(
                 outcome,
@@ -1445,6 +1656,9 @@ export async function completeSources(
         needs: response.needs.map((need) => ({
             ...need,
             contributions: coveredNeeds.get(need.needId) ?? [],
+            ...(coverageReadings.has(need.needId)
+                ? { coverageReadings: coverageReadings.get(need.needId) }
+                : {}),
         })),
         ...(assessmentAuthor
             ? {
@@ -1452,6 +1666,18 @@ export async function completeSources(
                       author: assessmentAuthor,
                       verification: "not_semantically_reviewed" as const,
                   },
+              }
+            : {}),
+        ...(data.coveragePolicy
+            ? {
+                  coveragePolicy: data.coveragePolicy,
+                  coverageSearches: await Promise.all(
+                      data.work.flatMap((work) =>
+                          work.discovery
+                              ? [observeCoverageSearch(reads, work.requestId)]
+                              : [],
+                      ),
+                  ),
               }
             : {}),
         retentionAuthority: "system_mandate" as const,

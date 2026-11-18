@@ -3,6 +3,32 @@ import { dimensionLabel as domainDimensionLabel } from "@convex/domain/researchP
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { JobStage } from "@/components/ai/job-progress";
 
+export type CoveragePreset = FunctionArgs<
+    typeof api.researchLaunch.confirmAndStart
+>["coveragePreset"];
+
+export const coveragePresetOptions: ReadonlyArray<{
+    value: CoveragePreset;
+    label: string;
+    description: string;
+}> = [
+    {
+        value: "balanced",
+        label: "Balanced",
+        description: "A measured mix of first-party and independent sources.",
+    },
+    {
+        value: "first_party_depth",
+        label: "First-party depth",
+        description: "Prioritize filings and issuer material.",
+    },
+    {
+        value: "independent_scrutiny",
+        label: "Independent scrutiny",
+        description: "Prioritize external challenge and counter-evidence.",
+    },
+];
+
 type RunProjection = NonNullable<
     FunctionReturnType<typeof api.researchRuns.getMine>
 >;

@@ -20,17 +20,20 @@ export async function seedWorkbench(
     local = false,
     route?: ModelRoute,
     contextDurationMs = 60000,
+    researchAngle?: string,
+    company?: Parameters<typeof createAdmittedPreflight>[1],
 ) {
     vi.useFakeTimers();
     const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
     agentTest.register(t);
     workflowTest.register(t);
-    const { userId, preflightId } = await createAdmittedPreflight(t);
+    const { userId, preflightId } = await createAdmittedPreflight(t, company);
     const client = t.withIdentity({ subject: userId });
     const { runId } = await client.mutation(api.framing.confirmCompany, {
         preflightId,
         idempotencyKey: "native-workbench",
         coveragePreset: "balanced",
+        ...(researchAngle ? { researchAngle } : {}),
     });
     if (local) {
         vi.stubEnv(

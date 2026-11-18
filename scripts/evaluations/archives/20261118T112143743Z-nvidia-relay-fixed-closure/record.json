@@ -1,0 +1,46 @@
+{
+    "schemaVersion": 1,
+    "id": "20261118T112143743Z-nvidia-relay-fixed-closure",
+    "createdAt": "2026-11-18T11:21:43.743Z",
+    "git": {
+        "head": "787a2b00e401cf2513dedb35f068bc53c39cfc8e",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/tmp/workbench-nvidia-relay-fixed-JLgYqD/closed-state.json",
+            "archivePath": "external/close/closed-state.json"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-relay-fixed-JLgYqD/operator-status.json",
+            "archivePath": "external/operator/operator-status.json"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-relay-fixed-JLgYqD/run-approved.mts",
+            "archivePath": "external/launcher/run-approved.mts"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/close/closed-state.json",
+            "bytes": 357,
+            "sha256": "f3b9d3be35b7e878a12c41a561893b0abb448dab05a6e54cab40a660188fe88c"
+        },
+        {
+            "path": "external/launcher/run-approved.mts",
+            "bytes": 3657,
+            "sha256": "f48b0e0bc70d3c74cb3e9c41d1c36825ba0a92a177384d4e383710c56242ab6f"
+        },
+        {
+            "path": "external/operator/operator-status.json",
+            "bytes": 325,
+            "sha256": "5737680b3b8e56c35f3d1a9098f26d21b70974cc89ee0f170fe7b3c9653c1e16"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261118T112143743Z-nvidia-relay-fixed-closure.tar.gz",
+        "bytes": 2241,
+        "sha256": "500bcce404adaa4db78465073c4dde6f81335727a534bf8781e8cdc9e79fe9b9"
+    },
+    "verification": "restored_and_verified"
+}

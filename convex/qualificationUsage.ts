@@ -16,9 +16,15 @@ export const qualificationCategory = (
 ) =>
     call.service === "model"
         ? "model"
-        : call.operation === "source_need_search"
+        : ["source_need_search", "framing_context_search"].includes(
+                call.operation,
+            )
           ? "search"
-          : ["get_contents", "retrieve_filing_html"].includes(call.operation)
+          : [
+                  "get_contents",
+                  "retrieve_filing_html",
+                  "framing_context_read",
+              ].includes(call.operation)
             ? "acquisition"
             : "technical";
 const empty = () => ({

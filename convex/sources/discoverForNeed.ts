@@ -23,10 +23,16 @@ type Reservation = FunctionReturnType<typeof internal.sourcesMission.reserve>;
 export async function discoverForNeed(
     ctx: ActionCtx,
     args: FunctionArgs<typeof internal.sourcesMission.reserve>,
-    { preparation, inputHash, discoveryLimit }: Reservation,
+    { preparation, inputHash, discoveryLimit, discovery }: Reservation,
     input: Extract<Reservation["input"], { kind: "discover_sources_for_need" }>,
     simulation: boolean,
 ): Promise<Infer<typeof operationOutcomeValidator>> {
+    if (!discovery)
+        return {
+            kind: "unavailable",
+            code: "discovery_reservation_unavailable",
+        };
+    const { query } = discovery;
     const searchExa = simulation ? undefined : configuredExaHttpDiscovery();
     if (!simulation && !searchExa)
         return {
@@ -77,7 +83,7 @@ export async function discoverForNeed(
                   costDollars: 0,
                   searchTime: 0,
               }
-            : await searchExa(input.query, searchLimit);
+            : await searchExa(query, searchLimit);
         responseReceived = true;
         if (!simulation)
             await ctx.runMutation(internal.providerCalls.recordAttempt, {
@@ -165,13 +171,11 @@ export async function discoverForNeed(
             discoveryResult,
             {
                 needId: input.needId,
-                query: input.query,
+                query,
                 ...persisted,
             },
             {
-                progressKeys: [
-                    sha256Hex(`search:${input.needId}:${input.query}`),
-                ],
+                progressKeys: [sha256Hex(`search:${input.needId}:${query}`)],
             },
         );
     } catch (error) {

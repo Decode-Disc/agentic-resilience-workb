@@ -1140,6 +1140,7 @@ export const performInstruction = internalMutation({
             interpretedNeed: input.interpretedNeed,
             framingRevisionId: run.fixedFramingRevisionId,
             coverageRole: input.coverageRole ?? undefined,
+            target: input.target,
             status,
             outcome,
             createdAt: Date.now(),
@@ -1155,6 +1156,21 @@ export const performInstruction = internalMutation({
             interpretedNeed: input.interpretedNeed,
             occurredAt: Date.now(),
         });
+        if (
+            status === "waiting" &&
+            input.target &&
+            run.sourcesProtocol === "sources_mission_v1"
+        ) {
+            await processWorkbenchInstructions(ctx, { runId: run._id });
+            const treatment = await ctx.db.get(id);
+            if (!treatment)
+                throw executionError("instruction_receipt_unavailable");
+            return retainOperationEffect(ctx, request, pin, {
+                instructionId: id,
+                status: treatment.status,
+                outcome: treatment.outcome,
+            });
+        }
         if (status === "waiting")
             await ctx.scheduler.runAfter(
                 0,

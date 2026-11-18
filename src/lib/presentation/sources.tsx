@@ -20,7 +20,10 @@ import type {
     SourcesMatrixFilter,
     SourcesPreparationView,
 } from "@/components/workspace/sources/sources-screens";
-import { sourceDocumentKindLabel } from "@/lib/presentation/research-copy";
+import {
+    coveragePresetOptions,
+    sourceDocumentKindLabel,
+} from "@/lib/presentation/research-copy";
 
 type Overview = NonNullable<
     FunctionReturnType<typeof api.sourcesWorkspace.overview>
@@ -637,6 +640,17 @@ export function sourcesPreparationView(
     const needsNotice = reasons.find(
         (reason) => reasons.filter((entry) => entry === reason).length > 1,
     );
+    const coverage = overview.coverage;
+    const coveragePreset =
+        coverage &&
+        coveragePresetOptions.find(
+            ({ value }) => value === coverage.policy.preset,
+        );
+    const focusLabels = {
+        mixed: "Official and independent",
+        official: "Official",
+        independent: "Independent challenge",
+    };
     const families = new Map<SourcesRow["family"], "found" | "unavailable">();
     for (const row of rows) families.set(row.family, "found");
     for (const family of overview.collect.failedFamilies)
@@ -646,6 +660,40 @@ export function sourcesPreparationView(
         title: presentation.title,
         summary,
         outcome: { label: presentation.outcome, settled },
+        ...(coverage && coveragePreset
+            ? {
+                  coverage: {
+                      label: coveragePreset.label,
+                      description: coveragePreset.description,
+                      searches: coverage.searches.map((search) => ({
+                          id: search.requestId,
+                          focus: search.focus
+                              ? focusLabels[search.focus]
+                              : "Documentary context",
+                          status:
+                              search.outcome === "performed"
+                                  ? "Completed"
+                                  : "Unfinished",
+                      })),
+                      assessments: coverage.assessments.map((assessment) => ({
+                          needId: assessment.needId,
+                          statement: `Sources assessment: ${assessment.statement}`,
+                          sources: [
+                              ...new Set(
+                                  assessment.readings.map(
+                                      ({ sourceId }) => sourceId,
+                                  ),
+                              ),
+                          ].map((sourceId) => ({
+                              sourceId,
+                              label:
+                                  rowsById.get(sourceId)?.title ??
+                                  "Read source",
+                          })),
+                      })),
+                  },
+              }
+            : {}),
         collect: {
             candidates: overview.collect.candidates,
             families: familyOrder

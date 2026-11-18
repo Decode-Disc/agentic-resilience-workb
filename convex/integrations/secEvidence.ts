@@ -28,7 +28,8 @@ export function resolveDirectFilingUrl(canonicalUrl: string): string | null {
 }
 
 export async function retrieveAndNormalizeSecFiling(
-    resolver: SecCompanyEvidenceResolver,
+    resolver: Pick<SecCompanyEvidenceResolver, "retrieveDocumentHtml"> &
+        Partial<Pick<SecCompanyEvidenceResolver, "inspectEvidence">>,
     input: SourceDocumentRetrievalInput | ApprovedSourceRetrievalInput,
     retainResolvedUrl?: (url: string) => Promise<void>,
 ): Promise<ApprovedSourceRetrievalResult> {
@@ -54,8 +55,8 @@ export async function retrieveAndNormalizeSecFiling(
 
             let primaryDocument = input.secPrimaryDocument;
             if (!primaryDocument) {
-                const snapshot = await resolver.inspectEvidence(cleanCik);
-                const matchedFiling = snapshot.filings.find(
+                const snapshot = await resolver.inspectEvidence?.(cleanCik);
+                const matchedFiling = snapshot?.filings.find(
                     (f) => f.accessionNumber === input.secAccessionNumber,
                 );
                 primaryDocument = matchedFiling?.primaryDocument;

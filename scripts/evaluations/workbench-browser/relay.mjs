@@ -10,6 +10,8 @@ import http from "node:http";
 import { pathToFileURL } from "node:url";
 import { parseEnv } from "node:util";
 import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
     RESOURCE_POLICY_VERSION,
     resolveGenerationAuthority,
     QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
@@ -108,6 +110,29 @@ export function createQualificationRelay(
             .filter((r) => r.event === "response" || r.event === "uncertain")
             .reduce((s, r) => s + (r.cost ?? 0), 0),
         fatal;
+    const knownFinal =
+        protocol.manifest?.costAccountingPolicy === "known_final_v1";
+    let budgetedUsd = 0;
+    const inFlightReservations = new Map();
+    const account = (entry) => {
+        if (entry.event === "dispatch") {
+            inFlightReservations.set(entry.call, entry.reserveUsd);
+            budgetedUsd += entry.reserveUsd;
+        } else if (
+            knownFinal &&
+            entry.event === "response" &&
+            entry.outcome === "response_received" &&
+            entry.billing === "reported" &&
+            Number.isFinite(entry.cost) &&
+            entry.cost >= 0
+        ) {
+            const reservation = inFlightReservations.get(entry.call);
+            if (reservation === undefined) return;
+            inFlightReservations.delete(entry.call);
+            budgetedUsd += entry.cost - reservation;
+        }
+    };
+    for (const entry of prior) account(entry);
     if (
         prior.some((r) => r.event === "halt") ||
         prior.some(
@@ -137,6 +162,7 @@ export function createQualificationRelay(
         const entry = { ...v, at: new Date().toISOString() };
         appendFileSync(`${root}/ledger.jsonl`, `${JSON.stringify(entry)}\n`);
         prior.push(entry);
+        account(entry);
     };
     const digest = (v) => createHash("sha256").update(v).digest("hex");
     const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -252,8 +278,7 @@ export function createQualificationRelay(
                     throw new Error("Invalid prepared relay capabilities");
                 route = prepared;
             }
-            const { contextWindow, maxTokens, inputPrice, outputPrice } =
-                route.descriptor;
+            const { contextWindow, maxTokens } = route.descriptor;
             const constraints = states[0].constraints;
             if (constraints?.resourcePolicy !== RESOURCE_POLICY_VERSION)
                 throw new Error("resource_policy_unsupported");
@@ -286,13 +311,15 @@ export function createQualificationRelay(
                 p.provider?.require_parameters !== true
             )
                 throw new Error("Route or request contract changed");
+            const { prompt: inputPrice, completion: outputPrice } =
+                p.provider.max_price ?? {};
             if (
-                !Number.isFinite(p.provider.max_price?.prompt) ||
-                p.provider.max_price.prompt < 0 ||
-                p.provider.max_price.prompt > inputPrice ||
-                !Number.isFinite(p.provider.max_price.completion) ||
-                p.provider.max_price.completion < 0 ||
-                p.provider.max_price.completion > outputPrice
+                !Number.isFinite(inputPrice) ||
+                inputPrice < 0 ||
+                inputPrice > MODEL_MAX_INPUT_PRICE_PER_MILLION ||
+                !Number.isFinite(outputPrice) ||
+                outputPrice < 0 ||
+                outputPrice > MODEL_MAX_OUTPUT_PRICE_PER_MILLION
             )
                 throw new Error("Price ceiling changed");
             if (control.mode === "dry") {
@@ -332,7 +359,7 @@ export function createQualificationRelay(
                 ((p.max_tokens ?? p.max_completion_tokens) * outputPrice) / 1e6;
             if (
                 calls >= maximumRequests ||
-                reserved + reserve > maximumCostUsd
+                budgetedUsd + reserve > maximumCostUsd
             ) {
                 event({
                     event: "budget_exhausted",
@@ -576,6 +603,7 @@ export function createQualificationRelay(
             json("relay-summary.json", {
                 calls,
                 reservedUsd: reserved,
+                budgetedUsd,
                 reportedCostUsd: cost,
                 fatal,
             });
@@ -656,6 +684,7 @@ export function createQualificationRelay(
             json("relay-summary.json", {
                 calls,
                 reservedUsd: reserved,
+                budgetedUsd,
                 reportedCostUsd: cost,
                 fatal,
             });

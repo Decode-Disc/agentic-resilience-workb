@@ -147,6 +147,8 @@ async function requireCampaignScenarios(
             !scenario ||
             run.companySnapshot?.cik.replace(/^0+/, "") !==
                 scenario.company.cik.replace(/^0+/, "") ||
+            (scenario.coveragePreset !== undefined &&
+                run.coveragePreset !== scenario.coveragePreset) ||
             run.researchStartedAt !== undefined ||
             run.lifecycleState !== "framing"
         )
@@ -997,6 +999,9 @@ export const authorizeWorkbenchQualification = internalMutation({
                         args.sourcesLot.filter(
                             (e) => e.scenarioId === scenario.id,
                         ).length !== 1 ||
+                        (scenario.coveragePreset !== undefined &&
+                            owned.run.coveragePreset !==
+                                scenario.coveragePreset) ||
                         owned.run.companySnapshot?.cik.replace(/^0+/, "") !==
                             scenario.company.cik.replace(/^0+/, "")
                     )

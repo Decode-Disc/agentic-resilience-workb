@@ -92,7 +92,9 @@ test.each([
                 );
             return toolResponse(
                 operation,
-                operation === "adjust_framing" ? { content: program(2) } : {},
+                operation === "adjust_framing"
+                    ? { content: program(2), eventBasis: { kind: "none" } }
+                    : {},
                 "initial-operation",
             );
         }),
@@ -1785,7 +1787,7 @@ test("a framing effect produced by a native tool is delivered and acknowledged b
                     "The saved research program contains two questions.",
                 );
             return new Response(
-                `data: ${JSON.stringify({ id: "save-through-native-tool", choices: [{ index: 0, delta: { role: "assistant", tool_calls: [{ index: 0, id: "save-framing", type: "function", function: { name: "adjust_framing", arguments: JSON.stringify({ content: program(2) }) } }] }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: "save-through-native-tool", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], usage: { prompt_tokens: 10, completion_tokens: 5 } })}\n\ndata: [DONE]\n\n`,
+                `data: ${JSON.stringify({ id: "save-through-native-tool", choices: [{ index: 0, delta: { role: "assistant", tool_calls: [{ index: 0, id: "save-framing", type: "function", function: { name: "adjust_framing", arguments: JSON.stringify({ content: program(2), eventBasis: { kind: "none" } }) } }] }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: "save-through-native-tool", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], usage: { prompt_tokens: 10, completion_tokens: 5 } })}\n\ndata: [DONE]\n\n`,
                 { headers: { "content-type": "text/event-stream" } },
             );
         }),

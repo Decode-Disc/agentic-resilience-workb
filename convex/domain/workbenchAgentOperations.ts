@@ -6,7 +6,10 @@ import {
 } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationReuseIdentity } from "@convex/execution/missionData";
-import { operationResultValidator } from "@convex/execution/operationResults";
+import {
+    observeOperationOutcome,
+    operationResultValidator,
+} from "@convex/execution/operationResults";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
@@ -19,6 +22,8 @@ import {
     controlResearchInput,
     nativeAdjustFramingInput,
     nativeSourceRequestInput,
+    publicContextInput,
+    publicContextResultValidator,
     requestApprovalInput,
     requestApprovalResultValidator,
     sourceRequestInput,
@@ -39,6 +44,11 @@ function recoverableWorkbenchRefusal(
             "stale_instructions",
             "framing_version_conflict",
             "framing_fixed",
+            "framing_event_basis_required",
+            "framing_event_basis_invalid",
+            "framing_open_preserve_program",
+            "framing_public_lookup_invalid",
+            "framing_public_reference_undated",
             "framing_read_only",
             "framing_analyst_conflict",
             "framing_authority_unavailable",
@@ -371,6 +381,65 @@ export const nativeWorkbenchOperations: Record<
     AgentOperationDefinition
 > = {
     ...workbenchOperations,
+    verify_public_context: {
+        effectKind: "durable_effect",
+        unknownOutcome: {
+            kind: "unavailable",
+            code: "operation_outcome_unknown",
+        },
+        version: 1,
+        description:
+            "Read dated public context about the confirmed company while framing. Search for the unresolved event or context. Only returned excerpts are readings.",
+        inputValidator: publicContextInput,
+        resultValidator: operationResultValidator(publicContextResultValidator),
+        identity: operationReuseIdentity,
+        async pin(ctx, mission, input, _runId, effectPin) {
+            if (!mission || input.kind !== "verify_public_context")
+                return { kind: "unavailable", code: "mission_required" };
+            const run = await ctx.db.get(mission.runId);
+            if (
+                run?.lifecycleState !== "framing" ||
+                !run.currentFramingRevisionId
+            )
+                return { kind: "unavailable", code: "framing_fixed" };
+            if (
+                effectPin &&
+                (effectPin.kind !== "framing_revision" ||
+                    effectPin.revisionId !== run.currentFramingRevisionId)
+            )
+                return {
+                    kind: "unavailable",
+                    code: "framing_version_conflict",
+                };
+            return {
+                kind: "available",
+                pin: {
+                    kind: "framing_revision",
+                    revisionId: run.currentFramingRevisionId,
+                },
+            };
+        },
+        async execute(ctx, args) {
+            if (!args.requestId)
+                return {
+                    outcome: { kind: "refused", code: "request_unavailable" },
+                };
+            return {
+                outcome: observeOperationOutcome(
+                    await ctx.runAction(
+                        internal.workbenchPublicContextActions.execute,
+                        {
+                            requestId: args.requestId,
+                            expectedGeneration: args.expectedGeneration,
+                        },
+                    ),
+                ),
+            };
+        },
+        validateOutcome(_request, outcome) {
+            return outcome;
+        },
+    },
     adjust_framing: {
         ...adjustFraming,
         version: 2,

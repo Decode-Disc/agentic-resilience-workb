@@ -1,5 +1,9 @@
+import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
+import { assertSourcesCompletionCapacity } from "@convex/domain/sources";
 import { registeredAgentDefinitions } from "@convex/execution/agentCatalog";
+import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { expect, test } from "vitest";
+import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 test("Sources is a research binding using canonical shared reading operations", () => {
     const definitions = registeredAgentDefinitions();
@@ -437,6 +441,78 @@ test("distinct need-bound queries retain distinct provider identities within the
     ).toMatchObject({ searches: 2, phase: "initial" });
 });
 
+test("the coverage preset orients the reserved query without adding searches", async () => {
+    const results = [];
+    const query = "workflow documentation";
+    for (const preset of [
+        "balanced",
+        "first_party_depth",
+        "independent_scrutiny",
+        undefined,
+    ] as const) {
+        const f = await seedSourcePreparation();
+        await f.t.run((ctx) =>
+            ctx.db.patch(f.runId, {
+                sourcesProtocol: "sources_mission_v1",
+                coveragePreset: preset ?? "independent_scrutiny",
+                sourcesCoveragePolicyVersion: preset
+                    ? "sources_coverage_v1"
+                    : undefined,
+            }),
+        );
+        const preparationId = await f.t.mutation(
+            internal.sourcesMission.claim,
+            {
+                runId: f.runId,
+                corpusRevisionId: f.corpusRevisionId,
+                expectedGeneration: 3,
+                envelope,
+            },
+        );
+        const requestId = await f.t.mutation(
+            internal.execution.operations.enqueueNative,
+            {
+                runId: f.runId,
+                expectedGeneration: 3,
+                cause: "search",
+                input: {
+                    kind: "discover_sources_for_need",
+                    needId: "common-context",
+                    query,
+                },
+            },
+        );
+        await f.t.mutation(internal.execution.operations.claim, {
+            requestId,
+            expectedGeneration: 3,
+        });
+        const reservation = await f.t.mutation(
+            internal.sourcesMission.reserve,
+            { requestId, expectedGeneration: 3 },
+        );
+        const preparation = await f.t.run((ctx) => ctx.db.get(preparationId));
+        expect(preparation?.sourcesMission?.searches).toBe(1);
+        expect(preparation?.sourcesMission?.coveragePolicy).toEqual(
+            preset ? { version: "sources_coverage_v1", preset } : undefined,
+        );
+        expect(preparation?.sourcesMission?.work[0]?.discovery).toEqual(
+            reservation.discovery,
+        );
+        results.push(reservation.discovery);
+    }
+    expect(results.map((result) => result?.focus)).toEqual([
+        "mixed",
+        "official",
+        "independent",
+        undefined,
+    ]);
+    expect(new Set(results.map((result) => result?.query)).size).toBe(4);
+    expect(results.every((result) => result?.query.startsWith(query))).toBe(
+        true,
+    );
+    expect(results[3]?.query).toBe(query);
+});
+
 test("Sources receives the confirmed company and fixed framing even without initial candidates", async () => {
     const { seedCapturedSources } = await import(
         "@/__tests__/setup/sources-mission"
@@ -482,4 +558,52 @@ test("Sources receives the confirmed company and fixed framing even without init
         fixed: true,
     });
     expect(context.activeWork.candidates).toEqual([]);
+});
+
+test("admission reserves the space for attributed coverage readings at handoff", async () => {
+    const f = await seedCapturedSources();
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        const data = {
+            ...preparation.sourcesMission,
+            needs: Array.from({ length: 100 }, (_, index) => ({
+                id: `need-${index}`,
+                version: 1,
+                information: "x".repeat(9090),
+                questionIds: [],
+                commonContext: index === 0,
+            })),
+            envelope: { ...preparation.sourcesMission.envelope, maxNeeds: 100 },
+        };
+        const reads = new SourceReviewReads(
+            ctx.db,
+            f.runId,
+            SOURCES_HANDOFF_READ_CAPACITY,
+        );
+        await expect(
+            assertSourcesCompletionCapacity(
+                reads,
+                preparation,
+                data,
+                null,
+                f.readRequestId,
+            ),
+        ).resolves.toBeUndefined();
+        await expect(
+            assertSourcesCompletionCapacity(
+                reads,
+                preparation,
+                {
+                    ...data,
+                    coveragePolicy: {
+                        version: "sources_coverage_v1",
+                        preset: "balanced",
+                    },
+                },
+                null,
+                f.readRequestId,
+            ),
+        ).rejects.toThrow("sources_result_capacity");
+    });
 });

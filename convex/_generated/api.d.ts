@@ -216,6 +216,8 @@ import type * as sourcesSimulation from "../sourcesSimulation.js";
 import type * as sourcesWorkspace from "../sourcesWorkspace.js";
 import type * as visitors from "../visitors.js";
 import type * as workbench from "../workbench.js";
+import type * as workbenchPublicContext from "../workbenchPublicContext.js";
+import type * as workbenchPublicContextActions from "../workbenchPublicContextActions.js";
 import type * as workflow from "../workflow.js";
 import type * as workflowControls from "../workflowControls.js";
 
@@ -434,6 +436,8 @@ declare const fullApi: ApiFromModules<{
   sourcesWorkspace: typeof sourcesWorkspace;
   visitors: typeof visitors;
   workbench: typeof workbench;
+  workbenchPublicContext: typeof workbenchPublicContext;
+  workbenchPublicContextActions: typeof workbenchPublicContextActions;
   workflow: typeof workflow;
   workflowControls: typeof workflowControls;
 }>;

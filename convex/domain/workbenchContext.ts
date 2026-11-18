@@ -11,8 +11,10 @@ import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
 import {
     controlledSourcesContributions,
     projectSourceDocumentState,
+    readSourcesCoverage,
     summarizeSourcesPreparation,
 } from "./sources";
+import { observedPublicContext } from "./workbenchContracts";
 import {
     projectWorkbenchInstructions,
     readWorkbenchInstructions,
@@ -76,13 +78,32 @@ export async function readWorkbenchFacts(
     const controlled = preparation?.sourcesMission
         ? await controlledSourcesContributions(ctx, preparation)
         : [];
+    const eventBasis = framing?.eventBasis;
+    const eventContext =
+        eventBasis?.kind === "public"
+            ? observedPublicContext(
+                  await ctx.db.get(eventBasis.lookupRequestId),
+              )
+            : undefined;
     const context = {
         company: run.companySnapshot ?? null,
         originalRequest: run.researchAngle ?? null,
+        modernSources: run.sourcesProtocol === "sources_mission_v1",
         framing: framing
             ? {
                   revision: framing.revision,
                   ...framing.content,
+                  ...(eventBasis ? { eventBasis } : {}),
+                  ...(eventBasis?.kind === "public" && eventContext
+                      ? {
+                            eventReferences:
+                                eventBasis.referenceIndexes.flatMap((index) => {
+                                    const reference =
+                                        eventContext.references[index];
+                                    return reference ? [reference] : [];
+                                }),
+                        }
+                      : {}),
                   origin: framing.origin,
                   fixed: !!run.fixedFramingRevisionId,
                   questionCapacity: await researchQuestionCapacity(ctx, run),
@@ -125,6 +146,7 @@ export async function readWorkbenchFacts(
                           preparation,
                           research.sources,
                       ),
+                      coverage: await readSourcesCoverage(ctx, preparation),
                       controlledContributions: controlled,
                   },
               }

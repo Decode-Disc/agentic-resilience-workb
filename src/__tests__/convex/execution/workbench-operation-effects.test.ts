@@ -4,6 +4,7 @@ import {
     getAgentDefinition,
     registeredAgentDefinitions,
 } from "@convex/execution/agentCatalog";
+import { pauseResearchAtBoundary } from "@convex/execution/researchControl";
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
@@ -971,4 +972,130 @@ test.each(
         blockCode: "operation_effect_receipt_missing",
         progressKeys: [],
     });
+});
+
+test("documentary follow-up links existing work at full need capacity", async () => {
+    const { t, client, runId, active } = await framedTurn(
+        "follow-up-at-capacity",
+        true,
+    );
+    const corpusRevisionId = await t.run(async (ctx) => {
+        const id = await ctx.db.insert("corpusRevisions", {
+            runId,
+            revision: 1,
+            status: "draft",
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(runId, {
+            activeCorpusRevisionId: id,
+            lifecycleState: "discovering_sources",
+        });
+        return id;
+    });
+    const preparationId = await t.mutation(internal.sourcesMission.claim, {
+        runId,
+        corpusRevisionId,
+        expectedGeneration: 1,
+        envelope: { ...sourcesTestEnvelope, maxNeeds: 2 },
+    });
+    const before = await t.run((ctx) => ctx.db.get(preparationId));
+    assert(before?.sourcesMission);
+    expect(before.sourcesMission.needs).toHaveLength(2);
+    const needId = before.sourcesMission.needs[0]?.id;
+    assert(needId);
+    let messageId = await client.mutation(api.execution.conversations.submit, {
+        runId,
+        turnId: active.turnId,
+        delivery: "steer",
+        requestKey: "existing-need",
+        text: "Are you already checking the payment terms?",
+    });
+    const request = (
+        target:
+            | { kind: "existing_need"; needId: string }
+            | { kind: "new_need"; questionId: string },
+    ) =>
+        t.mutation(internal.execution.operations.enqueue, {
+            missionId: active.missionId,
+            expectedGeneration: 1,
+            cause: "documentary-request",
+            input: {
+                kind: "transmit_source_request",
+                messageId,
+                interpretedNeed: "Check payment terms.",
+                target,
+            },
+        });
+    const dispatch = (requestId: Awaited<ReturnType<typeof request>>) =>
+        t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        });
+    const requestId = await request({ kind: "existing_need", needId });
+    const result = await dispatch(requestId);
+    assert(result.kind === "success");
+    expect(JSON.parse(result.valueJson)).toMatchObject({
+        status: "transmitted",
+    });
+    const instruction = await t.run((ctx) =>
+        ctx.db
+            .query("workbenchInstructions")
+            .withIndex("by_request", (q) => q.eq("requestId", requestId))
+            .unique(),
+    );
+    expect(instruction).toMatchObject({
+        status: "transmitted",
+        preparationId,
+        needId,
+    });
+    const distinct = await dispatch(
+        await request({ kind: "new_need", questionId: "q" }),
+    );
+    assert(distinct.kind === "success");
+    expect(JSON.parse(distinct.valueJson)).toMatchObject({
+        status: "limited",
+        outcome: expect.stringContaining("reached its documentary need limit"),
+    });
+    expect(await t.run((ctx) => ctx.db.get(preparationId))).toEqual(before);
+
+    await client.mutation(api.execution.researchControl.pause, {
+        runId,
+        expectedGeneration: 1,
+    });
+    await t.run((ctx) => pauseResearchAtBoundary(ctx, runId));
+    const paused = await t.run((ctx) => ctx.db.get(runId));
+    assert(paused?.executionStatus === "paused");
+    messageId = await client.mutation(api.execution.conversations.submit, {
+        runId,
+        turnId: active.turnId,
+        delivery: "steer",
+        requestKey: "check-during-pause",
+        text: "Keep the payment terms check for when I resume.",
+    });
+    const deferredId = await request({ kind: "existing_need", needId });
+    const deferred = await dispatch(deferredId);
+    assert(deferred.kind === "success");
+    expect(JSON.parse(deferred.valueJson)).toMatchObject({ status: "waiting" });
+    expect(
+        (await t.run((ctx) => ctx.db.get(preparationId)))?.sourcesMission,
+    ).toEqual(before.sourcesMission);
+    await client.mutation(api.execution.researchControl.resume, {
+        runId,
+        expectedGeneration: paused.executionGeneration,
+    });
+    await t.mutation(internal.workbench.processInstructions, { runId });
+    const treated = await t.run((ctx) =>
+        ctx.db
+            .query("workbenchInstructions")
+            .withIndex("by_request", (q) => q.eq("requestId", deferredId))
+            .unique(),
+    );
+    expect(treated).toMatchObject({
+        status: "transmitted",
+        preparationId,
+        needId,
+    });
+    expect(
+        (await t.run((ctx) => ctx.db.get(preparationId)))?.sourcesMission,
+    ).toEqual(before.sourcesMission);
 });

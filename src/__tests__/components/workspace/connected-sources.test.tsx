@@ -304,6 +304,42 @@ test("how preparation ran accounts for every candidate and names conflicts and l
     convexReactHarness.query(api.sourcesWorkspace.overview).returns({
         ...overview,
         materialOutcome: "partial",
+        coverage: {
+            policy: {
+                version: "sources_coverage_v1",
+                preset: "independent_scrutiny",
+            },
+            searches: [
+                {
+                    requestId:
+                        "search-coverage" as Id<"agentOperationRequests">,
+                    needIds: ["common-context"],
+                    query: "workflow terms",
+                    focus: "independent",
+                    outcome: "unfinished",
+                    reasonCode: "operation_outcome_unknown",
+                },
+            ],
+            assessments: [
+                {
+                    needId: "common-context",
+                    statement: "No usable independent material found",
+                    author: {
+                        type: "agent",
+                        missionId: "sources" as Id<"agentMissions">,
+                        invocationId:
+                            "sources-invocation" as Id<"agentInvocations">,
+                    },
+                    readings: [
+                        {
+                            sourceId,
+                            captureId: "capture" as Id<"sourceCaptures">,
+                            passageOrder: 0,
+                        },
+                    ],
+                },
+            ],
+        },
         collect: { ...overview.collect, candidates: 9, acquisitions: 5 },
         reading: {
             captured: 5,
@@ -342,6 +378,15 @@ test("how preparation ran accounts for every candidate and names conflicts and l
     });
     fireEvent.click(
         screen.getByRole("button", { name: /How preparation ran/ }),
+    );
+    expect(screen.getByText("Independent scrutiny")).toBeTruthy();
+    expect(
+        screen.getByText(
+            "Sources assessment: No usable independent material found",
+        ),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(
+        /sources_coverage_v1|operation_outcome_unknown/,
     );
     expect(
         screen.getAllByText(

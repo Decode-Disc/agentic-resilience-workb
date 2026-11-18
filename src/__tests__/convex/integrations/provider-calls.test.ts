@@ -1,13 +1,26 @@
+import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { ActionCtx } from "@convex/_generated/server";
 import schema from "@convex/schema";
-import { makeFunctionReference } from "convex/server";
+import { execute as executePublicContext } from "@convex/workbenchPublicContextActions";
+import {
+    type FunctionArgs,
+    getFunctionName,
+    makeFunctionReference,
+} from "convex/server";
 import { convexTest } from "convex-test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
+import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
 import rateLimiterTest from "./rate-limiter-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+});
 const reserveSecRateLimit = makeFunctionReference<
     "mutation",
     Record<string, never>,
@@ -1156,4 +1169,112 @@ test("Task5 defect 1: terminal telemetry unchanged after decision revocation", a
     expect(callAfter?.status).toBe("started");
     expect(callAfter?.completedAt).toBeUndefined();
     expect(callAfter?.errorCode).toBeUndefined();
+});
+
+test("framing lookup with a settled provider receipt and lost reading result does not repeat dispatch", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 1, readings: 1 }),
+    );
+    const paidFetch = vi.fn(async () =>
+        Response.json({ results: [], costDollars: { total: 0.01 } }),
+    );
+    vi.stubGlobal("fetch", paidFetch);
+    const { t, runId } = await seedWorkbench(false, nativePiFixtureRoute);
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const message = await t.run((ctx) =>
+        ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_turn", (q) => q.eq("turnId", active.turnId))
+            .first(),
+    );
+    assert(message);
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "lost-framing-lookup-ack",
+        input: {
+            kind: "verify_public_context",
+            messageId: message._id,
+            query: "public event",
+        },
+    });
+    const args = { requestId, expectedGeneration: 1 };
+    expect(
+        await t.mutation(internal.execution.operations.claim, args),
+    ).toMatchObject({ kind: "execute" });
+
+    const registered = executePublicContext as typeof executePublicContext & {
+        _handler(
+            ctx: ActionCtx,
+            args: FunctionArgs<
+                typeof internal.workbenchPublicContextActions.execute
+            >,
+        ): Promise<unknown>;
+    };
+    await expect(
+        t.action((ctx) =>
+            registered._handler(
+                {
+                    ...ctx,
+                    runMutation: async (reference, values) => {
+                        const result = await ctx.runMutation(reference, values);
+                        if (
+                            getFunctionName(reference) ===
+                                "providerCalls:recordAttempt" &&
+                            values &&
+                            typeof values === "object" &&
+                            "status" in values &&
+                            values.status === "succeeded"
+                        )
+                            throw Error(
+                                "lost provider receipt acknowledgement",
+                            );
+                        return result;
+                    },
+                },
+                args,
+            ),
+        ),
+    ).rejects.toThrow("lost provider receipt acknowledgement");
+
+    const receipts = await t.run((ctx) =>
+        ctx.db
+            .query("providerCalls")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .collect(),
+    );
+    expect(receipts).toEqual([
+        expect.objectContaining({
+            status: "succeeded",
+            operation: "framing_context_search",
+            reportedCost: 0.01,
+            operationRequestId: requestId,
+        }),
+    ]);
+    await expect(
+        t.action(internal.workbenchPublicContextActions.execute, args),
+    ).resolves.toEqual({
+        kind: "unavailable",
+        code: "operation_outcome_unknown",
+    });
+    expect(paidFetch).toHaveBeenCalledTimes(1);
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", runId))
+                .collect(),
+        ),
+    ).toEqual(receipts);
 });

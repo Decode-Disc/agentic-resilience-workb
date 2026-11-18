@@ -1,4 +1,7 @@
-import { framingContentValidator } from "@convex/domain/framingContracts";
+import {
+    framingContentValidator,
+    framingEventBasis,
+} from "@convex/domain/framingContracts";
 import { coverageRoleValidator } from "@convex/domain/sourceDiscoveryRecovery";
 import {
     retrievalMetadataValidator,
@@ -8,6 +11,7 @@ import {
     documentaryControlOutput,
     documentaryQualificationOutput,
     observedDestinationValidator,
+    sourcesCoverageVersion,
     sourcesEnvelopeValidator,
     sourcesPreparationValidator,
 } from "@convex/domain/sourcesContracts";
@@ -73,7 +77,11 @@ import {
     workflowStepKeyValidator,
     workflowStepStateValidator,
 } from "./domain/validators";
-import { workbenchInstructionTransmissionStatus } from "./domain/workbenchContracts";
+import {
+    documentaryRequestTarget,
+    publicContextAllowanceValidator,
+    workbenchInstructionTransmissionStatus,
+} from "./domain/workbenchContracts";
 import { protectedDiagnosticValidator } from "./execution/operationContracts";
 import { executionTables } from "./execution/schema";
 import {
@@ -214,7 +222,9 @@ export default defineSchema({
         costMicros: v.optional(v.number()),
         receipt: v.optional(zodToConvex(analysisReceiptSchema)),
         createdAt: v.number(),
-    }).index("by_lot_and_attempt", ["lotId", "attemptKey"]),
+    })
+        .index("by_lot_and_attempt", ["lotId", "attemptKey"])
+        .index("by_campaign_and_status", ["campaignId", "status"]),
     qualificationCoverage: defineTable({
         campaignId: v.id("qualificationCampaigns"),
         candidateHash: v.string(),
@@ -311,6 +321,7 @@ export default defineSchema({
         messageId: v.id("agentMessageDeliveries"),
         interpretedNeed: v.string(),
         framingRevisionId: v.id("framingRevisions"),
+        target: v.optional(documentaryRequestTarget),
         coverageRole: v.optional(coverageRoleValidator),
         status: workbenchInstructionTransmissionStatus,
         outcome: v.string(),
@@ -324,6 +335,7 @@ export default defineSchema({
         runId: v.id("researchRuns"),
         revision: v.number(),
         content: framingContentValidator,
+        eventBasis: v.optional(framingEventBasis),
         requestKey: v.string(),
         contentHash: v.string(),
         origin: v.union(
@@ -339,6 +351,7 @@ export default defineSchema({
         sourcesProtocol: v.optional(v.literal("sources_mission_v1")),
         sourcesEnvelope: v.optional(sourcesEnvelopeValidator),
         currentFramingRevisionId: v.optional(v.id("framingRevisions")),
+        publicContextAllowance: v.optional(publicContextAllowanceValidator),
         fixedFramingRevisionId: v.optional(v.id("framingRevisions")),
         researchStartRequestKey: v.optional(v.string()),
         agentExecutionVersion: v.optional(v.literal(3)),
@@ -359,6 +372,7 @@ export default defineSchema({
         companySnapshot: v.optional(companySnapshotValidator),
         companyPreflightId: v.optional(v.id("companyPreflights")),
         coveragePreset: v.optional(coveragePresetValidator),
+        sourcesCoveragePolicyVersion: v.optional(sourcesCoverageVersion),
         researchAngle: v.optional(v.string()),
         activeCorpusRevisionId: v.optional(v.id("corpusRevisions")),
         completionOutcome: v.optional(

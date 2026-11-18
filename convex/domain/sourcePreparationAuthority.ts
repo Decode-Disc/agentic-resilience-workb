@@ -22,6 +22,11 @@ export const SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION = "source_actions_v4";
 export const SOURCE_PREPARATION_EXECUTION_PLAN_VERSION =
     SOURCE_PREPARATION_SOURCE_ACTIONS_VERSION;
 
+/** Transport facts emitted at send and response boundaries. */
+export type ObserveProviderDispatch = (
+    outcome: "unknown" | "response_received",
+) => void;
+
 export const preparationDispatchOutcomeValidator = v.union(
     v.literal("not_dispatched"),
     v.literal("response_received"),
