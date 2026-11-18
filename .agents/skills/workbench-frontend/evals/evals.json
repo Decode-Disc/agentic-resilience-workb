@@ -9,8 +9,8 @@
       "prompt": "In the source reader, I cannot understand the difference between Primary regulator, Regulatory, and Material event filing. Inspect their real meanings and propose a clearer presentation. Analysis only; do not edit or run providers.",
       "files": [
         "../../../src/lib/presentation/research-copy.ts",
-        "../../../src/components/workspace/source-family-badge.tsx",
-        "../../../src/components/workspace/source-context-panel.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-family-badge.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-context-panel.tsx",
         "../../../convex/domain/sourceSelectionPolicy.ts"
       ],
       "expectations": [
@@ -27,8 +27,8 @@
       "prompt": "Preparation stopped before assessment, but the screen recommends a stronger reference and says coverage is not established. Diagnose the presentation and recovery path from current code. Do not edit, retry, or inspect secrets.",
       "files": [
         "../../../src/lib/presentation/research-copy.ts",
-        "../../../src/components/workspace/live-source-review.tsx",
-        "../../../src/components/workspace/source-proposal-review.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/live-source-review.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-proposal-review.tsx",
         "../../../src/components/ui/alert-status.tsx"
       ],
       "expectations": [
@@ -44,8 +44,8 @@
       "name": "count-scope-and-drilldown",
       "prompt": "Annual regulatory report shows included matches, but the linked list contains interim and event filings too. Explain what the counter really counts and how its wording and destination should relate. Read-only inspection only.",
       "files": [
-        "../../../src/components/workspace/source-coverage-rail.tsx",
-        "../../../src/components/workspace/source-master-list.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-coverage-rail.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-master-list.tsx",
         "../../../src/lib/presentation/research-copy.ts",
         "../../../context/TECH.md"
       ],
@@ -63,9 +63,9 @@
       "prompt": "The source cards are still confusing. Make their information easier to understand. First inspect the existing composition and explain what should change. Analysis only; do not implement or regenerate mockups.",
       "files": [
         "../../../DESIGN.md",
-        "../../../src/components/workspace/source-proposal-carousel.tsx",
-        "../../../src/components/workspace/source-family-badge.tsx",
-        "../../../src/components/workspace/source-context-panel.tsx"
+        "../../../archive/legacy-source-review/src/components/workspace/source-proposal-carousel.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-family-badge.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-context-panel.tsx"
       ],
       "expectations": [
         "Inspects the current card and accepted design and distinguishes observed defects from an unspecified user preference.",
@@ -83,7 +83,7 @@
         "../../../src/components/ui/accordion.tsx",
         "../../../src/components/ui/collapsible.tsx",
         "../../../src/components/ui/responsive-popover.tsx",
-        "../../../src/components/workspace/source-coverage-rail.tsx"
+        "../../../archive/legacy-source-review/src/components/workspace/source-coverage-rail.tsx"
       ],
       "expectations": [
         "Inspects existing disclosure APIs and their Coverage caller instead of constructing bespoke open-state, motion, or breakpoint behavior.",
@@ -98,7 +98,7 @@
       "name": "small-visual-fix-verification",
       "prompt": "Plan a small correction to spacing and icon placement in the Coverage header. No state, wording meaning, or interaction changes are requested. Explain the verification needed; do not edit.",
       "files": [
-        "../../../src/components/workspace/source-coverage-rail.tsx"
+        "../../../archive/legacy-source-review/src/components/workspace/source-coverage-rail.tsx"
       ],
       "expectations": [
         "Keeps the inspection scoped to the affected owners, callers, and widths.",
@@ -114,9 +114,9 @@
       "prompt": "Searching one Coverage topic starts a dossier-wide cooldown. Audit whether another topic can still show an enabled search button, and where the first topic's result appears after switching topics. Read-only; do not search or prepare sources.",
       "files": [
         "../../../src/lib/presentation/research-copy.ts",
-        "../../../src/components/workspace/source-coverage-rail.tsx",
-        "../../../src/components/workspace/source-search-feedback.tsx",
-        "../../../src/components/workspace/live-source-review.tsx"
+        "../../../archive/legacy-source-review/src/components/workspace/source-coverage-rail.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-search-feedback.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/live-source-review.tsx"
       ],
       "expectations": [
         "Distinguishes dossier-wide operation availability from topic-specific pending and terminal feedback.",
@@ -133,8 +133,8 @@
       "files": [
         "../../../PRODUCT.md",
         "../../../docs/ROADMAP.md",
-        "../../../src/components/workspace/live-source-review.tsx",
-        "../../../src/components/workspace/source-context-panel.tsx"
+        "../../../archive/legacy-source-review/src/components/workspace/live-source-review.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-context-panel.tsx"
       ],
       "expectations": [
         "Checks current legacy-draft and preparation entry conditions rather than assuming the supplied historical symptom still exists.",
@@ -154,8 +154,8 @@
         "../../../DESIGN.md",
         "../../../src/assets/styles/themes/evidence-workbench.css",
         "../../../src/assets/styles/base-preset.css",
-        "../../../src/components/workspace/source-coverage-rail.tsx",
-        "../../../src/components/workspace/source-decision.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-coverage-rail.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-decision.tsx",
         "../../../src/lib/presentation/research-copy.ts"
       ],
       "expectations": [
@@ -228,8 +228,8 @@
         "../../../PRODUCT.md",
         "../../../context/TECH.md",
         "../../../docs/ROADMAP.md",
-        "../../../src/components/workspace/live-source-review.tsx",
-        "../../../src/components/workspace/source-decision.tsx"
+        "../../../archive/legacy-source-review/src/components/workspace/live-source-review.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-decision.tsx"
       ],
       "expectations": [
         "Traces the existing source decision and corpus checkpoint boundary instead of assuming the same operation can retain analytical appraisals.",
@@ -268,7 +268,7 @@
         "../../../context/TECH.md",
         "../../../docs/ROADMAP.md",
         "../../../DESIGN.md",
-        "../../../src/components/workspace/live-source-review.tsx"
+        "../../../archive/legacy-source-review/src/components/workspace/live-source-review.tsx"
       ],
       "expectations": [
         "Separates inspected delivered behavior, the approved question-led target and the request's read-only assessment scope; approval of a target alone does not authorize a rewrite or certify migration readiness.",
@@ -394,7 +394,7 @@
         "../../../src/components/workspace/start/start-screens.tsx",
         "../../../src/components/ui/collapsible.tsx",
         "../../../src/components/ui/disclosure-motion.tsx",
-        "../../../src/components/workspace/source-preparation-status.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-preparation-status.tsx",
         "../../../src/components/admin/admin-execution-journal.tsx",
         "../../../src/development/workbench-ui/chat-composition-mocks.tsx",
         "../../../workbench-ui.playwright.config.ts"
@@ -456,7 +456,7 @@
       "files": [
         "../../../src/components/ui/button.tsx",
         "../../../src/components/ui/calendar.tsx",
-        "../../../src/components/workspace/source-context-panel.tsx",
+        "../../../archive/legacy-source-review/src/components/workspace/source-context-panel.tsx",
         "../../../src/lib/utils.ts"
       ],
       "expectations": [

@@ -34,7 +34,7 @@ The caller supplies a framed dossier and available evidence. A specialized Inves
 | Re-examination outcome, when requested | A justified inventory contribution when needed, the effect on the appraisals, and a proposed revision or justification for maintaining them, tied to the examined basis. |
 | Progress and inspection | Actual advancement, inspectable interpretations and control results, unresolved needs, and exceptions affecting the inquiry. |
 
-The [cooperation sequence](2026-10-23-question-led-workbench-conception.md#cooperation-and-documentary-complement) governs documentary requests and returned material. [Sources](2026-10-24-source-ingestion-and-processing-conception.md) supplies the qualified material; Investigation expresses the analytical need without specifying retrieval operations.
+The [cooperation sequence](2026-10-23-question-led-workbench-conception.md#cooperation-and-documentary-complement) governs documentary requests and returned material. Sources (`docs-checkpoint-2026-11-18:docs/brainstorming/question-led-workbench/2026-10-24-source-ingestion-and-processing-conception.md`) supplies the qualified material; Investigation expresses the analytical need without specifying retrieval operations.
 
 ## Internal Work by Principal Stage
 
@@ -53,7 +53,7 @@ Investigation uses the documentary qualification and comparison results attached
 
 The inventory-contribution operation applies the [shared admission criteria](2026-10-23-question-led-workbench-conception.md#shared-company-inventory-and-evidence-matrix) to new assertions and question-specific uses arising from the inquiry. Investigation reuses valid documentary controls while justifying its new analytical contribution; it does not rerun Sources' preparation.
 
-The [common reuse rules](2026-10-26-agentic-execution-architecture.md#reuse-of-controlled-results) distinguish an unchanged reference from a modified assertion or new use. Admission of a shared assertion does not establish the later economic reasoning of every appraisal that cites it.
+The common reuse rules (`docs-checkpoint-2026-11-18:docs/brainstorming/question-led-workbench/2026-10-26-agentic-execution-architecture.md#reuse-of-controlled-results`) distinguish an unchanged reference from a modified assertion or new use. Admission of a shared assertion does not establish the later economic reasoning of every appraisal that cites it.
 
 ### Test the Interpretations
 
@@ -85,7 +85,7 @@ Design arbitration on 2026-10-30 selected typed, scoped semantic findings under 
 
 ## Autonomy and Optional Inspection
 
-The mission agent uses its available operations to adapt the inquiry and revisit interpretations as evidence requires, under the [common execution contract](2026-10-26-agentic-execution-architecture.md#shared-mission-contract). Exceptions follow the global intervention policy; the [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the submitted artifacts allow progression. Challenged uses and dependent appraisals follow the [global re-examination rules](2026-10-23-question-led-workbench-conception.md#retained-judgments-and-pending-revisions).
+The mission agent uses its available operations to adapt the inquiry and revisit interpretations as evidence requires, under the common execution contract (`docs-checkpoint-2026-11-18:docs/brainstorming/question-led-workbench/2026-10-26-agentic-execution-architecture.md#shared-mission-contract`). Exceptions follow the global intervention policy; the [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the submitted artifacts allow progression. Challenged uses and dependent appraisals follow the [global re-examination rules](2026-10-23-question-led-workbench-conception.md#retained-judgments-and-pending-revisions).
 
 Optional inspection exposes the assertions reused or introduced, the relationship between evidence and interpretation, relevant alternatives, objections, and the reasons for requesting more material. The analyst can challenge a use, correct an assertion, or redirect a question. The precise correction and revision mechanics remain to be designed with the shared inventory, rather than introduced as an Investigation-only policy.
 

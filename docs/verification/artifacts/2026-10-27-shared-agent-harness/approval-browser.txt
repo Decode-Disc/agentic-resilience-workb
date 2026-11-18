@@ -1,9 +1,0 @@
-
-Running 2 tests using 1 worker
-
-(node:4006725) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-(Use `node --trace-warnings ...` to show where the warning was created)
-  ✓  1 [chromium] › e2e/retrieval-approval.spec.ts:15:5 › approved late preparation evidence survives materialization and reconnection on desktop (42.9s)
-  ✓  2 [chromium] › e2e/retrieval-approval.spec.ts:15:5 › approved late preparation evidence survives materialization and reconnection on mobile (46.5s)
-
-  2 passed (1.5m)

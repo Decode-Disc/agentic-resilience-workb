@@ -76,7 +76,7 @@ The reader should be able to move from an economic implication to the relevant m
 
 ## Submission Controls
 
-Synthesis submission owns structural and semantic controls of the proposed result. It reuses valid input controls under the [common reuse rules](2026-10-26-agentic-execution-architecture.md#reuse-of-controlled-results), then examines its new analytical contribution:
+Synthesis submission owns structural and semantic controls of the proposed result. It reuses valid input controls under the common reuse rules (`docs-checkpoint-2026-11-18:docs/brainstorming/question-led-workbench/2026-10-26-agentic-execution-architecture.md#reuse-of-controlled-results`), then examines its new analytical contribution:
 
 - New relationships and transversal inferences are justified from admissible retained appraisals and their evidence. Retaining those inputs does not establish the proposed connection automatically.
 - The diagram and argued note express the same interpretation, scope, and conditions. The note can develop nuances while preserving the diagram's underlying meaning.
@@ -88,7 +88,7 @@ Design arbitration on 2026-10-30 selected typed, scoped semantic findings under 
 
 ## Autonomy and Optional Inspection
 
-The mission agent chooses its approach and useful inspections under the [common execution contract](2026-10-26-agentic-execution-architecture.md#shared-mission-contract). The [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the applicable result allows progression. System work checks the result against its artifact requirements; for a supported synthesis, this includes the diagram's relationships and the note's fidelity.
+The mission agent chooses its approach and useful inspections under the common execution contract (`docs-checkpoint-2026-11-18:docs/brainstorming/question-led-workbench/2026-10-26-agentic-execution-architecture.md#shared-mission-contract`). The [mission completion contract](2026-10-23-question-led-workbench-conception.md#mission-completion-contract) governs when the applicable result allows progression. System work checks the result against its artifact requirements; for a supported synthesis, this includes the diagram's relationships and the note's fidelity.
 
 An available diagram supports a quick overall reading, then optional inspection of a mechanism and its evidence. The alternative finding explains why that reading could not be established. The analyst can challenge the interpretation or its stated limits. The precise navigation, correction interactions, and visual treatment of changing inputs remain to be designed.
 

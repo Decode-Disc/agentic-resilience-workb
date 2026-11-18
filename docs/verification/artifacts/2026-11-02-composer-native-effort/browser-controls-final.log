@@ -1,9 +1,0 @@
-
-Running 2 tests using 1 worker
-
-(node:940730) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-(Use `node --trace-warnings ...` to show where the warning was created)
-  ✓  1 [chromium] › src/__tests__/e2e/workbench-model-controls.spec.ts:12:5 › model choice and immediate slash controls preserve the native dossier on desktop (49.5s)
-  ✓  2 [chromium] › src/__tests__/e2e/workbench-model-controls.spec.ts:12:5 › model choice and immediate slash controls preserve the native dossier on mobile (46.8s)
-
-  2 passed (1.8m)

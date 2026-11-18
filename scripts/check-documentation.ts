@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
     existsSync,
     readdirSync,
@@ -21,10 +22,12 @@ type Rule = {
     pattern: RegExp;
 };
 type Link = { target: string; offset: number };
+type LocalTarget = { at: string; target: string; paths: string[] };
 
 const root = realpathSync(process.cwd());
 const errors: string[] = [];
 const documents: string[] = [];
+const localTargets: LocalTarget[] = [];
 const headingCache = new Map<string, Set<string>>();
 let localLinks = 0;
 
@@ -282,6 +285,37 @@ function links(path: string, content: string): Link[] {
     return result;
 }
 
+function repoPath(resolved: string) {
+    return relative(root, resolved).split(sep).join("/");
+}
+
+function gitIgnoredPaths(paths: string[]): Set<string> {
+    if (!paths.length) return new Set();
+    const inside = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], {
+        cwd: root,
+        encoding: "utf8",
+    });
+    if (
+        inside.error ||
+        inside.status !== 0 ||
+        inside.stdout.trim() !== "true"
+    ) {
+        return new Set();
+    }
+    const result = spawnSync("git", ["check-ignore", "-z", "--stdin"], {
+        cwd: root,
+        input: `${paths.join("\0")}\0`,
+        encoding: "utf8",
+    });
+    if (result.error) throw result.error;
+    if (result.status !== 0 && result.status !== 1) {
+        throw new Error(
+            `git check-ignore failed (${result.status}): ${result.stderr.trim()}`,
+        );
+    }
+    return new Set(result.stdout.split("\0").filter(Boolean));
+}
+
 function checkLink(path: string, content: string, link: Link) {
     const target = link.target.replace(/\\([^\w])/g, "$1");
     if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(target)) return;
@@ -305,20 +339,24 @@ function checkLink(path: string, content: string, link: Link) {
               file.replace(/^\//, ""),
           )
         : resolve(root, path);
-    if (
-        !insideRoot(resolved) ||
-        (existsSync(resolved) && !insideRoot(realpathSync(resolved)))
-    ) {
+    const real = existsSync(resolved) ? realpathSync(resolved) : undefined;
+    if (!insideRoot(resolved) || (real && !insideRoot(real))) {
         errors.push(`${at}: target outside repository: ${target}`);
-    } else if (!existsSync(resolved)) {
+    } else if (!real) {
         errors.push(`${at}: missing target ${target}`);
-    } else if (
-        anchor &&
-        resolved.endsWith(".md") &&
-        statSync(resolved).isFile() &&
-        !headings(resolved).has(anchor)
-    ) {
-        errors.push(`${at}: missing heading #${anchor} in ${file || path}`);
+    } else {
+        const paths = [
+            ...new Set([repoPath(resolved), repoPath(real)].filter(Boolean)),
+        ];
+        if (paths.length) localTargets.push({ at, target, paths });
+        if (
+            anchor &&
+            resolved.endsWith(".md") &&
+            statSync(resolved).isFile() &&
+            !headings(resolved).has(anchor)
+        ) {
+            errors.push(`${at}: missing heading #${anchor} in ${file || path}`);
+        }
     }
 }
 
@@ -344,6 +382,14 @@ try {
             );
         }
         for (const link of links(path, content)) checkLink(path, content, link);
+    }
+    const ignored = gitIgnoredPaths([
+        ...new Set(localTargets.flatMap((entry) => entry.paths)),
+    ]);
+    for (const entry of localTargets) {
+        if (entry.paths.some((path) => ignored.has(path))) {
+            errors.push(`${entry.at}: target is gitignored: ${entry.target}`);
+        }
     }
     for (const error of errors) console.error(error);
     console.log(

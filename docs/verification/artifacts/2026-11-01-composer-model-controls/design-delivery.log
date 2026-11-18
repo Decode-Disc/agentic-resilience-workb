@@ -1,9 +1,0 @@
-
-> agentic-resilience-workbench@ design:check /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
-> pnpm design:sync --check
-
-
-> agentic-resilience-workbench@ design:sync /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
-> node --experimental-strip-types scripts/sync-design-context.ts --check
-
-Design documentation is up to date.

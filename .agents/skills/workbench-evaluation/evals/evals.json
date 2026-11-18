@@ -8,7 +8,7 @@
       "expected_output": "A plain-language interpretation of the saved observations, their implications for analyst usefulness, and a bounded recommendation or explicit lack of evidence for a choice.",
       "files": [
         "../../../PRODUCT.md",
-        "../../../docs/verification/2026-10-21-source-utility.md",
+        "../../../scripts/evaluations/source-selection/REPORT.md",
         "../../../scripts/evaluations/source-selection/README.md"
       ],
       "expectations": [
@@ -75,7 +75,7 @@
       "expected_output": "A narrowly scoped frontend verification proposal using the relevant UI workflow rather than the research evaluation procedure.",
       "files": [
         "../../../AGENTS.md",
-        "../../../src/components/workspace/source-coverage-rail.tsx"
+        "../../../archive/legacy-source-review/src/components/workspace/source-coverage-rail.tsx"
       ],
       "expectations": [
         "Recognizes ordinary presentation verification as outside this evaluation skill's scope.",
@@ -140,9 +140,7 @@
       "name": "cheap-stress-model-versus-task-quality",
       "prompt": "Interpret this recorded batch without calls or edits: eleven Nemo scenarios, eight published answers, two blocked cases and one unfinished case. One answer says research started although the dossier stayed in framing. Another answer is economically generic but correctly preserves the data and completes. Keep Nemo for harness corrections before qualifying the intended candidate, glm-5.3-flash. What can we conclude and what is the smallest next step?",
       "expected_output": "An evidence-bounded interpretation separating published replies, actual business outcomes, harness integrity and economic answer quality; preserves the selected stress and quality model roles.",
-      "files": [
-        "../../../docs/verification/2026-11-01-workbench-nemo-requalification.md"
-      ],
+      "files": [],
       "expectations": [
         "Does not report eight business successes from eight published responses, or infer the cause of the unfinished case without execution evidence.",
         "Treats the false published start as a system/publication failure even though the server refused the underlying action.",
@@ -339,8 +337,8 @@
       "prompt": "The active, unexpired campaign already authorizes the prepared next configuration within its remaining lot and cumulative limits. The previous lot has a recorded assessment, complete cleanup and reconciled charges. Continue the qualification. Do not expand the mandate or change runner code.",
       "expected_output": "Uses the native campaign lifecycle for the next covered lot, examines and records its evidence-bound assessment, and continues or closes at the agreed boundary without asking the user to reconfirm the existing mandate.",
       "files": [
-        "../SKILL.md",
-        "../references/campaigns.md"
+        "SKILL.md",
+        "references/campaigns.md"
       ],
       "expectations": [
         "Verifies the retained mandate and status, then uses the existing campaign run rather than reconstructing temporary configuration, capture or cleanup in scripts.",
@@ -355,8 +353,8 @@
       "prompt": "A campaign was interrupted. Native status shows cleanup is pending. Its recovery run later finishes cleanup without model calls, but assess rejects Stale campaign evidence. Complete the available diagnosis and explain whether we can record a model-quality verdict. Do not patch the runner, rewrite evidence indexes, or start another paid lot.",
       "expected_output": "Inspects native status and recovery diagnostics, preserves rejected evidence and distinguishes an assessment-tooling failure from unexercised model quality, with no index rewrite or replacement paid run.",
       "files": [
-        "../SKILL.md",
-        "../references/campaigns.md"
+        "SKILL.md",
+        "references/campaigns.md"
       ],
       "expectations": [
         "Uses native status and cleanup recovery rather than replaying the interrupted scenarios or changing provider configuration manually.",
@@ -371,8 +369,8 @@
       "prompt": "Automate the next qualification so I no longer have to coordinate every step. There is an old approved campaign in the archives, but I do not know whether any current mandate is active. Inspect what exists and prepare the next step; do not launch paid calls.",
       "expected_output": "Checks current support and retained campaign status, prepares a reviewable mandate when needed and identifies the concrete missing authorization without treating historical approval or an automation request as paid-execution authority.",
       "files": [
-        "../SKILL.md",
-        "../references/campaigns.md"
+        "SKILL.md",
+        "references/campaigns.md"
       ],
       "expectations": [
         "Checks whether an active mandate actually covers the requested work before selecting a new campaign or reusing one.",
@@ -387,8 +385,8 @@
       "prompt": "Prepare a targeted live qualification with three fixed cases and a cumulative twelve-model-attempt/USD0.50 mandate. The number of consultations each agent needs is unknown. A previous case consumed the budget before a later final reply could be observed. Prepare only; no authorization or inference. The user rejected predictive agent call shares.",
       "expected_output": "A native campaign preparation using cumulative limits without invented per-case or final-response reservations. It preserves all cases and expected meanings, discloses any ordering change and keeps incomplete coverage possible.",
       "files": [
-        "../SKILL.md",
-        "../references/campaigns.md"
+        "SKILL.md",
+        "references/campaigns.md"
       ],
       "expectations": [
         "Does not introduce a six/three/three split, reserve a predicted final generation or ask the user to estimate tool needs.",
@@ -403,8 +401,8 @@
       "prompt": "Explain this closed lot, read-only. Sources returns prose around JSON on its sixth paid attempt. Its invocation retains invalid_output correction feedback requesting one JSON object without prose or Markdown. The next invocation is created but has no providerCallId and stops with qualification_budget_exhausted. The evaluator imposed a six-attempt scenario cap; nine of twelve global attempts were consumed. Do not edit, spend, or propose a fix before checking existing recovery.",
       "expected_output": "An evidence-led attribution: malformed output is rejected, feedback and continuation exist, but the evaluator cap prevents the next provider call. The actual model correction remains untested; the conclusion does not invent a missing recovery mechanism.",
       "files": [
-        "../SKILL.md",
-        "../references/campaigns.md"
+        "SKILL.md",
+        "references/campaigns.md"
       ],
       "expectations": [
         "Separates the invalid response, feedback generation, continuation admission and actual paid dispatch.",
@@ -419,8 +417,8 @@
       "prompt": "Interpret the preserved Sources trace, no new calls or edits. A qualification with two new contributions supplies contributionId=\"\" twice and is refused. The next provider request includes this refusal and current facts. The model says it will omit contributionId, but its returned tool arguments still contain two empty strings. The same request identity reuses the original refusal; no additional documentary control is dispatched. A later global limit stops generation.",
       "expected_output": "A causal account grounded in the returned arguments: the repair was announced but not performed, the refusal is safely reused and no second control or adoption occurred. Budget truncation and untested completion remain separate.",
       "files": [
-        "../SKILL.md",
-        "../references/campaigns.md"
+        "SKILL.md",
+        "references/campaigns.md"
       ],
       "expectations": [
         "Compares actual tool arguments rather than accepting the model's statement that the fields were removed.",
@@ -435,8 +433,8 @@
       "prompt": "Prepare an unpaid manifest review for a user-authorized budget-boundary test. The user explicitly requires this scenario to stop at two paid generations even when the global mandate has room. Other adaptive qualification cases have no scenario cap. Do not run or enlarge anything.",
       "expected_output": "Preserves the explicit two-generation test boundary and leaves ordinary adaptive cases uncapped beyond their cumulative authority. It judges refusal containment separately from task completion.",
       "files": [
-        "../SKILL.md",
-        "../references/campaigns.md"
+        "SKILL.md",
+        "references/campaigns.md"
       ],
       "expectations": [
         "Does not remove or enlarge the explicitly requested two-generation cap under the default cumulative-allocation policy.",
@@ -451,8 +449,8 @@
       "prompt": "Read-only: a Sources request contains its completion schema in a system-context message but no response_format. The selected endpoint advertises structured_outputs and tools. Documentary controls use a separate structured one-shot transport, while Sources uses a native tool loop. The user deferred output-format changes. Explain whether prose around JSON proves structured output is unsupported.",
       "expected_output": "Distinguishes prompt guidance from provider-enforced output. It identifies the unused capability and transport-specific integration uncertainty, keeps the native loop intact and respects the deferred implementation.",
       "files": [
-        "../SKILL.md",
-        "../references/campaigns.md"
+        "SKILL.md",
+        "references/campaigns.md"
       ],
       "expectations": [
         "Examines actual serialized request parameters and selected endpoint capabilities rather than inferring enforcement from a schema in context.",

@@ -177,4 +177,4 @@ The two recorded historical runs are complete artifacts. Their original runner b
 
 Results test the tasks and captures supplied here. They do not establish general source reliability, editorial independence, factual truth, production robustness, analyst time savings, extraction fidelity or cross-company recall. The existing metadata selector receives different inputs and enforces authority constraints, so its outputs are not a directly comparable model-accuracy baseline.
 
-The original experiment did not change the approval contract. [ADR-024](../../../docs/decisions/024-qualify-source-content-before-corpus-approval.md) subsequently authorized bounded preparation before corpus approval. Implementation and activation still require their separate verification gates.
+The original experiment did not change the approval contract. ADR-024 (`docs-checkpoint-2026-11-18:docs/decisions/024-qualify-source-content-before-corpus-approval.md`) subsequently authorized bounded preparation before corpus approval. Implementation and activation still require their separate verification gates.

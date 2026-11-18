@@ -1,9 +1,0 @@
-
-Running 2 tests using 1 worker
-
-(node:265649) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-(Use `node --trace-warnings ...` to show where the warning was created)
-  ✓  1 [chromium] › src/__tests__/e2e/start-workbench.spec.ts:12:5 › START saves the research program and conversation through reconnection on desktop (1.2m)
-  ✓  2 [chromium] › src/__tests__/e2e/start-workbench.spec.ts:12:5 › START saves the research program and conversation through reconnection on mobile (53.2s)
-
-  2 passed (2.3m)

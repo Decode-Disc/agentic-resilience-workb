@@ -227,4 +227,31 @@ Setext heading
         expect(result.status).toBe(1);
         expect(result.output).toContain("invalid policy row");
     });
+
+    it("rejects links targeting gitignored paths inside a git repository", () => {
+        const root = fixture();
+        const init = spawnSync("git", ["init"], {
+            cwd: root,
+            encoding: "utf8",
+        });
+        expect(init.status, init.stderr).toBe(0);
+        put(root, ".gitignore", ".implementation-plans/\n");
+        put(root, ".implementation-plans/plan.md", "# Local scratch\n");
+        put(root, "docs/brainstorming/allowed.md", "# Allowed\n");
+        put(
+            root,
+            "context/TECH.md",
+            [
+                "# Technical contract",
+                "[ignored](../.implementation-plans/plan.md)",
+                "[allowed](../docs/brainstorming/allowed.md)",
+            ].join("\n"),
+        );
+        const result = check(root);
+        expect(result.status, result.output).toBe(1);
+        expect(result.output).toContain(
+            "context/TECH.md:2: target is gitignored: ../.implementation-plans/plan.md",
+        );
+        expect(result.output).not.toContain("allowed.md");
+    });
 });

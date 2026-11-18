@@ -16,15 +16,15 @@ The conservative reservation is **USD 2.905615338** for **416 attempts**. A **US
 
 | Experiment | Recorded inference cost, USD | Evidence and scope |
 | --- | ---: | --- |
-| Initial 20-call screen | 0.0046848582 | [Initial screen](../../../../../docs/verification/2026-10-20-cross-company-source-quality-screen.md); four common cases. |
-| Eight-call DeepSeek replacement screen | 0.00165696 | [Replacement screen](../../../../../docs/verification/2026-10-20-deepseek-v41-source-quality-screen.md); evaluation-only substitutions. |
-| Four-call GLM screen | 0.001102867344 | [GLM screen](../../../../../docs/verification/2026-10-20-glm53-source-quality-screen.md); different reasoning condition. |
-| First progressive batch | 0.101061466052 | [Common-case comparison](../../../../../docs/verification/2026-10-21-source-quality-first-batch.md); 320 calls across five candidates. |
-| Second progressive batch | 0.08439218 | [Grouped qualification and comparison](../../../../../docs/verification/2026-10-21-source-quality-second-batch.md); 96 calls across the two DeepSeek finalists. |
+| Initial 20-call screen | 0.0046848582 | Initial screen (`docs-checkpoint-2026-11-18:docs/verification/2026-10-20-cross-company-source-quality-screen.md`); four common cases. |
+| Eight-call DeepSeek replacement screen | 0.00165696 | Replacement screen (`docs-checkpoint-2026-11-18:docs/verification/2026-10-20-deepseek-v41-source-quality-screen.md`); evaluation-only substitutions. |
+| Four-call GLM screen | 0.001102867344 | GLM screen (`docs-checkpoint-2026-11-18:docs/verification/2026-10-20-glm53-source-quality-screen.md`); different reasoning condition. |
+| First progressive batch | 0.101061466052 | Common-case comparison (`docs-checkpoint-2026-11-18:docs/verification/2026-10-21-source-quality-first-batch.md`); 320 calls across five candidates. |
+| Second progressive batch | 0.08439218 | Grouped qualification and comparison (`docs-checkpoint-2026-11-18:docs/verification/2026-10-21-source-quality-second-batch.md`); 96 calls across the two DeepSeek finalists. |
 
 The two progressive batches total **USD 0.185453646052**, excluding the earlier screens. The first batch includes usage-priced Jev charges; the other reported components are provider-reported as detailed in the reports. These are recorded experiment costs, not reconciled invoices or a future dossier quote. The original USD 2.905615338 figure is a conservative reservation for the unapproved manifest, not an amount spent.
 
-Retrieval and illustrative source-review work are separate from these model batches. Read the [retrieval correction](../../../../../docs/verification/2026-10-21-evidence-retrieval-repair.md#interpretation-correction-2026-10-22) before interpreting reference retention: equivalent Snowflake revenue evidence is present despite an exact-reference miss. The [utility replay](../../../../../docs/verification/2026-10-21-source-utility.md) uses historical outputs and observed source pools, not fresh discovery or independent validation. The 600-character explanation limit remains a deferred output-contract issue. None of these records selects a definitive retrieval winner or authorizes general activation.
+Retrieval and illustrative source-review work are separate from these model batches. Read the retrieval correction (`docs-checkpoint-2026-11-18:docs/verification/2026-10-21-evidence-retrieval-repair.md#interpretation-correction-2026-10-22`) before interpreting reference retention: equivalent Snowflake revenue evidence is present despite an exact-reference miss. The utility replay (`docs-checkpoint-2026-11-18:docs/verification/2026-10-21-source-utility.md`) uses historical outputs and observed source pools, not fresh discovery or independent validation. The 600-character explanation limit remains a deferred output-contract issue. None of these records selects a definitive retrieval winner or authorizes general activation.
 
 ## Corpus and reference
 

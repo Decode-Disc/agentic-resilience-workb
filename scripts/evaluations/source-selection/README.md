@@ -136,7 +136,7 @@ node --experimental-strip-types scripts/evaluations/source-selection/check-sourc
   --retrieval-mode both --report-file /path/to/new-replay-report.json
 ```
 
-The retained run directory must contain matching `freeze.json`, `native-state.json` and `native-results.jsonl`; summaries cannot replace them. Options include `--retrieval-mode lexical|hybrid|both`, `--company` matching a study company and `--context-bytes`. Existing output files are refused. A replay records the current preparer's hash and is a new measurement when code changes. The [retrieval report](../../../docs/verification/2026-10-21-evidence-retrieval.md) records the original input locations and their limitations.
+The retained run directory must contain matching `freeze.json`, `native-state.json` and `native-results.jsonl`; summaries cannot replace them. Options include `--retrieval-mode lexical|hybrid|both`, `--company` matching a study company and `--context-bytes`. Existing output files are refused. A replay records the current preparer's hash and is a new measurement when code changes. The retrieval report (`docs-checkpoint-2026-11-18:docs/verification/2026-10-21-evidence-retrieval.md`) records the original input locations and their limitations.
 
 ## Local artifacts and restoration
 
@@ -150,14 +150,14 @@ Use `pnpm evaluation:archive --help` for options, an example, storage paths and 
 
 ## Cross-company model selection
 
-The [frozen cross-company fixture](fixtures/cross-company-20261020/README.md) records its corpus, references and catalog provenance. Use the generic selection commands above with those inputs. Recorded provider/model profiles and reasoning differences belong in the [screening report](../../../docs/verification/2026-10-20-glm53-source-quality-screen.md#catalog-configuration-recorded-on-2026-10-22).
+The [frozen cross-company fixture](fixtures/cross-company-20261020/README.md) records its corpus, references and catalog provenance. Use the generic selection commands above with those inputs. Recorded provider/model profiles and reasoning differences belong in the screening report (`docs-checkpoint-2026-11-18:docs/verification/2026-10-20-glm53-source-quality-screen.md#catalog-configuration-recorded-on-2026-10-22`).
 
 ## Recorded evaluation state, 2026-10-22
 
 These are dated observations, not current execution grants or application activation:
 
 - [Original ServiceNow comparison](REPORT.md) and [grouped qualification](QUALIFICATION-EVALUATION.md).
-- [Cross-company preparation](../../../docs/verification/2026-10-20-cross-company-source-quality-preparation.md), [common-case batch](../../../docs/verification/2026-10-21-source-quality-first-batch.md) and [grouped batch](../../../docs/verification/2026-10-21-source-quality-second-batch.md).
-- [Retrieval interpretation correction](../../../docs/verification/2026-10-21-evidence-retrieval-repair.md#interpretation-correction-2026-10-22) and [source utility](../../../docs/verification/2026-10-21-source-utility.md).
+- Cross-company preparation (`docs-checkpoint-2026-11-18:docs/verification/2026-10-20-cross-company-source-quality-preparation.md`), common-case batch (`docs-checkpoint-2026-11-18:docs/verification/2026-10-21-source-quality-first-batch.md`) and grouped batch (`docs-checkpoint-2026-11-18:docs/verification/2026-10-21-source-quality-second-batch.md`).
+- Retrieval interpretation correction (`docs-checkpoint-2026-11-18:docs/verification/2026-10-21-evidence-retrieval-repair.md#interpretation-correction-2026-10-22`) and source utility (`docs-checkpoint-2026-11-18:docs/verification/2026-10-21-source-utility.md`).
 
 The [roadmap](../../../docs/ROADMAP.md) owns delivery state and remaining acceptance work.
