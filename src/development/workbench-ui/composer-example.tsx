@@ -28,13 +28,18 @@ export function ComposerExample() {
               ]
             : [],
     );
-    const [editing, setEditing] = useState<{ id?: string } | null>(null);
+    // Adding a question uses the composer; an existing question is edited in its row.
+    const [adding, setAdding] = useState(false);
+    const [inlineEdit, setInlineEdit] = useState<{
+        id: string;
+        text: string;
+    } | null>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const actionTrigger = useRef<HTMLElement | null>(null);
     useEffect(() => {
-        if (editing) inputRef.current?.focus();
+        if (adding) inputRef.current?.focus();
         else actionTrigger.current?.focus();
-    }, [editing]);
+    }, [adding]);
     const [draft, setDraft] = useState("");
     const modelControls = usePreviewModelSelector();
     const [receipt, setReceipt] = useState("");
@@ -43,56 +48,34 @@ export function ComposerExample() {
         draft,
         onDraftChange: setDraft,
         onSend: async (text) => {
-            if (editing) {
-                setQuestions((current) =>
-                    editing.id
-                        ? current.map((question) =>
-                              question.id === editing.id
-                                  ? { ...question, text }
-                                  : question,
-                          )
-                        : [
-                              ...current,
-                              {
-                                  id: crypto.randomUUID(),
-                                  label: `Q${current.length + 1}`,
-                                  shortLabel: "Custom question",
-                                  text,
-                                  rationale:
-                                      "Added by the analyst for this illustrative program.",
-                              },
-                          ],
-                );
-                setEditing(null);
+            if (adding) {
+                setQuestions((current) => [
+                    ...current,
+                    {
+                        id: crypto.randomUUID(),
+                        label: `Q${current.length + 1}`,
+                        shortLabel: "Custom question",
+                        text,
+                        rationale:
+                            "Added by the analyst for this illustrative program.",
+                    },
+                ]);
+                setAdding(false);
             } else setReceipt(text);
         },
     });
     const composer = (
         <ConversationComposer
             inputRef={inputRef}
-            label={
-                editing
-                    ? editing.id
-                        ? "Edit research question"
-                        : "Add research question"
-                    : "Message"
-            }
+            label={adding ? "Add research question" : "Message"}
             placeholder={
-                editing && !editing.id
-                    ? "What would you like to investigate?"
-                    : undefined
+                adding ? "What would you like to investigate?" : undefined
             }
-            actionLabel={
-                editing
-                    ? editing.id
-                        ? "Save changes"
-                        : "Add question"
-                    : undefined
-            }
+            actionLabel={adding ? "Add question" : undefined}
             onCancel={
-                editing
+                adding
                     ? () => {
-                          setEditing(null);
+                          setAdding(false);
                           setDraft("");
                       }
                     : undefined
@@ -121,19 +104,46 @@ export function ComposerExample() {
                                 collapsible
                                 questions={questions}
                                 composer={composer}
-                                actionActive={editing !== null}
+                                actionActive={adding}
+                                editing={
+                                    inlineEdit
+                                        ? {
+                                              questionId: inlineEdit.id,
+                                              text: inlineEdit.text,
+                                          }
+                                        : undefined
+                                }
+                                onEditChange={(text) =>
+                                    inlineEdit &&
+                                    setInlineEdit({ ...inlineEdit, text })
+                                }
+                                onEditCancel={() => setInlineEdit(null)}
+                                onEditSave={() => {
+                                    if (!inlineEdit) return;
+                                    setQuestions((current) =>
+                                        current.map((question) =>
+                                            question.id === inlineEdit.id
+                                                ? {
+                                                      ...question,
+                                                      text: inlineEdit.text.trim(),
+                                                  }
+                                                : question,
+                                        ),
+                                    );
+                                    setInlineEdit(null);
+                                }}
                                 onAddRequest={() => {
                                     actionTrigger.current =
                                         document.activeElement as HTMLElement;
                                     setDraft("");
-                                    setEditing({});
+                                    setAdding(true);
                                 }}
-                                onEditRequest={(question) => {
-                                    actionTrigger.current =
-                                        document.activeElement as HTMLElement;
-                                    setDraft(question.text);
-                                    setEditing({ id: question.id });
-                                }}
+                                onEditRequest={(question) =>
+                                    setInlineEdit({
+                                        id: question.id,
+                                        text: question.text,
+                                    })
+                                }
                                 onStart={() =>
                                     setReceipt(
                                         "Illustrative launch only; no research is executed.",

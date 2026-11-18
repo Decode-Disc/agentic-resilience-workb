@@ -348,10 +348,11 @@
     padding: 0;
     gap: 0;
     border-radius: 16px;
-    background: var(--popover);
-    border: 1px solid var(--divider);
-    box-shadow: 0 8px 24px -16px
-        color-mix(in oklab, var(--foreground) 30%, transparent);
+    /* Popover and thread surfaces are nearly identical, so the card carries its own tint to read as a separate layer. */
+    background: color-mix(in oklab, var(--foreground) 4%, var(--card));
+    border: 1px solid var(--border);
+    box-shadow: 0 12px 32px -18px
+        color-mix(in oklab, var(--foreground) 35%, transparent);
     animation-duration: 200ms;
     animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -437,84 +438,97 @@
 .chat-context-sections > section + section {
     border-top: 1px solid var(--divider);
 }
-.chat-context-section-heading,
-.chat-context-work-heading {
+.chat-context-section-heading {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     gap: 8px;
     min-height: 24px;
-    margin: 0 6px 4px;
-}
-.chat-context-section-heading h2,
-.chat-context-sections > section > h2,
-.chat-context-work-heading h2 {
-    margin: 0;
+    margin-bottom: 4px;
     font-size: 11px;
     line-height: 17px;
-    font-weight: 400;
     color: var(--muted-foreground);
 }
-.chat-context-sections > section > h2 {
-    margin: 0 6px 4px;
+.chat-context-section-heading h2 {
+    flex: 1;
+    margin: 0;
+    font-size: inherit;
+    line-height: inherit;
+    font-weight: 400;
 }
-.chat-context-sections > :where(section) > p {
-    margin: 0 6px;
-    font-size: 12px;
+.chat-context-section-heading > button {
+    margin-right: -8px;
+}
+.chat-context-scope-text {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    font-size: 12.5px;
+    line-height: 19px;
+    text-wrap: pretty;
+}
+.chat-context-scope-text[data-expanded] {
+    display: block;
+}
+.chat-context-more {
+    margin-top: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+}
+.chat-context-more:hover {
+    color: var(--foreground);
+}
+.chat-context-more:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-badge);
+}
+.chat-context-sources [data-slot="collapsible-trigger"] > svg {
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.chat-context-sources [data-slot="collapsible-trigger"][data-panel-open] > svg {
+    transform: rotate(180deg);
+}
+.chat-context-source-panel {
+    max-height: 260px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+.chat-context-program {
+    margin: 0;
+    font-size: 12.5px;
     line-height: 19px;
 }
-.chat-context-scope-action {
-    padding-inline: 6px;
+.chat-context-status {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    line-height: 19px;
+}
+.chat-context-status > span:not([class]) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.chat-context-status > small {
     font-size: 11px;
     color: var(--muted-foreground);
 }
-.chat-context-plan > button,
-.chat-context-completed > button {
-    display: flex;
-    width: 100%;
-    height: auto;
-    min-height: 32px;
-    justify-content: flex-start;
-    gap: 8px;
-    padding: 6px;
-    border-radius: 8px;
-    text-align: left;
-    white-space: normal;
-    font-size: 12px;
-    font-weight: 400;
+.chat-context-status[data-state="running"] > small {
+    color: var(--brand-purple);
 }
-.chat-context-plan > button > span {
-    display: grid;
-    flex: 1;
-    min-width: 0;
-    gap: 2px;
-}
-.chat-context-plan > button > span > span:first-child {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
-}
-.chat-context-completed > button > span {
-    flex: 1;
-}
-.chat-context-plan > button > svg,
-.chat-context-completed > button > svg {
-    flex-shrink: 0;
-    color: var(--muted-foreground);
-}
-.chat-context-plan > button[aria-expanded="true"] > svg:last-child,
-.chat-context-completed > button[aria-expanded="true"] > svg:last-child {
-    transform: rotate(90deg);
-}
-.chat-context-plan-details {
-    padding: 4px 6px 8px 29px;
-    color: var(--muted-foreground);
-    font-size: 12px;
-    line-height: 19px;
-}
-.chat-context-plan-details p {
-    margin: 0;
+.chat-context-status[data-state="interrupted"] > small,
+.chat-context-status[data-state="blocked"] > small {
+    color: var(--destructive-text);
 }
 .chat-context-meta {
     display: block;
@@ -524,62 +538,6 @@
 }
 .chat-context-empty {
     color: var(--muted-foreground);
-}
-.chat-context-work-heading > span {
-    font-size: 10px;
-    color: var(--muted-foreground);
-}
-.chat-context-work:has([data-state="running"])
-    .chat-context-work-heading
-    > span {
-    color: var(--brand-purple);
-}
-.chat-context-work ul {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 0;
-    margin: 0;
-    list-style: none;
-}
-.chat-context-work li {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 5px 6px;
-    font-size: 12px;
-    line-height: 18px;
-}
-.chat-context-work li > svg {
-    flex-shrink: 0;
-    margin-top: 1px;
-    color: var(--muted-foreground);
-}
-.chat-context-work li > div {
-    flex: 1;
-    min-width: 0;
-}
-.chat-context-work strong {
-    display: block;
-    font-weight: 400;
-}
-.chat-context-work li > div > span {
-    display: block;
-    color: var(--muted-foreground);
-    font-size: 10px;
-    line-height: 16px;
-}
-.chat-context-work-state {
-    font-size: 10px;
-    color: var(--muted-foreground);
-    flex-shrink: 0;
-}
-.chat-context-work li[data-state="running"] > svg,
-.chat-context-work li[data-state="running"] .chat-context-work-state {
-    color: var(--brand-purple);
-}
-.chat-context-work li[data-state="interrupted"] .chat-context-work-state {
-    color: var(--destructive-text);
 }
 @media (prefers-reduced-motion: reduce) {
     .chat-context-card {
@@ -597,9 +555,6 @@
         min-width: 44px;
         min-height: 44px;
     }
-    .chat-context-scope-action,
-    .chat-context-plan > button,
-    .chat-context-completed > button,
     .chat-context-card [data-slot="conversation-reference"] {
         min-height: 44px;
     }
@@ -693,6 +648,42 @@
     color: var(--muted-foreground);
     font-size: 13px;
     line-height: 1.5;
+}
+.chat-question-edit {
+    margin: 6px 0 0 -10px;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+.chat-question-edit:hover {
+    color: var(--foreground);
+}
+.chat-question-edit[hidden] {
+    display: none;
+}
+/* The question is edited where it is read; the field grows with the wording instead of scrolling. */
+.chat-question-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 72ch;
+}
+.chat-question-editor textarea {
+    min-height: 0;
+    max-height: none;
+    font-size: 15px;
+    line-height: 1.5;
+    font-weight: 500;
+}
+.chat-question-editor p[role="alert"] {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--destructive-text);
+}
+.chat-question-editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
 }
 @media (prefers-reduced-motion: reduce) {
     .chat-question-row,
@@ -885,6 +876,15 @@
     margin-left: auto;
 }
 
+/* The reading lane eases aside as the floating context card settles in. */
+[data-slot="conversation-thread-body"] {
+    transition: width 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+    [data-slot="conversation-thread-body"] {
+        transition: none;
+    }
+}
 /* A useful reading lane remains beside the content-sized context card. */
 [data-slot="conversation-thread"]:has(
         [data-slot="conversation-context-trigger"][data-context-layout="side"][aria-expanded="true"]
@@ -900,63 +900,6 @@
     height: auto;
     max-height: inherit;
 }
-.chat-context-scope {
-    padding: 3px 6px 10px;
-    font-size: 13px;
-    line-height: 1.6;
-    font-weight: 500;
-    overflow-wrap: anywhere;
-}
-.chat-context-scope > div {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-.chat-context-card .chat-context-scope-detail {
-    margin: 0 0 16px;
-    font-size: 12px;
-    line-height: 1.65;
-}
-.chat-context-nav {
-    width: 100%;
-    height: auto;
-    min-height: 44px;
-    justify-content: flex-start;
-    gap: 8px;
-    padding: 8px 6px;
-    text-align: left;
-    white-space: normal;
-    font-size: 12px;
-}
-.chat-context-nav > span {
-    flex: 1;
-    min-width: 0;
-}
-.chat-context-nav > svg {
-    flex: none;
-    color: var(--muted-foreground);
-}
-.chat-context-nav small {
-    font-size: 11px;
-    font-weight: 400;
-    color: var(--muted-foreground);
-    line-height: 1.6;
-}
-.chat-context-nav > span > small {
-    display: block;
-    margin-top: 4px;
-}
-.chat-context-nav [data-state="interrupted"],
-.chat-context-nav [data-state="blocked"] {
-    color: var(--destructive-text);
-}
-.chat-context-mission {
-    align-items: flex-start;
-}
-.chat-context-mission > span > small {
-    padding-left: 25px;
-}
 .chat-context-card .chat-context-sections {
     padding: 0;
 }
@@ -966,14 +909,30 @@
 .chat-context-card .chat-context-sections > section + section {
     margin-top: 0;
 }
-.chat-context-card .chat-context-sections > section > h2 {
-    margin: 0 6px 5px;
+/* Beside the conversation the card settles in from the edge it docks to, and the reading lane eases aside with it. */
+.chat-context-card[data-context-layout="side"][data-open] {
+    animation: chat-context-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.chat-context-card
-    .chat-context-sections
-    > section
-    > [data-slot="conversation-mission"] {
-    margin-top: 10px;
+.chat-context-card[data-context-layout="side"][data-closed] {
+    animation: chat-context-out 140ms ease-in both;
+}
+@keyframes chat-context-in {
+    from {
+        opacity: 0;
+        transform: translateX(12px);
+    }
+}
+@keyframes chat-context-out {
+    to {
+        opacity: 0;
+        transform: translateX(8px);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .chat-context-card[data-context-layout="side"][data-open],
+    .chat-context-card[data-context-layout="side"][data-closed] {
+        animation: none;
+    }
 }
 @media (max-width: 640px) {
     .chat-context-card[data-context-layout="popover"] {
@@ -1024,16 +983,6 @@ summary:hover > .chat-pending-toggle {
         clip-path: inset(50%);
         white-space: nowrap;
     }
-}
-.chat-pending-preview {
-    flex-basis: 100%;
-    min-width: 0;
-    padding-left: 13px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: 400;
-    color: var(--muted-foreground);
 }
 .chat-reply-phase {
     font-size: 11px;

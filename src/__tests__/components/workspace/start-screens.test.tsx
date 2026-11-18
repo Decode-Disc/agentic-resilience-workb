@@ -115,7 +115,7 @@ describe("Start presentation without backend providers", () => {
             ).getByText("Claims intake"),
         ).toBeTruthy();
     });
-    it("preserves optional corrections through the shared composer", () => {
+    it("edits a question inline without taking over the conversation composer", () => {
         sessionStorage.clear();
         render(
             <StartScreenPreview
@@ -129,15 +129,24 @@ describe("Start presentation without backend providers", () => {
             screen.getByRole("region", { name: "Proposed framing" }),
         );
         fireEvent.click(program.getByRole("button", { name: "Edit question" }));
-        fireEvent.change(program.getByRole("textbox"), {
+        const editor = within(
+            program.getByRole("region", { name: "Framing summary" }),
+        ).getByRole("textbox", { name: "Edit research question" });
+        expect(document.activeElement).toBe(editor);
+        fireEvent.change(editor, {
             target: { value: "Who can change routing rules?" },
         });
         expect(
-            program.queryByRole("button", {
-                name: "Start research",
+            program.getByRole("textbox", {
+                name: "Refine the framing in your own words",
             }),
-        ).toBeNull();
-        fireEvent.click(program.getByRole("button", { name: "Save changes" }));
+        ).toBeTruthy();
+        expect(
+            program.getByRole<HTMLButtonElement>("button", {
+                name: "Start research",
+            }).disabled,
+        ).toBe(true);
+        fireEvent.click(program.getByRole("button", { name: "Save question" }));
         expect(
             program.getByRole("heading", {
                 name: "Who can change routing rules?",
@@ -168,9 +177,10 @@ describe("Start presentation without backend providers", () => {
         const edit = program.getByRole("button", { name: "Edit question" });
         edit.focus();
         fireEvent.click(edit);
-        fireEvent.change(program.getByRole("textbox"), {
-            target: { value: "Discard this change" },
-        });
+        fireEvent.change(
+            program.getByRole("textbox", { name: "Edit research question" }),
+            { target: { value: "Discard this change" } },
+        );
         fireEvent.click(program.getByRole("button", { name: "Cancel" }));
         expect(
             program.getByRole("region", { name: "Framing summary" })
@@ -337,10 +347,10 @@ it("keeps an unfinished question edit and launch guard when the pending program 
     );
     expect(disclosure.open).toBe(false);
     expect(
-        screen.queryByRole("button", {
+        screen.getByRole<HTMLButtonElement>("button", {
             name: "Start research",
-        }),
-    ).toBeNull();
+        }).disabled,
+    ).toBe(true);
     fireEvent.click(
         screen.getByText("Proposed research program", {
             selector: "summary span",
@@ -408,7 +418,9 @@ it("lists every question of a prepared program and opens one at a time with its 
 
     fireEvent.click(screen.getByText("Hide questions"));
     expect(screen.queryByRole("button", { name: "1 Position" })).toBeNull();
-    expect(screen.getByText("Position · Switching")).toBeTruthy();
+    expect(screen.queryByText("Position · Switching")).toBeNull();
+    expect(screen.getByText("2 questions")).toBeTruthy();
+    expect(screen.getByText("Show questions")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Start research" }));
     expect(start).toHaveBeenCalledOnce();
 });

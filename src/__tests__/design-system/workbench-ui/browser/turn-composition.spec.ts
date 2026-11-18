@@ -130,10 +130,20 @@ test("question actions share the composer and keep its ordinary draft", async ({
     await page
         .getByRole("button", { name: "Edit question", exact: true })
         .click();
-    await expect(input).toHaveValue("Can agents alter pricing power?");
-    await input.fill("Who can change pricing?");
+    const editor = page.getByRole("textbox", {
+        name: "Edit research question",
+        exact: true,
+    });
+    await expect(editor).toHaveValue("Can agents alter pricing power?");
+    await expect(
+        page.getByRole("textbox", {
+            name: "Refine the framing in your own words",
+            exact: true,
+        }),
+    ).toHaveValue("Keep my unsent message.");
+    await editor.fill("Who can change pricing?");
     await page
-        .getByRole("button", { name: "Save changes", exact: true })
+        .getByRole("button", { name: "Save question", exact: true })
         .click();
     await expect(
         page.getByRole("heading", { name: "Who can change pricing?" }),
@@ -146,7 +156,7 @@ test("question actions share the composer and keep its ordinary draft", async ({
     await page
         .getByRole("button", { name: "Edit question", exact: true })
         .click();
-    await input.fill("Discard this edit");
+    await editor.fill("Discard this edit");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(
         page.getByRole("heading", { name: "Who can change pricing?" }),

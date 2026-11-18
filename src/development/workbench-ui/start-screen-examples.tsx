@@ -8,7 +8,6 @@ import {
     useState,
 } from "react";
 import { createPortal } from "react-dom";
-import type { ConversationAgents } from "@/components/chat/conversation-agent";
 import { ConversationHistory } from "@/components/chat/conversation-history";
 import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
@@ -156,10 +155,8 @@ function ReferenceChip() {
 function PreviewResearchContext({
     activities,
     missions,
-    agents,
     scope,
     questions,
-    launched,
     hasReference,
     scopePending = false,
     onChangeScope,
@@ -169,10 +166,8 @@ function PreviewResearchContext({
 }: {
     activities: readonly ConversationWorkItem[];
     missions: readonly ConversationMissionSnapshot[];
-    agents: ConversationAgents;
     scope: string;
     questions: readonly StartFramingQuestion[];
-    launched: boolean;
     hasReference: boolean;
     scopePending?: boolean;
     onChangeScope?: () => void;
@@ -180,26 +175,18 @@ function PreviewResearchContext({
     onOpenChange?: (open: boolean) => void;
     onInspectFraming?: () => void;
 }) {
-    const { isMobile } = useResponsive();
     return (
         <ConversationContext
-            defaultOpen={!launched && !isMobile}
             open={open}
             onOpenChange={onOpenChange}
             title={`${company.ticker} · Research`}
+            icon={<CompanyFaviconAvatar company={company} size="xs" />}
             activities={activities}
             missions={missions}
-            agents={agents}
             onChangeScope={onChangeScope}
-            planSummary={scopePending ? "Scope being clarified" : scope}
-            questionCount={questions.length}
-            plan={
-                <FramingProposal
-                    title="Research program"
-                    questions={questions}
-                />
-            }
-            planAction={
+            scope={scopePending ? "Scope being clarified" : scope}
+            questions={questions.map((q) => q.shortLabel ?? q.label)}
+            scopeAction={
                 onInspectFraming && (
                     <Button
                         variant="ghost"
@@ -455,18 +442,21 @@ function FramingExample({
     } = controller;
     const { isMobile } = useResponsive();
     const questionAction = state.questionAction ?? null;
+    // Existing questions are edited in their row; only a new question takes over the composer.
+    const inlineQuestion = questionAction?.id ? questionAction : null;
+    const composerQuestion = inlineQuestion ? null : questionAction;
     const selectedQuestionId = state.selectedQuestionId;
     const { scenario, needsContext, scope, questions, suppliedContext } = state;
     const actionTrigger = useRef<HTMLElement | null>(null);
     const previousAction = useRef(false);
     useEffect(() => {
-        if (previousAction.current && !questionAction)
+        if (previousAction.current && !composerQuestion)
             actionTrigger.current?.focus();
-        previousAction.current = !!questionAction;
-    }, [questionAction]);
+        previousAction.current = !!composerQuestion;
+    }, [composerQuestion]);
     const { inputRef: refinementRef, fill } =
         useQuickTextFill<HTMLTextAreaElement>(setRefinement);
-    const actionOpen = questionAction !== null;
+    const actionOpen = composerQuestion !== null;
     useEffect(() => {
         if (actionOpen) refinementRef.current?.focus();
     }, [actionOpen, refinementRef]);
@@ -479,9 +469,9 @@ function FramingExample({
             inputRef={refinementRef}
             onResumeQueue={controller.resumeQueue}
             placeholder={
-                questionAction && !questionAction.id
+                composerQuestion
                     ? "What would you like to investigate?"
-                    : !state.launched && isMobile && !questionAction
+                    : !state.launched && isMobile && !composerQuestion
                       ? needsContext
                           ? "Describe another scope…"
                           : "Refine the framing…"
@@ -492,23 +482,19 @@ function FramingExample({
                     ? "Ask about the sources"
                     : needsContext
                       ? "Or describe a different scope…"
-                      : questionAction
-                        ? questionAction.id
-                            ? "Edit research question"
-                            : "Add research question"
+                      : composerQuestion
+                        ? "Add research question"
                         : "Refine the framing in your own words"
             }
             actionLabel={
                 needsContext
                     ? "Continue"
-                    : questionAction
-                      ? questionAction.id
-                          ? "Save changes"
-                          : "Add question"
+                    : composerQuestion
+                      ? "Add question"
                       : undefined
             }
             onCancel={
-                questionAction ? () => setQuestionAction(null) : undefined
+                composerQuestion ? () => setQuestionAction(null) : undefined
             }
             pending={conversation.sending}
             failed={conversation.failed}
@@ -580,7 +566,6 @@ function FramingExample({
                 context={
                     <PreviewResearchContext
                         missions={state.missions}
-                        agents={state.agents}
                         activities={
                             state.turns?.flatMap((turn) =>
                                 turn.entries.flatMap((entry) =>
@@ -598,7 +583,6 @@ function FramingExample({
                                 : undefined
                         }
                         questions={questions}
-                        launched={state.launched}
                         hasReference={scenario === "specific"}
                     />
                 }
@@ -690,13 +674,31 @@ function FramingExample({
                                 ) : undefined
                             }
                             questions={questions}
-                            actionActive={questionAction !== null}
+                            actionActive={composerQuestion !== null}
                             selectedQuestionId={selectedQuestionId}
-                            onEditRequest={(q) => {
-                                actionTrigger.current =
-                                    document.activeElement as HTMLElement;
-                                setQuestionAction({ id: q.id, text: q.text });
-                            }}
+                            onEditRequest={
+                                composerQuestion
+                                    ? undefined
+                                    : (q) =>
+                                          setQuestionAction({
+                                              id: q.id,
+                                              text: q.text,
+                                          })
+                            }
+                            editing={
+                                inlineQuestion?.id
+                                    ? {
+                                          questionId: inlineQuestion.id,
+                                          text: inlineQuestion.text,
+                                      }
+                                    : undefined
+                            }
+                            onEditChange={(text) =>
+                                inlineQuestion &&
+                                setQuestionAction({ ...inlineQuestion, text })
+                            }
+                            onEditCancel={() => setQuestionAction(null)}
+                            onEditSave={controller.saveQuestion}
                             onAddRequest={() => {
                                 actionTrigger.current =
                                     document.activeElement as HTMLElement;
@@ -816,11 +818,9 @@ function ResearchExample({
             context={
                 <PreviewResearchContext
                     missions={state.missions}
-                    agents={state.agents}
                     activities={activities}
                     scope={state.scope}
                     questions={state.questions}
-                    launched
                     onInspectFraming={onInspectFraming}
                     open={contextOpen}
                     onOpenChange={setContextOpen}

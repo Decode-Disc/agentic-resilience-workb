@@ -68,7 +68,7 @@ test("START missing context can use the proposed scope without answering", async
         page.getByRole("region", { name: "Clarify research context" }),
     ).toHaveCount(0);
     await expect(
-        page.getByRole("region", { name: "Plan", exact: true }),
+        page.getByRole("region", { name: "Scope", exact: true }),
     ).toContainText("Photo-led auto claims");
     await expect(
         page.getByRole("region", { name: "Your clarification" }),
@@ -191,9 +191,6 @@ test("START View framing navigates from source collection to its framing screen"
     page,
 }) => {
     await page.goto("/?layout=start&screen=launched&theme=dark");
-    await page
-        .getByRole("button", { name: "Research context", exact: true })
-        .click();
     await inspectResearchProgram(page);
     await page
         .getByRole("button", { name: "View framing", exact: true })
@@ -226,7 +223,7 @@ test("START optional corrections update the proposed research program", async ({
         .getByRole("textbox", { name: "Edit research question", exact: true })
         .fill("Who can change the routing rules?");
     await page
-        .getByRole("button", { name: "Save changes", exact: true })
+        .getByRole("button", { name: "Save question", exact: true })
         .click();
     await expect(
         page.getByRole("heading", {
@@ -296,7 +293,7 @@ test("START freeform context is reflected in the scope and retained when reopene
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await expect(page.getByRole("log")).toContainText("Claims intake");
     await expect(
-        page.getByRole("region", { name: "Plan", exact: true }),
+        page.getByRole("region", { name: "Scope", exact: true }),
     ).toContainText("Claims intake");
     await changeResearchScope(page);
     await expect(context).toHaveValue("Claims intake");
@@ -619,9 +616,6 @@ test("START conversation keeps a guided correction through launch and reload", a
         .click();
     await expect(page).toHaveURL(/screen=launched/);
     await page.reload();
-    await page
-        .getByRole("button", { name: "Research context", exact: true })
-        .click();
     await inspectResearchProgram(page);
     await page
         .getByRole("button", { name: "View framing", exact: true })
@@ -711,9 +705,6 @@ test("START the accepted program stays inspectable from the mobile chat context"
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/?layout=start&screen=launched&theme=light");
     await page.getByRole("button", { name: "Ask AI", exact: true }).click();
-    await page
-        .getByRole("button", { name: "Research context", exact: true })
-        .click();
     await inspectResearchProgram(page);
     await page
         .getByRole("button", { name: "View framing", exact: true })

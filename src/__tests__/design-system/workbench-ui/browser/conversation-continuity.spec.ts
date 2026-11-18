@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { reviewResearchProgram } from "@/__tests__/helpers/research-program";
+import {
+    inspectResearchProgram,
+    reviewResearchProgram,
+} from "@/__tests__/helpers/research-program";
 
 for (const width of [1440, 390]) {
     test(`the same conversation continues through research launch and reload at ${width}px`, async ({
@@ -139,15 +142,9 @@ test("the accepted program remains inspectable from Plan without inserting anoth
     await expect(
         page.getByRole("log").getByText("Framing fixed", { exact: true }),
     ).toHaveCount(0);
+    await inspectResearchProgram(page);
     await page
-        .getByRole("button", { name: "Research context", exact: true })
-        .click();
-    await page
-        .getByRole("region", { name: "Plan", exact: true })
-        .getByRole("button", { name: "Research program", exact: true })
-        .click();
-    await page
-        .getByRole("region", { name: "Plan", exact: true })
+        .getByRole("region", { name: "Scope", exact: true })
         .getByRole("button", { name: "View framing", exact: true })
         .click();
     await expect(
@@ -275,9 +272,6 @@ for (const width of [1440, 390]) {
         if (width === 390) {
             await page
                 .getByRole("button", { name: "Research context", exact: true })
-                .click();
-            await page
-                .getByRole("button", { name: "Research program", exact: true })
                 .click();
             await page
                 .getByRole("button", { name: "View framing", exact: true })

@@ -103,7 +103,7 @@ for (const width of [320, 390, 768]) {
             .getByRole("button", { name: "Research context", exact: true })
             .click();
         await expect(
-            page.getByRole("region", { name: "Plan", exact: true }),
+            page.getByRole("region", { name: "Scope", exact: true }),
         ).toBeVisible();
         await page
             .getByRole("button", {

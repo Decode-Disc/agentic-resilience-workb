@@ -68,6 +68,7 @@ import {
     SheetTitle,
     SheetTrigger,
 } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import { GlassPanel } from "@/components/workbench-ui/glass-panel";
 import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import {
@@ -631,6 +632,10 @@ export function FramingProposal({
     suppliedContext,
     onAdjustScope,
     onEditRequest,
+    editing,
+    onEditChange,
+    onEditCancel,
+    onEditSave,
     onAddRequest,
     actionActive = false,
     selectedQuestionId,
@@ -658,7 +663,18 @@ export function FramingProposal({
     clarification?: ReactNode;
     suppliedContext?: { question: string; answer: string };
     onAdjustScope?: () => void;
+    /** Opens the question's inline editor; the caller then supplies `editing`. */
     onEditRequest?: (question: StartFramingQuestion) => void;
+    /** The question edited in place. The caller owns the draft so it survives recoverable failures. */
+    editing?: {
+        questionId: string;
+        text: string;
+        pending?: boolean;
+        error?: string;
+    };
+    onEditChange?: (text: string) => void;
+    onEditCancel?: () => void;
+    onEditSave?: () => void;
     onAddRequest?: () => void;
     actionActive?: boolean;
     selectedQuestionId?: string;
@@ -668,7 +684,11 @@ export function FramingProposal({
 }) {
     const summaryRef = useRef<HTMLElement>(null);
     const [reviewing, setReviewing] = useState(true);
-    const needsInput = Boolean(clarification) || actionActive;
+    const editingQuestion = editing
+        ? questions.find((q) => q.id === editing.questionId)
+        : undefined;
+    const needsInput =
+        Boolean(clarification) || actionActive || Boolean(editingQuestion);
     useEffect(() => {
         if (needsInput) setReviewing(true);
     }, [needsInput]);
@@ -684,11 +704,26 @@ export function FramingProposal({
     // Undefined opens the first question; null keeps every question folded.
     const [selected, setSelected] = useState<string | null>();
     const current =
-        selected === null
+        editingQuestion ??
+        (selected === null
             ? undefined
-            : (questions.find((q) => q.id === selected) ?? questions[0]);
+            : (questions.find((q) => q.id === selected) ?? questions[0]));
     const hasQuestions = questions.length > 0;
     const busy = pending || actionActive;
+    const editorRef = useRef<HTMLTextAreaElement>(null);
+    const editButtonRef = useRef<HTMLButtonElement>(null);
+    const editorErrorId = useId();
+    const editingId = editingQuestion?.id;
+    const previousEditingId = useRef(editingId);
+    // Entering an edit moves focus into the field; leaving it returns focus to the Edit command.
+    useEffect(() => {
+        const editor = editorRef.current;
+        if (editingId && editor) {
+            editor.focus();
+            editor.setSelectionRange(editor.value.length, editor.value.length);
+        } else if (previousEditingId.current) editButtonRef.current?.focus();
+        previousEditingId.current = editingId;
+    }, [editingId]);
     const emptyProgram =
         collapsible &&
         Boolean(composer) &&
@@ -742,7 +777,9 @@ export function FramingProposal({
                                             aria-controls={
                                                 open ? detailId : undefined
                                             }
-                                            disabled={busy}
+                                            disabled={
+                                                busy || Boolean(editingQuestion)
+                                            }
                                             onClick={() =>
                                                 setSelected(open ? null : q.id)
                                             }>
@@ -764,11 +801,123 @@ export function FramingProposal({
                                                 tabIndex={-1}
                                                 className="chat-focused-question"
                                                 aria-label="Framing summary">
-                                                <h3>{q.text}</h3>
-                                                {q.rationale && (
-                                                    <p className="chat-question-rationale">
-                                                        {q.rationale}
-                                                    </p>
+                                                {editing &&
+                                                editingQuestion?.id === q.id ? (
+                                                    <form
+                                                        className="chat-question-editor"
+                                                        onSubmit={(event) => {
+                                                            event.preventDefault();
+                                                            onEditSave?.();
+                                                        }}>
+                                                        <Textarea
+                                                            ref={editorRef}
+                                                            aria-label="Edit research question"
+                                                            value={editing.text}
+                                                            disabled={
+                                                                editing.pending
+                                                            }
+                                                            aria-invalid={
+                                                                editing.error
+                                                                    ? true
+                                                                    : undefined
+                                                            }
+                                                            aria-describedby={
+                                                                editing.error
+                                                                    ? editorErrorId
+                                                                    : undefined
+                                                            }
+                                                            onChange={(event) =>
+                                                                onEditChange?.(
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            onKeyDown={(
+                                                                event,
+                                                            ) => {
+                                                                if (
+                                                                    event.key ===
+                                                                    "Escape"
+                                                                ) {
+                                                                    event.preventDefault();
+                                                                    onEditCancel?.();
+                                                                } else if (
+                                                                    event.key ===
+                                                                        "Enter" &&
+                                                                    !event.shiftKey &&
+                                                                    !event
+                                                                        .nativeEvent
+                                                                        .isComposing
+                                                                ) {
+                                                                    event.preventDefault();
+                                                                    event.currentTarget.form?.requestSubmit();
+                                                                }
+                                                            }}
+                                                        />
+                                                        {editing.error && (
+                                                            <p
+                                                                id={
+                                                                    editorErrorId
+                                                                }
+                                                                role="alert">
+                                                                {editing.error}
+                                                            </p>
+                                                        )}
+                                                        <div className="chat-question-editor-actions">
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={
+                                                                    onEditCancel
+                                                                }>
+                                                                Cancel
+                                                            </Button>
+                                                            <Button
+                                                                type="submit"
+                                                                size="sm"
+                                                                disabled={
+                                                                    editing.pending ||
+                                                                    !editing.text.trim() ||
+                                                                    editing.text.trim() ===
+                                                                        q.text
+                                                                }>
+                                                                Save question
+                                                            </Button>
+                                                        </div>
+                                                    </form>
+                                                ) : (
+                                                    <>
+                                                        <h3>{q.text}</h3>
+                                                        {q.rationale && (
+                                                            <p className="chat-question-rationale">
+                                                                {q.rationale}
+                                                            </p>
+                                                        )}
+                                                    </>
+                                                )}
+                                                {onEditRequest && (
+                                                    <Button
+                                                        ref={editButtonRef}
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="chat-question-edit"
+                                                        hidden={
+                                                            editingQuestion?.id ===
+                                                            q.id
+                                                        }
+                                                        disabled={busy}
+                                                        onClick={() =>
+                                                            onEditRequest(q)
+                                                        }>
+                                                        <Icon
+                                                            iconNode={
+                                                                PencilEdit01Icon
+                                                            }
+                                                            size={15}
+                                                        />
+                                                        Edit question
+                                                    </Button>
                                                 )}
                                             </section>
                                         )}
@@ -799,7 +948,7 @@ export function FramingProposal({
     );
     const footer = !emptyProgram &&
         !clarification &&
-        (onStart || onEditRequest || onAddRequest) && (
+        (onStart || onAddRequest) && (
             <div
                 hidden={actionActive}
                 className={styles.framingLaunch}
@@ -810,20 +959,6 @@ export function FramingProposal({
                         (collapsible && !reviewing && hasQuestions)
                     }
                     className="chat-question-actions">
-                    {current && onEditRequest && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label="Edit question"
-                            title="Edit question"
-                            disabled={busy}
-                            onClick={() => onEditRequest(current)}>
-                            <Icon iconNode={PencilEdit01Icon} size={16} />
-                            <span className="hidden sm:inline">
-                                Edit question
-                            </span>
-                        </Button>
-                    )}
                     {onAddRequest && (
                         <Button
                             variant="ghost"
@@ -835,7 +970,11 @@ export function FramingProposal({
                             aria-describedby={
                                 addUnavailableReason ? addNoteId : undefined
                             }
-                            disabled={busy || Boolean(addUnavailableReason)}
+                            disabled={
+                                busy ||
+                                Boolean(editingQuestion) ||
+                                Boolean(addUnavailableReason)
+                            }
                             onClick={onAddRequest}>
                             <Icon iconNode={PlusSignIcon} size={16} />
                             <span
@@ -872,6 +1011,7 @@ export function FramingProposal({
                         disabled={
                             busy ||
                             startDisabled ||
+                            Boolean(editingQuestion) ||
                             Boolean(startUnavailableReason)
                         }
                         onClick={onStart}>
@@ -914,13 +1054,6 @@ export function FramingProposal({
                                   open: "Hide questions",
                                   closed: "Show questions",
                               }
-                    }
-                    preview={
-                        clarification || !hasQuestions
-                            ? undefined
-                            : questions
-                                  .map((q) => q.shortLabel ?? q.label)
-                                  .join(" · ")
                     }
                     headerAction={
                         emptyProgram && onAddRequest ? (

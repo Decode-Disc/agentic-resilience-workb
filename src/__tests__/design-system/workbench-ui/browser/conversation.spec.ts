@@ -367,7 +367,7 @@ for (const width of [390, 1440]) {
             log.getByRole("button", { name: /Inspect reference/ }),
         ).toHaveCount(0);
         await expect(
-            page.getByRole("region", { name: "Plan", exact: true }),
+            page.getByRole("region", { name: "Scope", exact: true }),
         ).toBeVisible();
         await page
             .getByRole("button", {
@@ -401,7 +401,7 @@ for (const width of [390, 1440]) {
         await expect(source).toHaveCount(0);
         await page
             .locator(".chat-context-card")
-            .getByRole("button", { name: "Sources", exact: true })
+            .getByRole("button", { name: "Show sources", exact: true })
             .click();
         await source.click();
         await expect(
@@ -544,16 +544,12 @@ for (const width of [390, 1440])
         ).toBeVisible();
         await expect(group).toHaveAttribute("aria-expanded", "true");
         await context.click();
-        await page
-            .locator(".chat-context-card")
-            .getByRole("button", {
-                name: "Inspect Sources Agent work",
-                exact: true,
-            })
-            .click();
         await expect(
-            page.getByText("1 working", { exact: true }),
-        ).toBeVisible();
+            page
+                .locator(".chat-context-card")
+                .getByRole("region", { name: "Work", exact: true })
+                .getByRole("status"),
+        ).toContainText("Working");
         await page
             .getByRole("button", {
                 name: "Close research context",

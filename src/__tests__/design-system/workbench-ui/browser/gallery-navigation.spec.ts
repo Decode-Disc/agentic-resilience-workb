@@ -155,7 +155,7 @@ test("composer specimen saves and edits the analyst's question instead of insert
     await expect(edit).toHaveValue("Who sets the coordination rules?");
     await edit.fill("Who can change the coordination rules?");
     await page
-        .getByRole("button", { name: "Save changes", exact: true })
+        .getByRole("button", { name: "Save question", exact: true })
         .click();
     await expect(
         page.getByRole("heading", {

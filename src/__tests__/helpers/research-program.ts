@@ -23,7 +23,7 @@ export async function changeResearchScope(page: Page) {
     await change.click();
 }
 
-/** Opens the saved program within the persistent research-context inspector. */
+/** Opens the research-context card, whose scope actions include View framing and Change scope. */
 export async function inspectResearchProgram(page: Page) {
     const context = page.getByRole("button", {
         name: "Research context",
@@ -31,9 +31,4 @@ export async function inspectResearchProgram(page: Page) {
     });
     if ((await context.getAttribute("aria-expanded")) !== "true")
         await context.click();
-    const program = page.getByRole("button", {
-        name: "Research program",
-        exact: true,
-    });
-    if (await program.isVisible()) await program.click();
 }

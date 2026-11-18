@@ -14,13 +14,11 @@ import {
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import {
     ArrowDown01Icon,
-    ArrowLeft01Icon,
     ArrowRight01Icon,
     Cancel01Icon,
     CommandIcon,
     File01Icon,
     Task01Icon,
-    Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import {
@@ -47,10 +45,7 @@ import {
     DEFAULT_CONVERSATION_AGENTS,
     WORKBENCH_AGENT,
 } from "@/components/chat/conversation-agent";
-import {
-    ConversationMission,
-    type ConversationMissionSnapshot,
-} from "@/components/chat/conversation-mission";
+import type { ConversationMissionSnapshot } from "@/components/chat/conversation-mission";
 import { useConversationVisible } from "@/components/chat/conversation-thread";
 import {
     Message,
@@ -106,6 +101,8 @@ export {
 
 export const WORKBENCH_AGENT_NAME = WORKBENCH_AGENT.name;
 const CONTEXT_PANEL_WIDTH_PX = 280;
+/** Below this conversation width the card would crowd the reading lane, so it becomes a popover. */
+const CONTEXT_SIDE_MIN_WIDTH_PX = CONTEXT_PANEL_WIDTH_PX + 640 + 92;
 
 /** Keeps conversation identity and its context together wherever the chat is composed. */
 export function ConversationHeader({
@@ -822,7 +819,6 @@ export function ConversationMessages({
 export function ConversationPendingPanel({
     title,
     summary,
-    preview,
     toggleLabels = { open: "Hide", closed: "Show" },
     children,
     footer,
@@ -835,8 +831,6 @@ export function ConversationPendingPanel({
     onOpenChange?: (open: boolean) => void;
     title: string;
     summary: ReactNode;
-    /** Folded-only line naming what the panel holds, so folding never hides what is pending. */
-    preview?: ReactNode;
     /** Names what the header toggle reveals or hides. */
     toggleLabels?: { open: string; closed: string };
     children?: ReactNode;
@@ -880,11 +874,6 @@ export function ConversationPendingPanel({
                             </span>
                             <Icon iconNode={ArrowDown01Icon} size={14} />
                         </span>
-                        {preview && !expanded && (
-                            <span className="chat-pending-preview">
-                                {preview}
-                            </span>
-                        )}
                     </summary>
                     <div
                         data-slot="conversation-pending-body"
@@ -936,147 +925,126 @@ export function ConversationReference({
     );
 }
 
-function ContextWorkItems({
-    items,
-}: {
-    items: readonly ConversationWorkItem[];
-}) {
+/** The one piece of work worth surfacing beside the conversation: what is happening now. Finished work stays in the transcript. */
+function currentWork(
+    activities: readonly ConversationWorkItem[],
+    missions: readonly ConversationMissionSnapshot[],
+) {
+    const mission = missions.find((m) => m.state !== "completed");
+    if (mission)
+        return {
+            state: mission.state,
+            title:
+                mission.operations.find((o) => o.state === "running")?.title ??
+                mission.title,
+            label: mission.stateLabel ?? workStateLabels[mission.state],
+        };
+    const activity = [...activities]
+        .reverse()
+        .find((a) => a.state !== "completed");
+    return activity
+        ? {
+              state: activity.state,
+              title: activity.title,
+              label: workStateLabels[activity.state],
+          }
+        : undefined;
+}
+
+/** Clamps long scope text and offers the rest only when it is actually cut. */
+function ContextScope({ children }: { children: ReactNode }) {
+    const textRef = useRef<HTMLParagraphElement>(null);
+    const [expanded, setExpanded] = useState(false);
+    const [clamped, setClamped] = useState(false);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: remeasure when the scope text changes.
+    useLayoutEffect(() => {
+        const text = textRef.current;
+        if (text && !expanded)
+            setClamped(text.scrollHeight > text.clientHeight + 1);
+    }, [children, expanded]);
     return (
-        <ul>
-            {items.map((item) => (
-                <li key={item.id} data-state={item.state}>
-                    <ConversationWorkMark state={item.state} />
-                    <div>
-                        <strong>{item.title}</strong>
-                        <span>{item.summary}</span>
-                    </div>
-                    <span className="chat-context-work-state">
-                        {workStateLabels[item.state]}
-                    </span>
-                </li>
-            ))}
-        </ul>
+        <>
+            <p
+                ref={textRef}
+                className="chat-context-scope-text"
+                data-expanded={expanded || undefined}>
+                {children}
+            </p>
+            {(clamped || expanded) && (
+                <button
+                    type="button"
+                    className="chat-context-more"
+                    aria-expanded={expanded}
+                    onClick={() => setExpanded(!expanded)}>
+                    {expanded ? "Show less" : "Show more"}
+                </button>
+            )}
+        </>
     );
 }
 
-/** Reflects supplied activity snapshots; it never schedules or simulates work. */
-function ConversationWorkList({
-    activities,
-    missions,
-    agents,
-}: {
-    activities: readonly ConversationWorkItem[];
-    missions: readonly ConversationMissionSnapshot[];
-    agents: ConversationAgents;
-}) {
-    const current = activities.filter((item) => item.state !== "completed");
-    const completed = activities.filter((item) => item.state === "completed");
-    const working =
-        current.filter((item) => item.state === "running").length +
-        missions.filter((mission) => mission.state === "running").length;
-    return (
-        <section className="chat-context-work" aria-label="Work">
-            <div className="chat-context-work-heading">
-                <h2>Work</h2>
-                <span role="status">
-                    {working ? `${working} working` : "No active work"}
-                </span>
-            </div>
-            {missions.map((mission) => {
-                const agent = agents[mission.agentId];
-                return agent ? (
-                    <ConversationMission
-                        key={mission.id}
-                        mission={mission}
-                        agent={agent}
-                    />
-                ) : (
-                    <LoadErrorAlert
-                        key={mission.id}
-                        variant="inline"
-                        title="Work attribution unavailable"
-                        description="This mission’s agent could not be restored."
-                    />
-                );
-            })}
-            {current.length > 0 && <ContextWorkItems items={current} />}
-            {completed.length > 0 && (
-                <Collapsible className="chat-context-completed">
-                    <CollapsibleTrigger
-                        render={<Button variant="ghost" size="sm" />}
-                        aria-label="Completed work">
-                        <Icon iconNode={Tick02Icon} size={15} />
-                        <span>{completed.length} completed</span>
-                        <Icon iconNode={ArrowRight01Icon} size={12} />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <ContextWorkItems items={completed} />
-                    </CollapsibleContent>
-                </Collapsible>
-            )}
-            {!activities.length && !missions.length && (
-                <p className="chat-context-empty">No work recorded yet.</p>
-            )}
-        </section>
-    );
-}
-
-/** A compact dossier overview; program, source and work details stay one deliberate action away. */
+/** Floating dossier card beside the conversation: what the transcript does not already show, on one surface. */
 export function ConversationContext({
-    defaultOpen = true,
+    defaultOpen,
     open: controlledOpen,
     onOpenChange,
     title = "Research context",
+    icon,
     activities = [],
     missions = [],
-    agents = DEFAULT_CONVERSATION_AGENTS,
-    plan,
-    planSummary,
-    planAction,
-    questionCount,
+    scope,
+    scopeAction,
+    onChangeScope,
+    questions,
+    programTitle = "Research program",
     outputs,
     sources,
     sourcesSummary,
-    onChangeScope,
 }: {
+    /** Defaults to open where the card fits beside the conversation, closed where it would cover it. */
     defaultOpen?: boolean;
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     title?: string;
+    /** Identifies the dossier, such as the company favicon; defaults to the research context glyph. */
+    icon?: ReactNode;
     activities?: readonly ConversationWorkItem[];
     missions?: readonly ConversationMissionSnapshot[];
-    agents?: ConversationAgents;
-    plan: ReactNode;
-    planSummary?: ReactNode;
-    planAction?: ReactNode;
-    questionCount?: number;
+    scope: ReactNode;
+    scopeAction?: ReactNode;
+    onChangeScope?: () => void;
+    /** Short labels of the research questions, in program order. */
+    questions: readonly string[];
+    /** Names the program's state, such as an accepted program after launch. */
+    programTitle?: string;
     outputs?: ReactNode;
     sources: ReactNode;
     sourcesSummary?: ReactNode;
-    onChangeScope?: () => void;
 }) {
     const [open, setOpen] = useControllableState({
         prop: controlledOpen,
-        defaultProp: defaultOpen,
+        defaultProp: defaultOpen ?? false,
         onChange: onOpenChange,
         caller: "ConversationContext",
     });
-    const [view, setView] = useState<"overview" | "plan" | "sources" | "work">(
-        "overview",
-    );
     const { isMobile } = useResponsive();
     const visible = useConversationVisible();
     const triggerRef = useRef<HTMLButtonElement>(null);
-    const backRef = useRef<HTMLButtonElement>(null);
-    const panelRef = useRef<HTMLDivElement>(null);
-    const detailTrigger = useRef<HTMLButtonElement | null>(null);
-    const previousView = useRef(view);
     const [frame, setFrame] = useState<{
         left: number;
         top: number;
         width: number;
         height: number;
     } | null>(null);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the initial placement decides the default once; later resizes never reopen a dismissed card.
+    useLayoutEffect(() => {
+        if (defaultOpen !== undefined) return;
+        const width = triggerRef.current
+            ?.closest<HTMLElement>('[data-slot="conversation-thread"]')
+            ?.getBoundingClientRect().width;
+        if (width ? width >= CONTEXT_SIDE_MIN_WIDTH_PX : !isMobile)
+            setOpen(true);
+    }, []);
     useLayoutEffect(() => {
         const host = triggerRef.current?.closest<HTMLElement>(
             '[data-slot="conversation-thread"]',
@@ -1112,40 +1080,8 @@ export function ConversationContext({
             window.removeEventListener("scroll", measure, true);
         };
     }, []);
-    const side = frame
-        ? frame.width >= CONTEXT_PANEL_WIDTH_PX + 640 + 92
-        : !isMobile;
-    const inspect = (next: typeof view, trigger: HTMLButtonElement) => {
-        detailTrigger.current = trigger;
-        setView(next);
-    };
-    useLayoutEffect(() => {
-        if (view !== "overview") backRef.current?.focus();
-        else if (previousView.current !== "overview") {
-            const label = detailTrigger.current?.getAttribute("aria-label");
-            Array.from(
-                panelRef.current?.querySelectorAll<HTMLButtonElement>(
-                    "button",
-                ) ?? [],
-            )
-                .find((button) => button.getAttribute("aria-label") === label)
-                ?.focus();
-        }
-        previousView.current = view;
-    }, [view]);
-    const back = () => setView("overview");
-    const latestActivity =
-        activities.find(
-            (activity) =>
-                activity.state === "running" || activity.state === "waiting",
-        ) ?? activities.at(-1);
-    const hasWork = missions.length > 0 || activities.length > 0;
-    const viewTitle = {
-        overview: title,
-        plan: "Research program",
-        sources: "Sources",
-        work: "Recorded work",
-    }[view];
+    const side = frame ? frame.width >= CONTEXT_SIDE_MIN_WIDTH_PX : !isMobile;
+    const work = currentWork(activities, missions);
     return (
         <Popover
             open={open && visible}
@@ -1171,7 +1107,6 @@ export function ConversationContext({
                 <Icon iconNode={Task01Icon} size={19} />
             </PopoverTrigger>
             <PopoverContent
-                ref={panelRef}
                 layer={side ? "context" : "popup"}
                 side="bottom"
                 align="end"
@@ -1203,19 +1138,8 @@ export function ConversationContext({
                         : undefined
                 }>
                 <div className="chat-context-topline">
-                    {view === "overview" ? (
-                        <Icon iconNode={Task01Icon} size={16} />
-                    ) : (
-                        <Button
-                            ref={backRef}
-                            variant="ghost"
-                            size="icon-xs"
-                            aria-label="Back to research context"
-                            onClick={back}>
-                            <Icon iconNode={ArrowLeft01Icon} size={15} />
-                        </Button>
-                    )}
-                    <PopoverTitle>{viewTitle}</PopoverTitle>
+                    {icon ?? <Icon iconNode={Task01Icon} size={16} />}
+                    <PopoverTitle>{title}</PopoverTitle>
                     <Button
                         variant="ghost"
                         size="icon-xs"
@@ -1226,8 +1150,8 @@ export function ConversationContext({
                     </Button>
                 </div>
                 <PopoverDescription className="sr-only">
-                    Current research scope, program, source collection and
-                    recorded work.
+                    Current research scope, program, sources and work in
+                    progress.
                 </PopoverDescription>
                 <ScrollArea
                     className="chat-context-scroll"
@@ -1238,180 +1162,83 @@ export function ConversationContext({
                         tabIndex: 0,
                     }}>
                     <div className="chat-context-sections">
-                        {view === "overview" ? (
-                            <>
-                                <section aria-label="Plan">
-                                    <div className="chat-context-scope">
-                                        <div>{planSummary ?? plan}</div>
-                                    </div>
+                        <section aria-label="Scope">
+                            <header className="chat-context-section-heading">
+                                <h2>Scope</h2>
+                                {scopeAction}
+                                {onChangeScope && (
                                     <Button
                                         variant="ghost"
-                                        className="chat-context-nav"
-                                        aria-label="Research program"
-                                        onClick={(event) =>
-                                            inspect("plan", event.currentTarget)
-                                        }>
-                                        <Icon iconNode={File01Icon} size={15} />
-                                        <span>Research program</span>
-                                        {questionCount !== undefined && (
-                                            <small>
-                                                {questionCount}{" "}
-                                                {questionCount === 1
-                                                    ? "question"
-                                                    : "questions"}
-                                            </small>
-                                        )}
-                                        <Icon
-                                            iconNode={ArrowRight01Icon}
-                                            size={12}
-                                        />
+                                        size="xs"
+                                        onClick={() => {
+                                            onChangeScope();
+                                            if (!side) setOpen(false);
+                                        }}>
+                                        Change scope
                                     </Button>
-                                </section>
-                                {outputs && (
-                                    <section aria-label="Outputs">
-                                        <h2>Outputs</h2>
-                                        {outputs}
-                                    </section>
                                 )}
-                                <section aria-label="Sources">
-                                    <Button
-                                        variant="ghost"
-                                        className="chat-context-nav"
-                                        aria-label="Sources"
-                                        onClick={(event) =>
-                                            inspect(
-                                                "sources",
-                                                event.currentTarget,
-                                            )
-                                        }>
-                                        <Icon iconNode={File01Icon} size={15} />
-                                        <span>
-                                            Sources
-                                            {sourcesSummary && (
-                                                <small>{sourcesSummary}</small>
-                                            )}
-                                        </span>
-                                        <Icon
-                                            iconNode={ArrowRight01Icon}
-                                            size={12}
-                                        />
-                                    </Button>
-                                </section>
-                                {hasWork && (
-                                    <section aria-label="Work">
-                                        <h2>Work</h2>
-                                        {missions.map((mission) => {
-                                            const agent =
-                                                agents[mission.agentId];
-                                            return (
-                                                <Button
-                                                    key={mission.id}
-                                                    variant="ghost"
-                                                    className="chat-context-nav chat-context-mission"
-                                                    aria-label={`Inspect ${agent?.name ?? "agent"} work`}
-                                                    onClick={(event) =>
-                                                        inspect(
-                                                            "work",
-                                                            event.currentTarget,
-                                                        )
-                                                    }>
-                                                    <span>
-                                                        {agent ? (
-                                                            <AgentIdentity
-                                                                agent={agent}
-                                                            />
-                                                        ) : (
-                                                            "Agent attribution unavailable"
-                                                        )}
-                                                        <small>
-                                                            {mission.operations.find(
-                                                                (operation) =>
-                                                                    operation.state ===
-                                                                    "running",
-                                                            )?.title ??
-                                                                mission.title}
-                                                        </small>
-                                                    </span>
-                                                    <small
-                                                        data-state={
-                                                            mission.state
-                                                        }>
-                                                        {mission.stateLabel ??
-                                                            workStateLabels[
-                                                                mission.state
-                                                            ]}
-                                                    </small>
-                                                    <Icon
-                                                        iconNode={
-                                                            ArrowRight01Icon
-                                                        }
-                                                        size={12}
-                                                    />
-                                                </Button>
-                                            );
-                                        })}
-                                        {!missions.length && latestActivity && (
-                                            <Button
-                                                variant="ghost"
-                                                className="chat-context-nav"
-                                                aria-label="Inspect recorded work"
-                                                onClick={(event) =>
-                                                    inspect(
-                                                        "work",
-                                                        event.currentTarget,
-                                                    )
-                                                }>
-                                                <span>
-                                                    {latestActivity.title}
-                                                    <small>
-                                                        {latestActivity.summary}
-                                                    </small>
-                                                </span>
-                                                <small
-                                                    data-state={
-                                                        latestActivity.state
-                                                    }>
-                                                    {
-                                                        workStateLabels[
-                                                            latestActivity.state
-                                                        ]
-                                                    }
-                                                </small>
-                                                <Icon
-                                                    iconNode={ArrowRight01Icon}
-                                                    size={12}
-                                                />
-                                            </Button>
-                                        )}
-                                    </section>
-                                )}
-                            </>
-                        ) : view === "plan" ? (
-                            <section aria-label="Plan">
-                                <div className="chat-context-section-heading">
-                                    {planAction}
-                                    {onChangeScope && (
-                                        <Button
-                                            variant="ghost"
-                                            size="xs"
-                                            onClick={() => {
-                                                onChangeScope();
-                                                if (!side) setOpen(false);
-                                            }}>
-                                            Change scope
-                                        </Button>
-                                    )}
-                                </div>
-                                {plan}
+                            </header>
+                            <ContextScope>{scope}</ContextScope>
+                        </section>
+                        <section aria-label={programTitle}>
+                            <header className="chat-context-section-heading">
+                                <h2>{programTitle}</h2>
+                                <span>
+                                    {questions.length}{" "}
+                                    {questions.length === 1
+                                        ? "question"
+                                        : "questions"}
+                                </span>
+                            </header>
+                            {questions.length > 0 && (
+                                <p className="chat-context-program">
+                                    {questions.join(" · ")}
+                                </p>
+                            )}
+                        </section>
+                        {outputs && (
+                            <section aria-label="Outputs">
+                                <header className="chat-context-section-heading">
+                                    <h2>Outputs</h2>
+                                </header>
+                                {outputs}
                             </section>
-                        ) : view === "sources" ? (
-                            <section aria-label="Sources">{sources}</section>
-                        ) : (
-                            <ConversationWorkList
-                                activities={activities}
-                                missions={missions}
-                                agents={agents}
-                            />
+                        )}
+                        <Collapsible
+                            render={<section aria-label="Sources" />}
+                            className="chat-context-sources">
+                            <header className="chat-context-section-heading">
+                                <h2>Sources</h2>
+                                <CollapsibleTrigger
+                                    render={
+                                        <Button variant="ghost" size="xs" />
+                                    }
+                                    aria-label="Show sources">
+                                    {sourcesSummary ?? "Show"}
+                                    <Icon
+                                        iconNode={ArrowDown01Icon}
+                                        size={12}
+                                    />
+                                </CollapsibleTrigger>
+                            </header>
+                            <CollapsibleContent className="chat-context-source-panel">
+                                {sources}
+                            </CollapsibleContent>
+                        </Collapsible>
+                        {work && (
+                            <section aria-label="Work">
+                                <header className="chat-context-section-heading">
+                                    <h2>Work</h2>
+                                </header>
+                                <div
+                                    className="chat-context-status"
+                                    data-state={work.state}
+                                    role="status">
+                                    <ConversationWorkMark state={work.state} />
+                                    <span>{work.title}</span>
+                                    <small>{work.label}</small>
+                                </div>
+                            </section>
                         )}
                     </div>
                 </ScrollArea>

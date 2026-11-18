@@ -60,19 +60,14 @@ test("context navigation stays usable while details scroll under the close actio
         exact: true,
     });
     const card = page.getByRole("dialog").filter({ has: close });
-    const plan = details.getByRole("button", {
-        name: "Research program",
+    const showSources = details.getByRole("button", {
+        name: "Show sources",
         exact: true,
     });
-    await plan.focus();
+    await showSources.focus();
     await page.keyboard.press("Enter");
-    await expect(
-        details.getByRole("region", { name: "Plan", exact: true }),
-    ).toBeVisible();
-    await page
-        .getByRole("button", { name: "Back to research context", exact: true })
-        .click();
-    await expect(plan).toBeFocused();
+    await expect(showSources).toHaveAttribute("aria-expanded", "true");
+    await expect(showSources).toBeFocused();
     await expect
         .poll(() =>
             details.evaluate((node) => node.scrollHeight > node.clientHeight),

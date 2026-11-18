@@ -17,30 +17,21 @@ for (const width of [390, 1440]) {
         await expect(
             context.getByRole("region", { name: "Outputs", exact: true }),
         ).toHaveCount(0);
-        const program = context.getByRole("button", {
-            name: "Research program",
-            exact: true,
-        });
-        await program.click();
         await expect(
-            context.getByRole("list", {
-                name: "Research questions",
+            context.getByRole("region", {
+                name: "Proposed research program",
                 exact: true,
             }),
         ).toBeVisible();
-        await context
-            .getByRole("button", { name: "Back to research context" })
-            .click();
-        await expect(program).toBeFocused();
-        await context
-            .getByRole("button", { name: "Sources", exact: true })
-            .click();
+        const showSources = context.getByRole("button", {
+            name: "Show sources",
+            exact: true,
+        });
+        await showSources.click();
+        await expect(showSources).toHaveAttribute("aria-expanded", "true");
         await expect(
             context.getByRole("button", { name: /^Inspect reference:/ }),
         ).toBeVisible();
-        await context
-            .getByRole("button", { name: "Back to research context" })
-            .click();
         const box = await context.boundingBox();
         expect(box).not.toBeNull();
         if (box) expect(box.height).toBeLessThan(600);

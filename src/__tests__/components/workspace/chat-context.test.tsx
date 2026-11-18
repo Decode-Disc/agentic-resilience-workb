@@ -9,44 +9,82 @@ import { expect, it, vi } from "vitest";
 import { ConversationContext } from "@/components/chat/workbench-conversation";
 
 const slots = {
-    plan: <p>Examine claims coordination.</p>,
-
+    scope: "Claims coordination",
+    questions: ["Position", "Switching"],
     sources: <p>One supplied reference.</p>,
 };
 
-it("opens program and source details on demand and returns to the dossier overview", async () => {
-    render(
-        <ConversationContext {...slots} planSummary="Claims coordination" />,
-    );
-    fireEvent.click(
-        await screen.findByRole("button", { name: "Research program" }),
+it("shows scope, program and sources together without drill-down views", async () => {
+    render(<ConversationContext {...slots} sourcesSummary="1 reference" />);
+    const card = within(
+        await screen.findByRole("dialog", { name: "Research context" }),
     );
     expect(
-        await screen.findByText("Examine claims coordination."),
+        within(card.getByRole("region", { name: "Scope" })).getByText(
+            "Claims coordination",
+        ),
     ).toBeTruthy();
-    expect(screen.queryByText("One supplied reference.")).toBeNull();
-    fireEvent.click(
-        screen.getByRole("button", { name: "Back to research context" }),
+    const program = within(
+        card.getByRole("region", { name: "Research program" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
-    expect(await screen.findByText("One supplied reference.")).toBeTruthy();
-    fireEvent.click(
-        screen.getByRole("button", { name: "Back to research context" }),
-    );
-    expect(screen.getByText("Claims coordination")).toBeTruthy();
+    expect(program.getByText("2 questions")).toBeTruthy();
+    expect(program.getByText("Position · Switching")).toBeTruthy();
+    const sources = within(card.getByRole("region", { name: "Sources" }));
+    expect(sources.getByText("1 reference")).toBeTruthy();
+    expect(sources.queryByText("One supplied reference.")).toBeNull();
+    fireEvent.click(sources.getByRole("button", { name: "Show sources" }));
+    expect(await sources.findByText("One supplied reference.")).toBeTruthy();
+    expect(
+        card.queryByRole("button", { name: "Back to research context" }),
+    ).toBeNull();
+    expect(card.queryByRole("button", { name: "Research program" })).toBeNull();
 });
 
-it("keeps current work visible and reveals completed work only when requested", async () => {
-    render(
+it("reduces work to the current status line instead of repeating the conversation", async () => {
+    const { rerender } = render(
         <ConversationContext
             {...slots}
             activities={[
+                {
+                    id: "done",
+                    title: "Find reporting",
+                    state: "completed",
+                    summary: "Annual filing retained",
+                },
                 {
                     id: "active",
                     title: "Check coordination",
                     state: "running",
                     summary: "Comparing the retained material",
                 },
+            ]}
+        />,
+    );
+    const work = within(await screen.findByRole("region", { name: "Work" }));
+    expect(work.getByText("Check coordination")).toBeTruthy();
+    expect(work.getByText("Working")).toBeTruthy();
+    expect(work.queryByText("Find reporting")).toBeNull();
+    expect(work.queryByText("Annual filing retained")).toBeNull();
+
+    rerender(
+        <ConversationContext
+            {...slots}
+            activities={[
+                {
+                    id: "active",
+                    title: "Check coordination",
+                    state: "interrupted",
+                    summary: "Preparation stopped",
+                },
+            ]}
+        />,
+    );
+    expect(await screen.findByText("Interrupted")).toBeTruthy();
+
+    rerender(
+        <ConversationContext
+            {...slots}
+            activities={[
                 {
                     id: "done",
                     title: "Find reporting",
@@ -56,38 +94,12 @@ it("keeps current work visible and reveals completed work only when requested", 
             ]}
         />,
     );
-    fireEvent.click(
-        await screen.findByRole("button", { name: "Inspect recorded work" }),
+    await waitFor(() =>
+        expect(screen.queryByRole("region", { name: "Work" })).toBeNull(),
     );
-    const work = within(await screen.findByRole("region", { name: "Work" }));
-    expect(work.getByText("Comparing the retained material")).toBeTruthy();
-    expect(work.queryByText("Annual filing retained")).toBeNull();
-    const completed = work.getByRole("button", {
-        name: "Completed work",
-    });
-    expect(completed.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(completed);
-    expect(await work.findByText("Annual filing retained")).toBeTruthy();
 });
 
-it("shows a compact plan and keeps its full explanation available on request", async () => {
-    render(
-        <ConversationContext {...slots} planSummary="Claims coordination" />,
-    );
-    const plan = within(await screen.findByRole("region", { name: "Plan" }));
-    expect(plan.getByText("Claims coordination")).toBeTruthy();
-    expect(plan.queryByText("Examine claims coordination.")).toBeNull();
-    fireEvent.click(
-        plan.getByRole("button", {
-            name: "Research program",
-        }),
-    );
-    expect(
-        await screen.findByText("Examine claims coordination."),
-    ).toBeTruthy();
-});
-
-it("opens the context initially without reopening it after the analyst dismisses it", async () => {
+it("opens initially without reopening it after the analyst dismisses it", async () => {
     const { rerender } = render(<ConversationContext {...slots} />);
     const trigger = screen.getByRole("button", {
         name: /^Research context$/,
@@ -99,80 +111,11 @@ it("opens the context initially without reopening it after the analyst dismisses
     await waitFor(() =>
         expect(trigger.getAttribute("aria-expanded")).toBe("false"),
     );
-    rerender(
-        <ConversationContext
-            {...slots}
-            plan={<p>Inspect switching costs.</p>}
-        />,
-    );
+    rerender(<ConversationContext {...slots} scope="Switching costs" />);
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
 });
 
-it("updates work status from supplied activity changes without replaying the work", async () => {
-    const { rerender } = render(
-        <ConversationContext
-            {...slots}
-            activities={[
-                {
-                    id: "sources",
-                    title: "Company reporting",
-                    state: "running",
-                    summary: "Reading supplied material",
-                },
-            ]}
-        />,
-    );
-    const trigger = screen.getByRole("button", {
-        name: /^Research context$/,
-    });
-    if (trigger.getAttribute("aria-expanded") !== "true")
-        fireEvent.click(trigger);
-    fireEvent.click(
-        await screen.findByRole("button", { name: "Inspect recorded work" }),
-    );
-    expect(await screen.findByText("1 working", { exact: true })).toBeTruthy();
-    expect(screen.getByText("Reading supplied material")).toBeTruthy();
-    rerender(
-        <ConversationContext
-            {...slots}
-            activities={[
-                {
-                    id: "sources",
-                    title: "Company reporting",
-                    state: "completed",
-                    summary: "Material available",
-                },
-            ]}
-        />,
-    );
-    const completed = await screen.findByRole("button", {
-        name: "Completed work",
-    });
-    expect(completed.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(completed);
-    expect(await screen.findByText("Complete", { exact: true })).toBeTruthy();
-    expect(screen.queryByText("1 working", { exact: true })).toBeNull();
-    expect(screen.getByText("Material available")).toBeTruthy();
-    rerender(
-        <ConversationContext
-            {...slots}
-            activities={[
-                {
-                    id: "sources",
-                    title: "Company reporting",
-                    state: "interrupted",
-                    summary: "Preparation stopped",
-                },
-            ]}
-        />,
-    );
-    expect(
-        await screen.findByText("Interrupted", { exact: true }),
-    ).toBeTruthy();
-    expect(screen.getByText("Preparation stopped")).toBeTruthy();
-});
-
-it("keeps narrow context nonmodal and closes it when changing scope", async () => {
+it("keeps narrow context closed until requested, nonmodal, and closes it when changing scope", async () => {
     const bounds = vi
         .spyOn(HTMLElement.prototype, "getBoundingClientRect")
         .mockImplementation(function (this: HTMLElement) {
@@ -181,27 +124,29 @@ it("keeps narrow context nonmodal and closes it when changing scope", async () =
                 : new DOMRect(0, 0, 32, 32);
         });
     try {
+        const changeScope = vi.fn();
         render(
             <div data-slot="conversation-thread">
-                <ConversationContext {...slots} onChangeScope={vi.fn()} />
+                <ConversationContext {...slots} onChangeScope={changeScope} />
             </div>,
         );
+        const trigger = screen.getByRole("button", {
+            name: "Research context",
+        });
+        await waitFor(() =>
+            expect(trigger.getAttribute("aria-expanded")).toBe("false"),
+        );
+        fireEvent.click(trigger);
         const panel = await screen.findByRole("dialog", {
             name: "Research context",
         });
         await waitFor(() =>
             expect(panel.getAttribute("aria-modal")).not.toBe("true"),
         );
-        fireEvent.click(
-            screen.getByRole("button", { name: "Research program" }),
-        );
         fireEvent.click(screen.getByRole("button", { name: "Change scope" }));
+        expect(changeScope).toHaveBeenCalledOnce();
         await waitFor(() =>
-            expect(
-                screen
-                    .getByRole("button", { name: "Research context" })
-                    .getAttribute("aria-expanded"),
-            ).toBe("false"),
+            expect(trigger.getAttribute("aria-expanded")).toBe("false"),
         );
     } finally {
         bounds.mockRestore();

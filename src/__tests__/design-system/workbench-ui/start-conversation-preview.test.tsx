@@ -584,10 +584,9 @@ it("saves a question edit directly while a conversational response continues", a
             text: "Who sets the rules?",
         }),
     );
-    await act(async () => {
-        await result.current.conversation.submit("Who sets the rules?");
-    });
+    act(() => result.current.saveQuestion());
     expect(result.current.state.questions[0]?.text).toBe("Who sets the rules?");
+    expect(result.current.state.questionAction ?? null).toBeNull();
     expect(result.current.activeTurn?.id).toBe(id);
     expect(result.current.messages.some((m) => m.delivery === "queued")).toBe(
         false,

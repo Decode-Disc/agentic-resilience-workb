@@ -1209,6 +1209,9 @@ export function useStartConversationPreview(
     const questionAction = state.questionAction ?? null;
     const setQuestionAction = (value: PreviewConversation["questionAction"]) =>
         update({ questionAction: value });
+    // An existing question is edited in its row; only a new question uses the composer.
+    const composerQuestion =
+        questionAction && !questionAction.id ? questionAction : null;
     const setSelectedQuestionId = (value: string) =>
         update({ selectedQuestionId: value });
     const activeTurn = state.turns.find((turn) => turn.state === "running");
@@ -1451,17 +1454,44 @@ export function useStartConversationPreview(
         draft:
             !state.launched && needsContext
                 ? (state.contextDraft ?? "")
-                : ((!state.launched ? questionAction?.text : undefined) ??
+                : ((!state.launched ? composerQuestion?.text : undefined) ??
                   state.draft),
         isRunning: responseRunning(state),
         onDraftChange: (text) =>
             !state.launched && needsContext
                 ? update({ contextDraft: text })
-                : !state.launched && questionAction
-                  ? setQuestionAction({ ...questionAction, text })
+                : !state.launched && composerQuestion
+                  ? setQuestionAction({ ...composerQuestion, text })
                   : setRefinement(text),
         onSend: send,
     });
+    /** Records an analyst's added or reworded question in the illustrative program. */
+    function commitQuestion(
+        action: { id?: string; text: string },
+        text: string,
+    ) {
+        const id = action.id ?? crypto.randomUUID();
+        update({
+            analystQuestionIds: [
+                ...new Set([...(state.analystQuestionIds ?? []), id]),
+            ],
+            messages: [
+                ...getMessages(state),
+                createPreviewMessage({
+                    from: "user",
+                    text: `${action.id ? "Updated" : "Added"} research question: ${text}`,
+                }),
+            ],
+            questions: action.id
+                ? state.questions.map((q) => (q.id === id ? { ...q, text } : q))
+                : [
+                      ...state.questions,
+                      { id, label: `Q${state.questions.length + 1}`, text },
+                  ],
+        });
+        setSelectedQuestionId(id);
+        setQuestionAction(null);
+    }
     async function send(text: string, delivery: "queue" | "steer" = "queue") {
         if (failNext) {
             setFailNext(false);
@@ -1469,7 +1499,7 @@ export function useStartConversationPreview(
         }
         if (
             !needsContext &&
-            !questionAction &&
+            !composerQuestion &&
             (responseRunning(state) ||
                 getMessages(state).some(
                     (message) => message.delivery === "queued",
@@ -1503,30 +1533,8 @@ export function useStartConversationPreview(
             applyContext(text);
             return;
         }
-        if (questionAction) {
-            const id = questionAction.id ?? crypto.randomUUID();
-            update({
-                analystQuestionIds: [
-                    ...new Set([...(state.analystQuestionIds ?? []), id]),
-                ],
-                messages: [
-                    ...getMessages(state),
-                    createPreviewMessage({
-                        from: "user",
-                        text: `${questionAction.id ? "Updated" : "Added"} research question: ${text}`,
-                    }),
-                ],
-                questions: questionAction.id
-                    ? state.questions.map((q) =>
-                          q.id === id ? { ...q, text } : q,
-                      )
-                    : [
-                          ...state.questions,
-                          { id, label: `Q${state.questions.length + 1}`, text },
-                      ],
-            });
-            setSelectedQuestionId(id);
-            setQuestionAction(null);
+        if (composerQuestion) {
+            commitQuestion(composerQuestion, text);
             return;
         }
 
@@ -1722,6 +1730,10 @@ export function useStartConversationPreview(
         setExample,
         setFailNext,
         setQuestionAction,
+        saveQuestion: () => {
+            if (questionAction?.id && questionAction.text.trim())
+                commitQuestion(questionAction, questionAction.text.trim());
+        },
         setRefinement,
         selectScenario,
         requestScopeChange,

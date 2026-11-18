@@ -16,7 +16,7 @@ test("mobile framing leaves the context closed and preserves the reader's choice
     await expect(context).toHaveAttribute("aria-expanded", "false");
     await context.click();
     await expect(
-        page.getByRole("region", { name: "Plan", exact: true }),
+        page.getByRole("region", { name: "Scope", exact: true }),
     ).toBeVisible();
     await page
         .getByRole("button", { name: "Close research context", exact: true })
@@ -82,10 +82,15 @@ for (const viewport of [
         await page
             .getByRole("button", { name: "Edit question", exact: true })
             .click();
-        await expect(input).toBeFocused();
+        await expect(
+            page.getByRole("textbox", {
+                name: "Edit research question",
+                exact: true,
+            }),
+        ).toBeFocused();
         await assertContained();
         await expect(
-            page.getByRole("button", { name: "Save changes", exact: true }),
+            page.getByRole("button", { name: "Save question", exact: true }),
         ).toBeInViewport();
         await page.getByRole("button", { name: "Cancel", exact: true }).click();
         await assertContained();
@@ -138,7 +143,7 @@ test("a short mobile viewport keeps the question editor inside the conversation 
     });
     await input.fill("Who can change the claims routing rules?");
     await page
-        .getByRole("button", { name: "Save changes", exact: true })
+        .getByRole("button", { name: "Save question", exact: true })
         .click();
     await expect(
         page.getByRole("textbox", {

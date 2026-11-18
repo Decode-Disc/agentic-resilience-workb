@@ -920,3 +920,74 @@
 .compactHandle {
     @apply hidden;
 }
+
+/* Folded, the program is one row: its title and count on the left, Start on the right. A blocking reason keeps the stacked layout so it stays readable. */
+.pendingAction
+[data-slot="conversation-pending-panel"][data-expanded="false"]:not(
+    :has(.framingLimitNote)
+) {
+    @apply grid grid-cols-[minmax(0,1fr)_auto] items-center;
+    border: 1px solid var(--border);
+    border-bottom: 0;
+}
+.pendingAction
+    [data-slot="conversation-pending-panel"][data-expanded="false"]:not(
+        :has(.framingLimitNote)
+    )
+    > :is(
+        [data-slot="conversation-pending-details"],
+        [data-slot="conversation-pending-footer"]
+    ) {
+    border: 0;
+    @apply bg-transparent;
+}
+.pendingAction
+    [data-slot="conversation-pending-panel"][data-expanded="false"]:not(
+        :has(.framingLimitNote)
+    )
+    > [data-slot="conversation-pending-details"]
+    > summary {
+    @apply flex-nowrap min-h-[52px];
+}
+.pendingAction
+    [data-slot="conversation-pending-panel"][data-expanded="false"]:not(
+        :has(.framingLimitNote)
+    )
+    > [data-slot="conversation-pending-details"]
+    > summary
+    > span {
+    @apply shrink-0 whitespace-nowrap;
+}
+.pendingAction
+    [data-slot="conversation-pending-panel"][data-expanded="false"]:not(
+        :has(.framingLimitNote)
+    )
+    > [data-slot="conversation-pending-details"]
+    > summary
+    > span:first-child {
+    @apply shrink min-w-0 overflow-hidden text-ellipsis;
+}
+.pendingAction
+    [data-slot="conversation-pending-panel"][data-expanded="false"]:not(
+        :has(.framingLimitNote)
+    )
+    .framingLaunch {
+    @apply min-h-0 py-[8px] pl-0 pr-[12px];
+}
+.pendingAction
+    [data-slot="conversation-pending-panel"][data-expanded="false"]
+    > [data-slot="conversation-composer"] {
+    @apply col-span-full;
+}
+/* Phones have room for the count or the title, not both; the count is what invites expanding. */
+@media (max-width: 640px) {
+    .pendingAction
+        [data-slot="conversation-pending-panel"][data-expanded="false"]:not(
+            :has(.framingLimitNote)
+        )
+        > [data-slot="conversation-pending-details"]
+        > summary
+        > span:first-child {
+        @apply sr-only;
+    }
+}

@@ -32,6 +32,7 @@ import {
     ConversationReference,
     useWorkbenchConversation,
 } from "@/components/chat/workbench-conversation";
+import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import { WorkbenchModelSelector } from "@/components/composer/model-picker";
 import type { ResearchControlCommand } from "@/components/composer/slash-commands";
 import Icon from "@/components/icon";
@@ -54,7 +55,6 @@ import {
 } from "@/components/workspace/approvals/connected-approval-card";
 import { UsePreparedSourcesButton } from "@/components/workspace/use-prepared-sources-button";
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
-import { useResponsive } from "@/hooks/use-responsive";
 import { sourcesPhasePresentation } from "@/lib/presentation/sources";
 import {
     conversationOperation,
@@ -277,7 +277,6 @@ function StartWorkspaceContent({
     const { run, company, framing } = snapshot;
     const runId = run._id;
     const navigate = useNavigate();
-    const { isMobile } = useResponsive();
     const state = useQuery(api.execution.conversations.get, { runId });
     const modelChoices = useQuery(api.workbench.models, { runId });
     const selectModel = useMutation(api.workbench.setModel);
@@ -321,7 +320,12 @@ function StartWorkspaceContent({
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const trigger = useRef<HTMLElement | null>(null);
     const activeTurnId = state?.activeTurn?._id;
-    const editKey = edit ? `${edit.kind}:${edit.id ?? ""}` : null;
+    // An existing question is edited in its row; scope edits and new questions use the composer.
+    const inlineEdit = edit?.kind === "question" && edit.id ? edit : null;
+    const composerEdit = inlineEdit ? null : edit;
+    const editKey = composerEdit
+        ? `${composerEdit.kind}:${composerEdit.id ?? ""}`
+        : null;
     const insufficient =
         run.completionOutcome === "insufficient_public_evidence";
     const launched = !!run.fixedFramingRevisionId;
@@ -397,52 +401,55 @@ function StartWorkspaceContent({
             setModelPending(false);
         }
     };
+    /** Saves an edit against the framing revision it was opened on, so a newer program is never overwritten. */
+    const saveEdit = async (edit: Edit, text: string) => {
+        const content =
+            edit.kind === "scope"
+                ? { ...edit.content, scope: text }
+                : {
+                      ...edit.content,
+                      questions: edit.id
+                          ? edit.content.questions.map((q) =>
+                                q.id === edit.id ? { ...q, text } : q,
+                            )
+                          : [
+                                ...edit.content.questions,
+                                {
+                                    id:
+                                        edit.newQuestionId ??
+                                        crypto.randomUUID(),
+                                    text,
+                                    shortLabel: `Question ${edit.content.questions.length + 1}`,
+                                    rationale: "Added by the analyst.",
+                                },
+                            ],
+                  };
+        try {
+            setSaving(true);
+            await save({
+                runId,
+                expectedRevision: edit.revision,
+                requestKey: edit.requestKey,
+                content,
+            });
+            setEdit(null);
+            queueMicrotask(() => trigger.current?.focus());
+        } catch (cause) {
+            const code = convexErrorCode(cause);
+            setError(
+                code === "framing_question_capacity" && readiness.questionLimit
+                    ? questionCapacityCopy(readiness.questionLimit)
+                    : "The research program could not be saved. If it changed, cancel this edit and review the latest version before trying again.",
+            );
+            throw cause;
+        } finally {
+            setSaving(false);
+        }
+    };
     const send = async (text: string, mode: "queue" | "steer" = "queue") => {
         setError(null);
-        if (edit) {
-            const content =
-                edit.kind === "scope"
-                    ? { ...edit.content, scope: text }
-                    : {
-                          ...edit.content,
-                          questions: edit.id
-                              ? edit.content.questions.map((q) =>
-                                    q.id === edit.id ? { ...q, text } : q,
-                                )
-                              : [
-                                    ...edit.content.questions,
-                                    {
-                                        id:
-                                            edit.newQuestionId ??
-                                            crypto.randomUUID(),
-                                        text,
-                                        shortLabel: `Question ${edit.content.questions.length + 1}`,
-                                        rationale: "Added by the analyst.",
-                                    },
-                                ],
-                      };
-            try {
-                setSaving(true);
-                await save({
-                    runId,
-                    expectedRevision: edit.revision,
-                    requestKey: edit.requestKey,
-                    content,
-                });
-                setEdit(null);
-                queueMicrotask(() => trigger.current?.focus());
-            } catch (cause) {
-                const code = convexErrorCode(cause);
-                setError(
-                    code === "framing_question_capacity" &&
-                        readiness.questionLimit
-                        ? questionCapacityCopy(readiness.questionLimit)
-                        : "The research program could not be saved. If it changed, cancel this edit and review the latest version before trying again.",
-                );
-                throw cause;
-            } finally {
-                setSaving(false);
-            }
+        if (composerEdit) {
+            await saveEdit(composerEdit, text);
             return;
         }
         if (delivery.current?.text !== text || delivery.current?.mode !== mode)
@@ -587,14 +594,18 @@ function StartWorkspaceContent({
                 metadata: { custom: { agentId: "workbench" } },
             })),
         ],
-        draft: edit?.text ?? draft,
+        draft: composerEdit?.text ?? draft,
         onDraftChange: (text) =>
-            edit
-                ? setEdit({ ...edit, text, requestKey: crypto.randomUUID() })
+            composerEdit
+                ? setEdit({
+                      ...composerEdit,
+                      text,
+                      requestKey: crypto.randomUUID(),
+                  })
                 : setDraft(text),
         onSend: send,
         isRunning: running || awaitingAdmission !== undefined,
-        queue: edit ? undefined : queue,
+        queue: composerEdit ? undefined : queue,
         onStop: activeTurnId
             ? () => stop({ runId, turnId: activeTurnId }).then(() => {})
             : undefined,
@@ -939,18 +950,18 @@ function StartWorkspaceContent({
     };
     const composer = (
         <>
-            {launched && !edit && (
+            {launched && !composerEdit && (
                 <ConversationWorkReturn missions={missions} agents={agents} />
             )}
             <ConversationComposer
                 inputRef={inputRef}
-                onCommand={!edit ? onCommand : undefined}
+                onCommand={!composerEdit ? onCommand : undefined}
                 availableCommands={[...snapshot.availableCommands, "/model"]}
-                grants={!edit ? grants : undefined}
+                grants={!composerEdit ? grants : undefined}
                 onOpenModels={() => setModelPickerOpen(true)}
                 controlsOpen={modelPickerOpen}
                 modelSelector={
-                    !edit ? (
+                    !composerEdit ? (
                         <WorkbenchModelSelector
                             snapshot={modelChoices}
                             open={modelPickerOpen}
@@ -963,30 +974,28 @@ function StartWorkspaceContent({
                     ) : undefined
                 }
                 label={
-                    edit
-                        ? edit.kind === "scope"
+                    composerEdit
+                        ? composerEdit.kind === "scope"
                             ? "Edit research scope"
-                            : edit.id
-                              ? "Edit research question"
-                              : "Add research question"
+                            : "Add research question"
                         : launched
                           ? "Ask about the sources"
                           : "Refine the framing in your own words"
                 }
                 placeholder={
-                    edit?.kind === "question" && !edit.id
+                    composerEdit?.kind === "question"
                         ? "What would you like to investigate?"
                         : undefined
                 }
                 actionLabel={
-                    edit
-                        ? edit.kind === "scope" || edit.id
+                    composerEdit
+                        ? composerEdit.kind === "scope"
                             ? "Save changes"
                             : "Add question"
                         : undefined
                 }
                 onCancel={
-                    edit
+                    composerEdit
                         ? () => {
                               setEdit(null);
                               setError(null);
@@ -1014,18 +1023,28 @@ function StartWorkspaceContent({
     const context = (
         <ConversationContext
             title={`${company?.ticker ?? "Company"} · Research`}
-            defaultOpen={!launched && !isMobile}
+            icon={
+                company ? (
+                    <CompanyFaviconAvatar company={company} size="xs" />
+                ) : undefined
+            }
             missions={missions}
-            agents={agents}
             activities={[...work.values()].flatMap((t) =>
                 t.entries.flatMap((e) =>
                     e.kind === "operation" ? [e.operation] : [],
                 ),
             )}
             onChangeScope={!launched ? () => beginEdit("scope") : undefined}
-            planSummary={framing?.content.scope || "Scope being prepared"}
-            questionCount={framing?.content.questions.length ?? 0}
-            planAction={
+            scope={framing?.content.scope || "Scope being prepared"}
+            questions={
+                framing?.content.questions.map((q) => q.shortLabel) ?? []
+            }
+            programTitle={
+                launched
+                    ? "Accepted research program"
+                    : "Proposed research program"
+            }
+            scopeAction={
                 launched ? (
                     <Button
                         variant="ghost"
@@ -1044,31 +1063,6 @@ function StartWorkspaceContent({
                         View framing
                     </Button>
                 ) : undefined
-            }
-            plan={
-                <>
-                    {launched && (
-                        <p className="chat-context-scope-detail">
-                            {framing?.content.scope}
-                        </p>
-                    )}
-                    <FramingProposal
-                        title={
-                            launched
-                                ? "Accepted research program"
-                                : "Proposed research program"
-                        }
-                        scope={launched ? undefined : framing?.content.scope}
-                        questions={
-                            framing?.content.questions.map(
-                                (question, index) => ({
-                                    ...question,
-                                    label: `Q${index + 1}`,
-                                }),
-                            ) ?? []
-                        }
-                    />
-                </>
             }
             sourcesSummary={`${snapshot.sources.length} references · ${captured} saved ${captured === 1 ? "capture" : "captures"}`}
             sources={
@@ -1110,7 +1104,7 @@ function StartWorkspaceContent({
                 })) ?? []
             }
             composer={composer}
-            actionActive={!!edit}
+            actionActive={!!composerEdit}
             pending={saving}
             startDisabled={
                 !framing?.content.scope.trim() ||
@@ -1125,8 +1119,40 @@ function StartWorkspaceContent({
                 !launched ? readiness.startUnavailable : undefined
             }
             onEditRequest={
-                !launched ? (q) => beginEdit("question", q.id) : undefined
+                !launched && !composerEdit
+                    ? (q) => beginEdit("question", q.id)
+                    : undefined
             }
+            editing={
+                inlineEdit?.id
+                    ? {
+                          questionId: inlineEdit.id,
+                          text: inlineEdit.text,
+                          pending: saving,
+                          error: error ?? undefined,
+                      }
+                    : undefined
+            }
+            onEditChange={(text) =>
+                inlineEdit &&
+                setEdit({
+                    ...inlineEdit,
+                    text,
+                    requestKey: crypto.randomUUID(),
+                })
+            }
+            onEditCancel={() => {
+                setEdit(null);
+                setError(null);
+            }}
+            onEditSave={() => {
+                if (!inlineEdit) return;
+                setError(null);
+                // A refusal is shown beside the field; the unsaved wording stays.
+                void saveEdit(inlineEdit, inlineEdit.text.trim()).catch(
+                    () => undefined,
+                );
+            }}
             onAddRequest={!launched ? () => beginEdit("question") : undefined}
             onStart={!launched ? () => void launch() : undefined}
             error={undefined}

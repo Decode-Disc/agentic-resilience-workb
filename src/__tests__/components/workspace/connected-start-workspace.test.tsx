@@ -245,15 +245,13 @@ test("the Sources context explains a model interruption without declaring docume
         },
     });
     render(<ConnectedStartWorkspace runId={runId} />);
-    fireEvent.click(screen.getByRole("button", { name: "Research context" }));
-    fireEvent.click(
-        screen.getByRole("button", { name: "Inspect Sources Agent work" }),
-    );
-    expect(
+    const work = within(
         within(
             screen.getByRole("region", { name: "Research context details" }),
-        ).getByText(detail),
-    ).toBeTruthy();
+        ).getByRole("region", { name: "Work" }),
+    );
+    expect(work.getByRole("status").textContent).toMatch(/Interrupted/);
+    expect(screen.getAllByText(detail).length).toBeGreaterThan(0);
     expect(
         screen.queryByText("Documentary preparation completed with limits"),
     ).toBeNull();
@@ -274,12 +272,10 @@ test("the context identifies a launched research program as accepted", () => {
         preparation: { status: "partial" },
     });
     render(<ConnectedStartWorkspace runId={runId} />);
-    fireEvent.click(screen.getByRole("button", { name: "Research context" }));
-    fireEvent.click(screen.getByRole("button", { name: "Research program" }));
     expect(
-        screen.getByRole("region", {
-            name: "Accepted research program",
-        }),
+        within(
+            screen.getByRole("region", { name: "Research context details" }),
+        ).getByRole("region", { name: "Accepted research program" }),
     ).toBeTruthy();
     expect(
         screen.queryByRole("region", { name: "Proposed research scope" }),
@@ -463,14 +459,20 @@ test("selecting /model opens the same model menu without a research operation", 
     expect(command).not.toHaveBeenCalled();
     expect(submitMessage).not.toHaveBeenCalled();
 });
-test("the same composer saves an edited question against the visible framing revision", async () => {
+test("an inline question edit saves against the visible framing revision and leaves the composer alone", async () => {
     render(<ConnectedStartWorkspace runId={runId} />);
     expect(screen.getByText("Who controls coordination?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
-    fireEvent.change(screen.getByRole("textbox"), {
-        target: { value: "Who can set the workflow rules?" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.change(
+        screen.getByRole("textbox", { name: "Edit research question" }),
+        { target: { value: "Who can set the workflow rules?" } },
+    );
+    expect(
+        screen.getByRole("textbox", {
+            name: "Refine the framing in your own words",
+        }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save question" }));
     await waitFor(() =>
         expect(save).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -487,7 +489,11 @@ test("the same composer saves an edited question against the visible framing rev
             }),
         ),
     );
-    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+    await waitFor(() =>
+        expect(
+            screen.queryByRole("textbox", { name: "Edit research question" }),
+        ).toBeNull(),
+    );
 });
 test("adding a question preserves the existing program and draft without starting research", async () => {
     render(<ConnectedStartWorkspace runId={runId} />);
@@ -715,9 +721,10 @@ test("a query retry preserves an unsaved question and its revision", () => {
     try {
         const view = render(<ConnectedStartWorkspace runId={runId} />);
         fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
-        fireEvent.change(screen.getByRole("textbox"), {
-            target: { value: "Unsaved analyst wording" },
-        });
+        fireEvent.change(
+            screen.getByRole("textbox", { name: "Edit research question" }),
+            { target: { value: "Unsaved analyst wording" } },
+        );
         convexReactHarness
             .query(api.workbench.snapshot)
             .throws(new Error("private diagnostic"));
@@ -730,9 +737,11 @@ test("a query retry preserves an unsaved question and its revision", () => {
         expect(screen.queryByText("private diagnostic")).toBeNull();
         convexReactHarness.query(api.workbench.snapshot).returns(readySnapshot);
         fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-        expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(
-            "Unsaved analyst wording",
-        );
+        expect(
+            screen.getByRole<HTMLTextAreaElement>("textbox", {
+                name: "Edit research question",
+            }).value,
+        ).toBe("Unsaved analyst wording");
     } finally {
         consoleError.mockRestore();
     }

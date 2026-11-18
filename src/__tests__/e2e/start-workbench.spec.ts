@@ -101,12 +101,16 @@ for (const viewport of [
         await page
             .getByRole("button", { name: "Edit question", exact: true })
             .click();
-        await expect(input).toBeFocused();
-        await input.fill(
+        const editor = page.getByRole("textbox", {
+            name: "Edit research question",
+            exact: true,
+        });
+        await expect(editor).toBeFocused();
+        await editor.fill(
             "Who controls coordination and switching in this workflow?",
         );
         await page
-            .getByRole("button", { name: "Save changes", exact: true })
+            .getByRole("button", { name: "Save question", exact: true })
             .click();
         await expect(
             page.getByText(
@@ -255,7 +259,7 @@ for (const viewport of [
             await context.click();
         const contextCard = page.locator(".chat-context-card");
         await contextCard
-            .getByRole("button", { name: "Sources", exact: true })
+            .getByRole("button", { name: "Show sources", exact: true })
             .click();
         const sourceSearch = contextCard.getByRole("searchbox", {
             name: "Find a source",

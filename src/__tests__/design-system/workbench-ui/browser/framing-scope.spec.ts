@@ -34,7 +34,7 @@ for (const width of [1440, 390]) {
         ).toBeVisible();
         if (width === 1440)
             await expect(
-                page.getByRole("region", { name: "Plan", exact: true }),
+                page.getByRole("region", { name: "Scope", exact: true }),
             ).toBeVisible();
         await expect(
             page
@@ -67,14 +67,8 @@ for (const width of [1440, 390]) {
             await page
                 .getByRole("button", { name: "Research context", exact: true })
                 .click();
-        await page
-            .getByRole("button", {
-                name: "Back to research context",
-                exact: true,
-            })
-            .click();
         await expect(
-            page.getByRole("region", { name: "Plan", exact: true }),
+            page.getByRole("region", { name: "Scope", exact: true }),
         ).toContainText("Repair network management");
         await expect(
             page.getByRole("button", { name: "Start research", exact: true }),
@@ -130,7 +124,7 @@ test("the open context card stays beside the program while entering a question",
         }),
     ).toBeFocused();
     await expect(
-        page.getByRole("region", { name: "Plan", exact: true }),
+        page.getByRole("region", { name: "Scope", exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await reviewResearchProgram(page);
@@ -144,6 +138,6 @@ test("the open context card stays beside the program while entering a question",
         }),
     ).toBeFocused();
     await expect(
-        page.getByRole("region", { name: "Plan", exact: true }),
+        page.getByRole("region", { name: "Scope", exact: true }),
     ).toBeVisible();
 });
