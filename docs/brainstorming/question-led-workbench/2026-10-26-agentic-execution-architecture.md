@@ -4,6 +4,8 @@ Follow-up, 2026-11-01: the [message-authority repair and final paid cases](../..
 
 Supersession, 2026-11-11: current `authority_native_v1` work derives model deadlines and receipt leases from remaining approved authority rather than historical 60-second/five-minute generation ceilings. Application defaults have one [resource-policy owner](../../../context/TECH.md#locked-resource-limits); native context/output management and retained evidence remain distinct. Earlier implementation values below preserve their dated meaning and grant no renewed execution authority.
 
+Design update, 2026-11-18: [ADR-029](../../decisions/029-ground-workbench-framing-and-carry-coverage-through-handoffs.md) extends the earlier operation and handoff design. The [technical contract](../../../context/TECH.md#public-context-during-framing) owns the new framing operation, with implementation and semantic qualification pending.
+
 ## Status and Ownership
 
 Accepted on 2026-10-26 and refined on 2026-10-27, 2026-10-29, 2026-11-01 and 2026-11-07. This document preserves dated execution rationale; the [technical contract](../../../context/TECH.md#agentic-missions-and-shared-operations) owns current obligations and the [global conception](2026-10-23-question-led-workbench-conception.md) preserves workflow rationale.
