@@ -47,10 +47,6 @@
     div[data-slot="combobox-item"] {
         @apply cursor-pointer!;
     }
-
-    *[data-slot="dropdown-menu-content"] {
-        @apply rounded-xl!;
-    }
 }
 
 @layer components {

@@ -50,11 +50,6 @@ import {
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
     Empty,
     EmptyDescription,
     EmptyHeader,
@@ -65,13 +60,6 @@ import {
     ResizablePanel,
     ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import {
     Sheet,
     SheetClose,
@@ -609,6 +597,28 @@ export function FramingClarification({
         </AgentQuestion>
     );
 }
+/** Question count against the documentary limit; the meter repeats the count visually. */
+function ProgramCount({ count, limit }: { count: number; limit?: number }) {
+    if (!limit)
+        return (
+            <span>{`${count} ${count === 1 ? "question" : "questions"}`}</span>
+        );
+    return (
+        <>
+            <span className={styles.programMeter} aria-hidden="true">
+                {Array.from({ length: limit }, (_, index) => (
+                    <span
+                        // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional and never reorder.
+                        key={index}
+                        data-filled={index < count || undefined}
+                    />
+                ))}
+            </span>
+            <span>{`${count} of ${limit} questions`}</span>
+        </>
+    );
+}
+
 /** Separates the proposed research program from optional analyst context and corrections. */
 export function FramingProposal({
     collapsible = false,
@@ -657,26 +667,32 @@ export function FramingProposal({
     error?: string;
 }) {
     const summaryRef = useRef<HTMLElement>(null);
-    const [reviewing, setReviewing] = useState(!collapsible);
+    const [reviewing, setReviewing] = useState(true);
     const needsInput = Boolean(clarification) || actionActive;
     useEffect(() => {
         if (needsInput) setReviewing(true);
     }, [needsInput]);
     const limitNoteId = useId();
-    const limitNote = startUnavailableReason ?? addUnavailableReason;
+    const addNoteId = useId();
+    const questionListId = useId();
     const previousClarification = useRef(Boolean(clarification));
     useEffect(() => {
         if (previousClarification.current && !clarification)
             summaryRef.current?.focus();
         previousClarification.current = Boolean(clarification);
     }, [clarification]);
-    const [selected, setSelected] = useState(questions[0]?.id);
-    const current = questions.find((q) => q.id === selected) ?? questions[0];
+    // Undefined opens the first question; null keeps every question folded.
+    const [selected, setSelected] = useState<string | null>();
+    const current =
+        selected === null
+            ? undefined
+            : (questions.find((q) => q.id === selected) ?? questions[0]);
+    const hasQuestions = questions.length > 0;
     const busy = pending || actionActive;
     const emptyProgram =
         collapsible &&
         Boolean(composer) &&
-        !current &&
+        !hasQuestions &&
         !clarification &&
         !actionActive &&
         !error;
@@ -708,61 +724,59 @@ export function FramingProposal({
                             </details>
                         </section>
                     )}
-                    {current && !actionActive && (
-                        <div className="chat-question-navigation">
-                            <Select
-                                value={current.id}
-                                onValueChange={(value) => {
-                                    if (value) setSelected(value);
-                                }}
-                                disabled={busy}>
-                                <SelectTrigger
-                                    aria-label="Research question"
-                                    className="chat-question-selector">
-                                    <SelectValue>
-                                        {questions.indexOf(current) + 1} of{" "}
-                                        {questions.length} ·{" "}
-                                        {current.shortLabel ?? current.label}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {questions.map((q, index) => (
-                                        <SelectItem key={q.id} value={q.id}>
-                                            {index + 1}.{" "}
-                                            {q.shortLabel ?? q.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-                    {current && !actionActive ? (
-                        <section
-                            ref={summaryRef}
-                            tabIndex={-1}
-                            className="chat-focused-question"
-                            aria-label="Framing summary">
-                            <span className="chat-question-caption">
-                                Research question
-                            </span>
-                            <h3>{current.text}</h3>
-                            {current.rationale && (
-                                <Collapsible
-                                    key={current.id}
-                                    className="chat-question-rationale">
-                                    <CollapsibleTrigger
-                                        render={
-                                            <Button variant="ghost" size="xs" />
-                                        }>
-                                        Why this question?
-                                    </CollapsibleTrigger>
-                                    <CollapsibleContent>
-                                        <p>{current.rationale}</p>
-                                    </CollapsibleContent>
-                                </Collapsible>
-                            )}
-                        </section>
-                    ) : !current && !actionActive ? (
+                    {hasQuestions && !actionActive ? (
+                        <ol
+                            className="chat-question-list"
+                            aria-label="Research questions">
+                            {questions.map((q, index) => {
+                                const open = q.id === current?.id;
+                                const detailId = `${questionListId}-${q.id}`;
+                                return (
+                                    <li
+                                        key={q.id}
+                                        data-open={open || undefined}>
+                                        <button
+                                            type="button"
+                                            className="chat-question-row"
+                                            aria-expanded={open}
+                                            aria-controls={
+                                                open ? detailId : undefined
+                                            }
+                                            disabled={busy}
+                                            onClick={() =>
+                                                setSelected(open ? null : q.id)
+                                            }>
+                                            <span className="chat-question-number">
+                                                {index + 1}
+                                            </span>{" "}
+                                            <span className="chat-question-label">
+                                                {q.shortLabel ?? q.label}
+                                            </span>
+                                            <Icon
+                                                iconNode={ArrowRight01Icon}
+                                                size={14}
+                                            />
+                                        </button>
+                                        {open && (
+                                            <section
+                                                id={detailId}
+                                                ref={summaryRef}
+                                                tabIndex={-1}
+                                                className="chat-focused-question"
+                                                aria-label="Framing summary">
+                                                <h3>{q.text}</h3>
+                                                {q.rationale && (
+                                                    <p className="chat-question-rationale">
+                                                        {q.rationale}
+                                                    </p>
+                                                )}
+                                            </section>
+                                        )}
+                                    </li>
+                                );
+                            })}
+                        </ol>
+                    ) : !hasQuestions && !actionActive ? (
                         <Empty className="flex-none items-start gap-0 rounded-none px-3.5 py-3 text-left">
                             <EmptyHeader className="max-w-none items-start gap-1">
                                 <EmptyTitle className="text-[13px]/[18px]">
@@ -789,10 +803,11 @@ export function FramingProposal({
             <div
                 hidden={actionActive}
                 className={styles.framingLaunch}
-                data-empty-program={!current || undefined}>
+                data-empty-program={!hasQuestions || undefined}>
                 <div
                     hidden={
-                        actionActive || (collapsible && !reviewing && !!current)
+                        actionActive ||
+                        (collapsible && !reviewing && hasQuestions)
                     }
                     className="chat-question-actions">
                     {current && onEditRequest && (
@@ -818,23 +833,30 @@ export function FramingProposal({
                                 addUnavailableReason ?? "Add research question"
                             }
                             aria-describedby={
-                                addUnavailableReason ? limitNoteId : undefined
+                                addUnavailableReason ? addNoteId : undefined
                             }
                             disabled={busy || Boolean(addUnavailableReason)}
                             onClick={onAddRequest}>
                             <Icon iconNode={PlusSignIcon} size={16} />
                             <span
                                 className={
-                                    current ? "hidden sm:inline" : undefined
+                                    hasQuestions
+                                        ? "hidden sm:inline"
+                                        : undefined
                                 }>
-                                Add research question
+                                Add question
                             </span>
                         </Button>
                     )}
                 </div>
-                {limitNote ? (
+                {addUnavailableReason && (
+                    <p id={addNoteId} className="sr-only">
+                        {addUnavailableReason}
+                    </p>
+                )}
+                {startUnavailableReason ? (
                     <p id={limitNoteId} className={styles.framingLimitNote}>
-                        {limitNote}
+                        {startUnavailableReason}
                     </p>
                 ) : (
                     <p className="sr-only">
@@ -874,13 +896,31 @@ export function FramingProposal({
                             : (title ?? "Proposed research program")
                     }
                     summary={
+                        clarification ? (
+                            "Research boundary"
+                        ) : emptyProgram ? (
+                            "No questions yet"
+                        ) : (
+                            <ProgramCount
+                                count={questions.length}
+                                limit={questionLimit}
+                            />
+                        )
+                    }
+                    toggleLabels={
                         clarification
-                            ? "Research boundary"
-                            : emptyProgram
-                              ? "No questions yet"
-                              : questionLimit
-                                ? `${questions.length} of ${questionLimit} questions`
-                                : `${questions.length} questions`
+                            ? undefined
+                            : {
+                                  open: "Hide questions",
+                                  closed: "Show questions",
+                              }
+                    }
+                    preview={
+                        clarification || !hasQuestions
+                            ? undefined
+                            : questions
+                                  .map((q) => q.shortLabel ?? q.label)
+                                  .join(" · ")
                     }
                     headerAction={
                         emptyProgram && onAddRequest ? (

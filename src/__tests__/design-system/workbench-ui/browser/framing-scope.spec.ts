@@ -39,8 +39,8 @@ for (const width of [1440, 390]) {
         await expect(
             page
                 .getByRole("region", { name: "Clarify research context" })
-                .getByRole("combobox", {
-                    name: "Research question",
+                .getByRole("list", {
+                    name: "Research questions",
                     exact: true,
                 }),
         ).toHaveCount(0);
@@ -58,8 +58,8 @@ for (const width of [1440, 390]) {
         await expect(
             page
                 .getByRole("region", { name: "Research framing" })
-                .getByRole("combobox", {
-                    name: "Research question",
+                .getByRole("list", {
+                    name: "Research questions",
                     exact: true,
                 }),
         ).toBeVisible();

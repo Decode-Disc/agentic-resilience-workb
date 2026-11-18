@@ -149,7 +149,7 @@ export function NestedMenuTooltip({
                     align="start"
                     sideOffset={10}
                     className={cn(
-                        "min-w-[180px] overflow-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                        "min-w-[180px] overflow-hidden rounded-popup bg-popover p-1.5 text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
                         uiLayerClasses.popup,
                         "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
                         className,
@@ -165,7 +165,7 @@ export function NestedMenuTooltip({
                                 type="button"
                                 key={item.key}
                                 className={cn(
-                                    "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm outline-none transition-colors",
+                                    "flex w-full items-center gap-2 rounded-option px-3 py-2 text-sm outline-none transition-colors",
                                     "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
                                     item.variant === "danger" &&
                                         "text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10",
@@ -230,7 +230,7 @@ export function NestedMenuItemComponent({
         <button
             type="button"
             className={cn(
-                "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors",
+                "flex w-full items-center gap-2 rounded-option px-3 py-2 text-sm outline-none transition-colors",
                 "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
                 item.variant === "danger" &&
                     "text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10",
@@ -432,7 +432,7 @@ export function NestedMenu({
                         align={align}
                         sideOffset={sideOffset}
                         className={cn(
-                            "min-w-[200px] overflow-hidden rounded-xl px-2 py-1 bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
+                            "min-w-[200px] overflow-hidden rounded-popup p-1.5 bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95",
                             uiLayerClasses.popup,
                             "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
                             className,

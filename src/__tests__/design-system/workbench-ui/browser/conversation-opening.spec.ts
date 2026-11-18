@@ -23,8 +23,8 @@ for (const width of [390, 1440]) {
         });
         await program.click();
         await expect(
-            context.getByRole("combobox", {
-                name: "Research question",
+            context.getByRole("list", {
+                name: "Research questions",
                 exact: true,
             }),
         ).toBeVisible();

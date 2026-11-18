@@ -155,16 +155,15 @@ test("a short mobile viewport keeps the question editor inside the conversation 
     ).toBeInViewport();
 });
 
-test("mobile question selection reveals only the requested question without a horizontal strip", async ({
+test("mobile question rows reveal only the requested question without a horizontal strip", async ({
     page,
 }) => {
     await page.setViewportSize({ width: 320, height: 740 });
     await page.goto("/?layout=start&screen=framing&theme=light");
     await reviewResearchProgram(page);
-    const selector = page.getByRole("combobox", { name: "Research question" });
-    await selector.click();
-    await page.getByRole("option", { name: "4. Bypass", exact: true }).click();
-    await expect(selector).toContainText("4 of 4");
+    const bypass = page.getByRole("button", { name: "4 Bypass", exact: true });
+    await bypass.click();
+    await expect(bypass).toHaveAttribute("aria-expanded", "true");
     await expect(
         page.getByRole("region", { name: "Framing summary" }),
     ).toContainText("bypass");

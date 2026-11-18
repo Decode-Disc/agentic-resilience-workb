@@ -132,7 +132,7 @@ export function researchProgramReadiness(
 
 /** Why a new question cannot be added; shared by the disabled control and a refused save. */
 export function questionCapacityCopy(capacity: number) {
-    return `Documentary preparation can take on ${plural(capacity, "research question")} in this workspace. Edit an existing question instead.`;
+    return `This workspace can prepare sources for up to ${plural(capacity, "research question")}. Edit a question to change focus.`;
 }
 
 /** Why Start cannot proceed, for the disabled control and for a refusal that raced it. Undefined when Start is available or no longer applies. */

@@ -38,7 +38,7 @@ export interface WorkspaceDockSection {
 }
 
 const item =
-    "inline-flex h-9 shrink-0 items-center gap-2 rounded-[11px] px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+    "inline-flex h-9 shrink-0 items-center gap-2 rounded-2xl px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 /**
  * Workspace sections and actions in one floating dock. Every section keeps
@@ -153,4 +153,4 @@ export function WorkspaceDock({
 
 /** The dock's inventory control: ink, so the evidence count stands out from the sections. */
 export const workspaceDockActionClass =
-    "inline-flex h-9 shrink-0 items-center gap-2 rounded-[11px] bg-foreground px-3 text-sm font-medium text-background shadow-raised transition-colors hover:bg-foreground/88 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+    "inline-flex h-9 shrink-0 items-center gap-2 rounded-2xl bg-foreground px-3 text-sm font-medium text-background shadow-raised transition-colors hover:bg-foreground/88 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";

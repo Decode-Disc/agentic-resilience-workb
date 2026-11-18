@@ -249,13 +249,11 @@ test("START optional corrections update the proposed research program", async ({
             exact: true,
         }),
     ).toBeVisible();
-    const selector = page.getByRole("combobox", {
-        name: "Research question",
-        exact: true,
-    });
-    await expect(selector).toContainText("5 of 5");
-    await selector.click();
-    await page.getByRole("option", { name: /^1\./ }).click();
+    await expect(page.getByRole("button", { name: /^5 / })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+    );
+    await page.getByRole("button", { name: /^1 / }).click();
     await expect(
         page.getByRole("heading", {
             name: "Who can change the routing rules?",
@@ -384,11 +382,10 @@ test("START useful context changes the scope and research program with mobile ke
         "Who controls access to the repair network?",
     );
     await expect(
-        summary.getByRole("combobox", {
-            name: "Research question",
-            exact: true,
-        }),
-    ).toContainText("of 3");
+        summary
+            .getByRole("list", { name: "Research questions", exact: true })
+            .getByRole("listitem"),
+    ).toHaveCount(3);
     await expect(summary).not.toContainText(
         "Could agent-led claim intake bypass it?",
     );
@@ -610,12 +607,8 @@ test("START conversation keeps a guided correction through launch and reload", a
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Send refinement" }).click();
     await reviewResearchProgram(page);
-    const questionSelector = page.getByRole("combobox", {
-        name: "Research question",
-        exact: true,
-    });
-    await questionSelector.click();
-    await page.getByRole("option", { name: /^5\./ }).click();
+    const fifthQuestion = page.getByRole("button", { name: /^5 / });
+    await fifthQuestion.click();
     await expect(
         page.getByRole("region", { name: "Proposed framing", exact: true }),
     ).toContainText(
@@ -634,8 +627,7 @@ test("START conversation keeps a guided correction through launch and reload", a
         .getByRole("button", { name: "View framing", exact: true })
         .click();
     await reviewResearchProgram(page);
-    await questionSelector.click();
-    await page.getByRole("option", { name: /^5\./ }).click();
+    await fifthQuestion.click();
     await expect(
         page.getByRole("region", {
             name: "Accepted research program",
@@ -817,11 +809,10 @@ test("START reference activity controls update the supplied scope and question p
         "Who controls access to the repair network?",
     );
     await expect(
-        summary.getByRole("combobox", {
-            name: "Research question",
-            exact: true,
-        }),
-    ).toContainText("of 3");
+        summary
+            .getByRole("list", { name: "Research questions", exact: true })
+            .getByRole("listitem"),
+    ).toHaveCount(3);
     await expect(
         page.getByRole("button", { name: "Start research", exact: true }),
     ).toBeEnabled();

@@ -42,6 +42,10 @@
     --radius-full: 9999px;
     --radius-input: 0.65rem;
     --radius-source-card: 0.75rem;
+    --radius-control: 0.6rem;
+    --radius-option: 0.5rem;
+    --radius-popup: 0.875rem;
+    --radius-tooltip: 0.5rem;
     --container-max: 100rem;
     --gutter: 1rem;
     --gutter-sm: 1.5rem;

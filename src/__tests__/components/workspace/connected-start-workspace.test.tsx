@@ -466,11 +466,6 @@ test("selecting /model opens the same model menu without a research operation", 
 test("the same composer saves an edited question against the visible framing revision", async () => {
     render(<ConnectedStartWorkspace runId={runId} />);
     expect(screen.getByText("Who controls coordination?")).toBeTruthy();
-    fireEvent.click(
-        screen.getByText("Proposed research program", {
-            selector: "summary span",
-        }),
-    );
     fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
     fireEvent.change(screen.getByRole("textbox"), {
         target: { value: "Who can set the workflow rules?" },
@@ -502,16 +497,6 @@ test("adding a question preserves the existing program and draft without startin
         }),
         { target: { value: "Keep my ordinary draft." } },
     );
-    if (
-        screen.queryByText("Proposed research program", {
-            selector: "summary span",
-        })
-    )
-        fireEvent.click(
-            screen.getByText("Proposed research program", {
-                selector: "summary span",
-            }),
-        );
     fireEvent.click(
         screen.getByRole("button", { name: "Add research question" }),
     );
@@ -592,19 +577,16 @@ test("a program at documentary capacity shows its limit and cannot grow, while S
     });
     render(<ConnectedStartWorkspace runId={runId} />);
     expect(screen.getByText("3 of 3 questions")).toBeTruthy();
-    fireEvent.click(
-        screen.getByText("Proposed research program", {
-            selector: "summary span",
-        }),
-    );
     const add = screen.getByRole<HTMLButtonElement>("button", {
         name: "Add research question",
     });
     expect(add.disabled).toBe(true);
     expect(
-        screen.getByText(
-            "Documentary preparation can take on 3 research questions in this workspace. Edit an existing question instead.",
-        ),
+        screen.getByRole("button", {
+            name: "Add research question",
+            description:
+                "This workspace can prepare sources for up to 3 research questions. Edit a question to change focus.",
+        }),
     ).toBeTruthy();
     expect(
         screen.getByRole<HTMLButtonElement>("button", {
@@ -732,11 +714,6 @@ test("a query retry preserves an unsaved question and its revision", () => {
         .mockImplementation(() => undefined);
     try {
         const view = render(<ConnectedStartWorkspace runId={runId} />);
-        fireEvent.click(
-            screen.getByText("Proposed research program", {
-                selector: "summary span",
-            }),
-        );
         fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
         fireEvent.change(screen.getByRole("textbox"), {
             target: { value: "Unsaved analyst wording" },
@@ -907,16 +884,6 @@ test("cancelling the first question restores the ordinary draft and keyboard foc
     fireEvent.change(input, {
         target: { value: "Keep my conversation draft" },
     });
-    if (
-        screen.queryByText("Proposed research program", {
-            selector: "summary span",
-        })
-    )
-        fireEvent.click(
-            screen.getByText("Proposed research program", {
-                selector: "summary span",
-            }),
-        );
     fireEvent.click(
         screen.getByRole("button", { name: "Add research question" }),
     );

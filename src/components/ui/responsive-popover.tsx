@@ -84,7 +84,7 @@ export function ResponsivePopover({
                 align="start"
                 sideOffset={12}
                 className={cn(
-                    "w-80 max-w-[calc(100vw-2rem)] gap-0 rounded-xl p-0 motion-reduce:animate-none",
+                    "w-80 max-w-[calc(100vw-2rem)] gap-0 rounded-popup p-0 motion-reduce:animate-none",
                     className,
                 )}>
                 {content}

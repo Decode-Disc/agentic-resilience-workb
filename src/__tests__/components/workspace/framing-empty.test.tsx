@@ -54,7 +54,6 @@ it("keeps an attached empty program to one summary and question action until a q
             composer={<textarea aria-label="Refine framing" />}
         />,
     );
-    fireEvent.click(screen.getByText("Review"));
     expect(
         screen.getByRole("heading", { name: "Who controls coordination?" }),
     ).toBeTruthy();

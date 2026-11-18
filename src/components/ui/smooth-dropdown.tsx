@@ -457,7 +457,7 @@ export function SmoothDropdwon({
                                     onMouseEnter={() => setHoveredItem(item.id)}
                                     onMouseLeave={() => setHoveredItem(null)}
                                     className={cn(
-                                        "relative m-0 flex cursor-pointer items-center gap-3 rounded-lg py-2 pl-3 text-sm transition-colors duration-200 ease-out",
+                                        "relative m-0 flex cursor-pointer items-center gap-3 rounded-option py-2 pl-3 text-sm transition-colors duration-200 ease-out",
                                         isDestructive && showIndicator
                                             ? "text-destructive"
                                             : isActive
@@ -470,7 +470,7 @@ export function SmoothDropdwon({
                                         <motion.div
                                             layoutId="activeIndicator"
                                             className={cn(
-                                                "absolute inset-0 rounded",
+                                                "absolute inset-0 rounded-option",
                                                 isDestructive
                                                     ? "bg-destructive/10"
                                                     : "bg-accent/60",

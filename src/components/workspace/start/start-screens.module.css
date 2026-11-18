@@ -565,6 +565,16 @@
 .pendingAction .framingScope header {
     @apply hidden;
 }
+/* Segments repeat the question count against the documentary limit. */
+.programMeter {
+    @apply inline-flex gap-[3px];
+}
+.programMeter > span {
+    @apply h-[4px] w-[10px] rounded-full bg-foreground/15;
+}
+.programMeter > span[data-filled] {
+    @apply bg-brand-purple;
+}
 .framingLaunch {
     @apply flex flex-row flex-wrap items-center justify-between gap-[10px] py-[8px] px-[12px] bg-transparent bg-none;
     border: 0;
@@ -663,18 +673,6 @@
 }
 .pendingAction [data-slot="conversation-pending-details"] > summary {
     @apply min-h-[36px] py-[10px] px-[14px] text-[12.5px] gap-[12px];
-}
-.pendingAction
-    [data-slot="conversation-pending-details"][open]
-    > summary
-    > span:nth-child(2) {
-    @apply hidden;
-}
-.pendingAction
-    [data-slot="conversation-pending-details"][open]
-    > summary
-    > svg {
-    @apply ml-auto;
 }
 .pendingAction [data-slot="conversation-pending-body"] {
     max-height: min(38dvh, 340px);
@@ -778,9 +776,6 @@
     }
     .pendingAction .framingLaunch {
         @apply flex-nowrap min-h-[46px] py-[6px] px-[10px] gap-[8px];
-    }
-    .pendingAction [class~="chat-question-navigation"] {
-        @apply flex-nowrap;
     }
     .pendingAction [class~="chat-question-actions"] {
         @apply flex-nowrap gap-[12px];
@@ -902,21 +897,7 @@
 .pendingAction [data-slot="conversation-composer"] {
     @apply relative z-[1] mt-[-2px];
 }
-.pendingAction [class~="chat-focused-question"] {
-    @apply m-[0] py-[8px] px-[14px];
-    border: 0;
-    @apply bg-transparent bg-none;
-}
-.pendingAction [class~="chat-focused-question"] h3 {
-    @apply text-[16px];
-}
 @media (max-width: 640px) {
-    .pendingAction [class~="chat-focused-question"] {
-        @apply py-[6px] px-[10px];
-    }
-    .pendingAction [class~="chat-focused-question"] h3 {
-        @apply text-[14.5px];
-    }
     .pendingAction [data-slot="conversation-pending-summary"] {
         @apply grid grid-cols-[minmax(0,_1fr)_auto] py-[8px] px-[10px] gap-y-[2px] gap-x-[8px] text-[12px];
     }

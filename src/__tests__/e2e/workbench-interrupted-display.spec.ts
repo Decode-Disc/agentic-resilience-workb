@@ -94,7 +94,6 @@ for (const width of [1440, 390, 320]) {
         });
         await expect.poll(visible).toBe(true);
         await expect(page.locator("#invitation-code")).toHaveCount(0);
-        await page.getByText("Proposed research program").click();
         await expect(
             page.getByText("Who controls the workflow and its rules?", {
                 exact: true,

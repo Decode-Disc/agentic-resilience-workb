@@ -90,8 +90,9 @@
 [data-slot="conversation-pending-details"] > summary {
     list-style: none;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 4px 8px;
     min-height: 40px;
     padding: 10px 12px;
     cursor: pointer;
@@ -113,9 +114,12 @@
     margin-right: 8px;
 }
 [data-slot="conversation-pending-details"] > summary > span:nth-child(2) {
-    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-weight: 400;
     color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
 }
 [data-slot="conversation-pending-body"] {
     max-height: min(28dvh, 230px);
@@ -146,8 +150,16 @@
 [data-slot="conversation-thread"] ::selection {
     background: var(--tint-violet);
 }
-[data-slot="conversation-pending-details"][open] > summary > svg {
-    transform: rotate(90deg);
+.chat-pending-toggle svg {
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-slot="conversation-pending-details"][open] .chat-pending-toggle svg {
+    transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+    .chat-pending-toggle svg {
+        transition: none;
+    }
 }
 
 [data-slot="conversation-thread"] [data-slot="message-actions"] {
@@ -569,11 +581,6 @@
 .chat-context-work li[data-state="interrupted"] .chat-context-work-state {
     color: var(--destructive-text);
 }
-.chat-question-rationale p {
-    margin: 4px 0 0;
-    font-size: 13px;
-    line-height: 1.5;
-}
 @media (prefers-reduced-motion: reduce) {
     .chat-context-card {
         animation: none;
@@ -597,35 +604,101 @@
         min-height: 44px;
     }
 }
-.chat-question-navigation {
+/* One numbered row per question; the open row carries its full wording and rationale. */
+.chat-question-list {
     display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0 8px 8px;
+    list-style: none;
+}
+.chat-question-list > li {
+    border-radius: var(--radius-option);
+}
+.chat-question-list > li[data-open] {
+    background: color-mix(in oklab, var(--foreground) 3.5%, transparent);
+}
+.chat-question-row {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
     align-items: center;
-    gap: 16px;
-    min-width: 0;
-    padding: 2px 14px 12px;
+    gap: 10px;
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: var(--radius-option);
+    background: transparent;
+    color: var(--foreground);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 120ms ease-out;
 }
-.chat-focused-question {
-    margin: 0 14px;
-    padding: 14px 16px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: color-mix(in oklab, var(--foreground) 2%, var(--card));
+.chat-question-row:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--foreground) 4%, transparent);
 }
-.chat-question-caption {
-    display: block;
+.chat-question-row:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+}
+.chat-question-row:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+.chat-question-row > svg {
     color: var(--muted-foreground);
-    font-size: 10px;
-    line-height: 14px;
-    text-transform: uppercase;
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.chat-focused-question h3 {
-    margin: 5px 0 0;
-    font-size: 17px;
-    line-height: 1.45;
+.chat-question-list > li[data-open] .chat-question-row > svg {
+    transform: rotate(90deg);
+}
+.chat-question-number {
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-badge);
+    color: var(--muted-foreground);
+    font-size: 12px;
+    line-height: 20px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.chat-question-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13.5px;
     font-weight: 500;
 }
+.chat-focused-question {
+    padding: 0 12px 12px 42px;
+}
+.chat-focused-question:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+    border-radius: var(--radius-option);
+}
+.chat-focused-question h3 {
+    margin: 0;
+    max-width: 72ch;
+    font-size: 15px;
+    line-height: 1.5;
+    font-weight: 500;
+    text-wrap: pretty;
+}
 .chat-question-rationale {
-    margin-top: 12px;
+    margin: 6px 0 0;
+    max-width: 68ch;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    line-height: 1.5;
+}
+@media (prefers-reduced-motion: reduce) {
+    .chat-question-row,
+    .chat-question-row > svg {
+        transition: none;
+    }
 }
 .chat-question-actions,
 .chat-composer-mode {
@@ -655,11 +728,6 @@
     padding: 4px 0;
 }
 @media (max-width: 640px) {
-    .chat-question-navigation {
-        flex-wrap: wrap;
-        gap: 8px;
-        padding: 6px 10px 8px;
-    }
     .chat-question-actions button::after {
         content: "";
         position: absolute;
@@ -670,18 +738,20 @@
         height: 32px;
         min-height: 32px;
     }
+    .chat-question-list {
+        padding-inline: 4px;
+    }
+    .chat-question-row {
+        min-height: 44px;
+    }
     .chat-focused-question {
-        margin-inline: 10px;
-        padding: 10px 12px;
+        padding: 0 10px 10px 42px;
     }
     .chat-focused-question h3 {
         font-size: 14.5px;
         line-height: 21px;
     }
     .chat-question-rationale {
-        margin-top: 8px;
-    }
-    .chat-question-rationale p {
         font-size: 12.5px;
         line-height: 18px;
     }
@@ -925,14 +995,45 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* The whole summary toggles; this pill only makes that affordance legible. */
 .chat-pending-toggle {
     margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 8px 0 10px;
+    border-radius: var(--radius-control);
     font-size: 12px;
-    color: var(--muted-foreground);
+    font-weight: 500;
+    color: var(--foreground);
+    transition: background-color 120ms ease-out;
 }
-.chat-question-selector {
-    width: 100%;
+summary:hover > .chat-pending-toggle {
+    background: color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+@media (max-width: 640px) {
+    .chat-pending-toggle {
+        padding-inline: 6px;
+    }
+    .chat-pending-toggle > span {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}
+.chat-pending-preview {
+    flex-basis: 100%;
     min-width: 0;
+    padding-left: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 400;
+    color: var(--muted-foreground);
 }
 .chat-reply-phase {
     font-size: 11px;

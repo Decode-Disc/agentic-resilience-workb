@@ -138,9 +138,10 @@ test("question actions share the composer and keep its ordinary draft", async ({
     await expect(
         page.getByRole("heading", { name: "Who can change pricing?" }),
     ).toBeVisible();
-    await expect(
-        page.getByRole("combobox", { name: "Research question", exact: true }),
-    ).toContainText("5 of 5");
+    await expect(page.getByRole("button", { name: /^5 / })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+    );
     await reviewResearchProgram(page);
     await page
         .getByRole("button", { name: "Edit question", exact: true })
@@ -272,9 +273,10 @@ test("failed question submission preserves both drafts and retries once", async 
             exact: true,
         }),
     ).toBeVisible();
-    await expect(
-        page.getByRole("combobox", { name: "Research question", exact: true }),
-    ).toContainText("5 of 5");
+    await expect(page.getByRole("button", { name: /^5 / })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+    );
     await expect(input).toHaveValue("My unsent conversation draft.");
     await expect(error).toHaveCount(0);
 });

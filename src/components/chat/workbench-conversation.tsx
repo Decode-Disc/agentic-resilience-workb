@@ -13,6 +13,7 @@ import {
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import {
+    ArrowDown01Icon,
     ArrowLeft01Icon,
     ArrowRight01Icon,
     Cancel01Icon,
@@ -821,6 +822,8 @@ export function ConversationMessages({
 export function ConversationPendingPanel({
     title,
     summary,
+    preview,
+    toggleLabels = { open: "Hide", closed: "Show" },
     children,
     footer,
     composer,
@@ -831,7 +834,11 @@ export function ConversationPendingPanel({
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     title: string;
-    summary: string;
+    summary: ReactNode;
+    /** Folded-only line naming what the panel holds, so folding never hides what is pending. */
+    preview?: ReactNode;
+    /** Names what the header toggle reveals or hides. */
+    toggleLabels?: { open: string; closed: string };
     children?: ReactNode;
     footer?: ReactNode;
     composer?: ReactNode;
@@ -866,9 +873,18 @@ export function ConversationPendingPanel({
                         }}>
                         {heading}
                         <span className="chat-pending-toggle">
-                            {expanded ? "Close" : "Review"}
+                            <span>
+                                {expanded
+                                    ? toggleLabels.open
+                                    : toggleLabels.closed}
+                            </span>
+                            <Icon iconNode={ArrowDown01Icon} size={14} />
                         </span>
-                        <Icon iconNode={ArrowRight01Icon} size={14} />
+                        {preview && !expanded && (
+                            <span className="chat-pending-preview">
+                                {preview}
+                            </span>
+                        )}
                     </summary>
                     <div
                         data-slot="conversation-pending-body"

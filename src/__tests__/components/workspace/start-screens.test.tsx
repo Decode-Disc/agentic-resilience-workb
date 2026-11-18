@@ -128,7 +128,6 @@ describe("Start presentation without backend providers", () => {
         const program = within(
             screen.getByRole("region", { name: "Proposed framing" }),
         );
-        fireEvent.click(program.getByText("Proposed research program"));
         fireEvent.click(program.getByRole("button", { name: "Edit question" }));
         fireEvent.change(program.getByRole("textbox"), {
             target: { value: "Who can change routing rules?" },
@@ -163,7 +162,6 @@ describe("Start presentation without backend providers", () => {
         const program = within(
             screen.getByRole("region", { name: "Proposed framing" }),
         );
-        fireEvent.click(program.getByText("Proposed research program"));
         const original = program.getByRole("region", {
             name: "Framing summary",
         }).textContent;
@@ -321,11 +319,6 @@ it("keeps an unfinished question edit and launch guard when the pending program 
             onOpenProgress={vi.fn()}
         />,
     );
-    fireEvent.click(
-        screen.getByText("Proposed research program", {
-            selector: "summary span",
-        }),
-    );
     fireEvent.click(screen.getByRole("button", { name: "Edit question" }));
     const editor = screen.getByRole("textbox", {
         name: "Edit research question",
@@ -360,7 +353,7 @@ it("keeps an unfinished question edit and launch guard when the pending program 
     ).toBe("Who can replace a service?");
 });
 
-it("keeps a prepared program compact and reveals one freely selected question without a rationale wall", async () => {
+it("lists every question of a prepared program and opens one at a time with its rationale", () => {
     const questions = [
         {
             id: "a",
@@ -388,17 +381,34 @@ it("keeps a prepared program compact and reveals one freely selected question wi
             onAddRequest={vi.fn()}
         />,
     );
+    expect(screen.queryByRole("combobox")).toBeNull();
+    const first = screen.getByRole("button", { name: "1 Position" });
+    const second = screen.getByRole("button", { name: "2 Switching" });
+    expect(first.getAttribute("aria-expanded")).toBe("true");
+    expect(second.getAttribute("aria-expanded")).toBe("false");
+    expect(
+        screen.getByRole("heading", { name: "Who controls routing?" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Separate control from supply.")).toBeTruthy();
+    expect(screen.queryByText("What would a customer rebuild?")).toBeNull();
+
+    fireEvent.click(second);
+    expect(second.getAttribute("aria-expanded")).toBe("true");
+    expect(first.getAttribute("aria-expanded")).toBe("false");
+    expect(
+        screen.getByRole("heading", { name: "What would a customer rebuild?" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Who controls routing?")).toBeNull();
+
+    fireEvent.click(second);
+    expect(second.getAttribute("aria-expanded")).toBe("false");
     expect(
         screen.queryByRole("region", { name: "Framing summary" }),
     ).toBeNull();
-    expect(screen.getByRole("button", { name: "Start research" })).toBeTruthy();
-    fireEvent.click(screen.getByText("Proposed research program"));
-    expect(
-        await screen.findByRole("combobox", { name: "Research question" }),
-    ).toBeTruthy();
-    expect(screen.getByText("Who controls routing?")).toBeTruthy();
-    expect(screen.queryByText("What would a customer rebuild?")).toBeNull();
-    expect(screen.queryByText("Separate control from supply.")).toBeNull();
+
+    fireEvent.click(screen.getByText("Hide questions"));
+    expect(screen.queryByRole("button", { name: "1 Position" })).toBeNull();
+    expect(screen.getByText("Position · Switching")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Start research" }));
     expect(start).toHaveBeenCalledOnce();
 });
