@@ -30,6 +30,8 @@ import {
 import { classifyRunPurpose, runPurposeValidator } from "./domain/runPurpose";
 import { withdrawableRun } from "./domain/runWithdrawal";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
+import { settledSourcesPhase } from "./domain/sources";
+import { sourcesPhaseValidator } from "./domain/validators";
 import { sourceDossierCandidateLimit } from "./resourceLimits";
 import { readReopenBlock } from "./runRecovery";
 import { isBrowserTestSlot } from "./runWorkspace";
@@ -53,6 +55,7 @@ const runOverviewValidator = v.object({
     executionStatus: runFields.executionStatus,
     pauseReason: runFields.pauseReason,
     completionOutcome: runFields.completionOutcome,
+    sourcesPhase: v.optional(sourcesPhaseValidator),
     createdAt: runFields.createdAt,
     updatedAt: runFields.updatedAt,
     preparation: v.optional(
@@ -646,6 +649,11 @@ async function projectOperationsRun(
         executionStatus: run.executionStatus,
         pauseReason: run.pauseReason,
         completionOutcome: run.completionOutcome,
+        sourcesPhase:
+            run.lifecycleState === "sources_prepared" &&
+            preparation?.runId === run._id
+                ? settledSourcesPhase(preparation)
+                : undefined,
         createdAt: run.createdAt,
         updatedAt: run.updatedAt,
         preparation:
@@ -736,6 +744,7 @@ export const inspectRun = query({
     args: { runId: v.id("researchRuns") },
     returns: v.object({
         run: schema.doc("researchRuns"),
+        sourcesPhase: v.optional(sourcesPhaseValidator),
         company: v.union(schema.doc("companies"), v.null()),
         /** Whether the run failed at its Sources deadline and can be reopened into the time-limit decision. */
         reopenable: v.boolean(),
@@ -744,8 +753,17 @@ export const inspectRun = query({
         await requireAdmin(ctx);
         const run = await ctx.db.get(args.runId);
         if (!run) throw new Error("Run not found");
+        const preparation =
+            run.lifecycleState === "sources_prepared" &&
+            run.sourcePreparationId &&
+            run.sourcesProtocol
+                ? await ctx.db.get(run.sourcePreparationId)
+                : null;
         return {
             run,
+            sourcesPhase: settledSourcesPhase(
+                preparation?.runId === run._id ? preparation : null,
+            ),
             company: run.companyId ? await ctx.db.get(run.companyId) : null,
             reopenable: (await readReopenBlock(ctx, run)) === null,
         };

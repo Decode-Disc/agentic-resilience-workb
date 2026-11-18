@@ -16,6 +16,7 @@ export type ConversationMissionSnapshot = {
     agentId: string;
     title: string;
     state: ConversationWorkItem["state"];
+    stateLabel?: string;
     startedAt?: string;
     finishedAt?: string;
     operations: readonly ConversationWorkItem[];
@@ -55,6 +56,7 @@ export function ConversationMission({
             <ConversationActivityGroup
                 id={mission.id}
                 state={mission.state}
+                stateLabel={mission.stateLabel}
                 title={`${agent.name} · ${mission.title}`}
                 titleContent={
                     <>

@@ -183,6 +183,27 @@ export function sourcesSettlementNote(cause: SourcesSettlementCause): string {
     }
 }
 
+/** Display outcome of a recorded modern handoff, without reading its mission or history. */
+export function settledSourcesPhase(
+    preparation:
+        | (Pick<Doc<"sourceSelectionProposalRebuilds">, "status"> &
+              Partial<
+                  Pick<Doc<"sourceSelectionProposalRebuilds">, "sourcesMission">
+              >)
+        | null,
+):
+    | "completed"
+    | "completed_with_limits"
+    | "ended_without_material"
+    | undefined {
+    const result = preparation?.sourcesMission?.result;
+    if (!preparation || !result || preparation.status === "started")
+        return undefined;
+    if (!result.documents.length || result.outcome === "blocked")
+        return "ended_without_material";
+    return result.outcome === "partial" ? "completed_with_limits" : "completed";
+}
+
 /** The single reading of Sources progress for the workspace and Workbench. A settled preparation keeps its outcome when later work starts or fails; a limit never reads as interruption once material is handed off. */
 export function sourcesPreparationPhase(
     run: Pick<
@@ -203,6 +224,8 @@ export function sourcesPreparationPhase(
     if (run.completionOutcome === "insufficient_public_evidence")
         return "insufficient_evidence";
     if (run.lifecycleState === "framing") return "waiting";
+    const modernHandoff = settledSourcesPhase(preparation);
+    if (modernHandoff) return modernHandoff;
     const settled =
         preparation &&
         preparation.status !== "started" &&
@@ -215,7 +238,8 @@ export function sourcesPreparationPhase(
             : preparation.status === "blocked"
               ? "ended_without_material"
               : "completed_with_limits";
-    if (mission?.status === "completed") return "completed";
+    if (mission?.status === "completed" && !preparation?.sourcesMission)
+        return "completed";
     // A later analytical stage, including its failure, does not rewrite documentary preparation.
     if (
         !isDocumentaryResearchPhase(run.lifecycleState) &&
@@ -246,6 +270,8 @@ export function sourcesPreparationPhase(
               ? "completed_with_limits"
               : "completed";
     if (run.pauseReason === "analyst") return "paused";
+    if (preparation?.status === "started" && mission?.status === "completed")
+        return "waiting";
     if (run.executionStatus === "running") return "collecting";
     return "waiting";
 }

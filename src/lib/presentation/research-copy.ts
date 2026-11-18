@@ -183,36 +183,6 @@ type DossierTone =
     | "dashed"
     | "ink";
 
-// The cutout card paints its status pin as a solid surface; this maps each
-// dossier-status tone (owned by `dossierStatus`) to that surface and to the
-// colour of the corners that bleed out of it.
-const dossierStatusSurfaces = {
-    success: {
-        fill: "bg-success text-success-foreground ring-success/25",
-        edge: "text-success",
-    },
-    accent: {
-        fill: "bg-info text-info-foreground ring-info/25",
-        edge: "text-info",
-    },
-    review: {
-        fill: "bg-warning text-warning-foreground ring-warning/25",
-        edge: "text-warning",
-    },
-    destructive: {
-        fill: "bg-danger text-danger-foreground ring-danger/25",
-        edge: "text-danger",
-    },
-    dashed: {
-        fill: "bg-muted text-muted-foreground ring-muted/25",
-        edge: "text-muted",
-    },
-    ink: {
-        fill: "bg-secondary text-secondary-foreground ring-secondary/25",
-        edge: "text-secondary",
-    },
-} satisfies Record<DossierTone, { fill: string; edge: string }>;
-
 const eventLabels = {
     run_created: "Research dossier created",
     run_transitioned: "Research advanced",
@@ -379,11 +349,6 @@ export function lifecycleLabel(state: LifecycleState): string {
 /** Returns an analyst-readable execution label. */
 export function executionLabel(status: ExecutionStatus): string {
     return executionLabels[status];
-}
-
-/** The solid surface and bleeding-corner colour for a dossier status shown as a card pin. */
-export function dossierStatusSurface(tone: DossierTone) {
-    return dossierStatusSurfaces[tone];
 }
 
 /** Returns a stable milestone label without exposing event keys. */
@@ -1526,7 +1491,12 @@ export function sourceRecoveryFeedback(
 /** Dossier execution is distinct from the current research phase and analyst approval. */
 export function dossierStatus(
     run: Pick<RunProjection, "executionStatus" | "lifecycleState"> &
-        Partial<Pick<RunProjection, "pauseReason" | "completionOutcome">>,
+        Partial<
+            Pick<
+                RunProjection,
+                "pauseReason" | "completionOutcome" | "sourcesPhase"
+            >
+        >,
 ): {
     label: string;
     tone: DossierTone;
@@ -1558,6 +1528,21 @@ export function dossierStatus(
         return { label: "Framing", tone: "ink" };
     if (run.completionOutcome === "insufficient_public_evidence")
         return { label: "Limited material", tone: "dashed" };
+    if (
+        run.lifecycleState === "sources_prepared" &&
+        run.executionStatus === "idle"
+    ) {
+        switch (run.sourcesPhase) {
+            case "completed":
+                return { label: "Sources prepared", tone: "success" };
+            case "completed_with_limits":
+                return { label: "Sources with limits", tone: "review" };
+            case "ended_without_material":
+                return { label: "No usable material", tone: "dashed" };
+            default:
+                return { label: "Sources handoff recorded", tone: "ink" };
+        }
+    }
     return {
         label: run.executionStatus === "completed" ? "Complete" : "Ready",
         tone: "success",

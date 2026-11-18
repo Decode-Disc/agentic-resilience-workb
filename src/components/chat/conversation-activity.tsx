@@ -80,13 +80,15 @@ function useWorkAnimationRef(state: ConversationWorkItem["state"]) {
 
 function ConversationWorkLabel({
     state,
+    text,
 }: {
     state: ConversationWorkItem["state"];
+    text?: string;
 }) {
     const element = useWorkAnimationRef(state);
     return (
         <span ref={element} className={styles.workLabel} data-state={state}>
-            {workStateLabels[state]}
+            {text ?? workStateLabels[state]}
         </span>
     );
 }
@@ -140,9 +142,11 @@ export function ConversationWorkMark({
 export function ConversationWorkStatus({
     state,
     label,
+    stateLabel,
 }: {
     state: ConversationWorkItem["state"];
     label: string;
+    stateLabel?: string;
 }) {
     return (
         <span
@@ -151,7 +155,7 @@ export function ConversationWorkStatus({
             role="status"
             aria-label={label}>
             <ConversationWorkMark state={state} />
-            <ConversationWorkLabel state={state} />
+            <ConversationWorkLabel state={state} text={stateLabel} />
         </span>
     );
 }
@@ -238,6 +242,7 @@ export function ConversationActivityGroup({
     content,
     triggerLabel,
     statusLabel,
+    stateLabel,
     titleContent,
 }: {
     id: string;
@@ -248,6 +253,7 @@ export function ConversationActivityGroup({
     content?: ReactNode | ((open: boolean) => ReactNode);
     triggerLabel?: string;
     statusLabel?: string;
+    stateLabel?: string;
     /** Optional title material; the text title remains the accessible group identity. */
     titleContent?: ReactNode;
 }) {
@@ -306,6 +312,7 @@ export function ConversationActivityGroup({
                 </span>
                 <ConversationWorkStatus
                     state={state}
+                    stateLabel={stateLabel}
                     label={statusLabel ?? `${title} status`}
                 />
             </CollapsibleTrigger>

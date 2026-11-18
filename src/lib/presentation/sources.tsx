@@ -131,7 +131,7 @@ const phaseCopy: Record<
         label: "No material",
         outcome: "No material",
         title: "No usable material prepared",
-        detail: `${sourcesAgent} stopped without keeping any document. The documents it found remain listed as leads in Sources. Investigation is not available yet.`,
+        detail: `${sourcesAgent} handed off without retaining any document. You can inspect any available captures and leads in Sources. Investigation is not available yet.`,
     },
     interrupted: {
         workState: "interrupted",
@@ -591,12 +591,11 @@ export function sourcesPreparationView(
     run: Run,
     rows: readonly SourcesRow[],
 ): SourcesPreparationView {
-    const presentation = sourcesPhasePresentation(
-        overview.research.sources?.phase ?? run.sourcesPhase,
-    );
+    const phase = overview.research.sources?.phase ?? run.sourcesPhase;
+    const presentation = sourcesPhasePresentation(phase);
     const state = presentation.workState;
     const labels = questionLabels(overview);
-    const settled = state === "completed";
+    const settled = state === "completed" || phase === "ended_without_material";
     const count = (outcome: DocumentaryNeed["outcome"]) =>
         overview.needs.filter((need) => need.outcome === outcome).length;
     const needs = plural(overview.needs.length, [
@@ -605,28 +604,31 @@ export function sourcesPreparationView(
     ]);
     const gaps = count("gap");
     const unfinished = count("unfinished");
-    const summary = overview.materialOutcome
-        ? [
-              `${plural(overview.organize.retained, ["document", "documents"])} retained across ${needs}.`,
-              gaps
-                  ? `${plural(gaps, ["need", "needs"])} found no usable public document.`
-                  : undefined,
-              unfinished
-                  ? `${plural(unfinished, ["need", "needs"])} ${unfinished === 1 ? "has" : "have"} unfinished work.`
-                  : undefined,
-              "Investigation is not available yet.",
-          ]
-              .filter(Boolean)
-              .join(" ")
-        : run.sourcesPhase === "time_limit"
-          ? `${sourcesAgent} used its time window with ${plural(overview.reading.captured, ["document", "documents"])} captured for ${needs}.`
-          : state === "paused"
-            ? `${sourcesAgent} is paused with ${plural(overview.reading.captured, ["document", "documents"])} captured so far for ${needs}.`
-            : run.sourcesPhase === "failed"
-              ? `Preparation stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} captured so far remain available.`
-              : state === "interrupted"
-                ? `${sourcesAgent} stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} captured so far remain available.`
-                : `${sourcesAgent} is collecting and reading material for ${needs}. Outcomes settle when it hands off.`;
+    const summary =
+        settled && overview.materialOutcome
+            ? [
+                  `${plural(overview.organize.retained, ["document", "documents"])} retained across ${needs}.`,
+                  gaps
+                      ? `${plural(gaps, ["need", "needs"])} found no usable public document.`
+                      : undefined,
+                  unfinished
+                      ? `${plural(unfinished, ["need", "needs"])} ${unfinished === 1 ? "has" : "have"} unfinished work.`
+                      : undefined,
+                  "Investigation is not available yet.",
+              ]
+                  .filter(Boolean)
+                  .join(" ")
+            : phase === "time_limit"
+              ? `${sourcesAgent} used its time window with ${plural(overview.reading.captured, ["document", "documents"])} captured for ${needs}.`
+              : state === "paused"
+                ? `${sourcesAgent} is paused with ${plural(overview.reading.captured, ["document", "documents"])} captured so far for ${needs}.`
+                : phase === "failed"
+                  ? `Preparation stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} captured so far remain available.`
+                  : state === "interrupted"
+                    ? `${sourcesAgent} stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} captured so far remain available.`
+                    : state === "running"
+                      ? `${sourcesAgent} is collecting and reading material for ${needs}. Outcomes settle when it hands off.`
+                      : presentation.detail;
     const rowsById = new Map(rows.map((row) => [row.sourceId as string, row]));
     // A reason repeated on several needs, such as the time window ending, is stated once.
     const reasons = overview.needs

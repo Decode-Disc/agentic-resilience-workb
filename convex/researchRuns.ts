@@ -11,7 +11,11 @@ import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
-import { readSourcesMission, sourcesPreparationPhase } from "./domain/sources";
+import {
+    readSourcesMission,
+    settledSourcesPhase,
+    sourcesPreparationPhase,
+} from "./domain/sources";
 import {
     assertLifecycleTransition,
     canStartNewCorpusRevision,
@@ -20,6 +24,7 @@ import {
     companySnapshotValidator,
     executionStatusValidator,
     researchRunLifecycleValidator,
+    sourcesPhaseValidator,
     workflowStepKeyValidator,
 } from "./domain/validators";
 import { readSourcesDecisionRequestId } from "./execution/approvals";
@@ -415,6 +420,7 @@ const runProjectionValidator = v.object({
     researchAngle: v.optional(v.string()),
     framingScope: v.union(v.string(), v.null()),
     activeCorpusRevisionId: v.optional(v.id("corpusRevisions")),
+    sourcesPhase: v.optional(sourcesPhaseValidator),
     completionOutcome:
         schema.tables.researchRuns.validator.fields.completionOutcome,
     updatedAt: v.number(),
@@ -502,7 +508,24 @@ export const listMine = query({
         return {
             ...result,
             page: await Promise.all(
-                result.page.map((run) => projectRun(ctx, run)),
+                result.page.map(async (run) => {
+                    const projection = await projectRun(ctx, run);
+                    if (
+                        run.lifecycleState !== "sources_prepared" ||
+                        !run.sourcePreparationId ||
+                        !run.sourcesProtocol
+                    )
+                        return projection;
+                    const preparation = await ctx.db.get(
+                        run.sourcePreparationId,
+                    );
+                    return {
+                        ...projection,
+                        sourcesPhase: settledSourcesPhase(
+                            preparation?.runId === run._id ? preparation : null,
+                        ),
+                    };
+                }),
             ),
         };
     },

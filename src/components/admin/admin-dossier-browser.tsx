@@ -176,7 +176,12 @@ function DossierList({
                                     </ItemTitle>
                                     <ItemDescription className="flex flex-wrap gap-x-1.5">
                                         <span>
-                                            {lifecycleLabel(run.lifecycleState)}
+                                            {run.lifecycleState ===
+                                            "sources_prepared"
+                                                ? "Investigation is not available yet"
+                                                : lifecycleLabel(
+                                                      run.lifecycleState,
+                                                  )}
                                         </span>
                                         <span aria-hidden="true">·</span>
                                         <span>

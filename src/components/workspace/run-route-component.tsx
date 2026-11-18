@@ -52,19 +52,12 @@ function sourcesFallbackCopy(
         };
     const presentation = sourcesPhasePresentation(run.sourcesPhase);
     const state = presentation.workState;
-    if (state === "running" || state === "waiting" || state === "paused")
+    if (state === "running")
         return {
-            title:
-                state === "paused"
-                    ? presentation.title
-                    : "Preparing documentary sources",
+            title: "Preparing documentary sources",
             description: `The ${agentName("sources")} is gathering public documents. Its preparation appears here as soon as discovery returns.`,
         };
-    return {
-        title: "Documentary preparation stopped",
-        description:
-            "Documentary preparation stopped. Available material and permitted next actions are shown when the Sources view can be loaded.",
-    };
+    return { title: presentation.title, description: presentation.detail };
 }
 
 /** Owner-scoped production workspace backed only by reactive Convex state. */

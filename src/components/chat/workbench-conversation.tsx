@@ -1320,11 +1320,10 @@ export function ConversationContext({
                                                         data-state={
                                                             mission.state
                                                         }>
-                                                        {
+                                                        {mission.stateLabel ??
                                                             workStateLabels[
                                                                 mission.state
-                                                            ]
-                                                        }
+                                                            ]}
                                                     </small>
                                                     <Icon
                                                         iconNode={

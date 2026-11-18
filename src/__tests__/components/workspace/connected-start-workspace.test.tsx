@@ -288,9 +288,21 @@ test("the context identifies a launched research program as accepted", () => {
 });
 
 test.each([
-    "partial",
-    "blocked",
-])("settled %s material reads as completed with limits, never as fully prepared", (status) => {
+    [
+        "partial",
+        "completed_with_limits",
+        "Complete with limits",
+        "Documentary preparation completed with limits",
+        "completed",
+    ],
+    [
+        "blocked",
+        "ended_without_material",
+        "No material",
+        "No usable material prepared",
+        "blocked",
+    ],
+] as const)("settled %s material keeps its outcome in the header and activity", (status, sourcesPhase, label, title, state) => {
     convexReactHarness.query(api.workbench.snapshot).returns({
         ...readySnapshot,
         run: {
@@ -300,7 +312,7 @@ test.each([
             executionStatus: "idle",
         },
         preparation: { status },
-        sourcesPhase: "completed_with_limits",
+        sourcesPhase,
     });
     render(<ConnectedStartWorkspace runId={runId} />);
     const mission = document.querySelector(
@@ -309,10 +321,9 @@ test.each([
     expect(mission).not.toBeNull();
     if (!(mission instanceof HTMLElement))
         throw new Error("Missing Sources mission");
-    expect(mission.getAttribute("data-state")).toBe("completed");
-    expect(
-        screen.getByText("Documentary preparation completed with limits"),
-    ).toBeTruthy();
+    expect(mission.getAttribute("data-state")).toBe(state);
+    expect(screen.getByText(title)).toBeTruthy();
+    expect(mission.textContent).toContain(label);
     expect(screen.queryByText("Documentary material ready")).toBeNull();
     expect(mission.textContent).not.toMatch(
         /sources_prepared|operation_result_capacity/,

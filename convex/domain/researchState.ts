@@ -174,19 +174,27 @@ export function formatResearchSummary(state: ResearchState): string {
     else if (status === "paused") summary = "Research is paused.";
     else summary = "Research is not running.";
 
-    const material = state.sources?.outcome;
-    if (material) {
+    const sourcePhase = state.sources?.phase;
+    if (
+        state.sources?.outcome &&
+        (sourcePhase === "completed" ||
+            sourcePhase === "completed_with_limits" ||
+            sourcePhase === "ended_without_material")
+    ) {
         const outcome =
-            material === "complete"
-                ? "Sources preparation is complete."
-                : material === "partial"
+            sourcePhase === "ended_without_material"
+                ? "Sources preparation ended without usable material."
+                : sourcePhase === "completed_with_limits"
                   ? "Sources preparation ended with partial material."
-                  : "Sources preparation ended without usable material.";
+                  : "Sources preparation is complete.";
         summary =
             terminal || status === "running" || status === "paused"
                 ? `${summary} ${outcome}`
                 : outcome;
-        summary += " Inspect the retained material and its limits.";
+        summary +=
+            sourcePhase === "ended_without_material"
+                ? " Inspect available captures and leads in Sources."
+                : " Inspect the retained material and its limits.";
     } else if (
         !terminal &&
         status === "idle" &&

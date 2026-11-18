@@ -5,8 +5,9 @@ import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { Link } from "@tanstack/react-router";
 import type { FunctionReturnType } from "convex/server";
 import { motion } from "motion/react";
-import { type FocusEvent, useState } from "react";
+import { type FocusEvent, useId, useState } from "react";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
+import { DossierStatusBadge } from "@/components/dossier-status-badge";
 import Icon from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,12 +25,7 @@ import {
     useCutoutContentStaggerVariants,
 } from "@/components/ui/cutout-card";
 import { useCompanyCoverImage } from "@/hooks/use-company-cover-image";
-import {
-    dossierStatus,
-    dossierStatusSurface,
-    lifecycleLabel,
-} from "@/lib/presentation/research-copy";
-import { cn } from "@/lib/utils";
+import { lifecycleLabel } from "@/lib/presentation/research-copy";
 
 type ResearchDossier = FunctionReturnType<
     typeof api.researchRuns.listMine
@@ -53,8 +49,7 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
     const [pointerHovered, setPointerHovered] = useState(false);
     const [focusWithin, setFocusWithin] = useState(false);
     const companyName = dossier.company?.legalName ?? "Research dossier";
-    const status = dossierStatus(dossier);
-    const statusSurface = dossierStatusSurface(status.tone);
+    const statusId = useId();
     const marketIdentity = dossier.company
         ? `${dossier.company.ticker} · ${dossier.company.exchange}`
         : "Company confirmation pending";
@@ -84,6 +79,7 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
             <Link
                 {...route}
                 aria-label={`Open ${companyName} dossier`}
+                aria-describedby={statusId}
                 className="block outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
                 <CutoutCardMedia className="h-72">
                     <CutoutCardImage
@@ -95,30 +91,27 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
                     <CutoutCardOverlay />
                     <CutoutCardInsetLabel className="bottom-0 left-0 rounded-tr-[20px] bg-card px-5 py-3">
                         <span className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">
-                            {lifecycleLabel(dossier.lifecycleState)}
+                            {dossier.lifecycleState === "sources_prepared"
+                                ? "Investigation is not available yet"
+                                : lifecycleLabel(dossier.lifecycleState)}
                         </span>
                         <CutoutCorner className="absolute -right-[31px] -bottom-px rotate-90 text-card" />
                         <CutoutCorner className="absolute -top-[31px] -left-px rotate-90 text-card" />
                     </CutoutCardInsetLabel>
 
                     <CutoutCardPin
-                        className={cn(
-                            "top-0 right-0 rounded-bl-[16px] px-4 py-2 font-semibold text-sm shadow-md shadow-foreground/10 ring-1 ring-border/30",
-                            statusSurface.fill,
-                        )}>
-                        {status.label}
+                        id={statusId}
+                        className="top-0 right-0 max-w-[calc(100%-24px)] rounded-bl-[16px] bg-card px-3 py-2 shadow-md shadow-foreground/10">
+                        <DossierStatusBadge
+                            run={dossier}
+                            className="max-w-full whitespace-normal text-left"
+                        />
                         <CutoutCorner
-                            className={cn(
-                                "absolute top-0 -left-[23px] -rotate-90",
-                                statusSurface.edge,
-                            )}
+                            className="absolute top-0 -left-[23px] -rotate-90 text-card"
                             size={24}
                         />
                         <CutoutCorner
-                            className={cn(
-                                "absolute right-0 -bottom-[23px] -rotate-90",
-                                statusSurface.edge,
-                            )}
+                            className="absolute right-0 -bottom-[23px] -rotate-90 text-card"
                             size={24}
                         />
                     </CutoutCardPin>

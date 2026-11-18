@@ -660,6 +660,7 @@ function StartWorkspaceContent({
                   agentId: "sources",
                   title: "Documentary preparation",
                   state: sourceState,
+                  stateLabel: sourcePresentation.label,
                   startedAt:
                       (snapshot.sourcesWork?.startedAt ?? run.researchStartedAt)
                           ? new Date(
@@ -1291,12 +1292,16 @@ function StartWorkspaceContent({
                                             <EmptyTitle>
                                                 {insufficient
                                                     ? "No documentary preparation completed"
-                                                    : "Preparing source discovery"}
+                                                    : sourceState === "running"
+                                                      ? "Preparing source discovery"
+                                                      : "No documents recorded"}
                                             </EmptyTitle>
                                             <EmptyDescription>
                                                 {insufficient
                                                     ? "Research ended before documentary preparation could proceed."
-                                                    : "Documents will appear as they are found."}
+                                                    : sourceState === "running"
+                                                      ? "Documents will appear as they are found."
+                                                      : "Open Sources to review preparation."}
                                             </EmptyDescription>
                                         </EmptyHeader>
                                     </Empty>

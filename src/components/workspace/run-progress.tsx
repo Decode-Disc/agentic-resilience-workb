@@ -15,6 +15,7 @@ import {
     evidenceStatusCopy,
     lifecycleLabel,
 } from "@/lib/presentation/research-copy";
+import { sourcesPhasePresentation } from "@/lib/presentation/sources";
 import { cn } from "@/lib/utils";
 
 type RunProjection = FunctionReturnType<typeof api.researchRuns.getMine>;
@@ -30,6 +31,9 @@ export function RunProgress({
     events: RunEvents;
     onOpenSources?: () => void;
 }) {
+    const sources = run.sourcesProtocol
+        ? sourcesPhasePresentation(run.sourcesPhase)
+        : null;
     const canAddManualSource = [
         "awaiting_evidence_sufficiency_review",
         "awaiting_source_review",
@@ -59,15 +63,11 @@ export function RunProgress({
                         <h2 className="text-micro">Sources</h2>
                         <Badge
                             tone={
-                                run.executionStatus === "running" &&
-                                run.lifecycleState === "discovering_sources"
+                                sources?.workState === "running"
                                     ? "inference"
                                     : "ink"
                             }>
-                            {run.executionStatus === "running" &&
-                            run.lifecycleState === "discovering_sources"
-                                ? "Running"
-                                : "Documentary material"}
+                            {sources?.label ?? "Documentary material"}
                         </Badge>
                     </div>
                     <div
@@ -117,11 +117,18 @@ export function RunProgress({
                         Current state
                     </p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary">
-                            {lifecycleLabel(run.lifecycleState)}
-                        </Badge>
+                        {run.lifecycleState !== "sources_prepared" && (
+                            <Badge variant="secondary">
+                                {lifecycleLabel(run.lifecycleState)}
+                            </Badge>
+                        )}
                         <DossierStatusBadge run={run} />
                     </div>
+                    {run.lifecycleState === "sources_prepared" && (
+                        <p className="mt-4 text-sm text-muted-foreground">
+                            Investigation is not available yet.
+                        </p>
+                    )}
                     {run.lifecycleState === "corpus_approved" ? (
                         <p className="mt-4 text-sm text-muted-foreground">
                             Source set approved. These sources are ready for

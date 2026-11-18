@@ -967,3 +967,57 @@ test("a saved capture without indexed passages does not claim an opening excerpt
     });
     expect(reader?.capture).not.toBeNull();
 });
+
+test("dossier reads distinguish a settled partial handoff from pending settlement", async () => {
+    const f = await scenario();
+    const owner = f.t.withIdentity({ subject: f.userId });
+    const settled = await owner.query(api.researchRuns.getMine, {
+        runId: f.runId,
+    });
+    expect(settled.sourcesPhase).toBe("completed_with_limits");
+    const visitor = await owner.query(api.visitors.current, {});
+    assert(visitor?.workspace);
+    const { page } = await owner.query(api.researchRuns.listMine, {
+        workspaceKey: visitor.workspace.key,
+        paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(page.find((run) => run.runId === f.runId)).toMatchObject({
+        sourcesPhase: "completed_with_limits",
+    });
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+        });
+        await ctx.db.patch(f.preparationId, { status: "started" });
+        await ctx.db.patch(f.missionId, { status: "completed" });
+    });
+    const pending = await owner.query(api.researchRuns.getMine, {
+        runId: f.runId,
+    });
+    expect(pending.sourcesPhase).toBe("waiting");
+    const overview = await owner.query(api.sourcesWorkspace.overview, {
+        runId: f.runId,
+    });
+    expect(overview?.researchSummary).not.toContain(
+        "Sources preparation ended",
+    );
+});
+
+test("a settled inquiry with no retained documents reports no usable material", async () => {
+    const f = await seedResearchStateScenario({
+        outcome: "complete",
+        retainedDocumentCount: 0,
+        capturedDocumentCount: 1,
+    });
+    const run = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.researchRuns.getMine, { runId: f.runId });
+    expect(run.sourcesPhase).toBe("ended_without_material");
+    const context = await facts(f);
+    expect(context.research).toMatchObject({
+        summary: expect.stringContaining(
+            "Sources preparation ended without usable material.",
+        ),
+    });
+});

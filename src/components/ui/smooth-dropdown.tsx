@@ -59,6 +59,7 @@ export interface SmoothDropdownProps {
     activeItemId?: string;
     /** Accessible name of the portalled menu’s persistent trigger. */
     triggerAriaLabel?: string;
+    triggerAriaDescriptionId?: string;
     triggerClassName?: string;
     /** Consumer-specific closed geometry; the expanded menu retains its shared shape. */
     closedRadius?: number;
@@ -99,6 +100,7 @@ export function SmoothDropdwon({
     defaultActiveItemId,
     activeItemId,
     triggerAriaLabel = "Open dropdown",
+    triggerAriaDescriptionId,
     triggerClassName,
     closedRadius = 12,
     style,
@@ -605,6 +607,7 @@ export function SmoothDropdwon({
                     <button
                         type="button"
                         aria-label={triggerAriaLabel}
+                        aria-describedby={triggerAriaDescriptionId}
                         aria-expanded={isOpen}
                         aria-haspopup="listbox"
                         style={{ borderRadius: closedRadius }}

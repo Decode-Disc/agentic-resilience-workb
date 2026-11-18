@@ -9,7 +9,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import { DossierStatusBadge } from "@/components/dossier-status-badge";
 import Icon from "@/components/icon";
@@ -196,8 +196,15 @@ export function DossierSwitcherView({
         observer.observe(node);
         return () => observer.disconnect();
     }, [hasActive]);
+    const statusDescriptionId = useId();
     return (
         <div ref={host} className={cn("min-w-0", className)}>
+            {active && (
+                <span id={statusDescriptionId} className="sr-only">
+                    {active.company?.legalName ?? "Research dossier"} ·{" "}
+                    {dossierStatus(active).label}
+                </span>
+            )}
             <SmoothDropdwon
                 open={open}
                 onOpenChange={setOpen}
@@ -211,6 +218,9 @@ export function DossierSwitcherView({
                 openWidth={520}
                 activeItemId={activeRunId}
                 triggerAriaLabel="Switch research dossier"
+                triggerAriaDescriptionId={
+                    active ? statusDescriptionId : undefined
+                }
                 triggerClassName={cn(
                     "border-accent-foreground/50",
                     open ? "rounded-t-xl!" : "",
@@ -239,7 +249,12 @@ export function DossierSwitcherView({
                                         ? `${active.company?.legalName ?? "Research dossier"} · ${active.framingScope ?? active.researchAngle ?? "Scope being prepared"}`
                                         : "Recent Dossiers"}
                                 </span>
-                                {active && <DossierStatusBadge run={active} />}
+                                {active && (
+                                    <DossierStatusBadge
+                                        run={active}
+                                        className="max-w-[48%] truncate"
+                                    />
+                                )}
                             </>
                         )}
                         <Icon
@@ -330,8 +345,11 @@ export function DossierSwitcherView({
                                                       run={run}
                                                   />
                                                   {run.lifecycleState !==
+                                                      "sources_prepared" &&
+                                                  (run.lifecycleState !==
                                                       "framing" ||
-                                                  state.label !== "Framing" ? (
+                                                      state.label !==
+                                                          "Framing") ? (
                                                       <Badge tone="ink">
                                                           {lifecycleLabel(
                                                               run.lifecycleState,

@@ -178,7 +178,9 @@ function DossierDetailBody({
                                   run.purpose
                                       ? dossierPurposeLabel(run.purpose)
                                       : null,
-                                  lifecycleLabel(run.lifecycleState),
+                                  run.lifecycleState === "sources_prepared"
+                                      ? "Investigation is not available yet"
+                                      : lifecycleLabel(run.lifecycleState),
                                   `created ${new Date(run.createdAt).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" })}`,
                               ]
                                   .filter(Boolean)
@@ -188,7 +190,9 @@ function DossierDetailBody({
                 </div>
                 {run ? (
                     <div className="flex flex-wrap items-center gap-2">
-                        <DossierStatusBadge run={run} />
+                        <DossierStatusBadge
+                            run={{ ...run, sourcesPhase: details.sourcesPhase }}
+                        />
                         {run.withdrawnAt ? (
                             <AdminMarkBadge mark="withdrawn" />
                         ) : null}

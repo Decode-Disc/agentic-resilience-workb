@@ -228,7 +228,15 @@ const dossierStatusOptions: ReadonlyArray<FilterOption> = [
             "cancelled",
             "completed",
         ] as const satisfies ReadonlyArray<ExecutionStatus>
-    ).map((status) => ({ value: status, label: executionLabel(status) })),
+    ).map((status) => ({
+        value: status,
+        label:
+            status === "idle"
+                ? "Idle"
+                : status === "paused"
+                  ? "Paused"
+                  : executionLabel(status),
+    })),
 ];
 
 /** Applies the shared execution-status and period rule to one dossier. */
