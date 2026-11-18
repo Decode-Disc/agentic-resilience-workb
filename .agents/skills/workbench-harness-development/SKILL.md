@@ -17,6 +17,8 @@ For evaluation-only work, use [workbench-evaluation](../workbench-evaluation/SKI
 
 ## 1. Locate the Contract and Its Owner
 
+For an agent capability, start with the useful result the analyst needs at that stage of the dossier. Identify the observations available to the agent, the decision the analyst retains and the actor or operation that must be able to continue from the result. Use that path to determine whether the change belongs in instructions, tools, or the handoff between them.
+
 Use the [technical contract](../../../context/TECH.md) as architectural authority. Inspect the current implementation before choosing where to change it:
 
 - [Agent catalogue](../../../convex/execution/agentCatalog.ts) and [definition contract](../../../convex/execution/agentDefinition.ts): registered versions, scopes, permitted operation references and domain completion.
