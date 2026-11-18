@@ -352,10 +352,7 @@ for (const width of [1440, 390]) {
             exact: true,
         });
         await expect(
-            progress.getByRole("heading", {
-                name: "Documentary preparation stopped",
-                exact: true,
-            }),
+            progress.getByText("Interrupted", { exact: true }),
         ).toBeVisible();
         const notice = progress.getByRole("status", {
             name: "Source preparation interrupted",
@@ -389,10 +386,7 @@ for (const width of [1440, 390]) {
         await page.keyboard.press("Enter");
         await expect(notice).toHaveCount(0);
         await expect(
-            progress.getByRole("heading", {
-                name: "Collecting the documentary material",
-                exact: true,
-            }),
+            progress.getByText("Working", { exact: true }),
         ).toBeVisible();
         await expect(
             progress.getByText("Capturing", { exact: true }),

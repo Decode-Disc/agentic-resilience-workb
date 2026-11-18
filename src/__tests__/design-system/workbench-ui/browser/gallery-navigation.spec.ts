@@ -102,20 +102,18 @@ test("screen examples retain the chosen model and expose commands in the real co
     await expect(page.getByRole("option", { name: /\/pause/ })).toBeVisible();
     await page.getByRole("option", { name: /\/pause/ }).click();
     await expect(
-        page.getByRole("heading", {
-            name: "Documentary preparation stopped",
-            exact: true,
-        }),
+        page
+            .getByRole("region", { name: "Documentary progress", exact: true })
+            .getByText("Interrupted", { exact: true }),
     ).toBeVisible();
     await chat.fill("/");
     await expect(page.getByRole("option", { name: /\/resume/ })).toBeVisible();
     await expect(page.getByRole("option", { name: /\/pause/ })).toHaveCount(0);
     await page.getByRole("option", { name: /\/resume/ }).click();
     await expect(
-        page.getByRole("heading", {
-            name: "Collecting the documentary material",
-            exact: true,
-        }),
+        page
+            .getByRole("region", { name: "Documentary progress", exact: true })
+            .getByText("Working", { exact: true }),
     ).toBeVisible();
     await expect(
         page.getByRole("button", { name: "Workbench model and effort" }),

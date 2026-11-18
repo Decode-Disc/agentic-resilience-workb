@@ -127,13 +127,8 @@ function Gallery() {
         return () =>
             window.removeEventListener("workbench-example-action", listener);
     }, []);
-    const openProgress = () => {
-        const url = new URL(location.href);
-        url.searchParams.delete("layout");
-        url.searchParams.delete("screen");
-        url.searchParams.set("component", "ProgressTimeline");
-        location.assign(url.href);
-    };
+    // Progress is the dossier home: the launched START screen with its stage panel.
+    const openProgress = () => navigateToScreen("start", "launched");
     const href = (values: Record<string, string>) => {
         const target = new URLSearchParams({ ...values, theme });
         return `?${target}`;
@@ -183,7 +178,7 @@ function Gallery() {
                                 <a
                                     href={href({
                                         layout: "sources",
-                                        screen: "preparation",
+                                        screen: "matrix",
                                     })}
                                 />
                             }
@@ -281,7 +276,6 @@ function Gallery() {
                         onNavigate={(screen) =>
                             navigateToScreen("start", screen)
                         }
-                        onOpenProgress={openProgress}
                     />
                 ) : layout === "sources" && sourcesScreen ? (
                     <SourcesScreenPreview
@@ -385,7 +379,7 @@ function Gallery() {
                         className="gallery-screen-entry"
                         href={href({
                             layout: "sources",
-                            screen: "preparation",
+                            screen: "matrix",
                         })}>
                         <strong>Sources screens</strong>
                         <span>

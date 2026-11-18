@@ -383,7 +383,7 @@ function StartResearchContent({ isSessionReady }: { isSessionReady: boolean }) {
             await navigate({
                 to: "/workspace/$runId",
                 params: { runId: result.runId },
-                search: { section: "progress" },
+                search: { section: "overview" },
             });
         } catch (error) {
             const sourceErrorMessage = sourceAddErrorMessage(error);

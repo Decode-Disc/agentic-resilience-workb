@@ -26,11 +26,11 @@ test("links into the retired candidate review open the source matrix", () => {
             view: "inspect",
             coverage: "official_commercial_terms",
         }),
-    ).toEqual({ section: "progress", inventory: 1 });
+    ).toEqual({ section: "overview", inventory: 1 });
 });
 
 test.each([
-    ["evidence", { section: "progress", inventory: 1 }],
+    ["evidence", { section: "overview", inventory: 1 }],
     ["assessment", { section: "investigation", subsection: "review" }],
     ["map", { section: "synthesis", subsection: "mechanism" }],
     ["brief", { section: "synthesis", subsection: "full-brief" }],

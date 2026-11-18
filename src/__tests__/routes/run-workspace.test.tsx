@@ -73,7 +73,7 @@ describe("production run workspace", () => {
                 .getByRole("link", { name: "Sources" })
                 .getAttribute("aria-current"),
         ).toBe("page");
-        expect(screen.getByRole("link", { name: "Research" })).toBeTruthy();
+        expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
         for (const label of ["Investigation", "Synthesis"]) {
             const tab = screen.getByRole("button", { name: label });
             expect(tab.getAttribute("aria-disabled")).toBe("true");
@@ -94,7 +94,7 @@ describe("production run workspace", () => {
         expect(sources.getAttribute("aria-current")).toBe("page");
         expect(sources.textContent).toContain("Sources");
         // Other sections stay reachable by icon; their names remain accessible.
-        expect(screen.getByRole("link", { name: "Research" }).textContent).toBe(
+        expect(screen.getByRole("link", { name: "Overview" }).textContent).toBe(
             "",
         );
         expect(

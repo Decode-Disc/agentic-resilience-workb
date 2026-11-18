@@ -10,7 +10,6 @@ function renderNeeds() {
     render(
         <DocumentaryNeeds
             questions={[{ id: "q1", label: "Q1", question: "Position" }]}
-            notice="The Sources Agent stopped here because its time window ended."
             onOpenSource={onOpenSource}
             needs={[
                 {
@@ -41,13 +40,8 @@ function renderNeeds() {
     return { onOpenSource };
 }
 
-test("a shared reason appears once; the full need and its documents each have an explicit control", () => {
+test("a long need and its documents each open from an explicit control", () => {
     const { onOpenSource } = renderNeeds();
-    expect(
-        screen.getAllByText(
-            "The Sources Agent stopped here because its time window ended.",
-        ),
-    ).toHaveLength(1);
     // The need text itself is not a hidden trigger.
     expect(screen.queryByRole("button", { name: longNeed })).toBeNull();
     const more = screen.getByRole("button", { name: "Show full need" });

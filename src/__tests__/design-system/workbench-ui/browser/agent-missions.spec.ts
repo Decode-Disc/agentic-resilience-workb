@@ -130,10 +130,12 @@ for (const theme of ["dark", "light"] as const) {
             await page.clock.runFor(300);
             await page.keyboard.press("Escape");
             await expect(
-                page.getByRole("heading", {
-                    name: "Documentary material ready",
-                    exact: true,
-                }),
+                page
+                    .getByRole("region", {
+                        name: "Documentary progress",
+                        exact: true,
+                    })
+                    .getByText("Complete with limits", { exact: true }),
             ).toBeVisible();
             if (width === 390) {
                 await page.screenshot({

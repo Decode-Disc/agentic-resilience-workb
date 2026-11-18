@@ -87,8 +87,8 @@ test("Sources locations survive the URL only within the Sources section", () => 
         use: "context",
     });
     expect(
-        workspaceSearch({ section: "progress", sourcesView: "matrix", q: "x" }),
-    ).toEqual({ section: "progress" });
+        workspaceSearch({ section: "overview", sourcesView: "matrix", q: "x" }),
+    ).toEqual({ section: "overview" });
     expect(
         workspaceSearch({ section: "sources", sourcesView: "elsewhere" }),
     ).toEqual({ section: "sources" });
@@ -211,5 +211,17 @@ test("the reader receives every Sources location key, including its starting poi
         source: "abc",
         need: "workflow",
         focus: "conflict",
+    });
+});
+
+test("links to the former Progress view open Overview, keeping their History alias", () => {
+    expect(workspaceSearch({ section: "progress" })).toEqual({
+        section: "overview",
+    });
+    expect(workspaceSearch({ section: "progress", detail: "timeline" })).toEqual(
+        { section: "overview", detail: "timeline" },
+    );
+    expect(workspaceSearch({ section: "sources", detail: "timeline" })).toEqual({
+        section: "sources",
     });
 });

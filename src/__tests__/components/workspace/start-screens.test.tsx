@@ -122,7 +122,6 @@ describe("Start presentation without backend providers", () => {
                 name="framing"
                 theme="light"
                 onNavigate={vi.fn()}
-                onOpenProgress={vi.fn()}
             />,
         );
         const program = within(
@@ -165,7 +164,6 @@ describe("Start presentation without backend providers", () => {
                 name="framing"
                 theme="light"
                 onNavigate={vi.fn()}
-                onOpenProgress={vi.fn()}
             />,
         );
         const program = within(
@@ -195,7 +193,6 @@ describe("Start presentation without backend providers", () => {
                 name="framing"
                 theme="light"
                 onNavigate={vi.fn()}
-                onOpenProgress={vi.fn()}
             />,
         );
         const input = screen.getByRole<HTMLTextAreaElement>("textbox", {
@@ -326,7 +323,6 @@ it("keeps an unfinished question edit and launch guard when the pending program 
             name="framing"
             theme="light"
             onNavigate={vi.fn()}
-            onOpenProgress={vi.fn()}
         />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Edit question" }));

@@ -3,6 +3,7 @@ import {
     AiChat02Icon,
     ArrowLeft01Icon,
     ArrowRight01Icon,
+    Cancel01Icon,
     PencilEdit01Icon,
     PlusSignIcon,
 } from "@hugeicons/core-free-icons";
@@ -20,7 +21,6 @@ import {
     useState,
 } from "react";
 import type { GroupImperativeHandle, Layout } from "react-resizable-panels";
-import { AgentIdentity } from "@/components/chat/agent-identity";
 import {
     AgentQuestion,
     AgentQuestionDescription,
@@ -31,7 +31,6 @@ import {
     AgentQuestionOther,
     AgentQuestionTitle,
 } from "@/components/chat/agent-question";
-import { SOURCES_AGENT } from "@/components/chat/conversation-agent";
 import {
     ConversationThread,
     ConversationThreadDock,
@@ -56,6 +55,14 @@ import {
     EmptyTitle,
 } from "@/components/ui/empty";
 import {
+    Dialog as LinearDialog,
+    DialogClose as LinearDialogClose,
+    DialogContainer as LinearDialogContainer,
+    DialogContent as LinearDialogContent,
+    DialogTitle as LinearDialogTitle,
+    DialogTrigger as LinearDialogTrigger,
+} from "@/components/ui/linear-modal";
+import {
     ResizableHandle,
     ResizablePanel,
     ResizablePanelGroup,
@@ -77,6 +84,7 @@ import {
 } from "@/components/workbench-ui/motion";
 import { useMediaQuery } from "@/hooks/use-responsive";
 import type {
+    DossierStage,
     SourcesStateMark,
     SourcesStateTone,
 } from "@/lib/presentation/sources";
@@ -283,11 +291,14 @@ export function StartResearchScreen({
     runtime,
     conversation,
     conversationComposer,
+    overview,
     heading,
     notice,
     summary,
     stages,
     lanes,
+    result,
+    history,
     limitations,
     handoff,
     resting = false,
@@ -296,11 +307,17 @@ export function StartResearchScreen({
     runtime: AssistantRuntime;
     conversation: ReactNode;
     conversationComposer?: ReactNode;
+    /** The dossier's question and stages, above the current stage's detail. */
+    overview?: ReactNode;
     heading: ReactNode;
     notice?: ReactNode;
     summary?: ReactNode;
     stages?: ReactNode;
     lanes: ReactNode;
+    /** The current stage's handed-off result; it takes the place of the collection lanes. */
+    result?: ReactNode;
+    /** The dossier's recorded steps, after the current stage. */
+    history?: ReactNode;
     limitations?: ReactNode;
     handoff?: ReactNode;
     /** Quiets the lanes while preparation is not working (paused, waiting or awaiting a decision). */
@@ -418,6 +435,7 @@ export function StartResearchScreen({
                             <section
                                 className={styles.progress}
                                 aria-label="Documentary progress">
+                                {overview}
                                 <header
                                     className={
                                         handoff ? styles.muted : undefined
@@ -425,38 +443,47 @@ export function StartResearchScreen({
                                     {heading}
                                 </header>
                                 {notice}
-                                <GlassPanel className={styles.summaryPanel}>
+                                {!result && (
+                                    <GlassPanel className={styles.summaryPanel}>
+                                        <div
+                                            className={
+                                                handoff
+                                                    ? `${styles.summaryOverview} ${styles.muted}`
+                                                    : styles.summaryOverview
+                                            }>
+                                            {summary}
+                                            {stages && (
+                                                <div className={styles.stages}>
+                                                    {stages}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {limitations}
+                                    </GlassPanel>
+                                )}
+                                {result ? (
+                                    <div className={styles.stageResult}>
+                                        {result}
+                                    </div>
+                                ) : (
                                     <div
                                         className={
                                             handoff
-                                                ? `${styles.summaryOverview} ${styles.muted}`
-                                                : styles.summaryOverview
+                                                ? styles.completed
+                                                : cn(
+                                                      styles.lanes,
+                                                      resting && styles.resting,
+                                                  )
                                         }>
-                                        {summary}
-                                        {stages && (
-                                            <div className={styles.stages}>
-                                                {stages}
-                                            </div>
-                                        )}
+                                        {lanes}
                                     </div>
-                                    {limitations}
-                                </GlassPanel>
-                                <div
-                                    className={
-                                        handoff
-                                            ? styles.completed
-                                            : cn(
-                                                  styles.lanes,
-                                                  resting && styles.resting,
-                                              )
-                                    }>
-                                    {lanes}
-                                </div>
+                                )}
                                 {handoff && (
                                     <div className={styles.handoff}>
                                         {handoff}
                                     </div>
                                 )}
+                                {history}
                             </section>
                         </ResizablePanel>
                     </ResizablePanelGroup>
@@ -1205,24 +1232,161 @@ function SourcesStateGlyph({ mark }: { mark: SourcesStateMark }) {
     return <WorkbenchIcon name={mark} size={14} strokeWidth={2} />;
 }
 
+/**
+ * The dossier's framed scope and where it stands. The scope clamps to two lines;
+ * Read framing opens the full scope and its questions in a dialog that morphs
+ * from the control, so the stage stays where it was. The stepper keeps every
+ * stage readable and scrolls the current one into view on narrow panels.
+ */
+export function StageOverview({
+    question,
+    questions = [],
+    stages,
+}: {
+    question: string;
+    questions?: readonly StartFramingQuestion[];
+    stages: readonly DossierStage[];
+}) {
+    const stepperRef = useRef<HTMLOListElement>(null);
+    const current = stages.find((stage) => stage.state === "current")?.key;
+    useEffect(() => {
+        const list = stepperRef.current;
+        const step = current
+            ? list?.querySelector<HTMLElement>(`[data-stage="${current}"]`)
+            : null;
+        if (!list || !step || list.scrollWidth <= list.clientWidth) return;
+        list.scrollLeft =
+            step.offsetLeft - (list.clientWidth - step.offsetWidth) / 2;
+    }, [current]);
+    return (
+        <section className={styles.stageOverview} aria-label="Dossier stage">
+            <h1 className={styles.stageQuestion}>{question}</h1>
+            <div className={styles.stageMeta}>
+                <span className={styles.stageLinks}>
+                    {questions.length > 0 && (
+                        <span>{`${questions.length} ${questions.length === 1 ? "question" : "questions"}`}</span>
+                    )}
+                    <FramingDialog scope={question} questions={questions} />
+                </span>
+                <ol
+                    ref={stepperRef}
+                    className={styles.stepper}
+                    aria-label="Dossier stages">
+                    {stages.map((stage) => (
+                        <li
+                            key={stage.key}
+                            data-stage={stage.key}
+                            data-state={stage.state}
+                            aria-current={
+                                stage.state === "current" ? "step" : undefined
+                            }>
+                            <span
+                                className={styles.stepMark}
+                                aria-hidden="true">
+                                {stage.state === "done" && (
+                                    <WorkbenchIcon
+                                        name="check"
+                                        size={10}
+                                        strokeWidth={2.4}
+                                    />
+                                )}
+                            </span>
+                            <span>{stage.label}</span>
+                            {stage.state === "unavailable" && (
+                                <span className="sr-only">
+                                    , not available yet
+                                </span>
+                            )}
+                        </li>
+                    ))}
+                </ol>
+            </div>
+        </section>
+    );
+}
+
+/** The accepted framing in full, read without leaving the stage panel. */
+function FramingDialog({
+    scope,
+    questions,
+}: {
+    scope: string;
+    questions: readonly StartFramingQuestion[];
+}) {
+    return (
+        <LinearDialog>
+            <LinearDialogTrigger className={styles.framingTrigger}>
+                Read framing
+            </LinearDialogTrigger>
+            <LinearDialogContainer className={styles.framingPosition}>
+                <LinearDialogContent className={styles.framingDialog}>
+                    <div className={styles.framingTop}>
+                        <LinearDialogTitle className={styles.framingTitle}>
+                            Research framing
+                        </LinearDialogTitle>
+                        <LinearDialogClose
+                            className={styles.framingClose}
+                            aria-label="Close framing">
+                            <Icon iconNode={Cancel01Icon} size={16} />
+                        </LinearDialogClose>
+                    </div>
+                    <div className={styles.framingBody}>
+                        <section aria-label="Scope">
+                            <h3 className="wb-label">Scope</h3>
+                            <p>{scope}</p>
+                        </section>
+                        {questions.length > 0 && (
+                            <section aria-label="Research questions">
+                                <h3 className="wb-label">
+                                    {`${questions.length} ${questions.length === 1 ? "question" : "questions"}`}
+                                </h3>
+                                <ol className={styles.framingQuestions}>
+                                    {questions.map((item) => (
+                                        <li key={item.id}>
+                                            <span
+                                                className={
+                                                    styles.framingQuestionLabel
+                                                }>
+                                                {item.label}
+                                            </span>
+                                            <span>
+                                                {item.shortLabel && (
+                                                    <b>{item.shortLabel}</b>
+                                                )}
+                                                <span>{item.text}</span>
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            </section>
+                        )}
+                    </div>
+                </LinearDialogContent>
+            </LinearDialogContainer>
+        </LinearDialog>
+    );
+}
+
 export function StartSourcesHeader({
     label,
     title,
     description,
+    attribution,
     actions,
-    onOpenProgress,
     detail,
     mark = "live",
     tone = "accent",
 }: {
-    label: string;
+    /** The stage state, shown as one pill beside the stage title. */
+    label?: string;
+    /** The stage name. */
     title: string;
     /** Status summary or explanation shown directly under the title. */
     description?: ReactNode;
-    /** Secondary controls (such as pause, resume or restart) grouped with the progress action. */
+    /** Who produced the stage's work, after its explanation. */
+    attribution?: ReactNode;
+    /** Stage controls such as pause, resume, a pending decision or settlement. */
     actions?: ReactNode;
-    /** Opens the dossier's activity log, the recorded timeline of research steps. */
-    onOpenProgress?: () => void;
     detail?: string;
     mark?: SourcesStateMark;
     tone?: SourcesStateTone;
@@ -1248,35 +1412,27 @@ export function StartSourcesHeader({
                         filter: "blur(2px)",
                         transition: listExitTransition,
                     }}>
-                    <span className={styles.sourceLabel}>
-                        <AgentIdentity agent={SOURCES_AGENT} />
-                        <span className={styles.stateLabel}>
-                            <SourcesStateGlyph mark={mark} />
-                            <span>{label}</span>
-                        </span>
-                    </span>
-                    <h1>{title}</h1>
+                    <div className={styles.sourceTitleRow}>
+                        <h2>{title}</h2>
+                        {label && (
+                            <span className={styles.stateLabel}>
+                                <SourcesStateGlyph mark={mark} />
+                                <span>{label}</span>
+                            </span>
+                        )}
+                    </div>
                     {description && (
                         <p className={styles.sourceDescription} role="status">
                             {description}
                         </p>
                     )}
+                    {attribution}
                 </motion.div>
             </AnimatePresence>
-            {(actions || onOpenProgress || detail) && (
+            {(actions || detail) && (
                 <div className={styles.openProgress}>
-                    {(actions || onOpenProgress) && (
-                        <div className={styles.sourceActions}>
-                            {actions}
-                            {onOpenProgress && (
-                                <Button
-                                    variant="launch"
-                                    onClick={onOpenProgress}>
-                                    View progress
-                                    <WorkbenchIcon name="chevron" size={14} />
-                                </Button>
-                            )}
-                        </div>
+                    {actions && (
+                        <div className={styles.sourceActions}>{actions}</div>
                     )}
                     {detail && <span>{detail}</span>}
                 </div>

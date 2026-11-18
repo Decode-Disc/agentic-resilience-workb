@@ -15,7 +15,6 @@ it("restarts illustrative work while preserving the completed mission in convers
             name="launched"
             theme="light"
             onNavigate={vi.fn()}
-            onOpenProgress={vi.fn()}
         />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Preview tools" }));
@@ -79,7 +78,6 @@ it("retains an unsent draft after failed delivery and records it once on explici
             name="framing"
             theme="light"
             onNavigate={vi.fn()}
-            onOpenProgress={vi.fn()}
         />,
     );
     expect(screen.queryByRole("button", { name: "Fail next send" })).toBeNull();
@@ -124,7 +122,6 @@ it("keeps partial illustrative output visibly interrupted rather than declaring 
             name="framing"
             theme="light"
             onNavigate={vi.fn()}
-            onOpenProgress={vi.fn()}
         />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Preview tools" }));
@@ -152,7 +149,6 @@ it("retains the result of a guided framing correction in conversation history", 
             name="framing"
             theme="light"
             onNavigate={vi.fn()}
-            onOpenProgress={vi.fn()}
         />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Preview tools" }));

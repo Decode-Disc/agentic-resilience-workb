@@ -2,12 +2,8 @@ import {
     AGENT_IDENTITIES,
     type AgentIdentityId,
 } from "@convex/domain/agentIdentities";
-import {
-    AiChat02Icon,
-    AiSearch02Icon,
-    FileSearchIcon,
-    WorkflowSquare01Icon,
-} from "@hugeicons/core-free-icons";
+import { AiChat02Icon } from "@hugeicons/core-free-icons";
+import { stageIcons } from "@/lib/presentation/stage-icons";
 import type { PlatformIcon } from "@/types/ui";
 
 /** Display identity, independent from message roles and execution providers. */
@@ -24,7 +20,7 @@ export const WORKBENCH_AGENT = {
 } satisfies ConversationAgent;
 export const SOURCES_AGENT = {
     ...AGENT_IDENTITIES.sources,
-    icon: FileSearchIcon,
+    icon: stageIcons.sources,
 } satisfies ConversationAgent;
 
 export const DEFAULT_CONVERSATION_AGENTS: ConversationAgents &
@@ -33,10 +29,10 @@ export const DEFAULT_CONVERSATION_AGENTS: ConversationAgents &
     [SOURCES_AGENT.id]: SOURCES_AGENT,
     investigation: {
         ...AGENT_IDENTITIES.investigation,
-        icon: AiSearch02Icon,
+        icon: stageIcons.investigation,
     },
     synthesis: {
         ...AGENT_IDENTITIES.synthesis,
-        icon: WorkflowSquare01Icon,
+        icon: stageIcons.synthesis,
     },
 };

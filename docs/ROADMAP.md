@@ -170,7 +170,7 @@ Outcome: the analyst can frame one persistent dossier, launch the question-led w
 - [ ] Extend and qualify Workbench's [dossier-wide consultation and coordination](../context/TECH.md#workbench-conversation-steering-and-instructions) as the Investigation and Synthesis business bindings become available, reusing their authoritative artifacts and operations. Current bindings cover framing and Sources preparation; later analytical aggregation and follow-up remain undelivered.
 - [x] Connect shared research pause/resume primitives to the framed documentary workflow and analyst controls, preserving engaged results, pending requests, cumulative consumption and the single active research slot.
 - [ ] Make the proposed company/activity scope and intended question useful immediately without reconstructing activity revenue or introducing financial calculations.
-- [ ] Evolve the existing workspace within the accepted timeline, compact composer and contextual-intervention direction. Settle remaining layout choices before changing the affected surfaces.
+- [ ] Evolve the existing workspace within the accepted timeline, compact composer and contextual-intervention direction. Settle remaining layout choices before changing the affected surfaces. On 2026-11-18 the dossier home (named Overview, first Progress) gained a stage panel and History, and Sources became the document library ([ADR-030](decisions/030-make-progress-the-dossier-home-and-sources-a-library.md)); browser qualification is pending and the retrieval-failure alert of the former progress page is not yet carried into the stage panel.
 
 ## Phase 7 — Shared Execution and Sources
 

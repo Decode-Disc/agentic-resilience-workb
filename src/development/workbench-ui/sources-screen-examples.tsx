@@ -5,7 +5,6 @@ import { WorkbenchShellSurface } from "@/components/workbench-shell/workbench-sh
 import { WorkbenchUiRoot } from "@/components/workbench-ui";
 import {
     SourcesMatrixScreen,
-    SourcesPreparationScreen,
     SourcesReaderScreen,
     type SourcesScreenFrame,
 } from "@/components/workspace/sources/sources-screens";
@@ -22,14 +21,14 @@ import {
     illustrativeSources,
     type MatrixFilterValues,
     matrixFilters,
-    preparationView,
     readerQuestionTexts,
     readerSourceGroups,
     selectedSources,
     totalSources,
 } from "./sources-fixture-data";
 
-export const sourcesScreenNames = ["preparation", "matrix", "reader"] as const;
+// The document matrix is the Sources landing; the preparation result lives in Progress.
+export const sourcesScreenNames = ["matrix", "reader"] as const;
 export type SourcesScreenName = (typeof sourcesScreenNames)[number];
 
 function notify(message: string) {
@@ -61,7 +60,7 @@ function PreviewSectionNavigation({
             actions={inventory}
             sections={[
                 {
-                    key: "progress",
+                    key: "overview",
                     label: "Progress",
                     current: false,
                     render: <button type="button" onClick={onOpenProgress} />,
@@ -140,14 +139,9 @@ export function SourcesScreenPreview({
             />
         ),
     };
-    const preparationStep = {
-        id: "preparation",
-        label: "Preparation",
-        onSelect: () => onNavigate("preparation"),
-    };
-    const matrixStep = {
+    const documentsStep = {
         id: "matrix",
-        label: "Source matrix",
+        label: "Documents",
         onSelect: () => onNavigate("matrix"),
     };
     return (
@@ -157,17 +151,9 @@ export function SourcesScreenPreview({
             style={{ lineHeight: 1.5 }}
             data-sources-screen={name}>
             <WorkbenchShellSurface>
-                {name === "preparation" ? (
-                    <SourcesPreparationScreen
-                        frame={frame}
-                        view={preparationView}
-                        onInspectSources={() => onNavigate("matrix")}
-                        onOpenSource={(id) => openSource(id)}
-                    />
-                ) : name === "matrix" ? (
+                {name === "matrix" ? (
                     <SourcesMatrixScreen
                         frame={frame}
-                        trail={[preparationStep, matrixStep]}
                         rows={filterIllustrativeSources(query, filters)}
                         total={totalSources}
                         currentId={selectedId}
@@ -193,8 +179,7 @@ export function SourcesScreenPreview({
                     <SourcesReaderScreen
                         frame={frame}
                         trail={[
-                            preparationStep,
-                            matrixStep,
+                            documentsStep,
                             { id: "source", label: source.title },
                         ]}
                         sources={readerSourceGroups}

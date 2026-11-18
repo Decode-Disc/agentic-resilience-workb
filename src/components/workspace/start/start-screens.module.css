@@ -126,8 +126,9 @@
 .actions button:first-child {
     @apply px-[8px];
 }
+/* Fills what the section bar above leaves; outside a flex parent it keeps the full height. */
 .research {
-    @apply flex flex-col h-[100%] min-h-[0] overflow-hidden;
+    @apply flex flex-col flex-[1_1_0] h-[100%] min-h-[0] overflow-hidden;
 }
 .researchPanels {
     @apply flex-[1] min-h-[0];
@@ -334,28 +335,156 @@
 .stageLabels {
     @apply flex justify-between gap-[8px] text-[12.5px] text-muted-foreground;
 }
+/* The title takes every column the actions leave, so it wraps only where the row ends. */
 .sourceHeading {
-    @apply flex items-start justify-between gap-x-[24px] gap-y-[14px];
+    @apply grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-[24px] gap-y-[12px];
 }
 .sourceTitles {
     @apply flex-[1] flex flex-col gap-[8px] min-w-[0];
 }
-.sourceHeading h1 {
-    @apply text-[34px] leading-[38px] font-medium tracking-[-0.045em] m-[0] text-balance;
+/* The stage title sits under the dossier question, so it steps down a level. */
+.sourceHeading h2 {
+    @apply text-[24px] leading-[30px] font-medium tracking-[-0.03em] m-[0] text-pretty;
+}
+.stageResult {
+    @apply flex flex-col gap-[16px] min-w-[0];
+}
+.stageOverview {
+    @apply flex flex-col gap-[10px];
+}
+/* The framed scope can be a paragraph; two lines identify the dossier and Read framing opens the rest. */
+.stageQuestion {
+    @apply m-[0] max-w-[70ch] text-[16px] leading-[24px] font-medium tracking-[-0.01em] line-clamp-2;
+}
+.stageMeta {
+    @apply flex flex-wrap items-center justify-between gap-x-[20px] gap-y-[10px] pb-[20px] border-b border-border;
+}
+.stageLinks {
+    @apply flex items-center gap-[14px] text-[13px] text-muted-foreground;
+}
+.framingTrigger {
+    all: unset;
+    @apply text-foreground underline underline-offset-[3px] decoration-border rounded-[4px] cursor-pointer;
+}
+.framingTrigger:hover {
+    @apply decoration-foreground;
+}
+.framingTrigger:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+/* Every stage stays readable; on narrow panels the row scrolls and centres the current stage. */
+.stepper {
+    /* The padding keeps the current stage's ring inside the scroll box. */
+    @apply -m-[4px] p-[4px] list-none flex items-center gap-[8px] min-w-[0] max-w-[calc(100%+8px)] overflow-x-auto;
+    scrollbar-width: none;
+}
+.stepper::-webkit-scrollbar {
+    display: none;
+}
+.stepper > li {
+    @apply flex items-center gap-[6px] text-[12.5px] text-muted-foreground whitespace-nowrap;
+}
+.stepper > li + li::before {
+    content: "";
+    @apply block w-[16px] h-px bg-border;
+}
+.stepper > li[data-state="done"] {
+    @apply text-foreground;
+}
+.stepper > li[data-state="current"] {
+    @apply text-foreground font-medium;
+}
+.stepper > li[data-state="unavailable"] {
+    @apply opacity-60;
+}
+.stepMark {
+    @apply grid place-items-center size-[16px] rounded-full border border-border;
+}
+.stepper > li[data-state="done"] .stepMark {
+    @apply bg-foreground text-background border-foreground;
+}
+.stepper > li[data-state="current"] .stepMark {
+    @apply border-brand-purple;
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand-purple) 22%, transparent);
+}
+.stepper > li[data-state="current"] .stepMark::after {
+    content: "";
+    @apply size-[6px] rounded-full bg-brand-purple;
+}
+@container research-progress (max-width: 30rem) {
+    .stepper > li + li::before {
+        @apply w-[12px];
+    }
+}
+.framingPosition {
+    @apply grid place-items-center p-[16px];
+}
+.framingDialog {
+    @apply relative flex flex-col w-[100%] max-w-[640px] max-h-[min(80dvh,720px)] rounded-[16px] bg-popover text-popover-foreground;
+    box-shadow:
+        0 0 0 1px var(--border),
+        0 24px 48px -16px color-mix(in oklab, var(--foreground) 28%, transparent);
+}
+.framingTop {
+    @apply flex items-center justify-between gap-[12px] py-[14px] pl-[22px] pr-[12px] border-b border-border;
+}
+.framingTitle {
+    @apply m-[0] text-[17px] leading-[24px] font-semibold tracking-[-0.02em];
+}
+.framingClose {
+    @apply grid place-items-center size-[32px] rounded-[10px] text-muted-foreground cursor-pointer;
+}
+.framingClose:hover {
+    @apply bg-foreground/6 bg-none text-foreground;
+}
+.framingClose:focus-visible {
+    outline: 2px solid var(--ring);
+    @apply outline-offset-[2px];
+}
+.framingBody {
+    @apply min-h-[0] overflow-y-auto flex flex-col gap-[22px] py-[18px] px-[22px];
+}
+.framingBody section {
+    @apply flex flex-col gap-[8px];
+}
+.framingBody h3 {
+    @apply m-[0] text-muted-foreground;
+}
+.framingBody p {
+    @apply m-[0] text-[14.5px] leading-[22px];
+}
+.framingQuestions {
+    @apply m-[0] p-[0] list-none flex flex-col gap-[14px];
+}
+.framingQuestions > li {
+    @apply grid grid-cols-[2rem_minmax(0,1fr)] gap-x-[8px] text-[14px] leading-[21px];
+}
+.framingQuestions > li > span:last-child {
+    @apply flex flex-col gap-[2px];
+}
+.framingQuestions b {
+    @apply font-medium;
+}
+.framingQuestions > li > span:last-child > span {
+    @apply text-muted-foreground;
+}
+.framingQuestionLabel {
+    @apply font-mono text-[12px] leading-[21px] text-muted-foreground;
 }
 .sourceDescription {
     @apply m-[0] max-w-[64ch] text-[14.5px] leading-[22px] text-muted-foreground;
 }
-.sourceLabel {
-    @apply flex items-center gap-[10px];
-    font: 500 11px / 1.5 var(--font-mono);
-    @apply tracking-[0.12em] uppercase text-brand-purple;
+.sourceTitleRow {
+    @apply flex flex-wrap items-center gap-x-[12px] gap-y-[6px];
 }
 .liveDot {
     @apply w-[8px] h-[8px] rounded-[50%] bg-brand-purple bg-none;
 }
+/* One state pill beside the stage title; its tone follows the dossier status. */
 .stateLabel {
-    @apply inline-flex items-center gap-[7px];
+    @apply inline-flex items-center gap-[6px] h-[24px] px-[10px] rounded-full text-[12.5px] font-medium text-brand-purple whitespace-nowrap;
+    background: color-mix(in oklab, currentColor 9%, transparent);
 }
 /* The state label takes the dossier status tones; the agent identity keeps its own purple. */
 .sourceTitles[data-tone="review"] .stateLabel {
@@ -375,12 +504,13 @@
 }
 .openProgress {
     /* Several decisions wrap within half the row instead of squeezing the title. */
-    @apply flex flex-col items-end gap-[8px] shrink min-w-[0] max-w-[50%] pt-[4px];
+    @apply flex flex-col items-end gap-[8px] min-w-[0] max-w-[24rem] pt-[4px];
 }
 .sourceActions {
     @apply flex flex-wrap items-center justify-end gap-[8px];
 }
-.openProgress button {
+.openProgress button,
+.openProgress a {
     @apply text-[14px] h-[40px] py-0 px-[16px];
 }
 .openProgress > span {
@@ -455,10 +585,7 @@
         @apply basis-[100%];
     }
     .sourceHeading {
-        @apply items-start flex-col gap-[12px];
-    }
-    .sourceHeading h1 {
-        @apply text-[28px] leading-[34px] tracking-[-0.03em];
+        @apply grid-cols-[minmax(0,1fr)];
     }
     .openProgress {
         @apply items-start pt-[0] w-[100%] max-w-none;
@@ -477,8 +604,8 @@
     }
 }
 @container research-progress (max-width: 26rem) {
-    .sourceHeading h1 {
-        @apply text-[24px] leading-[30px];
+    .sourceHeading h2 {
+        @apply text-[20px] leading-[26px];
     }
     .counts {
         @apply w-[100%] justify-between gap-[16px];
@@ -860,7 +987,6 @@
     .framingDock {
         --framing-dock-limit: calc(100cqh - min(180px, 50cqh));
         @apply max-h-(--framing-dock-limit) overflow-x-hidden overflow-y-auto overscroll-contain;
-        scrollbar-width: thin;
     }
     .pendingAction [data-slot="conversation-pending-panel"] {
         @apply max-h-(--framing-dock-limit);

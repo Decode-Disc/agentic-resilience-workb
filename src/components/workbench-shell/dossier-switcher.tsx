@@ -121,7 +121,7 @@ function DossierSwitcherContent({
                     void navigate({
                         to: "/workspace/$runId",
                         params: { runId },
-                        search: { section: "progress" },
+                        search: { section: "overview" },
                     });
             }}
             actions={

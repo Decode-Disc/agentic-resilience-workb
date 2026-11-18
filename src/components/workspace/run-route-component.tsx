@@ -17,7 +17,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { EvidenceInventory } from "@/components/workspace/evidence-inventory";
 import { RunProgress } from "@/components/workspace/run-progress";
-import { ConnectedSources } from "@/components/workspace/sources/connected-sources";
+import {
+    ConnectedSources,
+    ProgressSourcesResult,
+} from "@/components/workspace/sources/connected-sources";
 import {
     ConnectedStartWorkspace,
     StartWorkspaceSkeleton,
@@ -86,23 +89,18 @@ export function RunRouteComponent({
     const events = useQuery(api.researchRuns.listMyEvents, { runId });
     const [localInventoryOpen, setLocalInventoryOpen] = useState(false);
 
+    // Framed dossiers load their events only when History is opened.
     const needsEvents =
-        section !== "progress" ||
-        detail === "timeline" ||
+        section !== "overview" ||
         (run !== undefined && run !== null && run.startMode !== "framed");
 
     if (run === undefined || (needsEvents && events === undefined)) {
-        if (section === "progress")
+        if (section === "overview")
             return (
                 <div
-                    data-workbench-layout={
-                        detail === "timeline" ? "document" : "viewport"
-                    }
+                    data-workbench-layout="viewport"
                     className="flex min-h-0 flex-1 flex-col">
-                    <StartWorkspaceSkeleton
-                        detail={detail}
-                        ariaLabel="Loading research workspace"
-                    />
+                    <StartWorkspaceSkeleton ariaLabel="Loading research workspace" />
                 </div>
             );
         return (
@@ -142,23 +140,6 @@ export function RunRouteComponent({
             search: { section: "sources" },
         });
 
-    if (run.startMode === "framed" && section === "progress")
-        return (
-            <ConnectedStartWorkspace
-                runId={runId}
-                detail={detail}
-                progress={
-                    events ? (
-                        <RunProgress
-                            run={run}
-                            events={events}
-                            onOpenSources={openSources}
-                        />
-                    ) : undefined
-                }
-            />
-        );
-
     const inventory = (
         <EvidenceInventory
             runId={runId}
@@ -166,6 +147,33 @@ export function RunRouteComponent({
             onOpenChange={onInventoryOpenChange ?? setLocalInventoryOpen}
         />
     );
+    if (run.startMode === "framed" && section === "overview")
+        return (
+            <ConnectedStartWorkspace
+                runId={runId}
+                detail={detail}
+                navigationActions={inventory}
+                sourcesResult={
+                    <ProgressSourcesResult
+                        runId={runId}
+                        run={run}
+                        onOpenSource={(source, need) =>
+                            void navigate({
+                                to: "/workspace/$runId",
+                                params: { runId },
+                                search: {
+                                    section: "sources",
+                                    sourcesView: "reader",
+                                    source,
+                                    need,
+                                },
+                            })
+                        }
+                    />
+                }
+            />
+        );
+
     const navigation = (
         <WorkspaceNavigation
             runId={runId}
@@ -193,7 +201,7 @@ export function RunRouteComponent({
                 </div>
             </header>
             <div className="min-w-0">
-                {section === "progress" ? (
+                {section === "overview" ? (
                     <RunProgress
                         run={run}
                         events={events ?? []}
@@ -240,13 +248,6 @@ export function RunRouteComponent({
             onSearchChange={onSourcesSearchChange}
             navigation={navigation}
             fallback={generic}
-            onOpenDecision={() =>
-                void navigate({
-                    to: "/workspace/$runId",
-                    params: { runId },
-                    search: { section: "progress" },
-                })
-            }
             onFollowUp={
                 run.startMode === "framed"
                     ? (draft) => {
@@ -254,7 +255,7 @@ export function RunRouteComponent({
                           void navigate({
                               to: "/workspace/$runId",
                               params: { runId },
-                              search: { section: "progress" },
+                              search: { section: "overview" },
                           });
                       }
                     : undefined

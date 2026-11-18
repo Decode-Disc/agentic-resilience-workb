@@ -2,6 +2,7 @@ import type { api } from "@convex/_generated/api";
 import { dimensionLabel as domainDimensionLabel } from "@convex/domain/researchPlan";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { JobStage } from "@/components/ai/job-progress";
+import { sourcesPhaseState } from "@/lib/presentation/sources-phase-state";
 
 type RunProjection = NonNullable<
     FunctionReturnType<typeof api.researchRuns.getMine>
@@ -1532,16 +1533,19 @@ export function dossierStatus(
         run.lifecycleState === "sources_prepared" &&
         run.executionStatus === "idle"
     ) {
-        switch (run.sourcesPhase) {
-            case "completed":
-                return { label: "Sources prepared", tone: "success" };
-            case "completed_with_limits":
-                return { label: "Sources with limits", tone: "review" };
-            case "ended_without_material":
-                return { label: "No usable material", tone: "dashed" };
-            default:
-                return { label: "Sources handoff recorded", tone: "ink" };
-        }
+        const label =
+            run.sourcesPhase === "completed"
+                ? "Sources prepared"
+                : run.sourcesPhase === "completed_with_limits"
+                  ? "Sources with limits"
+                  : run.sourcesPhase === "ended_without_material"
+                    ? "No usable material"
+                    : undefined;
+        if (!label || !run.sourcesPhase)
+            return { label: "Sources handoff recorded", tone: "ink" };
+        // The Sources stage owns this tone; a muted stage reads as dashed in the badge.
+        const { tone } = sourcesPhaseState[run.sourcesPhase];
+        return { label, tone: tone === "muted" ? "dashed" : tone };
     }
     return {
         label: run.executionStatus === "completed" ? "Complete" : "Ready",

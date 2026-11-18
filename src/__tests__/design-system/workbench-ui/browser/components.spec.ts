@@ -14,17 +14,19 @@ test("START completed material stays readable until explicit navigation", async 
         page.getByRole("button", { name: "Stay here", exact: true }),
     ).toHaveCount(0);
     await expect(
-        page.getByRole("heading", { name: "Documentary material ready" }),
+        page
+            .getByRole("region", { name: "Documentary progress", exact: true })
+            .getByText("Complete with limits", { exact: true }),
     ).toBeVisible();
     await page.clock.runFor(5000);
     await expect(page).toHaveURL(/layout=start&screen=handoff/);
-    const progress = page.getByRole("button", {
-        name: "View progress",
-        exact: true,
-    });
-    await expect(progress).toBeVisible();
-    await progress.click();
-    await expect(page).toHaveURL(/component=ProgressTimeline/);
+    // Progress is this screen: the handed-off result sits in the stage panel, with no separate progress page.
+    await expect(
+        page.getByRole("button", { name: "View progress", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+        page.getByRole("table", { name: "Documentary needs" }),
+    ).toBeVisible();
 });
 
 test("START company picker closes with Escape and restores keyboard focus", async ({
@@ -204,11 +206,6 @@ test("START View framing navigates from source collection to its framing screen"
     await expect(
         page.getByRole("button", { name: "Start research", exact: true }),
     ).toHaveCount(0);
-    await page.goBack();
-    await page
-        .getByRole("button", { name: "View progress", exact: true })
-        .click();
-    await expect(page).toHaveURL(/component=ProgressTimeline/);
 });
 
 test("START optional corrections update the proposed research program", async ({

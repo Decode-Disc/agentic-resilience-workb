@@ -9,18 +9,19 @@ const consoleErrors = (page: Page) => {
     return errors;
 };
 
-test("preparation leads to the matrix and a selected source in the reader", async ({
+test("the document matrix leads to a selected source in the reader and back", async ({
     page,
 }) => {
     const errors = consoleErrors(page);
-    await page.goto("/?layout=sources&screen=preparation&theme=light");
+    await page.goto("/?layout=sources&screen=matrix&theme=light");
     await expect(
         page.getByRole("heading", {
-            name: "Documentary material for four questions",
+            name: "Sources, captures and contributions",
         }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Inspect sources" }).click();
-    await expect(page).toHaveURL(/screen=matrix/);
+    await expect(
+        page.getByRole("navigation", { name: "Sources location" }),
+    ).toHaveCount(0);
 
     const call = page.getByRole("button", { name: "Q2 2025 earnings call" });
     await call.focus();
@@ -44,7 +45,7 @@ test("preparation leads to the matrix and a selected source in the reader", asyn
         page.getByRole("status", { name: "Citation position" }),
     ).toHaveText("Citation 2 of 3");
 
-    await location.getByRole("button", { name: "Source matrix" }).click();
+    await location.getByRole("button", { name: "Documents" }).click();
     await expect(page).toHaveURL(/screen=matrix/);
     await expect(
         page.getByRole("button", { name: "Form 10-K · FY2025" }),
@@ -54,11 +55,11 @@ test("preparation leads to the matrix and a selected source in the reader", asyn
     expect(errors).toEqual([]);
 });
 
-test("preparation maps documentary needs to the questions they serve", async ({
+test("the handed-off Sources result in Progress maps documentary needs to the questions they serve", async ({
     page,
 }) => {
     const errors = consoleErrors(page);
-    await page.goto("/?layout=sources&screen=preparation&theme=light");
+    await page.goto("/?layout=start&screen=handoff&theme=light");
     const needs = page.getByRole("table", { name: "Documentary needs" });
     await expect(
         needs.getByRole("rowheader", {
@@ -102,24 +103,11 @@ test("preparation maps documentary needs to the questions they serve", async ({
     expect(errors).toEqual([]);
 });
 
-test("the outcome jumps straight to how preparation ran", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto("/?layout=sources&screen=preparation&theme=light");
-    await page.getByRole("button", { name: "How it ran" }).click();
-    const disclosure = page.getByRole("button", {
-        name: /How preparation ran/,
-    });
-    await expect(disclosure).toHaveAttribute("aria-expanded", "true");
-    await expect(disclosure).toBeFocused();
-    await expect(disclosure).toBeInViewport();
-    await expect(
-        page.getByRole("heading", { name: "Collect sources" }),
-    ).toBeVisible();
-});
-
-test("preparation needs stay readable on a phone", async ({ page }) => {
+test("the Sources result's needs stay readable on a phone", async ({
+    page,
+}) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/?layout=sources&screen=preparation&theme=dark");
+    await page.goto("/?layout=start&screen=handoff&theme=dark");
     const needs = page.getByRole("table", { name: "Documentary needs" });
     const question = needs.getByRole("button", { name: /^Q4/ });
     await question.click();
@@ -232,7 +220,7 @@ test.describe("on a touch screen", () => {
     });
 
     test("needs map marks explain themselves with a tap", async ({ page }) => {
-        await page.goto("/?layout=sources&screen=preparation&theme=light");
+        await page.goto("/?layout=start&screen=handoff&theme=light");
         await page
             .getByRole("button", {
                 name: "Serves Q3: Searched, nothing usable",

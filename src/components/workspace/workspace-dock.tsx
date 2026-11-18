@@ -1,10 +1,4 @@
-import {
-    AiSearchIcon,
-    BubbleChatIcon,
-    ChartIncreaseIcon,
-    Files02Icon,
-    LockIcon,
-} from "@hugeicons/core-free-icons";
+import { LockIcon } from "@hugeicons/core-free-icons";
 import { cloneElement, type ReactElement, type ReactNode, useId } from "react";
 import Icon from "@/components/icon";
 import {
@@ -12,18 +6,12 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { stageIcons } from "@/lib/presentation/stage-icons";
 import { cn } from "@/lib/utils";
 
-/** One icon per workspace section, shared by the live bar and the gallery. */
-const sectionIcons = {
-    progress: BubbleChatIcon,
-    sources: Files02Icon,
-    investigation: AiSearchIcon,
-    synthesis: ChartIncreaseIcon,
-} as const;
 
 export interface WorkspaceDockSection {
-    key: keyof typeof sectionIcons;
+    key: keyof typeof stageIcons;
     label: string;
     current: boolean;
     /** Why the section cannot open yet; it stays visible, locked, with this explanation. */
@@ -75,7 +63,7 @@ export function WorkspaceDock({
                     const content = (
                         <>
                             <Icon
-                                iconNode={sectionIcons[section.key]}
+                                iconNode={stageIcons[section.key]}
                                 className="size-4"
                             />
                             {showLabel ? section.label : null}

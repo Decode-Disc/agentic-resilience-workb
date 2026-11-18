@@ -47,7 +47,7 @@ test("opens inventory from the current workspace without starting research", () 
     render(
         <RunRouteComponent
             runId={"run-1" as never}
-            section="progress"
+            section="overview"
             onInventoryOpenChange={onInventoryOpenChange}
         />,
     );
@@ -118,7 +118,7 @@ test("does not advertise manual source intake after corpus approval", () => {
         updatedAt: 2,
     } as never);
 
-    render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
+    render(<RunRouteComponent runId={"run-1" as never} section="overview" />);
 
     expect(
         screen.queryByText(/you can add a public source manually/i),
@@ -158,7 +158,7 @@ test.each([
         providerFailures: [{ service: "exa", errorCode: "http_503" }],
         updatedAt: 2,
     });
-    render(<RunRouteComponent runId={"run-1" as never} section="progress" />);
+    render(<RunRouteComponent runId={"run-1" as never} section="overview" />);
     expect(screen.getByText(title)).toBeTruthy();
     expect(
         screen.getByText(

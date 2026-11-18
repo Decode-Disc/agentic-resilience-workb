@@ -483,6 +483,24 @@
         "Keeps Approval Teal reserved for analyst approval."
       ],
       "expected_output": "One owner change that propagates the success tone to every dossier-status surface, with the affected consumers named."
+    },
+    {
+      "id": 26,
+      "name": "merge-surfaces-without-restating",
+      "prompt": "Move the Sources preparation result into the Overview stage panel, following the approved mockup. The mockup shows the needs table but not how long needs are truncated. Plan the change; do not edit files.",
+      "files": [
+        "../../../src/components/workspace/start/connected-start-workspace.tsx",
+        "../../../src/components/workspace/sources/sources-screens.tsx",
+        "../../../src/lib/presentation/sources.tsx",
+        "../../../src/lib/presentation/research-copy.ts"
+      ],
+      "expectations": [
+        "Lists each statement of the Sources state, stop cause and Investigation availability the merged panel would show and keeps one of each.",
+        "Treats two differently worded stop causes as an owner defect to resolve, not a choice made in the screen.",
+        "Keeps the installed need truncation and its Show full need control, because the mockup does not show a change to them.",
+        "Checks that the stage pill and the dossier badge read the same tone owner."
+      ],
+      "expected_output": "A merge plan with one statement per fact, unchanged unshown behaviors, and owner-level corrections for divergent wording or tone."
     }
   ]
 }

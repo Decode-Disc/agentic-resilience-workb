@@ -3,6 +3,8 @@ import {
     Cancel01Icon,
     Search01Icon,
 } from "@hugeicons/core-free-icons";
+import { AgentByline } from "@/components/chat/agent-identity";
+import { SOURCES_AGENT } from "@/components/chat/conversation-agent";
 import {
     type ReactNode,
     type Ref,
@@ -87,12 +89,13 @@ export type DiscoveryOutcome = "found" | "none" | "unavailable";
 
 /** Presentation figures for one preparation; the consumer derives them from persisted work. */
 export interface SourcesPreparationView {
-    eyebrow: string;
-    title: string;
-    /** What was prepared and what happens next, supplied by the consumer; never a verdict on the questions. */
+    /** What was prepared, supplied by the consumer; never a verdict on the questions. */
     summary: string;
+    /** The one explanation of why Sources stopped, stated with the summary. */
+    stop?: string;
+    /** An earlier explanation recorded at handoff that differs from the current stop. */
+    handoffNote?: string;
     description?: string;
-    outcome: { label: string; settled: boolean };
     collect: {
         candidates: number;
         /** Omitted when the preparation does not record reuse. */
@@ -145,8 +148,6 @@ export interface SourcesPreparationView {
     };
     questions: readonly NeedQuestion[];
     needs: readonly DocumentaryNeed[];
-    /** A reason shared by several needs, shown once above them. */
-    needsNotice?: string;
     researchNotice?: string;
 }
 
@@ -175,132 +176,52 @@ const roleBadges = {
 };
 const check = <WorkbenchIcon name="check" size={11} strokeWidth={2.4} />;
 
-/** Initial preparation: documentary needs against the questions they serve, with how preparation ran on demand. */
-export function SourcesPreparationScreen({
-    frame,
+/** What Sources handed off: needs against the questions they serve, then how preparation ran on demand. */
+export function SourcesPreparationResult({
     view,
-    onInspectSources,
-    inspectEmphasis = "primary",
-    actions,
-    notices,
     onOpenSource,
+    runOpen,
+    onRunOpenChange,
+    runTriggerRef,
 }: {
-    frame: SourcesScreenFrame;
     view: SourcesPreparationView;
-    onInspectSources: () => void;
-    /** Demotes "Inspect sources" when an urgent decision sits beside it. */
-    inspectEmphasis?: "primary" | "secondary";
-    /** Consumer decisions placed after "Inspect sources", such as a checkpoint approval. */
-    actions?: ReactNode;
-    /** Recovery, failed-search or availability notices shown above the needs. */
-    notices?: ReactNode;
     /** Opens one of a need's documents in the reader. */
     onOpenSource?: (sourceId: string, needId: string) => void;
+    runOpen?: boolean;
+    onRunOpenChange?: (open: boolean) => void;
+    runTriggerRef?: Ref<HTMLButtonElement>;
 }) {
-    const [runOpen, setRunOpen] = useState(false);
-    const runTrigger = useRef<HTMLButtonElement>(null);
-    // The run sits below the needs; this brings it into view with focus, then opens it.
-    const showRun = () => {
-        const trigger = runTrigger.current;
-        if (!trigger) return;
-        trigger.focus({ preventScroll: true });
-        const reduced = window.matchMedia(
-            "(prefers-reduced-motion: reduce)",
-        ).matches;
-        if (reduced || Math.abs(trigger.getBoundingClientRect().top) < 2) {
-            trigger.scrollIntoView({ block: "start" });
-            setRunOpen(true);
-            return;
-        }
-        // Opening animates the panel's height, which cancels a smooth scroll in progress.
-        let opened = false;
-        const open = () => {
-            if (opened) return;
-            opened = true;
-            document.removeEventListener("scrollend", open, true);
-            setRunOpen(true);
-        };
-        document.addEventListener("scrollend", open, true);
-        window.setTimeout(open, 700);
-        trigger.scrollIntoView({ block: "start", behavior: "smooth" });
-    };
+    const [localRunOpen, setLocalRunOpen] = useState(false);
     return (
-        <SourcesWorkspaceFrame
-            {...frame}
-            prominent
-            eyebrow={view.eyebrow}
-            title={view.title}
-            description={view.summary}
-            headingAside={
-                <div className={cn("wb-glass", styles.outcome)}>
-                    <span className={styles.outcomeText}>
-                        <span className="wb-label">Outcome</span>
-                        <span className={styles.outcomeLabel}>
-                            <WorkbenchIcon
-                                name={
-                                    view.outcome.settled
-                                        ? "check"
-                                        : "unfinished"
-                                }
-                                size={16}
-                                strokeWidth={2}
-                            />
-                            {view.outcome.label}
-                        </span>
-                    </span>
-                    <span className={styles.outcomeActions}>
-                        <Button
-                            variant="outline"
-                            size="lg"
-                            className={styles.secondaryAction}
-                            onClick={showRun}>
-                            How it ran
-                            <Icon iconNode={ArrowDown01Icon} size={14} />
-                        </Button>
-                        <Button
-                            variant={
-                                inspectEmphasis === "secondary"
-                                    ? "outline"
-                                    : undefined
-                            }
-                            className={
-                                inspectEmphasis === "secondary"
-                                    ? styles.secondaryAction
-                                    : styles.primaryAction
-                            }
-                            size="lg"
-                            onClick={onInspectSources}>
-                            Inspect sources
-                            <WorkbenchIcon
-                                name="chevron"
-                                size={14}
-                                strokeWidth={2}
-                            />
-                        </Button>
-                        {actions}
-                    </span>
-                </div>
-            }>
-            {notices}
-            {view.researchNotice ? <p>{view.researchNotice}</p> : null}
+        <>
+            <div className={styles.stageSummary} role="status">
+                <p>
+                    {view.summary}
+                    {view.stop && ` ${view.stop}`}
+                </p>
+                {view.handoffNote && (
+                    <p className="wb-meta">{view.handoffNote}</p>
+                )}
+                {view.researchNotice && <p>{view.researchNotice}</p>}
+                <AgentByline agent={SOURCES_AGENT} />
+            </div>
             <DocumentaryNeeds
                 questions={view.questions}
                 needs={view.needs}
-                notice={view.needsNotice}
                 onOpenSource={onOpenSource}
             />
             <PreparationRun
                 view={view}
-                open={runOpen}
-                onOpenChange={setRunOpen}
-                triggerRef={runTrigger}
+                open={runOpen ?? localRunOpen}
+                onOpenChange={onRunOpenChange ?? setLocalRunOpen}
+                triggerRef={runTriggerRef}
             />
             {view.description && (
                 <p className={cn("wb-meta", styles.preparationNote)}>
                     {view.description}
                 </p>
             )}
-        </SourcesWorkspaceFrame>
+        </>
     );
 }
 
@@ -314,54 +235,26 @@ function PreparationRun({
     view: SourcesPreparationView;
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    triggerRef: Ref<HTMLButtonElement>;
+    triggerRef?: Ref<HTMLButtonElement>;
 }) {
     const { collect, reading, organize } = view;
     return (
         <Collapsible
             open={open}
             onOpenChange={onOpenChange}
-            className={cn("wb-glass", styles.process)}>
+            className={styles.process}>
             <CollapsibleTrigger
                 ref={triggerRef}
                 render={
                     <Button variant="unstyled" className={styles.processLine} />
                 }>
-                <span className={cn("wb-label", styles.processLabel)}>
-                    How preparation ran
-                </span>
-                <span className={styles.flow}>
-                    <span className={styles.flowStep}>
-                        <span>
-                            <b>{collect.candidates}</b> collected
-                        </span>
-                    </span>
-                    <StageArrow />
-                    <span className={styles.flowStep}>
-                        <span>
-                            <b>{reading.captured}</b> captured ·{" "}
-                            {captureBreakdown(reading)}
-                        </span>
-                        <ReadingBar
-                            height={5}
-                            counts={{
-                                full: reading.full,
-                                partial: reading.partial,
-                                unavailable: reading.unavailable,
-                                notCaptured: reading.notCaptured,
-                            }}
-                        />
-                    </span>
-                    <StageArrow />
-                    <span className={styles.flowStep}>
-                        <span>
-                            <b>{organize.selected}</b> retained ·{" "}
-                            {organize.context} kept as context
-                        </span>
-                    </span>
-                </span>
                 <span className={styles.processChevron} aria-hidden="true">
-                    <WorkbenchIcon name="chevron" size={14} strokeWidth={2} />
+                    <WorkbenchIcon name="chevron" size={12} strokeWidth={2} />
+                </span>
+                <span className={styles.processLabel}>How preparation ran</span>
+                <span className={styles.flow}>
+                    {collect.candidates} collected → {reading.captured} captured
+                    → {organize.selected} retained
                 </span>
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -550,17 +443,6 @@ function controlTotal(controls: SourcesPreparationView["reading"]["controls"]) {
     );
 }
 
-function captureBreakdown(reading: SourcesPreparationView["reading"]) {
-    return [
-        `${reading.full} complete`,
-        `${reading.partial} partial`,
-        reading.unavailable ? `${reading.unavailable} unavailable` : undefined,
-        reading.notCaptured ? `${reading.notCaptured} not captured` : undefined,
-    ]
-        .filter(Boolean)
-        .join(", ");
-}
-
 function StageArrow() {
     return (
         <span className={styles.stageArrow} aria-hidden="true">
@@ -596,7 +478,7 @@ export function SourcesMatrixScreen({
     contributionTerms,
 }: {
     frame: SourcesScreenFrame;
-    trail: readonly SourcesTrailStep[];
+    trail?: readonly SourcesTrailStep[];
     rows: readonly SourceMatrixRow[];
     total: number;
     currentId?: string;

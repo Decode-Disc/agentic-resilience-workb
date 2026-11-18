@@ -31,7 +31,7 @@ for (const viewport of [
                     typeof internal.execution.fixtures.inspectWorkbench
                 >
             >("execution/fixtures:inspectWorkbench", { runId, fixtureKey });
-        await page.goto(`/workspace/${runId}?section=progress`);
+        await page.goto(`/workspace/${runId}?section=overview`);
         await expect(
             page.getByText("Simulation: the research program is saved.", {
                 exact: false,

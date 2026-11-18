@@ -545,3 +545,11 @@
     --wb-mark-light-display: none;
     --wb-mark-dark-display: block;
 }
+
+/* Default scrollbars on every surface: thin and divider-toned. A component overrides it only for a specific effect, such as a strip whose scrollbar is hidden. */
+@layer base {
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--divider) transparent;
+    }
+}

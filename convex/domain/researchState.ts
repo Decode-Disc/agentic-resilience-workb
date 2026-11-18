@@ -135,6 +135,26 @@ export async function readResearchState(
     };
 }
 
+/** The single analyst-facing sentence for the Sources mission's recorded stop; every surface reuses it rather than translating block codes again. */
+export function sourcesCurrentStop(state: ResearchState): string | null {
+    const stop = state.sources?.executionStop;
+    if (!stop) return null;
+    const actor = `The ${agentName("sources")}`;
+    const generation = generationInterruption(stop.blockCode ?? undefined);
+    return generation === "invalid_response"
+        ? `${actor} stopped because its model response could not be used.`
+        : generation === "repeated_failure"
+          ? `${actor} stopped after repeated attempts made no progress.`
+          : stop.blockCode === "execution_time_limit" ||
+              stop.blockCode === "execution_deadline"
+            ? `${actor} stopped because its time window ended.`
+            : stop.blockCode === "resource_limit"
+              ? `${actor} stopped at a technical limit. The recorded reason does not identify which resource was exhausted.`
+              : stop.blockCode === null
+                ? `The reason for the ${agentName("sources")}'s stop was not recorded.`
+                : `${actor} stopped before it could finish. Retained work remains available for inspection.`;
+}
+
 /** Renders observed outcomes and permitted next actions; it never grants execution authority. */
 export function formatResearchSummary(state: ResearchState): string {
     const status = researchStatus({
@@ -203,24 +223,8 @@ export function formatResearchSummary(state: ResearchState): string {
         summary =
             "Sources preparation has ended. Inspect the retained material and its limits.";
     }
-    const stop = state.sources?.executionStop;
-    if (stop) {
-        const generation = generationInterruption(stop.blockCode ?? undefined);
-        const detail =
-            generation === "invalid_response"
-                ? `${sourcesActor} stopped because its model response could not be used.`
-                : generation === "repeated_failure"
-                  ? `${sourcesActor} stopped after repeated attempts made no progress.`
-                  : stop.blockCode === "execution_time_limit" ||
-                      stop.blockCode === "execution_deadline"
-                    ? `${sourcesActor} stopped because its time window ended.`
-                    : stop.blockCode === "resource_limit"
-                      ? `${sourcesActor} stopped at a technical limit. The recorded reason does not identify which resource was exhausted.`
-                      : stop.blockCode === null
-                        ? `The reason for the ${agentName("sources")}'s stop was not recorded.`
-                        : `${sourcesActor} stopped before it could finish. Retained work remains available for inspection.`;
-        summary += ` Recorded stop: ${detail}`;
-    }
+    const stop = sourcesCurrentStop(state);
+    if (stop) summary += ` Recorded stop: ${stop}`;
     if (
         state.nextCapability === "investigation_unavailable" ||
         (!terminal && state.phase === "sources_prepared")

@@ -2,16 +2,10 @@ import type { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 
 import { DossierStatusBadge } from "@/components/dossier-status-badge";
+import { RunHistory } from "@/components/workspace/run-history";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-    Empty,
-    EmptyDescription,
-    EmptyHeader,
-    EmptyTitle,
-} from "@/components/ui/empty";
-import {
-    eventLabel,
     evidenceStatusCopy,
     lifecycleLabel,
 } from "@/lib/presentation/research-copy";
@@ -172,32 +166,7 @@ export function RunProgress({
                         </p>
                     </div>
                 ) : null}
-                {events.length === 0 ? (
-                    <Empty className="surface-panel min-h-40 p-6">
-                        <EmptyHeader>
-                            <EmptyTitle>No progress events yet</EmptyTitle>
-                            <EmptyDescription>
-                                Updates will appear here after the research run
-                                starts.
-                            </EmptyDescription>
-                        </EmptyHeader>
-                    </Empty>
-                ) : (
-                    <ol className="space-y-2">
-                        {events.map((event) => (
-                            <li
-                                key={event._id}
-                                className="border-l border-border/70 py-1 pl-4 text-sm">
-                                <span className="font-medium">
-                                    {lifecycleLabel(event.lifecycleState)}
-                                </span>
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                    {eventLabel(event.type)}
-                                </span>
-                            </li>
-                        ))}
-                    </ol>
-                )}
+                <RunHistory events={events} />
             </div>
             <aside className="rounded-2xl border-[1.5px] border-dashed border-edge-dashed p-5">
                 <div className="flex items-center justify-between gap-3">

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+
 for (const width of [1440, 390])
     for (const theme of ["light", "dark"])
         test(`dossier selection ${width} ${theme}`, async ({ page }) => {

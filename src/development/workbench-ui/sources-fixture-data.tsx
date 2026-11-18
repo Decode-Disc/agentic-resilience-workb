@@ -13,13 +13,11 @@ import { readerContributions, readerPages } from "./fixture-data";
 
 /** Illustrative CCC preparation; no source was collected or read for this preview. */
 export const preparationView: SourcesPreparationView = {
-    eyebrow: "Initial preparation",
-    title: "Documentary material for four questions",
     summary:
-        "29 documents prepared across 8 documentary needs. One need found no public document and two remain unfinished; Investigation can start on the usable material.",
+        "29 documents retained across 8 documentary needs. 1 need found no public document. 2 needs have unfinished work.",
+    stop: "The Sources Agent stopped because its time window ended.",
     description:
         "A shared foundation plus searches aimed at Q1–Q4. Each source is collected once and reused by every question.",
-    outcome: { label: "Prepared with limits", settled: true },
     collect: {
         candidates: 47,
         reused: 8,

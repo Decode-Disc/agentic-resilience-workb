@@ -13,6 +13,8 @@ import type { ConversationMissionSnapshot } from "@/components/chat/conversation
 import { CompanyFaviconAvatar } from "@/components/company-favicon-avatar";
 import { ComposerToolbar } from "@/components/composer/composer";
 import { ComposerToolsMenu } from "@/components/composer/tools-menu";
+import { AgentByline } from "@/components/chat/agent-identity";
+import { SOURCES_AGENT } from "@/components/chat/conversation-agent";
 import Icon from "@/components/icon";
 import {
     Popover,
@@ -47,6 +49,7 @@ import {
     type CoveragePreset,
     CoveragePresetPicker,
 } from "@/components/workspace/coverage-preset-picker";
+import { SourcesPreparationResult } from "@/components/workspace/sources/sources-screens";
 import {
     CompanyCandidateLabel,
     CompanyContextBadge,
@@ -59,6 +62,7 @@ import {
     CompanyMandatePanel,
     FramingClarification,
     FramingProposal,
+    StageOverview,
     StartAngleSuggestions,
     StartEntryScreen,
     type StartFramingQuestion,
@@ -71,6 +75,8 @@ import {
 } from "@/components/workspace/start/start-screens";
 import { useQuickTextFill } from "@/hooks/use-quick-text-fill";
 import { useResponsive } from "@/hooks/use-responsive";
+import { dossierStages } from "@/lib/presentation/sources";
+import { preparationView } from "./sources-fixture-data";
 import {
     activityClarification,
     guidedExamples,
@@ -787,13 +793,11 @@ function ResearchExample({
     controller,
     composerControls,
     history,
-    onOpenProgress,
     onInspectFraming,
 }: {
     controller: StartConversationPreview;
     composerControls: ComponentProps<typeof FramingExample>["composerControls"];
     history: ReactNode;
-    onOpenProgress: () => void;
     onInspectFraming: () => void;
     trialControls: ReactNode;
 }) {
@@ -815,6 +819,29 @@ function ResearchExample({
         ) ?? [];
     return (
         <StartResearchScreen
+            overview={
+                <StageOverview
+                    questions={state.questions}
+                    question="Does CCC control the photo-led claim workflow, or supply modules an agent could replace?"
+                    stages={dossierStages(
+                        done ? "completed_with_limits" : "collecting",
+                    )}
+                />
+            }
+            result={
+                done ? (
+                    <SourcesPreparationResult
+                        view={preparationView}
+                        onOpenSource={() =>
+                            window.dispatchEvent(
+                                new CustomEvent("workbench-example-action", {
+                                    detail: "Illustrative · opens the reader in Sources",
+                                }),
+                            )
+                        }
+                    />
+                ) : undefined
+            }
             context={
                 <PreviewResearchContext
                     missions={state.missions}
@@ -915,30 +942,29 @@ function ResearchExample({
                         workState === "running"
                             ? "accent"
                             : done
-                              ? "success"
+                              ? "review"
                               : "muted"
                     }
                     label={
                         done
-                            ? "Complete"
+                            ? "Complete with limits"
                             : interrupted
                               ? "Interrupted"
                               : "Working"
                     }
-                    title={
-                        done
-                            ? "Documentary material ready"
-                            : interrupted
-                              ? "Documentary preparation stopped"
-                              : "Collecting the documentary material"
+                    actions={
+                        done ? (
+                            <Button>
+                                Open sources
+                                <Icon iconNode={ArrowRight01Icon} size={16} />
+                            </Button>
+                        ) : undefined
                     }
-                    onOpenProgress={onOpenProgress}
-                    detail={
-                        done
-                            ? "Ready when you are"
-                            : interrupted
-                              ? "Recorded inputs remain available"
-                              : "Ready when you are"
+                    title="Sources"
+                    attribution={
+                        done ? undefined : (
+                            <AgentByline agent={SOURCES_AGENT} />
+                        )
                     }
                 />
             }
@@ -1117,13 +1143,11 @@ export function StartScreenPreview({
     name,
     theme,
     onNavigate,
-    onOpenProgress,
     onStatus,
 }: {
     name: StartScreenName;
     theme: "light" | "dark";
     onNavigate: (screen: StartScreenName) => void;
-    onOpenProgress: () => void;
     onStatus?: (message: string) => void;
 }) {
     const controller = useStartConversationPreview(name, onStatus);
@@ -1248,7 +1272,6 @@ export function StartScreenPreview({
                         composerControls={composerControls}
                         history={history}
                         onInspectFraming={() => onNavigate("framing")}
-                        onOpenProgress={onOpenProgress}
                     />
                 ) : name === "confirm" ? (
                     <div className="start-confirmation-frame">

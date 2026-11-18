@@ -1,5 +1,5 @@
 export type WorkspaceSection =
-    | "progress"
+    | "overview"
     | "sources"
     | "investigation"
     | "synthesis";
@@ -36,7 +36,7 @@ export const workspaceSections: ReadonlyArray<{
     label: string;
     unavailable?: string;
 }> = [
-    { key: "progress", label: "Research" },
+    { key: "overview", label: "Overview" },
     { key: "sources", label: "Sources" },
     {
         key: "investigation",
@@ -66,10 +66,11 @@ export function workspaceSearch(
                   legacy === "investigation" ||
                   legacy === "synthesis"
                 ? legacy
-                : "progress";
+                : // The former Progress view, and any unknown section, open Overview.
+                  "overview";
     const result: WorkspaceSearch = { section };
     if (
-        section === "progress" &&
+        section === "overview" &&
         (search.detail === "timeline" || search.detail === "framing")
     )
         result.detail = search.detail;

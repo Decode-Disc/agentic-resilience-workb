@@ -37,3 +37,35 @@ export function AgentIdentity({
         </span>
     );
 }
+
+/** Quiet attribution of work to the agent that produced it, in the neutral text tone. */
+export function AgentByline({
+    agent,
+    className,
+}: {
+    agent: ConversationAgent;
+    className?: string;
+}) {
+    return (
+        <span
+            data-slot="agent-byline"
+            className={cn(
+                "inline-flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted-foreground",
+                className,
+            )}>
+            Prepared by
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-foreground">
+                <Icon
+                    iconNode={
+                        agent.icon ??
+                        DEFAULT_CONVERSATION_AGENTS[agent.id]?.icon ??
+                        WORKBENCH_AGENT.icon
+                    }
+                    size={14}
+                    className="shrink-0"
+                />
+                {agent.name}
+            </span>
+        </span>
+    );
+}

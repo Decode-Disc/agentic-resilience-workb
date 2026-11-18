@@ -4,6 +4,7 @@ import { mergeRunCompanyMetadata } from "@convex/domain/companyMetadata";
 import {
     formatResearchSummary,
     readResearchState,
+    sourcesCurrentStop,
 } from "@convex/domain/researchState";
 import { researchStateValidator } from "@convex/domain/researchStateContracts";
 import {
@@ -64,6 +65,8 @@ export const needOutcomeValidator = v.union(
 const overviewValidator = v.object({
     research: researchStateValidator,
     researchSummary: v.string(),
+    /** The Sources mission's recorded stop in analyst wording, shared with the research summary. */
+    currentStop: v.union(v.string(), v.null()),
     preparationId: v.id("sourceSelectionProposalRebuilds"),
     preparationStatus,
     missionStatus: v.optional(missionStatusValidator),
@@ -457,6 +460,7 @@ export const overview = query({
         return {
             research,
             researchSummary: formatResearchSummary(research),
+            currentStop: sourcesCurrentStop(research),
             preparationId: preparation._id,
             preparationStatus: preparation.status,
             ...(mission ? { missionStatus: mission.status } : {}),

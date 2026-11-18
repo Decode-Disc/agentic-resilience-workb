@@ -1,20 +1,21 @@
 @reference "../../styles.css";
 
+/* Sits directly in the stage panel: no card of its own, so the need column gets the width. */
 .panel {
-    @apply rounded-[24px] pt-[20px] px-[22px] pb-[14px] flex flex-col gap-[8px] min-w-[0];
+    @apply flex flex-col gap-[6px] min-w-[0];
     container-type: inline-size;
 }
 .head {
-    @apply flex items-baseline justify-between flex-wrap gap-y-[6px] gap-x-[24px] pb-[6px];
+    @apply flex items-baseline justify-between flex-wrap gap-y-[6px] gap-x-[24px];
 }
 .head h2 {
     @apply m-[0] text-[16px] font-semibold tracking-[-0.02em] leading-[24px];
 }
 .lens {
-    @apply m-[0] flex-[1] min-w-[0] flex justify-end;
+    @apply m-[0] min-w-[0] flex;
 }
 .lensLine {
-    @apply inline-flex flex-wrap items-baseline justify-end gap-y-[2px] gap-x-[8px] text-right text-[13.5px] leading-[20px];
+    @apply inline-flex flex-wrap items-baseline gap-y-[2px] gap-x-[8px] text-[13px] leading-[20px];
 }
 .lensLine[data-active] {
     animation: lens-in 0.24s var(--wb-ease-arrive);
@@ -38,12 +39,12 @@
 .table {
     @apply w-[100%] table-fixed border-separate border-spacing-0 text-left;
 }
-/* The need reads at a comfortable measure; question columns share the remaining width. */
-.needCol {
-    width: 44%;
+/* The need takes the remaining width; question marks and the outcome stay compact. */
+.questionCol {
+    @apply w-[44px];
 }
 .outcomeCol {
-    @apply w-[264px];
+    @apply w-[148px];
 }
 .table th,
 .table td {
@@ -54,7 +55,7 @@
     @apply pb-[10px] font-normal;
 }
 .outcomeHead {
-    @apply pl-[16px];
+    @apply pl-[14px];
 }
 .questionHead {
     @apply pb-[10px] text-center font-normal;
@@ -62,7 +63,7 @@
 }
 .question {
     all: unset;
-    @apply relative isolate inline-flex items-center justify-center h-[28px] min-w-[36px] px-[8px] rounded-[999px] font-mono text-[12px] font-medium text-muted-foreground cursor-pointer;
+    @apply relative isolate box-border inline-flex items-center justify-center h-[26px] min-w-[32px] max-w-[100%] px-[6px] rounded-[999px] font-mono text-[12px] font-medium text-muted-foreground cursor-pointer;
     box-shadow: inset 0 0 0 1px
         color-mix(in oklab, var(--foreground) 12%, transparent);
     transition: color 0.15s ease-out;
@@ -115,11 +116,15 @@
     outline: 2px solid var(--ring);
     @apply outline-offset-[2px];
 }
+.needLabel[data-clamp] {
+    @apply line-clamp-2;
+}
 .documents {
     @apply flex flex-col gap-[6px] min-w-[0] max-w-[100%];
 }
+/* The outcome badge, the documents toggle and any flag stack, so the column stays narrow. */
 .documentsHead {
-    @apply flex flex-wrap items-center gap-[6px];
+    @apply flex flex-col items-start gap-[4px];
 }
 .documentsToggle {
     all: unset;
@@ -146,12 +151,6 @@
 }
 .documentsToggle[data-panel-open] svg {
     rotate: 90deg;
-}
-.notice {
-    @apply m-[0] -mt-[2px] mb-[4px] text-[12.5px] leading-[18px] text-muted-foreground;
-}
-.needLabel[data-clamp] {
-    @apply line-clamp-2;
 }
 .needSources {
     @apply m-[0] p-[0] flex flex-col gap-[2px];
@@ -221,10 +220,10 @@
     @apply text-center;
 }
 .outcome {
-    @apply pl-[16px];
+    @apply pl-[14px];
 }
 .prepared {
-    @apply inline-flex flex-wrap items-center gap-[6px] min-w-[0] max-w-[100%];
+    @apply inline-flex flex-col items-start gap-[4px] min-w-[0] max-w-[100%];
 }
 .need,
 .outcome {
@@ -278,8 +277,7 @@
 }
 
 .legend {
-    @apply flex flex-wrap gap-y-[6px] gap-x-[18px] pt-[12px] text-[12.5px] text-muted-foreground;
-    border-top: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent);
+    @apply flex flex-wrap gap-y-[6px] gap-x-[16px] text-[12.5px] text-muted-foreground;
 }
 .legendItem {
     @apply inline-flex items-center gap-[7px];
@@ -299,20 +297,8 @@
 
 /* Narrow panels keep every question column; the outcome moves under the need. */
 @container (max-width: 620px) {
-    .panel {
-        @apply px-[14px];
-    }
     .head {
         @apply flex-col;
-    }
-    .lens {
-        @apply w-[100%] justify-items-start;
-    }
-    .lensLine {
-        @apply justify-start text-left;
-    }
-    .needCol {
-        @apply w-auto;
     }
     .questionCol {
         @apply w-[40px];

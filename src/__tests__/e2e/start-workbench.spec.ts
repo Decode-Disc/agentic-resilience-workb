@@ -48,7 +48,7 @@ for (const viewport of [
                 slotKey: browserTestSlot(),
             },
         );
-        await page.goto(`/workspace/${runId}?section=progress`);
+        await page.goto(`/workspace/${runId}?section=overview`);
         await expect(
             page.getByRole("region", { name: "Research framing", exact: true }),
         ).toBeVisible({ timeout: 60000 });

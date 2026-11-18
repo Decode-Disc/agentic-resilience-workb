@@ -22,10 +22,11 @@ for (const width of [1440, 390]) {
                 slotKey: browserTestSlot(),
             },
         );
-        await page.goto(`/workspace/${runId}?section=progress&detail=timeline`);
-        await page
-            .getByRole("button", { name: "Back to research", exact: true })
-            .click();
+        // An old timeline link resolves to the dossier's Progress view; no separate page sits in front of it.
+        await page.goto(`/workspace/${runId}?section=overview&detail=timeline`);
+        await expect(
+            page.getByRole("button", { name: "Back to research", exact: true }),
+        ).toHaveCount(0);
         const draft = page.getByRole("textbox", {
             name: "Refine the framing in your own words",
             exact: true,
@@ -47,14 +48,6 @@ for (const width of [1440, 390]) {
         await page
             .getByRole("button", { name: "Switch theme", exact: true })
             .click();
-        await expect(draft).toHaveValue(
-            "Keep this draft while inspecting progress.",
-        );
-        await page.goBack();
-        await expect(
-            page.getByRole("button", { name: "Back to research", exact: true }),
-        ).toBeVisible();
-        await page.goForward();
         await expect(draft).toHaveValue(
             "Keep this draft while inspecting progress.",
         );

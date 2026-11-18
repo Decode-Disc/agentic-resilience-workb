@@ -52,7 +52,7 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
             slotKey: browserTestSlot(),
         },
     );
-    await page.goto(`/workspace/${runId}?section=progress`);
+    await page.goto(`/workspace/${runId}?section=overview`);
     const conversation = page.getByLabel("Research conversation");
     const progress = page.getByLabel("Documentary progress");
 
@@ -115,7 +115,7 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     });
 
     await page.getByRole("button", { name: "Open decision" }).click();
-    await expect(page).toHaveURL(/section=progress/);
+    await expect(page).toHaveURL(/section=overview/);
     await expect(conversationCard).toBeVisible({ timeout: 30000 });
     await conversationCard
         .getByRole("button", { name: "Always continue" })
@@ -202,7 +202,7 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
             slotKey: browserTestSlot(),
         },
     );
-    await page.goto(`/workspace/${runId}?section=progress`);
+    await page.goto(`/workspace/${runId}?section=overview`);
 
     const progress = page.getByLabel("Documentary progress");
     const askAi = page.getByRole("button", { name: "Ask AI" });
@@ -264,7 +264,7 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
     });
 
     await page.getByRole("button", { name: "Open decision" }).click();
-    await expect(page).toHaveURL(/section=progress/);
+    await expect(page).toHaveURL(/section=overview/);
     await askAi.click();
     await conversationTimeLimitCard
         .getByRole("button", { name: "Continue once" })

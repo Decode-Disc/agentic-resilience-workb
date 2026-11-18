@@ -11,7 +11,10 @@ import type { FunctionReturnType } from "convex/server";
 import type { ComponentProps } from "react";
 import { assert, beforeEach, expect, test, vi } from "vitest";
 import { convexReactHarness } from "@/__tests__/helpers/convex-react-harness";
-import { ConnectedSources } from "@/components/workspace/sources/connected-sources";
+import {
+    ConnectedSources,
+    ProgressSourcesResult,
+} from "@/components/workspace/sources/connected-sources";
 
 vi.mock(
     "convex/react",
@@ -80,6 +83,7 @@ const overview: Overview = {
         nextCapability: null,
     },
     researchSummary: "Research is running.",
+    currentStop: null,
     preparationId: "prep-1" as Overview["preparationId"],
     preparationStatus: "started",
     missionStatus: "running",
@@ -282,25 +286,20 @@ test("dossiers on the corpus-approval path keep their existing review", () => {
     expect(screen.getByText("Corpus review")).toBeTruthy();
 });
 
-test("preparation under way shows unsettled needs without backend vocabulary", () => {
-    const { onSearchChange } = renderSources();
+test("Sources opens on the document matrix without a preparation step", () => {
+    renderSources();
     expect(
         screen.getByRole("heading", {
-            name: "Collecting the documentary material",
+            name: "Sources, captures and contributions",
         }),
     ).toBeTruthy();
-    expect(
-        screen.getByText(
-            "The Sources Agent is collecting and reading material for 2 documentary needs. Outcomes settle when it hands off.",
-        ),
-    ).toBeTruthy();
-    expect(screen.getAllByText("In progress").length).toBeGreaterThan(0);
+    expect(screen.getByText("Form 10-K · FY2025")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Inspect sources/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Preparation" })).toBeNull();
     expect(document.body.textContent).not.toMatch(rawValues);
-    fireEvent.click(screen.getByRole("button", { name: /Inspect sources/ }));
-    expect(onSearchChange).toHaveBeenCalledWith({ sourcesView: "matrix" });
 });
 
-test("how preparation ran accounts for every candidate and names conflicts and leads for what they are", () => {
+test("the Progress Sources result accounts for every candidate and names conflicts and leads for what they are", () => {
     convexReactHarness.query(api.sourcesWorkspace.overview).returns({
         ...overview,
         materialOutcome: "partial",
@@ -337,18 +336,25 @@ test("how preparation ran accounts for every candidate and names conflicts and l
             restricted: 0,
         },
     });
-    const { onSearchChange } = renderSources({
-        run: { ...run, sourcesPhase: "completed" },
-    });
+    const onOpenSource = vi.fn();
+    render(
+        <ProgressSourcesResult
+            runId={runId}
+            run={{ ...run, sourcesPhase: "completed" }}
+            onOpenSource={onOpenSource}
+        />,
+    );
     fireEvent.click(
-        screen.getByRole("button", { name: /How preparation ran/ }),
+        screen.getByRole("button", {
+            name: /How preparation ran.*9 collected → 5 captured → 4 retained/,
+        }),
     );
     expect(
-        screen.getAllByText(
+        screen.getByText(
             (_, element) =>
-                element?.textContent ===
-                "5 captured · 3 complete, 2 partial, 4 not captured",
-        )[0],
+                element?.tagName === "SPAN" &&
+                element.textContent === "4 not captured",
+        ),
     ).toBeTruthy();
     expect(
         screen.getByText("Controls on 29 retained contributions"),
@@ -376,11 +382,7 @@ test("how preparation ran accounts for every candidate and names conflicts and l
             })[0] as HTMLElement,
         ).getByRole("button", { name: /Form 10-K · FY2025/ }),
     );
-    expect(onSearchChange).toHaveBeenCalledWith({
-        sourcesView: "reader",
-        source: sourceId,
-        need: "workflow",
-    });
+    expect(onOpenSource).toHaveBeenCalledWith(sourceId, "workflow");
     expect(screen.queryByText("Opposing")).toBeNull();
     expect(screen.queryByText("Excluded")).toBeNull();
     expect(screen.queryByText(/Planned discovery|full reading/i)).toBeNull();
@@ -579,60 +581,6 @@ test("without a Workbench conversation the reader offers no follow-up it cannot 
     expect(screen.queryByRole("button", { name: "Follow up" })).toBeNull();
 });
 
-test("the Sources page points to the conversation's time-limit decision", () => {
-    const requestId = "approval-sources-1" as Id<"approvalRequests">;
-    const onOpenDecision = vi.fn();
-    renderSources({
-        run: {
-            ...run,
-            executionStatus: "paused",
-            pauseReason: "sources_time_limit",
-            executionGeneration: 5,
-            sourcesPhase: "time_limit",
-            sourcesDecisionRequestId: requestId,
-        },
-        onOpenDecision,
-    });
-    expect(
-        screen.getByRole("heading", {
-            name: "The Sources Agent reached its time limit",
-        }),
-    ).toBeTruthy();
-    expect(screen.getAllByText("Decision needed").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("group")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Continue once" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Open decision" }));
-    expect(onOpenDecision).toHaveBeenCalledOnce();
-    expect(document.body.textContent).not.toMatch(
-        /sources_time_limit|time_limit/,
-    );
-});
-
-test("the Sources preparation view exposes the same recorded settlement action for a technical stop", async () => {
-    const usePrepared = vi.fn().mockResolvedValue(undefined);
-    convexReactHarness
-        .mutation(api.execution.approvals.usePreparedSources)
-        .uses(usePrepared);
-    renderSources({
-        run: {
-            ...run,
-            executionStatus: "paused",
-            pauseReason: "execution_interrupted",
-            sourcesPhase: "interrupted",
-            sourcesSettlementAvailable: true,
-        },
-    });
-    fireEvent.click(
-        screen.getByRole("button", { name: "Use what's prepared" }),
-    );
-    await waitFor(() =>
-        expect(usePrepared).toHaveBeenCalledWith({
-            runId,
-            expectedGeneration: 4,
-        }),
-    );
-});
-
 test("captured-only row does not imply qualification", () => {
     const captured = rows[0];
     assert(captured);
@@ -725,25 +673,37 @@ test("conflict leaves every effective-use restriction and the retained capture d
     expect(screen.getByText("Retained from another capture")).toBeTruthy();
 });
 
-test("Sources labels an older handoff explanation as recorded history", () => {
+test("the Progress Sources result states the current stop once and keeps a different handoff note as recorded history", () => {
     convexReactHarness.query(api.sourcesWorkspace.overview).returns({
         ...overview,
         materialOutcome: "partial",
         research: { ...overview.research, status: "paused" },
-        researchSummary: "Recorded stop: the model response could not be used.",
+        researchSummary:
+            "Research is paused. Recorded stop: The Sources Agent stopped because its model response could not be used.",
+        currentStop:
+            "The Sources Agent stopped because its model response could not be used.",
         needs: overview.needs.map((need) => ({
             ...need,
             outcome: "unfinished",
             unfinished: ["The time window ended."],
         })),
     });
-    renderSources({ run: { ...run, sourcesPhase: "completed_with_limits" } });
+    render(
+        <ProgressSourcesResult
+            runId={runId}
+            run={{ ...run, sourcesPhase: "completed_with_limits" }}
+            onOpenSource={vi.fn()}
+        />,
+    );
     expect(
-        screen.getByText(/Dossier status:.*model response could not be used/),
-    ).toBeTruthy();
+        screen.getAllByText(/model response could not be used/),
+    ).toHaveLength(1);
     expect(
-        screen.getByText(/Recorded at handoff:.*time window ended/),
-    ).toBeTruthy();
+        screen.getAllByText(/Recorded at handoff:.*time window ended/),
+    ).toHaveLength(1);
+    // The dossier pause is not restated by the Sources stage.
+    expect(screen.queryByText(/Dossier status:/)).toBeNull();
+    expect(screen.queryByText(/Investigation is not available yet/)).toBeNull();
     expect(screen.queryByText(/Start a new analysis/)).toBeNull();
 });
 
@@ -763,21 +723,22 @@ test.each([
         },
         researchSummary: "The dossier needs attention.",
     });
-    renderSources({
-        run: {
-            ...run,
-            sourcesPhase: "completed_with_limits",
-            executionStatus: status,
-            lifecycleState: "extracting_evidence",
-        },
-    });
-    expect(
-        screen.getByRole("heading", {
-            name: "Documentary preparation completed with limits",
-        }),
-    ).toBeTruthy();
-    if (status !== "running")
+    render(
+        <ProgressSourcesResult
+            runId={runId}
+            run={{
+                ...run,
+                sourcesPhase: "completed_with_limits",
+                executionStatus: status,
+                lifecycleState: "extracting_evidence",
+            }}
+            onOpenSource={vi.fn()}
+        />,
+    );
+    expect(screen.getByRole("table", { name: "Documentary needs" })).toBeTruthy();
+    if (status === "failed" || status === "cancelled")
         expect(
             screen.getByText("Dossier status: The dossier needs attention."),
         ).toBeTruthy();
+    else expect(screen.queryByText(/Dossier status:/)).toBeNull();
 });

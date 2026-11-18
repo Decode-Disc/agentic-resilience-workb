@@ -805,6 +805,11 @@ test("current Sources summary preserves an older handoff explanation as recorded
     const research = context.research as { summary: string };
     expect(overview).toHaveProperty("researchSummary", research.summary);
     expect(research.summary).toContain("model response could not be used");
+    // Every surface states the current stop with the same sentence.
+    expect(overview?.currentStop).toBe(
+        "The Sources Agent stopped because its model response could not be used.",
+    );
+    expect(research.summary).toContain(overview?.currentStop);
     expect(
         JSON.stringify(
             (await f.t.run((ctx) => ctx.db.get(f.preparationId)))

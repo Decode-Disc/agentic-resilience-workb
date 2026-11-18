@@ -363,7 +363,7 @@ describe("StartResearchPage", () => {
         expect(navigate).toHaveBeenCalledWith({
             to: "/workspace/$runId",
             params: { runId: "run-42" },
-            search: { section: "progress" },
+            search: { section: "overview" },
         });
     });
 
@@ -701,7 +701,7 @@ describe("StartResearchPage", () => {
         expect(navigate).toHaveBeenCalledWith({
             to: "/workspace/$runId",
             params: { runId: "run-44" },
-            search: { section: "progress" },
+            search: { section: "overview" },
         });
     });
 

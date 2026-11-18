@@ -20,7 +20,7 @@ for (const width of [1440, 390, 320]) {
             "execution/fixtures:startWorkbench",
             { fixtureKey, slotKey: browserTestSlot() },
         );
-        await page.goto(`/workspace/${runId}?section=progress`);
+        await page.goto(`/workspace/${runId}?section=overview`);
         await expect(
             page.getByText("Simulation: the research program is saved.", {
                 exact: false,

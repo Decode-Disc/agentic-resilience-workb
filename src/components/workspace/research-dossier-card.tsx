@@ -58,7 +58,7 @@ export function ResearchDossierCard({ dossier }: { dossier: ResearchDossier }) {
     const route = {
         to: "/workspace/$runId" as const,
         params: { runId: dossier.runId },
-        search: { section: "progress" as const },
+        search: { section: "overview" as const },
     };
     const coverImage = useCompanyCoverImage(
         dossier.company?.websiteUrl,

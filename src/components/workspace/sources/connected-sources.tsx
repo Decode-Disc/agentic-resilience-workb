@@ -4,16 +4,13 @@ import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { type ReactNode, useState } from "react";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import {
     SourcesMatrixScreen,
-    SourcesPreparationScreen,
+    SourcesPreparationResult,
     SourcesReaderScreen,
     type SourcesScreenFrame,
 } from "@/components/workspace/sources/sources-screens";
-import { UsePreparedSourcesButton } from "@/components/workspace/use-prepared-sources-button";
 import {
     documentaryContributionTerms,
     filterSourcesRows,
@@ -45,7 +42,6 @@ export function ConnectedSources({
     navigation,
     fallback,
     onFollowUp,
-    onOpenDecision,
 }: {
     runId: Id<"researchRuns">;
     run: Run;
@@ -56,8 +52,6 @@ export function ConnectedSources({
     fallback: ReactNode;
     /** Opens the Workbench composer with this draft; absent when Workbench cannot receive it. */
     onFollowUp?: (draft: string) => void;
-    /** Opens the conversation that holds the dossier's pending time-limit decision. */
-    onOpenDecision?: () => void;
 }) {
     const frame: SourcesScreenFrame = { navigation };
     return (
@@ -73,9 +67,73 @@ export function ConnectedSources({
                 frame={frame}
                 fallback={fallback}
                 onFollowUp={onFollowUp}
-                onOpenDecision={onOpenDecision}
             />
         </LoadErrorBoundary>
+    );
+}
+
+/**
+ * The Sources result in the Progress stage panel once Sources has handed off:
+ * the needs against the questions they serve and how preparation ran.
+ */
+export function ProgressSourcesResult({
+    runId,
+    run,
+    onOpenSource,
+}: {
+    runId: Id<"researchRuns">;
+    run: Run;
+    /** Opens a need's document in the Sources reader. */
+    onOpenSource: (sourceId: string, needId: string) => void;
+}) {
+    return (
+        <LoadErrorBoundary
+            title="Sources result unavailable"
+            description="Your sources and decisions are unchanged. Try loading them again.">
+            <ProgressSourcesResultQuery
+                runId={runId}
+                run={run}
+                onOpenSource={onOpenSource}
+            />
+        </LoadErrorBoundary>
+    );
+}
+
+function ProgressSourcesResultQuery({
+    runId,
+    run,
+    onOpenSource,
+}: {
+    runId: Id<"researchRuns">;
+    run: Run;
+    onOpenSource: (sourceId: string, needId: string) => void;
+}) {
+    const overview = useQuery(api.sourcesWorkspace.overview, { runId });
+    const rows = useQuery(
+        api.sourcesWorkspace.listSources,
+        overview ? { runId } : "skip",
+    );
+    // Older dossiers without the Sources workspace show their lanes instead.
+    if (overview === null || rows === null) return null;
+    if (overview === undefined || rows === undefined)
+        return (
+            <div
+                role="status"
+                aria-label="Loading the Sources result"
+                aria-busy="true"
+                className="flex flex-col gap-3">
+                <Skeleton className="h-7 w-48 rounded-lg" />
+                {[0, 1, 2, 3].map((row) => (
+                    <Skeleton key={row} className="h-12 w-full rounded-xl" />
+                ))}
+                <Skeleton className="h-12 w-full rounded-2xl" />
+            </div>
+        );
+    return (
+        <SourcesPreparationResult
+            view={sourcesPreparationView(overview, run, rows)}
+            onOpenSource={onOpenSource}
+        />
     );
 }
 
@@ -86,7 +144,6 @@ type ScreenProps = {
     onSearchChange: (patch: SourcesSearch, replace?: boolean) => void;
     frame: SourcesScreenFrame;
     onFollowUp?: (draft: string) => void;
-    onOpenDecision?: () => void;
 };
 
 /** Decides the path once: the corpus-approval fallback, or the Sources screens. */
@@ -111,12 +168,10 @@ function SourcesQuery({
 
 function SourcesContent({
     runId,
-    run,
     search,
     onSearchChange,
     frame,
     onFollowUp,
-    onOpenDecision,
     overview,
     rows,
 }: ScreenProps & {
@@ -125,81 +180,19 @@ function SourcesContent({
     >;
     rows: readonly SourcesRow[];
 }) {
-    const preparationStep = {
-        id: "preparation",
-        label: "Preparation",
+    // The document list is the Sources landing; the reader returns to it.
+    const documentsStep = {
+        id: "matrix",
+        label: "Documents",
         onSelect: () =>
             onSearchChange({
                 sourcesView: undefined,
-                source: undefined,
-                need: undefined,
-                focus: undefined,
-            }),
-    };
-    const matrixStep = {
-        id: "matrix",
-        label: "Source matrix",
-        onSelect: () =>
-            onSearchChange({
-                sourcesView: "matrix",
                 source: search.source,
                 need: undefined,
                 focus: undefined,
             }),
     };
-    if (search.sourcesView === "matrix") {
-        const filters = sourcesFilterValues(search);
-        return (
-            <SourcesMatrixScreen
-                frame={frame}
-                trail={[preparationStep, matrixStep]}
-                rows={filterSourcesRows(
-                    sortSourcesRows(rows),
-                    search.q ?? "",
-                    filters,
-                ).map(sourcesMatrixRow)}
-                total={rows.length}
-                currentId={search.source}
-                query={search.q ?? ""}
-                onQueryChange={(q) =>
-                    onSearchChange({ q: q || undefined }, true)
-                }
-                filters={sourcesMatrixFilters.map((filter) => ({
-                    ...filter,
-                    value: filters[filter.id],
-                }))}
-                onFilterChange={(filterId, optionId) => {
-                    const filter = sourcesMatrixFilters.find(
-                        (entry) => entry.id === filterId,
-                    );
-                    if (!filter) return;
-                    onSearchChange({
-                        [filterId as SourcesFilterId]:
-                            optionId === filter.options[0].id
-                                ? undefined
-                                : optionId,
-                    });
-                }}
-                onClearFilters={() =>
-                    onSearchChange({
-                        q: undefined,
-                        kind: undefined,
-                        reading: undefined,
-                        use: undefined,
-                    })
-                }
-                onOpenSource={(id) =>
-                    onSearchChange({
-                        sourcesView: "reader",
-                        source: id,
-                        need: undefined,
-                        focus: undefined,
-                    })
-                }
-                contributionTerms={documentaryContributionTerms}
-            />
-        );
-    }
+    // The reader shows one document; without one to show, the document list stands in.
     if (search.sourcesView === "reader") {
         const selected =
             rows.find((row) => row.sourceId === search.source) ??
@@ -211,8 +204,7 @@ function SourcesContent({
                     runId={runId}
                     frame={frame}
                     trail={[
-                        preparationStep,
-                        matrixStep,
+                        documentsStep,
                         { id: "source", label: selected.title },
                     ]}
                     rows={rows}
@@ -249,7 +241,7 @@ function SourcesContent({
                     }
                     onOpenMatrix={() =>
                         onSearchChange({
-                            sourcesView: "matrix",
+                            sourcesView: undefined,
                             source: selected.sourceId,
                         })
                     }
@@ -257,45 +249,52 @@ function SourcesContent({
                 />
             );
     }
+    const filters = sourcesFilterValues(search);
     return (
-        <SourcesPreparationScreen
+        <SourcesMatrixScreen
             frame={frame}
-            view={sourcesPreparationView(overview, run, rows)}
-            onInspectSources={() => onSearchChange({ sourcesView: "matrix" })}
-            onOpenSource={(sourceId, needId) =>
+            rows={filterSourcesRows(
+                sortSourcesRows(rows),
+                search.q ?? "",
+                filters,
+            ).map(sourcesMatrixRow)}
+            total={rows.length}
+            currentId={search.source}
+            query={search.q ?? ""}
+            onQueryChange={(q) => onSearchChange({ q: q || undefined }, true)}
+            filters={sourcesMatrixFilters.map((filter) => ({
+                ...filter,
+                value: filters[filter.id],
+            }))}
+            onFilterChange={(filterId, optionId) => {
+                const filter = sourcesMatrixFilters.find(
+                    (entry) => entry.id === filterId,
+                );
+                if (!filter) return;
                 onSearchChange({
-                    sourcesView: "reader",
-                    source: sourceId,
-                    need: needId,
+                    [filterId as SourcesFilterId]:
+                        optionId === filter.options[0].id
+                            ? undefined
+                            : optionId,
+                });
+            }}
+            onClearFilters={() =>
+                onSearchChange({
+                    q: undefined,
+                    kind: undefined,
+                    reading: undefined,
+                    use: undefined,
                 })
             }
-            inspectEmphasis={
-                run.sourcesPhase === "time_limit" &&
-                run.sourcesDecisionRequestId
-                    ? "secondary"
-                    : "primary"
+            onOpenSource={(id) =>
+                onSearchChange({
+                    sourcesView: "reader",
+                    source: id,
+                    need: undefined,
+                    focus: undefined,
+                })
             }
-            actions={
-                // The decision itself is made on its card in the conversation.
-                run.sourcesPhase === "time_limit" &&
-                run.sourcesDecisionRequestId &&
-                onOpenDecision ? (
-                    <Button size="lg" onClick={onOpenDecision}>
-                        Open decision
-                        <WorkbenchIcon
-                            name="chevron"
-                            size={14}
-                            strokeWidth={2}
-                        />
-                    </Button>
-                ) : run.sourcesSettlementAvailable ? (
-                    <UsePreparedSourcesButton
-                        runId={runId}
-                        expectedGeneration={run.executionGeneration}
-                        size="lg"
-                    />
-                ) : undefined
-            }
+            contributionTerms={documentaryContributionTerms}
         />
     );
 }

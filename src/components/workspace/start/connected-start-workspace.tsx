@@ -5,20 +5,23 @@ import { approvalActionCopy } from "@convex/domain/approvalCopy";
 import { isResumableResearchPause } from "@convex/domain/transitions";
 import { HISTORY_PAGE_SIZE } from "@convex/resourcePolicy";
 import {
-    ArrowLeft01Icon,
     ArrowRight01Icon,
     Loading03Icon,
     PauseIcon,
     PlayIcon,
 } from "@hugeicons/core-free-icons";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { ConvexError } from "convex/values";
 import { MotionConfig, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ConversationActivityList } from "@/components/chat/conversation-activity-list";
-import { DEFAULT_CONVERSATION_AGENTS as agents } from "@/components/chat/conversation-agent";
+import { AgentByline } from "@/components/chat/agent-identity";
+import {
+    DEFAULT_CONVERSATION_AGENTS as agents,
+    SOURCES_AGENT,
+} from "@/components/chat/conversation-agent";
 import { ConversationHistory } from "@/components/chat/conversation-history";
 import {
     type ConversationMissionSnapshot,
@@ -37,7 +40,7 @@ import { WorkbenchModelSelector } from "@/components/composer/model-picker";
 import type { ResearchControlCommand } from "@/components/composer/slash-commands";
 import Icon from "@/components/icon";
 import { LoadErrorBoundary } from "@/components/load-error-boundary";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
     Empty,
     EmptyDescription,
@@ -53,9 +56,14 @@ import {
     approvalCardElementId,
     ConnectedApprovalCard,
 } from "@/components/workspace/approvals/connected-approval-card";
+import { RunHistoryDisclosure } from "@/components/workspace/run-history";
 import { UsePreparedSourcesButton } from "@/components/workspace/use-prepared-sources-button";
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
-import { sourcesPhasePresentation } from "@/lib/presentation/sources";
+import {
+    dossierStages,
+    sourcesHandedOff,
+    sourcesPhasePresentation,
+} from "@/lib/presentation/sources";
 import {
     conversationOperation,
     questionCapacityCopy,
@@ -72,6 +80,7 @@ import {
 } from "@/lib/workspace/workbench-draft";
 import {
     FramingProposal,
+    StageOverview,
     StartFramingScreen,
     StartResearchScreen,
     StartSourceCounts,
@@ -120,8 +129,12 @@ function convexErrorCode(error: unknown) {
 
 type StartWorkspaceProps = {
     runId: Id<"researchRuns">;
+    /** `timeline` opens History in the stage panel; `framing` shows the accepted framing. */
     detail?: "timeline" | "framing";
-    progress?: ReactNode;
+    /** Workspace-wide controls at the end of the section bar, such as the evidence inventory. */
+    navigationActions?: ReactNode;
+    /** The Sources result shown in the stage panel once Sources has handed off. */
+    sourcesResult?: ReactNode;
 };
 function useStartDraft(runId: Id<"researchRuns">) {
     // A follow-up prepared on another screen starts the draft; the analyst still sends it.
@@ -138,9 +151,7 @@ function useStartDraft(runId: Id<"researchRuns">) {
 export function ConnectedStartWorkspace(props: StartWorkspaceProps) {
     return (
         <div
-            data-workbench-layout={
-                props.detail === "timeline" ? "document" : "viewport"
-            }
+            data-workbench-layout="viewport"
             className="flex min-h-0 flex-1 flex-col">
             <StartWorkspaceSession key={props.runId} {...props} />
         </div>
@@ -157,33 +168,12 @@ function StartWorkspaceSession(props: StartWorkspaceProps) {
         </LoadErrorBoundary>
     );
 }
-/** Layout-accurate skeleton for the Research split viewport and the Progress timeline detail view. */
+/** Layout-accurate skeleton for the Progress split viewport. */
 export function StartWorkspaceSkeleton({
-    detail,
     ariaLabel = "Loading research conversation",
 }: {
-    detail?: "timeline" | "framing";
     ariaLabel?: string;
 }) {
-    if (detail === "timeline")
-        return (
-            <div
-                role="status"
-                aria-label={ariaLabel}
-                aria-busy="true"
-                className="min-w-0 space-y-6 pb-28 pt-2 sm:pb-36">
-                <Skeleton className="h-9 w-72 max-w-full rounded-xl" />
-                <div className="space-y-3">
-                    <Skeleton className="h-8 w-36 rounded-lg" />
-                    <Skeleton className="h-8 w-32 rounded-lg" />
-                </div>
-                <div className="space-y-4">
-                    <Skeleton className="h-28 w-full rounded-2xl" />
-                    <Skeleton className="h-44 w-full rounded-2xl" />
-                    <Skeleton className="h-36 w-full rounded-2xl" />
-                </div>
-            </div>
-        );
     return (
         <div
             role="status"
@@ -247,18 +237,19 @@ export function StartWorkspaceSkeleton({
 function StartWorkspaceQuery({
     runId,
     detail,
-    progress,
+    navigationActions,
+    sourcesResult,
     drafts,
 }: StartWorkspaceProps & { drafts: ReturnType<typeof useStartDraft> }) {
     const snapshot = useQuery(api.workbench.snapshot, { runId });
-    if (snapshot === undefined)
-        return <StartWorkspaceSkeleton detail={detail} />;
+    if (snapshot === undefined) return <StartWorkspaceSkeleton />;
     return (
         <StartWorkspaceContent
             key={runId}
             snapshot={snapshot}
             detail={detail}
-            progress={progress}
+            navigationActions={navigationActions}
+            sourcesResult={sourcesResult}
             drafts={drafts}
         />
     );
@@ -266,12 +257,14 @@ function StartWorkspaceQuery({
 function StartWorkspaceContent({
     snapshot,
     detail,
-    progress,
+    navigationActions,
+    sourcesResult,
     drafts,
 }: {
     snapshot: Snapshot;
     detail?: "timeline" | "framing";
-    progress?: ReactNode;
+    navigationActions?: ReactNode;
+    sourcesResult?: ReactNode;
     drafts: ReturnType<typeof useStartDraft>;
 }) {
     const { run, company, framing } = snapshot;
@@ -657,6 +650,15 @@ function StartWorkspaceContent({
         (s) => s.state === "captured",
     ).length;
     const sourcePresentation = sourcesPhasePresentation(snapshot.sourcesPhase);
+    // Once Sources hands off, its result replaces the collection lanes.
+    const programQuestions =
+        framing?.content.questions.map((q, index) => ({
+            ...q,
+            label: `Q${index + 1}`,
+        })) ?? [];
+    const stageResult = sourcesHandedOff(snapshot.sourcesPhase)
+        ? sourcesResult
+        : undefined;
     const sourceDetail =
         snapshot.sourcesWork?.interruptionDetail ?? sourcePresentation.detail;
     const sourceState = sourcePresentation.workState;
@@ -698,26 +700,10 @@ function StartWorkspaceContent({
                           </ConversationActivityList>
                           {snapshot.sourcesWork?.operationsLimited && (
                               <p>
-                                  Recent operations shown. Open the activity
-                                  timeline for earlier work.
+                                  Recent operations shown. History in the stage
+                                  panel lists earlier steps.
                               </p>
                           )}
-                          <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                  void navigate({
-                                      to: "/workspace/$runId",
-                                      params: { runId },
-                                      search: {
-                                          section: "progress",
-                                          detail: "timeline",
-                                      },
-                                  })
-                              }>
-                              View progress
-                              <Icon iconNode={ArrowRight01Icon} size={16} />
-                          </Button>
                       </>
                   ),
               },
@@ -1054,7 +1040,7 @@ function StartWorkspaceContent({
                                 to: "/workspace/$runId",
                                 params: { runId },
                                 search: {
-                                    section: "progress",
+                                    section: "overview",
                                     detail: "framing",
                                 },
                                 resetScroll: false,
@@ -1097,12 +1083,7 @@ function StartWorkspaceContent({
         <FramingProposal
             collapsible
             title={launched ? "Accepted research program" : undefined}
-            questions={
-                framing?.content.questions.map((q, index) => ({
-                    ...q,
-                    label: `Q${index + 1}`,
-                })) ?? []
-            }
+            questions={programQuestions}
             composer={composer}
             actionActive={!!composerEdit}
             pending={saving}
@@ -1158,37 +1139,13 @@ function StartWorkspaceContent({
             error={undefined}
         />
     );
-    const sections = <WorkspaceNavigation runId={runId} section="progress" />;
-    if (detail === "timeline")
-        return (
-            <MotionConfig reducedMotion="user">
-                <motion.div
-                    key="timeline"
-                    initial={{ opacity: 0, x: 18 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                    className="min-w-0 pb-28 pt-2 sm:pb-36">
-                    {sections}
-                    <header className="mb-5 flex flex-col items-start gap-3">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                                void navigate({
-                                    to: "/workspace/$runId",
-                                    params: { runId },
-                                    search: { section: "progress" },
-                                })
-                            }>
-                            <Icon iconNode={ArrowLeft01Icon} size={16} />
-                            Back to research
-                        </Button>
-                        <h1 className="text-section text-2xl">Progress</h1>
-                    </header>
-                    {progress}
-                </motion.div>
-            </MotionConfig>
-        );
+    const sections = (
+        <WorkspaceNavigation
+            runId={runId}
+            section="overview"
+            actions={navigationActions}
+        />
+    );
     return (
         <MotionConfig reducedMotion="user">
             <motion.div
@@ -1198,6 +1155,11 @@ function StartWorkspaceContent({
                 transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                 className="flex h-full min-h-0 flex-1 flex-col">
                 <WorkbenchUiRoot className="flex h-full min-h-0 flex-1 flex-col">
+                    {!inspecting && (
+                        <div className="shrink-0 pt-3 [&_[data-workspace-bar]]:pb-3">
+                            {sections}
+                        </div>
+                    )}
                     {inspecting ? (
                         <StartFramingScreen
                             runtime={conversation.runtime}
@@ -1210,6 +1172,19 @@ function StartWorkspaceContent({
                         />
                     ) : (
                         <StartResearchScreen
+                            overview={
+                                <StageOverview
+                                    questions={programQuestions}
+                                    question={
+                                        run.researchAngle?.trim() ||
+                                        framing?.content.scope ||
+                                        "Research question being prepared"
+                                    }
+                                    stages={dossierStages(
+                                        snapshot.sourcesPhase,
+                                    )}
+                                />
+                            }
                             runtime={conversation.runtime}
                             context={context}
                             conversation={log}
@@ -1219,18 +1194,38 @@ function StartWorkspaceContent({
                                     mark={sourcePresentation.mark}
                                     tone={sourcePresentation.tone}
                                     label={sourcePresentation.label}
-                                    title={sourcePresentation.title}
-                                    description={sourceDetail}
-                                    actions={researchControls}
-                                    onOpenProgress={() =>
-                                        void navigate({
-                                            to: "/workspace/$runId",
-                                            params: { runId },
-                                            search: {
-                                                section: "progress",
-                                                detail: "timeline",
-                                            },
-                                        })
+                                    title="Sources"
+                                    description={
+                                        stageResult ? undefined : sourceDetail
+                                    }
+                                    attribution={
+                                        stageResult ? undefined : (
+                                            <AgentByline agent={SOURCES_AGENT} />
+                                        )
+                                    }
+                                    actions={
+                                        stageResult ? (
+                                            <>
+                                                {researchControls}
+                                                <Link
+                                                    to="/workspace/$runId"
+                                                    params={{ runId }}
+                                                    search={{
+                                                        section: "sources",
+                                                    }}
+                                                    className={buttonVariants()}>
+                                                    Open sources
+                                                    <Icon
+                                                        iconNode={
+                                                            ArrowRight01Icon
+                                                        }
+                                                        size={16}
+                                                    />
+                                                </Link>
+                                            </>
+                                        ) : (
+                                            researchControls
+                                        )
                                     }
                                 />
                             }
@@ -1261,6 +1256,13 @@ function StartWorkspaceContent({
                                 />
                             }
                             resting={launched && sourceState !== "running"}
+                            result={stageResult}
+                            history={
+                                <RunHistoryDisclosure
+                                    runId={runId}
+                                    defaultOpen={detail === "timeline"}
+                                />
+                            }
                             lanes={
                                 snapshot.sources.length ? (
                                     (
@@ -1361,7 +1363,7 @@ function StartWorkspaceContent({
                                 void navigate({
                                     to: "/workspace/$runId",
                                     params: { runId },
-                                    search: { section: "progress" },
+                                    search: { section: "overview" },
                                 })
                             }>
                             Back to preparation

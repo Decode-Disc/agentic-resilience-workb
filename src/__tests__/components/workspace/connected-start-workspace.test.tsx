@@ -284,21 +284,9 @@ test("the context identifies a launched research program as accepted", () => {
 });
 
 test.each([
-    [
-        "partial",
-        "completed_with_limits",
-        "Complete with limits",
-        "Documentary preparation completed with limits",
-        "completed",
-    ],
-    [
-        "blocked",
-        "ended_without_material",
-        "No material",
-        "No usable material prepared",
-        "blocked",
-    ],
-] as const)("settled %s material keeps its outcome in the header and activity", (status, sourcesPhase, label, title, state) => {
+    ["partial", "completed_with_limits", "Complete with limits", "completed"],
+    ["blocked", "ended_without_material", "No material", "blocked"],
+] as const)("settled %s material keeps its outcome in the header and activity", (status, sourcesPhase, label, state) => {
     convexReactHarness.query(api.workbench.snapshot).returns({
         ...readySnapshot,
         run: {
@@ -318,7 +306,12 @@ test.each([
     if (!(mission instanceof HTMLElement))
         throw new Error("Missing Sources mission");
     expect(mission.getAttribute("data-state")).toBe(state);
-    expect(screen.getByText(title)).toBeTruthy();
+    // The stage is named once and its state is a single pill beside the name.
+    const stage = screen.getByRole("region", { name: "Documentary progress" });
+    expect(
+        within(stage).getByRole("heading", { level: 2, name: "Sources" }),
+    ).toBeTruthy();
+    expect(within(stage).getByText(label)).toBeTruthy();
     expect(mission.textContent).toContain(label);
     expect(screen.queryByText("Documentary material ready")).toBeNull();
     expect(mission.textContent).not.toMatch(
@@ -760,7 +753,13 @@ test("insufficient evidence does not announce prepared sources or future discove
         sourcesPhase: "insufficient_evidence",
     });
     render(<ConnectedStartWorkspace runId={runId} />);
-    expect(screen.getByText("Public evidence is insufficient")).toBeTruthy();
+    const stage = screen.getByRole("region", { name: "Documentary progress" });
+    expect(within(stage).getByText("Limited material")).toBeTruthy();
+    expect(
+        within(stage).getByText(
+            "Public evidence was not sufficient to prepare documentary material for this program.",
+        ),
+    ).toBeTruthy();
     expect(screen.queryByText("Documentary material ready")).toBeNull();
     expect(
         screen.queryByText("Documents will appear as they are found."),
@@ -986,7 +985,7 @@ test.each([
     else expect(second?.requestKey).toBe(first?.requestKey);
 });
 
-test("a launched dossier keeps the research viewport free of segment-scroll and offers workspace sections on the timeline detail view", () => {
+test("a launched dossier opens Progress with its sections, question and current stage, and no separate progress page", () => {
     convexReactHarness.query(api.workbench.snapshot).returns({
         ...readySnapshot,
         run: {
@@ -994,37 +993,35 @@ test("a launched dossier keeps the research viewport free of segment-scroll and 
             fixedFramingRevisionId: "framing-1",
             lifecycleState: "discovering_sources",
             executionStatus: "running",
+            researchAngle: "Will Example keep its workflow position?",
         },
     });
-    const { rerender } = render(<ConnectedStartWorkspace runId={runId} />);
-    expect(
-        screen.queryByRole("navigation", {
-            name: "Research workspace sections",
-        }),
-    ).toBeNull();
-    expect(
-        screen.getAllByRole("button", { name: /View progress/ }).length,
-    ).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /Open Progress/i })).toBeNull();
-
-    rerender(
-        <ConnectedStartWorkspace
-            runId={runId}
-            detail="timeline"
-            progress={<p>Timeline entries</p>}
-        />,
-    );
+    render(<ConnectedStartWorkspace runId={runId} />);
     const sections = screen.getByRole("navigation", {
         name: "Research workspace sections",
     });
     expect(
         within(sections)
-            .getByRole("link", { name: /Research/ })
+            .getByRole("link", { name: "Overview" })
             .getAttribute("aria-current"),
     ).toBe("page");
     expect(
         within(sections).getByRole("link", { name: "Sources" }),
     ).toBeTruthy();
+    const stage = screen.getByRole("region", { name: "Dossier stage" });
+    expect(
+        within(stage).getByRole("heading", {
+            name: "Will Example keep its workflow position?",
+        }),
+    ).toBeTruthy();
+    const stepper = within(stage).getByRole("list", { name: "Dossier stages" });
+    expect(
+        within(stepper)
+            .getByText("Sources")
+            .closest("li")
+            ?.getAttribute("aria-current"),
+    ).toBe("step");
+    expect(screen.queryByRole("button", { name: /View progress/ })).toBeNull();
 });
 
 test("framing before launch keeps its screen without workspace sections", () => {
@@ -1644,4 +1641,141 @@ test("Use what's prepared remains actionable when an older technical pause has n
             expectedGeneration: 5,
         }),
     );
+});
+
+test("after Sources hands off, the stage panel shows its result instead of collection lanes", async () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "sources_prepared",
+            executionStatus: "idle",
+        },
+        preparation: { status: "partial" },
+        sourcesPhase: "completed_with_limits",
+        sources: [
+            {
+                id: "source-a",
+                title: "Annual filing",
+                state: "captured",
+                url: "https://example.test/filing",
+            },
+        ],
+    });
+    render(
+        <ConnectedStartWorkspace
+            runId={runId}
+            sourcesResult={<p>Documentary needs result</p>}
+        />,
+    );
+    const stage = screen.getByRole("region", { name: "Documentary progress" });
+    expect(within(stage).getByText("Documentary needs result")).toBeTruthy();
+    expect(within(stage).queryByText("No documents at this stage.")).toBeNull();
+    expect(within(stage).queryByText("Captured")).toBeNull();
+    // The result states the outcome once: one state pill, no collection counts or generic phase sentence.
+    expect(within(stage).queryByText("found")).toBeNull();
+    expect(within(stage).getAllByText("Complete with limits")).toHaveLength(1);
+    expect(
+        within(stage).queryByText(/Investigation is not available yet/),
+    ).toBeNull();
+    expect(
+        within(stage).getByRole("link", { name: /Open sources/ }),
+    ).toBeTruthy();
+    // The framing opens in a dialog over the stage, which stays where it was.
+    fireEvent.click(
+        within(stage).getByRole("button", { name: "Read framing" }),
+    );
+    const framing = await screen.findByRole("dialog", {
+        name: "Research framing",
+    });
+    expect(within(framing).getByText("Q1")).toBeTruthy();
+    expect(screen.getByText("Documentary needs result")).toBeTruthy();
+});
+
+test("while Sources collects, the stage panel keeps its lanes even when a result is available", () => {
+    convexReactHarness.query(api.workbench.snapshot).returns({
+        ...readySnapshot,
+        run: {
+            ...readySnapshot.run,
+            fixedFramingRevisionId: "framing-1",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+        },
+        sources: [
+            {
+                id: "source-a",
+                title: "Annual filing",
+                state: "captured",
+                url: "https://example.test/filing",
+            },
+        ],
+    });
+    render(
+        <ConnectedStartWorkspace
+            runId={runId}
+            sourcesResult={<p>Documentary needs result</p>}
+        />,
+    );
+    const stage = screen.getByRole("region", { name: "Documentary progress" });
+    expect(within(stage).queryByText("Documentary needs result")).toBeNull();
+    expect(within(stage).getByText("Annual filing")).toBeTruthy();
+});
+
+const launchedSnapshot = {
+    ...readySnapshot,
+    run: {
+        ...readySnapshot.run,
+        fixedFramingRevisionId: "framing-1",
+        lifecycleState: "discovering_sources",
+        executionStatus: "running",
+    },
+};
+const recordedEvents = [
+    {
+        _id: "event-1",
+        _creationTime: 1,
+        runId,
+        type: "run_created",
+        lifecycleState: "framing",
+    },
+    {
+        _id: "event-2",
+        _creationTime: 2,
+        runId,
+        type: "company_confirmed",
+        lifecycleState: "framing",
+    },
+];
+
+test("History in the stage panel lists recorded steps only when opened", () => {
+    convexReactHarness.query(api.workbench.snapshot).returns(launchedSnapshot);
+    convexReactHarness
+        .query(api.researchRuns.listMyEvents)
+        .returns(recordedEvents);
+    render(<ConnectedStartWorkspace runId={runId} />);
+    const history = screen.getByRole("button", { name: /History/ });
+    expect(history.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Company confirmed")).toBeNull();
+    fireEvent.click(history);
+    expect(screen.getByText("Company confirmed")).toBeTruthy();
+    expect(screen.getByText("Research dossier created")).toBeTruthy();
+});
+
+test("an old timeline link opens Progress with History expanded instead of a separate page", () => {
+    convexReactHarness.query(api.workbench.snapshot).returns(launchedSnapshot);
+    convexReactHarness
+        .query(api.researchRuns.listMyEvents)
+        .returns(recordedEvents);
+    render(<ConnectedStartWorkspace runId={runId} detail="timeline" />);
+    expect(
+        screen
+            .getByRole("button", { name: /History/ })
+            .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(screen.getByText("Company confirmed")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Dossier stage" })).toBeTruthy();
+    expect(
+        screen.queryByRole("button", { name: /Back to research/ }),
+    ).toBeNull();
 });

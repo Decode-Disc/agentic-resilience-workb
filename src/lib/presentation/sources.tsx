@@ -21,6 +21,8 @@ import type {
     SourcesPreparationView,
 } from "@/components/workspace/sources/sources-screens";
 import { sourceDocumentKindLabel } from "@/lib/presentation/research-copy";
+import { sourcesPhaseState } from "@/lib/presentation/sources-phase-state";
+import { workspaceSections } from "@/lib/workspace/navigation";
 
 type Overview = NonNullable<
     FunctionReturnType<typeof api.sourcesWorkspace.overview>
@@ -37,33 +39,16 @@ export type SourcesPhase = Run["sourcesPhase"];
 
 const sourcesAgent = `The ${agentName("sources")}`;
 
-/** A Sources state's glyph: a live dot while working, otherwise a static mark. */
-export type SourcesStateMark =
-    | "live"
-    | "clock"
-    | "pause"
-    | "warning"
-    | "check"
-    | "unfinished-check"
-    | "unfinished"
-    | "barred";
-/** Follows the dossier status tones: accent while working, review when the analyst must decide, success once handed off. */
-export type SourcesStateTone =
-    | "accent"
-    | "review"
-    | "ink"
-    | "success"
-    | "muted"
-    | "destructive";
+export type {
+    SourcesStateMark,
+    SourcesStateTone,
+} from "@/lib/presentation/sources-phase-state";
 
 /** Analyst copy for the Sources phase Convex derives; every surface translates the same phase. */
 const phaseCopy: Record<
     SourcesPhase,
     {
         workState: ConversationWorkItem["state"];
-        /** The state's glyph and tone, so working, waiting for the analyst and handed off read apart at a glance. */
-        mark: SourcesStateMark;
-        tone: SourcesStateTone;
         label: string;
         outcome: string;
         title: string;
@@ -72,8 +57,6 @@ const phaseCopy: Record<
 > = {
     collecting: {
         workState: "running",
-        mark: "live",
-        tone: "accent",
         label: "Working",
         outcome: "In progress",
         title: "Collecting the documentary material",
@@ -81,8 +64,6 @@ const phaseCopy: Record<
     },
     waiting: {
         workState: "waiting",
-        mark: "clock",
-        tone: "muted",
         label: "Waiting",
         outcome: "Waiting",
         title: "Documentary preparation is waiting",
@@ -90,8 +71,6 @@ const phaseCopy: Record<
     },
     paused: {
         workState: "paused",
-        mark: "pause",
-        tone: "ink",
         label: "Paused",
         outcome: "Paused",
         title: "Documentary preparation paused",
@@ -99,8 +78,6 @@ const phaseCopy: Record<
     },
     time_limit: {
         workState: "paused",
-        mark: "warning",
-        tone: "review",
         label: "Decision needed",
         outcome: "Decision needed",
         title: `${sourcesAgent} reached its time limit`,
@@ -108,8 +85,6 @@ const phaseCopy: Record<
     },
     completed: {
         workState: "completed",
-        mark: "check",
-        tone: "success",
         label: "Complete",
         outcome: "Prepared",
         title: "Documentary material ready",
@@ -117,8 +92,6 @@ const phaseCopy: Record<
     },
     completed_with_limits: {
         workState: "completed",
-        mark: "unfinished-check",
-        tone: "success",
         label: "Complete with limits",
         outcome: "Prepared with limits",
         title: "Documentary preparation completed with limits",
@@ -126,8 +99,6 @@ const phaseCopy: Record<
     },
     ended_without_material: {
         workState: "blocked",
-        mark: "barred",
-        tone: "muted",
         label: "No material",
         outcome: "No material",
         title: "No usable material prepared",
@@ -135,8 +106,6 @@ const phaseCopy: Record<
     },
     interrupted: {
         workState: "interrupted",
-        mark: "unfinished",
-        tone: "muted",
         label: "Interrupted",
         outcome: "Interrupted",
         title: "Documentary preparation interrupted",
@@ -144,8 +113,6 @@ const phaseCopy: Record<
     },
     failed: {
         workState: "interrupted",
-        mark: "unfinished",
-        tone: "destructive",
         label: "Stopped",
         outcome: "Stopped",
         title: "Documentary preparation stopped",
@@ -153,8 +120,6 @@ const phaseCopy: Record<
     },
     insufficient_evidence: {
         workState: "blocked",
-        mark: "barred",
-        tone: "muted",
         label: "Limited material",
         outcome: "Limited material",
         title: "Public evidence is insufficient",
@@ -162,8 +127,54 @@ const phaseCopy: Record<
     },
 };
 
+/** A phase's copy with its shared tone and glyph, so working, waiting for the analyst and handed off read apart at a glance. */
 export function sourcesPhasePresentation(phase: SourcesPhase) {
-    return phaseCopy[phase];
+    return { ...phaseCopy[phase], ...sourcesPhaseState[phase] };
+}
+
+/** Phases in which Sources has handed its result back; later dossier activity never reopens them. */
+const handedOffPhases: ReadonlySet<SourcesPhase> = new Set([
+    "completed",
+    "completed_with_limits",
+    "ended_without_material",
+    "insufficient_evidence",
+]);
+
+/** Whether Sources has handed off, so its result replaces collection progress. */
+export function sourcesHandedOff(phase: SourcesPhase) {
+    return handedOffPhases.has(phase);
+}
+
+export type DossierStage = {
+    key: "framing" | "sources" | "investigation" | "synthesis";
+    label: string;
+    state: "done" | "current" | "upcoming" | "unavailable";
+};
+
+/**
+ * The dossier's stages for a launched program. Investigation and Synthesis stay
+ * unavailable until those capabilities exist; they never read as upcoming work.
+ */
+export function dossierStages(phase: SourcesPhase): DossierStage[] {
+    const unavailable = new Map(
+        workspaceSections.map((section) => [section.key, section.unavailable]),
+    );
+    const later = (key: "investigation" | "synthesis", label: string) =>
+        ({
+            key,
+            label,
+            state: unavailable.get(key) ? "unavailable" : "upcoming",
+        }) satisfies DossierStage;
+    return [
+        { key: "framing", label: "Framing", state: "done" },
+        {
+            key: "sources",
+            label: "Sources",
+            state: sourcesHandedOff(phase) ? "done" : "current",
+        },
+        later("investigation", "Investigation"),
+        later("synthesis", "Synthesis"),
+    ];
 }
 
 /** Documentary contributions borrow claim tones for colour only; their labels never imply an inventory class. */
@@ -569,12 +580,11 @@ function questionLabels(overview: Overview | null | undefined) {
 
 const familyOrder = Object.keys(familyLabels) as SourcesRow["family"][];
 
-/** Preparation figures for the overview; the outcome label follows the shared Sources mission state. */
-function needReason(need: Overview["needs"][number], recorded = false) {
-    const reason = [need.gap, ...need.unfinished].filter(Boolean).join(" ");
-    return reason
-        ? `${recorded ? "Recorded at handoff: " : ""}${reason}`
-        : undefined;
+/** Why one need ended as it did, joined from its gap and unfinished notes. */
+function needReason(need: Overview["needs"][number]) {
+    return (
+        [need.gap, ...need.unfinished].filter(Boolean).join(" ") || undefined
+    );
 }
 
 function controlCounts(tally: Overview["contributions"]) {
@@ -604,6 +614,18 @@ export function sourcesPreparationView(
     ]);
     const gaps = count("gap");
     const unfinished = count("unfinished");
+    // One stop explanation for the stage: the mission's current recorded stop, else the reason shared by the handoff notes.
+    const reasons = overview.needs
+        .map((need) => needReason(need))
+        .filter((reason): reason is string => Boolean(reason));
+    const sharedReason = reasons.find(
+        (reason) => reasons.filter((entry) => entry === reason).length > 1,
+    );
+    const stop = overview.currentStop ?? sharedReason;
+    const handoffNote =
+        sharedReason && sharedReason !== stop
+            ? `Recorded at handoff: ${sharedReason}`
+            : undefined;
     const summary =
         settled && overview.materialOutcome
             ? [
@@ -614,38 +636,19 @@ export function sourcesPreparationView(
                   unfinished
                       ? `${plural(unfinished, ["need", "needs"])} ${unfinished === 1 ? "has" : "have"} unfinished work.`
                       : undefined,
-                  "Investigation is not available yet.",
               ]
                   .filter(Boolean)
                   .join(" ")
-            : phase === "time_limit"
-              ? `${sourcesAgent} used its time window with ${plural(overview.reading.captured, ["document", "documents"])} captured for ${needs}.`
-              : state === "paused"
-                ? `${sourcesAgent} is paused with ${plural(overview.reading.captured, ["document", "documents"])} captured so far for ${needs}.`
-                : phase === "failed"
-                  ? `Preparation stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} captured so far remain available.`
-                  : state === "interrupted"
-                    ? `${sourcesAgent} stopped before handing off its material. ${plural(overview.reading.captured, ["document", "documents"])} captured so far remain available.`
-                    : state === "running"
-                      ? `${sourcesAgent} is collecting and reading material for ${needs}. Outcomes settle when it hands off.`
-                      : presentation.detail;
+            : presentation.detail;
     const rowsById = new Map(rows.map((row) => [row.sourceId as string, row]));
-    // A reason repeated on several needs, such as the time window ending, is stated once.
-    const reasons = overview.needs
-        .map((need) => needReason(need, !!overview.materialOutcome))
-        .filter(Boolean);
-    const needsNotice = reasons.find(
-        (reason) => reasons.filter((entry) => entry === reason).length > 1,
-    );
     const families = new Map<SourcesRow["family"], "found" | "unavailable">();
     for (const row of rows) families.set(row.family, "found");
     for (const family of overview.collect.failedFamilies)
         if (!families.has(family)) families.set(family, "unavailable");
     return {
-        eyebrow: "Initial preparation",
-        title: presentation.title,
         summary,
-        outcome: { label: presentation.outcome, settled },
+        ...(stop ? { stop } : {}),
+        ...(handoffNote ? { handoffNote } : {}),
         collect: {
             candidates: overview.collect.candidates,
             families: familyOrder
@@ -743,10 +746,9 @@ export function sourcesPreparationView(
                       overview.organize.restricted
                           ? `${plural(overview.organize.restricted, ["contribution", "contributions"])} restricted`
                           : undefined,
-                      "Investigation is not available yet",
                   ]
                       .filter(Boolean)
-                      .join(" · ")
+                      .join(" · ") || undefined
                 : undefined,
         },
         questions: overview.questions.map((question, index) => {
@@ -766,16 +768,12 @@ export function sourcesPreparationView(
                         : question.text,
             };
         }),
-        researchNotice:
-            ["paused", "failed", "cancelled"].includes(
-                overview.research.status,
-            ) ||
-            overview.research.sources?.executionStop ||
-            run.sourcesPhase === "interrupted" ||
-            run.sourcesPhase === "failed"
-                ? `Dossier status: ${overview.researchSummary}`
-                : undefined,
-        needsNotice,
+        // Later dossier failures stay visible; a pause or the Sources stop is already stated by the stage.
+        researchNotice: ["failed", "cancelled"].includes(
+            overview.research.status,
+        )
+            ? `Dossier status: ${overview.researchSummary}`
+            : undefined,
         needs: overview.needs.map(
             (need): DocumentaryNeed => ({
                 id: need.id,
@@ -797,9 +795,14 @@ export function sourcesPreparationView(
                           ),
                       }
                     : {}),
-                ...(needReason(need, !!overview.materialOutcome) &&
-                needReason(need, !!overview.materialOutcome) !== needsNotice
-                    ? { detail: needReason(need, !!overview.materialOutcome) }
+                ...(needReason(need) &&
+                needReason(need) !== stop &&
+                needReason(need) !== sharedReason
+                    ? {
+                          detail: overview.materialOutcome
+                              ? `Recorded at handoff: ${needReason(need)}`
+                              : needReason(need),
+                      }
                     : {}),
                 sources: need.sourceIds.flatMap((sourceId) => {
                     const row = rowsById.get(sourceId);

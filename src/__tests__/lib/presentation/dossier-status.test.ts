@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { dossierStatus } from "@/lib/presentation/research-copy";
+import { sourcesPhasePresentation } from "@/lib/presentation/sources";
 
 const base = {
     lifecycleState: "discovering_sources" as const,
@@ -57,4 +58,20 @@ test.each([
         sourcesPhase,
     };
     expect(dossierStatus(run).label).toBe(label);
+});
+
+test.each([
+    ["completed", "success", "check"],
+    ["completed_with_limits", "review", "check"],
+    ["ended_without_material", "dashed", "barred"],
+] as const)("the dossier badge and the Sources stage share one tone for %s", (sourcesPhase, tone, mark) => {
+    const run = {
+        lifecycleState: "sources_prepared" as const,
+        executionStatus: "idle" as const,
+        sourcesPhase,
+    };
+    expect(dossierStatus(run).tone).toBe(tone);
+    const stage = sourcesPhasePresentation(sourcesPhase);
+    expect(stage.tone === "muted" ? "dashed" : stage.tone).toBe(tone);
+    expect(stage.mark).toBe(mark);
 });

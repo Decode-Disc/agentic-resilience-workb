@@ -6,7 +6,6 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
 import styles from "./documentary-needs.module.css";
 import { ReadingGlyph, type ReadingState, WorkbenchIcon } from "./glyphs";
 import { HelpTip } from "./help-tip";
@@ -137,7 +136,6 @@ function MarkTip({
     );
 }
 
-/** Long needs clamp to two lines; expanding shows the full text, its reason and the documents serving it. */
 /** The need clamps to two lines; an explicit control shows the rest. */
 function NeedLabel({ need }: { need: DocumentaryNeed }) {
     const [full, setFull] = useState(false);
@@ -198,14 +196,11 @@ function NeedOutcomeSummary({
         ) : null;
     const showCounts =
         !badge || Boolean(need.documents) || Boolean(need.contributions);
-    const counts = showCounts
-        ? [
-              need.documents !== undefined &&
-                  countLabel(need.documents, "document"),
-              need.contributions !== undefined &&
-                  countLabel(need.contributions, "contribution"),
-          ].filter((count): count is string => Boolean(count))
-        : [];
+    // Contributions stay in each mark's explanation and the document list; the cell keeps one count.
+    const counts =
+        showCounts && need.documents !== undefined
+            ? [countLabel(need.documents, "document")]
+            : [];
     if (!counts.length && !need.flag && badge) return badge;
     const sources = need.sources ?? [];
     return (
@@ -213,6 +208,7 @@ function NeedOutcomeSummary({
             {sources.length > 0 ? (
                 <Collapsible className={styles.documents}>
                     <span className={styles.documentsHead}>
+                        {badge}
                         <CollapsibleTrigger className={styles.documentsToggle}>
                             <WorkbenchIcon
                                 name="chevron"
@@ -222,7 +218,6 @@ function NeedOutcomeSummary({
                             <Counts counts={counts} />
                         </CollapsibleTrigger>
                         {need.flag}
-                        {badge}
                     </span>
                     <CollapsibleContent>
                         <ul
@@ -278,14 +273,11 @@ export function DocumentaryNeeds({
     title = "Documentary needs",
     questions,
     needs,
-    notice,
     onOpenSource,
 }: {
     title?: string;
     questions: readonly NeedQuestion[];
     needs: readonly DocumentaryNeed[];
-    /** A reason shared by several needs, shown once above the table instead of on every row. */
-    notice?: ReactNode;
     /** Opens a document from an expanded need. */
     onOpenSource?: (sourceId: string, needId: string) => void;
 }) {
@@ -314,38 +306,51 @@ export function DocumentaryNeeds({
     return (
         <MotionConfig reducedMotion="user">
             <section
-                className={cn("wb-glass wb-focal", styles.panel)}
+                className={styles.panel}
                 aria-labelledby={headingId}
                 onKeyDown={(event) => {
                     if (event.key === "Escape" && lens) setLens(undefined);
                 }}>
                 <div className={styles.head}>
                     <h2 id={headingId}>{title}</h2>
-                    <p
-                        role="status"
-                        className={styles.lens}
-                        hidden={questions.length === 0}>
-                        {!focused ? (
-                            <span className={styles.lensLine} data-active>
-                                <span className={styles.hint}>
-                                    Select a question to see the needs it relies
-                                    on.
+                    <div className={styles.legend}>
+                        {outcomeOrder
+                            .filter(
+                                (outcome) =>
+                                    (outcome !== "in_progress" &&
+                                        outcome !== "on_hold") ||
+                                    needs.some(
+                                        (need) => need.outcome === outcome,
+                                    ),
+                            )
+                            .map((outcome) => (
+                                <span
+                                    key={outcome}
+                                    className={styles.legendItem}>
+                                    <NeedMark outcome={outcome} />
+                                    {outcomes[outcome].legend}
                                 </span>
-                            </span>
-                        ) : (
-                            <span className={styles.lensLine} data-active>
-                                <b>{focused.label}</b>
-                                {!repeatsNeed && (
-                                    <span>{focused.question}</span>
-                                )}
-                                <span className="wb-meta">
-                                    {needCount(relied)}
-                                </span>
-                            </span>
-                        )}
-                    </p>
+                            ))}
+                    </div>
                 </div>
-                {notice && <p className={styles.notice}>{notice}</p>}
+                <p
+                    role="status"
+                    className={styles.lens}
+                    hidden={questions.length === 0}>
+                    {!focused ? (
+                        <span className={styles.lensLine} data-active>
+                            <span className={styles.hint}>
+                                Select a question to see the needs it relies on.
+                            </span>
+                        </span>
+                    ) : (
+                        <span className={styles.lensLine} data-active>
+                            <b>{focused.label}</b>
+                            {!repeatsNeed && <span>{focused.question}</span>}
+                            <span className="wb-meta">{needCount(relied)}</span>
+                        </span>
+                    )}
+                </p>
                 <table className={styles.table} aria-labelledby={headingId}>
                     <colgroup>
                         <col className={styles.needCol} />
@@ -488,21 +493,6 @@ export function DocumentaryNeeds({
                         ))}
                     </tbody>
                 </table>
-                <div className={styles.legend}>
-                    {outcomeOrder
-                        .filter(
-                            (outcome) =>
-                                (outcome !== "in_progress" &&
-                                    outcome !== "on_hold") ||
-                                needs.some((need) => need.outcome === outcome),
-                        )
-                        .map((outcome) => (
-                            <span key={outcome} className={styles.legendItem}>
-                                <NeedMark outcome={outcome} />
-                                {outcomes[outcome].legend}
-                            </span>
-                        ))}
-                </div>
             </section>
         </MotionConfig>
     );
