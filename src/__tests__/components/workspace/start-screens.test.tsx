@@ -424,3 +424,33 @@ it("lists every question of a prepared program and opens one at a time with its 
     fireEvent.click(screen.getByRole("button", { name: "Start research" }));
     expect(start).toHaveBeenCalledOnce();
 });
+
+it("lets a clamped question reveal its full wording and rationale on request", () => {
+    render(
+        <FramingProposal
+            questions={[
+                {
+                    id: "a",
+                    label: "Q1",
+                    shortLabel: "Position",
+                    text: "Who controls routing?",
+                    rationale: "Separate control from supply.",
+                },
+            ]}
+            onStart={vi.fn()}
+        />,
+    );
+    const summary = screen.getByRole("region", { name: "Framing summary" });
+    const more = within(summary).getByRole("button", {
+        name: "Read more",
+    });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(summary.hasAttribute("data-full")).toBe(false);
+    fireEvent.click(more);
+    expect(
+        within(summary)
+            .getByRole("button", { name: "Show less" })
+            .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(summary.hasAttribute("data-full")).toBe(true);
+});

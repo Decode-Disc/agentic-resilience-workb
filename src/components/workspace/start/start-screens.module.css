@@ -517,15 +517,26 @@
     }
 }
 
+/* Messages, the program panel and the composer share one centered lane, as in T3 Code. */
 .framing {
+    --chat-gutter: 12px;
+    --chat-lane: min(
+        var(--chat-lane-width),
+        calc(100% - 2 * var(--chat-gutter))
+    );
     --conversation-dock-bottom: 12px;
     @apply relative flex flex-col w-[100%] h-[100%] min-h-[0] min-w-[0] overflow-hidden;
 }
 .framing [data-slot="conversation-thread-log"] {
     @apply p-[0] rounded-none;
 }
+@media (min-width: 640px) {
+    .framing {
+        --chat-gutter: 48px;
+    }
+}
 .framing [data-slot="conversation-thread-content"] {
-    width: min(1024px, calc(100% - 80px));
+    width: var(--chat-lane);
     @apply mx-auto gap-[26px] pt-[28px] px-0 pb-0;
 }
 .framing [data-slot="conversation-scroll-content"] {
@@ -543,7 +554,7 @@
 .framingDock {
     @apply absolute z-[3] inset-x-0;
     bottom: var(--conversation-dock-bottom);
-    width: min(1040px, calc(100% - 64px));
+    width: var(--chat-lane);
     @apply mx-auto flex flex-col gap-[0];
 }
 .pendingAction {
@@ -574,6 +585,18 @@
 }
 .programMeter > span[data-filled] {
     @apply bg-brand-purple;
+}
+.programCountShort {
+    @apply hidden;
+}
+/* Phones keep the header on one line with the short count; the full wording stays for assistive technology. */
+@media (max-width: 640px) {
+    .programCountFull {
+        @apply sr-only;
+    }
+    .programCountShort {
+        @apply inline;
+    }
 }
 .framingLaunch {
     @apply flex flex-row flex-wrap items-center justify-between gap-[10px] py-[8px] px-[12px] bg-transparent bg-none;
@@ -637,7 +660,6 @@
         @apply py-[8px] px-[12px];
     }
     .framingDock {
-        width: calc(100% - 20px);
         @apply bottom-[10px];
     }
     .framingLaunch p {
@@ -762,7 +784,19 @@
         @apply absolute -inset-[5px];
     }
     .pendingAction [data-slot="conversation-pending-details"] > summary {
-        @apply min-h-[32px] py-[8px] px-[12px] text-[12px];
+        @apply min-h-[32px] py-[8px] px-[12px] text-[12px] flex-nowrap;
+    }
+    /* The toggle never wraps onto its own line; the title gives way first. */
+    .pendingAction [data-slot="conversation-pending-details"]
+        > summary
+        > span:first-child {
+        @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap;
+    }
+    .pendingAction
+        [data-slot="conversation-pending-details"]
+        > summary
+        > span:nth-child(2) {
+        @apply shrink-0;
     }
     .pendingAction [data-slot="conversation-pending-body"] {
         @apply max-h-[40cqh];

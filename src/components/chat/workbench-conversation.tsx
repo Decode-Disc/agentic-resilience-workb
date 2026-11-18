@@ -815,6 +815,40 @@ export function ConversationMessages({
     );
 }
 
+/** Marks which edges of a scrolling region hide content, so the region can show it continues. */
+function useScrollEdges<T extends HTMLElement>(active: boolean) {
+    const ref = useRef<T>(null);
+    const [edges, setEdges] = useState<"top" | "bottom" | "both" | undefined>();
+    useEffect(() => {
+        const node = ref.current;
+        if (!node || !active) return setEdges(undefined);
+        const update = () => {
+            const above = node.scrollTop > 1;
+            const below =
+                node.scrollHeight - node.clientHeight - node.scrollTop > 1;
+            setEdges(
+                above && below
+                    ? "both"
+                    : above
+                      ? "top"
+                      : below
+                        ? "bottom"
+                        : undefined,
+            );
+        };
+        update();
+        node.addEventListener("scroll", update, { passive: true });
+        const observer = new ResizeObserver(update);
+        observer.observe(node);
+        for (const child of Array.from(node.children)) observer.observe(child);
+        return () => {
+            node.removeEventListener("scroll", update);
+            observer.disconnect();
+        };
+    }, [active]);
+    return [ref, edges] as const;
+}
+
 /** Keeps pending content mounted while folded and leaves its decision footer reachable. */
 export function ConversationPendingPanel({
     title,
@@ -850,6 +884,7 @@ export function ConversationPendingPanel({
             <span>{summary}</span>
         </>
     );
+    const [bodyRef, overflow] = useScrollEdges<HTMLDivElement>(expanded);
     return (
         <section
             data-slot="conversation-pending-panel"
@@ -876,7 +911,9 @@ export function ConversationPendingPanel({
                         </span>
                     </summary>
                     <div
+                        ref={bodyRef}
                         data-slot="conversation-pending-body"
+                        data-overflow={overflow}
                         hidden={!expanded}>
                         {children}
                     </div>

@@ -598,6 +598,8 @@ export function FramingClarification({
         </AgentQuestion>
     );
 }
+/** Wording longer than this can exceed the two lines a phone shows before Read more. */
+const CLAMPED_QUESTION_CHARACTERS = 70;
 /** Question count against the documentary limit; the meter repeats the count visually. */
 function ProgramCount({ count, limit }: { count: number; limit?: number }) {
     if (!limit)
@@ -615,7 +617,12 @@ function ProgramCount({ count, limit }: { count: number; limit?: number }) {
                     />
                 ))}
             </span>
-            <span>{`${count} of ${limit} questions`}</span>
+            <span className={styles.programCountFull}>
+                {`${count} of ${limit} questions`}
+            </span>
+            <span className={styles.programCountShort} aria-hidden="true">
+                {`${count}/${limit}`}
+            </span>
         </>
     );
 }
@@ -710,6 +717,7 @@ export function FramingProposal({
             : (questions.find((q) => q.id === selected) ?? questions[0]));
     const hasQuestions = questions.length > 0;
     const busy = pending || actionActive;
+    const [fullQuestionId, setFullQuestionId] = useState<string>();
     const editorRef = useRef<HTMLTextAreaElement>(null);
     const editButtonRef = useRef<HTMLButtonElement>(null);
     const editorErrorId = useId();
@@ -800,6 +808,10 @@ export function FramingProposal({
                                                 ref={summaryRef}
                                                 tabIndex={-1}
                                                 className="chat-focused-question"
+                                                data-full={
+                                                    fullQuestionId === q.id ||
+                                                    undefined
+                                                }
                                                 aria-label="Framing summary">
                                                 {editing &&
                                                 editingQuestion?.id === q.id ? (
@@ -896,29 +908,61 @@ export function FramingProposal({
                                                         )}
                                                     </>
                                                 )}
-                                                {onEditRequest && (
-                                                    <Button
-                                                        ref={editButtonRef}
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="chat-question-edit"
-                                                        hidden={
-                                                            editingQuestion?.id ===
-                                                            q.id
-                                                        }
-                                                        disabled={busy}
-                                                        onClick={() =>
-                                                            onEditRequest(q)
-                                                        }>
-                                                        <Icon
-                                                            iconNode={
-                                                                PencilEdit01Icon
+                                                <div className="chat-question-detail-actions">
+                                                    {/* Narrow screens clamp the wording; this restores it with the rationale. */}
+                                                    {(q.rationale ||
+                                                        q.text.length >
+                                                            CLAMPED_QUESTION_CHARACTERS) && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="chat-question-more"
+                                                            hidden={
+                                                                editingQuestion?.id ===
+                                                                q.id
                                                             }
-                                                            size={15}
-                                                        />
-                                                        Edit question
-                                                    </Button>
-                                                )}
+                                                            aria-expanded={
+                                                                fullQuestionId ===
+                                                                q.id
+                                                            }
+                                                            onClick={() =>
+                                                                setFullQuestionId(
+                                                                    fullQuestionId ===
+                                                                        q.id
+                                                                        ? undefined
+                                                                        : q.id,
+                                                                )
+                                                            }>
+                                                            {fullQuestionId ===
+                                                            q.id
+                                                                ? "Show less"
+                                                                : "Read more"}
+                                                        </Button>
+                                                    )}
+                                                    {onEditRequest && (
+                                                        <Button
+                                                            ref={editButtonRef}
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="chat-question-edit"
+                                                            hidden={
+                                                                editingQuestion?.id ===
+                                                                q.id
+                                                            }
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                onEditRequest(q)
+                                                            }>
+                                                            <Icon
+                                                                iconNode={
+                                                                    PencilEdit01Icon
+                                                                }
+                                                                size={15}
+                                                            />
+                                                            Edit question
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </section>
                                         )}
                                     </li>
