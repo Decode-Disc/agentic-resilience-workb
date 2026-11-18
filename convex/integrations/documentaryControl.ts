@@ -3,9 +3,9 @@ import { documentaryPermittedUses } from "@convex/domain/sourceSelectionPolicy";
 import type { DocumentaryContribution } from "@convex/domain/sourcesContracts";
 import { z } from "zod";
 import {
-    type AttemptDependencies,
     type AttemptReceipt,
     invokeOneShot,
+    type OneShotDependencies,
     rejectedOutputDiagnostic,
 } from "./modelTransport";
 import type { SourceQualificationRoute } from "./sourceQualificationConfig";
@@ -52,7 +52,7 @@ export async function examineDocumentaryContributions(
         evidence: unknown[];
     },
     route: SourceQualificationRoute,
-    dependencies: AttemptDependencies,
+    dependencies: OneShotDependencies,
 ): Promise<DocumentaryControlAttempt> {
     const { contributions } = input;
     const schema = controlSchema.extend({

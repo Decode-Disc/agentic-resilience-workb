@@ -1,4 +1,4 @@
-import { fetchExaSearch } from "@convex/sourceSelectionProposalActions";
+import { fetchExaSearch } from "@convex/integrations/exaSearchClient";
 import { expect, test } from "vitest";
 
 test("discovers public source metadata through the production search transport", async () => {

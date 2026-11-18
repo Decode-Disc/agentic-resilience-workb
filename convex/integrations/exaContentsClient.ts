@@ -8,6 +8,7 @@ import {
     ExaContentsError,
     readExaResponseJson,
 } from "./exa";
+import { readExaApiKey } from "./exaConfiguration";
 
 const contentsResponseSchema = z.looseObject({
     results: z.array(
@@ -101,4 +102,9 @@ export function createExaContentsClient(apiKey: string): ExaContentsClient {
             return client.getContents(urls, options);
         },
     };
+}
+
+export function configuredExaContentsClient(): ExaContentsClient | undefined {
+    const apiKey = readExaApiKey();
+    return apiKey ? createExaContentsClient(apiKey) : undefined;
 }

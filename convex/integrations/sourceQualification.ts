@@ -13,9 +13,9 @@ import {
     type SourceQualification,
 } from "@convex/domain/sourceQualification";
 import {
-    type AttemptDependencies,
     type AttemptReceipt,
     invokeOneShot,
+    type OneShotDependencies,
     rejectedOutputDiagnostic,
 } from "./modelTransport";
 import type { SourceQualificationRoute } from "./sourceQualificationConfig";
@@ -30,7 +30,7 @@ export type QualificationAttemptResult = AttemptReceipt &
 export async function qualifySourceDocument(
     input: ReturnType<typeof prepareQualificationInput>,
     route: SourceQualificationRoute,
-    dependencies: AttemptDependencies,
+    dependencies: OneShotDependencies,
 ): Promise<QualificationAttemptResult> {
     const { instructions, ...state } = input.request;
     const attempt = await invokeOneShot({
@@ -81,7 +81,7 @@ export type SourceComparisonAttemptResult = AttemptReceipt &
 export async function compareSourceContributions(
     input: PreparedSourceComparisonInput,
     route: SourceQualificationRoute,
-    dependencies: AttemptDependencies,
+    dependencies: OneShotDependencies,
 ): Promise<SourceComparisonAttemptResult> {
     const hasComparablePrimaryPassage = input.request.findings.some(
         (finding) => finding.primaryPassageKeys.length > 0,

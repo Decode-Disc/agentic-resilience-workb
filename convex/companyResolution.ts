@@ -2,7 +2,6 @@ import { patchQualificationReceipt } from "@convex/qualificationUsage";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
-import Exa from "exa-js";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -18,7 +17,7 @@ import {
     requireCompanyWebsiteUrl,
 } from "./domain/companyMetadata";
 import { companySnapshotValidator } from "./domain/validators";
-import { createExaWebsiteAdapter } from "./integrations/exa";
+import { configuredExaWebsiteSearch } from "./integrations/exaSdkSearch";
 import {
     classifyIrAsWebsite,
     createSecCompanyResolver,
@@ -821,8 +820,8 @@ async function resolveWebsiteForCompany(
     if (secWebsite) {
         return { url: secWebsite, source: "sec_ir" };
     }
-    const exaKey = process.env.EXA_API_KEY?.trim();
-    if (!exaKey) {
+    const adapter = configuredExaWebsiteSearch();
+    if (!adapter) {
         return cachedResolution;
     }
     try {
@@ -865,10 +864,6 @@ async function resolveWebsiteForCompany(
 
     const startedAt = Date.now();
     try {
-        const client = new Exa(exaKey);
-        const adapter = createExaWebsiteAdapter({
-            search: (query, options) => client.search(query, options),
-        });
         const batch = await withWebsiteTimeout(
             adapter.search(`${company.legalName} official website`),
         );

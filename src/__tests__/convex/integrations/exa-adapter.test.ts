@@ -1,5 +1,5 @@
 import { createExaDiscoveryAdapter } from "@convex/integrations/exa";
-import { validateExaCandidates } from "@convex/exaDiscoveryActions";
+import { validateExaCandidates } from "@convex/integrations/exaCandidateValidation";
 import { expect, test, vi } from "vitest";
 
 test("requests metadata-only Exa results", async () => {

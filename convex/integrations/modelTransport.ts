@@ -35,6 +35,7 @@ import {
 } from "ai";
 import type { ZodType } from "zod";
 import { createAgentTools } from "./modelInput";
+import { readOpenRouterApiKey } from "./openRouterConfiguration";
 import type { SourceQualificationRoute } from "./sourceQualificationConfig";
 
 export { agentInputByteLength, agentOperationInputSchema } from "./modelInput";
@@ -63,6 +64,10 @@ export type AttemptDependencies = {
     beforeDispatch?: AgentGenerationLifecycle["beforeDispatch"];
     onObservation?: (observation: AgentGenerationObservation) => Promise<void>;
     observeProvider?: AgentGenerationLifecycle["observeProvider"];
+};
+
+export type OneShotDependencies = Omit<AttemptDependencies, "apiKey"> & {
+    apiKey?: string;
 };
 
 export type StructuredAttempt<T> =
@@ -756,13 +761,17 @@ function toolHasExecuteCallback(candidate: unknown): boolean {
 /** Performs one bounded structured-output attempt; orchestration owns fallback and persistence. */
 export async function invokeOneShot<T>(args: {
     route: SourceQualificationRoute;
-    dependencies: AttemptDependencies;
+    dependencies: OneShotDependencies;
     instructions: string;
     prompt: string;
     schema: ZodType<T>;
     schemaName: string;
 }): Promise<StructuredAttempt<T>> {
-    const { route, dependencies } = args;
+    const { route } = args;
+    const dependencies: AttemptDependencies = {
+        ...args.dependencies,
+        apiKey: args.dependencies.apiKey ?? readOpenRouterApiKey() ?? "",
+    };
     const preflight = preflightFailure(route, dependencies);
     if (preflight) return preflight;
     const startedAt = Date.now();

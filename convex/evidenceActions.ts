@@ -17,7 +17,7 @@ import type {
     ApprovedSourceRetrievalResult,
 } from "./integrations/approvedSourceRetrieval";
 import { createExaContentsAdapter } from "./integrations/exa";
-import { createExaContentsClient } from "./integrations/exaContentsClient";
+import { configuredExaContentsClient } from "./integrations/exaContentsClient";
 import { retrieveAndNormalizeExaFiling } from "./integrations/exaEvidence";
 import { retrieveAndNormalizePublicPdf } from "./integrations/publicPdfEvidence";
 import { createSecCompanyResolver } from "./integrations/sec";
@@ -557,12 +557,9 @@ export const retrieveAndNormalizeExaSource = internalAction({
             };
         }
 
-        const apiKey =
-            typeof process !== "undefined"
-                ? process.env?.EXA_API_KEY?.trim()
-                : undefined;
+        const client = configuredExaContentsClient();
 
-        if (!apiKey) {
+        if (!client) {
             const operationScope = `run:${args.runId}:gen:${args.executionGeneration}:source:${args.sourceId}${args.workerKey ? `:${args.workerKey}` : ""}`;
             const operationKey = `${operationScope}:get_contents:${source.canonicalUrl}`;
             try {
@@ -597,7 +594,6 @@ export const retrieveAndNormalizeExaSource = internalAction({
             };
         }
 
-        const client = createExaContentsClient(apiKey);
         const adapter = createExaContentsAdapter(client, {
             now: Date.now,
             operationScope: `run:${args.runId}:gen:${args.executionGeneration}:source:${args.sourceId}${args.workerKey ? `:${args.workerKey}` : ""}`,

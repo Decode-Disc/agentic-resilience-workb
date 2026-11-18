@@ -3,6 +3,8 @@ import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import type { SourceCoverageRole } from "./domain/sourceSelectionPolicy";
 
+import { isExaConfigured } from "./integrations/exaConfiguration";
+
 type SecFiling = {
     accessionNumber: string;
     form?: string;
@@ -141,8 +143,6 @@ export const discoverForRun = internalAction({
             internal.researchPlanning.getDiscoveryContext,
             { runId: args.runId },
         );
-        const environment =
-            typeof process === "undefined" ? undefined : process.env;
         const initialCapacity = await ctx.runQuery(
             internal.sourceDiscovery.getCandidateCapacity,
             {
@@ -169,7 +169,7 @@ export const discoverForRun = internalAction({
             return { total: result.total };
         }
         if (args.skipWeb) return { total: result.total };
-        if (environment?.EXA_API_KEY?.trim()) {
+        if (isExaConfigured()) {
             return ctx.runAction(internal.exaDiscoveryActions.discoverForRun, {
                 runId: args.runId,
             });

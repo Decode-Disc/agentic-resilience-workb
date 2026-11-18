@@ -6,19 +6,15 @@ import {
     MAX_EXA_DISCOVERY_ATTEMPTS as MAX_EXA_ATTEMPTS,
 } from "@convex/resourcePolicy";
 import { ConvexError, v } from "convex/values";
-import Exa from "exa-js";
 
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { paidWorkDisabledErrorData } from "./domain/providerAvailability";
-import {
-    PublicSourceUrlError,
-    validatePublicSourceUrl,
-} from "./domain/publicSourceUrl";
-import {
-    createExaDiscoveryAdapter,
-    exaDiscoveryDisposition,
-} from "./integrations/exa";
+import { PublicSourceUrlError } from "./domain/publicSourceUrl";
+import { exaDiscoveryDisposition } from "./integrations/exa";
+
+import { validateExaCandidates } from "./integrations/exaCandidateValidation";
+import { configuredExaSdkDiscovery } from "./integrations/exaSdkSearch";
 
 class ExaLogicalTimeoutError extends Error {
     constructor() {
@@ -49,62 +45,18 @@ async function withLogicalTimeout<T>(
     }
 }
 
-export async function validateExaCandidates<
-    Candidate extends { canonicalUrl: string },
->(
-    candidates: ReadonlyArray<Candidate>,
-    resolveAddresses: (hostname: string) => Promise<ReadonlyArray<string>>,
-    signal?: AbortSignal,
-): Promise<{ candidates: Array<Candidate>; rejected: number }> {
-    signal?.throwIfAborted();
-    const validation = Promise.allSettled(
-        candidates.map(async (candidate) => {
-            const validated = await validatePublicSourceUrl(
-                candidate.canonicalUrl,
-                resolveAddresses,
-            );
-            return {
-                ...candidate,
-                canonicalUrl: validated.canonicalUrl,
-            };
-        }),
-    );
-    let onAbort: (() => void) | undefined;
-    try {
-        const results = await (signal
-            ? Promise.race([
-                  validation,
-                  new Promise<never>((_resolve, reject) => {
-                      onAbort = () => reject(signal.reason);
-                      signal.addEventListener("abort", onAbort, { once: true });
-                  }),
-              ])
-            : validation);
-        return {
-            candidates: results.flatMap((result) =>
-                result.status === "fulfilled" ? [result.value] : [],
-            ),
-            rejected: results.filter(({ status }) => status === "rejected")
-                .length,
-        };
-    } finally {
-        if (signal && onAbort) signal.removeEventListener("abort", onAbort);
-    }
-}
-
 export const discoverForRun = internalAction({
     args: { runId: v.id("researchRuns") },
     returns: v.object({ total: v.number() }),
     handler: async (ctx, args): Promise<{ total: number }> => {
-        const exaKey = process.env.EXA_API_KEY?.trim();
-        if (!exaKey) {
+        const exa = configuredExaSdkDiscovery();
+        if (!exa) {
             throw new Error("Exa source discovery is not configured");
         }
         const context = await ctx.runQuery(
             internal.researchPlanning.getDiscoveryContext,
             args,
         );
-        let exa: ReturnType<typeof createExaDiscoveryAdapter> | undefined;
         for (const [index, planQuery] of context.queries.entries()) {
             const capacity = await ctx.runQuery(
                 internal.sourceDiscovery.getCandidateCapacity,
@@ -152,13 +104,6 @@ export const discoverForRun = internalAction({
                     continue;
                 }
                 try {
-                    if (!exa) {
-                        const exaClient = new Exa(exaKey);
-                        exa = createExaDiscoveryAdapter({
-                            search: (query, options) =>
-                                exaClient.search(query, options),
-                        });
-                    }
                     const batch = await withLogicalTimeout(
                         exa.search(
                             planQuery.query,

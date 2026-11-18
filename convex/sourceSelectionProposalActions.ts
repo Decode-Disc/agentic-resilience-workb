@@ -26,11 +26,8 @@ import {
     SOURCE_FAMILIES as DISCOVERY_FAMILIES,
     SOURCE_SELECTION_POLICY_VERSION,
 } from "./domain/sourceSelectionPolicy";
-import { validateExaCandidates } from "./exaDiscoveryActions";
-import {
-    createExaDiscoveryAdapter,
-    readExaResponseJson,
-} from "./integrations/exa";
+import { validateExaCandidates } from "./integrations/exaCandidateValidation";
+import { configuredExaHttpDiscovery } from "./integrations/exaSearchClient";
 import { sourcePreparationEnabled } from "./resourceLimits";
 import {
     secFilingCandidate,
@@ -150,95 +147,6 @@ async function withTimeout<T>(work: Promise<T>): Promise<T> {
         ]);
     } finally {
         if (timeout) clearTimeout(timeout);
-    }
-}
-
-export async function fetchExaSearch(
-    apiKey: string,
-    query: string,
-    options: {
-        type: "auto";
-        numResults: number;
-        contents: false;
-        includeDomains?: Array<string>;
-    },
-    requestSignal?: AbortSignal,
-) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
-    try {
-        const signal = requestSignal
-            ? AbortSignal.any([controller.signal, requestSignal])
-            : controller.signal;
-        signal.throwIfAborted();
-        const response = await fetch("https://api.exa.ai/search", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-api-key": apiKey,
-            },
-            // `false` opts out in the SDK; the HTTP API expects this field omitted.
-            body: JSON.stringify({ query, ...options, contents: undefined }),
-            signal,
-            redirect: "error",
-        });
-        if (!response.ok) {
-            await response.body?.cancel();
-            throw new DiscoveryRequestError(
-                `http_${response.status}`,
-                response.status === 408 ||
-                    response.status === 429 ||
-                    response.status >= 500,
-            );
-        }
-        const payload: unknown = await readExaResponseJson(response, signal);
-        if (!payload || typeof payload !== "object") {
-            throw new DiscoveryRequestError("invalid_response", false);
-        }
-        const record = payload as Record<string, unknown>;
-        if (!Array.isArray(record.results)) {
-            throw new DiscoveryRequestError("invalid_response", false);
-        }
-        const results = record.results.flatMap((value) => {
-            if (!value || typeof value !== "object") return [];
-            const result = value as Record<string, unknown>;
-            if (
-                typeof result.id !== "string" ||
-                typeof result.url !== "string"
-            ) {
-                return [];
-            }
-            return [
-                {
-                    id: result.id,
-                    url: result.url,
-                    title:
-                        typeof result.title === "string" ? result.title : null,
-                    publishedDate:
-                        typeof result.publishedDate === "string"
-                            ? result.publishedDate
-                            : undefined,
-                },
-            ];
-        });
-        const costDollars =
-            record.costDollars && typeof record.costDollars === "object"
-                ? (record.costDollars as Record<string, unknown>)
-                : undefined;
-        return {
-            results,
-            rejectedResults: record.results.length - results.length,
-            searchTime:
-                typeof record.searchTime === "number"
-                    ? record.searchTime
-                    : undefined,
-            costDollars:
-                typeof costDollars?.total === "number"
-                    ? { total: costDollars.total }
-                    : undefined,
-        };
-    } finally {
-        clearTimeout(timeout);
     }
 }
 
@@ -494,16 +402,13 @@ async function executeDiscovery(
             }
         }
     }
-    const exaKey = process.env.EXA_API_KEY?.trim();
-    if (!exaKey) {
+    const searchExa = configuredExaHttpDiscovery();
+    if (!searchExa) {
         for (const query of context.queries) {
             const family = discoveryFamily(query.discoveryIntent);
             if (family && family !== "regulatory") failedFamilies.add(family);
         }
     } else {
-        const exa = createExaDiscoveryAdapter({
-            search: (query, options) => fetchExaSearch(exaKey, query, options),
-        });
         for (const [index, query] of context.queries.entries()) {
             const family = discoveryFamily(query.discoveryIntent);
             if (!family || family === "regulatory") continue;
@@ -565,7 +470,7 @@ async function executeDiscovery(
                 }
                 try {
                     await verifyActive();
-                    const batch = await exa.search(
+                    const batch = await searchExa(
                         query.query,
                         Math.min(4, latest.remainingCapacity),
                         query.includeDomains,

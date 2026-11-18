@@ -2,10 +2,6 @@
 
 import { lookup } from "node:dns/promises";
 import {
-    PublicSourceUrlError,
-    validatePublicSourceUrl,
-} from "@convex/domain/publicSourceUrl";
-import {
     materializeSourceComparisonOutput,
     prepareSourceComparisonInput,
     rankSourceComparisonPrimaryMetadata,
@@ -19,7 +15,6 @@ import {
     sha256Hex,
 } from "@convex/domain/sourcePassages";
 import {
-    preparationBudgetOutcome,
     preparationFailureCode,
     sourcePreparationError,
     sourcePreparationOutcomeValidator,
@@ -33,55 +28,31 @@ import {
     SOURCE_RETRIEVAL_VERSION,
     sourceComparisonQuery,
 } from "@convex/domain/sourceRetrievalPolicy";
-import { executionFailureCode } from "@convex/execution/errors";
-import type { SourceDocumentRetrievalInput } from "@convex/integrations/approvedSourceRetrieval";
-import {
-    createExaContentsAdapter,
-    createExaDiscoveryAdapter,
-} from "@convex/integrations/exa";
-import { createExaContentsClient } from "@convex/integrations/exaContentsClient";
-import { retrieveAndNormalizeExaFiling } from "@convex/integrations/exaEvidence";
-import type { AttemptDependencies } from "@convex/integrations/modelTransport";
-import {
-    createSecCompanyResolver,
-    SecRetryableError,
-} from "@convex/integrations/sec";
-import { retrieveAndNormalizeSecFiling } from "@convex/integrations/secEvidence";
+import { isOpenRouterConfigured } from "@convex/integrations/openRouterConfiguration";
+import { SecRetryableError } from "@convex/integrations/sec";
 import {
     compareSourceContributions,
-    type QualificationAttemptResult,
     qualifySourceDocument,
-    type SourceComparisonAttemptResult,
 } from "@convex/integrations/sourceQualification";
-import type { SourceQualificationRoute } from "@convex/integrations/sourceQualificationConfig";
-import { revisionRoute } from "@convex/modelConfiguration";
 import { SOURCE_COMPARISON_MAX_PRIMARY_CAPTURES } from "@convex/resourcePolicy";
-import {
-    simulatedSourceCandidate,
-    simulatedSourceText,
-} from "@convex/sourcesSimulation";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, internalAction } from "./_generated/server";
 import { discoveryFailure } from "./domain/sourceDiscoveryRecovery";
 import {
     SOURCE_COVERAGE_ROLES,
     SOURCE_ROLE_REQUIREMENTS,
 } from "./domain/sourceSelectionPolicy";
-import { validateExaCandidates } from "./exaDiscoveryActions";
-import { extractObservedDestinations } from "./integrations/evidenceNormalization";
+import { validateExaCandidates } from "./integrations/exaCandidateValidation";
+import { configuredExaHttpDiscovery } from "./integrations/exaSearchClient";
 import { SOURCE_EMBEDDING_PROFILE } from "./integrations/sourceEmbeddings";
+import { nodeActionGenerationDeadline } from "./resourcePolicy";
 import {
-    DEFAULT_EXA_CONTENTS_TIMEOUT_MS,
-    DEFAULT_SEC_TIMEOUT_MS,
-    EXA_DISCOVERY_TIMEOUT_MS,
-    MAX_APPROVED_SOURCE_BYTES,
-    nodeActionGenerationDeadline,
-    resolveGenerationAuthority,
-} from "./resourcePolicy";
-import { requestPinnedPublicSource } from "./sourceActions";
+    inspectSourceDocument,
+    sourcePreparationArgsValidator,
+} from "./sourceCaptureActions";
 import {
     secFilingCandidate,
     selectSecFilingsForDiscovery,
@@ -90,393 +61,11 @@ import {
     ensureSourceCaptureIndex,
     retrieveSourcePassages,
 } from "./sourceRetrievalActions";
-import { fetchExaSearch } from "./sourceSelectionProposalActions";
+import { executePreparationModel } from "./sources/preparationModel";
+import { preparationSecResolver } from "./sources/preparationSec";
 
-type PreparationModelReceipt = {
-    latencyMs: number;
-    reportedCost?: number;
-    usage: unknown;
-};
-
-/** Owns dispatch admission, pinned routing, bounded technical retry and receipts for both model tasks. */
-export async function executePreparationModel<
-    Result extends
-        | QualificationAttemptResult
-        | SourceComparisonAttemptResult
-        | import("./integrations/documentaryControl").DocumentaryControlAttempt,
->(
-    ctx: ActionCtx,
-    input: {
-        preparation: Doc<"sourceSelectionProposalRebuilds">;
-        executionDeadlineAt: number;
-        operationRequestId?: Id<"agentOperationRequests">;
-        sourceId: Id<"sources">;
-        operation:
-            | "source_qualification"
-            | "source_comparison"
-            | "source_documentary_control";
-        inputHash: string;
-        invocationInputJson: string;
-        validate?: () => Promise<void>;
-        execute: (
-            route: SourceQualificationRoute,
-            dependencies: Pick<
-                AttemptDependencies,
-                "authority" | "signal" | "beforeDispatch" | "observeProvider"
-            >,
-        ) => Promise<Result>;
-    },
-): Promise<
-    | {
-          result: Result;
-          providerCallId: Id<"providerCalls">;
-          receipt: PreparationModelReceipt;
-      }
-    | {
-          reasonCode: string;
-          diagnosticReason?: string;
-          providerCallId?: Id<"providerCalls">;
-          receipt?: PreparationModelReceipt;
-      }
-> {
-    const { preparation } = input;
-    let providerCallId: Id<"providerCalls"> | undefined;
-    let receipt: PreparationModelReceipt | undefined;
-    let firstAttempt: number | undefined;
-    while (true) {
-        const execution = resolveGenerationAuthority(
-            preparation,
-            Date.now(),
-            input.executionDeadlineAt,
-        );
-        if (execution.kind === "blocked")
-            return { reasonCode: execution.code, providerCallId, receipt };
-        const plan = await ctx.runQuery(
-            internal.providerCalls.nextPreparationAttemptForInput,
-            {
-                preparationId: preparation._id,
-                sourceId: input.sourceId,
-                operation: input.operation,
-                inputHash: input.inputHash,
-                now: Date.now(),
-            },
-        );
-        if (!plan.attempt)
-            return {
-                reasonCode: plan.errorCode ?? "preparation_unavailable",
-                diagnosticReason: plan.diagnosticReason,
-                providerCallId,
-                receipt,
-            };
-        firstAttempt ??= plan.attempt;
-        await input.validate?.();
-        let configured: Doc<"modelRevisions">;
-        try {
-            configured = await ctx.runMutation(
-                internal.modelConfiguration.forPreparation,
-                {
-                    preparationId: preparation._id,
-                    expectedGeneration: preparation.executionGeneration,
-                },
-            );
-        } catch (error) {
-            const code =
-                preparationFailureCode(error) ?? executionFailureCode(error);
-            if (code === "stale_execution")
-                return { reasonCode: code, providerCallId, receipt };
-            if (code === "model_unavailable" || code === "model_not_compatible")
-                return {
-                    reasonCode: "missing_configuration",
-                    providerCallId,
-                    receipt,
-                };
-            throw error;
-        }
-        const route: SourceQualificationRoute = {
-            ...revisionRoute(configured),
-            executionPlanVersion: preparation.executionPlanVersion,
-        };
-        const attempt = {
-            ...(input.operationRequestId
-                ? { operationRequestId: input.operationRequestId }
-                : {}),
-            inputHash: input.inputHash,
-            runId: preparation.runId,
-            corpusRevisionId: preparation.corpusRevisionId,
-            sourceId: input.sourceId,
-            preparationId: preparation._id,
-            executionGeneration: preparation.executionGeneration,
-            workflowVersion: preparation.workflowVersion,
-            stepKey: "source_preparation",
-            service: "model" as const,
-            operation: input.operation,
-            operationKey: `${preparation.operationKey}:step:${input.operation === "source_comparison" ? "source_comparison" : "source_preparation"}:input:${input.inputHash}:attempt:${plan.attempt}`,
-            attempt: plan.attempt,
-        };
-        const claimed = await ctx.runMutation(
-            internal.providerCalls.recordAttempt,
-            { ...attempt, status: "started" },
-        );
-        providerCallId = claimed.providerCallId;
-        if (!claimed.shouldExecute)
-            return {
-                reasonCode: claimed.errorCode ?? "attempt_already_recorded",
-                providerCallId,
-                receipt,
-            };
-        const invocationId = await ctx.runMutation(
-            internal.execution.invocationLifecycle.beginOneShot,
-            {
-                providerCallId,
-                inputJson: input.invocationInputJson,
-            },
-        );
-        let result: Result | undefined;
-        let providerIdentityObserved = false;
-        try {
-            const deadlineAt = Math.min(
-                claimed.deadlineAt ?? 0,
-                input.executionDeadlineAt,
-            );
-            result = await input.execute(route, {
-                authority: {
-                    resourcePolicy: preparation.resourcePolicy,
-                    deadlineAt,
-                },
-                signal: AbortSignal.timeout(
-                    Math.max(1, deadlineAt - Date.now()),
-                ),
-                beforeDispatch: async (requestJson, metadata) => {
-                    const retained = await ctx.runMutation(
-                        internal.execution.invocationLifecycle.retainRequest,
-                        {
-                            invocationId,
-                            expectedGeneration: preparation.executionGeneration,
-                            requestJson,
-                            effectiveMaxOutputTokens:
-                                metadata?.effectiveMaxOutputTokens,
-                        },
-                    );
-                    if (retained.kind === "blocked")
-                        throw sourcePreparationError(retained.code);
-                    await ctx.runQuery(
-                        internal.execution.invocationLifecycle
-                            .authorizeDispatch,
-                        {
-                            invocationId,
-                            expectedGeneration: preparation.executionGeneration,
-                        },
-                    );
-                },
-                observeProvider: async (observation) => {
-                    await ctx.runMutation(
-                        internal.providerCalls.observeGeneration,
-                        { invocationId, ...observation },
-                    );
-                    providerIdentityObserved ||=
-                        observation.generationId !== undefined;
-                },
-            });
-        } finally {
-            if (
-                providerIdentityObserved &&
-                result?.status !== "succeeded" &&
-                result?.reportedCost === undefined
-            )
-                await ctx.runMutation(internal.providerCalls.requestBilling, {
-                    invocationId,
-                });
-        }
-        receipt = {
-            latencyMs: result.latencyMs,
-            reportedCost: result.reportedCost,
-            usage: {
-                model: result.model,
-                resolvedModel: result.resolvedModel,
-                provider: result.provider,
-                inputTokens: result.inputTokens,
-                outputTokens: result.outputTokens,
-                reasoningTokens: result.reasoningTokens,
-                cachedInputTokens: result.cachedInputTokens,
-                inputHash: input.inputHash,
-            },
-        };
-        if (result.status === "not_run") {
-            await ctx.runMutation(
-                internal.execution.invocationLifecycle.finishOneShot,
-                {
-                    invocationId,
-                    attempt: {
-                        ...attempt,
-                        ...receipt,
-                        status: "failed",
-                        errorCode: result.reason,
-                        dispatchOutcome: "not_dispatched",
-                        retryable: false,
-                    },
-                    outputJson: JSON.stringify({
-                        status: result.status,
-                        reason: result.reason,
-                        output: result.output,
-                    }),
-                },
-            );
-            return { result, providerCallId, receipt };
-        }
-        await ctx.runMutation(
-            internal.execution.invocationLifecycle.finishOneShot,
-            {
-                invocationId,
-                ...(result.observableReplyJson
-                    ? { observableReplyJson: result.observableReplyJson }
-                    : {}),
-                attempt: {
-                    ...attempt,
-                    ...receipt,
-                    status: result.status,
-                    dispatchOutcome: result.dispatchOutcome,
-                    httpStatus: result.httpStatus,
-                    retryAfterAt: result.retryAfterAt,
-                    ...(result.status === "failed"
-                        ? {
-                              errorCode: result.errorCode,
-                              retryable: result.retryable,
-                              diagnostic: result.outputDiagnostic,
-                          }
-                        : {}),
-                },
-                outputJson: JSON.stringify(
-                    result.status === "succeeded"
-                        ? {
-                              status: result.status,
-                              result:
-                                  "qualification" in result
-                                      ? result.qualification
-                                      : result.output,
-                          }
-                        : {
-                              status: result.status,
-                              errorCode: result.errorCode,
-                              diagnostic: result.outputDiagnostic ?? null,
-                          },
-                ),
-            },
-        );
-        if (result.status === "succeeded")
-            return { result, providerCallId, receipt };
-        if (
-            firstAttempt !== 1 ||
-            plan.attempt !== 1 ||
-            !result.retryable ||
-            preparationBudgetOutcome(result) === "reserved"
-        )
-            return {
-                reasonCode: result.errorCode,
-                diagnosticReason: result.outputDiagnostic?.reason,
-                providerCallId,
-                receipt,
-            };
-    }
-}
-
-/** Shares authorization, pinned public transport and aggregate throttling for every preparation SEC request. */
-function preparationSecResolver(
-    ctx: ActionCtx,
-    preparation: Doc<"sourceSelectionProposalRebuilds">,
-    attempts: Pick<
-        Parameters<typeof createSecCompanyResolver>[0],
-        "recordAttempt" | "firstAttempt" | "maxAttempts" | "operationScope"
-    >,
-) {
-    const verifyActive = () =>
-        ctx.runQuery(internal.sourcePreparation.getForExecution, {
-            preparationId: preparation._id,
-            now: Date.now(),
-        });
-    const remaining = () =>
-        Math.max(1, (preparation.deadlineAt ?? 0) - Date.now());
-    const userAgent =
-        process.env.SEC_USER_AGENT?.trim() ||
-        "Evidence Workbench research@evidence-workbench.org";
-    return createSecCompanyResolver({
-        ...attempts,
-        now: Date.now,
-        userAgent,
-        retryPolicy: "confirmed_response",
-        timeoutMs: Math.min(DEFAULT_SEC_TIMEOUT_MS, remaining()),
-        reserveRequest: async () => {
-            await verifyActive();
-            const { retryAfter } = await ctx.runMutation(
-                internal.providerCalls.reserveSecRateLimit,
-                {},
-            );
-            if (retryAfter)
-                await new Promise((resolve) =>
-                    setTimeout(resolve, Math.min(retryAfter, remaining())),
-                );
-            await verifyActive();
-        },
-        fetch: async (url, init) => {
-            await verifyActive();
-            const signal = AbortSignal.any([
-                AbortSignal.timeout(
-                    Math.min(DEFAULT_SEC_TIMEOUT_MS, remaining()),
-                ),
-                ...(init?.signal ? [init.signal] : []),
-            ]);
-            signal.throwIfAborted();
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            let destination: Awaited<
-                ReturnType<typeof validatePublicSourceUrl>
-            >;
-            try {
-                destination = await Promise.race([
-                    validatePublicSourceUrl(String(url), async (hostname) => {
-                        const records = await lookup(hostname, {
-                            all: true,
-                            verbatim: true,
-                        });
-                        signal.throwIfAborted();
-                        return records.map((record) => record.address);
-                    }),
-                    new Promise<never>((_, reject) => {
-                        timer = setTimeout(
-                            () =>
-                                reject(
-                                    sourcePreparationError(
-                                        "source_url_unavailable",
-                                    ),
-                                ),
-                            Math.min(DEFAULT_SEC_TIMEOUT_MS, remaining()),
-                        );
-                    }),
-                ]);
-            } finally {
-                clearTimeout(timer);
-            }
-            const address = destination.addresses[0];
-            if (!address)
-                throw sourcePreparationError("source_url_unavailable");
-            await verifyActive();
-            signal.throwIfAborted();
-            return requestPinnedPublicSource(
-                destination.canonicalUrl,
-                address,
-                {
-                    headers: {
-                        Accept:
-                            new Headers(init?.headers).get("Accept") ??
-                            "application/json",
-                        "User-Agent": userAgent,
-                    },
-                    maxBytes: MAX_APPROVED_SOURCE_BYTES,
-                    signal,
-                    timeoutMs: Math.min(DEFAULT_SEC_TIMEOUT_MS, remaining()),
-                },
-            );
-        },
-    });
-}
+// Retained function path for persisted Workflow handles.
+export { inspectSource } from "./sourceCaptureActions";
 
 const supplementResultValidator = v.union(
     v.object({ status: v.literal("searched") }),
@@ -497,8 +86,7 @@ export const checkConfiguration = internalAction({
             ...args,
             now: Date.now(),
         });
-        // Node replaces process.env between invocations; the generated env export holds the old object.
-        const available = Boolean(process.env.OPENROUTER_API_KEY?.trim());
+        const available = isOpenRouterConfigured();
         await ctx.runMutation(
             internal.sourcePreparation.recordConfigurationCheck,
             { ...args, available },
@@ -522,7 +110,7 @@ export const searchSupplement = internalAction({
         const preparation = await verifyActive();
         if (preparation.target && preparation.insertedCount !== undefined)
             return { status: "complete" };
-        const apiKey = process.env.EXA_API_KEY?.trim();
+        const searchExa = configuredExaHttpDiscovery();
         const userAgent = process.env.SEC_USER_AGENT?.trim();
         let reservation: FunctionReturnType<
             typeof internal.sourcePreparation.reserveNextSupplementSearch
@@ -534,7 +122,7 @@ export const searchSupplement = internalAction({
                     ...args,
                     configuration: {
                         sec: Boolean(userAgent),
-                        exa: Boolean(apiKey),
+                        exa: Boolean(searchExa),
                     },
                 },
             );
@@ -628,14 +216,13 @@ export const searchSupplement = internalAction({
                 );
                 return { status: "searched" };
             }
-            const adapter = createExaDiscoveryAdapter({
-                search: (query, options) =>
-                    fetchExaSearch(apiKey as string, query, options, signal),
-            });
-            const batch = await adapter.search(
+            if (!searchExa)
+                throw sourcePreparationError("missing_configuration");
+            const batch = await searchExa(
                 reservation.query.query,
                 4,
                 reservation.query.includeDomains,
+                signal,
             );
             const validated = await validateExaCandidates(
                 batch.candidates.slice(0, 4),
@@ -845,7 +432,7 @@ async function qualifyCapturedSource(
             },
         );
         if (cached) return { status: "qualified", taskId: cached._id };
-        if (!process.env.OPENROUTER_API_KEY?.trim())
+        if (!isOpenRouterConfigured())
             return {
                 status: "unavailable",
                 reasonCode: "missing_configuration",
@@ -859,10 +446,7 @@ async function qualifyCapturedSource(
             inputHash: prepared.inputHash,
             invocationInputJson: JSON.stringify(prepared.request),
             execute: (route, dependencies) =>
-                qualifySourceDocument(prepared, route, {
-                    apiKey: process.env.OPENROUTER_API_KEY ?? "",
-                    ...dependencies,
-                }),
+                qualifySourceDocument(prepared, route, dependencies),
         });
         if ("reasonCode" in outcome)
             return {
@@ -1410,7 +994,7 @@ export const compareSource = internalAction({
                 });
                 return { status: "not_run", taskId };
             }
-            if (!process.env.OPENROUTER_API_KEY?.trim()) {
+            if (!isOpenRouterConfigured()) {
                 const output = makeTerminalOutput(
                     prepared,
                     "provider_unavailable",
@@ -1464,10 +1048,7 @@ export const compareSource = internalAction({
                         throw sourcePreparationError("stale_execution");
                 },
                 execute: (route, dependencies) =>
-                    compareSourceContributions(prepared, route, {
-                        apiKey: process.env.OPENROUTER_API_KEY ?? "",
-                        ...dependencies,
-                    }),
+                    compareSourceContributions(prepared, route, dependencies),
             });
             if (!("reasonCode" in outcome)) {
                 if (outcome.result.status === "failed")
@@ -1521,364 +1102,6 @@ export const compareSource = internalAction({
         }
     },
 });
-
-const inspectionResultValidator = v.object({
-    status: v.union(
-        v.literal("complete"),
-        v.literal("partial"),
-        v.literal("unavailable"),
-    ),
-    sourceCaptureId: v.optional(v.id("sourceCaptures")),
-    contentHash: v.optional(v.string()),
-    reasonCode: v.optional(v.string()),
-});
-type InspectionResult = Infer<typeof inspectionResultValidator>;
-
-const sourcePreparationArgsValidator = v.object({
-    preparationId: v.id("sourceSelectionProposalRebuilds"),
-    sourceId: v.id("sources"),
-});
-
-export const inspectSource = internalAction({
-    args: sourcePreparationArgsValidator,
-    returns: inspectionResultValidator,
-    handler: inspectSourceDocument,
-});
-
-async function inspectSourceDocument(
-    ctx: ActionCtx,
-    args: Infer<typeof sourcePreparationArgsValidator>,
-): Promise<InspectionResult> {
-    let captureId: Id<"sourceCaptures"> | undefined;
-    try {
-        const reservation = await ctx.runMutation(
-            internal.sourceCaptures.reserveUpload,
-            args,
-        );
-        const { capture, source, company } = reservation;
-        captureId = capture._id;
-        if (!reservation.shouldExecute) {
-            return capture.status === "committed"
-                ? {
-                      status: capture.readingCompleteness ?? "partial",
-                      sourceCaptureId: capture._id,
-                      contentHash: capture.contentHash,
-                  }
-                : {
-                      status: "unavailable",
-                      sourceCaptureId: capture._id,
-                      reasonCode:
-                          capture.failureCode ?? "inspection_in_progress",
-                  };
-        }
-        const simulation = await ctx.runQuery(
-            internal.sourcesSimulation.enabled,
-            { runId: capture.runId },
-        );
-        if (
-            simulation &&
-            source.canonicalUrl !==
-                simulatedSourceCandidate(capture.runId).canonicalUrl
-        )
-            throw sourcePreparationError("acquisition_target_invalid");
-        if (
-            !simulation &&
-            source.origin !== "sec" &&
-            !process.env.EXA_API_KEY?.trim()
-        ) {
-            throw sourcePreparationError("missing_configuration");
-        }
-        const preparation = await ctx.runQuery(
-            internal.sourcePreparation.getForExecution,
-            { ...args, now: Date.now() },
-        );
-        let canonicalUrl: string;
-        let resolutionTimer: ReturnType<typeof setTimeout> | undefined;
-        try {
-            const destination = await Promise.race([
-                validatePublicSourceUrl(
-                    source.canonicalUrl,
-                    async (hostname) => {
-                        if (simulation) return ["93.184.216.34"];
-                        const addresses = await lookup(hostname, {
-                            all: true,
-                            verbatim: true,
-                        });
-                        return addresses.map((record) => record.address);
-                    },
-                ),
-                new Promise<never>((_resolve, reject) => {
-                    resolutionTimer = setTimeout(
-                        () =>
-                            reject(
-                                sourcePreparationError(
-                                    "source_url_unavailable",
-                                ),
-                            ),
-                        Math.max(
-                            1,
-                            Math.min(
-                                EXA_DISCOVERY_TIMEOUT_MS,
-                                (preparation.deadlineAt ?? 0) - Date.now(),
-                            ),
-                        ),
-                    );
-                }),
-            ]);
-            canonicalUrl = destination.canonicalUrl;
-        } catch (error) {
-            if (!(error instanceof PublicSourceUrlError)) throw error;
-            throw sourcePreparationError(
-                error.data.code === "dns_failed"
-                    ? "source_url_unavailable"
-                    : "source_url_not_public",
-            );
-        } finally {
-            clearTimeout(resolutionTimer);
-        }
-        const input: SourceDocumentRetrievalInput = {
-            canonicalUrl:
-                source.origin === "sec"
-                    ? (capture.resolvedUrl ?? canonicalUrl)
-                    : canonicalUrl,
-            origin: source.origin,
-            companyCik: company.cik,
-            providerReference: source.providerReference,
-            secAccessionNumber: source.secAccessionNumber,
-            secForm: source.secForm,
-            secPrimaryDocument: source.secPrimaryDocument,
-        };
-        const operationScope = `${preparation.operationKey}:step:source_preparation:source:${source._id}:capture:${capture._id}`;
-        const acquisitionOperation =
-            source.origin === "sec" ? "retrieve_filing_html" : "get_contents";
-        const acquisitionPlan = simulation
-            ? { attempt: 1, errorCode: undefined }
-            : await ctx.runQuery(
-                  internal.providerCalls.nextPreparationAttemptForInput,
-                  {
-                      preparationId: args.preparationId,
-                      sourceId: source._id,
-                      operation: acquisitionOperation,
-                      inputHash: capture.requestInputHash,
-                      now: Date.now(),
-                  },
-              );
-        if (!acquisitionPlan.attempt)
-            throw sourcePreparationError(
-                acquisitionPlan.errorCode ?? "retrieval_unavailable",
-            );
-        const firstAttempt = acquisitionPlan.attempt as 1 | 2 | 3;
-        const maxAttempts = firstAttempt === 3 ? 3 : 2;
-        let boundaryError: unknown;
-        const subrequestAttempts = new Map<string, number>();
-        const recordAttempt = async (attempt: {
-            operation: string;
-            operationKey: string;
-            status: "started" | "succeeded" | "failed";
-            attempt: number;
-            latencyMs?: number;
-            errorCode?: string;
-            usage?: unknown;
-            reportedCost?: number;
-        }) => {
-            try {
-                const key = `${attempt.operation}:${attempt.attempt}`;
-                let logicalAttempt =
-                    subrequestAttempts.get(key) ?? attempt.attempt;
-                if (
-                    attempt.status === "started" &&
-                    attempt.operation !== acquisitionOperation
-                ) {
-                    const plan = await ctx.runQuery(
-                        internal.providerCalls.nextPreparationAttemptForInput,
-                        {
-                            preparationId: args.preparationId,
-                            sourceId: source._id,
-                            operation: attempt.operation,
-                            inputHash: capture.requestInputHash,
-                            now: Date.now(),
-                        },
-                    );
-                    if (!plan.attempt)
-                        throw sourcePreparationError(
-                            plan.errorCode ?? "retrieval_unavailable",
-                        );
-                    logicalAttempt = plan.attempt;
-                    subrequestAttempts.set(key, logicalAttempt);
-                }
-                const recorded = await ctx.runMutation(
-                    internal.providerCalls.recordAttempt,
-                    {
-                        ...attempt,
-                        attempt: logicalAttempt,
-                        inputHash: capture.requestInputHash,
-                        runId: capture.runId,
-                        corpusRevisionId: preparation.corpusRevisionId,
-                        sourceId: source._id,
-                        preparationId: args.preparationId,
-                        executionGeneration: preparation.executionGeneration,
-                        workflowVersion: preparation.workflowVersion,
-                        stepKey: "source_preparation",
-                        service: source.origin === "sec" ? "sec" : "exa",
-                    },
-                );
-                if (attempt.status === "started" && !recorded.shouldExecute) {
-                    throw sourcePreparationError(
-                        recorded.errorCode ?? "attempt_already_recorded",
-                    );
-                }
-                return recorded;
-            } catch (error) {
-                boundaryError = error;
-                throw error;
-            }
-        };
-        const remainingMs = Math.max(
-            1,
-            (preparation.deadlineAt ?? 0) - Date.now(),
-        );
-        const retrieval =
-            source.origin === "sec"
-                ? await retrieveAndNormalizeSecFiling(
-                      preparationSecResolver(ctx, preparation, {
-                          recordAttempt,
-                          operationScope,
-                          firstAttempt,
-                          maxAttempts,
-                      }),
-                      input,
-                      async (resolvedUrl) => {
-                          await ctx.runMutation(
-                              internal.sourceCaptures.retainSecDocumentUrl,
-                              {
-                                  preparationId: args.preparationId,
-                                  captureId: capture._id,
-                                  resolvedUrl,
-                              },
-                          );
-                      },
-                  )
-                : await retrieveAndNormalizeExaFiling(
-                      createExaContentsAdapter(
-                          simulation
-                              ? {
-                                    getContents: async (urls) => ({
-                                        results: urls.map((url) => ({
-                                            id: "sources-simulation-v1",
-                                            url,
-                                            text: simulatedSourceText,
-                                        })),
-                                    }),
-                                }
-                              : createExaContentsClient(
-                                    process.env.EXA_API_KEY?.trim() ?? "",
-                                ),
-                          {
-                              ...(simulation
-                                  ? { maxAttempts: 1 }
-                                  : {
-                                        recordAttempt,
-                                        operationScope,
-                                        firstAttempt,
-                                        maxAttempts,
-                                    }),
-                              retryPolicy: "confirmed_response",
-                              timeoutMs: Math.min(
-                                  DEFAULT_EXA_CONTENTS_TIMEOUT_MS,
-                                  remainingMs,
-                              ),
-                          },
-                      ),
-                      input,
-                  );
-        if (boundaryError !== undefined) throw boundaryError;
-        if (
-            retrieval.status === "failed" ||
-            !retrieval.normalizedText ||
-            !retrieval.retrievalVersion ||
-            !retrieval.normalizerVersion
-        ) {
-            throw sourcePreparationError(
-                retrieval.errorCode ?? "retrieval_unavailable",
-            );
-        }
-        await ctx.runQuery(internal.sourceCaptures.assertActive, {
-            ...args,
-            now: Date.now(),
-        });
-        const prepared = prepareQualificationInput({
-            company,
-            canonicalUrl: retrieval.canonicalUrl,
-            title: source.title,
-            asOfTime: preparation.asOfTime ?? preparation.createdAt,
-            text: retrieval.normalizedText,
-            retrievalCompleteness:
-                retrieval.status === "partial" ? "partial" : "complete",
-        });
-        const readingCompleteness =
-            retrieval.status === "partial"
-                ? "partial"
-                : prepared.readingCompleteness;
-        const storageId = await ctx.storage.store(
-            new Blob([prepared.normalizedText], {
-                type: "text/plain; charset=utf-8",
-            }),
-        );
-        await ctx.runMutation(internal.sourceCaptures.attachStorage, {
-            preparationId: args.preparationId,
-            captureId,
-            storageId,
-        });
-        await ctx.runMutation(internal.sourceCaptures.finalize, {
-            ...(preparation.sourcesMission
-                ? {
-                      representationCompleteness:
-                          retrieval.status === "partial"
-                              ? ("partial" as const)
-                              : ("complete" as const),
-                      observedDestinations: extractObservedDestinations(
-                          retrieval.rawContent ?? retrieval.normalizedText,
-                          retrieval.canonicalUrl,
-                      ),
-                  }
-                : {}),
-            preparationId: args.preparationId,
-            captureId,
-            contentHash: prepared.request.document.contentHash,
-            byteCount: new TextEncoder().encode(prepared.normalizedText)
-                .byteLength,
-            resolvedUrl: retrieval.canonicalUrl,
-            retrievalVersion: retrieval.retrievalVersion,
-            normalizerVersion: `${retrieval.normalizerVersion}+${prepared.normalizerVersion}`,
-            retrievedAt: Date.now(),
-            readingCompleteness,
-            omittedPassageCount: Math.max(
-                readingCompleteness === "partial" ? 1 : 0,
-                prepared.omittedPassageCount,
-            ),
-        });
-        return {
-            status: readingCompleteness,
-            sourceCaptureId: captureId,
-            contentHash: prepared.request.document.contentHash,
-        };
-    } catch (error) {
-        const reasonCode = preparationFailureCode(error);
-        if (captureId) {
-            await ctx.runMutation(internal.sourceCaptures.markUnavailable, {
-                preparationId: args.preparationId,
-                captureId,
-                failureCode: reasonCode ?? "inspection_failed",
-            });
-        }
-        if (!reasonCode) throw error;
-        return {
-            status: "unavailable",
-            ...(captureId ? { sourceCaptureId: captureId } : {}),
-            reasonCode,
-        };
-    }
-}
 
 /** One durable source operation; intermediate captures and receipts remain independently persisted. */
 export const prepareSource = internalAction({

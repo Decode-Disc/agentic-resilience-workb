@@ -1,4 +1,4 @@
-import { fetchExaSearch } from "@convex/sourceSelectionProposalActions";
+import { fetchExaSearch } from "@convex/integrations/exaSearchClient";
 import { afterEach, expect, test, vi } from "vitest";
 
 afterEach(() => {
@@ -97,7 +97,7 @@ test("a preparation deadline cancels an in-flight search without another request
 
 test("candidate validation releases a stalled DNS lookup when preparation is cancelled", async () => {
     const { validateExaCandidates } = await import(
-        "@convex/exaDiscoveryActions"
+        "@convex/integrations/exaCandidateValidation"
     );
     const cancellation = new AbortController();
     const resolve = vi.fn<() => Promise<string[]>>(() => new Promise(() => {}));
