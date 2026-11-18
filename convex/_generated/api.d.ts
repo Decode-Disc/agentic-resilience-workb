@@ -40,6 +40,7 @@ import type * as domain_executionValidationContracts from "../domain/executionVa
 import type * as domain_executionValidationOperations from "../domain/executionValidationOperations.js";
 import type * as domain_framingContracts from "../domain/framingContracts.js";
 import type * as domain_framingEditAuthority from "../domain/framingEditAuthority.js";
+import type * as domain_framingProvenance from "../domain/framingProvenance.js";
 import type * as domain_invitationCodes from "../domain/invitationCodes.js";
 import type * as domain_manualSourceIntake from "../domain/manualSourceIntake.js";
 import type * as domain_previewCache from "../domain/previewCache.js";
@@ -260,6 +261,7 @@ declare const fullApi: ApiFromModules<{
   "domain/executionValidationOperations": typeof domain_executionValidationOperations;
   "domain/framingContracts": typeof domain_framingContracts;
   "domain/framingEditAuthority": typeof domain_framingEditAuthority;
+  "domain/framingProvenance": typeof domain_framingProvenance;
   "domain/invitationCodes": typeof domain_invitationCodes;
   "domain/manualSourceIntake": typeof domain_manualSourceIntake;
   "domain/previewCache": typeof domain_previewCache;

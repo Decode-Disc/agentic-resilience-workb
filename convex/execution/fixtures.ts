@@ -1241,7 +1241,27 @@ export const activateWorkbench = internalMutation({
     },
     returns: v.id("researchRuns"),
     handler: async (ctx, args): Promise<Id<"researchRuns">> => {
-        const { run } = await requireLocalFixtureRun(ctx, args);
+        const { run, context } = await requireLocalFixtureRun(ctx, args);
+        const bindings =
+            context.paidQualification?.scenarios ?? context.simulatedScenarios;
+        const binding = bindings?.find((entry) => entry.runId === run._id);
+        let framingRequest: { text: string; receivedAt: string } | undefined;
+        if (context.campaignLotId && binding) {
+            const { campaign } = await requireCampaignLot(
+                ctx,
+                context.campaignLotId,
+            );
+            if (campaign.manifest.version !== 1)
+                framingRequest = campaign.manifest.scenarios.find(
+                    (entry) => entry.id === binding.id,
+                )?.framingRequest;
+        }
+        if (
+            framingRequest &&
+            args.researchAngle !== undefined &&
+            args.researchAngle !== framingRequest.text
+        )
+            throw new Error("Campaign framing request mismatch");
         if (run.startMode === "framed") return run._id;
         if (run.workflowId)
             await workflow.cancel(ctx, run.workflowId as WorkflowId);
@@ -1253,11 +1273,28 @@ export const activateWorkbench = internalMutation({
             workflowId: undefined,
             pauseReason: undefined,
             researchAngle:
+                framingRequest?.text ??
                 args.researchAngle?.trim().slice(0, 2000) ??
                 "Simulation: propose a claims workflow research program.",
         });
         const initialModel = await initialCampaignWorkbenchModel(ctx, run);
         await initializeFraming(ctx, run._id, initialModel);
+        if (framingRequest) {
+            const delivery = await ctx.db
+                .query("agentMessageDeliveries")
+                .withIndex("by_run_and_key", (q) =>
+                    q
+                        .eq("runId", run._id)
+                        .eq("requestKey", "framing-intention"),
+                )
+                .unique();
+            if (delivery?.status !== "queued" || delivery.turnId)
+                throw new Error("Fresh initial delivery required");
+            // This fixture-only historical date is bound by the immutable campaign, before the scheduled pump can run.
+            await ctx.db.patch(delivery._id, {
+                createdAt: Date.parse(framingRequest.receivedAt),
+            });
+        }
         return run._id;
     },
 });

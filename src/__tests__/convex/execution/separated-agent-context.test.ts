@@ -465,3 +465,40 @@ test("all maximum-need accounting defects fit one correction without omitting af
         }
     }
 });
+
+test("directed framing selects v5 by default while retaining explicit v4 resolution", () => {
+    const retained = getAgentDefinition("workbench_v1", 4);
+    const directed = getAgentDefinition("workbench_v1", 5);
+    expect(getAgentDefinition("workbench_v1").version).toBe(5);
+    expect(directed.version).toBe(5);
+    expect(directed.operations).toHaveProperty("search_public_context");
+    expect(directed.operations).not.toHaveProperty("verify_public_context");
+    for (const [name, operation] of Object.entries(retained.operations)) {
+        if (name !== "verify_public_context")
+            expect(directed.operations[name]).toBe(operation);
+    }
+    expect(() => getAgentDefinition("workbench_v1", 3)).toThrow();
+});
+
+test.each([
+    "independent_scrutiny",
+    undefined,
+] as const)("coverage priority survives factual consultation including historical absence (%s)", async (preset) => {
+    const f = await seedWorkbench();
+    await f.t.run((ctx) => ctx.db.patch(f.runId, { coveragePreset: preset }));
+    const facts = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        return readWorkbenchFacts(ctx, run);
+    });
+    assert(facts.kind === "ready");
+    const consult = getAgentDefinition("workbench_v1", 5).consultationContext?.(
+        { contextRendering: "separated_v1", domain: facts.context },
+    );
+    expect(consult?.coveragePreset).toBe(preset ?? null);
+    expect(consult?.coverageGuidance).toBe(
+        preset
+            ? "Prioritize independent material that can test the account."
+            : "Coverage priority is unknown for this historical dossier.",
+    );
+});

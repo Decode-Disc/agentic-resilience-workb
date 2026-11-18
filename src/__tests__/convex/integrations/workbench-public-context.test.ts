@@ -1,13 +1,18 @@
 import { api, internal } from "@convex/_generated/api";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { MAX_EXA_TEXT_CHARACTERS } from "@convex/resourcePolicy";
 import { requestPinnedPublicSource } from "@convex/sourceActions";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
+const dnsLookup = vi.hoisted(() =>
+    vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
+);
 vi.mock("node:dns/promises", async (importOriginal) => {
     const actual = await importOriginal<typeof import("node:dns/promises")>();
-    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]);
+    const lookup = dnsLookup;
     return { ...actual, default: { ...actual, lookup }, lookup };
 });
 vi.mock("@convex/sourceActions", () => ({
@@ -68,16 +73,29 @@ afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
 });
-async function enqueueLookup(query: string, readings = 1) {
+async function enqueueLookup(
+    query: string,
+    readings = 1,
+    kind:
+        | "verify_public_context"
+        | "search_public_context"
+        | "read_public_context" = "verify_public_context",
+    originalText?: string,
+) {
     vi.stubEnv(
         "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
-        JSON.stringify({ searches: 1, readings }),
+        JSON.stringify({
+            searches: kind === "search_public_context" ? 5 : 1,
+            readings,
+        }),
     );
     const fixture = await seedWorkbench(
         false,
         nativePiFixtureRoute,
         undefined,
-        `Read ${query}`,
+        originalText ?? `Read ${query}`,
+        undefined,
+        kind !== "verify_public_context" ? 5 : 4,
     );
     rateLimiterTest.register(fixture.t);
     const active = await fixture.t.mutation(
@@ -103,11 +121,18 @@ async function enqueueLookup(query: string, readings = 1) {
             missionId: active.missionId,
             expectedGeneration: 1,
             cause: "public-context-lookup",
-            input: {
-                kind: "verify_public_context",
-                messageId: message._id,
-                query,
-            },
+            input:
+                kind === "read_public_context"
+                    ? {
+                          kind,
+                          messageId: message._id,
+                          target: { kind: "supplied", url: query },
+                      }
+                    : {
+                          kind,
+                          messageId: message._id,
+                          query,
+                      },
         },
     );
     return {
@@ -382,4 +407,1465 @@ test("a provider HTTP refusal retains the known response and typed error", async
             errorCode: "http_429",
         },
     ]);
+});
+
+test("public discovery returns dated leads without reading and deduplicates factual progress", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const contentsRequests: unknown[] = [];
+    const results = [
+        {
+            id: "old",
+            url: "https://example.com/april",
+            title: "April announcement",
+            publishedDate: "2026-04-09",
+        },
+        {
+            id: "unknown",
+            url: "https://example.org/context",
+            title: "Undated context",
+        },
+        {
+            id: "private",
+            url: "https://127.0.0.1/private",
+            title: "Private destination",
+        },
+    ];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url, init) => {
+            if (String(url).endsWith("/contents"))
+                contentsRequests.push(JSON.parse(init.body));
+            return Response.json({ results, costDollars: { total: 0.01 } });
+        }),
+    );
+    const f = await enqueueLookup(
+        "recent announcement",
+        1,
+        "search_public_context",
+    );
+    const first = await dispatchLookup(f);
+    assert(first.kind === "success", JSON.stringify(first));
+    expect(JSON.parse(first.valueJson)).toEqual({
+        searchId: f.requestId,
+        candidates: [
+            {
+                url: "https://example.com/april",
+                title: "April announcement",
+                publisher: "example.com",
+                publishedAt: "2026-04-09T00:00:00.000Z",
+            },
+            {
+                url: "https://example.org/context",
+                title: "Undated context",
+                publisher: "example.org",
+            },
+        ],
+    });
+    const progress = (await f.t.run((ctx) => ctx.db.get(f.missionId)))
+        ?.progressKeys;
+    expect(progress).toHaveLength(2);
+    expect(await dispatchLookup(f)).toEqual(first);
+    results.reverse();
+    const secondId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "reformulation",
+        input: {
+            kind: "search_public_context",
+            query: "reformulated announcement",
+            messageId: f.messageId,
+        },
+    });
+    const second = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: secondId,
+        expectedGeneration: 1,
+    });
+    assert(second.kind === "success", JSON.stringify(second));
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toEqual(progress);
+    expect(contentsRequests).toEqual([]);
+    expect(await providerReceipts(f)).toMatchObject([
+        {
+            operation: "framing_context_search",
+            status: "succeeded",
+            searchQuery:
+                "CCC Intelligent Solutions Holdings Inc.: recent announcement",
+        },
+        {
+            operation: "framing_context_search",
+            status: "succeeded",
+            searchQuery:
+                "CCC Intelligent Solutions Holdings Inc.: reformulated announcement",
+        },
+    ]);
+    expect(await f.t.run((ctx) => ctx.db.get(f.runId))).not.toHaveProperty(
+        "sourcePreparationId",
+    );
+    expect(
+        (await f.client.query(api.framing.get, { runId: f.runId }))?.revision,
+    ).toBe(1);
+});
+
+test.each([
+    "empty",
+    "unconfigured",
+    "unknown dispatch",
+] as const)("public discovery distinguishes %s without adopting progress or retrying", async (state) => {
+    vi.stubEnv("EXA_API_KEY", state === "unconfigured" ? "" : "fixture-only");
+    const transport = vi.fn(async () => {
+        if (state === "unknown dispatch")
+            throw new TypeError("Connection lost after dispatch");
+        return Response.json({ results: [], costDollars: { total: 0.007 } });
+    });
+    vi.stubGlobal("fetch", transport);
+    const f = await enqueueLookup(
+        "an unresolved event",
+        1,
+        "search_public_context",
+    );
+    const outcome = await dispatchLookup(f);
+    expect(outcome).toEqual(
+        state === "empty"
+            ? {
+                  kind: "success",
+                  valueJson: JSON.stringify({
+                      searchId: f.requestId,
+                      candidates: [],
+                  }),
+                  progressKeys: [],
+              }
+            : {
+                  kind: "unavailable",
+                  code:
+                      state === "unconfigured"
+                          ? "missing_configuration"
+                          : "framing_provider_failed",
+              },
+    );
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toEqual([]);
+    expect(await dispatchLookup(f)).toEqual(outcome);
+    expect(transport).toHaveBeenCalledTimes(state === "unconfigured" ? 0 : 1);
+    const receipts = await providerReceipts(f);
+    expect(receipts).toHaveLength(state === "unconfigured" ? 0 : 1);
+    if (state === "unknown dispatch")
+        expect(receipts[0]).toMatchObject({
+            status: "failed",
+            dispatchOutcome: "unknown",
+            retryable: false,
+        });
+});
+
+test.each([
+    "Keep the saved program unchanged.",
+    "Pause research.",
+])("public discovery refuses unauthorized analyst instructions before I/O: %s", async (text) => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const transport = vi.fn(() => {
+        throw new Error("Unauthorized I/O");
+    });
+    vi.stubGlobal("fetch", transport);
+    const f = await enqueueLookup(
+        "recent event",
+        1,
+        "search_public_context",
+        text,
+    );
+    expect(await dispatchLookup(f)).toEqual({
+        kind: "unavailable",
+        code: "instruction_not_authorized",
+    });
+    expect(transport).not.toHaveBeenCalled();
+    expect(await providerReceipts(f)).toEqual([]);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toEqual([]);
+});
+
+test("selected publication opens only the chosen retained discovery destination", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const contentRequests: unknown[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url, init) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "one",
+                            url: "https://example.com/one",
+                            title: "First lead",
+                            publishedDate: "2026-11-16",
+                        },
+                        {
+                            id: "two",
+                            url: "https://example.org/two",
+                            title: "Second lead",
+                            publishedDate: "2026-11-17",
+                        },
+                    ],
+                });
+            contentRequests.push(JSON.parse(init.body));
+            return Response.json({
+                results: [
+                    {
+                        id: "two",
+                        url: "https://example.org/two",
+                        text: "The second publication describes the changed validation rights.",
+                    },
+                ],
+            });
+        }),
+    );
+    const f = await enqueueLookup(
+        "changed validation rights",
+        2,
+        "search_public_context",
+    );
+    const search = await dispatchLookup(f);
+    assert(search.kind === "success");
+    const readId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "selected-publication",
+        input: {
+            kind: "read_public_context",
+            target: { kind: "candidate", searchId: f.requestId, index: 1 },
+            messageId: f.messageId,
+        },
+    });
+    const read = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: readId,
+        expectedGeneration: 1,
+    });
+    assert(read.kind === "success", JSON.stringify(read));
+    expect(JSON.parse(read.valueJson)).toMatchObject({
+        readId,
+        status: "observed",
+        reference: {
+            url: "https://example.org/two",
+            publisher: "example.org",
+            excerpt:
+                "The second publication describes the changed validation rights.",
+            publishedAt: "2026-11-17T00:00:00.000Z",
+        },
+    });
+    expect(contentRequests).toEqual([
+        expect.objectContaining({ urls: ["https://example.org/two"] }),
+    ]);
+    expect(await providerReceipts(f)).toMatchObject([
+        { operation: "framing_context_search" },
+        { operation: "framing_context_read" },
+    ]);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toHaveLength(3);
+});
+
+test("selected publication continues the retained representation to its decisive passage without reacquiring", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const decisive =
+        "On November 17, 2026, validation rights moved to the insurer.";
+    const text = `${"Background context. ".repeat(1500)}\n${decisive}`;
+    let acquisitions = 0;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "long",
+                            url: "https://example.com/long",
+                            title: "Detailed announcement",
+                            publishedDate: "2026-11-17",
+                        },
+                    ],
+                });
+            acquisitions++;
+            return Response.json({
+                results: [
+                    { id: "long", url: "https://example.com/long", text },
+                ],
+            });
+        }),
+    );
+    const f = await enqueueLookup(
+        "validation rights",
+        2,
+        "search_public_context",
+    );
+    assert((await dispatchLookup(f)).kind === "success");
+    let continuation: typeof f.requestId | undefined;
+    let content = "";
+    let documentHash: string | undefined;
+    do {
+        const readId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: f.missionId,
+                expectedGeneration: 1,
+                cause: "continue-publication",
+                input: {
+                    kind: "read_public_context",
+                    messageId: f.messageId,
+                    target: {
+                        kind: "candidate",
+                        searchId: f.requestId,
+                        index: 0,
+                    },
+                    ...(continuation ? { continuation } : {}),
+                },
+            },
+        );
+        const outcome = await f.t.action(
+            internal.execution.operations.dispatch,
+            { requestId: readId, expectedGeneration: 1 },
+        );
+        assert(outcome.kind === "success", JSON.stringify(outcome));
+        const page = JSON.parse(outcome.valueJson);
+        expect(page.document).toMatchObject({
+            contentHash: documentHash ?? expect.any(String),
+            characters: text.length,
+            acquisitionCompleteness: "unknown",
+        });
+        documentHash = page.document.contentHash;
+        expect(page.range.start).toBe(content.length);
+        content += page.reference.excerpt;
+        expect(page.range.end).toBe(content.length);
+        expect(
+            await f.t.action(internal.execution.operations.dispatch, {
+                requestId: readId,
+                expectedGeneration: 1,
+            }),
+        ).toEqual(outcome);
+        continuation = page.continuation;
+        if (content.length < text.length) expect(continuation).toBe(readId);
+        expect(content.length).toBeLessThanOrEqual(text.length);
+    } while (continuation);
+    expect(content).toBe(text);
+    expect(content).toContain(decisive);
+    expect(acquisitions).toBe(1);
+});
+
+test.each([
+    "article",
+    "SEC",
+] as const)("supplied publication opens an analyst's %s reference without a search", async (kind) => {
+    const url = kind === "SEC" ? secFiling : "https://example.org/article";
+    if (kind === "SEC") simulateSec();
+    else
+        simulatePublisher(
+            () =>
+                new Response(
+                    '<html><head><meta property="article:published_time" content="2026-11-17T00:00:00Z"></head><body>The insurer may retain validation rights.</body></html>',
+                    { headers: { "content-type": "text/html" } },
+                ),
+        );
+    const f = await enqueueLookup(url, 2, "read_public_context");
+    const result = await dispatchLookup(f);
+    assert(result.kind === "success", JSON.stringify(result));
+    expect(JSON.parse(result.valueJson)).toMatchObject({
+        readId: f.requestId,
+        status: "observed",
+        reference: {
+            url,
+            excerpt: expect.stringContaining(
+                kind === "SEC" ? "April 9, 2025" : "validation rights",
+            ),
+            publishedAt:
+                kind === "SEC"
+                    ? "2025-04-15T00:00:00.000Z"
+                    : "2026-11-17T00:00:00.000Z",
+            ...(kind === "SEC" ? { eventAt: "2025-04-09T00:00:00.000Z" } : {}),
+        },
+        document: { acquisitionCompleteness: "complete" },
+    });
+    const receipts = await providerReceipts(f);
+    expect(
+        receipts.every(
+            (receipt) => receipt.operation === "framing_context_read",
+        ),
+    ).toBe(true);
+    expect(receipts).toHaveLength(kind === "SEC" ? 2 : 1);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toHaveLength(1);
+});
+
+test("selected publication refuses invalid locators and retains prior readings after an inconclusive acquisition", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    let reads = 0;
+    const transport = vi.fn(async (url, init) => {
+        if (String(url).endsWith("/search"))
+            return Response.json({
+                results: [
+                    {
+                        id: "one",
+                        url: "https://example.com/one",
+                        title: "First publication",
+                    },
+                    {
+                        id: "two",
+                        url: "https://example.com/two",
+                        title: "Unreadable publication",
+                    },
+                ],
+            });
+        reads++;
+        const request = JSON.parse(init.body);
+        return Response.json({
+            results: [
+                {
+                    id: "content",
+                    url: request.urls[0],
+                    text:
+                        reads === 1
+                            ? "The first publication retains a useful passage."
+                            : "",
+                },
+            ],
+        });
+    });
+    vi.stubGlobal("fetch", transport);
+    const f = await enqueueLookup("publication", 2, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    const read = async (index: number) => {
+        const requestId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: f.missionId,
+                expectedGeneration: 1,
+                cause: `read-${index}`,
+                input: {
+                    kind: "read_public_context",
+                    messageId: f.messageId,
+                    target: { kind: "candidate", searchId: f.requestId, index },
+                },
+            },
+        );
+        return {
+            requestId,
+            outcome: await f.t.action(internal.execution.operations.dispatch, {
+                requestId,
+                expectedGeneration: 1,
+            }),
+        };
+    };
+    for (const index of [-1, 0.5, 2])
+        expect((await read(index)).outcome).toMatchObject({
+            kind: "unavailable",
+            code: "source_reference_not_observed",
+        });
+    expect(reads).toBe(0);
+    const first = await read(0);
+    assert(first.outcome.kind === "success");
+    const progress = (await f.t.run((ctx) => ctx.db.get(f.missionId)))
+        ?.progressKeys;
+    const empty = await read(1);
+    assert(empty.outcome.kind === "success", JSON.stringify(empty.outcome));
+    expect(JSON.parse(empty.outcome.valueJson)).toMatchObject({
+        status: "inconclusive",
+        readId: empty.requestId,
+    });
+    expect(JSON.parse(empty.outcome.valueJson).reference).toBeUndefined();
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toEqual(progress);
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: first.requestId,
+            expectedGeneration: 1,
+        }),
+    ).toEqual(first.outcome);
+    expect(reads).toBe(2);
+});
+
+test("selected publication settles a late acquisition but cannot adopt it after an analyst framing edit", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    let f: Lookup;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "lead",
+                            url: "https://example.com/late",
+                            title: "Announcement",
+                        },
+                    ],
+                });
+            await f.client.mutation(api.framing.save, {
+                runId: f.runId,
+                expectedRevision: 1,
+                requestKey: "newer-analyst-edit",
+                content: { scope: "New analyst scope", questions: [] },
+            });
+            return Response.json({
+                results: [
+                    {
+                        id: "late",
+                        url: "https://example.com/late",
+                        text: "Late passage must not advance this revised program.",
+                    },
+                ],
+                costDollars: { total: 0.001 },
+            });
+        }),
+    );
+    f = await enqueueLookup("announcement", 1, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    const progress = (await f.t.run((ctx) => ctx.db.get(f.missionId)))
+        ?.progressKeys;
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "late-read",
+            input: {
+                kind: "read_public_context",
+                messageId: f.messageId,
+                target: { kind: "candidate", searchId: f.requestId, index: 0 },
+            },
+        },
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "refused" });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toEqual(progress);
+    expect(
+        (await f.client.query(api.framing.get, { runId: f.runId }))?.content
+            .scope,
+    ).toBe("New analyst scope");
+    expect(await providerReceipts(f)).toMatchObject([
+        { operation: "framing_context_search", status: "succeeded" },
+        {
+            operation: "framing_context_read",
+            status: "succeeded",
+            reportedCost: 0.001,
+        },
+    ]);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(requestId)))?.adoptedAt,
+    ).toBeUndefined();
+});
+
+test("selected publication ledger refuses a different destination before reserving an acquisition", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+            Response.json({
+                results: [
+                    {
+                        id: "lead",
+                        url: "https://example.com/authorized",
+                        title: "Authorized lead",
+                    },
+                ],
+            }),
+        ),
+    );
+    const f = await enqueueLookup("announcement", 2, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "authorize-read",
+            input: {
+                kind: "read_public_context",
+                messageId: f.messageId,
+                target: { kind: "candidate", searchId: f.requestId, index: 0 },
+            },
+        },
+    );
+    await f.t.run((ctx) => ctx.db.patch(requestId, { status: "running" }));
+    const authority = await f.t.query(
+        internal.workbenchPublicContext.forExecution,
+        { requestId, expectedGeneration: 1 },
+    );
+    await expect(
+        f.t.mutation(internal.providerCalls.recordAttempt, {
+            missionId: authority.missionId,
+            runId: authority.runId,
+            workflowVersion: authority.workflowVersion,
+            corpusRevisionId: authority.corpusRevisionId,
+            executionGeneration: 1,
+            operationRequestId: requestId,
+            service: "exa",
+            operation: "framing_context_read",
+            stepKey: "framing_context_read",
+            operationKey: `workbench:${requestId}:framing_context_read`,
+            status: "started",
+            attempt: 1,
+            inputHash: sha256Hex(
+                stableStringify({
+                    urls: ["https://example.org/different"],
+                    options: {
+                        text: { maxCharacters: MAX_EXA_TEXT_CHARACTERS },
+                    },
+                }),
+            ),
+        }),
+    ).rejects.toThrow("attempt_identity_conflict");
+    expect(await providerReceipts(f)).toHaveLength(1);
+});
+
+test("selected publication and supplied publication share passage progress across distinct read requests", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const url = "https://example.com/same";
+    const text = "The insurer retains validation rights.";
+    simulatePublisher(
+        () => new Response(text, { headers: { "content-type": "text/plain" } }),
+    );
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (endpoint) =>
+            Response.json({
+                results: String(endpoint).endsWith("/search")
+                    ? [{ id: "same", url, title: "Validation rights" }]
+                    : [{ id: "same", url, text }],
+            }),
+        ),
+    );
+    const f = await enqueueLookup(
+        "validation rights",
+        2,
+        "search_public_context",
+        `Investigate validation rights using ${url}`,
+    );
+    assert((await dispatchLookup(f)).kind === "success");
+    const readIds = [];
+    for (const target of [
+        { kind: "candidate" as const, searchId: f.requestId, index: 0 },
+        { kind: "supplied" as const, url },
+    ]) {
+        const requestId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: f.missionId,
+                expectedGeneration: 1,
+                cause: "same-passage",
+                input: {
+                    kind: "read_public_context",
+                    messageId: f.messageId,
+                    target,
+                },
+            },
+        );
+        readIds.push(requestId);
+        const result = await f.t.action(
+            internal.execution.operations.dispatch,
+            { requestId, expectedGeneration: 1 },
+        );
+        assert(result.kind === "success", JSON.stringify(result));
+        expect(JSON.parse(result.valueJson)).toMatchObject({
+            readId: requestId,
+            reference: { url, excerpt: text },
+        });
+        expect(
+            (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+        ).toHaveLength(2);
+    }
+    expect(readIds[0]).not.toBe(readIds[1]);
+});
+
+test("selected publication continues past a blank first extent and attributes a date found in the next passage", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const text = `${" ".repeat(8192)}BOSTON, November 17, 2026 (GLOBE NEWSWIRE) — The insurer now retains validation rights.`;
+    let acquisitions = 0;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "undated",
+                            url: "https://example.com/dated-later",
+                            title: "Undated lead",
+                        },
+                    ],
+                });
+            acquisitions++;
+            return Response.json({
+                results: [
+                    {
+                        id: "article",
+                        url: "https://example.com/dated-later",
+                        text,
+                    },
+                ],
+            });
+        }),
+    );
+    const f = await enqueueLookup(
+        "validation rights",
+        1,
+        "search_public_context",
+    );
+    assert((await dispatchLookup(f)).kind === "success");
+    const target = {
+        kind: "candidate" as const,
+        searchId: f.requestId,
+        index: 0,
+    };
+    const firstId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "blank-extent",
+        input: { kind: "read_public_context", messageId: f.messageId, target },
+    });
+    const first = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: firstId,
+        expectedGeneration: 1,
+    });
+    assert(first.kind === "success");
+    expect(JSON.parse(first.valueJson)).toMatchObject({
+        status: "inconclusive",
+        continuation: firstId,
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toHaveLength(1);
+    const secondId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "dated-extent",
+        input: {
+            kind: "read_public_context",
+            messageId: f.messageId,
+            target,
+            continuation: firstId,
+        },
+    });
+    const second = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: secondId,
+        expectedGeneration: 1,
+    });
+    assert(second.kind === "success", JSON.stringify(second));
+    expect(JSON.parse(second.valueJson)).toMatchObject({
+        status: "observed",
+        reference: {
+            publishedAt: "2026-11-17T00:00:00.000Z",
+            excerpt: expect.stringContaining("validation rights"),
+        },
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toHaveLength(2);
+    expect(acquisitions).toBe(1);
+});
+
+test.each([
+    "different target",
+    "search cursor",
+    "unadopted page",
+    "foreign dossier",
+    "foreign mission",
+    "stale revision",
+] as const)("selected publication refuses a %s continuation before external I/O", async (failure) => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    let acquisitions = 0;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "one",
+                            url: "https://example.com/one",
+                            title: "First",
+                        },
+                        {
+                            id: "two",
+                            url: "https://example.org/two",
+                            title: "Second",
+                        },
+                    ],
+                });
+            acquisitions++;
+            return Response.json({
+                results: [
+                    {
+                        id: "long",
+                        url: "https://example.com/one",
+                        text: "Retained context. ".repeat(1000),
+                    },
+                ],
+            });
+        }),
+    );
+    const f = await enqueueLookup("event", 1, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    const target = {
+        kind: "candidate" as const,
+        searchId: f.requestId,
+        index: 0,
+    };
+    const firstId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "retained-read",
+        input: { kind: "read_public_context", messageId: f.messageId, target },
+    });
+    const first = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: firstId,
+        expectedGeneration: 1,
+    });
+    assert(first.kind === "success");
+    expect(JSON.parse(first.valueJson).continuation).toBe(firstId);
+    if (failure === "unadopted page")
+        await f.t.run((ctx) => ctx.db.patch(firstId, { adoptedAt: undefined }));
+    if (failure === "foreign dossier")
+        await f.t.run(async (ctx) => {
+            const run = await ctx.db.get(f.runId);
+            assert(run);
+            const { _id, _creationTime, ...fields } = run;
+            const foreignId = await ctx.db.insert("researchRuns", fields);
+            await ctx.db.patch(firstId, { runId: foreignId });
+        });
+    if (failure === "foreign mission")
+        await f.t.run(async (ctx) => {
+            const mission = await ctx.db.get(f.missionId);
+            assert(mission);
+            const { _id, _creationTime, ...fields } = mission;
+            const foreignId = await ctx.db.insert("agentMissions", fields);
+            await ctx.db.patch(firstId, { missionId: foreignId });
+        });
+    if (failure === "stale revision")
+        await f.client.mutation(api.framing.save, {
+            runId: f.runId,
+            expectedRevision: 1,
+            requestKey: "new-scope",
+            content: { scope: "Analyst's new activity", questions: [] },
+        });
+    const nextId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "invalid-continuation",
+        input: {
+            kind: "read_public_context",
+            messageId: f.messageId,
+            target:
+                failure === "different target"
+                    ? { ...target, index: 1 }
+                    : target,
+            continuation: failure === "search cursor" ? f.requestId : firstId,
+        },
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: nextId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({
+        kind: "unavailable",
+        code: "source_reference_not_observed",
+    });
+    expect(acquisitions).toBe(1);
+    expect(await providerReceipts(f)).toHaveLength(2);
+});
+
+test("selected publication reports acquisition truncation separately from the returned extent", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const text = "x".repeat(MAX_EXA_TEXT_CHARACTERS);
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) =>
+            Response.json({
+                results: String(url).endsWith("/search")
+                    ? [
+                          {
+                              id: "long",
+                              url: "https://example.com/limited",
+                              title: "Long publication",
+                          },
+                      ]
+                    : [
+                          {
+                              id: "long",
+                              url: "https://example.com/limited",
+                              text,
+                          },
+                      ],
+            }),
+        ),
+    );
+    const f = await enqueueLookup(
+        "long publication",
+        1,
+        "search_public_context",
+    );
+    assert((await dispatchLookup(f)).kind === "success");
+    const readId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "limited-read",
+        input: {
+            kind: "read_public_context",
+            messageId: f.messageId,
+            target: { kind: "candidate", searchId: f.requestId, index: 0 },
+        },
+    });
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: readId,
+        expectedGeneration: 1,
+    });
+    assert(result.kind === "success", JSON.stringify(result));
+    const page = JSON.parse(result.valueJson);
+    expect(page.document).toMatchObject({
+        characters: text.length,
+        acquisitionCompleteness: "partial",
+    });
+    expect(page.range.end).toBeLessThan(text.length);
+    expect(page.continuation).toBe(readId);
+});
+
+test.each([
+    "missing grant",
+    "paid work disabled",
+    "unknown dispatch",
+    "HTTP failure",
+    "DNS failure",
+    "changed destination",
+] as const)("selected publication contains %s without adopting a passage or retrying", async (failure) => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    let acquisitions = 0;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "lead",
+                            url: "https://example.com/lead",
+                            title: "Observed lead",
+                        },
+                    ],
+                });
+            acquisitions++;
+            if (failure === "unknown dispatch")
+                throw new TypeError("Lost response");
+            if (failure === "HTTP failure")
+                return new Response("Unavailable", { status: 503 });
+            return Response.json({
+                results: [
+                    {
+                        id: "changed",
+                        url: "https://example.org/unrelated",
+                        text: "Unrelated publication.",
+                    },
+                ],
+            });
+        }),
+    );
+    const f = await enqueueLookup("event", 1, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    if (failure === "missing grant")
+        await f.t.run((ctx) =>
+            ctx.db.patch(f.runId, { publicContextAllowance: undefined }),
+        );
+    if (failure === "paid work disabled")
+        await f.t.run((ctx) =>
+            ctx.db.insert("paidWorkControls", {
+                key: "global",
+                enabled: false,
+                updatedAt: Date.now(),
+            }),
+        );
+    if (failure === "DNS failure") {
+        const dns = await import("node:dns/promises");
+        vi.mocked(dns.lookup).mockRejectedValueOnce(
+            new Error("DNS unavailable"),
+        );
+    }
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "unavailable-publication",
+            input: {
+                kind: "read_public_context",
+                messageId: f.messageId,
+                target: { kind: "candidate", searchId: f.requestId, index: 0 },
+            },
+        },
+    );
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    const codes = {
+        "missing grant": "public_context_allowance_unavailable",
+        "paid work disabled": "paid_work_disabled",
+        "unknown dispatch": "framing_provider_failed",
+        "HTTP failure": "http_503",
+        "DNS failure": "source_url_unavailable",
+    };
+    if (failure === "changed destination") {
+        assert(result.kind === "success");
+        expect(JSON.parse(result.valueJson)).toMatchObject({
+            status: "inconclusive",
+        });
+        expect(JSON.parse(result.valueJson).reference).toBeUndefined();
+    } else
+        expect(result).toMatchObject({
+            kind: "unavailable",
+            code: codes[failure],
+        });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toHaveLength(1);
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toEqual(result);
+    expect(acquisitions).toBe(
+        ["missing grant", "paid work disabled", "DNS failure"].includes(failure)
+            ? 0
+            : 1,
+    );
+    const receipts = await providerReceipts(f);
+    if (failure === "unknown dispatch")
+        expect(receipts.at(-1)).toMatchObject({
+            status: "failed",
+            dispatchOutcome: "unknown",
+            retryable: false,
+        });
+    if (failure === "HTTP failure")
+        expect(receipts.at(-1)).toMatchObject({
+            status: "failed",
+            dispatchOutcome: "response_received",
+            retryable: false,
+        });
+    if (failure === "DNS failure")
+        expect(receipts.at(-1)).toMatchObject({
+            status: "failed",
+            dispatchOutcome: "not_dispatched",
+            retryable: false,
+        });
+});
+
+test("selected publication reuses the known SEC filing date without fetching submissions", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    simulateSec();
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+            Response.json({
+                results: [
+                    {
+                        id: "filing",
+                        url: secFiling,
+                        title: "Material event",
+                        publishedDate: "2025-04-15",
+                    },
+                ],
+            }),
+        ),
+    );
+    const f = await enqueueLookup("filing", 1, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "selected-filing",
+            input: {
+                kind: "read_public_context",
+                messageId: f.messageId,
+                target: { kind: "candidate", searchId: f.requestId, index: 0 },
+            },
+        },
+    );
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    assert(result.kind === "success", JSON.stringify(result));
+    expect(JSON.parse(result.valueJson)).toMatchObject({
+        reference: {
+            publishedAt: "2025-04-15T00:00:00.000Z",
+            eventAt: "2025-04-09T00:00:00.000Z",
+        },
+    });
+    expect(
+        vi.mocked(requestPinnedPublicSource).mock.calls.map(([url]) => url),
+    ).toEqual([secFiling]);
+    expect(await providerReceipts(f)).toHaveLength(2);
+});
+
+test("selected publication exhausts the reading grant without losing an earlier passage", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    let acquisitions = 0;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "one",
+                            url: "https://example.com/one",
+                            title: "First",
+                        },
+                        {
+                            id: "two",
+                            url: "https://example.org/two",
+                            title: "Second",
+                        },
+                    ],
+                });
+            acquisitions++;
+            return Response.json({
+                results: [
+                    {
+                        id: "one",
+                        url: "https://example.com/one",
+                        text: "The earlier useful passage remains available.",
+                    },
+                ],
+            });
+        }),
+    );
+    const f = await enqueueLookup("event", 1, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    const results = [];
+    for (const index of [0, 1]) {
+        const requestId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: f.missionId,
+                expectedGeneration: 1,
+                cause: `read-${index}`,
+                input: {
+                    kind: "read_public_context",
+                    messageId: f.messageId,
+                    target: { kind: "candidate", searchId: f.requestId, index },
+                },
+            },
+        );
+        results.push({
+            requestId,
+            outcome: await f.t.action(internal.execution.operations.dispatch, {
+                requestId,
+                expectedGeneration: 1,
+            }),
+        });
+    }
+    expect(results[0]?.outcome.kind).toBe("success");
+    expect(results[1]?.outcome).toEqual({
+        kind: "unavailable",
+        code: "public_context_allowance_exhausted",
+    });
+    assert(results[0]);
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: results[0].requestId,
+            expectedGeneration: 1,
+        }),
+    ).toEqual(results[0].outcome);
+    expect(acquisitions).toBe(1);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toHaveLength(3);
+});
+
+test("selected publication settles an in-flight response after cancellation without adopting it", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    let f: Lookup;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "lead",
+                            url: "https://example.com/late",
+                            title: "Announcement",
+                        },
+                    ],
+                });
+            const conversation = await f.client.query(
+                api.execution.conversations.get,
+                { runId: f.runId },
+            );
+            assert(conversation.activeTurn);
+            await f.client.mutation(api.execution.conversations.stopResponse, {
+                runId: f.runId,
+                turnId: conversation.activeTurn._id,
+            });
+            return Response.json({
+                results: [
+                    {
+                        id: "late",
+                        url: "https://example.com/late",
+                        text: "Cancelled passage.",
+                    },
+                ],
+                costDollars: { total: 0.001 },
+            });
+        }),
+    );
+    f = await enqueueLookup("event", 1, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "cancelled-read",
+            input: {
+                kind: "read_public_context",
+                messageId: f.messageId,
+                target: { kind: "candidate", searchId: f.requestId, index: 0 },
+            },
+        },
+    );
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    expect(result).toMatchObject({ kind: "refused" });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(requestId)))?.adoptedAt,
+    ).toBeUndefined();
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toHaveLength(1);
+    expect((await providerReceipts(f)).at(-1)).toMatchObject({
+        status: "succeeded",
+        reportedCost: 0.001,
+        dispatchOutcome: "response_received",
+    });
+});
+
+test.each([
+    "cancel",
+    "edit",
+] as const)("selected publication revoked during DNS never dispatches Contents (%s)", async (revocation) => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    let contents = 0;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "lead",
+                            url: "https://example.com/rights",
+                            title: "Rights",
+                        },
+                    ],
+                });
+            contents++;
+            return Response.json({
+                results: [
+                    {
+                        id: "lead",
+                        url: "https://example.com/rights",
+                        text: "Late reading.",
+                    },
+                ],
+            });
+        }),
+    );
+    const f = await enqueueLookup("rights", 1, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "held-dns",
+            input: {
+                kind: "read_public_context",
+                messageId: f.messageId,
+                target: { kind: "candidate", searchId: f.requestId, index: 0 },
+            },
+        },
+    );
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    dnsLookup.mockImplementationOnce(async () => {
+        entered();
+        await held;
+        return [{ address: "93.184.216.34", family: 4 }];
+    });
+    const dispatch = f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    await started;
+    try {
+        if (revocation === "cancel") {
+            const conversation = await f.client.query(
+                api.execution.conversations.get,
+                { runId: f.runId },
+            );
+            assert(conversation.activeTurn);
+            await f.client.mutation(api.execution.conversations.stopResponse, {
+                runId: f.runId,
+                turnId: conversation.activeTurn._id,
+            });
+        } else {
+            await f.client.mutation(api.framing.save, {
+                runId: f.runId,
+                expectedRevision: 1,
+                requestKey: "during-dns",
+                content: { scope: "Analyst's changed scope", questions: [] },
+            });
+        }
+    } finally {
+        release();
+    }
+    await dispatch;
+    expect(contents).toBe(0);
+    expect((await providerReceipts(f)).at(-1)).toMatchObject({
+        status: "failed",
+        dispatchOutcome: "not_dispatched",
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(requestId)))?.adoptedAt,
+    ).toBeUndefined();
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toHaveLength(1);
+}, 30000);
+
+test("conditional questions share one retained passage in the actual mission context", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { estimateTextTokens } = await import(
+        "@earendil-works/pi-ai/utils/estimate"
+    );
+    const material = readFileSync(
+        "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/nvidia-governance.html",
+        "utf8",
+    );
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) =>
+            String(url).endsWith("/search")
+                ? Response.json({
+                      results: [
+                          {
+                              id: "rights",
+                              url: "https://example.com/rights",
+                              title: "Replay fixture",
+                              publishedDate: "2026-11-12",
+                          },
+                      ],
+                  })
+                : Response.json({
+                      results: [
+                          {
+                              id: "rights",
+                              url: "https://example.com/rights",
+                              text: material,
+                          },
+                      ],
+                  }),
+        ),
+    );
+    const f = await enqueueLookup("rights", 1, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    const readId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "shared-reading",
+        input: {
+            kind: "read_public_context",
+            messageId: f.messageId,
+            target: { kind: "candidate", searchId: f.requestId, index: 0 },
+        },
+    });
+    const reading = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: readId,
+        expectedGeneration: 1,
+    });
+    assert(reading.kind === "success");
+    const reference = JSON.parse(reading.valueJson).reference;
+    const questions = ["a", "b", "c"].map((id) => ({
+        id,
+        shortLabel: id,
+        text: `Which ${id} workflow decisions depend on the platform?`,
+        rationale: "Test control.",
+    }));
+    const editId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "shared-conditions",
+        input: {
+            kind: "adjust_framing",
+            messageId: f.messageId,
+            expectedRevision: 1,
+            content: { scope: "Company workflows", questions },
+            eventBasis: {
+                kind: "open",
+                conditions: questions.map((question) => ({
+                    questionId: question.id,
+                    hypothesis: `the ${question.id} condition holds`,
+                    basis: { kind: "public" as const, readIds: [readId] },
+                })),
+            },
+        },
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: editId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "success" });
+    const context = await f.t.query(internal.execution.context.build, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+    });
+    assert(context.kind === "ready");
+    const wire = JSON.parse(context.inputJson);
+    const projected = JSON.stringify(wire.domain.framing.conditionReferences);
+    const copies =
+        projected.split(JSON.stringify(reference.excerpt).slice(1, -1)).length -
+        1;
+    const measurements = {
+        passageCharacters: reference.excerpt.length,
+        bytes: new TextEncoder().encode(projected).length,
+        estimatedTokens: estimateTextTokens(projected),
+    };
+    process.stdout.write(
+        `Conditional provenance real-capture sizing ${JSON.stringify(measurements)}\n`,
+    );
+    expect(copies).toBe(1);
+    expect(wire.domain.framing.conditionReferences).toEqual([
+        { readId, ...reference },
+    ]);
+    for (const condition of wire.domain.framing.eventBasis.conditions)
+        expect(condition.basis.readIds).toEqual([readId]);
 });

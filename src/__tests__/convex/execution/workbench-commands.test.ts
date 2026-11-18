@@ -268,8 +268,15 @@ test.each([
     ).toEqual([]);
 });
 
-async function startedWorkbench(local = true) {
-    const setup = await seedWorkbench(local);
+async function startedWorkbench(local = true, version?: 4 | 5) {
+    const setup = await seedWorkbench(
+        local,
+        undefined,
+        60000,
+        undefined,
+        undefined,
+        version,
+    );
     await setup.client.mutation(api.framing.save, {
         runId: setup.runId,
         expectedRevision: 1,
@@ -704,4 +711,73 @@ test("an approval decision is recorded as a control exchange for the native hist
     expect(await f.t.run((ctx) => ctx.db.get(entry.messageId))).toMatchObject({
         nativeControlStatus: "recorded",
     });
+});
+
+test.each([
+    4, 5,
+] as const)("supported pinned v%s retains slash commands and exactly-once effects across default changes", async (version) => {
+    const { t, client, runId } = await startedWorkbench(true, version);
+    expect(
+        (await client.query(api.workbench.snapshot, { runId }))
+            .availableCommands,
+    ).toContain("/pause");
+    const pauseInput = {
+        runId,
+        requestKey: "pinned-pause",
+        command: "/pause" as const,
+        expectedGeneration: 1,
+    };
+    const pause = await client.mutation(api.workbench.command, pauseInput);
+    expect(pause.outcome).toBe("applied");
+    await t.mutation(internal.execution.researchControl.checkpoint, { runId });
+    expect(
+        (await client.query(api.workbench.snapshot, { runId }))
+            .availableCommands,
+    ).toContain("/resume");
+    const resumeInput = {
+        runId,
+        requestKey: "pinned-resume",
+        command: "/resume" as const,
+        expectedGeneration: 2,
+    };
+    const resume = await client.mutation(api.workbench.command, resumeInput);
+    expect(resume.outcome).toBe("applied");
+    expect(await client.mutation(api.workbench.command, pauseInput)).toEqual(
+        pause,
+    );
+    expect(await client.mutation(api.workbench.command, resumeInput)).toEqual(
+        resume,
+    );
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        executionGeneration: 3,
+        executionStatus: "running",
+    });
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("agentConversations")
+                .withIndex("by_run", (q) => q.eq("runId", runId))
+                .unique(),
+        ),
+    ).toMatchObject({
+        definitionId: "workbench_v1",
+        definitionVersion: version,
+    });
+    const messages = await client.query(
+        api.execution.conversations.listMessages,
+        { runId, paginationOpts: { numItems: 20, cursor: null } },
+    );
+    expect(
+        messages.page.filter(
+            (message) => message.role === "user" && message.text === "/pause",
+        ),
+    ).toHaveLength(1);
+    expect(
+        messages.page.filter(
+            (message) => message.role === "user" && message.text === "/resume",
+        ),
+    ).toHaveLength(1);
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
 });

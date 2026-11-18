@@ -13,17 +13,56 @@ const analystEvent = v.object({
     excerpt: v.string(),
 });
 
-export const framingEventBasisInput = v.union(
+const publicReadEvent = v.object({
+    kind: v.literal("public"),
+    label: v.string(),
+    readIds: v.array(v.id("agentOperationRequests")),
+});
+export const provisionalOpenEvent = v.object({
+    kind: v.literal("open"),
+    activityExcerpt: v.optional(v.string()),
+    conditions: v.optional(
+        v.array(
+            v.object({
+                questionId: v.string(),
+                hypothesis: v.string(),
+                basis: v.union(
+                    analystEvent,
+                    v.object({
+                        kind: v.literal("public"),
+                        readIds: v.array(v.id("agentOperationRequests")),
+                    }),
+                ),
+            }),
+        ),
+    ),
+});
+export const legacyFramingEventBasisInput = v.union(
     noEvent,
     openEvent,
     analystEvent,
     publicEvent,
 );
+export const directedFramingEventBasisInput = v.union(
+    noEvent,
+    provisionalOpenEvent,
+    analystEvent,
+    publicReadEvent,
+);
+
+export const framingEventBasisInput = v.union(
+    noEvent,
+    provisionalOpenEvent,
+    analystEvent,
+    publicEvent,
+    publicReadEvent,
+);
 export const framingEventBasis = v.union(
     noEvent,
-    openEvent,
+    provisionalOpenEvent,
     analystEvent.extend({ messageId: v.id("agentMessageDeliveries") }),
     publicEvent,
+    publicReadEvent,
 );
 
 export const framingQuestionValidator = v.object({

@@ -29,6 +29,7 @@ import {
 import { SourceReviewReads } from "./sourceReviewReads";
 import {
     completeSources,
+    coveragePresetGuidance,
     readEngagedSourcesWork,
     requireSourcesPreparation,
     sourcesCompletionAccounting,
@@ -360,6 +361,10 @@ export const sourcesDefinition: AgentDefinition & { id: "sources_v1" } = {
                     websiteUrl: company.websiteUrl ?? null,
                 },
                 originalRequest: run.researchAngle ?? null,
+                coveragePolicy: state.data.coveragePolicy ?? null,
+                coverageGuidance: coveragePresetGuidance(
+                    state.data.coveragePolicy?.preset,
+                ),
                 framing: research.framing
                     ? {
                           revision: research.framing.revision,

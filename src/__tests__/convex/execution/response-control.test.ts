@@ -747,7 +747,7 @@ test("an enabled controller reviews the first reply even without operations", as
 });
 
 test("the actual Pi worker delivers the reminder and publishes only the revised explanation", async () => {
-    const { workbenchDefinition } = await import(
+    const { directedWorkbenchDefinition: workbenchDefinition } = await import(
         "@convex/domain/workbenchAgent"
     );
     const generated = vi
@@ -1350,7 +1350,7 @@ test("a model cannot request the host review operation", async () => {
 });
 
 test("a corrective model attempting tools cannot obtain another generation", async () => {
-    const { workbenchDefinition } = await import(
+    const { directedWorkbenchDefinition: workbenchDefinition } = await import(
         "@convex/domain/workbenchAgent"
     );
     const generated = vi

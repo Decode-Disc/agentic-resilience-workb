@@ -3,7 +3,10 @@ import { conversationValidationDefinition } from "@convex/domain/conversationVal
 import { executionValidationDefinition } from "@convex/domain/executionValidationAgent";
 import { savedMaterialInspectionDefinition } from "@convex/domain/savedMaterialInspection";
 import { sourcesDefinition } from "@convex/domain/sourcesAgent";
-import { workbenchDefinition } from "@convex/domain/workbenchAgent";
+import {
+    directedWorkbenchDefinition,
+    workbenchDefinition,
+} from "@convex/domain/workbenchAgent";
 import {
     type AgentDefinition,
     agentMethodInstructions,
@@ -18,7 +21,7 @@ import { operationResultSchema } from "./operationResults";
 function definitions() {
     return {
         [sourcesDefinition.id]: sourcesDefinition,
-        [workbenchDefinition.id]: workbenchDefinition,
+        [directedWorkbenchDefinition.id]: directedWorkbenchDefinition,
         [conversationValidationDefinition.id]: conversationValidationDefinition,
         [executionValidationDefinition.id]: executionValidationDefinition,
         [savedMaterialInspectionDefinition.id]:
@@ -99,9 +102,13 @@ export function bindAgentDefinition(
     };
 }
 
+function supportedDefinitions(): readonly AgentDefinition[] {
+    return [...Object.values(definitions()), workbenchDefinition];
+}
+
 /** Enumerates the exact versioned bindings accepted by runtime resolution. */
 export function registeredAgentDefinitions(): readonly AgentDefinition[] {
-    return Object.values(definitions()).map(bindAgentDefinition);
+    return supportedDefinitions().map(bindAgentDefinition);
 }
 
 let operations: Map<string, AgentOperationDefinition> | undefined;
@@ -110,7 +117,7 @@ function registeredOperations() {
     const entries = new Map<string, AgentOperationDefinition>(
         Object.entries(commonOperations),
     );
-    for (const definition of Object.values(definitions())) {
+    for (const definition of supportedDefinitions()) {
         for (const [name, operation] of Object.entries(definition.operations)) {
             assertOperationContract(name, operation);
             const existing = entries.get(name);
@@ -135,7 +142,7 @@ export function getAgentDefinition(
 ): AgentDefinition {
     const current = definitions();
     const selectedVersion = version ?? current[id].version;
-    const definition = [...Object.values(current)].find(
+    const definition = supportedDefinitions().find(
         (definition) =>
             definition.id === id && definition.version === selectedVersion,
     );

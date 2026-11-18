@@ -991,6 +991,7 @@ export default defineSchema({
         ])
         .index("by_passage_key", ["passageKey"]),
     providerCalls: defineTable({
+        searchQuery: v.optional(v.string()),
         modelContextWindowTokens: v.optional(v.number()),
         reservedMaxOutputTokens: v.optional(v.number()),
         operationRequestId: v.optional(v.id("agentOperationRequests")),

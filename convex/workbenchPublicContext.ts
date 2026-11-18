@@ -1,9 +1,12 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
+import { stableStringify } from "@convex/domain/sourcePassages";
 import {
     explicitFramingPreservation,
     explicitResearchCommand,
     publicContextAllowanceValidator,
+    publicReadResultValidator,
+    publicSearchResultValidator,
 } from "@convex/domain/workbenchContracts";
 import { requireMissionAuthority } from "@convex/execution/authority";
 import {
@@ -11,15 +14,24 @@ import {
     requireInstructionVersion,
 } from "@convex/execution/conversations";
 import { executionError } from "@convex/execution/errors";
+import { historyTextFragment } from "@convex/execution/journal";
 import { missionScope } from "@convex/execution/missionData";
+import { operationObservationRange } from "@convex/execution/retainedText";
 import { secSubmissionsUrl } from "@convex/integrations/sec";
+import { framingReplaySchema } from "@convex/qualificationCampaignPolicy";
 import { requireCampaignLot } from "@convex/qualificationCampaigns";
 import {
     DOCUMENTARY_SEARCH_QUERY_MAX_CHARS,
+    MAX_OPERATION_RESULT_BYTES,
     SOURCES_ENVELOPE_MAX_COUNT,
 } from "@convex/resourcePolicy";
-import { readWorkbenchQualification } from "@convex/runWorkspace";
-import { v } from "convex/values";
+import {
+    readWorkbenchQualification,
+    requireBrowserFixtureContext,
+    requireBrowserTestRunOwner,
+} from "@convex/runWorkspace";
+import { type Infer, v } from "convex/values";
+import { zodToConvex } from "convex-helpers/server/zod4";
 import { validate } from "convex-helpers/validators";
 
 type SuppliedReference = {
@@ -71,7 +83,9 @@ export async function requirePublicContextRequest(
     const request = await ctx.db.get(requestId);
     if (
         !request?.missionId ||
-        request.input.kind !== "verify_public_context" ||
+        (request.input.kind !== "verify_public_context" &&
+            request.input.kind !== "search_public_context" &&
+            request.input.kind !== "read_public_context") ||
         request.status !== "running" ||
         request.expectedGeneration !== expectedGeneration
     )
@@ -82,6 +96,12 @@ export async function requirePublicContextRequest(
         expectedGeneration,
     );
     await requireInstructionVersion(ctx, mission, request.instructionVersion);
+    if (
+        (request.input.kind === "search_public_context" ||
+            request.input.kind === "read_public_context") &&
+        mission.definitionVersion !== 5
+    )
+        throw executionError("operation_not_allowed");
     const turn = mission.conversationTurnId
         ? await ctx.db.get(mission.conversationTurnId)
         : null;
@@ -117,20 +137,62 @@ export async function requirePublicContextRequest(
         )
     )
         throw executionError("instruction_not_authorized");
-    const query = request.input.query.trim();
-    if (!query || query.length > DOCUMENTARY_SEARCH_QUERY_MAX_CHARS)
+    let selectedCandidate: { url: string; publishedAt?: string } | undefined;
+    if (
+        request.input.kind === "read_public_context" &&
+        request.input.target.kind === "candidate"
+    ) {
+        const { searchId, index } = request.input.target;
+        const search = await ctx.db.get(searchId);
+        if (
+            !Number.isSafeInteger(index) ||
+            index < 0 ||
+            search?.input.kind !== "search_public_context" ||
+            search.missionId !== mission._id ||
+            search.runId !== run._id ||
+            search.input.messageId !== messageId ||
+            search.instructionVersion !== request.instructionVersion ||
+            search.pin?.kind !== "framing_revision" ||
+            search.pin.revisionId !== run.currentFramingRevisionId ||
+            search.status !== "completed" ||
+            search.adoptedAt === undefined ||
+            search.adoptionRefusalCode ||
+            search.outcome?.kind !== "success"
+        )
+            throw executionError("source_reference_not_observed");
+        const result: unknown = JSON.parse(search.outcome.valueJson);
+        if (
+            !validate(publicSearchResultValidator, result) ||
+            result.searchId !== search._id ||
+            !result.candidates[index]
+        )
+            throw executionError("source_reference_not_observed");
+        selectedCandidate = result.candidates[index];
+    }
+    const query =
+        request.input.kind === "read_public_context"
+            ? request.input.target.kind === "supplied"
+                ? request.input.target.url
+                : (selectedCandidate?.url ?? "")
+            : request.input.query.trim();
+    if (
+        !query ||
+        (request.input.kind !== "read_public_context" &&
+            query.length > DOCUMENTARY_SEARCH_QUERY_MAX_CHARS)
+    )
         throw executionError("discovery_query_invalid");
     let allowance = run.publicContextAllowance;
     let qualificationDeadline: number | undefined;
+    let replay: import("zod").infer<typeof framingReplaySchema> | undefined;
     if (run.purpose === "browser_test") {
         const qualification = await readWorkbenchQualification(ctx, run);
-        const binding = qualification?.scenarios?.find(
-            ({ runId }) => runId === run._id,
-        );
         const context = run.browserTestContextId
             ? await ctx.db.get(run.browserTestContextId)
             : null;
-        if (!qualification || !binding || !context?.campaignLotId)
+        const binding = (
+            qualification?.scenarios ?? context?.simulatedScenarios
+        )?.find((entry) => entry.runId === run._id);
+        if (!binding || !context?.campaignLotId)
             throw executionError("paid_work_disabled");
         const { lot, campaign } = await requireCampaignLot(
             ctx,
@@ -140,26 +202,46 @@ export async function requirePublicContextRequest(
             campaign.manifest.version === 1
                 ? undefined
                 : campaign.manifest.scenarios.find(
-                      ({ id }) => id === binding.id,
+                      (entry) => entry.id === binding.id,
                   );
         if (!scenario?.framingPublicContext)
             throw executionError("paid_work_disabled");
-        allowance = {
-            searches: Math.min(
-                lot.allocation.search,
-                scenario.limits?.search ?? Infinity,
-            ),
-            readings: Math.min(
-                lot.allocation.acquisition,
-                scenario.limits?.acquisition ?? Infinity,
-            ),
-        };
-        qualificationDeadline = qualification.deadlineAt;
+        if (scenario.framingReplay) {
+            const visitor = await requireBrowserTestRunOwner(ctx, run);
+            if (
+                (await requireBrowserFixtureContext(ctx, visitor)) !==
+                    context._id ||
+                mission.definitionVersion !== 5
+            )
+                throw executionError("instruction_not_authorized");
+            replay = scenario.framingReplay;
+            qualificationDeadline = Math.min(
+                context.expiresAt,
+                campaign.manifest.expiresAt,
+            );
+            allowance = { searches: 0, readings: 0 }; // Frozen operations perform no external I/O or provider reservation.
+        } else {
+            if (!qualification) throw executionError("paid_work_disabled");
+            allowance = {
+                searches: Math.min(
+                    lot.allocation.search,
+                    scenario.limits?.search ?? Infinity,
+                ),
+                readings: Math.min(
+                    lot.allocation.acquisition,
+                    scenario.limits?.acquisition ?? Infinity,
+                ),
+            };
+            qualificationDeadline = qualification.deadlineAt;
+        }
     }
     if (!allowance)
         throw executionError("public_context_allowance_unavailable");
     let suppliedReference: SuppliedReference | undefined;
-    if (/^https?:\/\//iu.test(query)) {
+    if (
+        request.input.kind !== "search_public_context" &&
+        /^https?:\/\//iu.test(query)
+    ) {
         let url: URL;
         try {
             url = new URL(query);
@@ -196,7 +278,11 @@ export async function requirePublicContextRequest(
                     return false;
                 }
             });
-        if (!suppliedByAnalyst && source?.origin !== "analyst_url")
+        if (
+            !selectedCandidate &&
+            !suppliedByAnalyst &&
+            source?.origin !== "analyst_url"
+        )
             throw executionError("source_reference_not_observed");
         const cleanCik = company.cik.replace(/^0+/u, "");
         const filing =
@@ -212,17 +298,56 @@ export async function requirePublicContextRequest(
                 : undefined;
         suppliedReference = {
             url: canonicalUrl,
-            publishedAt: source?.publishedAt,
+            publishedAt: selectedCandidate?.publishedAt
+                ? Date.parse(selectedCandidate.publishedAt)
+                : source?.publishedAt,
             confirmedSec,
         };
+    }
+    let retainedRead: Infer<typeof publicReadResultValidator> | undefined;
+    if (
+        request.input.kind === "read_public_context" &&
+        request.input.continuation
+    ) {
+        const previous = await ctx.db.get(request.input.continuation);
+        if (
+            previous?.input.kind !== "read_public_context" ||
+            previous.missionId !== mission._id ||
+            previous.runId !== run._id ||
+            previous.input.messageId !== messageId ||
+            previous.instructionVersion !== request.instructionVersion ||
+            stableStringify(previous.input.target) !==
+                stableStringify(request.input.target) ||
+            previous.pin?.kind !== "framing_revision" ||
+            previous.pin.revisionId !== run.currentFramingRevisionId ||
+            previous.status !== "completed" ||
+            previous.adoptedAt === undefined ||
+            previous.adoptionRefusalCode ||
+            previous.outcome?.kind !== "success"
+        )
+            throw executionError("source_reference_not_observed");
+        const value: unknown = JSON.parse(previous.outcome.valueJson);
+        if (
+            !validate(publicReadResultValidator, value) ||
+            value.continuation !== previous._id ||
+            !value.document ||
+            !value.range ||
+            !value.reference
+        )
+            throw executionError("source_reference_not_observed");
+        retainedRead = value;
     }
     return {
         mission,
         run,
+        operation: request.input.kind,
         allowance,
         qualificationDeadline,
         query: `${company.legalName}: ${query}`,
         suppliedReference,
+        selectedCandidate: !!selectedCandidate,
+        retainedRead,
+        replay,
     };
 }
 
@@ -232,12 +357,20 @@ export const forExecution = internalQuery({
         expectedGeneration: v.number(),
     },
     returns: v.object({
+        replay: v.optional(zodToConvex(framingReplaySchema)),
         missionId: v.id("agentMissions"),
         runId: v.id("researchRuns"),
         corpusRevisionId: v.optional(v.id("corpusRevisions")),
         workflowVersion: v.number(),
+        operation: v.union(
+            v.literal("verify_public_context"),
+            v.literal("search_public_context"),
+            v.literal("read_public_context"),
+        ),
         deadlineAt: v.number(),
         query: v.string(),
+        selectedCandidate: v.boolean(),
+        retainedRead: v.optional(publicReadResultValidator),
         suppliedReference: v.optional(
             v.object({
                 url: v.string(),
@@ -252,25 +385,81 @@ export const forExecution = internalQuery({
         const {
             mission,
             run,
+            operation,
+            selectedCandidate,
+            retainedRead,
             query,
             suppliedReference,
             qualificationDeadline,
+            replay,
         } = await requirePublicContextRequest(
             ctx,
             args.requestId,
             args.expectedGeneration,
         );
         return {
+            ...(replay ? { replay } : {}),
             missionId: mission._id,
             runId: run._id,
             corpusRevisionId: run.activeCorpusRevisionId,
             workflowVersion: mission.definitionVersion,
+            operation,
+            selectedCandidate,
+            ...(retainedRead ? { retainedRead } : {}),
             deadlineAt: Math.min(
                 mission.deadlineAt,
                 qualificationDeadline ?? Infinity,
             ),
             query,
             ...(suppliedReference ? { suppliedReference } : {}),
+        };
+    },
+});
+
+/** Continuations derive the next offset from an adopted page, never from an arbitrary caller position. */
+export const readingPage = internalQuery({
+    args: {
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+    },
+    returns: v.object({
+        readId: v.id("agentOperationRequests"),
+        contentHash: v.string(),
+        characters: v.number(),
+        start: v.number(),
+        end: v.number(),
+        excerpt: v.string(),
+    }),
+    handler: async (ctx, args) => {
+        const authority = await requirePublicContextRequest(
+            ctx,
+            args.requestId,
+            args.expectedGeneration,
+        );
+        if (authority.operation !== "read_public_context")
+            throw executionError("request_unavailable");
+        const root = authority.retainedRead?.document?.readId ?? args.requestId;
+        const start = authority.retainedRead?.range?.end ?? 0;
+        const limit = Math.floor(MAX_OPERATION_RESULT_BYTES / 8);
+        const text = await operationObservationRange(
+            ctx,
+            root,
+            start,
+            limit + 1,
+            authority.retainedRead?.document?.contentHash,
+        );
+        if (!text) throw executionError("source_read_unavailable");
+        const fragment =
+            text.characters === 0
+                ? { end: 0, content: "" }
+                : historyTextFragment(text.content, 0, limit);
+        return {
+            readId: root,
+            contentHash: text.contentHash,
+            characters: text.characters,
+            start,
+            end: start + fragment.end,
+            excerpt: fragment.content,
         };
     },
 });

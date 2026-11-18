@@ -649,3 +649,52 @@ test("empty conversation adds no facts and a large native state does not block e
     vi.useFakeTimers();
     await f.t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(0));
 });
+
+test.each([
+    4, 5,
+])("historical analyst fragments preserve their receipt date only for Workbench v%s", async (version) => {
+    const text = "Dated analyst request. ".repeat(600);
+    const f = await seedHistoryMission(text);
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.missionId, {
+            definitionId: "workbench_v1",
+            definitionVersion: version,
+            scope: { kind: "workbench_v1" },
+            state: { kind: "workbench_v1" },
+        });
+        await ctx.db.patch(f.runId, { startMode: "framed" });
+        const deliveries = await ctx.db
+            .query("agentMessageDeliveries")
+            .collect();
+        for (const delivery of deliveries) {
+            if (
+                delivery.runId === f.runId &&
+                delivery.role === "user" &&
+                delivery.status === "processed"
+            ) {
+                await ctx.db.patch(delivery._id, {
+                    createdAt: Date.UTC(2026, 10, 18),
+                });
+            }
+        }
+    });
+    let cursor: string | undefined;
+    let reconstructed = "";
+    do {
+        const result = await dispatchHistory(f, {
+            kind: "consult_conversation",
+            ...(cursor ? { cursor } : {}),
+        });
+        assert(result.outcome.kind === "success");
+        const page = JSON.parse(result.outcome.valueJson);
+        for (const entry of page.entries) {
+            if (entry.role !== "user") continue;
+            expect(entry.receivedAt).toBe(
+                version === 5 ? "2026-11-18T00:00:00.000Z" : undefined,
+            );
+            reconstructed += entry.content;
+        }
+        cursor = page.continueCursor ?? undefined;
+    } while (cursor);
+    expect(reconstructed).toBe(text);
+});

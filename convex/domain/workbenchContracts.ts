@@ -3,8 +3,10 @@ import { approvalActionValidator } from "@convex/execution/approvalContracts";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import {
+    directedFramingEventBasisInput,
     framingContentValidator,
     framingEventBasisInput,
+    legacyFramingEventBasisInput,
 } from "./framingContracts";
 import { coverageRoleValidator } from "./sourceDiscoveryRecovery";
 import {
@@ -98,6 +100,12 @@ export const adjustFramingInput = v.object({
 export const nativeAdjustFramingInput = adjustFramingInput.extend({
     messageId: v.id("agentMessageDeliveries"),
 });
+export const legacyNativeAdjustFramingInput = nativeAdjustFramingInput.extend({
+    eventBasis: v.optional(legacyFramingEventBasisInput),
+});
+export const directedNativeAdjustFramingInput = nativeAdjustFramingInput.extend(
+    { eventBasis: v.optional(directedFramingEventBasisInput) },
+);
 export const controlResearchInput = v.object({
     action: v.union(v.literal("pause"), v.literal("resume")),
     messageId: v.id("agentMessageDeliveries"),
@@ -184,6 +192,58 @@ export const publicContextInput = v.object({
     messageId: v.id("agentMessageDeliveries"),
     query: v.string(),
 });
+export const publicReadInput = v.object({
+    continuation: v.optional(v.id("agentOperationRequests")),
+    messageId: v.id("agentMessageDeliveries"),
+    target: v.union(
+        v.object({
+            kind: v.literal("candidate"),
+            searchId: v.id("agentOperationRequests"),
+            index: v.number(),
+        }),
+        v.object({ kind: v.literal("supplied"), url: v.string() }),
+    ),
+});
+export const publicReadResultValidator = v.object({
+    replayCorpusHash: v.optional(v.string()),
+    document: v.optional(
+        v.object({
+            readId: v.id("agentOperationRequests"),
+            contentHash: v.string(),
+            characters: v.number(),
+            acquisitionCompleteness: v.union(
+                v.literal("complete"),
+                v.literal("partial"),
+                v.literal("unknown"),
+            ),
+        }),
+    ),
+    range: v.optional(v.object({ start: v.number(), end: v.number() })),
+    continuation: v.optional(v.id("agentOperationRequests")),
+    readId: v.id("agentOperationRequests"),
+    status: v.union(v.literal("observed"), v.literal("inconclusive")),
+    reference: v.optional(
+        v.object({
+            url: v.string(),
+            publisher: v.string(),
+            excerpt: v.string(),
+            publishedAt: v.optional(v.string()),
+            eventAt: v.optional(v.string()),
+        }),
+    ),
+});
+export const publicSearchResultValidator = v.object({
+    replayCorpusHash: v.optional(v.string()),
+    searchId: v.id("agentOperationRequests"),
+    candidates: v.array(
+        v.object({
+            url: v.string(),
+            title: v.string(),
+            publisher: v.string(),
+            publishedAt: v.optional(v.string()),
+        }),
+    ),
+});
 export const publicContextResultValidator = v.object({
     status: v.union(v.literal("observed"), v.literal("inconclusive")),
     references: v.array(
@@ -212,6 +272,27 @@ export function observedPublicContext(
     return validate(publicContextResultValidator, result) ? result : undefined;
 }
 
+/** Only an adopted, nonblank reading can support a public framing association. */
+export function observedPublicRead(
+    request: Doc<"agentOperationRequests"> | null,
+) {
+    if (
+        request?.input.kind !== "read_public_context" ||
+        request.status !== "completed" ||
+        request.adoptedAt === undefined ||
+        request.adoptionRefusalCode ||
+        request.outcome?.kind !== "success"
+    )
+        return undefined;
+    const value: unknown = JSON.parse(request.outcome.valueJson);
+    return validate(publicReadResultValidator, value) &&
+        value.readId === request._id &&
+        value.status === "observed" &&
+        value.reference?.excerpt.trim()
+        ? value
+        : undefined;
+}
+
 export const workbenchSchemas = {
     id: v.literal("workbench_v1"),
     scope: v.object({ kind: v.literal("workbench_v1") }),
@@ -223,6 +304,14 @@ export const workbenchSchemas = {
         workingNotes: v.optional(v.string()),
     }),
     operation: v.union(
+        v.object({
+            kind: v.literal("read_public_context"),
+            ...publicReadInput.fields,
+        }),
+        v.object({
+            kind: v.literal("search_public_context"),
+            ...publicContextInput.fields,
+        }),
         v.object({
             kind: v.literal("verify_public_context"),
             ...publicContextInput.fields,

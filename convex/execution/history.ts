@@ -331,8 +331,16 @@ async function conversationFragment(
                     cursor: page.continueCursor,
                     offset: 0,
                 };
+    const mission = request.missionId
+        ? await ctx.db.get(request.missionId)
+        : null;
     const entry = {
         messageId: message._id,
+        ...(message.role === "user" &&
+        mission?.definitionId === "workbench_v1" &&
+        mission.definitionVersion >= 5
+            ? { receivedAt: new Date(message.createdAt).toISOString() }
+            : {}),
         turnId: message.turnId,
         role: message.role,
         offset: chunk.offset,

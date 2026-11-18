@@ -60,6 +60,7 @@ import {
 import {
     browserBatteryPath,
     candidateHash,
+    prepareFramingReplay,
     preserveQualificationCandidate,
     qualificationFingerprints,
     sha256,
@@ -1398,6 +1399,19 @@ async function executeCampaign(
                         })),
                 };
             }
+            if (Array.isArray(values.scenarios))
+                values.scenarios = values.scenarios.map(
+                    (scenario: Record<string, unknown>) => ({
+                        ...scenario,
+                        ...(scenario.framingReplay
+                            ? {
+                                  framingReplay: prepareFramingReplay(
+                                      scenario.framingReplay,
+                                  ),
+                              }
+                            : {}),
+                    }),
+                );
             resolvedInput = {
                 ...values,
                 batteryHash: sha256(JSON.stringify(values.scenarios)),

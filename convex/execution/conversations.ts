@@ -725,6 +725,7 @@ export async function readTurnInstructions(
         messages: [] as Array<{
             messageId: Id<"agentMessageDeliveries">;
             delivery: Doc<"agentMessageDeliveries">["delivery"];
+            receivedAt: string;
             text: string;
         }>,
     };
@@ -752,6 +753,7 @@ export async function readTurnInstructions(
             const entry = {
                 messageId: message._id,
                 delivery: message.delivery,
+                receivedAt: new Date(message.createdAt).toISOString(),
                 text,
             };
             bytes +=

@@ -12,13 +12,18 @@ import {
     researchQuestionCapacity,
     researchStartBlock,
 } from "@convex/domain/framingEditAuthority";
+import {
+    companyProvisionalProgram,
+    framingBasisAfterEdit,
+    prepareProvisionalFraming,
+    validateFramingPublicBasis,
+} from "@convex/domain/framingProvenance";
 import { MAX_RESEARCH_PLAN_QUESTIONS } from "@convex/domain/researchPlan";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationConcurrency } from "@convex/domain/sourcePreparationAuthority";
 import { activatedSourcesEnvelope } from "@convex/domain/sources";
 import { SOURCES_COVERAGE_VERSION } from "@convex/domain/sourcesContracts";
 import { coveragePresetValidator } from "@convex/domain/validators";
-import { observedPublicContext } from "@convex/domain/workbenchContracts";
 import {
     requireDossierAuthority,
     requireMissionAuthority,
@@ -275,9 +280,7 @@ async function saveFraming(
     const baseline = previous ?? current;
     const eventBasis =
         args.eventBasis ??
-        (baseline?.content.scope === content.scope
-            ? baseline.eventBasis
-            : undefined);
+        (baseline ? framingBasisAfterEdit(baseline, content) : undefined);
     const hash = sha256Hex(
         stableStringify(eventBasis ? { content, eventBasis } : content),
     );
@@ -395,7 +398,48 @@ export const applyFromWorkbench = internalMutation({
             currentRevision.content.scope === content.scope
         )
             proposedBasis = currentRevision.eventBasis;
-        if (proposedBasis?.kind === "open") {
+        if (
+            mission.definitionVersion === 5 &&
+            proposedBasis?.kind === "open" &&
+            proposedBasis.activityExcerpt === undefined &&
+            proposedBasis.conditions === undefined &&
+            currentRevision.content.scope.trim()
+        ) {
+            if (
+                currentRevision.eventBasis?.kind !== "open" ||
+                stableStringify(currentRevision.content) !==
+                    stableStringify(content)
+            )
+                throw executionError("framing_open_preserve_program");
+            proposedBasis = currentRevision.eventBasis;
+        }
+        if (
+            proposedBasis?.kind === "open" &&
+            mission.definitionVersion !== 5 &&
+            (proposedBasis.activityExcerpt !== undefined ||
+                proposedBasis.conditions !== undefined)
+        )
+            throw executionError("framing_event_basis_invalid");
+        if (
+            proposedBasis?.kind === "open" &&
+            mission.definitionVersion === 5 &&
+            (proposedBasis.activityExcerpt !== undefined ||
+                proposedBasis.conditions !== undefined ||
+                currentRevision.content.scope.trim())
+        ) {
+            const prepared = await prepareProvisionalFraming(ctx, {
+                basis: proposedBasis,
+                content,
+                current: currentRevision,
+                mission,
+                request,
+                messageId: causingMessageId,
+                company:
+                    run.companySnapshot?.legalName ?? "the selected company",
+            });
+            content = prepared.content;
+            proposedBasis = prepared.basis;
+        } else if (proposedBasis?.kind === "open") {
             if (
                 currentRevision.origin !== "initial" &&
                 (currentRevision.origin !== "workbench" ||
@@ -405,18 +449,7 @@ export const applyFromWorkbench = internalMutation({
             // The proposed wording may already assume an answer to the clarification.
             const company =
                 run.companySnapshot?.legalName ?? "the selected company";
-            content = {
-                scope: `Investigate the resilience of ${company} in its core operating workflows while the event is being clarified.`,
-                questions: [
-                    {
-                        id: "resilience-baseline",
-                        shortLabel: "Operating resilience",
-                        text: "Which dependencies and alternatives determine how the company can sustain operations and retain value through a disruption?",
-                        rationale:
-                            "Identify where the company controls the workflow and where customer, supplier or operating constraints could make a disruption material.",
-                    },
-                ],
-            };
+            content = companyProvisionalProgram(company);
         }
         if (request.operationVersion === 2)
             await requireFramingEditAuthority(ctx, mission, {
@@ -443,56 +476,14 @@ export const applyFromWorkbench = internalMutation({
                 throw executionError("framing_event_basis_invalid");
             eventBasis = { ...proposedBasis, messageId: message.messageId };
         } else if (proposedBasis?.kind === "public") {
-            const { lookupRequestId, referenceIndexes: indexes } =
-                proposedBasis;
-            const lookup = await ctx.db.get(lookupRequestId);
-            const result = observedPublicContext(lookup);
-            if (
-                lookup?.input.kind !== "verify_public_context" ||
-                lookup.runId !== run._id ||
-                lookup.missionId !== mission._id ||
-                lookup.pin?.kind !== "framing_revision" ||
-                lookup.pin.revisionId !== currentRevision._id ||
-                lookup.instructionVersion !== request.instructionVersion ||
-                lookup.input.messageId !== causingMessageId ||
-                !result
-            )
-                throw executionError("framing_public_lookup_invalid", [
-                    {
-                        path: "eventBasis.lookupRequestId",
-                        expected:
-                            "The requestId of the adopted verify_public_context result for this message and framing revision.",
-                    },
-                ]);
-            if (
-                !proposedBasis.label.trim() ||
-                !indexes.length ||
-                new Set(indexes).size !== indexes.length ||
-                indexes.some(
-                    (index) =>
-                        !Number.isSafeInteger(index) ||
-                        !result.references[index]?.excerpt.trim(),
-                )
-            )
-                throw executionError("framing_event_basis_invalid");
-            const datedIndexes = result.references.flatMap(
-                (reference, index) =>
-                    reference.excerpt.trim() &&
-                    (reference.eventAt !== undefined ||
-                        reference.publishedAt !== undefined)
-                        ? [index]
-                        : [],
-            );
-            if (!datedIndexes.some((index) => indexes.includes(index)))
-                throw executionError("framing_public_reference_undated", [
-                    {
-                        path: "eventBasis.referenceIndexes",
-                        expected: datedIndexes.length
-                            ? `Keep lookupRequestId ${lookupRequestId}. Include an applicable dated reference from indexes [${datedIndexes.join(", ")}].`
-                            : `Lookup ${lookupRequestId} has no dated reading. Leave the event open unless the analyst identified it in the active message.`,
-                    },
-                ]);
-            eventBasis = proposedBasis;
+            eventBasis = await validateFramingPublicBasis(ctx, {
+                basis: proposedBasis,
+                current: currentRevision,
+                scope: content.scope,
+                mission,
+                request,
+                messageId: causingMessageId,
+            });
         } else {
             eventBasis = proposedBasis;
         }

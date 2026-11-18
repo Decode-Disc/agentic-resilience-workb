@@ -4,6 +4,8 @@
 
 Accepted design on 2026-11-18. [PRODUCT](../../PRODUCT.md#operating-context) owns the analyst-facing behavior, [TECH](../../context/TECH.md#workbench-conversation-steering-and-instructions) owns enforcement, and [the roadmap](../ROADMAP.md#phase-6--framing-and-controlled-transition) owns implementation and qualification status.
 
+On 2026-11-18 the accepted [framing extension](../../context/TECH.md#public-context-during-framing) superseded the single-lookup provenance design and extended the preset to pre-Start reading choices. The [delivery record](../ROADMAP.md#phase-6--framing-and-controlled-transition) records the delivered v5 extension, retained v4 compatibility and pending live qualification.
+
 ## Context
 
 In a local NVIDIA dossier, Workbench received the exact question about surviving a recent crisis. The first model response framed research around an early-2025 episode and the existing framing operation saved it. The published reply described that interpretation as unconfirmed. The offered tools could inspect the dossier and save framing. Public-event lookup was unavailable. The coverage preset was stored on the dossier, while active Sources discovery used the mission's need and query without using the preset.

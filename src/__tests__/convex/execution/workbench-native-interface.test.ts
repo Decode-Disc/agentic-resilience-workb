@@ -1,8 +1,13 @@
 import { api, internal } from "@convex/_generated/api";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { runPiMission } from "@convex/integrations/piMission";
 import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import {
+    nativePiFixtureRoute,
+    nativeTextReply as reply,
+    nativeToolReply as toolReply,
+} from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 import { seedWorkbenchMaterials } from "@/__tests__/setup/workbench-materials";
 
@@ -19,18 +24,6 @@ afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
 });
-
-function reply(text: string) {
-    return new Response(
-        [
-            `data: ${JSON.stringify({ id: "native-workbench", choices: [{ index: 0, delta: { role: "assistant", content: text }, finish_reason: null }] })}`,
-            `data: ${JSON.stringify({ id: "native-workbench", choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5 } })}`,
-            "data: [DONE]",
-            "",
-        ].join("\n\n"),
-        { headers: { "content-type": "text/event-stream" } },
-    );
-}
 
 test("a direct analyst edit survives stale output and a fresh conflicting tool proposal in the same native conversation", async () => {
     const { t, client, runId } = await seedWorkbench(
@@ -245,18 +238,6 @@ test.each([
     ).toBe(true);
 }, 30000);
 
-function toolReply(name: string, input: object | string | undefined) {
-    return new Response(
-        [
-            `data: ${JSON.stringify({ id: "native-tool", choices: [{ index: 0, delta: { role: "assistant", content: "I am updating the proposal.", tool_calls: [{ index: 0, id: "native-adjust", type: "function", function: { name, arguments: typeof input === "string" ? input : JSON.stringify(input) } }] }, finish_reason: null }] })}`,
-            `data: ${JSON.stringify({ id: "native-tool", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], usage: { prompt_tokens: 10, completion_tokens: 5 } })}`,
-            "data: [DONE]",
-            "",
-        ].join("\n\n"),
-        { headers: { "content-type": "text/event-stream" } },
-    );
-}
-
 test("an unavailable passage gives a recovery instruction and a searched passage can then be read", async () => {
     const { t, sourceId, start } = await seedWorkbenchMaterials(
         1,
@@ -457,7 +438,7 @@ test("native tools omit mechanical revisions, persist canonical arguments and re
     assert(payloads[1]);
     const tools = payloads[0].tools.map((tool) => tool.function);
     expect(
-        tools.find((tool) => tool.name.includes("verify_public_context"))
+        tools.find((tool) => tool.name.includes("search_public_context"))
             ?.parameters.properties,
     ).toEqual({ query: expect.any(Object) });
     expect(
@@ -493,7 +474,9 @@ test("native tools omit mechanical revisions, persist canonical arguments and re
     expect(toolOutput).toContain("revision");
 }, 30000);
 
-test("a native steer during generation prevents stale publication while queued text waits for its own response", async () => {
+test.each([
+    4, 5,
+] as const)("dated framing context keeps initial and steering dates separate while queued text waits (v%s)", async (version) => {
     const payloads: unknown[] = [];
     let entered!: () => void;
     const dispatched = new Promise<void>((resolve) => {
@@ -523,7 +506,21 @@ test("a native steer during generation prevents stale publication while queued t
     const { t, client, runId } = await seedWorkbench(
         false,
         nativePiFixtureRoute,
+        60000,
+        undefined,
+        undefined,
+        version,
     );
+    await t.run(async (ctx) => {
+        for (const message of await ctx.db
+            .query("agentMessageDeliveries")
+            .collect()) {
+            if (message.runId === runId && message.role === "user")
+                await ctx.db.patch(message._id, {
+                    createdAt: Date.UTC(2026, 10, 18),
+                });
+        }
+    });
     const running = t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,
@@ -541,6 +538,16 @@ test("a native steer during generation prevents stale publication while queued t
             delivery: "steer",
             turnId: active.activeTurn._id,
         });
+        await t.run(async (ctx) => {
+            for (const message of await ctx.db
+                .query("agentMessageDeliveries")
+                .collect()) {
+                if (message.runId === runId && message.delivery === "steer")
+                    await ctx.db.patch(message._id, {
+                        createdAt: Date.UTC(2026, 11, 2),
+                    });
+            }
+        });
         await client.mutation(api.execution.conversations.submit, {
             runId,
             requestKey: "native-queued",
@@ -552,6 +559,30 @@ test("a native steer during generation prevents stale publication while queued t
     }
     await running;
     expect(payloads).toHaveLength(3);
+    const wire = payloads[1] as {
+        messages: Array<{ role: string; content: string }>;
+    };
+    const section = wire.messages.find((m) =>
+        m.content.includes("Required current mission state:"),
+    );
+    assert(section);
+    const state = JSON.parse(
+        section.content
+            .split("Required current mission state:\n")[1]
+            ?.split("\n")[0] ?? "null",
+    );
+    const activeMessages = state.conversationInstructions.messages;
+    expect(activeMessages).toHaveLength(2);
+    expect(
+        activeMessages.map(
+            (message: { receivedAt?: string }) => message.receivedAt,
+        ),
+    ).toEqual(
+        version === 5
+            ? ["2026-11-18T00:00:00.000Z", "2026-12-02T00:00:00.000Z"]
+            : [undefined, undefined],
+    );
+
     expect(JSON.stringify(payloads[1])).toContain("NEW DIRECTION");
     expect(JSON.stringify(payloads[1])).not.toContain("WAIT FOR NEXT RESPONSE");
     const page = await client.query(api.execution.conversations.listMessages, {
@@ -1445,10 +1476,12 @@ test("terminal recovery preserves a code-owned receipt instead of rewriting it a
     ).toHaveLength(1);
 }, 30000);
 
-test("native restoration repairs a refusal and reads several exact fragments before publishing", async () => {
+test.each([
+    4, 5,
+] as const)("native restoration after compaction preserves dated analyst fragments and retained v4 shape (v%s)", async (version) => {
     const original =
         "Analyst boundary: switching cost remains a question, never a finding. ".repeat(
-            110,
+            180,
         );
     const restored: string[] = [];
     const errors: unknown[] = [];
@@ -1459,6 +1492,12 @@ test("native restoration repairs a refusal and reads several exact fragments bef
         "fetch",
         vi.fn<typeof fetch>(async (_url, init) => {
             try {
+                if (stage === "compacting") {
+                    stage = "invalid";
+                    return reply(
+                        "Earlier exchanges are retained in history. Consult the original analyst boundary before attributing it.",
+                    );
+                }
                 if (stage === "initial")
                     return reply("Ready to discuss the question.");
                 if (stage === "retain")
@@ -1466,6 +1505,25 @@ test("native restoration repairs a refusal and reads several exact fragments bef
                         "Your original boundary is retained. ".repeat(260),
                     );
                 if (stage === "invalid") {
+                    const payload = JSON.parse(String(init?.body));
+                    const required = payload.messages.find(
+                        (m: { content: string }) =>
+                            m.content?.includes(
+                                "Required current mission state:",
+                            ),
+                    );
+                    assert(required);
+                    const state = JSON.parse(
+                        required.content
+                            .split("Required current mission state:\n")[1]
+                            .split("\n")[0],
+                    );
+                    expect(
+                        state.conversationInstructions.messages[0].receivedAt,
+                    ).toBe(
+                        version === 5 ? "2026-12-02T12:00:00.000Z" : undefined,
+                    );
+
                     stage = "repair";
                     return toolReply("consult_conversation", {
                         cursor: JSON.stringify({
@@ -1488,8 +1546,15 @@ test("native restoration repairs a refusal and reads several exact fragments bef
                     return toolReply("consult_conversation", {});
                 }
                 expect(result.kind).toBe("success");
-                for (const entry of result.value.entries)
+                for (const entry of result.value.entries) {
+                    if (entry.role === "user")
+                        expect(entry.receivedAt).toBe(
+                            version === 5
+                                ? "2026-11-18T00:00:00.000Z"
+                                : undefined,
+                        );
                     restored.push(entry.content);
+                }
                 cursor = result.value.continueCursor;
                 if (cursor)
                     return toolReply("consult_conversation", { cursor });
@@ -1506,6 +1571,10 @@ test("native restoration repairs a refusal and reads several exact fragments bef
     const { t, client, runId } = await seedWorkbench(
         false,
         nativePiFixtureRoute,
+        60000,
+        undefined,
+        undefined,
+        version,
     );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     stage = "retain";
@@ -1516,7 +1585,18 @@ test("native restoration repairs a refusal and reads several exact fragments bef
         text: original,
     });
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    await t.run(async (ctx) => {
+        for (const message of await ctx.db
+            .query("agentMessageDeliveries")
+            .collect()) {
+            if (message.runId === runId && message.role === "user")
+                await ctx.db.patch(message._id, {
+                    createdAt: Date.UTC(2026, 10, 18),
+                });
+        }
+    });
     const framing = await client.query(api.framing.get, { runId });
+    vi.setSystemTime(new Date("2026-12-02T12:00:00.000Z"));
     stage = "invalid";
     await client.mutation(api.execution.conversations.submit, {
         runId,
@@ -1524,7 +1604,34 @@ test("native restoration repairs a refusal and reads several exact fragments bef
         delivery: "queue",
         text: "Read the original exchange without changing the program.",
     });
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
+    await seedPiHistory(t, active.missionId, 1, 8, 56000);
+    stage = "compacting";
+    await t.mutation(internal.execution.missions.resume, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        simulation: false,
+    });
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 1000);
+    expect(
+        await t.run(async (ctx) =>
+            (await ctx.db.query("agentInvocations").collect()).some(
+                (invocation) =>
+                    invocation.purpose === "compaction" &&
+                    invocation.status === "returned",
+            ),
+        ),
+    ).toBe(true);
     if (errors.length) throw errors[0];
     expect(stage).toBe("done");
     expect(restored.join("")).toContain(original);
@@ -1548,7 +1655,7 @@ test("native restoration repairs a refusal and reads several exact fragments bef
         "Switching cost remains your research question. The saved program is unchanged.",
     );
     expect(final).not.toContain("history_cursor_invalid");
-});
+}, 60000);
 
 const nvidia = {
     cik: "1045810",
@@ -1577,6 +1684,7 @@ test("an unresolved crisis saves a neutral program and a later analyst confirmat
         undefined,
         "will it survive after the recent crisis ?",
         nvidia,
+        4,
     );
     const before = await client.query(api.framing.get, { runId });
     assert(before);
@@ -1679,6 +1787,7 @@ test.each([
         undefined,
         "How should I investigate the resilience of NVIDIA’s data-center business after the April 2025 H20 licensing episode?",
         nvidia,
+        4,
     );
     // Relevant excerpts and order from the archived NVIDIA lot's request 6.
     const documents = [
@@ -1872,6 +1981,8 @@ test("Workbench reads public context before Start and pins a dated passage to th
         nativePiFixtureRoute,
         undefined,
         "Will it survive after the recent crisis?",
+        undefined,
+        4,
     );
     const url = "https://93.184.216.34/report";
     const excerpt = "Supply restrictions took effect in April 2025.";
@@ -2043,6 +2154,10 @@ test.each([
     const { t, client, runId } = await seedWorkbench(
         false,
         nativePiFixtureRoute,
+        undefined,
+        undefined,
+        undefined,
+        4,
     );
     const analystScope = { scope: "Analyst-selected workflow", questions: [] };
     let modelCalls = 0;
@@ -2135,4 +2250,1675 @@ test.each([
         dispatchOutcome: "response_received",
         reportedCost: 0.01,
     });
+}, 30000);
+
+test.each([
+    false,
+    true,
+])("dated framing context carries admitted dates and phase guidance through the installed serializer (launched=%s)", async (launched) => {
+    const payloads: Array<{
+        messages: Array<{ role: string; content: string }>;
+    }> = [];
+    const offeredTools: string[][] = [];
+    vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url, init) => {
+            const body = JSON.parse(init.body);
+            payloads.push(body);
+            offeredTools.push(
+                body.tools.map(
+                    (tool: { function: { name: string } }) =>
+                        tool.function.name,
+                ),
+            );
+            return reply(
+                "The tentative program remains available for your review.",
+            );
+        }),
+    );
+    const { t, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Investigate the recent disruption.",
+        undefined,
+        5,
+    );
+    await t.run((ctx) =>
+        ctx.db.patch(runId, { coveragePreset: "independent_scrutiny" }),
+    );
+    if (launched)
+        await t.run(async (ctx) => {
+            const run = await ctx.db.get(runId);
+            assert(run);
+            await ctx.db.patch(runId, {
+                fixedFramingRevisionId: run.currentFramingRevisionId,
+            });
+        });
+    const delivery = await t.run(async (ctx) => {
+        const messages = await ctx.db.query("agentMessageDeliveries").collect();
+        const message = messages.find(
+            (m) => m.runId === runId && m.role === "user",
+        );
+        assert(message);
+        await ctx.db.patch(message._id, { createdAt: Date.UTC(2026, 10, 18) });
+        return message;
+    });
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    assert(payloads[0]);
+    const stateMessage = payloads[0].messages.find((m) =>
+        m.content.includes("Required current mission state:"),
+    );
+    assert(stateMessage);
+    const state = JSON.parse(
+        stateMessage.content
+            .split("Required current mission state:\n")[1]
+            ?.split("\n")[0] ?? "null",
+    );
+    expect(state.conversationInstructions.messages).toContainEqual({
+        messageId: delivery._id,
+        text: "Investigate the recent disruption.",
+        receivedAt: "2026-11-18T00:00:00.000Z",
+    });
+    expect(state.domain.coveragePreset).toBe("independent_scrutiny");
+    expect(offeredTools[0]).toContain("consult_run_state");
+    for (const name of ["search_public_context", "read_public_context"])
+        expect(offeredTools[0]?.includes(name)).toBe(!launched);
+    expect(offeredTools[0]).not.toContain("verify_public_context");
+    expect(state.method).toContain(
+        launched
+            ? "Consult relevant dossier material"
+            : "Interpret each analyst message as of its receivedAt",
+    );
+    expect(state.method).not.toContain(
+        launched
+            ? "Interpret each analyst message as of its receivedAt"
+            : "Consult relevant dossier material",
+    );
+    expect(payloads[0].messages).toContainEqual(
+        expect.objectContaining({
+            role: "user",
+            content: "Investigate the recent disruption.",
+        }),
+    );
+}, 30000);
+
+test("public discovery lets Workbench inspect dated leads and reformulate before choosing any reading", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 3, readings: 2 }),
+    );
+    let generation = 0;
+    let searches = 0;
+    const contentsRequests: string[] = [];
+    const errors: unknown[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+            if (String(url).endsWith("/search")) {
+                searches++;
+                return Response.json({
+                    results: [
+                        {
+                            id: `lead-${searches}`,
+                            url: `https://example.com/event-${searches}`,
+                            title:
+                                searches === 1
+                                    ? "April announcement"
+                                    : "November announcement",
+                            publishedDate:
+                                searches === 1 ? "2026-04-09" : "2026-11-17",
+                        },
+                    ],
+                    costDollars: { total: 0.007 },
+                });
+            }
+            if (String(url).endsWith("/contents")) {
+                contentsRequests.push(String(init?.body));
+                throw new Error("Discovery must not acquire content");
+            }
+            try {
+                const request = JSON.parse(String(init?.body));
+                const tools = request.tools.map(
+                    (tool: { function: { name: string } }) =>
+                        tool.function.name,
+                );
+                expect(tools).toContain("search_public_context");
+                expect(tools).not.toContain("verify_public_context");
+                if (generation++ === 0)
+                    return toolReply("search_public_context", {
+                        query: "recent announcement",
+                    });
+                const result = JSON.parse(
+                    request.messages
+                        .filter((m: { role: string }) => m.role === "tool")
+                        .at(-1).content,
+                );
+                expect(result.kind).toBe("success");
+                expect(result.value.searchId).toBeTruthy();
+                expect(result.value.candidates[0]).toMatchObject({
+                    title:
+                        searches === 1
+                            ? "April announcement"
+                            : "November announcement",
+                    publishedAt:
+                        searches === 1
+                            ? "2026-04-09T00:00:00.000Z"
+                            : "2026-11-17T00:00:00.000Z",
+                });
+                return searches === 1
+                    ? toolReply("search_public_context", {
+                          query: "November announcement",
+                      })
+                    : reply(
+                          "I found a relevant publication to read before refining the program.",
+                      );
+            } catch (error) {
+                errors.push(error);
+                throw error;
+            }
+        }),
+    );
+    const { t, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Investigate the recent announcement.",
+        undefined,
+        5,
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    if (errors.length) throw errors[0];
+    expect(searches).toBe(2);
+    expect(generation).toBe(3);
+    expect(contentsRequests).toEqual([]);
+    const observed = await t.run(async (ctx) => ({
+        requests: await ctx.db.query("agentOperationRequests").collect(),
+        missions: await ctx.db.query("agentMissions").collect(),
+        run: await ctx.db.get(runId),
+    }));
+    expect(
+        observed.requests.filter(
+            (r) => r.input.kind === "search_public_context",
+        ),
+    ).toEqual([
+        expect.objectContaining({
+            status: "completed",
+            adoptedAt: expect.any(Number),
+        }),
+        expect.objectContaining({
+            status: "completed",
+            adoptedAt: expect.any(Number),
+        }),
+    ]);
+    expect(
+        observed.missions.find((m) => m.definitionId === "workbench_v1")
+            ?.progressKeys,
+    ).toHaveLength(2);
+    expect(observed.run?.sourcePreparationId).toBeUndefined();
+}, 30000);
+
+test("selected publication reaches a later passage through native read continuation", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 2, readings: 2 }),
+    );
+    const decisive = "On November 17, validation rights moved to the insurer.";
+    const text = `${"Background. ".repeat(800)}\n${decisive}`;
+    const contentRequests: unknown[] = [];
+    const errors: unknown[] = [];
+    let generation = 0;
+    let searchId = "";
+    let hash = "";
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "first",
+                            url: "https://example.com/first",
+                            title: "Unselected announcement",
+                        },
+                        {
+                            id: "second",
+                            url: "https://example.org/second",
+                            title: "Validation rights",
+                            publishedDate: "2026-11-17",
+                        },
+                    ],
+                });
+            if (String(url).endsWith("/contents")) {
+                contentRequests.push(JSON.parse(String(init?.body)));
+                return Response.json({
+                    results: [
+                        {
+                            id: "second",
+                            url: "https://example.org/second",
+                            text,
+                        },
+                    ],
+                });
+            }
+            try {
+                const request = JSON.parse(String(init?.body));
+                if (generation++ === 0)
+                    return toolReply("search_public_context", {
+                        query: "validation announcement",
+                    });
+                const result = JSON.parse(
+                    request.messages
+                        .filter((m: { role: string }) => m.role === "tool")
+                        .at(-1).content,
+                );
+                expect(result.kind).toBe("success");
+                if (generation === 2) {
+                    searchId = result.value.searchId;
+                    return toolReply("read_public_context", {
+                        target: { kind: "candidate", searchId, index: 1 },
+                    });
+                }
+                expect(result.value.readId).toBeTruthy();
+                expect(result.value.readId).not.toBe(searchId);
+                expect(result.value.reference.url).toBe(
+                    "https://example.org/second",
+                );
+                if (generation === 3) {
+                    expect(result.value.reference.excerpt).not.toContain(
+                        decisive,
+                    );
+                    expect(result.value.continuation).toBe(result.value.readId);
+                    hash = result.value.document.contentHash;
+                    return toolReply("read_public_context", {
+                        target: { kind: "candidate", searchId, index: 1 },
+                        continuation: result.value.continuation,
+                    });
+                }
+                expect(result.value.reference.excerpt).toContain(decisive);
+                expect(result.value.document.contentHash).toBe(hash);
+                expect(result.value.continuation).toBeUndefined();
+                return reply(
+                    "The publication describes changed validation rights. That passage can inform the proposed research question.",
+                );
+            } catch (error) {
+                errors.push(error);
+                throw error;
+            }
+        }),
+    );
+    const { t, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Inspect the validation-rights announcement.",
+        undefined,
+        5,
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    if (errors.length) throw errors[0];
+    expect(generation).toBe(4);
+    expect(contentRequests).toEqual([
+        expect.objectContaining({ urls: ["https://example.org/second"] }),
+    ]);
+    expect(
+        (
+            await t.run((ctx) =>
+                ctx.db.query("agentOperationRequests").collect(),
+            )
+        ).filter((r) => r.input.kind === "read_public_context"),
+    ).toEqual([
+        expect.objectContaining({
+            status: "completed",
+            adoptedAt: expect.any(Number),
+        }),
+        expect.objectContaining({
+            status: "completed",
+            adoptedAt: expect.any(Number),
+        }),
+    ]);
+    expect(
+        (await t.run((ctx) => ctx.db.get(runId)))?.sourcePreparationId,
+    ).toBeUndefined();
+}, 30000);
+
+test("selected publication replay reaches the native repetition stop without repeated acquisition", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 1, readings: 1 }),
+    );
+    let searchId = "";
+    let generations = 0;
+    let acquisitions = 0;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "same",
+                            url: "https://example.com/same",
+                            title: "One publication",
+                        },
+                    ],
+                });
+            if (String(url).endsWith("/contents")) {
+                acquisitions++;
+                return Response.json({
+                    results: [
+                        {
+                            id: "same",
+                            url: "https://example.com/same",
+                            text: "A retained factual passage.",
+                        },
+                    ],
+                });
+            }
+            if (++generations > 12)
+                throw new Error("Repetition guard did not stop the loop");
+            if (generations === 1)
+                return toolReply("search_public_context", {
+                    query: "same publication",
+                });
+            const request = JSON.parse(String(init?.body));
+            if (!searchId)
+                searchId = JSON.parse(
+                    request.messages
+                        .filter((m: { role: string }) => m.role === "tool")
+                        .at(-1).content,
+                ).value.searchId;
+            return toolReply("read_public_context", {
+                target: { kind: "candidate", searchId, index: 0 },
+            });
+        }),
+    );
+    const { t, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Read the publication.",
+        undefined,
+        5,
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    const mission = await t.run(async (ctx) =>
+        (await ctx.db.query("agentMissions").collect()).find(
+            (m) => m.runId === runId && m.definitionId === "workbench_v1",
+        ),
+    );
+    expect(mission).toMatchObject({
+        status: "blocked",
+        blockCode: "repetition_stop",
+    });
+    expect(acquisitions).toBe(1);
+    expect(generations).toBeLessThan(12);
+}, 30000);
+
+test("independent read provenance saves two adopted passages and exposes the canonical draft before replying", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 3, readings: 3 }),
+    );
+    const scope =
+        "Investigate insurer control over estimate review after the November validation-rights announcement.";
+    const question = {
+        id: "bypass",
+        shortLabel: "Review control",
+        text: "Can insurers move estimate review outside the platform while preserving validation rights?",
+        rationale:
+            "Identify which party can direct the workflow and retain its value.",
+    };
+    const secondPassage =
+        "The November announcement permits exporting an estimate while preserving the insurer's validation decision.";
+    const longText = `${"Background context. ".repeat(450)}\n${secondPassage}`;
+    const errors: unknown[] = [];
+    let generation = 0;
+    let searches = 0;
+    let searchId = "";
+    let firstReadId = "";
+    let secondReadId = "";
+    let checkedSavedState = false;
+    let fixture: Awaited<ReturnType<typeof seedWorkbench>>;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+            if (String(url).endsWith("/search")) {
+                searches++;
+                return Response.json({
+                    results:
+                        searches === 1
+                            ? [
+                                  {
+                                      id: "old",
+                                      url: "https://example.com/april",
+                                      title: "April event",
+                                      publishedDate: "2025-04-09",
+                                  },
+                              ]
+                            : [
+                                  {
+                                      id: "rights",
+                                      url: "https://example.com/rights",
+                                      title: "November validation rights",
+                                      publishedDate: "2026-11-17",
+                                  },
+                                  {
+                                      id: "export",
+                                      url: "https://example.org/export",
+                                      title: "Estimate export",
+                                      publishedDate: "2026-11-18",
+                                  },
+                              ],
+                });
+            }
+            if (String(url).endsWith("/contents")) {
+                const requested = JSON.parse(String(init?.body)).urls[0];
+                return Response.json({
+                    results: [
+                        {
+                            id: "publication",
+                            url: requested,
+                            text: requested.endsWith("/rights")
+                                ? "The insurer retains validation rights during estimate review."
+                                : longText,
+                        },
+                    ],
+                });
+            }
+            try {
+                const request = JSON.parse(String(init?.body));
+                if (generation++ === 0)
+                    return toolReply("search_public_context", {
+                        query: "recent validation rights",
+                    });
+                const lastTool = request.messages
+                    .filter((m: { role: string }) => m.role === "tool")
+                    .at(-1);
+                expect(lastTool.content, lastTool.content).toMatch(/^\s*\{/u);
+                const result = JSON.parse(lastTool.content);
+                expect(result.kind).toBe("success");
+                if (generation === 2)
+                    return toolReply("search_public_context", {
+                        query: "November validation announcement",
+                    });
+                if (generation === 3) {
+                    searchId = result.value.searchId;
+                    return toolReply("read_public_context", {
+                        target: { kind: "candidate", searchId, index: 0 },
+                    });
+                }
+                if (generation === 4) {
+                    firstReadId = result.value.readId;
+                    return toolReply("read_public_context", {
+                        target: { kind: "candidate", searchId, index: 1 },
+                    });
+                }
+                if (generation === 5)
+                    return toolReply("read_public_context", {
+                        target: { kind: "candidate", searchId, index: 1 },
+                        continuation: result.value.continuation,
+                    });
+                if (generation === 6) {
+                    secondReadId = result.value.readId;
+                    expect(result.value.reference.excerpt).toContain(
+                        secondPassage,
+                    );
+                    return toolReply("adjust_framing", {
+                        content: { scope, questions: [question] },
+                        eventBasis: {
+                            kind: "public",
+                            label: "November validation-rights announcement",
+                            readIds: [firstReadId, secondReadId],
+                        },
+                    });
+                }
+                expect(result.value.revision).toBe(2);
+                const section = request.messages.find(
+                    (m: { content: string }) =>
+                        m.content?.includes("Required current mission state:"),
+                );
+                assert(section);
+                const state = JSON.parse(
+                    section.content
+                        .split("Required current mission state:\n")[1]
+                        .split("\n")[0],
+                );
+                const framing = await fixture.client.query(api.framing.get, {
+                    runId: fixture.runId,
+                });
+                assert(framing);
+                expect(state.domain.framing).toMatchObject({
+                    revision: framing.revision,
+                    scope: framing.content.scope,
+                    questions: framing.content.questions,
+                    eventBasis: {
+                        kind: "public",
+                        readIds: [firstReadId, secondReadId],
+                    },
+                    eventReferences: [
+                        expect.objectContaining({
+                            url: "https://example.com/rights",
+                            excerpt:
+                                "The insurer retains validation rights during estimate review.",
+                        }),
+                        expect.objectContaining({
+                            url: "https://example.org/export",
+                            excerpt: expect.stringContaining(secondPassage),
+                        }),
+                    ],
+                });
+                expect(framing.content).toEqual({
+                    scope,
+                    questions: [question],
+                });
+                checkedSavedState = true;
+                return reply(
+                    "The saved program examines insurer control over estimate review, grounded in the two November publications. Research starts when you choose Start research.",
+                );
+            } catch (error) {
+                errors.push(error);
+                throw error;
+            }
+        }),
+    );
+    fixture = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Investigate estimate review following the recent validation-rights announcement.",
+        undefined,
+        5,
+    );
+    await fixture.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        1000,
+    );
+    if (errors.length) throw errors[0];
+    expect(checkedSavedState).toBe(true);
+    expect(generation).toBe(7);
+    expect(
+        (await fixture.t.run((ctx) => ctx.db.get(fixture.runId)))
+            ?.sourcePreparationId,
+    ).toBeUndefined();
+
+    const original = await fixture.client.query(api.framing.get, {
+        runId: fixture.runId,
+    });
+    assert(original?.eventBasis?.kind === "public");
+    const laterMessage = await fixture.client.mutation(
+        api.execution.conversations.submit,
+        {
+            runId: fixture.runId,
+            requestKey: "refine-with-retained-event",
+            text: "Retain the scope and event. Clarify the rationale of the review-control question.",
+            delivery: "queue",
+        },
+    );
+    const later = await fixture.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: fixture.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(later);
+    const unrelated = await fixture.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: later.missionId,
+            expectedGeneration: 1,
+            cause: "unrelated-search",
+            input: {
+                kind: "search_public_context",
+                messageId: laterMessage,
+                query: "unrelated company context",
+            },
+        },
+    );
+    expect(
+        await fixture.t.action(internal.execution.operations.dispatch, {
+            requestId: unrelated,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "success" });
+    const refined = {
+        scope,
+        questions: [
+            {
+                ...question,
+                rationale:
+                    "Clarify the role of validation rights in controlling estimate review.",
+            },
+        ],
+    };
+    const refinementId = await fixture.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: later.missionId,
+            expectedGeneration: 1,
+            cause: "inherit-saved-event",
+            input: {
+                kind: "adjust_framing",
+                messageId: laterMessage,
+                expectedRevision: 2,
+                content: refined,
+                eventBasis: original.eventBasis,
+            },
+        },
+    );
+    const refinement = await fixture.t.action(
+        internal.execution.operations.dispatch,
+        { requestId: refinementId, expectedGeneration: 1 },
+    );
+    expect(refinement).toMatchObject({ kind: "success" });
+    const projected = await fixture.t.run(async (ctx) => {
+        const run = await ctx.db.get(fixture.runId);
+        const mission = await ctx.db.get(later.missionId);
+        assert(run && mission);
+        return getAgentDefinition("workbench_v1", 5).context(ctx, mission, run);
+    });
+    assert(projected.kind === "ready");
+    expect(projected.context.framing).toMatchObject({
+        revision: 3,
+        eventBasis: original.eventBasis,
+        eventReferences: [
+            expect.objectContaining({ url: "https://example.com/rights" }),
+            expect.objectContaining({
+                url: "https://example.org/export",
+                excerpt: expect.stringContaining(secondPassage),
+            }),
+        ],
+    });
+    const refinedQuestion = refined.questions[0];
+    assert(refinedQuestion);
+    const revisedByAnalyst = {
+        ...refined,
+        questions: [
+            {
+                ...refinedQuestion,
+                rationale: "Analyst's newer rationale.",
+            },
+        ],
+    };
+    await fixture.client.mutation(api.framing.save, {
+        runId: fixture.runId,
+        expectedRevision: 3,
+        requestKey: "later-analyst-edit",
+        content: revisedByAnalyst,
+    });
+    await fixture.t.action(internal.execution.operations.dispatch, {
+        requestId: refinementId,
+        expectedGeneration: 1,
+    });
+    expect(
+        await fixture.client.query(api.framing.get, { runId: fixture.runId }),
+    ).toMatchObject({
+        revision: 4,
+        content: revisedByAnalyst,
+        eventBasis: original.eventBasis,
+    });
+    const archived = await fixture.t.run(async (ctx) => {
+        const run = await ctx.db.get(fixture.runId);
+        assert(run);
+        return ctx.db
+            .query("framingRevisions")
+            .withIndex("by_run_and_revision", (q) =>
+                q.eq("runId", fixture.runId).eq("revision", 2),
+            )
+            .first();
+    });
+    expect(archived).toMatchObject({
+        content: original.content,
+        eventBasis: original.eventBasis,
+    });
+}, 30000);
+
+test.each([
+    "search ID",
+    "duplicate",
+    "unadopted",
+    "foreign mission",
+    "wrong revision",
+    "undated",
+] as const)("independent read provenance refuses %s associations and preserves the saved draft", async (failure) => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 1, readings: 1 }),
+    );
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url) =>
+            Response.json({
+                results: String(url).endsWith("/search")
+                    ? [
+                          {
+                              id: "lead",
+                              url: "https://example.com/rights",
+                              title: "Validation rights",
+                              ...(failure === "undated"
+                                  ? {}
+                                  : { publishedDate: "2026-11-17" }),
+                          },
+                      ]
+                    : [
+                          {
+                              id: "lead",
+                              url: "https://example.com/rights",
+                              text: "The insurer retains validation rights.",
+                          },
+                      ],
+            }),
+        ),
+    );
+    const { t, runId, client } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Investigate the latest validation-rights event.",
+        undefined,
+        5,
+    );
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const message = await t.run((ctx) =>
+        ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_turn", (q) => q.eq("turnId", active.turnId))
+            .first(),
+    );
+    assert(message);
+    const searchId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "provenance-search",
+        input: {
+            kind: "search_public_context",
+            messageId: message._id,
+            query: "validation rights",
+        },
+    });
+    assert(
+        (
+            await t.action(internal.execution.operations.dispatch, {
+                requestId: searchId,
+                expectedGeneration: 1,
+            })
+        ).kind === "success",
+    );
+    const readId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "provenance-read",
+        input: {
+            kind: "read_public_context",
+            messageId: message._id,
+            target: { kind: "candidate", searchId, index: 0 },
+        },
+    });
+    assert(
+        (
+            await t.action(internal.execution.operations.dispatch, {
+                requestId: readId,
+                expectedGeneration: 1,
+            })
+        ).kind === "success",
+    );
+    if (failure === "unadopted")
+        await t.run((ctx) => ctx.db.patch(readId, { adoptedAt: undefined }));
+    if (failure === "foreign mission")
+        await t.run(async (ctx) => {
+            const mission = await ctx.db.get(active.missionId);
+            assert(mission);
+            const { _id, _creationTime, ...fields } = mission;
+            const foreignId = await ctx.db.insert("agentMissions", fields);
+            await ctx.db.patch(readId, { missionId: foreignId });
+        });
+    if (failure === "wrong revision")
+        await t.run(async (ctx) => {
+            const run = await ctx.db.get(runId);
+            assert(run?.currentFramingRevisionId);
+            const framing = await ctx.db.get(run.currentFramingRevisionId);
+            assert(framing);
+            const { _id, _creationTime, ...fields } = framing;
+            const otherId = await ctx.db.insert("framingRevisions", {
+                ...fields,
+                revision: 99,
+                requestKey: "foreign-revision",
+            });
+            await ctx.db.patch(readId, {
+                pin: { kind: "framing_revision", revisionId: otherId },
+            });
+        });
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "invalid-provenance-write",
+        input: {
+            kind: "adjust_framing",
+            expectedRevision: 1,
+            eventBasisRequired: true,
+            messageId: message._id,
+            content: {
+                scope: "Insurer control over estimate review",
+                questions: [],
+            },
+            eventBasis: {
+                kind: "public",
+                label: "Validation-rights event",
+                readIds:
+                    failure === "search ID"
+                        ? [searchId]
+                        : failure === "duplicate"
+                          ? [readId, readId]
+                          : [readId],
+            },
+        },
+    });
+    const outcome = await t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    expect(outcome).toMatchObject({
+        kind: "refused",
+        code:
+            failure === "duplicate"
+                ? "framing_event_basis_invalid"
+                : failure === "undated"
+                  ? "framing_public_reference_undated"
+                  : "framing_public_lookup_invalid",
+    });
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 1,
+        content: { scope: "", questions: [] },
+    });
+    if (failure === "search ID" || failure === "undated") {
+        const diagnostic = getAgentDefinition(
+            "workbench_v1",
+            5,
+        ).operationDiagnostic?.(
+            failure === "search ID"
+                ? "framing_public_lookup_invalid"
+                : "framing_public_reference_undated",
+        );
+        expect(diagnostic).toContain("readIds");
+        expect(diagnostic).not.toContain("lookupRequestId");
+    }
+});
+
+test("provisional estimate review keeps the analyst's activity and saves explicit conditions with their read provenance", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 1, readings: 2 }),
+    );
+    const scope =
+        "Investigate whether insurers can bypass CCC during estimate review while the announcement is clarified.";
+    const questions = [
+        {
+            id: "common",
+            shortLabel: "Bypass options",
+            text: "Which steps of estimate review require CCC's platform?",
+            rationale: "Locate control across both plausible announcements.",
+        },
+        {
+            id: "validation",
+            shortLabel: "Validation rights",
+            text: "which validation decisions can insurers retain outside CCC?",
+            rationale: "Test whether contractual control limits bypass.",
+        },
+        {
+            id: "export",
+            shortLabel: "Estimate export",
+            text: "can exported estimates be reviewed through an alternative workflow?",
+            rationale: "Test operational dependence on CCC.",
+        },
+    ];
+    const hypotheses = [
+        "the announcement changes contractual validation rights",
+        "the announcement enables exporting an estimate",
+    ];
+    const reads: string[] = [];
+    const errors: unknown[] = [];
+    let searchId = "";
+    let generation = 0;
+    let fixture: Awaited<ReturnType<typeof seedWorkbench>>;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "validation",
+                            url: "https://example.com/validation",
+                            title: "Illustrative validation-rights announcement",
+                            publishedDate: "2026-11-17",
+                        },
+                        {
+                            id: "export",
+                            url: "https://example.org/export",
+                            title: "Illustrative estimate-export announcement",
+                            publishedDate: "2026-11-18",
+                        },
+                    ],
+                });
+            if (String(url).endsWith("/contents")) {
+                const selected = JSON.parse(String(init?.body)).urls[0];
+                return Response.json({
+                    results: [
+                        {
+                            id: "illustrative",
+                            url: selected,
+                            text: selected.endsWith("/validation")
+                                ? "Illustrative fixture: insurers retain contractual validation rights."
+                                : "Illustrative fixture: estimates can be exported for review.",
+                        },
+                    ],
+                });
+            }
+            try {
+                const request = JSON.parse(String(init?.body));
+                if (generation++ === 0)
+                    return toolReply("search_public_context", {
+                        query: "latest estimate review announcement",
+                    });
+                const last = request.messages
+                    .filter((m: { role: string }) => m.role === "tool")
+                    .at(-1);
+                expect(last.content, last.content).toMatch(/^\s*\{/u);
+                const result = JSON.parse(last.content);
+                expect(result.kind).toBe("success");
+                if (generation === 2) {
+                    searchId = result.value.searchId;
+                    return toolReply("read_public_context", {
+                        target: { kind: "candidate", searchId, index: 0 },
+                    });
+                }
+                if (generation === 3) {
+                    reads.push(result.value.readId);
+                    return toolReply("read_public_context", {
+                        target: { kind: "candidate", searchId, index: 1 },
+                    });
+                }
+                if (generation === 4) {
+                    reads.push(result.value.readId);
+                    return toolReply("adjust_framing", {
+                        content: { scope, questions },
+                        eventBasis: {
+                            kind: "open",
+                            activityExcerpt: "estimate review",
+                            conditions: [
+                                {
+                                    questionId: "validation",
+                                    hypothesis: hypotheses[0],
+                                    basis: {
+                                        kind: "public",
+                                        readIds: [reads[0]],
+                                    },
+                                },
+                                {
+                                    questionId: "export",
+                                    hypothesis: hypotheses[1],
+                                    basis: {
+                                        kind: "public",
+                                        readIds: [reads[1]],
+                                    },
+                                },
+                            ],
+                        },
+                    });
+                }
+                const saved = await fixture.client.query(api.framing.get, {
+                    runId: fixture.runId,
+                });
+                assert(saved);
+                expect(saved.content.scope).toBe(scope);
+                expect(saved.eventBasis).toMatchObject({
+                    kind: "open",
+                    activityExcerpt: "estimate review",
+                });
+                for (const [index, id] of ["validation", "export"].entries()) {
+                    const text = saved.content.questions.find(
+                        (question) => question.id === id,
+                    )?.text;
+                    expect(text).toBe(
+                        `If ${hypotheses[index]}, ${questions[index + 1]?.text}`,
+                    );
+                }
+                const section = request.messages.find(
+                    (m: { content: string }) =>
+                        m.content?.includes("Required current mission state:"),
+                );
+                assert(section);
+                const state = JSON.parse(
+                    section.content
+                        .split("Required current mission state:\n")[1]
+                        .split("\n")[0],
+                );
+                expect(state.domain.framing).toMatchObject({
+                    revision: saved.revision,
+                    scope: saved.content.scope,
+                    questions: saved.content.questions,
+                    eventBasis: saved.eventBasis,
+                    conditionReferences: [
+                        expect.objectContaining({
+                            url: "https://example.com/validation",
+                            readId: expect.any(String),
+                        }),
+                        expect.objectContaining({
+                            url: "https://example.org/export",
+                            readId: expect.any(String),
+                        }),
+                    ],
+                });
+                return reply(
+                    "The provisional program keeps estimate review as the activity and separates both conditional checks. Which announcement did you mean?",
+                );
+            } catch (error) {
+                errors.push(error);
+                throw error;
+            }
+        }),
+    );
+    fixture = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Can insurers bypass CCC during estimate review after the latest announcement?",
+        undefined,
+        5,
+    );
+    await fixture.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        1000,
+    );
+    if (errors.length) throw errors[0];
+    expect(generation).toBe(5);
+    expect(
+        (await fixture.t.run((ctx) => ctx.db.get(fixture.runId)))
+            ?.sourcePreparationId,
+    ).toBeUndefined();
+
+    const published = await fixture.client.query(
+        api.execution.conversations.listMessages,
+        {
+            runId: fixture.runId,
+            paginationOpts: { numItems: 20, cursor: null },
+        },
+    );
+    const clarification = published.page
+        .filter((message) => message.role === "assistant")
+        .at(-1)?.text;
+    expect(clarification).toContain("estimate review");
+    expect(clarification).toContain("Which announcement did you mean?");
+    const before = await fixture.client.query(api.framing.get, {
+        runId: fixture.runId,
+    });
+    assert(before);
+    const editedQuestions = before.content.questions.map((question) =>
+        question.id === "validation"
+            ? {
+                  ...question,
+                  text: "Which validation decisions does the analyst want to examine?",
+              }
+            : question,
+    );
+    await fixture.client.mutation(api.framing.save, {
+        runId: fixture.runId,
+        expectedRevision: before.revision,
+        requestKey: "analyst-replaces-conditional-question",
+        content: { scope: before.content.scope, questions: editedQuestions },
+    });
+    const edited = await fixture.client.query(api.framing.get, {
+        runId: fixture.runId,
+    });
+    assert(edited?.eventBasis?.kind === "open");
+    expect(
+        edited.eventBasis.conditions?.map((condition) => condition.questionId),
+    ).toEqual(["export"]);
+    const archived = await fixture.t.run((ctx) =>
+        ctx.db
+            .query("framingRevisions")
+            .withIndex("by_run_and_revision", (q) =>
+                q.eq("runId", fixture.runId).eq("revision", before.revision),
+            )
+            .first(),
+    );
+    expect(archived?.eventBasis).toEqual(before.eventBasis);
+}, 30000);
+
+test("provisional estimate review refusal also protects the original unnamed Nvidia crisis from fabricated analyst attribution", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    let calls = 0;
+    const errors: unknown[] = [];
+    let fixture: Awaited<ReturnType<typeof seedWorkbench>>;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            try {
+                if (++calls === 1)
+                    return toolReply("adjust_framing", {
+                        content: {
+                            scope: "Investigate NVIDIA's resilience after the recent crisis",
+                            questions: [
+                                {
+                                    id: "licensing",
+                                    shortLabel: "Licensing",
+                                    text: "how would licensing affect value capture?",
+                                    rationale: "Investigate the claimed event.",
+                                },
+                            ],
+                        },
+                        eventBasis: {
+                            kind: "open",
+                            activityExcerpt: "recent crisis",
+                            conditions: [
+                                {
+                                    questionId: "licensing",
+                                    hypothesis:
+                                        "the crisis concerns H20 export licensing",
+                                    basis: {
+                                        kind: "analyst",
+                                        excerpt: "H20 export licensing",
+                                    },
+                                },
+                            ],
+                        },
+                    });
+                const request = JSON.parse(String(init?.body));
+                const result = JSON.parse(
+                    request.messages
+                        .filter((m: { role: string }) => m.role === "tool")
+                        .at(-1).content,
+                );
+                if (calls === 2) {
+                    expect(result).toMatchObject({
+                        kind: "refused",
+                        code: "framing_event_basis_invalid",
+                    });
+                    expect(
+                        await fixture.client.query(api.framing.get, {
+                            runId: fixture.runId,
+                        }),
+                    ).toMatchObject({
+                        revision: 1,
+                        content: { scope: "", questions: [] },
+                    });
+                    return toolReply("adjust_framing", {
+                        content: {
+                            scope: "Investigate NVIDIA's operating resilience",
+                            questions: [
+                                {
+                                    id: "resilience",
+                                    shortLabel: "Resilience",
+                                    text: "Which dependencies matter for operating resilience?",
+                                    rationale: "Keep the event unresolved.",
+                                },
+                            ],
+                        },
+                        eventBasis: { kind: "open" },
+                    });
+                }
+                expect(result.kind).toBe("success");
+                const saved = await fixture.client.query(api.framing.get, {
+                    runId: fixture.runId,
+                });
+                expect(saved).toMatchObject({
+                    revision: 2,
+                    eventBasis: { kind: "open" },
+                });
+                expect(JSON.stringify(saved?.content)).not.toContain("H20");
+                return reply(
+                    "The provisional program examines operating resilience while leaving the event open. Which recent event did you mean?",
+                );
+            } catch (error) {
+                errors.push(error);
+                throw error;
+            }
+        }),
+    );
+    fixture = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "will it survive after the recent crisis ?",
+        nvidia,
+        5,
+    );
+    await fixture.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    if (errors.length) throw errors[0];
+    expect(calls).toBe(3);
+    expect(
+        (await fixture.t.run((ctx) => ctx.db.get(fixture.runId)))
+            ?.sourcePreparationId,
+    ).toBeUndefined();
+}, 30000);
+
+test("independent read provenance inherits conditional A while adding B across turns and refuses reassignment after deletion", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 2, readings: 2 }),
+    );
+    const scope = "Investigate insurer control over estimate review.";
+    const common = {
+        id: "common",
+        shortLabel: "Workflow",
+        text: "Which steps require the platform?",
+        rationale: "Locate workflow control.",
+    };
+    const questionA = {
+        id: "a",
+        shortLabel: "Validation",
+        text: "can insurers validate estimates outside the platform?",
+        rationale: "Test validation control.",
+    };
+    const questionB = {
+        id: "b",
+        shortLabel: "Export",
+        text: "can exported estimates support another review workflow?",
+        rationale: "Test operational dependence.",
+    };
+    const hypothesisA = "the announcement changes validation rights";
+    const hypothesisB = "the announcement enables estimate export";
+    let phase: "A" | "B" | "invalid" = "A";
+    let call = 0;
+    let searchId = "";
+    let firstReadId = "";
+    let secondReadId = "";
+    let acquisitions = 0;
+    const errors: unknown[] = [];
+    let fixture: Awaited<ReturnType<typeof seedWorkbench>>;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: phase,
+                            url: `https://example.com/${phase}`,
+                            title: `Illustrative ${phase} publication`,
+                            publishedDate: "2026-11-17",
+                        },
+                    ],
+                });
+            if (String(url).endsWith("/contents")) {
+                acquisitions++;
+                const selected = JSON.parse(String(init?.body)).urls[0];
+                return Response.json({
+                    results: [
+                        {
+                            id: phase,
+                            url: selected,
+                            text:
+                                phase === "A"
+                                    ? "Illustrative fixture: insurers retain validation rights."
+                                    : "Illustrative fixture: estimates can be exported.",
+                        },
+                    ],
+                });
+            }
+            try {
+                const request = JSON.parse(String(init?.body));
+                call++;
+                if (phase === "invalid") {
+                    const before = await fixture.client.query(api.framing.get, {
+                        runId: fixture.runId,
+                    });
+                    assert(before?.eventBasis?.kind === "open");
+                    if (call === 1)
+                        return toolReply("adjust_framing", {
+                            content: {
+                                scope,
+                                questions: [
+                                    ...before.content.questions,
+                                    { ...questionA, id: "c" },
+                                ],
+                            },
+                            eventBasis: {
+                                ...before.eventBasis,
+                                conditions: [
+                                    ...(before.eventBasis.conditions ?? []),
+                                    {
+                                        questionId: "c",
+                                        hypothesis: hypothesisA,
+                                        basis: {
+                                            kind: "public",
+                                            readIds: [firstReadId],
+                                        },
+                                    },
+                                ],
+                            },
+                        });
+                    const result = JSON.parse(
+                        request.messages
+                            .filter((m: { role: string }) => m.role === "tool")
+                            .at(-1).content,
+                    );
+                    expect(result).toMatchObject({
+                        kind: "refused",
+                        code: "framing_public_lookup_invalid",
+                    });
+                    expect(before.revision).toBe(5);
+                    return reply(
+                        "The earlier passage remains attached to its historical question. This new association needs a current reading.",
+                    );
+                }
+                if (call === 1)
+                    return toolReply("search_public_context", {
+                        query: `estimate review ${phase}`,
+                    });
+                const result = JSON.parse(
+                    request.messages
+                        .filter((m: { role: string }) => m.role === "tool")
+                        .at(-1).content,
+                );
+                expect(result.kind).toBe("success");
+                if (call === 2) {
+                    searchId = result.value.searchId;
+                    return toolReply("read_public_context", {
+                        target: { kind: "candidate", searchId, index: 0 },
+                    });
+                }
+                if (call === 3) {
+                    if (phase === "A") {
+                        firstReadId = result.value.readId;
+                        return toolReply("adjust_framing", {
+                            content: { scope, questions: [common, questionA] },
+                            eventBasis: {
+                                kind: "open",
+                                activityExcerpt: "estimate review",
+                                conditions: [
+                                    {
+                                        questionId: "a",
+                                        hypothesis: hypothesisA,
+                                        basis: {
+                                            kind: "public",
+                                            readIds: [firstReadId],
+                                        },
+                                    },
+                                ],
+                            },
+                        });
+                    }
+                    secondReadId = result.value.readId;
+                    const before = await fixture.client.query(api.framing.get, {
+                        runId: fixture.runId,
+                    });
+                    assert(before?.eventBasis?.kind === "open");
+                    return toolReply("adjust_framing", {
+                        content: {
+                            scope,
+                            questions: [...before.content.questions, questionB],
+                        },
+                        eventBasis: {
+                            ...before.eventBasis,
+                            conditions: [
+                                ...(before.eventBasis.conditions ?? []),
+                                {
+                                    questionId: "b",
+                                    hypothesis: hypothesisB,
+                                    basis: {
+                                        kind: "public",
+                                        readIds: [secondReadId],
+                                    },
+                                },
+                            ],
+                        },
+                    });
+                }
+                const saved = await fixture.client.query(api.framing.get, {
+                    runId: fixture.runId,
+                });
+                expect(
+                    saved?.content.questions.find(
+                        (question) => question.id === "a",
+                    )?.text,
+                ).toBe(`If ${hypothesisA}, ${questionA.text}`);
+                if (phase === "B") {
+                    expect(
+                        saved?.content.questions.find(
+                            (question) => question.id === "b",
+                        )?.text,
+                    ).toBe(`If ${hypothesisB}, ${questionB.text}`);
+                    expect(saved).toMatchObject({
+                        revision: 4,
+                        eventBasis: {
+                            conditions: [
+                                {
+                                    questionId: "a",
+                                    basis: { readIds: [firstReadId] },
+                                },
+                                {
+                                    questionId: "b",
+                                    basis: { readIds: [secondReadId] },
+                                },
+                            ],
+                        },
+                    });
+                }
+                return reply(
+                    "The provisional questions are saved with their conditions. Which announcement should research investigate?",
+                );
+            } catch (error) {
+                errors.push(error);
+                throw error;
+            }
+        }),
+    );
+    fixture = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Investigate estimate review after the latest announcement.",
+        undefined,
+        5,
+    );
+    await fixture.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        1000,
+    );
+    if (errors.length) throw errors[0];
+    const first = await fixture.client.query(api.framing.get, {
+        runId: fixture.runId,
+    });
+    assert(first);
+    await fixture.client.mutation(api.framing.save, {
+        runId: fixture.runId,
+        expectedRevision: 2,
+        requestKey: "unrelated-analyst-rationale",
+        content: {
+            scope,
+            questions: first.content.questions.map((question) =>
+                question.id === "common"
+                    ? {
+                          ...question,
+                          rationale:
+                              "The analyst's more precise common rationale.",
+                      }
+                    : question,
+            ),
+        },
+    });
+    phase = "B";
+    call = 0;
+    await fixture.client.mutation(api.execution.conversations.submit, {
+        runId: fixture.runId,
+        requestKey: "add-b",
+        delivery: "queue",
+        text: "Keep the existing question and scope. Add a conditional check about exporting an estimate.",
+    });
+    await fixture.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        1000,
+    );
+    if (errors.length) throw errors[0];
+    const both = await fixture.client.query(api.framing.get, {
+        runId: fixture.runId,
+    });
+    assert(both);
+    await fixture.client.mutation(api.framing.save, {
+        runId: fixture.runId,
+        expectedRevision: 4,
+        requestKey: "delete-a",
+        content: {
+            scope,
+            questions: both.content.questions.filter(
+                (question) => question.id !== "a",
+            ),
+        },
+    });
+    const deleted = await fixture.client.query(api.framing.get, {
+        runId: fixture.runId,
+    });
+    expect(deleted).toMatchObject({
+        revision: 5,
+        eventBasis: { conditions: [{ questionId: "b" }] },
+    });
+    const oldWrite = await fixture.t.run(async (ctx) =>
+        (await ctx.db.query("agentOperationRequests").collect()).find(
+            (request) =>
+                request.input.kind === "adjust_framing" &&
+                request.outcome?.kind === "success" &&
+                JSON.parse(request.outcome.valueJson).revision === 4,
+        ),
+    );
+    assert(oldWrite);
+    await fixture.t.action(internal.execution.operations.dispatch, {
+        requestId: oldWrite._id,
+        expectedGeneration: 1,
+    });
+    expect(
+        await fixture.client.query(api.framing.get, { runId: fixture.runId }),
+    ).toEqual(deleted);
+    phase = "invalid";
+    call = 0;
+    await fixture.client.mutation(api.execution.conversations.submit, {
+        runId: fixture.runId,
+        requestKey: "new-condition",
+        delivery: "queue",
+        text: "Add another conditional question without changing the current scope.",
+    });
+    await fixture.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        1000,
+    );
+    if (errors.length) throw errors[0];
+    expect(
+        await fixture.client.query(api.framing.get, { runId: fixture.runId }),
+    ).toEqual(deleted);
+    const archived = await fixture.t.run((ctx) =>
+        ctx.db
+            .query("framingRevisions")
+            .withIndex("by_run_and_revision", (q) =>
+                q.eq("runId", fixture.runId).eq("revision", 2),
+            )
+            .first(),
+    );
+    expect(archived?.content).toEqual(first.content);
+    expect(archived?.eventBasis).toEqual(first.eventBasis);
+    expect(acquisitions).toBe(2);
+}, 30000);
+
+test("provisional estimate review refuses a missing conditional basis before any draft is saved", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    let calls = 0;
+    const errors: unknown[] = [];
+    let fixture: Awaited<ReturnType<typeof seedWorkbench>>;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            try {
+                if (++calls === 1)
+                    return toolReply("adjust_framing", {
+                        content: {
+                            scope: "Investigate estimate review",
+                            questions: [
+                                {
+                                    id: "check",
+                                    shortLabel: "Rights",
+                                    text: "who controls validation?",
+                                    rationale: "Check control.",
+                                },
+                            ],
+                        },
+                        eventBasis: {
+                            kind: "open",
+                            activityExcerpt: "estimate review",
+                            conditions: [
+                                {
+                                    questionId: "check",
+                                    hypothesis: "validation rights change",
+                                },
+                            ],
+                        },
+                    });
+                const request = JSON.parse(String(init?.body));
+                const diagnostic = request.messages
+                    .filter(
+                        (message: { role: string }) => message.role === "tool",
+                    )
+                    .at(-1).content;
+                expect(diagnostic).toContain("basis");
+                expect(
+                    await fixture.client.query(api.framing.get, {
+                        runId: fixture.runId,
+                    }),
+                ).toMatchObject({
+                    revision: 1,
+                    content: { scope: "", questions: [] },
+                });
+                return reply(
+                    "The conditional proposal was not saved because its supporting reference was missing.",
+                );
+            } catch (error) {
+                errors.push(error);
+                throw error;
+            }
+        }),
+    );
+    fixture = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Investigate estimate review.",
+        undefined,
+        5,
+    );
+    await fixture.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    if (errors.length) throw errors[0];
+    expect(calls).toBe(2);
+    expect(
+        await fixture.client.query(api.framing.get, { runId: fixture.runId }),
+    ).toMatchObject({ revision: 1 });
 }, 30000);

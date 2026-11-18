@@ -1,18 +1,23 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import {
     campaignManifestSchema,
     emptyCampaignLimits,
+    framingReplaySchema,
+    type QualificationScenario,
 } from "@convex/qualificationCampaignPolicy";
 import {
     initialDocumentaryMaterial,
     initialFixtureContent,
     initialFixtureIds,
 } from "@convex/qualificationInitialFixtures";
+import directedMaterial from "@evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json";
+import { prepareFramingReplay } from "@evaluations/workbench-browser/protocol";
 import { prepareCampaignScenarios } from "@evaluations/workbench-browser/scenarios";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
@@ -24,13 +29,28 @@ import {
     type Value,
 } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
+import {
+    nativePiFixtureRoute,
+    nativeTextReply,
+    nativeToolReply,
+} from "@/__tests__/setup/pi-native";
 import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
-import { sourcesTestEnvelope } from "@/__tests__/setup/sources-mission";
+import {
+    activateSourcesMission,
+    sourcesTestEnvelope,
+} from "@/__tests__/setup/sources-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
+
+vi.mock("node:dns/promises", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("node:dns/promises")>()),
+    lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
+}));
 
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
 });
 
 const install = makeFunctionReference<
@@ -51,13 +71,37 @@ async function fixture(
         | "independent_scrutiny"
         | undefined
     )[] = [undefined],
+    framingRequest?: { text: string; receivedAt: string },
+    framingReplay?: QualificationScenario["framingReplay"],
 ) {
     const f = await seedWorkbench(true);
     const raw = configurableCampaign();
     const baseline = raw.scenarios[0];
     assert(baseline);
+    if (framingReplay?.case === "nvidia")
+        baseline.company = {
+            cik: "1045810",
+            name: "NVIDIA Corporation",
+            ticker: "NVDA",
+            websiteUrl: "https://www.nvidia.com",
+        };
     const scenarios = presets.map((coveragePreset) => ({
         ...baseline,
+        ...(framingReplay
+            ? { framingReplay, framingPublicContext: true as const }
+            : {}),
+        ...(framingRequest
+            ? {
+                  framingRequest,
+                  steps: [
+                      {
+                          id: "settled",
+                          action: "wait_for",
+                          state: "conversation_settled",
+                      },
+                  ],
+              }
+            : {}),
         ...(coveragePreset
             ? {
                   coveragePreset,
@@ -83,6 +127,15 @@ async function fixture(
                   },
               }),
     }));
+    if (framingRequest)
+        for (const scenario of scenarios)
+            scenario.steps = [
+                {
+                    id: "settled",
+                    action: "wait_for",
+                    state: "conversation_settled",
+                },
+            ];
     const manifest = campaignManifestSchema.parse({
         ...raw,
         mode: "deterministic",
@@ -443,5 +496,570 @@ test.each([
     ).toBeUndefined();
     expect(
         await f.t.run((ctx) => ctx.db.query("sourceCaptures").take(1)),
+    ).toEqual([]);
+});
+
+test.each([
+    "balanced",
+    "first_party_depth",
+    "independent_scrutiny",
+] as const)("directed framing handoff fixes the agent's program and preset in the first Sources request (%s)", async (preset) => {
+    activateSourcesMission();
+    vi.stubEnv("SEC_USER_AGENT", "Workbench fixture evidence@example.test");
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 1, readings: 1 }),
+    );
+    const sourceRequests: string[] = [];
+    const errors: unknown[] = [];
+    let generation = 0;
+    let searchId = "";
+    const scope = "Investigate insurer control over estimate review.";
+    const questions = [
+        {
+            id: "control",
+            shortLabel: "Control",
+            text: "Which review decisions require the platform?",
+            rationale: "Locate workflow control.",
+        },
+        {
+            id: "validation",
+            shortLabel: "Validation",
+            text: "can insurers validate estimates through another workflow?",
+            rationale: "Test conditional bypass.",
+        },
+    ];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+            if (String(url).includes("data.sec.gov/submissions/"))
+                return Response.json({
+                    cik: "1818201",
+                    name: "CCC Intelligent Solutions Holdings Inc.",
+                    tickers: ["CCCS"],
+                    exchanges: ["NASDAQ"],
+                    filings: {
+                        recent: {
+                            accessionNumber: [],
+                            filingDate: [],
+                            form: [],
+                            primaryDocument: [],
+                        },
+                    },
+                });
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: directedMaterial.ccc.results.map(
+                        ({ text: _text, ...lead }) => lead,
+                    ),
+                });
+            if (String(url).endsWith("/contents"))
+                return Response.json({ results: directedMaterial.ccc.results });
+            try {
+                const request = JSON.parse(String(init?.body));
+                const section = request.messages.find(
+                    (message: { content: string }) =>
+                        message.content?.includes(
+                            "Required current mission state:",
+                        ),
+                );
+                assert(section);
+                const state = JSON.parse(
+                    section.content
+                        .split("Required current mission state:\n")[1]
+                        .split("\n")[0],
+                );
+                if (state.definition.id === "sources_v1") {
+                    sourceRequests.push(section.content);
+                    return nativeTextReply(
+                        JSON.stringify({
+                            kind: "complete",
+                            needs: state.activeWork.needs.map(
+                                (need: { id: string }) => ({
+                                    needId: need.id,
+                                    unfinished: [
+                                        "Offline fixture ends before documentary collection.",
+                                    ],
+                                }),
+                            ),
+                        }),
+                    );
+                }
+                if (generation++ === 0) {
+                    expect(state.domain.coveragePreset).toBe(preset);
+                    return nativeToolReply("search_public_context", {
+                        query: "validation rights",
+                    });
+                }
+                const result = JSON.parse(
+                    request.messages
+                        .filter(
+                            (message: { role: string }) =>
+                                message.role === "tool",
+                        )
+                        .at(-1).content,
+                );
+                expect(result.kind).toBe("success");
+                if (generation === 2) {
+                    searchId = result.value.searchId;
+                    return nativeToolReply("read_public_context", {
+                        target: { kind: "candidate", searchId, index: 0 },
+                    });
+                }
+                if (generation === 3)
+                    return nativeToolReply("adjust_framing", {
+                        content: { scope, questions },
+                        eventBasis: {
+                            kind: "open",
+                            activityExcerpt: "estimate review",
+                            conditions: [
+                                {
+                                    questionId: "validation",
+                                    hypothesis:
+                                        "the announcement changes validation rights",
+                                    basis: {
+                                        kind: "public",
+                                        readIds: [result.value.readId],
+                                    },
+                                },
+                            ],
+                        },
+                    });
+                return nativeTextReply(
+                    "The provisional estimate-review program is saved. Choose Start research when ready.",
+                );
+            } catch (error) {
+                errors.push(error);
+                throw error;
+            }
+        }),
+    );
+    const f = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Investigate estimate review after the latest validation-rights announcement.",
+        undefined,
+        undefined,
+        preset,
+    );
+    rateLimiterTest.register(f.t);
+    const conversation = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .unique(),
+    );
+    expect(conversation?.definitionVersion).toBe(5);
+    const configured = await f.t.run(async (ctx) => {
+        const catalog = (await ctx.db.query("modelCatalog").collect()).find(
+            (entry) =>
+                entry.model === nativePiFixtureRoute.model &&
+                entry.provider === nativePiFixtureRoute.provider,
+        );
+        const invitation = await ctx.db
+            .query("invitations")
+            .withIndex("by_slot_key", (q) => q.eq("slotKey", "admin"))
+            .unique();
+        const visitor = invitation?.claimedByVisitorId
+            ? await ctx.db.get(invitation.claimedByVisitorId)
+            : null;
+        const assignment = (
+            await ctx.db.query("agentModelSettings").collect()
+        ).find((entry) => entry.agent === "sources");
+        assert(catalog && visitor);
+        return {
+            catalogId: catalog._id,
+            subject: visitor.authUserId,
+            revision: assignment?.revision ?? 0,
+        };
+    });
+    await f.t
+        .withIdentity({ subject: configured.subject })
+        .mutation(api.modelConfiguration.assign, {
+            agent: "sources",
+            catalogId: configured.catalogId,
+            expectedRevision: configured.revision,
+            requestKey: "directed-source-model",
+        });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        1000,
+    );
+    if (errors.length) throw errors[0];
+    expect(generation).toBe(4);
+    expect(sourceRequests).toEqual([]);
+    const draft = await f.client.query(api.framing.get, { runId: f.runId });
+    assert(draft);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.runId)))?.sourcePreparationId,
+    ).toBeUndefined();
+    const start = {
+        runId: f.runId,
+        expectedRevision: draft.revision,
+        requestKey: "directed-start",
+    };
+    expect(await f.client.mutation(api.framing.startResearch, start)).toBe(
+        f.runId,
+    );
+    expect(await f.client.mutation(api.framing.startResearch, start)).toBe(
+        f.runId,
+    );
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        1000,
+    );
+    if (errors.length) throw errors[0];
+    const saved = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(
+            run?.fixedFramingRevisionId &&
+                run.sourcePreparationId &&
+                run.ownerVisitorId,
+        );
+        return {
+            run,
+            fixed: await ctx.db.get(run.fixedFramingRevisionId),
+            preparation: await ctx.db.get(run.sourcePreparationId),
+            visitor: await ctx.db.get(run.ownerVisitorId),
+            missions: await ctx.db.query("agentMissions").collect(),
+        };
+    });
+    expect(saved.fixed?.content).toEqual(draft.content);
+    expect(saved.visitor?.analysesReserved).toBe(1);
+    expect(saved.preparation?.sourcesMission?.coveragePolicy?.preset).toBe(
+        preset,
+    );
+    for (const question of draft.content.questions)
+        expect(
+            saved.preparation?.sourcesMission?.needs.find((need) =>
+                need.questionIds.includes(question.id),
+            )?.information,
+        ).toBe(question.text);
+    expect(
+        saved.preparation?.sourcesMission?.needs.find(
+            (need) => need.commonContext,
+        )?.information,
+    ).toContain(draft.content.scope);
+    expect(
+        saved.missions.some((mission) => mission.definitionId === "sources_v1"),
+    ).toBe(true);
+    expect(sourceRequests).toHaveLength(1);
+    const wire = JSON.parse(
+        sourceRequests[0]
+            ?.split("Required current mission state:\n")[1]
+            ?.split("\n")[0] ?? "null",
+    );
+    expect(wire.domain.framing).toMatchObject({
+        scope: draft.content.scope,
+        questions: draft.content.questions,
+        fixed: true,
+    });
+    expect(wire.domain.coveragePolicy?.preset).toBe(preset);
+    for (const question of draft.content.questions)
+        expect(
+            wire.activeWork.needs.find((need: { questionIds: string[] }) =>
+                need.questionIds.includes(question.id),
+            )?.information,
+        ).toBe(question.text);
+}, 30000);
+
+test("dated fresh framing fixture preserves the exact original request before any dispatch", async () => {
+    const request = {
+        text: "will it survive after the recent crisis ?",
+        receivedAt: "2026-11-18T09:00:00.000Z",
+    };
+    const f = await fixture("sources_correction", ["balanced"], request);
+    await f.t.mutation(internal.execution.fixtures.activateWorkbench, {
+        runId: f.runId,
+        fixtureKey: f.args.fixtureKey,
+    });
+    const initial = await f.t.run(async (ctx) => ({
+        run: await ctx.db.get(f.runId),
+        revisions: await ctx.db
+            .query("framingRevisions")
+            .filter((q) => q.eq(q.field("runId"), f.runId))
+            .collect(),
+        deliveries: await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_key", (q) => q.eq("runId", f.runId))
+            .collect(),
+        missions: await ctx.db
+            .query("agentMissions")
+            .filter((q) => q.eq(q.field("runId"), f.runId))
+            .collect(),
+    }));
+    expect(initial.revisions).toHaveLength(1);
+    expect(initial.revisions[0]).toMatchObject({
+        origin: "initial",
+        content: { scope: "", questions: [] },
+    });
+    expect(initial.run?.researchStartedAt).toBeUndefined();
+    expect(initial.run?.sourcePreparationId).toBeUndefined();
+    expect(
+        initial.missions.filter((m) => m.definitionId === "sources_v1"),
+    ).toEqual([]);
+    const messages = await f.client.query(
+        api.execution.conversations.listMessages,
+        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
+    );
+    expect(messages.page.filter((d) => d.role === "user")).toMatchObject([
+        { text: request.text, createdAt: Date.parse(request.receivedAt) },
+    ]);
+});
+
+test("original Nvidia request reaches the first native dispatch with an empty program and its November date", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-18T09:00:00.000Z"));
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    let first = "";
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            first = String(init?.body);
+            return nativeTextReply(
+                "Which crisis do you mean? The initial program remains open.",
+            );
+        }),
+    );
+    const f = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "will it survive after the recent crisis ?",
+        {
+            cik: "1045810",
+            legalName: "NVIDIA Corporation",
+            ticker: "NVDA",
+            exchange: "NASDAQ",
+        },
+    );
+    const before = await f.client.query(api.framing.get, { runId: f.runId });
+    expect(before).toMatchObject({
+        origin: "initial",
+        content: { scope: "", questions: [] },
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        1000,
+    );
+    const request = JSON.parse(first);
+    const section = request.messages.find((message: { content?: string }) =>
+        message.content?.includes("Required current mission state:"),
+    );
+    assert(section);
+    const state = JSON.parse(
+        section.content
+            .split("Required current mission state:\n")[1]
+            .split("\n")[0],
+    );
+    expect(state.conversationInstructions.messages).toEqual([
+        expect.objectContaining({
+            text: "will it survive after the recent crisis ?",
+            receivedAt: "2026-11-18T09:00:00.000Z",
+        }),
+    ]);
+    expect(state.domain.framing).toMatchObject({
+        scope: "",
+        questions: [],
+        origin: "initial",
+    });
+    expect(first).not.toContain("nvda-20261111.htm");
+    expect(first).not.toContain("Huang");
+    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    expect(run?.researchStartedAt).toBeUndefined();
+    expect(run?.sourcePreparationId).toBeUndefined();
+    expect(await f.client.query(api.framing.get, { runId: f.runId })).toEqual(
+        before,
+    );
+});
+
+test.each([
+    ["nvidia", "balanced"],
+    ["ccc", "balanced"],
+    ["ccc", "first_party_depth"],
+    ["ccc", "independent_scrutiny"],
+    ["lookupUnavailable", "balanced"],
+    ["insufficientDatedSupport", "balanced"],
+] as const)("bound campaign replay supplies actual framing operations without network (%s, %s)", async (replayCase, preset) => {
+    const path = resolve(
+        "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json",
+    );
+    const replay = framingReplaySchema.parse(
+        prepareFramingReplay({
+            materialPath: path,
+            materialHash: createHash("sha256")
+                .update(readFileSync(path))
+                .digest("hex"),
+            case: replayCase,
+        }),
+    );
+    const f = await fixture(
+        "sources_correction",
+        [preset],
+        {
+            text:
+                replayCase === "nvidia"
+                    ? "will it survive after the recent crisis ?"
+                    : "Investigate estimate review after the latest announcement.",
+            receivedAt: "2026-11-18T09:00:00.000Z",
+        },
+        replay,
+    );
+    await f.t.mutation(internal.execution.fixtures.activateWorkbench, {
+        runId: f.runId,
+        fixtureKey: f.args.fixtureKey,
+    });
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    const message = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_turn", (q) => q.eq("turnId", active.turnId))
+            .first(),
+    );
+    assert(message);
+    const initial = await f.t.query(internal.execution.context.build, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+    });
+    assert(initial.kind === "ready");
+    expect(initial.inputJson).not.toContain(replay.materialHash);
+    expect(initial.inputJson).not.toContain("Illustrative fixture:");
+    expect(initial.inputJson).not.toContain("Huang");
+    expect(initial.inputJson).not.toContain("nvda-20261111.htm");
+    const dns = vi.mocked((await import("node:dns/promises")).lookup);
+    dns.mockClear();
+    const network = vi.fn<typeof fetch>(async () => {
+        throw new Error("Frozen replay must not access network");
+    });
+    vi.stubGlobal("fetch", network);
+    const searchId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "replay-search",
+        input: {
+            kind: "search_public_context",
+            messageId: message._id,
+            query: "latest announcement",
+        },
+    });
+    const searched = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: searchId,
+        expectedGeneration: 1,
+    });
+    if (replay.unavailable)
+        expect(searched).toMatchObject({
+            kind: "unavailable",
+            code: "missing_configuration",
+        });
+    else {
+        assert(searched.kind === "success");
+        const result = JSON.parse(searched.valueJson);
+        expect(result.replayCorpusHash).toBe(replay.materialHash);
+        expect(
+            result.candidates.map((lead: { url: string }) => lead.url),
+        ).toEqual(replay.documents.map((doc) => doc.url));
+        expect(result.candidates[0]).not.toHaveProperty("text");
+        const readId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: active.missionId,
+                expectedGeneration: 1,
+                cause: "replay-read",
+                input: {
+                    kind: "read_public_context",
+                    messageId: message._id,
+                    target: { kind: "candidate", searchId, index: 0 },
+                },
+            },
+        );
+        const read = await f.t.action(internal.execution.operations.dispatch, {
+            requestId: readId,
+            expectedGeneration: 1,
+        });
+        assert(read.kind === "success");
+        expect(JSON.parse(read.valueJson)).toMatchObject({
+            replayCorpusHash: replay.materialHash,
+        });
+        if (replayCase === "nvidia")
+            expect(JSON.parse(read.valueJson).reference).toMatchObject({
+                excerpt: expect.stringContaining("resignation"),
+                publishedAt: "2026-11-12T00:00:00.000Z",
+            });
+        else
+            expect(JSON.parse(read.valueJson).reference.excerpt).toBe(
+                replay.documents[0]?.text,
+            );
+        if (replayCase === "insufficientDatedSupport")
+            expect(JSON.parse(read.valueJson).reference).not.toHaveProperty(
+                "publishedAt",
+            );
+        if (replayCase === "insufficientDatedSupport") {
+            const editId = await f.t.mutation(
+                internal.execution.operations.enqueue,
+                {
+                    missionId: active.missionId,
+                    expectedGeneration: 1,
+                    cause: "undated-replay-cannot-identify-event",
+                    input: {
+                        kind: "adjust_framing",
+                        messageId: message._id,
+                        expectedRevision: 1,
+                        content: {
+                            scope: "Investigate estimate review.",
+                            questions: [
+                                {
+                                    id: "control",
+                                    shortLabel: "Control",
+                                    text: "Which review decisions require the platform?",
+                                    rationale: "Locate control.",
+                                },
+                            ],
+                        },
+                        eventBasis: {
+                            kind: "public",
+                            label: "The announcement",
+                            readIds: [readId],
+                        },
+                    },
+                },
+            );
+            expect(
+                await f.t.action(internal.execution.operations.dispatch, {
+                    requestId: editId,
+                    expectedGeneration: 1,
+                }),
+            ).toMatchObject({
+                kind: "refused",
+                code: "framing_public_reference_undated",
+            });
+        }
+    }
+    expect(
+        await f.client.query(api.framing.get, { runId: f.runId }),
+    ).toMatchObject({ revision: 1, content: { scope: "", questions: [] } });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.runId)))?.sourcePreparationId,
+    ).toBeUndefined();
+    expect(network).not.toHaveBeenCalled();
+    expect(dns).not.toHaveBeenCalled();
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .collect(),
+        ),
     ).toEqual([]);
 });

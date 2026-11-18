@@ -14,6 +14,11 @@ import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 import rateLimiterTest from "./rate-limiter-test-register.js";
 
+vi.mock("node:dns/promises", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("node:dns/promises")>()),
+    lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+}));
+
 const modules = import.meta.glob("/convex/**/*.ts");
 
 afterEach(() => {
@@ -1171,17 +1176,38 @@ test("Task5 defect 1: terminal telemetry unchanged after decision revocation", a
     expect(callAfter?.errorCode).toBeUndefined();
 });
 
-test("framing lookup with a settled provider receipt and lost reading result does not repeat dispatch", async () => {
+test.each([
+    "verify_public_context",
+    "search_public_context",
+    "read_public_context",
+] as const)("%s with a settled receipt and lost acknowledgement does not repeat dispatch", async (kind) => {
     vi.stubEnv("EXA_API_KEY", "fixture-only");
     vi.stubEnv(
         "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
         JSON.stringify({ searches: 1, readings: 1 }),
     );
     const paidFetch = vi.fn(async () =>
-        Response.json({ results: [], costDollars: { total: 0.01 } }),
+        Response.json({
+            results: [
+                {
+                    id: "lead",
+                    url: "https://example.com/lead",
+                    title: "Observed lead",
+                    text: "Retained source text.",
+                },
+            ],
+            costDollars: { total: 0.01 },
+        }),
     );
     vi.stubGlobal("fetch", paidFetch);
-    const { t, runId } = await seedWorkbench(false, nativePiFixtureRoute);
+    const { t, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        "Read the public announcement.",
+        undefined,
+        kind === "verify_public_context" ? 4 : 5,
+    );
     const active = await t.mutation(
         internal.execution.conversations.startTurn,
         {
@@ -1199,15 +1225,42 @@ test("framing lookup with a settled provider receipt and lost reading result doe
             .first(),
     );
     assert(message);
+    let searchId: Id<"agentOperationRequests"> | undefined;
+    if (kind === "read_public_context") {
+        searchId = await t.mutation(internal.execution.operations.enqueue, {
+            missionId: active.missionId,
+            expectedGeneration: 1,
+            cause: "lead-for-ack-test",
+            input: {
+                kind: "search_public_context",
+                messageId: message._id,
+                query: "public event",
+            },
+        });
+        expect(
+            await t.action(internal.execution.operations.dispatch, {
+                requestId: searchId,
+                expectedGeneration: 1,
+            }),
+        ).toMatchObject({ kind: "success" });
+        paidFetch.mockClear();
+    }
+    const input = (() => {
+        if (kind === "read_public_context") {
+            assert(searchId);
+            return {
+                kind,
+                messageId: message._id,
+                target: { kind: "candidate" as const, searchId, index: 0 },
+            };
+        }
+        return { kind, messageId: message._id, query: "public event" };
+    })();
     const requestId = await t.mutation(internal.execution.operations.enqueue, {
         missionId: active.missionId,
         expectedGeneration: 1,
         cause: "lost-framing-lookup-ack",
-        input: {
-            kind: "verify_public_context",
-            messageId: message._id,
-            query: "public event",
-        },
+        input,
     });
     const args = { requestId, expectedGeneration: 1 };
     expect(
@@ -1254,10 +1307,15 @@ test("framing lookup with a settled provider receipt and lost reading result doe
             .withIndex("by_run", (q) => q.eq("runId", runId))
             .collect(),
     );
-    expect(receipts).toEqual([
+    expect(
+        receipts.filter((receipt) => receipt.operationRequestId === requestId),
+    ).toEqual([
         expect.objectContaining({
             status: "succeeded",
-            operation: "framing_context_search",
+            operation:
+                kind === "read_public_context"
+                    ? "framing_context_read"
+                    : "framing_context_search",
             reportedCost: 0.01,
             operationRequestId: requestId,
         }),

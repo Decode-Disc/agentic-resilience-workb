@@ -461,3 +461,204 @@ test("unknown charges remain inconclusive and a reconciliation mismatch blocks e
         "failed",
     );
 });
+
+const { campaignManifestSchema } = await import(
+    "../../../convex/qualificationCampaignPolicy.ts"
+);
+const { configurableCampaign } = await import("../setup/qualification-v2.ts");
+
+test("dated fresh-framing mandates refuse scripted programs and documentary seeding", () => {
+    const base = configurableCampaign();
+    const scenario = {
+        ...base.scenarios[0],
+        framingRequest: {
+            text: "will it survive after the recent crisis ?",
+            receivedAt: "2026-11-18T09:00:00.000Z",
+        },
+    };
+    const manifest = {
+        ...base,
+        scenarios: [scenario],
+        expectations: [{ id: scenario.id, checks: ["agent-saved-framing"] }],
+        batteryHash: "a".repeat(64),
+    };
+    assert.equal(campaignManifestSchema.safeParse(manifest).success, false);
+    scenario.steps = [{ id: "start", action: "start_research" }];
+    assert.equal(campaignManifestSchema.safeParse(manifest).success, true);
+    scenario.initialFixture = {
+        id: "sources_correction",
+        hash: "b".repeat(64),
+    };
+    assert.equal(campaignManifestSchema.safeParse(manifest).success, false);
+    delete scenario.initialFixture;
+    scenario.framingRequest.receivedAt = "not-a-date";
+    assert.equal(campaignManifestSchema.safeParse(manifest).success, false);
+});
+
+test("prepared directed-framing comparisons keep fresh requests, shared material and zero paid authority", async () => {
+    const { createHash } = await import("node:crypto");
+    const directory = new URL(
+        "../../../scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/",
+        import.meta.url,
+    );
+    const manifest = campaignManifestSchema.parse(
+        JSON.parse(
+            readFileSync(new URL("campaign-input.json", directory), "utf8"),
+        ),
+    );
+    assert.equal(manifest.mode, "deterministic");
+    assert.deepEqual(manifest.total, {
+        model: 0,
+        search: 0,
+        acquisition: 0,
+        costUsd: 0,
+    });
+    assert.equal(manifest.scenarios.length, 7);
+    assert(
+        manifest.scenarios.every(
+            (s) =>
+                s.framingRequest &&
+                !s.initialFixture &&
+                !s.steps.some((step) => step.action === "save_framing"),
+        ),
+    );
+    const presets = manifest.scenarios.filter((s) => s.id.startsWith("ccc-"));
+    assert.deepEqual(
+        presets.map((s) => s.coveragePreset),
+        ["balanced", "first_party_depth", "independent_scrutiny"],
+    );
+    assert.equal(
+        new Set(presets.map((s) => JSON.stringify(s.framingRequest))).size,
+        1,
+    );
+    const unnamed = manifest.scenarios.find((s) => s.id === "nvidia-unnamed");
+    assert.equal(
+        unnamed.framingRequest.text,
+        "will it survive after the recent crisis ?",
+    );
+    assert.equal(unnamed.framingRequest.receivedAt, "2026-11-18T09:00:00.000Z");
+    assert(!unnamed.framingRequest.text.includes("sec.gov"));
+    assert(!unnamed.framingRequest.text.includes("Huang"));
+    const material = JSON.parse(
+        readFileSync(new URL("material.json", directory), "utf8"),
+    );
+    for (const document of material.documents)
+        assert.equal(
+            createHash("sha256")
+                .update(readFileSync(new URL(document.file, directory)))
+                .digest("hex"),
+            document.sha256,
+        );
+    assert(
+        material.ccc.results.every((result) =>
+            result.text.startsWith("Illustrative fixture:"),
+        ),
+    );
+    assert(
+        material.provenance.includes(
+            "not a capture of the historical Exa index",
+        ),
+    );
+});
+
+test("campaign preparation freezes retrieval material for a future real-model mandate without dispatch", async () => {
+    const { writeFileSync } = await import("node:fs");
+    const { createHash } = await import("node:crypto");
+    const { resolve } = await import("node:path");
+    const { runCampaign } = await import(
+        "../../../scripts/evaluations/workbench-browser/campaign.ts"
+    );
+    const root = mkdtempSync(join(tmpdir(), "framing-replay-prepare-"));
+    try {
+        const materialPath = resolve(
+            "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json",
+        );
+        const materialHash = createHash("sha256")
+            .update(readFileSync(materialPath))
+            .digest("hex");
+        const input = JSON.parse(
+            readFileSync(
+                "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/campaign-input.json",
+                "utf8",
+            ),
+        );
+        input.mode = "live";
+        input.expiresAt = Date.now() + 3600000;
+        input.perLot = input.total = {
+            model: 60,
+            search: 0,
+            acquisition: 0,
+            costUsd: 3,
+        };
+        for (const scenario of input.scenarios)
+            scenario.framingReplay = {
+                materialPath,
+                materialHash,
+                case: scenario.id.startsWith("nvidia-")
+                    ? "nvidia"
+                    : scenario.id === "lookup-unavailable"
+                      ? "lookupUnavailable"
+                      : scenario.id === "insufficient-dated-support"
+                        ? "insufficientDatedSupport"
+                        : "ccc",
+            };
+        const path = join(root, "input.json");
+        writeFileSync(path, JSON.stringify(input));
+        await runCampaign(
+            "prepare",
+            join(root, "prepared"),
+            { manifest: path },
+            undefined,
+            {
+                connect: async () => {
+                    throw new Error("Preparation must not connect");
+                },
+            },
+        );
+        const prepared = JSON.parse(
+            readFileSync(join(root, "prepared", "campaign.json"), "utf8"),
+        );
+        assert.equal(prepared.boundary, "prepared_without_authorization");
+        const scenarios = prepared.manifest.scenarios;
+        assert.equal(
+            scenarios[0].framingRequest.text,
+            "will it survive after the recent crisis ?",
+        );
+        assert(!scenarios[0].framingRequest.text.includes("Huang"));
+        assert(
+            scenarios[0].framingReplay.documents.some((doc) =>
+                doc.url.includes("20261111"),
+            ),
+        );
+        const ccc = scenarios.filter((s) => s.id.startsWith("ccc-"));
+        assert.equal(
+            new Set(ccc.map((s) => JSON.stringify(s.framingReplay))).size,
+            1,
+        );
+        assert.equal(
+            scenarios.find((s) => s.id === "lookup-unavailable").framingReplay
+                .unavailable,
+            true,
+        );
+        assert(
+            scenarios
+                .find((s) => s.id === "insufficient-dated-support")
+                .framingReplay.documents.every((doc) => !doc.publishedAt),
+        );
+        assert(
+            scenarios.every(
+                (s) =>
+                    s.framingReplay.materialHash === materialHash &&
+                    !s.framingReplay.materialPath,
+            ),
+        );
+        input.scenarios[0].framingReplay.materialHash = "0".repeat(64);
+        writeFileSync(path, JSON.stringify(input));
+        await assert.rejects(
+            runCampaign("prepare", join(root, "tampered"), { manifest: path }),
+            /hash|changed/i,
+        );
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});

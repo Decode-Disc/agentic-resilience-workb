@@ -2,7 +2,12 @@ import { api, internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { agentToolSchemas } from "@convex/execution/agentDefinition";
 import type { FunctionArgs } from "convex/server";
+import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    nativePiFixtureRoute,
+    nativeTextReply,
+} from "@/__tests__/setup/pi-native";
 import {
     seedWorkbench,
     workbenchAdmissionInput,
@@ -11,10 +16,18 @@ import {
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
 });
 
-async function activeWorkbench(text: string) {
-    const fixture = await seedWorkbench(true);
+async function activeWorkbench(text: string, version: 4 | 5 = 4, local = true) {
+    const fixture = await seedWorkbench(
+        local,
+        local ? undefined : nativePiFixtureRoute,
+        60000,
+        undefined,
+        undefined,
+        version,
+    );
     const { t, client, runId } = fixture;
     const queued = await t.run((ctx) =>
         ctx.db
@@ -39,7 +52,7 @@ async function activeWorkbench(text: string) {
             runId,
             definitionId: "workbench_v1",
             scope: { kind: "workbench_v1" },
-            simulation: true,
+            simulation: local,
         },
     );
     assert(active);
@@ -512,3 +525,489 @@ test("a control message cannot cause a framing write while a separate active edi
         content: { scope: "Insurer-repairer coordination", questions: [] },
     });
 });
+
+test.each([
+    4, 5,
+] as const)("framing v%s refuses the other version's public basis at both offered and forced-write boundaries", async (version) => {
+    const { t, client, runId, missionId, messageId } = await activeWorkbench(
+        "Investigate the public event.",
+        version,
+    );
+    const referenceId = await t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId,
+            expectedGeneration: 1,
+            cause: "reference-for-shape-test",
+            input: { kind: "consult_mission_state" },
+        },
+    );
+    const basis =
+        version === 4
+            ? {
+                  kind: "public" as const,
+                  label: "Event",
+                  readIds: [referenceId],
+              }
+            : {
+                  kind: "public" as const,
+                  label: "Event",
+                  lookupRequestId: referenceId,
+                  referenceIndexes: [0],
+              };
+    const input = {
+        content: { scope: "Public event", questions: [] },
+        eventBasis: basis,
+    };
+    const context = await t.query(internal.execution.context.build, {
+        missionId,
+        expectedGeneration: 1,
+    });
+    assert(context.kind === "ready");
+    const offered = agentToolSchemas(
+        getAgentDefinition("workbench_v1", version),
+        JSON.parse(context.inputJson),
+    );
+    assert(offered.adjust_framing);
+    expect(validate(offered.adjust_framing.inputValidator, input)).toBe(false);
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 1,
+        cause: "forced-cross-version-basis",
+        input: {
+            kind: "adjust_framing",
+            expectedRevision: 1,
+            messageId,
+            ...input,
+        },
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "refused", code: "framing_event_basis_invalid" });
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 1,
+        content: { scope: "", questions: [] },
+    });
+});
+
+test("retained v4 refuses a forced structured open proposal rather than saving unmatched condition metadata", async () => {
+    const { t, client, runId, missionId, messageId } = await activeWorkbench(
+        "Investigate estimate review.",
+        4,
+    );
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 1,
+        cause: "v5-open-on-v4",
+        input: {
+            kind: "adjust_framing",
+            expectedRevision: 1,
+            messageId,
+            content: {
+                scope: "Investigate estimate review",
+                questions: [
+                    {
+                        id: "rights",
+                        shortLabel: "Rights",
+                        text: "who controls review?",
+                        rationale: "Inspect control.",
+                    },
+                ],
+            },
+            eventBasis: {
+                kind: "open",
+                activityExcerpt: "estimate review",
+                conditions: [
+                    {
+                        questionId: "rights",
+                        hypothesis: "review rights change",
+                        basis: { kind: "analyst", excerpt: "estimate review" },
+                    },
+                ],
+            },
+        },
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "refused", code: "framing_event_basis_invalid" });
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 1,
+        content: { scope: "", questions: [] },
+    });
+});
+
+test.each([
+    "invented activity",
+    "invented analyst basis",
+    "missing question",
+    "duplicate condition",
+    "unavailable read",
+    "empty read basis",
+    "unanchored scope change",
+] as const)("provisional framing refuses %s and preserves a nonempty analyst draft", async (failure) => {
+    const { t, client, runId, missionId, messageId } = await activeWorkbench(
+        "Investigate estimate review.",
+        5,
+    );
+    const retained = {
+        id: "keep",
+        shortLabel: "Analyst question",
+        text: "Which workflow decisions does the insurer control?",
+        rationale: "The analyst's existing question.",
+    };
+    await client.mutation(api.framing.save, {
+        runId,
+        expectedRevision: 1,
+        requestKey: "analyst-baseline",
+        content: {
+            scope: "Investigate estimate review",
+            questions: [retained],
+        },
+    });
+    const before = await client.query(api.framing.get, { runId });
+    const referenceId = await t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId,
+            expectedGeneration: 1,
+            cause: "non-reading-reference",
+            input: { kind: "consult_mission_state" },
+        },
+    );
+    const basis: Extract<
+        FunctionArgs<typeof internal.execution.operations.enqueue>["input"],
+        { kind: "adjust_framing" }
+    >["eventBasis"] = {
+        kind: "open",
+        activityExcerpt: "estimate review",
+        conditions: [
+            {
+                questionId: "check",
+                hypothesis: "validation rights change",
+                basis: { kind: "analyst", excerpt: "estimate review" },
+            },
+        ],
+    };
+    assert(basis.conditions?.[0]);
+    let scope = "Investigate estimate review";
+    if (failure === "invented activity") {
+        scope = "Investigate claims processing";
+        basis.activityExcerpt = "claims processing";
+    }
+    if (failure === "invented analyst basis")
+        basis.conditions[0].basis = {
+            kind: "analyst",
+            excerpt: "H20 licensing",
+        };
+    if (failure === "missing question")
+        basis.conditions[0].questionId = "missing";
+    if (failure === "duplicate condition")
+        basis.conditions.push({ ...basis.conditions[0] });
+    if (failure === "unavailable read")
+        basis.conditions[0].basis = { kind: "public", readIds: [referenceId] };
+    if (failure === "empty read basis")
+        basis.conditions[0].basis = { kind: "public", readIds: [] };
+    if (failure === "unanchored scope change") {
+        scope = "Investigate a different workflow";
+        delete basis.activityExcerpt;
+        basis.conditions = [];
+    }
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 1,
+        cause: "invalid-provisional-draft",
+        input: {
+            kind: "adjust_framing",
+            expectedRevision: 2,
+            messageId,
+            eventBasis: basis,
+            content: {
+                scope,
+                questions: [
+                    retained,
+                    {
+                        id: "check",
+                        shortLabel: "Conditional check",
+                        text: "can the insurer use another workflow?",
+                        rationale: "Test the condition.",
+                    },
+                ],
+            },
+        },
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({
+        kind: "refused",
+        code:
+            failure === "unavailable read"
+                ? "framing_public_lookup_invalid"
+                : "framing_event_basis_invalid",
+    });
+    expect(await client.query(api.framing.get, { runId })).toEqual(before);
+});
+
+test.each([
+    "replace",
+    "remove",
+] as const)("changing a saved conditional hypothesis removes its old generated prefix before Start (%s)", async (change) => {
+    const { activateSourcesMission } = await import(
+        "@/__tests__/setup/sources-mission"
+    );
+    activateSourcesMission();
+    vi.stubEnv("SEC_USER_AGENT", "Workbench fixture evidence@example.test");
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url, init) => {
+            if (!String(url).includes("data.sec.gov/submissions/")) {
+                const request = JSON.parse(String(init?.body));
+                const section = request.messages.find(
+                    (message: { content?: string }) =>
+                        message.content?.includes(
+                            "Required current mission state:",
+                        ),
+                );
+                const state = JSON.parse(
+                    section.content
+                        .split("Required current mission state:\n")[1]
+                        .split("\n")[0],
+                );
+                return state.definition.id === "sources_v1"
+                    ? nativeTextReply(
+                          JSON.stringify({
+                              kind: "complete",
+                              needs: state.activeWork.needs.map(
+                                  (need: { id: string }) => ({
+                                      needId: need.id,
+                                      unfinished: [
+                                          "Fixture ends before documentary collection.",
+                                      ],
+                                  }),
+                              ),
+                          }),
+                      )
+                    : nativeTextReply(
+                          "The saved program is available for review.",
+                      );
+            }
+            return Response.json({
+                cik: "1818201",
+                name: "CCC Intelligent Solutions Holdings Inc.",
+                tickers: ["CCCS"],
+                exchanges: ["NASDAQ"],
+                filings: {
+                    recent: {
+                        accessionNumber: [],
+                        filingDate: [],
+                        form: [],
+                        primaryDocument: [],
+                    },
+                },
+            });
+        }),
+    );
+    const a = "validation rights stay local";
+    const b = "validation rights become portable";
+    const f = await activeWorkbench(
+        `Investigate estimate review. Compare whether ${a} or ${b}.`,
+        5,
+        false,
+    );
+    const rateLimiter = await import(
+        "@/__tests__/convex/integrations/rate-limiter-test-register.js"
+    );
+    rateLimiter.default.register(f.t);
+    const configured = await f.t.run(async (ctx) => {
+        const catalog = (await ctx.db.query("modelCatalog").collect()).find(
+            (entry) => entry.model === nativePiFixtureRoute.model,
+        );
+        const invitation = await ctx.db
+            .query("invitations")
+            .withIndex("by_slot_key", (q) => q.eq("slotKey", "admin"))
+            .unique();
+        const visitor = invitation?.claimedByVisitorId
+            ? await ctx.db.get(invitation.claimedByVisitorId)
+            : null;
+        const assignment = await ctx.db
+            .query("agentModelSettings")
+            .withIndex("by_agent", (q) => q.eq("agent", "sources"))
+            .unique();
+        assert(catalog && visitor);
+        return {
+            catalogId: catalog._id,
+            subject: visitor.authUserId,
+            revision: assignment?.revision ?? 0,
+        };
+    });
+    await f.t
+        .withIdentity({ subject: configured.subject })
+        .mutation(api.modelConfiguration.assign, {
+            agent: "sources",
+            catalogId: configured.catalogId,
+            expectedRevision: configured.revision,
+            requestKey: "replacement-source-model",
+        });
+    const question = {
+        id: "validation",
+        shortLabel: "Validation",
+        text: "can insurers bypass the platform?",
+        rationale: "Test workflow control.",
+    };
+    let revision = 1;
+    for (const hypothesis of [a, b]) {
+        const before = await f.client.query(api.framing.get, {
+            runId: f.runId,
+        });
+        assert(before);
+        const requestId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: f.missionId,
+                expectedGeneration: 1,
+                cause: `condition-${revision}`,
+                input: {
+                    kind: "adjust_framing",
+                    messageId: f.messageId,
+                    expectedRevision: revision,
+                    content: {
+                        scope: "Investigate estimate review.",
+                        questions:
+                            revision === 1
+                                ? [question]
+                                : before.content.questions,
+                    },
+                    eventBasis: {
+                        kind: "open",
+                        activityExcerpt: "estimate review",
+                        conditions:
+                            revision === 2 && change === "remove"
+                                ? []
+                                : [
+                                      {
+                                          questionId: question.id,
+                                          hypothesis,
+                                          basis: {
+                                              kind: "analyst",
+                                              excerpt: hypothesis,
+                                          },
+                                      },
+                                  ],
+                    },
+                },
+            },
+        );
+        expect(
+            await f.t.action(internal.execution.operations.dispatch, {
+                requestId,
+                expectedGeneration: 1,
+            }),
+        ).toMatchObject({ kind: "success" });
+        revision++;
+    }
+    const saved = await f.client.query(api.framing.get, { runId: f.runId });
+    const expectedText =
+        change === "replace" ? `If ${b}, ${question.text}` : question.text;
+    expect(saved).toMatchObject({
+        revision: 3,
+        content: { questions: [{ ...question, text: expectedText }] },
+        eventBasis: {
+            conditions:
+                change === "replace"
+                    ? [
+                          {
+                              hypothesis: b,
+                              basis: { kind: "analyst", excerpt: b },
+                          },
+                      ]
+                    : [],
+        },
+    });
+    assert(saved);
+    const minimalId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "minimal-open-roundtrip",
+            input: {
+                kind: "adjust_framing",
+                messageId: f.messageId,
+                expectedRevision: 3,
+                content: saved.content,
+                eventBasis: { kind: "open" },
+            },
+        },
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: minimalId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "success" });
+    const roundtrip = await f.client.query(api.framing.get, { runId: f.runId });
+    expect(roundtrip?.content).toEqual(saved.content);
+    expect(roundtrip?.eventBasis).toEqual(saved.eventBasis);
+    const insufficientId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "insufficient-open-edit",
+            input: {
+                kind: "adjust_framing",
+                messageId: f.messageId,
+                expectedRevision: 4,
+                content: {
+                    ...saved.content,
+                    questions: saved.content.questions.map((question) => ({
+                        ...question,
+                        text: "A different proposed inquiry?",
+                    })),
+                },
+                eventBasis: { kind: "open" },
+            },
+        },
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: insufficientId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "refused", code: "framing_open_preserve_program" });
+    expect(await f.client.query(api.framing.get, { runId: f.runId })).toEqual(
+        roundtrip,
+    );
+    await f.client.mutation(api.framing.startResearch, {
+        runId: f.runId,
+        expectedRevision: 4,
+        requestKey: "replacement-start",
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        1000,
+    );
+    const handoff = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run?.fixedFramingRevisionId && run.sourcePreparationId);
+        return {
+            fixed: await ctx.db.get(run.fixedFramingRevisionId),
+            preparation: await ctx.db.get(run.sourcePreparationId),
+        };
+    });
+    expect(handoff.fixed?.content).toEqual(saved?.content);
+    expect(
+        handoff.preparation?.sourcesMission?.needs.find((need) =>
+            need.questionIds.includes(question.id),
+        )?.information,
+    ).toBe(expectedText);
+}, 30000);

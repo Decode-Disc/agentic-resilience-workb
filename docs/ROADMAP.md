@@ -48,8 +48,9 @@ Outcome: the analyst can frame one persistent dossier, launch the question-led w
 - [x] Administrator-managed OpenRouter model catalogue, per-agent assignments, immutable turn pins, offline serializer calibration (`Update model`), and capability-aware reasoning selection (`recommended` vs explicit levels).
 - [x] Shared pause/resume controls preserving engaged operations, pending instructions, cumulative consumption, and single active research slot.
 - [ ] Define remaining target mandate, exception-threshold, and cross-slice compatibility contracts for Investigation/Synthesis before schema migration.
-- [x] Implement [public-context framing](../context/TECH.md#public-context-during-framing), event provenance, and Sources need consultation and request routing.
-- [ ] Qualify the usefulness of live framing and follow-up, including event discovery, appropriate clarification, unavailable lookup and supplied filing. See [grounded framing evidence](verification/2026-11-18-grounded-framing-and-coverage.md).
+- [x] Preserve the v4 combined public lookup and historical single-lookup provenance, with Sources need consultation and request routing.
+- [x] Implement [Workbench-directed discovery and reading](../context/TECH.md#public-context-during-framing), dated message context, phase-specific instructions, preset-guided framing, provenance across reads and useful provisional programs.
+- [ ] Qualify the published reply, saved program and Sources handoff across event discovery, genuine ambiguity, unavailable reads, supplied filings and coverage presets. See the [qualification cases](verification/2026-11-18-grounded-framing-and-coverage.md#accepted-framing-qualification--2026-11-18).
 - [ ] Qualify broader semantic framing compliance, useful immediate company/activity scope (without invented financial calculations), and dossier-wide Workbench consultation/coordination ([conversation contract](../context/TECH.md#workbench-conversation-steering-and-instructions)) as Investigation and Synthesis bindings land.
 - [ ] Browser-qualify the 2026-11-18 Overview stage panel and History disclosure, Sources document library split, and carry the former progress page retrieval-failure alert into the stage panel.
 

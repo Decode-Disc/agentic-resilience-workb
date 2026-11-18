@@ -7,7 +7,7 @@ import {
 } from "@convex/domain/sourcePassages";
 import { TEXT_FRAGMENT_CHARACTERS } from "@convex/resourcePolicy";
 import type { PaginationOptions } from "convex/server";
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import { executionError } from "./errors";
 export const textManifestValidator = v.object({
     contentHash: v.string(),
@@ -282,4 +282,42 @@ export async function retainedTextRange(
         );
     }
     return parts.join("");
+}
+
+function operationObservationKey(requestId: Id<"agentOperationRequests">) {
+    return `operation:${requestId}:observation`;
+}
+
+/** The operation executor supplies writer authority; this owner retains its immutable observation representation. */
+export async function stageOperationObservation(
+    ctx: MutationCtx,
+    requestId: Id<"agentOperationRequests">,
+    fragment: Infer<typeof textFragmentValidator>,
+) {
+    await stageRetainedText(ctx, operationObservationKey(requestId), fragment);
+}
+
+/** Reads only the requested observation range and verifies its retained identity without exposing storage layout. */
+export async function operationObservationRange(
+    ctx: QueryCtx,
+    requestId: Id<"agentOperationRequests">,
+    start: number,
+    length: number,
+    expectedHash?: string,
+) {
+    const stored = await ctx.db
+        .query("retainedTexts")
+        .withIndex("by_key", (q) =>
+            q.eq("key", operationObservationKey(requestId)),
+        )
+        .unique();
+    if (!stored) return null;
+    const text = await completeRetainedText(ctx, stored._id);
+    if (expectedHash !== undefined && expectedHash !== text.contentHash)
+        throw executionError("retained_text_invalid");
+    return {
+        contentHash: text.contentHash,
+        characters: text.characters,
+        content: await retainedTextRange(ctx, text, start, length),
+    };
 }

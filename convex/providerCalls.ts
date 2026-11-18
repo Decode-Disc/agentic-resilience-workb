@@ -56,6 +56,7 @@ import { rateLimiter } from "./rateLimiter";
 import {
     BILLING_LOOKUP_LEASE_MS as BILLING_LEASE_MS,
     MAX_CONCURRENT_SOURCE_EMBEDDING_CALLS,
+    MAX_EXA_TEXT_CHARACTERS,
     MAX_PREPARATION_DIAGNOSTIC_BYTES,
     MAX_SOURCE_EMBEDDING_ATTEMPTS,
     MAX_SOURCE_EMBEDDING_BATCH_TEXTS,
@@ -635,6 +636,7 @@ export const nextPreparationAttemptForInput = internalQuery({
 });
 
 export const providerAttemptValidator = v.object({
+    searchQuery: v.optional(v.string()),
     modelContextWindowTokens: v.optional(v.number()),
     operationRequestId: v.optional(v.id("agentOperationRequests")),
     missionId: v.optional(v.id("agentMissions")),
@@ -714,7 +716,11 @@ export const recordAttempt = internalMutation({
                 : undefined;
         if (
             framingAuthority &&
-            (framingAuthority.mission._id !== args.missionId ||
+            ((framingAuthority.operation === "read_public_context" &&
+                args.operation !== "framing_context_read") ||
+                (framingAuthority.operation === "search_public_context" &&
+                    args.operation !== "framing_context_search") ||
+                framingAuthority.mission._id !== args.missionId ||
                 framingAuthority.run._id !== args.runId ||
                 framingAuthority.run.activeCorpusRevisionId !==
                     args.corpusRevisionId ||
@@ -725,10 +731,41 @@ export const recordAttempt = internalMutation({
                       args.service !==
                           (framingAuthority.suppliedReference.confirmedSec
                               ? "sec"
-                              : "url_metadata")
+                              : framingAuthority.selectedCandidate
+                                ? "exa"
+                                : "url_metadata")
                     : args.service !== "exa"))
         )
             throw sourcePreparationError("attempt_identity_conflict");
+        if (
+            framingAuthority?.operation === "search_public_context" &&
+            (args.searchQuery !== framingAuthority.query ||
+                args.inputHash !==
+                    sha256Hex(
+                        stableStringify({
+                            query: framingAuthority.query,
+                            limit: SOURCES_MAX_EVIDENCE_REFERENCES,
+                        }),
+                    ))
+        )
+            throw sourcePreparationError("attempt_identity_conflict");
+        if (framingAuthority?.operation === "read_public_context") {
+            const reference = framingAuthority.suppliedReference;
+            if (framingAuthority.retainedRead || !reference)
+                throw sourcePreparationError("attempt_identity_conflict");
+            if (!reference.confirmedSec) {
+                const expected = framingAuthority.selectedCandidate
+                    ? {
+                          urls: [reference.url],
+                          options: {
+                              text: { maxCharacters: MAX_EXA_TEXT_CHARACTERS },
+                          },
+                      }
+                    : reference;
+                if (args.inputHash !== sha256Hex(stableStringify(expected)))
+                    throw sourcePreparationError("attempt_identity_conflict");
+            }
+        }
         if (framingAuthority?.suppliedReference?.confirmedSec) {
             const input = framingSecReadInput(
                 framingAuthority.suppliedReference,
@@ -1589,6 +1626,7 @@ export const recordAttempt = internalMutation({
                 missionId: args.missionId,
                 invocationId: args.invocationId,
                 inputHash: args.inputHash,
+                searchQuery: args.searchQuery,
                 runId: args.runId,
                 corpusRevisionId: args.corpusRevisionId,
                 preparationId: args.preparationId,

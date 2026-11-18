@@ -22,6 +22,11 @@ export async function seedWorkbench(
     contextDurationMs = 60000,
     researchAngle?: string,
     company?: Parameters<typeof createAdmittedPreflight>[1],
+    definitionVersion?: 4 | 5,
+    coveragePreset:
+        | "balanced"
+        | "first_party_depth"
+        | "independent_scrutiny" = "balanced",
 ) {
     vi.useFakeTimers();
     const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
@@ -32,9 +37,26 @@ export async function seedWorkbench(
     const { runId } = await client.mutation(api.framing.confirmCompany, {
         preflightId,
         idempotencyKey: "native-workbench",
-        coveragePreset: "balanced",
+        coveragePreset,
         ...(researchAngle ? { researchAngle } : {}),
     });
+    if (definitionVersion) {
+        await t.run(async (ctx) => {
+            const conversation = await ctx.db
+                .query("agentConversations")
+                .withIndex("by_run", (q) => q.eq("runId", runId))
+                .unique();
+            assert(conversation);
+            await ctx.db.patch(conversation._id, { definitionVersion });
+            for (const mission of await ctx.db
+                .query("agentMissions")
+                .filter((q) => q.eq(q.field("runId"), runId))
+                .collect()) {
+                if (mission.definitionId === "workbench_v1")
+                    await ctx.db.patch(mission._id, { definitionVersion });
+            }
+        });
+    }
     if (local) {
         vi.stubEnv(
             "SOURCES_PREPARATION_WINDOW_MINUTES",

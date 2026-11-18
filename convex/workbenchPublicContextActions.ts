@@ -12,12 +12,16 @@ import {
 import { DiscoveryRequestError } from "@convex/domain/sourceDiscoveryRecovery";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import type { ObserveProviderDispatch } from "@convex/domain/sourcePreparationAuthority";
-import type { publicContextResultValidator } from "@convex/domain/workbenchContracts";
+import type {
+    publicContextResultValidator,
+    publicReadResultValidator,
+} from "@convex/domain/workbenchContracts";
 import {
     executionError as executionFailure,
     executionFailureCode,
 } from "@convex/execution/errors";
 import { operationOutcomeValidator } from "@convex/execution/executionProtocol";
+import { retainedTextParts } from "@convex/execution/retainedText";
 import {
     extractHtmlPublicationTime,
     normalizeSecHtml,
@@ -37,6 +41,7 @@ import {
     EXA_DISCOVERY_TIMEOUT_MS,
     MANUAL_SOURCE_METADATA_TIMEOUT_MS,
     MAX_APPROVED_SOURCE_BYTES,
+    MAX_EXA_TEXT_CHARACTERS,
     MAX_OPERATION_RESULT_BYTES,
     MAX_REDIRECTS,
     nodeActionGenerationDeadline,
@@ -133,6 +138,82 @@ function publicContextOutcome(references: Readings) {
     return { kind: "success" as const, valueJson: JSON.stringify(value) };
 }
 
+/** A retained page contributes progress only for visible, nonblank content, with dates attributed on that page. */
+function publicReadPageOutcome(
+    requestId: Request["requestId"],
+    page: FunctionReturnType<
+        typeof internal.workbenchPublicContext.readingPage
+    >,
+    reading: Readings[number],
+    acquisitionCompleteness: NonNullable<
+        Infer<typeof publicReadResultValidator>["document"]
+    >["acquisitionCompleteness"],
+    replayCorpusHash?: string,
+) {
+    const reference = reading.excerpt
+        ? {
+              url: reading.url,
+              publisher: reading.publisher,
+              excerpt: reading.excerpt,
+              ...(reading.publishedAt === undefined
+                  ? {}
+                  : {
+                        publishedAt: new Date(
+                            reading.publishedAt,
+                        ).toISOString(),
+                    }),
+              ...(reading.eventAt === undefined
+                  ? {}
+                  : { eventAt: new Date(reading.eventAt).toISOString() }),
+          }
+        : undefined;
+    const readable = !!reading.excerpt.trim();
+    return {
+        kind: "success" as const,
+        valueJson: JSON.stringify({
+            ...(replayCorpusHash ? { replayCorpusHash } : {}),
+            readId: requestId,
+            status: readable ? "observed" : "inconclusive",
+            ...(reference ? { reference } : {}),
+            document: {
+                readId: page.readId,
+                contentHash: page.contentHash,
+                characters: page.characters,
+                acquisitionCompleteness,
+            },
+            range: { start: page.start, end: page.end },
+            ...(page.end < page.characters ? { continuation: requestId } : {}),
+        }),
+        progressKeys: readable
+            ? [
+                  sha256Hex(
+                      stableStringify({ kind: "public_passage", ...reference }),
+                  ),
+              ]
+            : [],
+    };
+}
+
+function publicSearchOutcome(
+    searchId: Request["requestId"],
+    candidates: Infer<
+        typeof import("@convex/domain/workbenchContracts").publicSearchResultValidator
+    >["candidates"],
+    replayCorpusHash?: string,
+) {
+    return {
+        kind: "success" as const,
+        valueJson: JSON.stringify({
+            searchId,
+            candidates,
+            ...(replayCorpusHash ? { replayCorpusHash } : {}),
+        }),
+        progressKeys: candidates.map((lead) =>
+            sha256Hex(stableStringify({ kind: "public_lead", ...lead })),
+        ),
+    };
+}
+
 async function observeProvider<T>(
     ctx: ActionCtx,
     request: Request,
@@ -163,6 +244,9 @@ async function observeProvider<T>(
         stepKey,
         attempt: 1,
         inputHash: sha256Hex(stableStringify(input)),
+        ...(operation === "framing_context_search"
+            ? { searchQuery: authority.query }
+            : {}),
         operationKey: `workbench:${request.requestId}:${stepKey}`,
     };
     const admitted = await ctx.runMutation(
@@ -457,6 +541,32 @@ export const execute = internalAction({
                 internal.workbenchPublicContext.forExecution,
                 args,
             );
+            if (authority.replay?.unavailable)
+                return {
+                    kind: "unavailable",
+                    code: "missing_configuration",
+                    validation: {
+                        path: "framingReplay",
+                        expected: `Frozen lookup-unavailable fixture from corpus ${authority.replay.materialHash}; no provider dispatched.`,
+                    },
+                };
+            if (
+                authority.replay &&
+                authority.operation === "search_public_context"
+            ) {
+                return publicSearchOutcome(
+                    args.requestId,
+                    authority.replay.documents.map((doc) => ({
+                        url: doc.url,
+                        title: doc.title,
+                        publisher: new URL(doc.url).hostname,
+                        ...(doc.publishedAt
+                            ? { publishedAt: doc.publishedAt }
+                            : {}),
+                    })),
+                    authority.replay.materialHash,
+                );
+            }
             const search = configuredExaHttpDiscovery();
             const read = configuredExaContentsClient();
             const deadlineAt = Math.min(authority.deadlineAt, hostDeadline);
@@ -465,6 +575,148 @@ export const execute = internalAction({
             const maxCharacters = Math.floor(
                 MAX_OPERATION_RESULT_BYTES / (8 * limit),
             );
+            if (authority.operation === "read_public_context") {
+                const reference = authority.suppliedReference;
+                if (!reference)
+                    return {
+                        kind: "unavailable",
+                        code: "source_reference_not_observed",
+                    };
+                if (authority.retainedRead) {
+                    const page = await ctx.runQuery(
+                        internal.workbenchPublicContext.readingPage,
+                        args,
+                    );
+                    const previous = authority.retainedRead;
+                    if (!previous.reference || !previous.document)
+                        return {
+                            kind: "unavailable",
+                            code: "source_reference_not_observed",
+                        };
+                    const reading = framingReading(
+                        previous.reference.url,
+                        page.excerpt,
+                        previous.reference.publishedAt === undefined
+                            ? undefined
+                            : Date.parse(previous.reference.publishedAt),
+                    );
+                    if (
+                        reading.eventAt === undefined &&
+                        previous.reference.eventAt !== undefined
+                    )
+                        reading.eventAt = Date.parse(
+                            previous.reference.eventAt,
+                        );
+                    return publicReadPageOutcome(
+                        args.requestId,
+                        page,
+                        reading,
+                        previous.document.acquisitionCompleteness,
+                        authority.replay?.materialHash,
+                    );
+                }
+                let text: string;
+                let publishedAt = reference.publishedAt;
+                let url = reference.url;
+                if (authority.replay) {
+                    const doc = authority.replay.documents.find(
+                        (doc) => doc.url === url,
+                    );
+                    if (!doc)
+                        return {
+                            kind: "unavailable",
+                            code: "source_reference_not_observed",
+                        };
+                    text = reference.confirmedSec
+                        ? normalizeSecHtml(doc.text).normalizedText
+                        : doc.text;
+                    publishedAt =
+                        doc.publishedAt === undefined
+                            ? undefined
+                            : Date.parse(doc.publishedAt);
+                } else if (
+                    authority.selectedCandidate &&
+                    !reference.confirmedSec
+                ) {
+                    if (!read)
+                        return {
+                            kind: "unavailable",
+                            code: "missing_configuration",
+                        };
+                    const options = {
+                        text: { maxCharacters: MAX_EXA_TEXT_CHARACTERS },
+                    };
+                    const result = await observeProvider(
+                        ctx,
+                        args,
+                        "framing_context_read",
+                        { urls: [url], options },
+                        deadlineAt,
+                        DEFAULT_EXA_CONTENTS_TIMEOUT_MS,
+                        async (signal, observeDispatch) => {
+                            await validatePublicSourceUrl(
+                                url,
+                                resolveAddresses,
+                            );
+                            await ctx.runQuery(
+                                internal.workbenchPublicContext.forExecution,
+                                args,
+                            );
+                            signal.throwIfAborted();
+                            const contents = await read.getContents(
+                                [url],
+                                options,
+                                { signal, observeDispatch },
+                            );
+                            return {
+                                value: contents.results,
+                                cost: contents.costDollars?.total,
+                            };
+                        },
+                    );
+                    if (result.kind === "unavailable") return result;
+                    const matching = result.value.filter(
+                        (item) => item.url === url,
+                    );
+                    text =
+                        matching.length === 1 ? (matching[0]?.text ?? "") : "";
+                } else {
+                    const result = await readSuppliedReference(
+                        ctx,
+                        args,
+                        reference,
+                        deadlineAt,
+                    );
+                    if (result.kind === "unavailable") return result;
+                    ({ text, url, publishedAt } = result.value);
+                }
+                const retained = retainedTextParts(text);
+                for (const [index, content] of retained.parts.entries())
+                    await ctx.runMutation(
+                        internal.execution.operations.stageObservationText,
+                        {
+                            ...args,
+                            fragment: { ...retained.manifest, index, content },
+                        },
+                    );
+                const page = await ctx.runQuery(
+                    internal.workbenchPublicContext.readingPage,
+                    args,
+                );
+                return publicReadPageOutcome(
+                    args.requestId,
+                    page,
+                    framingReading(url, page.excerpt, publishedAt),
+                    authority.replay
+                        ? "complete"
+                        : authority.selectedCandidate && !reference.confirmedSec
+                          ? text.length >= MAX_EXA_TEXT_CHARACTERS
+                              ? "partial"
+                              : "unknown"
+                          : "complete",
+                    authority.replay?.materialHash,
+                );
+            }
             const supplied = authority.suppliedReference;
             if (supplied) {
                 const result = await readSuppliedReference(
@@ -490,7 +742,10 @@ export const execute = internalAction({
                         : [],
                 );
             }
-            if (!search || !read)
+            if (
+                !search ||
+                (authority.operation === "verify_public_context" && !read)
+            )
                 return { kind: "unavailable", code: "missing_configuration" };
             const found = await observeProvider(
                 ctx,
@@ -528,8 +783,25 @@ export const execute = internalAction({
                     Math.min(remaining, SOURCE_PUBLIC_ADDRESS_TIMEOUT_MS),
                 ),
             );
+            if (authority.operation === "search_public_context") {
+                return publicSearchOutcome(
+                    args.requestId,
+                    candidates.map((candidate) => ({
+                        url: candidate.canonicalUrl,
+                        title: candidate.title,
+                        publisher: new URL(candidate.canonicalUrl).hostname,
+                        ...(candidate.publishedAt === undefined
+                            ? {}
+                            : {
+                                  publishedAt: new Date(
+                                      candidate.publishedAt,
+                                  ).toISOString(),
+                              }),
+                    })),
+                );
+            }
             const references: Readings = [];
-            if (candidates.length) {
+            if (candidates.length && read) {
                 const urls = [
                     ...new Set(
                         candidates.map((candidate) => candidate.canonicalUrl),

@@ -24,6 +24,7 @@ const TABLE_OWNERS: Record<string, readonly string[]> = {
 };
 // These are the existing driver/transaction boundaries, not an exemption for all execution modules.
 const FUNCTION_OWNERS: Record<string, readonly string[]> = {
+    "execution.retainedText.stageOperationObservation": ["operations"],
     "execution.retainedText.stageRetainedText": [
         "journal",
         "piStore",

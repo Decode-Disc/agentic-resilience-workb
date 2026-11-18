@@ -63,6 +63,11 @@ import { schedulePiMission } from "./piControl";
 import { adoptProgress, agentProgressValidator } from "./progress";
 import { pauseResearchAtBoundary } from "./researchControl";
 
+import {
+    stageOperationObservation,
+    textFragmentValidator,
+} from "./retainedText";
+
 type Outcome = Infer<typeof operationOutcomeValidator>;
 type Input = Infer<typeof requestInputValidator>;
 
@@ -1373,6 +1378,26 @@ export const expire = internalMutation({
             return null;
         }
         await markOperationUnknown(ctx, request);
+        return null;
+    },
+});
+
+/** Retains immutable observation bytes under the same authority as their engaged durable operation. */
+export const stageObservationText = internalMutation({
+    args: {
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+        fragment: textFragmentValidator,
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const request = await ctx.db.get(args.requestId);
+        if (request?.status !== "running")
+            throw executionError("operation_not_dispatched");
+        const admitted = await authority(ctx, request, args.expectedGeneration);
+        if (admitted.operation?.effectKind !== "durable_effect")
+            throw executionError("operation_not_dispatched");
+        await stageOperationObservation(ctx, request._id, args.fragment);
         return null;
     },
 });

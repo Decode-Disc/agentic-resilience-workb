@@ -71,6 +71,7 @@ export const missionHistoryEntryValidator = v.object({
     ...fragmentFields,
 });
 export const conversationHistoryEntryValidator = v.object({
+    receivedAt: v.optional(v.string()),
     messageId: v.id("agentMessageDeliveries"),
     turnId: v.optional(v.id("agentConversationTurns")),
     role: v.union(v.literal("user"), v.literal("assistant")),

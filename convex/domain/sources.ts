@@ -22,7 +22,10 @@ import { getConvexSize, getDocumentSize, type Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { agentName } from "./agentIdentities";
 import { readResearchContext } from "./researchContext";
-import { MAX_RESEARCH_PLAN_QUESTIONS } from "./researchPlan";
+import {
+    type CoveragePreset,
+    MAX_RESEARCH_PLAN_QUESTIONS,
+} from "./researchPlan";
 import type { ResearchState } from "./researchStateContracts";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import {
@@ -399,6 +402,13 @@ const discoveryOrientation = {
     official: "Prioritize relevant issuer and regulatory publications.",
     independent: "Prioritize independent material that can test the account.",
 };
+
+/** Coverage priorities have the same meaning during framing and documentary discovery. */
+export function coveragePresetGuidance(preset?: CoveragePreset) {
+    return preset
+        ? discoveryOrientation[presetFocus[preset]]
+        : "Coverage priority is unknown for this historical dossier.";
+}
 
 /** Resolve the exact provider input before reserving shared search capacity. */
 export function authorizeSourcesDiscovery(

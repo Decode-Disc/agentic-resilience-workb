@@ -1,0 +1,10 @@
+{
+    "root": false,
+    "formatter": {
+        "indentStyle": "space",
+        "indentWidth": 4
+    },
+    "files": {
+        "includes": ["**", "!nvidia-governance.html", "!nvidia-h20.html"]
+    }
+}

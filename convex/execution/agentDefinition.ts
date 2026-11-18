@@ -52,6 +52,8 @@ export type AgentDefinition = {
     authority: string;
     executionScope: ExecutionScope;
     nativeConversation?: true;
+    /** Trusted phase instructions selected from server-owned state, outside domain observations. */
+    method?(run: Doc<"researchRuns">): string;
     /** Omitted on retained definitions whose historical envelopes must stay exact. */
     contextRendering?: "separated_v1";
     nativeToolSets?(

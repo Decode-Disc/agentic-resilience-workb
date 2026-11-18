@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { reasoningPreferenceValues } from "../../../convex/modelConfigurationValues.ts";
 import { QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY } from "../../../convex/resourcePolicy.ts";
@@ -648,4 +648,112 @@ export function assessQualification(root: string, input: unknown) {
         { flag: "wx", mode: 0o600 },
     );
     return { file: join(root, name), ...assessment };
+}
+
+/** Resolves and hash-checks replay bytes before the immutable mandate is prepared; assessor judgments never enter model context. */
+export function prepareFramingReplay(input: unknown) {
+    if (!input || typeof input !== "object" || !("materialPath" in input))
+        return input;
+    const descriptor = z
+        .object({
+            materialPath: z.string().min(1),
+            materialHash: z.string().regex(/^[a-f0-9]{64}$/),
+            case: z.enum([
+                "nvidia",
+                "ccc",
+                "lookupUnavailable",
+                "insufficientDatedSupport",
+            ]),
+        })
+        .strict()
+        .parse(input);
+    const path = resolve(descriptor.materialPath);
+    const bytes = readFileSync(path);
+    assert.equal(
+        sha256(bytes),
+        descriptor.materialHash,
+        "Frozen framing material hash changed",
+    );
+    const material = z
+        .object({
+            documents: z.array(
+                z.object({
+                    id: z.string(),
+                    url: z.url(),
+                    file: z.string(),
+                    sha256: z.string(),
+                    publishedAt: z.iso.datetime(),
+                }),
+            ),
+            ccc: z.object({
+                results: z.array(
+                    z.object({
+                        url: z.url(),
+                        title: z.string(),
+                        text: z.string(),
+                        publishedDate: z.string().optional(),
+                    }),
+                ),
+            }),
+            failures: z.object({
+                lookupUnavailable: z.object({
+                    status: z.literal("missing_configuration"),
+                }),
+                insufficientDatedSupport: z.object({
+                    results: z.array(
+                        z.object({
+                            url: z.url(),
+                            title: z.string(),
+                            text: z.string(),
+                        }),
+                    ),
+                }),
+            }),
+        })
+        .parse(JSON.parse(bytes.toString("utf8")));
+    const documents =
+        descriptor.case === "nvidia"
+            ? material.documents.map((doc) => {
+                  assert(
+                      !isAbsolute(doc.file) &&
+                          !doc.file.split(/[\\/]/u).includes(".."),
+                      "Replay document path must stay in corpus",
+                  );
+                  const raw = readFileSync(join(dirname(path), doc.file));
+                  assert.equal(
+                      sha256(raw),
+                      doc.sha256,
+                      "Frozen document hash changed",
+                  );
+                  return {
+                      url: doc.url,
+                      title: `NVIDIA SEC filing: ${doc.id}`,
+                      text: raw.toString("utf8"),
+                      publishedAt: doc.publishedAt,
+                  };
+              })
+            : (descriptor.case === "ccc"
+                  ? material.ccc.results
+                  : descriptor.case === "insufficientDatedSupport"
+                    ? material.failures.insufficientDatedSupport.results
+                    : []
+              ).map((doc) => ({
+                  url: doc.url,
+                  title: doc.title,
+                  text: doc.text,
+                  ...("publishedDate" in doc &&
+                  typeof doc.publishedDate === "string"
+                      ? {
+                            publishedAt: new Date(
+                                doc.publishedDate,
+                            ).toISOString(),
+                        }
+                      : {}),
+              }));
+    return {
+        materialHash: descriptor.materialHash,
+        case: descriptor.case,
+        unavailable: descriptor.case === "lookupUnavailable",
+        documents,
+    };
 }

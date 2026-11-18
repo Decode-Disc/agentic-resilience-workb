@@ -516,27 +516,43 @@ test("the installed native serializer receives stable method once for both execu
     }
 });
 
-test("preparing every advertised effort remains within the unchanged native-profile admission limit", async () => {
+test("preparing every advertised effort retains all calibrated versioned profiles without provider dispatch", async () => {
     const { prepareNativeProfiles } = await import(
         "@convex/integrations/piModelProfiles"
     );
     const { reasoningEffortValues } = await import(
         "@convex/modelConfigurationValues"
     );
-    const profiles = await prepareNativeProfiles(
-        { ...nativePiFixtureRoute, reasoningEffort: "medium" },
-        {
-            contextWindow: 131072,
-            maxTokens: 8192,
-            reasoning: true,
-            reasoningEfforts: [...reasoningEffortValues],
-            structuredOutputs: true,
-            inputPrice: 0.01,
-            outputPrice: 0.02,
-            cacheReadPrice: 0,
-        },
+    const { fixtureModelDescriptor, installModel } = await import(
+        "@/__tests__/setup/model-configuration"
     );
-    expect(profiles.length).toBeLessThanOrEqual(512);
+    const route = {
+        ...nativePiFixtureRoute,
+        reasoningEffort: "medium" as const,
+    };
+    const descriptor = {
+        ...fixtureModelDescriptor,
+        reasoning: true,
+        reasoningEfforts: [...reasoningEffortValues],
+    };
+    const profiles = await prepareNativeProfiles(route, descriptor);
+    const f = await seedConversation(true);
+    const network = vi.fn(() => {
+        throw new Error("Offline preparation must not dispatch");
+    });
+    vi.stubGlobal("fetch", network);
+    await installModel(f.t, route, "workbench", {
+        reasoningEfforts: [...reasoningEffortValues],
+    });
+    const retained = await f.t.run((ctx) =>
+        ctx.db.query("nativeInputProfiles").collect(),
+    );
+    expect(
+        retained
+            .map(({ key, bytes }) => ({ key, bytes }))
+            .sort((a, b) => a.key.localeCompare(b.key)),
+    ).toEqual([...profiles].sort((a, b) => a.key.localeCompare(b.key)));
+    expect(network).not.toHaveBeenCalled();
 }, 60000);
 
 test.each([

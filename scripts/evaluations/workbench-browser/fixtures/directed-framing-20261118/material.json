@@ -1,0 +1,61 @@
+{
+    "version": 1,
+    "provenance": "Curated offline replay, not a capture of the historical Exa index. SEC HTML retrieved on 2026-11-18; CCC announcements are invented fixtures.",
+    "documents": [
+        {
+            "id": "governance",
+            "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000082/nvda-20261111.htm",
+            "file": "nvidia-governance.html",
+            "sha256": "607a8a5ed41dd022cc7d25d952d544d2c54bb0d91d907d5bb3a89ab32fb5c0ce",
+            "publishedAt": "2026-11-12T00:00:00.000Z",
+            "dateSource": "Document signature; event date is distinct."
+        },
+        {
+            "id": "h20",
+            "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000082/nvda-20250409.htm",
+            "file": "nvidia-h20.html",
+            "sha256": "2eb37d5dada9080b491299a116df80d85d8c9c3b141eee4d415805b212a83483",
+            "publishedAt": "2025-04-15T00:00:00.000Z",
+            "dateSource": "Document signature; event date is distinct."
+        }
+    ],
+    "ccc": {
+        "results": [
+            {
+                "id": "rights",
+                "url": "https://example.com/rights",
+                "title": "Illustrative validation rights",
+                "publishedDate": "2026-11-17",
+                "text": "Illustrative fixture: insurers retain validation rights."
+            },
+            {
+                "id": "export",
+                "url": "https://example.org/export",
+                "title": "Illustrative estimate export announcement",
+                "publishedDate": "2026-11-16",
+                "text": "Illustrative fixture: insurers can export an estimate for review in another workflow."
+            }
+        ]
+    },
+    "failures": {
+        "lookupUnavailable": {
+            "status": "missing_configuration"
+        },
+        "insufficientDatedSupport": {
+            "results": [
+                {
+                    "id": "undated",
+                    "url": "https://example.org/undated",
+                    "title": "Illustrative undated announcement",
+                    "text": "Illustrative fixture: the workflow may have changed; no event or publication date is known."
+                }
+            ]
+        }
+    },
+    "assessorOnly": {
+        "unnamedNvidia": "Inspect whether the governance event is supported and changes the program. Inspect every saved question for unsupported H20 assumptions. The governance filing URL and later clarification must not be in initial input.",
+        "namedH20": "Distinguish April 9 notification from April 15 filing; the analyst supplied the H20 URL.",
+        "ccc": "No single event is identifiable from these two illustrative announcements. Preserve estimate review, common bypass checks, conditional alternatives and one targeted clarification.",
+        "coverage": "Identical material and request across presets. Different programs are not mandatory. Inspect selected readings, their use and the actual Start handoff."
+    }
+}

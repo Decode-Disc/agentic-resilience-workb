@@ -1,0 +1,420 @@
+{
+    "version": 2,
+    "key": "directed-framing-frozen-model-20261118",
+    "objective": "Compare actual model framing decisions against an immutable curated retrieval corpus, including unavailable and undated observations; real-model quality remains unqualified until an explicitly authorized lot is executed.",
+    "capability": "sources",
+    "mode": "live",
+    "executionSurface": "backend",
+    "researchDurationMs": 900000,
+    "configurations": [
+        {
+            "id": "offline",
+            "purpose": "quality",
+            "models": {
+                "workbench": {
+                    "model": "z-ai/glm-5.3-flash",
+                    "reasoning": "recommended"
+                },
+                "sources": {
+                    "model": "z-ai/glm-5.3-flash",
+                    "reasoning": "recommended"
+                }
+            }
+        }
+    ],
+    "scenarios": [
+        {
+            "id": "nvidia-unnamed",
+            "company": {
+                "cik": "1045810",
+                "name": "NVIDIA Corporation",
+                "ticker": "NVDA",
+                "websiteUrl": "https://www.nvidia.com"
+            },
+            "framing": {
+                "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+                "questions": [
+                    {
+                        "id": "resilience",
+                        "shortLabel": "Resilience",
+                        "text": "Which workflow dependencies need documentary examination?",
+                        "rationale": "Assessor reference only; Workbench must save its own program."
+                    }
+                ]
+            },
+            "framingRequest": {
+                "text": "will it survive after the recent crisis ?",
+                "receivedAt": "2026-11-18T09:00:00.000Z"
+            },
+            "framingPublicContext": true,
+            "coveragePreset": "balanced",
+            "steps": [
+                {
+                    "id": "framed",
+                    "action": "wait_for",
+                    "state": "conversation_settled"
+                },
+                {
+                    "id": "start",
+                    "action": "start_research"
+                },
+                {
+                    "id": "handoff",
+                    "action": "wait_for",
+                    "state": "sources_prepared"
+                }
+            ],
+            "framingReplay": {
+                "materialPath": "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json",
+                "materialHash": "48943261ddef51ecca75da8b315ddd7ad2f0fb712838cf5df87abd6fe19c5be6",
+                "case": "nvidia"
+            }
+        },
+        {
+            "id": "nvidia-h20-supplied",
+            "company": {
+                "cik": "1045810",
+                "name": "NVIDIA Corporation",
+                "ticker": "NVDA",
+                "websiteUrl": "https://www.nvidia.com"
+            },
+            "framing": {
+                "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+                "questions": [
+                    {
+                        "id": "resilience",
+                        "shortLabel": "Resilience",
+                        "text": "Which workflow dependencies need documentary examination?",
+                        "rationale": "Assessor reference only; Workbench must save its own program."
+                    }
+                ]
+            },
+            "framingRequest": {
+                "text": "Investigate NVIDIA data-center resilience after the April 2025 H20 export restrictions. Read this filing: https://www.sec.gov/Archives/edgar/data/1045810/000104581025000082/nvda-20250409.htm",
+                "receivedAt": "2026-11-18T09:00:00.000Z"
+            },
+            "framingPublicContext": true,
+            "coveragePreset": "balanced",
+            "steps": [
+                {
+                    "id": "framed",
+                    "action": "wait_for",
+                    "state": "conversation_settled"
+                },
+                {
+                    "id": "start",
+                    "action": "start_research"
+                },
+                {
+                    "id": "handoff",
+                    "action": "wait_for",
+                    "state": "sources_prepared"
+                }
+            ],
+            "framingReplay": {
+                "materialPath": "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json",
+                "materialHash": "48943261ddef51ecca75da8b315ddd7ad2f0fb712838cf5df87abd6fe19c5be6",
+                "case": "nvidia"
+            }
+        },
+        {
+            "id": "ccc-balanced",
+            "company": {
+                "cik": "1818201",
+                "name": "CCC Intelligent Solutions Holdings Inc.",
+                "ticker": "CCCS",
+                "websiteUrl": "https://www.cccis.com"
+            },
+            "framing": {
+                "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+                "questions": [
+                    {
+                        "id": "resilience",
+                        "shortLabel": "Resilience",
+                        "text": "Which workflow dependencies need documentary examination?",
+                        "rationale": "Assessor reference only; Workbench must save its own program."
+                    }
+                ]
+            },
+            "framingRequest": {
+                "text": "Can insurers bypass CCC during estimate review after the latest announcement?",
+                "receivedAt": "2026-11-18T09:00:00.000Z"
+            },
+            "framingPublicContext": true,
+            "coveragePreset": "balanced",
+            "steps": [
+                {
+                    "id": "framed",
+                    "action": "wait_for",
+                    "state": "conversation_settled"
+                },
+                {
+                    "id": "start",
+                    "action": "start_research"
+                },
+                {
+                    "id": "handoff",
+                    "action": "wait_for",
+                    "state": "sources_prepared"
+                }
+            ],
+            "framingReplay": {
+                "materialPath": "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json",
+                "materialHash": "48943261ddef51ecca75da8b315ddd7ad2f0fb712838cf5df87abd6fe19c5be6",
+                "case": "ccc"
+            }
+        },
+        {
+            "id": "ccc-first-party-depth",
+            "company": {
+                "cik": "1818201",
+                "name": "CCC Intelligent Solutions Holdings Inc.",
+                "ticker": "CCCS",
+                "websiteUrl": "https://www.cccis.com"
+            },
+            "framing": {
+                "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+                "questions": [
+                    {
+                        "id": "resilience",
+                        "shortLabel": "Resilience",
+                        "text": "Which workflow dependencies need documentary examination?",
+                        "rationale": "Assessor reference only; Workbench must save its own program."
+                    }
+                ]
+            },
+            "framingRequest": {
+                "text": "Can insurers bypass CCC during estimate review after the latest announcement?",
+                "receivedAt": "2026-11-18T09:00:00.000Z"
+            },
+            "framingPublicContext": true,
+            "coveragePreset": "first_party_depth",
+            "steps": [
+                {
+                    "id": "framed",
+                    "action": "wait_for",
+                    "state": "conversation_settled"
+                },
+                {
+                    "id": "start",
+                    "action": "start_research"
+                },
+                {
+                    "id": "handoff",
+                    "action": "wait_for",
+                    "state": "sources_prepared"
+                }
+            ],
+            "framingReplay": {
+                "materialPath": "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json",
+                "materialHash": "48943261ddef51ecca75da8b315ddd7ad2f0fb712838cf5df87abd6fe19c5be6",
+                "case": "ccc"
+            }
+        },
+        {
+            "id": "ccc-independent-scrutiny",
+            "company": {
+                "cik": "1818201",
+                "name": "CCC Intelligent Solutions Holdings Inc.",
+                "ticker": "CCCS",
+                "websiteUrl": "https://www.cccis.com"
+            },
+            "framing": {
+                "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+                "questions": [
+                    {
+                        "id": "resilience",
+                        "shortLabel": "Resilience",
+                        "text": "Which workflow dependencies need documentary examination?",
+                        "rationale": "Assessor reference only; Workbench must save its own program."
+                    }
+                ]
+            },
+            "framingRequest": {
+                "text": "Can insurers bypass CCC during estimate review after the latest announcement?",
+                "receivedAt": "2026-11-18T09:00:00.000Z"
+            },
+            "framingPublicContext": true,
+            "coveragePreset": "independent_scrutiny",
+            "steps": [
+                {
+                    "id": "framed",
+                    "action": "wait_for",
+                    "state": "conversation_settled"
+                },
+                {
+                    "id": "start",
+                    "action": "start_research"
+                },
+                {
+                    "id": "handoff",
+                    "action": "wait_for",
+                    "state": "sources_prepared"
+                }
+            ],
+            "framingReplay": {
+                "materialPath": "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json",
+                "materialHash": "48943261ddef51ecca75da8b315ddd7ad2f0fb712838cf5df87abd6fe19c5be6",
+                "case": "ccc"
+            }
+        },
+        {
+            "id": "lookup-unavailable",
+            "company": {
+                "cik": "1818201",
+                "name": "CCC Intelligent Solutions Holdings Inc.",
+                "ticker": "CCCS",
+                "websiteUrl": "https://www.cccis.com"
+            },
+            "framing": {
+                "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+                "questions": [
+                    {
+                        "id": "resilience",
+                        "shortLabel": "Resilience",
+                        "text": "Which workflow dependencies need documentary examination?",
+                        "rationale": "Assessor reference only; Workbench must save its own program."
+                    }
+                ]
+            },
+            "framingRequest": {
+                "text": "Can insurers bypass CCC during estimate review after the latest announcement?",
+                "receivedAt": "2026-11-18T09:00:00.000Z"
+            },
+            "framingPublicContext": true,
+            "coveragePreset": "balanced",
+            "steps": [
+                {
+                    "id": "framed",
+                    "action": "wait_for",
+                    "state": "conversation_settled"
+                }
+            ],
+            "framingReplay": {
+                "materialPath": "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json",
+                "materialHash": "48943261ddef51ecca75da8b315ddd7ad2f0fb712838cf5df87abd6fe19c5be6",
+                "case": "lookupUnavailable"
+            }
+        },
+        {
+            "id": "insufficient-dated-support",
+            "company": {
+                "cik": "1818201",
+                "name": "CCC Intelligent Solutions Holdings Inc.",
+                "ticker": "CCCS",
+                "websiteUrl": "https://www.cccis.com"
+            },
+            "framing": {
+                "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+                "questions": [
+                    {
+                        "id": "resilience",
+                        "shortLabel": "Resilience",
+                        "text": "Which workflow dependencies need documentary examination?",
+                        "rationale": "Assessor reference only; Workbench must save its own program."
+                    }
+                ]
+            },
+            "framingRequest": {
+                "text": "Can insurers bypass CCC during estimate review after the latest announcement?",
+                "receivedAt": "2026-11-18T09:00:00.000Z"
+            },
+            "framingPublicContext": true,
+            "coveragePreset": "balanced",
+            "steps": [
+                {
+                    "id": "framed",
+                    "action": "wait_for",
+                    "state": "conversation_settled"
+                }
+            ],
+            "framingReplay": {
+                "materialPath": "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json",
+                "materialHash": "48943261ddef51ecca75da8b315ddd7ad2f0fb712838cf5df87abd6fe19c5be6",
+                "case": "insufficientDatedSupport"
+            }
+        }
+    ],
+    "expectations": [
+        {
+            "id": "nvidia-unnamed",
+            "checks": [
+                "exact-dated-request",
+                "agent-saved-framing",
+                "semantic-reference-in-material-json",
+                "actual-start-handoff"
+            ]
+        },
+        {
+            "id": "nvidia-h20-supplied",
+            "checks": [
+                "exact-dated-request",
+                "agent-saved-framing",
+                "semantic-reference-in-material-json",
+                "actual-start-handoff"
+            ]
+        },
+        {
+            "id": "ccc-balanced",
+            "checks": [
+                "exact-dated-request",
+                "agent-saved-framing",
+                "semantic-reference-in-material-json",
+                "actual-start-handoff"
+            ]
+        },
+        {
+            "id": "ccc-first-party-depth",
+            "checks": [
+                "exact-dated-request",
+                "agent-saved-framing",
+                "semantic-reference-in-material-json",
+                "actual-start-handoff"
+            ]
+        },
+        {
+            "id": "ccc-independent-scrutiny",
+            "checks": [
+                "exact-dated-request",
+                "agent-saved-framing",
+                "semantic-reference-in-material-json",
+                "actual-start-handoff"
+            ]
+        },
+        {
+            "id": "lookup-unavailable",
+            "checks": [
+                "exact-dated-request",
+                "agent-saved-framing",
+                "semantic-reference-in-material-json",
+                "honest-partial-outcome"
+            ]
+        },
+        {
+            "id": "insufficient-dated-support",
+            "checks": [
+                "exact-dated-request",
+                "agent-saved-framing",
+                "semantic-reference-in-material-json",
+                "honest-partial-outcome"
+            ]
+        }
+    ],
+    "correctionPaths": ["convex", "scripts/evaluations/workbench-browser"],
+    "maximumLots": 1,
+    "repetitionsPerCandidate": 1,
+    "expiresAt": 1797552000000,
+    "perLot": {
+        "model": 60,
+        "search": 6,
+        "acquisition": 18,
+        "costUsd": 3
+    },
+    "total": {
+        "model": 60,
+        "search": 6,
+        "acquisition": 18,
+        "costUsd": 3
+    },
+    "batteryHash": "c0a2bcb2c647785ba52a9645a27fed8d3db3998eec989f366d6e0119e2941823"
+}

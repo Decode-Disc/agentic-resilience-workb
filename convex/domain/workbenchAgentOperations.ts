@@ -24,6 +24,9 @@ import {
     nativeSourceRequestInput,
     publicContextInput,
     publicContextResultValidator,
+    publicReadInput,
+    publicReadResultValidator,
+    publicSearchResultValidator,
     requestApprovalInput,
     requestApprovalResultValidator,
     sourceRequestInput,
@@ -376,70 +379,77 @@ export const workbenchOperations: Record<string, AgentOperationDefinition> = {
     transmit_source_request: transmitSourceRequest,
 };
 
+const publicContextOperation: Extract<
+    AgentOperationDefinition,
+    { effectKind: "durable_effect" }
+> = {
+    effectKind: "durable_effect",
+    unknownOutcome: {
+        kind: "unavailable",
+        code: "operation_outcome_unknown",
+    },
+    version: 1,
+    description:
+        "Read dated public context about the confirmed company while framing. Search for the unresolved event or context. Only returned excerpts are readings.",
+    inputValidator: publicContextInput,
+    resultValidator: operationResultValidator(publicContextResultValidator),
+    identity: operationReuseIdentity,
+    async pin(ctx, mission, input, _runId, effectPin) {
+        if (
+            !mission ||
+            (input.kind !== "verify_public_context" &&
+                input.kind !== "search_public_context" &&
+                input.kind !== "read_public_context")
+        )
+            return { kind: "unavailable", code: "mission_required" };
+        const run = await ctx.db.get(mission.runId);
+        if (run?.lifecycleState !== "framing" || !run.currentFramingRevisionId)
+            return { kind: "unavailable", code: "framing_fixed" };
+        if (
+            effectPin &&
+            (effectPin.kind !== "framing_revision" ||
+                effectPin.revisionId !== run.currentFramingRevisionId)
+        )
+            return {
+                kind: "unavailable",
+                code: "framing_version_conflict",
+            };
+        return {
+            kind: "available",
+            pin: {
+                kind: "framing_revision",
+                revisionId: run.currentFramingRevisionId,
+            },
+        };
+    },
+    async execute(ctx, args) {
+        if (!args.requestId)
+            return {
+                outcome: { kind: "refused", code: "request_unavailable" },
+            };
+        return {
+            outcome: observeOperationOutcome(
+                await ctx.runAction(
+                    internal.workbenchPublicContextActions.execute,
+                    {
+                        requestId: args.requestId,
+                        expectedGeneration: args.expectedGeneration,
+                    },
+                ),
+            ),
+        };
+    },
+    validateOutcome(_request, outcome) {
+        return outcome;
+    },
+};
+
 export const nativeWorkbenchOperations: Record<
     string,
     AgentOperationDefinition
 > = {
     ...workbenchOperations,
-    verify_public_context: {
-        effectKind: "durable_effect",
-        unknownOutcome: {
-            kind: "unavailable",
-            code: "operation_outcome_unknown",
-        },
-        version: 1,
-        description:
-            "Read dated public context about the confirmed company while framing. Search for the unresolved event or context. Only returned excerpts are readings.",
-        inputValidator: publicContextInput,
-        resultValidator: operationResultValidator(publicContextResultValidator),
-        identity: operationReuseIdentity,
-        async pin(ctx, mission, input, _runId, effectPin) {
-            if (!mission || input.kind !== "verify_public_context")
-                return { kind: "unavailable", code: "mission_required" };
-            const run = await ctx.db.get(mission.runId);
-            if (
-                run?.lifecycleState !== "framing" ||
-                !run.currentFramingRevisionId
-            )
-                return { kind: "unavailable", code: "framing_fixed" };
-            if (
-                effectPin &&
-                (effectPin.kind !== "framing_revision" ||
-                    effectPin.revisionId !== run.currentFramingRevisionId)
-            )
-                return {
-                    kind: "unavailable",
-                    code: "framing_version_conflict",
-                };
-            return {
-                kind: "available",
-                pin: {
-                    kind: "framing_revision",
-                    revisionId: run.currentFramingRevisionId,
-                },
-            };
-        },
-        async execute(ctx, args) {
-            if (!args.requestId)
-                return {
-                    outcome: { kind: "refused", code: "request_unavailable" },
-                };
-            return {
-                outcome: observeOperationOutcome(
-                    await ctx.runAction(
-                        internal.workbenchPublicContextActions.execute,
-                        {
-                            requestId: args.requestId,
-                            expectedGeneration: args.expectedGeneration,
-                        },
-                    ),
-                ),
-            };
-        },
-        validateOutcome(_request, outcome) {
-            return outcome;
-        },
-    },
+    verify_public_context: publicContextOperation,
     adjust_framing: {
         ...adjustFraming,
         version: 2,
@@ -450,5 +460,32 @@ export const nativeWorkbenchOperations: Record<
         version: 2,
         inputValidator: nativeSourceRequestInput,
         description: `${transmitSourceRequest.description} Choose the matching coverageRole explicitly, or null if no supported role matches; never omit this choice. Public commercial terms use official_commercial_terms.`,
+    },
+};
+
+/** v5 separates discovery from reading; retained v4 keeps its combined operation object. */
+export const directedWorkbenchOperations: Record<
+    string,
+    AgentOperationDefinition
+> = {
+    ...Object.fromEntries(
+        Object.entries(nativeWorkbenchOperations).filter(
+            ([name]) => name !== "verify_public_context",
+        ),
+    ),
+    read_public_context: {
+        ...publicContextOperation,
+        description:
+            "Read a publication selected by index from an adopted search, or a public HTTPS reference supplied by the active analyst. Only the returned extent was read. If continuation is returned, repeat the same target with that continuation to read the next passage from the exact retained representation without another external acquisition. Acquisition completeness and remaining retained text are separate. Only returned passages are readings.",
+        inputValidator: publicReadInput,
+        resultValidator: operationResultValidator(publicReadResultValidator),
+    },
+    search_public_context: {
+        ...publicContextOperation,
+        effectKind: "durable_effect",
+        description:
+            "Discover public leads about the confirmed company without reading publications. Inspect dates and titles, reformulate if useful, and select a publication separately. Candidates are not evidence.",
+        inputValidator: publicContextInput,
+        resultValidator: operationResultValidator(publicSearchResultValidator),
     },
 };

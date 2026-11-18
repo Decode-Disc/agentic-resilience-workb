@@ -95,7 +95,8 @@ export async function prepareCampaignScenarios(
                     companyCik: scenario.company.cik,
                     ticker: scenario.company.ticker,
                     websiteUrl: scenario.company.websiteUrl,
-                    researchAngle: scenario.framing.scope,
+                    researchAngle:
+                        scenario.framingRequest?.text ?? scenario.framing.scope,
                     ...(scenario.coveragePreset
                         ? { coveragePreset: scenario.coveragePreset }
                         : {}),
@@ -529,6 +530,20 @@ export async function runCampaignScenarios(
                 mode: manifest.mode,
                 scenario: `${c.id}-initial`,
             });
+            save(
+                directory,
+                "retrieval-mode",
+                scenario.framingReplay
+                    ? {
+                          mode: "frozen_replay",
+                          materialHash: scenario.framingReplay.materialHash,
+                          case: scenario.framingReplay.case,
+                          modelMode: manifest.mode,
+                          framingExternalRetrievalCalls: 0,
+                          scope: "pre_start_framing",
+                      }
+                    : { mode: "live_discovery", modelMode: manifest.mode },
+            );
             if (scenario.initialFixture) {
                 activeStep = "initial-fixture";
                 save(
@@ -562,7 +577,9 @@ export async function runCampaignScenarios(
                     {
                         runId: c.runId,
                         fixtureKey: c.fixtureKey,
-                        researchAngle: scenario.framing.scope,
+                        researchAngle:
+                            scenario.framingRequest?.text ??
+                            scenario.framing.scope,
                     },
                 );
             if (page) {
@@ -570,12 +587,24 @@ export async function runCampaignScenarios(
                 await page.goto(`${web}/workspace/${c.runId}`);
             }
             await wait("conversation_settled");
+            if (scenario.framingRequest) {
+                const saved = await inspect();
+                assert(
+                    saved.framing && saved.framing.origin === "workbench",
+                    "Fresh framing must be saved by Workbench before scenario actions",
+                );
+                save(directory, "agent-saved-framing", saved.framing);
+            }
             for (const step of scenario.steps) {
                 activeStep = step.id;
                 assert(!interrupted(), "Campaign interrupted");
                 save(directory, `${step.id}-before`, await inspect());
                 switch (step.action) {
                     case "save_framing":
+                        assert(
+                            !scenario.framingRequest,
+                            "Fresh framing cannot use a scripted save",
+                        );
                         await framing(step.content ?? scenario.framing);
                         break;
                     case "send_message": {
@@ -824,6 +853,47 @@ export async function runCampaignScenarios(
                     case "wait_for":
                         if (step.state === "conversation_settled") release();
                         await wait(step.state);
+                        if (
+                            step.state === "sources_prepared" &&
+                            scenario.framingRequest
+                        ) {
+                            const handoff = await inspect();
+                            const fixed = handoff.framing;
+                            const sources = handoff.preparation?.sourcesMission;
+                            assert(
+                                fixed &&
+                                    sources &&
+                                    handoff.run.fixedFramingRevisionId ===
+                                        fixed._id,
+                                "The actual Start must fix the agent-saved revision",
+                            );
+                            assert.equal(
+                                sources.coveragePolicy?.preset,
+                                scenario.coveragePreset,
+                            );
+                            for (const question of fixed.content.questions)
+                                assert.equal(
+                                    sources.needs.find((need) =>
+                                        need.questionIds.includes(question.id),
+                                    )?.information,
+                                    question.text,
+                                );
+                            assert(
+                                sources.needs.some(
+                                    (need) =>
+                                        need.commonContext &&
+                                        need.information.includes(
+                                            fixed.content.scope,
+                                        ),
+                                ),
+                            );
+                            save(directory, "actual-start-handoff", {
+                                fixed,
+                                coveragePolicy: sources.coveragePolicy,
+                                needs: sources.needs,
+                                mission: handoff.sourcesMission,
+                            });
+                        }
                         break;
                     case "fault": {
                         if (step.recipe === "stop_before_generation") {

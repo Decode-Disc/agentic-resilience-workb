@@ -217,6 +217,29 @@ export const qualificationEnvelopeSchema = z
         controls: z.number().int().min(1).max(SOURCES_ENVELOPE_MAX_COUNT),
     })
     .strict();
+export const framingReplaySchema = z
+    .object({
+        materialHash: z.string().regex(/^[a-f0-9]{64}$/),
+        case: z.enum([
+            "nvidia",
+            "ccc",
+            "lookupUnavailable",
+            "insufficientDatedSupport",
+        ]),
+        unavailable: z.boolean(),
+        documents: z.array(
+            z
+                .object({
+                    url: z.url().startsWith("https://"),
+                    title: z.string().min(1),
+                    text: z.string(),
+                    publishedAt: z.iso.datetime().optional(),
+                })
+                .strict(),
+        ),
+    })
+    .strict();
+
 export const qualificationScenarioSchema = z
     .object({
         id: identity,
@@ -229,7 +252,19 @@ export const qualificationScenarioSchema = z
             })
             .strict(),
         framing,
+        framingRequest: z
+            .object({
+                text: z
+                    .string()
+                    .min(1)
+                    .max(2000)
+                    .refine((text) => !!text.trim()),
+                receivedAt: z.iso.datetime(),
+            })
+            .strict()
+            .optional(),
         framingPublicContext: z.literal(true).optional(),
+        framingReplay: framingReplaySchema.optional(),
         coveragePreset: z
             .enum(coveragePresetValidator.members.map((value) => value.value))
             .optional(),
@@ -325,6 +360,18 @@ export const configurableCampaignManifestSchema = v2.superRefine((m, ctx) => {
             "Browser interaction steps require the browser execution surface",
         );
     for (const s of m.scenarios) {
+        if (s.framingReplay && (!s.framingRequest || !s.framingPublicContext))
+            issue(
+                "Frozen retrieval requires a fresh dated framing request and public-context scope",
+            );
+        if (
+            s.framingRequest &&
+            (s.initialFixture ||
+                s.steps.some((step) => step.action === "save_framing"))
+        )
+            issue(
+                "Fresh framing requires an agent-saved program without scripted framing or documentary seeding",
+            );
         if (s.initialFixture && m.capability !== "sources")
             issue("Documentary starting fixtures require Sources capability");
         for (const [index, step] of s.steps.entries())

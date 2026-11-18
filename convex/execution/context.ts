@@ -304,6 +304,7 @@ export async function buildMissionContext(
                   ),
               }
             : domainContext.context),
+        ...(definition.method ? { method: definition.method(run) } : {}),
         constraints: {
             resourcePolicy: mission.resourcePolicy,
             generation: mission.generation,
@@ -330,7 +331,14 @@ export async function buildMissionContext(
                 ? {
                       ...activeInstructions,
                       messages: activeInstructions.messages.map(
-                          ({ messageId, text }) => ({ messageId, text }),
+                          ({ messageId, text, receivedAt }) => ({
+                              messageId,
+                              text,
+                              ...(definition.id === "workbench_v1" &&
+                              definition.version >= 5
+                                  ? { receivedAt }
+                                  : {}),
+                          }),
                       ),
                   }
                 : (activeInstructions ?? null),

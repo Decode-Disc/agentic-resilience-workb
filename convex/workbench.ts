@@ -99,12 +99,21 @@ const commandResult = v.object({
 function workbenchCommandsSupported(
     conversation: Doc<"agentConversations"> | null,
 ) {
-    const definition = getAgentDefinition("workbench_v1");
-    return (
-        conversation?.definitionId === definition.id &&
-        conversation.definitionVersion === definition.version &&
-        !!definition.nativeConversation
-    );
+    if (
+        conversation?.definitionId !== "workbench_v1" ||
+        conversation.definitionVersion === undefined
+    )
+        return false;
+    try {
+        return !!getAgentDefinition(
+            conversation.definitionId,
+            conversation.definitionVersion,
+        ).nativeConversation;
+    } catch (error) {
+        if (executionFailureCode(error) === "definition_version_conflict")
+            return false;
+        throw error;
+    }
 }
 
 /** Exposes only analyst-relevant catalogue choices, independently of provider credentials. */

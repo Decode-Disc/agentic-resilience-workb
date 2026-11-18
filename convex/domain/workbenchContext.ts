@@ -4,17 +4,21 @@ import type { QueryCtx } from "@convex/_generated/server";
 import type { AgentDefinition } from "@convex/execution/agentDefinition";
 import { executionFailureCode } from "@convex/execution/errors";
 import { researchQuestionCapacity } from "./framingEditAuthority";
+import {
+    framingConditionalReferences,
+    framingPublicReferences,
+} from "./framingProvenance";
 import { formatResearchSummary, readResearchState } from "./researchState";
 import { requireSavedMaterialScope } from "./savedMaterialInspection";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
 import {
     controlledSourcesContributions,
+    coveragePresetGuidance,
     projectSourceDocumentState,
     readSourcesCoverage,
     summarizeSourcesPreparation,
 } from "./sources";
-import { observedPublicContext } from "./workbenchContracts";
 import {
     projectWorkbenchInstructions,
     readWorkbenchInstructions,
@@ -79,31 +83,27 @@ export async function readWorkbenchFacts(
         ? await controlledSourcesContributions(ctx, preparation)
         : [];
     const eventBasis = framing?.eventBasis;
-    const eventContext =
+    const eventReferences =
         eventBasis?.kind === "public"
-            ? observedPublicContext(
-                  await ctx.db.get(eventBasis.lookupRequestId),
-              )
+            ? await framingPublicReferences(ctx, eventBasis)
+            : undefined;
+    const conditionReferences =
+        eventBasis?.kind === "open"
+            ? await framingConditionalReferences(ctx, eventBasis)
             : undefined;
     const context = {
         company: run.companySnapshot ?? null,
         originalRequest: run.researchAngle ?? null,
+        coveragePreset: run.coveragePreset ?? null,
+        coverageGuidance: coveragePresetGuidance(run.coveragePreset),
         modernSources: run.sourcesProtocol === "sources_mission_v1",
         framing: framing
             ? {
                   revision: framing.revision,
                   ...framing.content,
                   ...(eventBasis ? { eventBasis } : {}),
-                  ...(eventBasis?.kind === "public" && eventContext
-                      ? {
-                            eventReferences:
-                                eventBasis.referenceIndexes.flatMap((index) => {
-                                    const reference =
-                                        eventContext.references[index];
-                                    return reference ? [reference] : [];
-                                }),
-                        }
-                      : {}),
+                  ...(eventReferences ? { eventReferences } : {}),
+                  ...(conditionReferences ? { conditionReferences } : {}),
                   origin: framing.origin,
                   fixed: !!run.fixedFramingRevisionId,
                   questionCapacity: await researchQuestionCapacity(ctx, run),
@@ -161,6 +161,7 @@ export async function readWorkbenchFacts(
                 stableStringify({
                     company: context.company,
                     originalRequest: context.originalRequest,
+                    coveragePreset: context.coveragePreset,
                     analystRequests: context.analystRequests,
                     framing: context.framing,
                     research: context.research,

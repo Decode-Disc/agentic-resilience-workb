@@ -336,8 +336,7 @@ async function retainNativeProfiles(
     ctx: MutationCtx,
     profiles: Infer<typeof nativeProfile>[],
 ) {
-    if (!profiles.length || profiles.length > 512)
-        throw executionError("model_not_compatible");
+    if (!profiles.length) throw executionError("model_not_compatible");
     for (const profile of profiles) {
         if (
             !profile.key ||
