@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-16T12:15:31.291Z",
+  "generatedAt": "2026-11-18T12:34:53.702Z",
   "title": "Design System: Agentic Resilience Workbench",
   "extensions": {
     "colorMeta": {
       "primary": {
         "role": "primary",
-        "displayName": "Institutional Ink",
+        "displayName": "primary",
         "tonalRamp": [
           "oklch(0.15 0.04 307.99)",
           "oklch(0.25 0.04 307.99)",
@@ -720,7 +720,7 @@
       },
       "dark-primary": {
         "role": "primary",
-        "displayName": "Dark · Institutional Ink",
+        "displayName": "Dark · primary",
         "tonalRamp": [
           "oklch(0.15 0.0084 308)",
           "oklch(0.25 0.0084 308)",
@@ -1520,11 +1520,11 @@
       },
       "body": {
         "displayName": "body",
-        "purpose": "default reading text; body-sm supports compact descriptions."
+        "purpose": "default reading text; body-sm supports compact descriptions (AppraisalBlock keeps local 19px/28px sizing)."
       },
       "body-sm": {
         "displayName": "body sm",
-        "purpose": "default reading text; body-sm supports compact descriptions."
+        "purpose": "default reading text; body-sm supports compact descriptions (AppraisalBlock keeps local 19px/28px sizing)."
       },
       "brief": {
         "displayName": "brief",
@@ -1708,28 +1708,26 @@
   ],
   "narrative": {
     "northStar": "The Evidence Workbench",
-    "overview": "An understated, modern and precise working interface for institutional research. A near-neutral canvas on a faint grid, Geist reading text and compact Geist Mono metadata carry evidence, source references and analyst decisions. Selective glass and one focal surface identify current work without competing with the material being examined.",
+    "overview": "An understated, precise institutional-research interface on a faint neutral grid, using Geist reading text, compact Geist Mono metadata, selective glass, and one focal surface to frame current work without competing with evidence.",
     "keyCharacteristics": [
-      "Near-neutral reading surfaces on a quiet, fading workspace grid.",
-      "Geist text and locally hosted Geist Mono metadata.",
-      "Selective glass, opaque reading objects and hairline separation.",
-      "Analytical meaning conveyed by labels and glyphs as well as tint.",
-      "Four workspace destinations and an inventory that opens in context."
+      "Near-neutral reading surfaces on a quiet, fading workspace grid with hairline row separation.",
+      "Geist Variable prose and locally hosted Geist Mono metadata (`@fontsource-variable/geist`, local Mono OFL).",
+      "Analytical meaning carried by both label/glyph and tint; four workspace destinations plus an in-context inventory sheet."
     ],
     "rules": [
       {
         "name": "The Semantic Color Rule",
-        "body": "Research Violet identifies focus, selection, running work and reasoned-appraisal outcomes; Approval Teal identifies analyst approval, amber identifies pending judgment, and evidence colors identify analytical meaning. Always retain the label and non-color cue.",
+        "body": "Research Violet identifies focus, selection, running work, and reasoned-appraisal outcomes; Approval Teal identifies analyst approval; amber identifies pending judgment; and evidence colors identify analytical meaning. Always retain the label and non-color cue.",
         "section": "colors"
       },
       {
         "name": "The Shared Type Rule",
-        "body": "Use sentence case for controls and prose. Reserve uppercase metadata and monospacing for short structural labels, counts and provenance.",
+        "body": "Use sentence case for controls and prose; reserve uppercase metadata and monospacing for short structural labels, counts, and provenance.",
         "section": "typography"
       },
       {
         "name": "The Surface Hierarchy Rule",
-        "body": "Use opaque reading regions within selective working surfaces, and separate rows with hairlines. OutcomeCard's dashed outer edges identify unfinished execution; dashed glyphs and frames in other components retain their specific uncertainty meaning, including AppraisalBlock's decisive unknown.",
+        "body": "Keep reading regions opaque inside selective glass panels, separate rows with hairlines, and reserve dashed outer edges (`OutcomeCard`) and dashed glyphs for unfinished execution or explicit uncertainty (`AppraisalBlock` decisive unknown).",
         "section": "elevation"
       }
     ],
