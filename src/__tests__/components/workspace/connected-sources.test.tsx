@@ -294,7 +294,9 @@ test("Sources opens on the document matrix without a preparation step", () => {
         }),
     ).toBeTruthy();
     expect(screen.getByText("Form 10-K · FY2025")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Inspect sources/ })).toBeNull();
+    expect(
+        screen.queryByRole("button", { name: /Inspect sources/ }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "Preparation" })).toBeNull();
     expect(document.body.textContent).not.toMatch(rawValues);
 });
@@ -303,6 +305,42 @@ test("the Progress Sources result accounts for every candidate and names conflic
     convexReactHarness.query(api.sourcesWorkspace.overview).returns({
         ...overview,
         materialOutcome: "partial",
+        coverage: {
+            policy: {
+                version: "sources_coverage_v1",
+                preset: "independent_scrutiny",
+            },
+            searches: [
+                {
+                    requestId:
+                        "search-coverage" as Id<"agentOperationRequests">,
+                    needIds: ["common-context"],
+                    query: "workflow terms",
+                    focus: "independent",
+                    outcome: "unfinished",
+                    reasonCode: "operation_outcome_unknown",
+                },
+            ],
+            assessments: [
+                {
+                    needId: "common-context",
+                    statement: "No usable independent material found",
+                    author: {
+                        type: "agent",
+                        missionId: "sources" as Id<"agentMissions">,
+                        invocationId:
+                            "sources-invocation" as Id<"agentInvocations">,
+                    },
+                    readings: [
+                        {
+                            sourceId,
+                            captureId: "capture" as Id<"sourceCaptures">,
+                            passageOrder: 0,
+                        },
+                    ],
+                },
+            ],
+        },
         collect: { ...overview.collect, candidates: 9, acquisitions: 5 },
         reading: {
             captured: 5,
@@ -348,6 +386,15 @@ test("the Progress Sources result accounts for every candidate and names conflic
         screen.getByRole("button", {
             name: /How preparation ran.*9 collected → 5 captured → 4 retained/,
         }),
+    );
+    expect(screen.getByText("Independent scrutiny")).toBeTruthy();
+    expect(
+        screen.getByText(
+            "Sources assessment: No usable independent material found",
+        ),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(
+        /sources_coverage_v1|operation_outcome_unknown/,
     );
     expect(
         screen.getByText(
@@ -735,7 +782,9 @@ test.each([
             onOpenSource={vi.fn()}
         />,
     );
-    expect(screen.getByRole("table", { name: "Documentary needs" })).toBeTruthy();
+    expect(
+        screen.getByRole("table", { name: "Documentary needs" }),
+    ).toBeTruthy();
     if (status === "failed" || status === "cancelled")
         expect(
             screen.getByText("Dossier status: The dossier needs attention."),

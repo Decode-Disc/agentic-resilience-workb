@@ -1,3 +1,4 @@
+import type { ObserveProviderDispatch } from "@convex/domain/sourcePreparationAuthority";
 import {
     DEFAULT_EXA_CONTENTS_TIMEOUT_MS,
     MAX_APPROVED_SOURCE_BYTES,
@@ -19,7 +20,10 @@ export type ExaContentsClient = {
         options?: {
             text?: { maxCharacters?: number } | true;
         },
-        requestOptions?: { signal: AbortSignal },
+        requestOptions?: {
+            signal: AbortSignal;
+            observeDispatch?: ObserveProviderDispatch;
+        },
     ): Promise<{
         results: ReadonlyArray<{
             id: string;

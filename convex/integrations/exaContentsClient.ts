@@ -1,6 +1,9 @@
 "use node";
 
-import { providerRetryAfterAt } from "@convex/domain/sourcePreparationAuthority";
+import {
+    type ObserveProviderDispatch,
+    providerRetryAfterAt,
+} from "@convex/domain/sourcePreparationAuthority";
 import Exa from "exa-js";
 import { z } from "zod";
 import {
@@ -29,6 +32,7 @@ class AbortableContentsExa extends Exa {
     constructor(
         private readonly contentsApiKey: string,
         private readonly requestSignal: AbortSignal,
+        private readonly observeDispatch?: ObserveProviderDispatch,
     ) {
         super(contentsApiKey);
     }
@@ -51,6 +55,7 @@ class AbortableContentsExa extends Exa {
             );
         }
         this.requestSignal.throwIfAborted();
+        this.observeDispatch?.("unknown");
         const response = await globalThis.fetch(
             `https://api.exa.ai${endpoint}`,
             {
@@ -65,6 +70,7 @@ class AbortableContentsExa extends Exa {
                 redirect: "error",
             },
         );
+        this.observeDispatch?.("response_received");
         if (!response.ok) {
             await response.body?.cancel();
             throw new ExaContentsError(
@@ -98,6 +104,7 @@ export function createExaContentsClient(apiKey: string): ExaContentsClient {
             const client = new AbortableContentsExa(
                 apiKey,
                 requestOptions.signal,
+                requestOptions.observeDispatch,
             );
             return client.getContents(urls, options);
         },

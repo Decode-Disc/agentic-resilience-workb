@@ -128,6 +128,7 @@ export async function projectWorkbenchInstructions(
             messageId: request.messageId,
             originalText,
             interpretedNeed: request.interpretedNeed,
+            target: request.target ?? null,
             needId: request.needId ?? null,
             preparationId: request.preparationId ?? null,
             framingRevisionId: request.framingRevisionId,
@@ -203,7 +204,10 @@ export async function processWorkbenchInstructions(
     )
         return null;
     if (run.sourcesProtocol === "sources_mission_v1") {
-        let data = preparation?.sourcesMission;
+        let data =
+            preparation?.runId === run._id
+                ? preparation.sourcesMission
+                : undefined;
         if (
             !data &&
             [
@@ -220,14 +224,66 @@ export async function processWorkbenchInstructions(
                 run._id,
                 SOURCES_HANDOFF_READ_CAPACITY,
             );
-        if (
+        const controlEngaged =
             preparation?.status === "started" &&
             data &&
             !data.result &&
-            (await hasEngagedSourcesControl(reads, data))
-        )
-            return null;
+            (await hasEngagedSourcesControl(reads, data));
+        const framing = run.fixedFramingRevisionId
+            ? await ctx.db.get(run.fixedFramingRevisionId)
+            : null;
         for (const request of requests) {
+            const target = request.target;
+            if (request.framingRevisionId !== run.fixedFramingRevisionId) {
+                await updateInstructionTreatment(ctx, request, {
+                    status: "limited",
+                    outcome:
+                        "This request refers to an earlier framing and cannot change the fixed research program.",
+                });
+                continue;
+            }
+            if (target?.kind === "existing_need") {
+                const need = data?.needs.find(({ id }) => id === target.needId);
+                if (!preparation || !need) {
+                    await updateInstructionTreatment(ctx, request, {
+                        status: "limited",
+                        outcome:
+                            "That documentary need is unavailable in the current preparation.",
+                    });
+                    continue;
+                }
+                const saved = data?.result?.needs.find(
+                    ({ needId }) => needId === need.id,
+                );
+                const ended =
+                    preparation.status !== "started" || !!data?.result;
+                await updateInstructionTreatment(ctx, request, {
+                    status:
+                        ended && (!saved || saved.unfinished.length)
+                            ? "limited"
+                            : "transmitted",
+                    preparationId: preparation._id,
+                    needId: need.id,
+                    outcome: ended
+                        ? "Your request refers to existing Sources work. Inspect its recorded material and limitations."
+                        : "Sources already has this check in its preparation.",
+                });
+                continue;
+            }
+            if (controlEngaged) continue;
+            const questionId =
+                target?.kind === "new_need" ? target.questionId : undefined;
+            if (
+                questionId !== undefined &&
+                !framing?.content.questions.some(({ id }) => id === questionId)
+            ) {
+                await updateInstructionTreatment(ctx, request, {
+                    status: "limited",
+                    outcome:
+                        "That question is outside the fixed research program.",
+                });
+                continue;
+            }
             if (settling) {
                 await updateInstructionTreatment(ctx, request, {
                     status: "limited",
@@ -241,18 +297,10 @@ export async function processWorkbenchInstructions(
                     ? { status: preparation.status, sourcesMission: data }
                     : null,
             );
-            if (
-                !preparation ||
-                !data ||
-                treatment.status !== "open" ||
-                request.framingRevisionId !== run.fixedFramingRevisionId
-            ) {
+            if (!preparation || !data || treatment.status !== "open") {
                 await updateInstructionTreatment(ctx, request, {
                     status: "limited",
-                    outcome:
-                        treatment.status !== "open"
-                            ? treatment.description
-                            : "This request refers to an earlier research framing and cannot change the fixed research program.",
+                    outcome: treatment.description,
                 });
                 continue;
             }
@@ -266,7 +314,8 @@ export async function processWorkbenchInstructions(
                         id: needId,
                         version: 1,
                         information: request.interpretedNeed,
-                        questionIds: [],
+                        questionIds:
+                            questionId === undefined ? [] : [questionId],
                         commonContext: false,
                     },
                 ],

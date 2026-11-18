@@ -33,7 +33,7 @@ import {
     type CampaignManifest,
     campaignConfiguration,
     campaignManifestSchema,
-    newCampaignManifestSchema,
+    campaignPreparationSchema,
 } from "../../../convex/qualificationCampaignPolicy.ts";
 import { initialFixtureContent } from "../../../convex/qualificationInitialFixtures.ts";
 import {
@@ -1403,7 +1403,7 @@ async function executeCampaign(
                 batteryHash: sha256(JSON.stringify(values.scenarios)),
             };
         }
-        const manifest = newCampaignManifestSchema.parse(resolvedInput);
+        const manifest = campaignPreparationSchema.parse(resolvedInput);
         if (manifest.version === 3) {
             const { prepareCampaignReviewer } = await import(
                 "./campaign-review.ts"

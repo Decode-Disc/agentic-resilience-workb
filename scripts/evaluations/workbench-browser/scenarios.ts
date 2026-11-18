@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
 import {
     type FunctionArgs,
@@ -96,6 +96,9 @@ export async function prepareCampaignScenarios(
                     ticker: scenario.company.ticker,
                     websiteUrl: scenario.company.websiteUrl,
                     researchAngle: scenario.framing.scope,
+                    ...(scenario.coveragePreset
+                        ? { coveragePreset: scenario.coveragePreset }
+                        : {}),
                     sources: [],
                 },
             },
@@ -321,6 +324,7 @@ export async function runCampaignScenarios(
     interrupted: () => boolean,
     backendClient?: ConvexHttpClient,
 ) {
+    const { expect } = await import("@playwright/test");
     assert(
         page
             ? manifest.executionSurface !== "backend"

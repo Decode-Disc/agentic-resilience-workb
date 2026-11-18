@@ -2,7 +2,10 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import { approvalActionValidator } from "@convex/execution/approvalContracts";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
-import { framingContentValidator } from "./framingContracts";
+import {
+    framingContentValidator,
+    framingEventBasisInput,
+} from "./framingContracts";
 import { coverageRoleValidator } from "./sourceDiscoveryRecovery";
 import {
     responseReviewInput,
@@ -90,6 +93,7 @@ export function explicitResearchCommand(
 export const adjustFramingInput = v.object({
     expectedRevision: v.number(),
     content: framingContentValidator,
+    eventBasis: v.optional(framingEventBasisInput),
 });
 export const nativeAdjustFramingInput = adjustFramingInput.extend({
     messageId: v.id("agentMessageDeliveries"),
@@ -148,17 +152,66 @@ export function approvalRequestIdFromOperation(
         : undefined;
 }
 
+export const documentaryRequestTarget = v.union(
+    v.object({ kind: v.literal("existing_need"), needId: v.string() }),
+    v.object({
+        kind: v.literal("new_need"),
+        questionId: v.optional(v.string()),
+    }),
+);
 export const sourceRequestInput = v.object({
     messageId: v.id("agentMessageDeliveries"),
     interpretedNeed: v.string(),
+    target: v.optional(documentaryRequestTarget),
     coverageRole: v.optional(coverageRoleValidator),
 });
 export const nativeSourceRequestInput = sourceRequestInput
-    .omit("coverageRole")
+    .omit("coverageRole", "target")
     .extend({
         coverageRole: v.union(coverageRoleValidator, v.null()),
     });
+export const modernSourceRequestInput = sourceRequestInput
+    .omit("coverageRole")
+    .extend({
+        target: documentaryRequestTarget,
+    });
 export const consultPreparedMaterialInput = v.object({ needId: v.string() });
+export const publicContextAllowanceValidator = v.object({
+    searches: v.number(),
+    readings: v.number(),
+});
+export const publicContextInput = v.object({
+    messageId: v.id("agentMessageDeliveries"),
+    query: v.string(),
+});
+export const publicContextResultValidator = v.object({
+    status: v.union(v.literal("observed"), v.literal("inconclusive")),
+    references: v.array(
+        v.object({
+            url: v.string(),
+            publisher: v.string(),
+            excerpt: v.string(),
+            publishedAt: v.optional(v.number()),
+            eventAt: v.optional(v.number()),
+        }),
+    ),
+});
+/** Only an adopted reading can be used as provenance. */
+export function observedPublicContext(
+    request: Doc<"agentOperationRequests"> | null,
+) {
+    if (
+        request?.input.kind !== "verify_public_context" ||
+        request.status !== "completed" ||
+        request.adoptedAt === undefined ||
+        request.adoptionRefusalCode ||
+        request.outcome?.kind !== "success"
+    )
+        return undefined;
+    const result: unknown = JSON.parse(request.outcome.valueJson);
+    return validate(publicContextResultValidator, result) ? result : undefined;
+}
+
 export const workbenchSchemas = {
     id: v.literal("workbench_v1"),
     scope: v.object({ kind: v.literal("workbench_v1") }),
@@ -171,6 +224,10 @@ export const workbenchSchemas = {
     }),
     operation: v.union(
         v.object({
+            kind: v.literal("verify_public_context"),
+            ...publicContextInput.fields,
+        }),
+        v.object({
             kind: v.literal("consult_prepared_material"),
             ...consultPreparedMaterialInput.fields,
         }),
@@ -181,6 +238,7 @@ export const workbenchSchemas = {
         v.object({
             kind: v.literal("adjust_framing"),
             ...adjustFramingInput.fields,
+            eventBasisRequired: v.optional(v.literal(true)),
             messageId: v.optional(v.id("agentMessageDeliveries")),
         }),
         v.object({

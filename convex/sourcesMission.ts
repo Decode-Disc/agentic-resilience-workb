@@ -20,6 +20,7 @@ import {
 } from "@convex/domain/sourceSelectionPolicy";
 import {
     assertSourcesCompletionCapacity,
+    authorizeSourcesDiscovery,
     controlledSourcesContributions,
     hasEngagedSourcesControl,
     initializeSources,
@@ -35,6 +36,7 @@ import {
     sourcesSettlementNote,
 } from "@convex/domain/sources";
 import {
+    authorizedDiscovery,
     documentaryContributionValidator,
     documentaryControlValidator,
     documentaryNeedValidator,
@@ -189,6 +191,7 @@ const proposalReturn = v.object({
     inputHash: v.string(),
     sourceId: v.optional(v.id("sources")),
     discoveryLimit: v.optional(v.number()),
+    discovery: v.optional(authorizedDiscovery),
 });
 export const reserve = internalMutation({
     args: workArgs,
@@ -250,11 +253,10 @@ export const reserve = internalMutation({
         const resources = sourcesResourceStatus(data);
         const block = resources[field].blockCode ?? resources.work.blockCode;
         if (block) throw executionError(block);
-        if (
-            input.kind === "discover_sources_for_need" &&
-            (!input.query.trim() || input.query.length > 512)
-        )
-            throw executionError("discovery_query_invalid");
+        const discovery =
+            input.kind === "discover_sources_for_need"
+                ? authorizeSourcesDiscovery(data.coveragePolicy, input)
+                : undefined;
         const capacity =
             input.kind === "discover_sources_for_need"
                 ? await readSourceCandidateCapacity(
@@ -489,6 +491,7 @@ export const reserve = internalMutation({
                     requestId: request._id,
                     kind: input.kind,
                     needIds,
+                    ...(discovery ? { discovery } : {}),
                     ...(sourceId ? { sourceId } : {}),
                 },
             ],
@@ -512,6 +515,7 @@ export const reserve = internalMutation({
                 ].includes(input.kind)
                     ? { input }
                     : {}),
+                ...(discovery?.focus ? { discovery } : {}),
                 contributions,
                 needs: data.needs.filter((n) =>
                     contributions.some((c) => c.needIds.includes(n.id)),
@@ -526,6 +530,7 @@ export const reserve = internalMutation({
             input,
             contributions,
             inputHash,
+            ...(discovery ? { discovery } : {}),
             needContext: data.needs.filter((n) =>
                 contributions.some((c) => c.needIds.includes(n.id)),
             ),

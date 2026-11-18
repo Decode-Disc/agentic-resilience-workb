@@ -2,13 +2,32 @@ import { commonOperationSuccessValidator } from "@convex/execution/operationCont
 import { operationResultValidator } from "@convex/execution/operationResults";
 import { type Infer, v } from "convex/values";
 import { sourceMaterialReferenceValidator } from "./sourceRetrievalPolicy";
-import { preparedMaterialOutcomeValidator } from "./validators";
+import {
+    coveragePresetValidator,
+    preparedMaterialOutcomeValidator,
+} from "./validators";
 
 export const observedDestinationValidator = v.object({
     url: v.string(),
     originText: v.string(),
     startOffset: v.number(),
     representationHash: v.string(),
+});
+
+export const SOURCES_COVERAGE_VERSION = "sources_coverage_v1";
+export const sourcesCoverageVersion = v.literal(SOURCES_COVERAGE_VERSION);
+export const sourcesCoveragePolicy = v.object({
+    version: sourcesCoverageVersion,
+    preset: coveragePresetValidator,
+});
+const discoveryFocus = v.union(
+    v.literal("mixed"),
+    v.literal("official"),
+    v.literal("independent"),
+);
+export const authorizedDiscovery = v.object({
+    query: v.string(),
+    focus: v.optional(discoveryFocus),
 });
 
 export const SOURCES_PROTOCOL = "sources_mission_v1";
@@ -115,9 +134,15 @@ export const preparedContributionReferenceValidator = v.object({
     captureId: v.optional(sourceMaterialReferenceValidator.fields.captureId),
     contentHash: v.optional(v.string()),
 });
+const coverageReading = v.object({
+    sourceId: sourceMaterialReferenceValidator.fields.sourceId,
+    captureId: sourceMaterialReferenceValidator.fields.captureId,
+    passageOrder: v.number(),
+});
 export const preparedNeedOutcomeValidator = v.object({
     ...needOutcomeValidator.fields,
     contributions: v.array(preparedContributionReferenceValidator),
+    coverageReadings: v.optional(v.array(coverageReading)),
 });
 export const documentaryAssessmentAuthorValidator = v.union(
     v.object({
@@ -132,6 +157,28 @@ export const documentaryAssessmentValidator = v.object({
     author: documentaryAssessmentAuthorValidator,
     verification: v.literal("not_semantically_reviewed"),
 });
+const coverageSearchOutcome = v.object({
+    requestId: v.id("agentOperationRequests"),
+    outcome: v.union(v.literal("performed"), v.literal("unfinished")),
+    reasonCode: v.optional(v.string()),
+});
+export const sourcesCoverage = v.object({
+    assessments: v.array(
+        v.object({
+            needId: v.string(),
+            statement: v.string(),
+            author: documentaryAssessmentAuthorValidator,
+            readings: v.array(coverageReading),
+        }),
+    ),
+    policy: sourcesCoveragePolicy,
+    searches: v.array(
+        coverageSearchOutcome.extend({
+            ...authorizedDiscovery.fields,
+            needIds: v.array(v.string()),
+        }),
+    ),
+});
 export const preparedMaterialValidator = v.object({
     version: v.literal(1),
     needsRevision: v.number(),
@@ -139,6 +186,8 @@ export const preparedMaterialValidator = v.object({
     documents: v.array(preparedDocumentValidator),
     needs: v.array(preparedNeedOutcomeValidator),
     documentaryAssessment: v.optional(documentaryAssessmentValidator),
+    coveragePolicy: v.optional(sourcesCoveragePolicy),
+    coverageSearches: v.optional(v.array(coverageSearchOutcome)),
     retentionAuthority: v.literal("system_mandate"),
     policyVersion: v.literal(SOURCES_PROTOCOL),
 });
@@ -268,6 +317,7 @@ export const sourcesPreparationValidator = v.object({
     needsRevision: v.number(),
     needs: v.array(documentaryNeedValidator),
     envelope: sourcesEnvelopeValidator,
+    coveragePolicy: v.optional(sourcesCoveragePolicy),
     searches: v.number(),
     acquisitions: v.number(),
     controls: v.number(),
@@ -281,6 +331,7 @@ export const sourcesPreparationValidator = v.object({
             ),
             kind: v.string(),
             needIds: v.array(v.string()),
+            discovery: v.optional(authorizedDiscovery),
         }),
     ),
     result: v.optional(preparedMaterialValidator),
@@ -288,7 +339,7 @@ export const sourcesPreparationValidator = v.object({
 const needInput = { needId: v.string() };
 export const discoverSourcesInput = v.object({
     ...needInput,
-    query: v.string(),
+    ...authorizedDiscovery.fields,
 });
 export const consultableSourceInput = v.object({
     ...needInput,

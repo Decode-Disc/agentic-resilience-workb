@@ -7,7 +7,6 @@ import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
-
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
@@ -18,6 +17,7 @@ import {
 } from "./domain/manualSourceIntake";
 import { validatePublicSourceUrl } from "./domain/publicSourceUrl";
 import { assertSourceCandidateRequestFits } from "./domain/sourceCandidateCapacity";
+import type { ObserveProviderDispatch } from "./domain/sourcePreparationAuthority";
 import { sourceCandidateLimit } from "./resourceLimits";
 
 import {
@@ -431,6 +431,7 @@ export function requestPinnedPublicSource(
         timeoutMs?: number;
         headers?: Record<string, string>;
         signal?: AbortSignal;
+        observeDispatch?: ObserveProviderDispatch;
     },
 ): Promise<Response> {
     const url = new URL(rawUrl);
@@ -478,6 +479,7 @@ export function requestPinnedPublicSource(
             safeReject(timeoutError);
         }, timeoutMs);
 
+        options?.observeDispatch?.("unknown");
         const request = httpsRequest(
             url,
             {
@@ -499,6 +501,7 @@ export function requestPinnedPublicSource(
                 },
             },
             (response) => {
+                options?.observeDispatch?.("response_received");
                 activeResponse = response;
                 const connectedAddress = normalizeRemoteAddress(
                     response.socket.remoteAddress,

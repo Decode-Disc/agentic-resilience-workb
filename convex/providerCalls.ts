@@ -7,12 +7,17 @@ import { readResponseControlPolicy } from "@convex/modelConfiguration";
 import {
     assertQualificationAllowance,
     patchQualificationReceipt,
+    qualificationCategory,
     updateQualificationUsage,
 } from "@convex/qualificationUsage";
 import {
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
 } from "@convex/resourcePolicy";
+import {
+    framingSecReadInput,
+    requirePublicContextRequest,
+} from "@convex/workbenchPublicContext";
 import { ConvexError, type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -60,6 +65,7 @@ import {
     MODEL_SETTLEMENT_GRACE_MS,
     IO_PROVIDER_LEASE_MS as PROVIDER_LEASE_MS,
     SOURCE_EMBEDDING_PROVIDER_LEASE_MS,
+    SOURCES_MAX_EVIDENCE_REFERENCES,
 } from "./resourcePolicy";
 import {
     readWorkbenchQualification,
@@ -473,7 +479,10 @@ function providerLeaseDurationMs(
             throw sourcePreparationError("execution_deadline");
         return remainingAuthorityMs + MODEL_SETTLEMENT_GRACE_MS;
     }
-    if (service === "exa" && operation === "get_contents") {
+    if (
+        service === "exa" &&
+        (operation === "get_contents" || operation === "framing_context_read")
+    ) {
         return PROVIDER_LEASE_MS.exaContents;
     }
     if (service === "exa" && operation === "resolve_company_website") {
@@ -664,6 +673,70 @@ export const recordAttempt = internalMutation({
         args,
     ): Promise<Infer<typeof recordAttemptResultValidator>> => {
         const now = Date.now();
+        const framingLookup =
+            args.operation === "framing_context_search" ||
+            args.operation === "framing_context_read";
+        const framingSecStep =
+            args.operation === "framing_context_read" &&
+            args.service === "sec" &&
+            (args.stepKey === "sec_submissions" ||
+                args.stepKey === "sec_filing");
+        if (
+            framingLookup &&
+            (!args.operationRequestId ||
+                !args.missionId ||
+                (args.operation === "framing_context_search" &&
+                    args.service !== "exa") ||
+                !["exa", "sec", "url_metadata"].includes(args.service) ||
+                args.invocationId ||
+                args.preparationId ||
+                args.sourceId ||
+                args.acceptedDecisionId ||
+                args.executionGeneration === undefined ||
+                args.attempt !== 1 ||
+                (!framingSecStep && args.stepKey !== args.operation) ||
+                args.operationKey !==
+                    `workbench:${args.operationRequestId}:${args.stepKey}` ||
+                !args.inputHash ||
+                !/^[a-f0-9]{64}$/.test(args.inputHash))
+        )
+            throw sourcePreparationError("attempt_identity_conflict");
+        const framingAuthority =
+            framingLookup &&
+            args.status === "started" &&
+            args.operationRequestId &&
+            args.executionGeneration !== undefined
+                ? await requirePublicContextRequest(
+                      ctx,
+                      args.operationRequestId,
+                      args.executionGeneration,
+                  )
+                : undefined;
+        if (
+            framingAuthority &&
+            (framingAuthority.mission._id !== args.missionId ||
+                framingAuthority.run._id !== args.runId ||
+                framingAuthority.run.activeCorpusRevisionId !==
+                    args.corpusRevisionId ||
+                framingAuthority.mission.definitionVersion !==
+                    args.workflowVersion ||
+                (framingAuthority.suppliedReference
+                    ? args.operation !== "framing_context_read" ||
+                      args.service !==
+                          (framingAuthority.suppliedReference.confirmedSec
+                              ? "sec"
+                              : "url_metadata")
+                    : args.service !== "exa"))
+        )
+            throw sourcePreparationError("attempt_identity_conflict");
+        if (framingAuthority?.suppliedReference?.confirmedSec) {
+            const input = framingSecReadInput(
+                framingAuthority.suppliedReference,
+                args.stepKey,
+            );
+            if (!input || args.inputHash !== sha256Hex(stableStringify(input)))
+                throw sourcePreparationError("attempt_identity_conflict");
+        }
         let qualification: Awaited<
             ReturnType<typeof readWorkbenchQualification>
         > = null;
@@ -673,7 +746,15 @@ export const recordAttempt = internalMutation({
                 const mission = args.missionId
                     ? await ctx.db.get(args.missionId)
                     : null;
-                if (args.service === "model") {
+                if (framingAuthority && mission) {
+                    qualification = await requireQualifiedBrowserMission(
+                        ctx,
+                        run,
+                        mission,
+                    );
+                    if (!qualification?.scenarios)
+                        throw sourcePreparationError("paid_work_disabled");
+                } else if (args.service === "model") {
                     qualification = await requireQualifiedBrowserMission(
                         ctx,
                         run,
@@ -726,7 +807,7 @@ export const recordAttempt = internalMutation({
                 args.diagnostic.originalBytes < 0)
         )
             throw new Error("Invalid provider output diagnostic");
-        if (args.missionId || args.invocationId) {
+        if (!framingLookup && (args.missionId || args.invocationId)) {
             const invocation = args.invocationId
                 ? await ctx.db.get(args.invocationId)
                 : null;
@@ -1034,6 +1115,8 @@ export const recordAttempt = internalMutation({
                         preparationFailureClass(call) !== "not_dispatched"),
             );
             if (existing) {
+                if (framingLookup && existing.inputHash !== args.inputHash)
+                    throw sourcePreparationError("attempt_identity_conflict");
                 if (
                     existing.status === "started" &&
                     existing.leaseExpiresAt !== undefined &&
@@ -1079,6 +1162,28 @@ export const recordAttempt = internalMutation({
                 };
             }
 
+            if (framingAuthority) {
+                const limit =
+                    args.operation === "framing_context_search"
+                        ? framingAuthority.allowance.searches
+                        : framingAuthority.allowance.readings;
+                if (limit <= 0)
+                    throw sourcePreparationError(
+                        "public_context_allowance_exhausted",
+                    );
+                const admitted = await ctx.db
+                    .query("providerCalls")
+                    .withIndex("by_run_operation_input_and_attempt", (q) =>
+                        q
+                            .eq("runId", framingAuthority.run._id)
+                            .eq("operation", args.operation),
+                    )
+                    .take(limit);
+                if (admitted.length >= limit)
+                    throw sourcePreparationError(
+                        "public_context_allowance_exhausted",
+                    );
+            }
             let recoveryOfProviderCallId: Id<"providerCalls"> | undefined;
             let remainingModelAuthorityMs: number | undefined;
             if (
@@ -1372,9 +1477,14 @@ export const recordAttempt = internalMutation({
                     args.service === "model"
                         ? modelReservationUsd
                         : args.service === "exa"
-                          ? args.operation === "source_need_search"
+                          ? [
+                                "source_need_search",
+                                "framing_context_search",
+                            ].includes(args.operation)
                               ? 0.007
-                              : 0.001
+                              : args.operation === "framing_context_read"
+                                ? 0.001 * SOURCES_MAX_EVIDENCE_REFERENCES
+                                : 0.001
                           : 0;
                 if (qualification.scenarios && args.runId) {
                     const run = await ctx.db.get(args.runId);
@@ -1418,23 +1528,7 @@ export const recordAttempt = internalMutation({
                             ),
                         0,
                     );
-                    const category = (
-                        call: Pick<
-                            Doc<"providerCalls">,
-                            "service" | "operation"
-                        >,
-                    ) =>
-                        call.service === "model"
-                            ? "model"
-                            : call.operation === "source_need_search"
-                              ? "search"
-                              : [
-                                      "get_contents",
-                                      "retrieve_filing_html",
-                                  ].includes(call.operation)
-                                ? "acquisition"
-                                : "technical";
-                    const kind = category(args);
+                    const kind = qualificationCategory(args);
                     const perDossierLimit = {
                         model: 20,
                         search: 2,
@@ -1454,10 +1548,12 @@ export const recordAttempt = internalMutation({
                               calls.filter(
                                   (call) =>
                                       call.runId === args.runId &&
-                                      category(call) === kind,
+                                      qualificationCategory(call) === kind,
                               ).length >= perDossierLimit ||
-                              calls.filter((call) => category(call) === kind)
-                                  .length >= lotLimit ||
+                              calls.filter(
+                                  (call) =>
+                                      qualificationCategory(call) === kind,
+                              ).length >= lotLimit ||
                               calls.some(
                                   (call) =>
                                       call.dispatchOutcome === "unknown" ||
@@ -1555,6 +1651,16 @@ export const recordAttempt = internalMutation({
             throw new Error("Provider attempt was not started");
         }
         if (
+            framingLookup &&
+            (existing.missionId !== args.missionId ||
+                existing.operationRequestId !== args.operationRequestId ||
+                existing.inputHash !== args.inputHash ||
+                existing.corpusRevisionId !== args.corpusRevisionId ||
+                existing.executionGeneration !== args.executionGeneration ||
+                existing.workflowVersion !== args.workflowVersion)
+        )
+            throw sourcePreparationError("attempt_identity_conflict");
+        if (
             args.preparationId &&
             (existing.preparationId !== args.preparationId ||
                 existing.corpusRevisionId !== args.corpusRevisionId ||
@@ -1568,7 +1674,7 @@ export const recordAttempt = internalMutation({
         )
             throw sourcePreparationError("attempt_identity_conflict");
         if (
-            args.service === "model" &&
+            (framingLookup || args.service === "model") &&
             (args.preparationId || args.missionId) &&
             args.operation !== "source_embedding"
         ) {

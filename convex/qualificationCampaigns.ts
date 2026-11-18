@@ -1,4 +1,7 @@
-import { readQualificationUsage } from "@convex/qualificationUsage";
+import {
+    qualificationCategory,
+    readQualificationUsage,
+} from "@convex/qualificationUsage";
 import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
@@ -18,6 +21,7 @@ import {
     analysisPricingAuthority,
     analysisProviderSchema,
     analysisReceiptSchema,
+    analysisUsageChargeMicros,
     campaignConfiguration,
     campaignConfigurations,
     campaignLimitsSchema,
@@ -424,18 +428,30 @@ export const reserveAnalysis = internalMutation({
             )
             .unique();
         if (existing) throw new Error("Analysis attempt already reserved");
-        const attempts = await ctx.db
-            .query("qualificationAnalysisAttempts")
-            .withIndex("by_lot_and_attempt", (q) => q.eq("lotId", lot._id))
-            .take(manifest.analysis.perLot.requests + 1);
-        if (
-            attempts.some(
-                (attempt) =>
-                    attempt.status === "reserved" &&
-                    attempt.provider === args.provider &&
-                    attempt.model === args.model,
-            )
-        )
+        const unresolved =
+            manifest.analysis.settlementPolicy === "verified_usage_v1"
+                ? await ctx.db
+                      .query("qualificationAnalysisAttempts")
+                      .withIndex("by_campaign_and_status", (q) =>
+                          q
+                              .eq("campaignId", lot.campaignId)
+                              .eq("status", "reserved"),
+                      )
+                      .first()
+                : (
+                      await ctx.db
+                          .query("qualificationAnalysisAttempts")
+                          .withIndex("by_lot_and_attempt", (q) =>
+                              q.eq("lotId", lot._id),
+                          )
+                          .take(manifest.analysis.perLot.requests + 1)
+                  ).some(
+                      (attempt) =>
+                          attempt.status === "reserved" &&
+                          attempt.provider === args.provider &&
+                          attempt.model === args.model,
+                  );
+        if (unresolved)
             throw new Error("Prior analysis dispatch outcome unknown");
         const total = campaign.analysisAllocated ?? {
             requests: 0,
@@ -519,17 +535,50 @@ export const settleAnalysis = internalMutation({
                     throw new Error("Analysis settlement conflict");
                 return null;
             }
+            const charge =
+                analysis.settlementPolicy === "verified_usage_v1" &&
+                analysis.pricing
+                    ? analysisUsageChargeMicros(analysis.pricing, receipt)
+                    : receipt.costMicros;
             if (
                 api &&
                 (attempt.reservationMicros === undefined ||
-                    receipt.costMicros === undefined ||
-                    receipt.costMicros > attempt.reservationMicros)
+                    charge === undefined ||
+                    charge > attempt.reservationMicros)
             )
                 throw new Error("Analysis reservation overrun");
+            if (
+                analysis.settlementPolicy === "verified_usage_v1" &&
+                attempt.reservationMicros !== undefined &&
+                charge !== undefined
+            ) {
+                const released = attempt.reservationMicros - charge;
+                const total = campaign.analysisAllocated;
+                const used = lot.analysisAllocated;
+                if (
+                    !total ||
+                    !used ||
+                    total.costMicros < attempt.reservationMicros ||
+                    used.costMicros < attempt.reservationMicros
+                )
+                    throw new Error("Analysis allocation unavailable");
+                await ctx.db.patch(campaign._id, {
+                    analysisAllocated: {
+                        ...total,
+                        costMicros: total.costMicros - released,
+                    },
+                });
+                await ctx.db.patch(lot._id, {
+                    analysisAllocated: {
+                        ...used,
+                        costMicros: used.costMicros - released,
+                    },
+                });
+            }
             await ctx.db.patch(attempt._id, {
                 status: "settled",
                 receipt,
-                ...(api ? { costMicros: receipt.costMicros } : {}),
+                ...(api ? { costMicros: charge } : {}),
             });
             return null;
         }
@@ -609,15 +658,8 @@ export const reconcile = internalMutation({
                             (call.qualificationReservationUsd ?? 0)
                     )
                         return { reconciled: false, usage: lot.allocation };
-                    if (call.service === "model") usage.model++;
-                    else if (call.operation === "source_need_search")
-                        usage.search++;
-                    else if (
-                        ["get_contents", "retrieve_filing_html"].includes(
-                            call.operation,
-                        )
-                    )
-                        usage.acquisition++;
+                    const category = qualificationCategory(call);
+                    if (category !== "technical") usage[category]++;
                     usage.costUsd += Math.max(
                         call.qualificationReservationUsd ?? 0,
                         call.reportedCost ?? 0,

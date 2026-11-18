@@ -1,0 +1,127 @@
+{
+    "schemaVersion": 1,
+    "id": "20261118T102419288Z-nvidia-grounded-framing-closeout",
+    "createdAt": "2026-11-18T10:24:19.288Z",
+    "git": {
+        "head": "787a2b00e401cf2513dedb35f068bc53c39cfc8e",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/lot-closeout.md",
+            "archivePath": "external/closeout/lot-closeout.md"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/campaign/campaign.json",
+            "archivePath": "external/approval/campaign.json"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/run-approved.mts",
+            "archivePath": "external/intended-run/run-approved.mts"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/resume-approved.mts",
+            "archivePath": "external/resumed-run/resume-approved.mts"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/runner-diagnostics.mts",
+            "archivePath": "external/runner-diagnostic/runner-diagnostics.mts"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/operator-status.json",
+            "archivePath": "external/attempt-first/operator-status.json"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/operator-attempt2.json",
+            "archivePath": "external/attempt-admitted/operator-attempt2.json"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/closed-state.json",
+            "archivePath": "external/campaign-closure/closed-state.json"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/campaign/lots/lot-1/progress.jsonl",
+            "archivePath": "external/review-journal/progress.jsonl"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/campaign/lots/lot-1/automated-review-mission.json",
+            "archivePath": "external/review-pin/automated-review-mission.json"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/campaign/lots/lot-1/automated-review-response-analysis-88855fe26bdfb1b5-1.json",
+            "archivePath": "external/review-observation/automated-review-response-analysis-88855fe26bdfb1b5-1.json"
+        },
+        {
+            "origin": "/tmp/workbench-nvidia-v3-OJYLFp/campaign/lots/lot-1/automated-review-status.json",
+            "archivePath": "external/review-status/automated-review-status.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/approval/campaign.json",
+            "bytes": 132498,
+            "sha256": "84e792e308a22ba43a66391c11ae538d34605cce81441c478150d3c3f53d4559"
+        },
+        {
+            "path": "external/attempt-admitted/operator-attempt2.json",
+            "bytes": 325,
+            "sha256": "0dfd300de92cff6efab4e2b464b1da199e12c29127a4de495f69f1deb13362b0"
+        },
+        {
+            "path": "external/attempt-first/operator-status.json",
+            "bytes": 325,
+            "sha256": "8fb839f468cc141941bc55bc7117715339243e9ec558934927606b425fbd8dba"
+        },
+        {
+            "path": "external/campaign-closure/closed-state.json",
+            "bytes": 792,
+            "sha256": "6a8cebcc8f277c549cbcc01a0064b54c3efdb93e8a3be6dcf2b923b8487727d5"
+        },
+        {
+            "path": "external/closeout/lot-closeout.md",
+            "bytes": 3120,
+            "sha256": "6d029daff483fac5e48ab807e78bfd0ad8e82696e96645b18339d152a49431a3"
+        },
+        {
+            "path": "external/intended-run/run-approved.mts",
+            "bytes": 3657,
+            "sha256": "f48b0e0bc70d3c74cb3e9c41d1c36825ba0a92a177384d4e383710c56242ab6f"
+        },
+        {
+            "path": "external/resumed-run/resume-approved.mts",
+            "bytes": 3671,
+            "sha256": "030d16551c50b67a8c0c1d4f496f49857f5c730057a47d4d56efc11b1f019905"
+        },
+        {
+            "path": "external/review-journal/progress.jsonl",
+            "bytes": 2679,
+            "sha256": "56bf14ddee2365d184e4111efd8834bac752e609c9680baf39c012bc64bd2765"
+        },
+        {
+            "path": "external/review-observation/automated-review-response-analysis-88855fe26bdfb1b5-1.json",
+            "bytes": 16216,
+            "sha256": "330a59ff2ca1de42cafbeb4d1771636baecc13e4ff2d802e5a93c859e887bb15"
+        },
+        {
+            "path": "external/review-pin/automated-review-mission.json",
+            "bytes": 8233,
+            "sha256": "107762e66a9853e2caeaa4cd5f6fa75ee88034f97f0311afc7cfb0a3d302b3b8"
+        },
+        {
+            "path": "external/review-status/automated-review-status.json",
+            "bytes": 74,
+            "sha256": "7d382b09d3a9a5401b93cc821bfaa2319d5d72c3df8070182f08bb0f2e5333ef"
+        },
+        {
+            "path": "external/runner-diagnostic/runner-diagnostics.mts",
+            "bytes": 722,
+            "sha256": "757a5f8ee588bd9398a4daf501353af975df3e7c81da3ddbf19043a98f534d6a"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261118T102419288Z-nvidia-grounded-framing-closeout.tar.gz",
+        "bytes": 63758,
+        "sha256": "0b11cb5d25ed2772af2ef79464b5e8e4a3a79b7cccbee39261c025843fe8d63e"
+    },
+    "verification": "restored_and_verified"
+}

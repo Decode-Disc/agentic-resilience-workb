@@ -199,7 +199,7 @@ async function withRelay(providerFetch, check, maximumRequests) {
         relay.listen(0, "127.0.0.1");
         await once(relay, "listening");
     };
-    const request = async (scenario) => {
+    const request = async (scenario, overrides = {}) => {
         writeFileSync(
             join(root, "control.json"),
             JSON.stringify({
@@ -227,13 +227,14 @@ async function withRelay(providerFetch, check, maximumRequests) {
                     reasoning: { enabled: true, effort: "low", exclude: true },
                     temperature: 0,
                     max_tokens: 6144,
+                    ...overrides,
                 }),
                 signal: AbortSignal.timeout(2000),
             },
         );
     };
-    const send = async (scenario) => {
-        const response = await request(scenario);
+    const send = async (scenario, overrides) => {
+        const response = await request(scenario, overrides);
         return {
             status: response.status,
             body: await response.text(),
@@ -330,6 +331,75 @@ const complete = (usage = { cost: 0.000001 }) =>
         `data: ${JSON.stringify({ id: "gen-unpaid", provider: "Unpaid fixture", choices: [{ delta: { content: "Complete" }, finish_reason: "stop" }], usage })}\n\ndata: [DONE]\n\n`,
         { headers: { "content-type": "text/event-stream" } },
     );
+
+test("relay forwards the Workbench price ceiling even when the catalogue price is lower", async () => {
+    let dispatches = 0;
+    await withRelay(
+        async (_url, init) => {
+            dispatches++;
+            assert.deepEqual(JSON.parse(init.body).provider.max_price, {
+                prompt: 0.15,
+                completion: 0.6,
+            });
+            return complete({ cost: 0.023 });
+        },
+        async ({ root, send, ledger }) => {
+            const path = join(root, "relay-route.json");
+            const route = JSON.parse(readFileSync(path, "utf8"));
+            route.descriptor.outputPrice = 0.5;
+            writeFileSync(path, JSON.stringify(route));
+            assert.equal((await send("nvidia-framing")).status, 200);
+            const events = ledger();
+            assert.deepEqual(
+                events.map((event) => event.event),
+                ["dispatch", "response"],
+            );
+            assert.equal(events[0].reserveUsd, 0.0233472);
+            assert.equal(events[1].cost, 0.023);
+            const over = await send("above-workbench-ceiling", {
+                provider: {
+                    require_parameters: true,
+                    max_price: { prompt: 0.15, completion: 0.61 },
+                },
+            });
+            assert.equal(over.status, 400);
+            assert.match(over.body, /Price ceiling changed/);
+            assert.equal(dispatches, 1);
+        },
+    );
+});
+
+test("relay admits against settled charges and retains unknown charges across restart", async () => {
+    let calls = 0;
+    await withRelay(
+        async () => (++calls === 1 ? complete({ cost: 0.001 }) : complete({})),
+        async ({ root, send, restart, ledger }) => {
+            const path = join(root, "protocol.json");
+            const protocol = JSON.parse(readFileSync(path, "utf8"));
+            protocol.manifest.costAccountingPolicy = "known_final_v1";
+            protocol.maximumCostUsd = 0.037;
+            writeFileSync(path, JSON.stringify(protocol));
+            await restart();
+            assert.equal((await send("settled")).status, 200);
+            await restart();
+            assert.equal((await send("unknown-charge")).status, 200);
+            await restart();
+            const blocked = await send("exhausted");
+            assert.equal(blocked.status, 400);
+            assert.match(blocked.body, /Authorized aggregate ceiling reached/);
+            assert.equal(calls, 2);
+            assert.deepEqual(
+                ledger()
+                    .filter((event) => event.event === "response")
+                    .map(({ billing, cost }) => ({ billing, cost })),
+                [
+                    { billing: "reported", cost: 0.001 },
+                    { billing: "unknown", cost: undefined },
+                ],
+            );
+        },
+    );
+});
 
 test("a received 429 survives restart and permits an independent scenario without erasing its charge reservation", async () => {
     let calls = 0;
@@ -650,10 +720,10 @@ for (const version of [2, 3])
                 model: "fixture/alternative",
                 reasoningEffort: "high",
                 descriptor: {
-                    contextWindow: 32768,
+                    contextWindow: 1048576,
                     maxTokens: 12000,
-                    inputPrice: 2,
-                    outputPrice: 6,
+                    inputPrice: 0.15,
+                    outputPrice: 0.5,
                 },
             }),
         );
@@ -688,7 +758,7 @@ for (const version of [2, 3])
                 max_tokens: 12000,
                 provider: {
                     require_parameters: true,
-                    max_price: { prompt: 2, completion: 6 },
+                    max_price: { prompt: 0.15, completion: 0.6 },
                 },
                 reasoning: { enabled: true, effort: "high", exclude: true },
                 temperature: 0,

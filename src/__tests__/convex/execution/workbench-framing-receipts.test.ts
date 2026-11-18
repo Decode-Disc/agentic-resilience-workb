@@ -199,6 +199,7 @@ async function respond(
 
 const incompleteEdit = JSON.stringify({ content: { scope: "Incomplete" } });
 const correctedEdit = JSON.stringify({
+    eventBasis: { kind: "none" },
     content: {
         scope: "Claims coordination",
         questions: [

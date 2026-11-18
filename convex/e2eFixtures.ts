@@ -1,3 +1,4 @@
+import { coveragePresetValidator } from "@convex/domain/validators";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -180,6 +181,7 @@ export const seedSourceReviewScenario = internalMutation({
                 ticker: v.string(),
                 websiteUrl: v.string(),
                 researchAngle: v.string(),
+                coveragePreset: v.optional(coveragePresetValidator),
                 sources: v.array(v.object(recordedSourceMetadata)),
             }),
         ),
@@ -290,6 +292,9 @@ export const seedSourceReviewScenario = internalMutation({
                         args.recordedScenario.companyCik ||
                         existingRun.companySnapshot?.legalName !==
                             args.recordedScenario.companyName ||
+                        (args.recordedScenario.coveragePreset !== undefined &&
+                            existingRun.coveragePreset !==
+                                args.recordedScenario.coveragePreset) ||
                         existingRun.researchAngle !==
                             args.recordedScenario.researchAngle ||
                         args.recordedScenario.sources.some(
@@ -367,7 +372,7 @@ export const seedSourceReviewScenario = internalMutation({
                 websiteUrl:
                     args.recordedScenario?.websiteUrl ?? "https://example.com/",
             },
-            coveragePreset: "balanced",
+            coveragePreset: args.recordedScenario?.coveragePreset ?? "balanced",
             researchAngle:
                 args.recordedScenario?.researchAngle ??
                 "Reactive source review verification",

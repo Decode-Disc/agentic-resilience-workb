@@ -67,6 +67,19 @@ const apiUsageCases = new Map<
         },
     ],
     [
+        "api_usage_unpriced_cache",
+        {
+            usage: {
+                input_tokens: 100,
+                output_tokens: 100,
+                input_tokens_details: {
+                    cache_write_tokens: 10,
+                    cache_write_tokens_details: { ttl_12h_tokens: 10 },
+                },
+            },
+        },
+    ],
+    [
         "api_usage_zero_input",
         {
             usage: { input_tokens: 0, output_tokens: 100 },
@@ -102,6 +115,7 @@ for (const { subscription, compaction, fault } of [
     ...[
         "api_401",
         "api_429",
+        "api_budget_exhausted",
         "api_usage",
         "api_price",
         "api_settlement",
@@ -120,9 +134,24 @@ for (const { subscription, compaction, fault } of [
         const api = fault.startsWith("api");
         const usageCase = apiUsageCases.get(fault);
         const high = fault === "api_high";
+        const reuseBudget = fault === "api" && !compaction;
+        const exhaustsBudget = fault === "api_budget_exhausted";
+        const verifiedUsage =
+            reuseBudget ||
+            exhaustsBudget ||
+            [
+                "api_usage_unpriced_cache",
+                "api_settlement",
+                "api_unknown",
+            ].includes(fault);
         const requestReservation = high ? 4000000 : 100000;
         const allowance =
             fault === "denied" ? 8 : compaction ? 12 : api ? 3 : 2;
+        const reviewBudget = reuseBudget
+            ? requestReservation + 148
+            : exhaustsBudget
+              ? requestReservation + 73
+              : allowance * requestReservation;
         const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
         const { preflightId } = await createAdmittedPreflight(t);
         await t.run(async (ctx) => {
@@ -150,13 +179,16 @@ for (const { subscription, compaction, fault } of [
                       ...qualificationReviewApiAnalysis(
                           high ? "gpt-6.1-sol" : "gpt-4o-mini",
                       ),
+                      ...(verifiedUsage
+                          ? { settlementPolicy: "verified_usage_v1" }
+                          : {}),
                       perLot: {
                           requests: allowance,
-                          costMicros: allowance * requestReservation,
+                          costMicros: reviewBudget,
                       },
                       total: {
                           requests: allowance,
-                          costMicros: allowance * requestReservation,
+                          costMicros: reviewBudget,
                       },
                       timeoutMs: compaction ? 60000 : 10000,
                   }
@@ -253,6 +285,12 @@ for (const { subscription, compaction, fault } of [
         let lastPurpose: string | undefined,
             lostAcknowledgement = false;
         vi.spyOn(client, "mutation").mockImplementation(async (...args) => {
+            const result = await t.mutation(
+                makeFunctionReference<"mutation", Record<string, Value>, Value>(
+                    getFunctionName(args[0]),
+                ),
+                args[1] ?? {},
+            );
             if (
                 fault === "api_settlement" &&
                 requests === 2 &&
@@ -263,14 +301,10 @@ for (const { subscription, compaction, fault } of [
                     )
             ) {
                 lostAcknowledgement = true;
-                throw new Error("Synthetic settlement failed before commit");
+                throw new Error(
+                    "Synthetic lost API settlement acknowledgement",
+                );
             }
-            const result = await t.mutation(
-                makeFunctionReference<"mutation", Record<string, Value>, Value>(
-                    getFunctionName(args[0]),
-                ),
-                args[1] ?? {},
-            );
             if (
                 fault === "settlement_ack" &&
                 !lostAcknowledgement &&
@@ -336,7 +370,9 @@ for (const { subscription, compaction, fault } of [
                     requests,
                     costMicros: subscription
                         ? 0
-                        : requests * requestReservation,
+                        : verifiedUsage
+                          ? requestReservation + (requests - 1) * 74
+                          : requests * requestReservation,
                 });
                 const body = await qualificationReviewPayload(init);
                 if (api) {
@@ -618,11 +654,13 @@ for (const { subscription, compaction, fault } of [
                           ? "provider_authentication_failed"
                           : fault === "api_429"
                             ? "provider_rate_limited"
-                            : fault === "api_usage" ||
-                                usageCase !== undefined ||
-                                fault === "api_settlement"
-                              ? "analysis_settlement_unconfirmed"
-                              : "unknown_dispatch_outcome",
+                            : exhaustsBudget
+                              ? "analysis_reservation_unavailable"
+                              : fault === "api_usage" ||
+                                  usageCase !== undefined ||
+                                  fault === "api_settlement"
+                                ? "analysis_settlement_unconfirmed"
+                                : "unknown_dispatch_outcome",
             });
             const before = requests;
             expect(before).toBe(
@@ -657,7 +695,13 @@ for (const { subscription, compaction, fault } of [
             }
             expect(
                 attempts.filter((attempt) => attempt.status === "reserved"),
-            ).toHaveLength(fault === "api_price" ? 0 : 1);
+            ).toHaveLength(
+                fault === "api_price" ||
+                    exhaustsBudget ||
+                    fault === "api_settlement"
+                    ? 0
+                    : 1,
+            );
             if (fault === "api_settlement") {
                 expect(
                     readFileSync(
@@ -689,6 +733,10 @@ for (const { subscription, compaction, fault } of [
                 expect(stage).toMatchObject({
                     reason: "provider_login_required",
                 });
+                expect(
+                    (await t.run((ctx) => ctx.db.get(lotId)))
+                        ?.analysisAllocated,
+                ).toEqual({ requests: 2, costMicros: 148 });
             }
             expect((await t.run((ctx) => ctx.db.get(lotId)))?.status).toBe(
                 "closing",
@@ -848,7 +896,9 @@ for (const { subscription, compaction, fault } of [
                 requests: completedRequests,
                 costMicros: subscription
                     ? 0
-                    : completedRequests * requestReservation,
+                    : reuseBudget
+                      ? 222
+                      : completedRequests * requestReservation,
             };
             expect(lot).toMatchObject({
                 status: "finished",

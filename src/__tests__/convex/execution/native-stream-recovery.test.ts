@@ -24,7 +24,10 @@ function response(content: string | Record<string, unknown>) {
                           type: "function",
                           function: {
                               name: "adjust_framing",
-                              arguments: JSON.stringify(content),
+                              arguments: JSON.stringify({
+                                  ...content,
+                                  eventBasis: { kind: "none" },
+                              }),
                           },
                       },
                   ],

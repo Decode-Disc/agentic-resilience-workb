@@ -1,4 +1,5 @@
 import { DiscoveryRequestError } from "@convex/domain/sourceDiscoveryRecovery";
+import type { ObserveProviderDispatch } from "@convex/domain/sourcePreparationAuthority";
 import { SOURCE_SELECTION_PROPOSAL_TIMEOUT_MS as PROVIDER_TIMEOUT_MS } from "@convex/resourcePolicy";
 import { createExaDiscoveryAdapter, readExaResponseJson } from "./exa";
 import { readExaApiKey } from "./exaConfiguration";
@@ -13,6 +14,7 @@ export async function fetchExaSearch(
         includeDomains?: Array<string>;
     },
     requestSignal?: AbortSignal,
+    observeDispatch?: ObserveProviderDispatch,
 ) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
@@ -21,6 +23,7 @@ export async function fetchExaSearch(
             ? AbortSignal.any([controller.signal, requestSignal])
             : controller.signal;
         signal.throwIfAborted();
+        observeDispatch?.("unknown");
         const response = await fetch("https://api.exa.ai/search", {
             method: "POST",
             headers: {
@@ -32,6 +35,7 @@ export async function fetchExaSearch(
             signal,
             redirect: "error",
         });
+        observeDispatch?.("response_received");
         if (!response.ok) {
             await response.body?.cancel();
             throw new DiscoveryRequestError(
@@ -101,9 +105,10 @@ export function configuredExaHttpDiscovery() {
         limit: number,
         includeDomains?: ReadonlyArray<string>,
         signal?: AbortSignal,
+        observeDispatch?: ObserveProviderDispatch,
     ) =>
         createExaDiscoveryAdapter({
             search: (text, options) =>
-                fetchExaSearch(apiKey, text, options, signal),
+                fetchExaSearch(apiKey, text, options, signal, observeDispatch),
         }).search(query, limit, includeDomains);
 }

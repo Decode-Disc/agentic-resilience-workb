@@ -24,6 +24,7 @@ import {
     controlledSourcesContributions,
     latestSourceQualifications,
     projectSourceDocumentState,
+    readSourcesCoverage,
     readSourcesMission,
     sourcesPreparationPhase,
     tallyDocumentaryContributions,
@@ -34,6 +35,7 @@ import {
     documentaryContributionValidator,
     documentaryFindingValidator,
     sourceDocumentStateValidator,
+    sourcesCoverage,
 } from "@convex/domain/sourcesContracts";
 import { isResumableResearchPause } from "@convex/domain/transitions";
 import { executionError } from "@convex/execution/errors";
@@ -70,6 +72,7 @@ const overviewValidator = v.object({
     preparationId: v.id("sourceSelectionProposalRebuilds"),
     preparationStatus,
     missionStatus: v.optional(missionStatusValidator),
+    coverage: v.optional(sourcesCoverage),
     materialOutcome: v.union(
         v.literal("complete"),
         v.literal("partial"),
@@ -372,6 +375,7 @@ export const overview = query({
             (qualification) => qualification.contributions,
         );
         const result = data.result;
+        const coverage = await readSourcesCoverage(ctx, preparation);
         const retainedStates = (result?.documents ?? [])
             .map((document) => {
                 const qualification = controlled.find(
@@ -465,6 +469,7 @@ export const overview = query({
             preparationStatus: preparation.status,
             ...(mission ? { missionStatus: mission.status } : {}),
             materialOutcome: result?.outcome ?? null,
+            ...(coverage ? { coverage } : {}),
             questions:
                 framing?.content.questions.map(({ id, text, shortLabel }) => ({
                     id,

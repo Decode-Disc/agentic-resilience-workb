@@ -133,6 +133,7 @@ test("framing edits use revisions and explicit research start consumes one analy
         reservationStatus: "consumed",
         executionStatus: "running",
         researchStartRequestKey: "start",
+        sourcesCoveragePolicyVersion: "sources_coverage_v1",
     });
     expect(run?.fixedFramingRevisionId).toBe(run?.currentFramingRevisionId);
     await t.mutation(transition, {

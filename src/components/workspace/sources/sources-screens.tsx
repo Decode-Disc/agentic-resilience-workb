@@ -3,8 +3,6 @@ import {
     Cancel01Icon,
     Search01Icon,
 } from "@hugeicons/core-free-icons";
-import { AgentByline } from "@/components/chat/agent-identity";
-import { SOURCES_AGENT } from "@/components/chat/conversation-agent";
 import {
     type ReactNode,
     type Ref,
@@ -13,6 +11,8 @@ import {
     useRef,
     useState,
 } from "react";
+import { AgentByline } from "@/components/chat/agent-identity";
+import { SOURCES_AGENT } from "@/components/chat/conversation-agent";
 import Icon from "@/components/icon";
 import { PaginationControls } from "@/components/pagination-controls";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +96,16 @@ export interface SourcesPreparationView {
     /** An earlier explanation recorded at handoff that differs from the current stop. */
     handoffNote?: string;
     description?: string;
+    coverage?: {
+        label: string;
+        description: string;
+        searches: readonly { id: string; focus: string; status: string }[];
+        assessments: readonly {
+            needId: string;
+            statement: string;
+            sources: readonly { sourceId: string; label: string }[];
+        }[];
+    };
     collect: {
         candidates: number;
         /** Omitted when the preparation does not record reuse. */
@@ -215,6 +225,7 @@ export function SourcesPreparationResult({
                 open={runOpen ?? localRunOpen}
                 onOpenChange={onRunOpenChange ?? setLocalRunOpen}
                 triggerRef={runTriggerRef}
+                onOpenSource={onOpenSource}
             />
             {view.description && (
                 <p className={cn("wb-meta", styles.preparationNote)}>
@@ -231,11 +242,13 @@ function PreparationRun({
     open,
     onOpenChange,
     triggerRef,
+    onOpenSource,
 }: {
     view: SourcesPreparationView;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     triggerRef?: Ref<HTMLButtonElement>;
+    onOpenSource?: (sourceId: string, needId: string) => void;
 }) {
     const { collect, reading, organize } = view;
     return (
@@ -258,6 +271,44 @@ function PreparationRun({
                 </span>
             </CollapsibleTrigger>
             <CollapsibleContent>
+                {view.coverage && (
+                    <div className="space-y-2 py-3 text-sm">
+                        <p>
+                            <strong>{view.coverage.label}</strong> ·{" "}
+                            {view.coverage.description}
+                        </p>
+                        {view.coverage.searches.length > 0 && (
+                            <ul
+                                aria-label="Coverage searches"
+                                className="max-h-36 space-y-1 overflow-y-auto">
+                                {view.coverage.searches.map((search) => (
+                                    <li key={search.id}>
+                                        {search.focus} · {search.status}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        {view.coverage.assessments.map((assessment) => (
+                            <div key={assessment.needId}>
+                                <p>{assessment.statement}</p>
+                                {onOpenSource &&
+                                    assessment.sources.map((source) => (
+                                        <Button
+                                            key={source.sourceId}
+                                            variant="link"
+                                            onClick={() =>
+                                                onOpenSource(
+                                                    source.sourceId,
+                                                    assessment.needId,
+                                                )
+                                            }>
+                                            {source.label}
+                                        </Button>
+                                    ))}
+                            </div>
+                        ))}
+                    </div>
+                )}
                 <PreparationStages view={view} />
             </CollapsibleContent>
         </Collapsible>

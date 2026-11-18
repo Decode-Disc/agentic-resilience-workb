@@ -16,12 +16,15 @@ import { MAX_RESEARCH_PLAN_QUESTIONS } from "@convex/domain/researchPlan";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationConcurrency } from "@convex/domain/sourcePreparationAuthority";
 import { activatedSourcesEnvelope } from "@convex/domain/sources";
+import { SOURCES_COVERAGE_VERSION } from "@convex/domain/sourcesContracts";
 import { coveragePresetValidator } from "@convex/domain/validators";
+import { observedPublicContext } from "@convex/domain/workbenchContracts";
 import {
     requireDossierAuthority,
     requireMissionAuthority,
 } from "@convex/execution/authority";
 import {
+    conversationInstructions,
     requireInstructionVersion,
     submitAuthorizedMessage,
 } from "@convex/execution/conversations";
@@ -34,6 +37,7 @@ import { sourcePreparationEnabled } from "@convex/resourceLimits";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import { sourcesQualificationEnvelope } from "@convex/sourcesSimulation";
+import { configuredPublicContextAllowance } from "@convex/workbenchPublicContext";
 import { workflow } from "@convex/workflow";
 import { type Infer, v } from "convex/values";
 
@@ -86,6 +90,9 @@ export async function initializeFraming(
         });
         await ctx.db.patch(run._id, {
             currentFramingRevisionId: revisionId,
+            ...(run.purpose !== "browser_test"
+                ? { publicContextAllowance: configuredPublicContextAllowance() }
+                : {}),
         });
     }
     await submitAuthorizedMessage(ctx, {
@@ -169,6 +176,7 @@ export const startResearch = mutation({
         await ctx.db.patch(run._id, {
             fixedFramingRevisionId: framing._id,
             sourcesProtocol: "sources_mission_v1",
+            sourcesCoveragePolicyVersion: SOURCES_COVERAGE_VERSION,
             sourcesEnvelope: sourcesMissionEnvelope,
             agentExecutionVersion: 3,
             researchStartedAt: Date.now(),
@@ -231,6 +239,7 @@ async function saveFraming(
         expectedRevision: number;
         requestKey: string;
         content: Infer<typeof framingContentValidator>;
+        eventBasis?: Doc<"framingRevisions">["eventBasis"];
     },
     origin: "analyst" | "workbench",
     actor?: Doc<"agentExecutionEvents">["actor"],
@@ -254,21 +263,29 @@ async function saveFraming(
             content.questions.length
     )
         throw executionError("framing_invalid");
-    const hash = sha256Hex(stableStringify(content));
     const previous = await ctx.db
         .query("framingRevisions")
         .withIndex("by_run_and_key", (q) =>
             q.eq("runId", run._id).eq("requestKey", args.requestKey),
         )
         .unique();
+    const current = run.currentFramingRevisionId
+        ? await ctx.db.get(run.currentFramingRevisionId)
+        : null;
+    const baseline = previous ?? current;
+    const eventBasis =
+        args.eventBasis ??
+        (baseline?.content.scope === content.scope
+            ? baseline.eventBasis
+            : undefined);
+    const hash = sha256Hex(
+        stableStringify(eventBasis ? { content, eventBasis } : content),
+    );
     if (previous) {
         if (previous.contentHash !== hash)
             throw executionError("framing_identity_conflict");
         return previous.revision;
     }
-    const current = run.currentFramingRevisionId
-        ? await ctx.db.get(run.currentFramingRevisionId)
-        : null;
     if (!current || current.revision !== args.expectedRevision)
         throw executionError("framing_version_conflict");
     // Only growth is refused, so a draft left over capacity by a configuration change can still be reworded or reduced.
@@ -287,6 +304,7 @@ async function saveFraming(
         runId: run._id,
         revision,
         content,
+        ...(eventBasis ? { eventBasis } : {}),
         contentHash: hash,
         requestKey: args.requestKey,
         origin,
@@ -309,6 +327,7 @@ async function saveFraming(
             previousRevision: current.revision,
             origin,
             content,
+            ...(eventBasis ? { eventBasis } : {}),
             fixed: false,
         },
     });
@@ -337,7 +356,7 @@ export const applyFromWorkbench = internalMutation({
         const request = await ctx.db.get(args.requestId);
         if (!request?.missionId || request.input.kind !== "adjust_framing")
             throw executionError("operation_not_allowed");
-        const { mission } = await requireMissionAuthority(
+        const { mission, run } = await requireMissionAuthority(
             ctx,
             request.missionId,
             args.expectedGeneration,
@@ -360,18 +379,131 @@ export const applyFromWorkbench = internalMutation({
                 throw executionError("operation_result_conflict");
             return value.revision;
         }
+        const currentRevision = run.currentFramingRevisionId
+            ? await ctx.db.get(run.currentFramingRevisionId)
+            : null;
+        if (
+            !currentRevision ||
+            currentRevision.revision !== request.input.expectedRevision
+        )
+            throw executionError("framing_version_conflict");
+        const { messageId: causingMessageId } = request.input;
+        let { content, eventBasis: proposedBasis } = request.input;
+        if (
+            !proposedBasis &&
+            currentRevision.eventBasis?.kind === "open" &&
+            currentRevision.content.scope === content.scope
+        )
+            proposedBasis = currentRevision.eventBasis;
+        if (proposedBasis?.kind === "open") {
+            if (
+                currentRevision.origin !== "initial" &&
+                (currentRevision.origin !== "workbench" ||
+                    currentRevision.eventBasis?.kind !== "open")
+            )
+                throw executionError("framing_open_preserve_program");
+            // The proposed wording may already assume an answer to the clarification.
+            const company =
+                run.companySnapshot?.legalName ?? "the selected company";
+            content = {
+                scope: `Investigate the resilience of ${company} in its core operating workflows while the event is being clarified.`,
+                questions: [
+                    {
+                        id: "resilience-baseline",
+                        shortLabel: "Operating resilience",
+                        text: "Which dependencies and alternatives determine how the company can sustain operations and retain value through a disruption?",
+                        rationale:
+                            "Identify where the company controls the workflow and where customer, supplier or operating constraints could make a disruption material.",
+                    },
+                ],
+            };
+        }
         if (request.operationVersion === 2)
             await requireFramingEditAuthority(ctx, mission, {
-                messageId: request.input.messageId,
-                proposed: request.input.content,
+                messageId: causingMessageId,
+                proposed: content,
             });
+        if (
+            !proposedBasis &&
+            request.input.eventBasisRequired &&
+            currentRevision.content.scope !== content.scope
+        )
+            throw executionError("framing_event_basis_required");
+        let eventBasis: Doc<"framingRevisions">["eventBasis"];
+        if (proposedBasis?.kind === "analyst") {
+            const instructions = await conversationInstructions(ctx, mission);
+            const message = instructions?.messages.find(
+                ({ messageId }) => messageId === causingMessageId,
+            );
+            if (
+                !message ||
+                !proposedBasis.excerpt.trim() ||
+                !message.text.includes(proposedBasis.excerpt)
+            )
+                throw executionError("framing_event_basis_invalid");
+            eventBasis = { ...proposedBasis, messageId: message.messageId };
+        } else if (proposedBasis?.kind === "public") {
+            const { lookupRequestId, referenceIndexes: indexes } =
+                proposedBasis;
+            const lookup = await ctx.db.get(lookupRequestId);
+            const result = observedPublicContext(lookup);
+            if (
+                lookup?.input.kind !== "verify_public_context" ||
+                lookup.runId !== run._id ||
+                lookup.missionId !== mission._id ||
+                lookup.pin?.kind !== "framing_revision" ||
+                lookup.pin.revisionId !== currentRevision._id ||
+                lookup.instructionVersion !== request.instructionVersion ||
+                lookup.input.messageId !== causingMessageId ||
+                !result
+            )
+                throw executionError("framing_public_lookup_invalid", [
+                    {
+                        path: "eventBasis.lookupRequestId",
+                        expected:
+                            "The requestId of the adopted verify_public_context result for this message and framing revision.",
+                    },
+                ]);
+            if (
+                !proposedBasis.label.trim() ||
+                !indexes.length ||
+                new Set(indexes).size !== indexes.length ||
+                indexes.some(
+                    (index) =>
+                        !Number.isSafeInteger(index) ||
+                        !result.references[index]?.excerpt.trim(),
+                )
+            )
+                throw executionError("framing_event_basis_invalid");
+            const datedIndexes = result.references.flatMap(
+                (reference, index) =>
+                    reference.excerpt.trim() &&
+                    (reference.eventAt !== undefined ||
+                        reference.publishedAt !== undefined)
+                        ? [index]
+                        : [],
+            );
+            if (!datedIndexes.some((index) => indexes.includes(index)))
+                throw executionError("framing_public_reference_undated", [
+                    {
+                        path: "eventBasis.referenceIndexes",
+                        expected: datedIndexes.length
+                            ? `Keep lookupRequestId ${lookupRequestId}. Include an applicable dated reference from indexes [${datedIndexes.join(", ")}].`
+                            : `Lookup ${lookupRequestId} has no dated reading. Leave the event open unless the analyst identified it in the active message.`,
+                    },
+                ]);
+            eventBasis = proposedBasis;
+        } else {
+            eventBasis = proposedBasis;
+        }
         const revision = await saveFraming(
             ctx,
             {
                 runId: mission.runId,
                 expectedRevision: request.input.expectedRevision,
                 requestKey: `operation:${request._id}`,
-                content: request.input.content,
+                content,
+                eventBasis,
             },
             "workbench",
             { type: "agent", missionId: mission._id },

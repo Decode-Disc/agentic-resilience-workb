@@ -311,6 +311,117 @@ function retainedNeedSources(
         .map((document) => document.sourceId);
 }
 
+test("coverage handoff freezes unfinished searches for Sources and Workbench", async () => {
+    const f = await seedCapturedSources();
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        await ctx.db.patch(f.preparationId, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                coveragePolicy: {
+                    version: "sources_coverage_v1",
+                    preset: "independent_scrutiny",
+                },
+            },
+        });
+    });
+    const expectedGeneration = 4;
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration,
+            cause: "coverage-search",
+            input: {
+                kind: "discover_sources_for_need",
+                needId: "common-context",
+                query: "workflow reliability",
+            },
+        },
+    );
+    await f.t.mutation(internal.execution.operations.claim, {
+        requestId,
+        expectedGeneration,
+    });
+    const reserved = await f.t.mutation(internal.sourcesMission.reserve, {
+        requestId,
+        expectedGeneration,
+    });
+    assert(reserved.discovery);
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.missionId, { deadlineAt: Date.now() }),
+    );
+    await f.t.mutation(internal.execution.operations.expire, {
+        requestId,
+        expectedGeneration,
+    });
+    await f.t.run((ctx) =>
+        completeSources(ctx, f.preparationId, {
+            kind: "complete",
+            needsRevision: 1,
+            needs: [
+                {
+                    needId: "common-context",
+                    unfinished: ["The search outcome could not be confirmed."],
+                    workRequestIds: [requestId],
+                },
+            ],
+        }),
+    );
+    const owner = f.t.withIdentity({ subject: f.userId });
+    const before = await owner.query(api.sourcesMission.getPreparedMaterial, {
+        runId: f.runId,
+    });
+    expect(before?.material).toMatchObject({
+        coveragePolicy: {
+            version: "sources_coverage_v1",
+            preset: "independent_scrutiny",
+        },
+        coverageSearches: [
+            {
+                requestId,
+                outcome: "unfinished",
+                reasonCode: "operation_outcome_unknown",
+            },
+        ],
+    });
+    await f.t.mutation(internal.execution.operations.recordResult, {
+        requestId,
+        expectedGeneration,
+        outcome: {
+            kind: "success",
+            valueJson: JSON.stringify({
+                needId: "common-context",
+                query: reserved.discovery.query,
+                inserted: 0,
+                total: 0,
+            }),
+        },
+    });
+    expect(
+        await owner.query(api.sourcesMission.getPreparedMaterial, {
+            runId: f.runId,
+        }),
+    ).toEqual(before);
+    const overview = await owner.query(api.sourcesWorkspace.overview, {
+        runId: f.runId,
+    });
+    expect(overview?.coverage?.searches).toEqual([
+        {
+            requestId,
+            needIds: ["common-context"],
+            ...reserved.discovery,
+            outcome: "unfinished",
+            reasonCode: "operation_outcome_unknown",
+        },
+    ]);
+    const facts = await workbenchFacts(f);
+    expect(facts.documentaryPreparation).toMatchObject({
+        coverage: overview?.coverage,
+    });
+});
+
 test("dossiers without the Sources protocol have no Sources workspace projection", async () => {
     const f = await seedCapturedSources();
     await f.t.run((ctx) =>

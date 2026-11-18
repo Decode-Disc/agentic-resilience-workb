@@ -1,33 +1,10 @@
-import type { api } from "@convex/_generated/api";
-import type { FunctionArgs } from "convex/server";
-
+import {
+    type CoveragePreset,
+    coveragePresetOptions,
+} from "@/lib/presentation/research-copy";
 import { cn } from "@/lib/utils";
 
-export type CoveragePreset = FunctionArgs<
-    typeof api.researchLaunch.confirmAndStart
->["coveragePreset"];
-
-const options: ReadonlyArray<{
-    value: CoveragePreset;
-    label: string;
-    description: string;
-}> = [
-    {
-        value: "balanced",
-        label: "Balanced",
-        description: "A measured mix of first-party and independent sources.",
-    },
-    {
-        value: "first_party_depth",
-        label: "First-party depth",
-        description: "Prioritize filings and issuer material.",
-    },
-    {
-        value: "independent_scrutiny",
-        label: "Independent scrutiny",
-        description: "Prioritize external challenge and counter-evidence.",
-    },
-];
+export type { CoveragePreset } from "@/lib/presentation/research-copy";
 
 /** Selects discovery priorities without changing mandatory workflow stages. */
 export function CoveragePresetPicker({
@@ -41,7 +18,7 @@ export function CoveragePresetPicker({
         <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Coverage preset</legend>
             <div className="grid gap-2 md:grid-cols-3">
-                {options.map((option) => (
+                {coveragePresetOptions.map((option) => (
                     <label
                         key={option.value}
                         className={cn(

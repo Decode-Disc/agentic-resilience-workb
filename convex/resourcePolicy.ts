@@ -300,6 +300,9 @@ export const DOSSIER_PURGE_BATCH = 100;
 
 export const SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS = 15;
 
+/** Maximum authored documentary search length before provider dispatch. */
+export const DOCUMENTARY_SEARCH_QUERY_MAX_CHARS = 512;
+
 export const MAX_EXA_DISCOVERY_ATTEMPTS = 2;
 
 export const EXA_DISCOVERY_TIMEOUT_MS = 10_000;

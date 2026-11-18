@@ -310,6 +310,28 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
                                                   ],
                                         },
                                     });
+        if (canonical.id === "workbench_v1")
+            for (const controlAvailable of [false, true])
+                for (const material of [false, true])
+                    for (const fixed of [false, true])
+                        for (const prepared of [false, true])
+                            for (const single of [false, true])
+                                snapshots.push({
+                                    framing: fixed
+                                        ? { revision: 1, fixed: true }
+                                        : null,
+                                    modernSources: true,
+                                    research: { controlAvailable },
+                                    availableMaterials: material ? [{}] : [],
+                                    documentaryPreparation: prepared
+                                        ? { settledNeedIds: ["fixture"] }
+                                        : null,
+                                    conversationInstructions: {
+                                        messages: single
+                                            ? [{ messageId: "one", text: "" }]
+                                            : [],
+                                    },
+                                });
         const seen = new Set<string>();
         for (const snapshot of snapshots) {
             const projected = agentToolSchemas(canonical, snapshot);

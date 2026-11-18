@@ -4,6 +4,7 @@ import { sha256Hex } from "@convex/domain/sourcePassages";
 import {
     type CampaignManifest,
     campaignManifestSchema,
+    campaignPreparationSchema,
     emptyCampaignLimits,
 } from "@convex/qualificationCampaignPolicy";
 import { ConvexHttpClient } from "convex/browser";
@@ -126,6 +127,97 @@ test("a historical campaign cannot dispatch more analysis but can settle an alre
             attemptKey: "before-cutover",
         }),
     ]);
+});
+
+test("a fresh API review can reuse settled budget without restoring its call allowance", async () => {
+    const { t } = await seedWorkbench(true);
+    const draft = qualificationReviewApiAnalysis();
+    const m = campaignPreparationSchema.parse({
+        ...configurableCampaign(),
+        version: 3,
+        mode: "deterministic",
+        batteryHash: "a".repeat(64),
+        perLot: emptyCampaignLimits(),
+        total: emptyCampaignLimits(),
+        analysis: {
+            ...draft,
+            maxRequestCostMicros: undefined,
+            perLot: { requests: 2, costMicros: 29180 },
+            total: { requests: 3, costMicros: 29180 },
+        },
+    });
+    assert(m.version === 3);
+    const campaignId = await t.mutation(authorize, { manifest: m });
+    const lotId = await t.mutation(admit, {
+        campaignId,
+        key: "api-review-budget",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    });
+    await t.mutation(internal.qualificationCampaigns.beginCleanup, { lotId });
+    const reserve = (attemptKey: string, targetLotId = lotId) =>
+        t.mutation(internal.qualificationCampaigns.reserveAnalysis, {
+            lotId: targetLotId,
+            attemptKey,
+            evidenceHash: "c".repeat(64),
+            provider: "openai",
+            model: "gpt-4o-mini",
+            reservationMicros:
+                m.analysis.maxRequestCostMicros ?? m.analysis.perLot.costMicros,
+        });
+    const settle = (attemptKey: string) =>
+        t.mutation(internal.qualificationCampaigns.settleAnalysis, {
+            lotId,
+            attemptKey,
+            receipt: {
+                accounting: "api_cost",
+                input: 100,
+                output: 100,
+                cacheRead: 0,
+                cacheWrite: 0,
+                costBasis: "sdk_estimate",
+                costUsd: 0.000075,
+                costMicros: 75,
+                pricingHash: sha256Hex(JSON.stringify(m.analysis.pricing)),
+                observationHash: "d".repeat(64),
+            },
+        });
+    await reserve("first");
+    await expect(reserve("unknown")).rejects.toThrow(
+        "Prior analysis dispatch outcome unknown",
+    );
+    await settle("first");
+    await settle("first");
+    await reserve("second");
+    await settle("second");
+    await expect(reserve("third")).rejects.toThrow(
+        "Analysis allowance exhausted",
+    );
+    const expected = { requests: 2, costMicros: 150 };
+    expect(
+        (await t.run((ctx) => ctx.db.get(lotId)))?.analysisAllocated,
+    ).toEqual(expected);
+    expect(
+        (await t.run((ctx) => ctx.db.get(campaignId)))?.analysisAllocated,
+    ).toEqual(expected);
+    await t.mutation(reconcile, { lotId, cleanupCompleted: true });
+    await t.mutation(assess, {
+        lotId,
+        assessmentHash: "e".repeat(64),
+        verdict: "failed",
+    });
+    const nextLotId = await t.mutation(admit, {
+        campaignId,
+        key: "second-lot",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    });
+    await t.mutation(internal.qualificationCampaigns.beginCleanup, {
+        lotId: nextLotId,
+    });
+    await expect(reserve("next-lot", nextLotId)).rejects.toThrow(
+        "Analysis allowance exhausted",
+    );
 });
 
 for (const basis of ["sdk_estimate", "provider_reported"] as const)

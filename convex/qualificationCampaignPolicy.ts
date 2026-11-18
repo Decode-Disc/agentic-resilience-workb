@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { coveragePresetValidator } from "./domain/validators.ts";
 import { reasoningPreferenceValues } from "./modelConfigurationValues.ts";
 import { initialFixtureIds } from "./qualificationInitialFixtures.ts";
 import {
@@ -228,6 +229,10 @@ export const qualificationScenarioSchema = z
             })
             .strict(),
         framing,
+        framingPublicContext: z.literal(true).optional(),
+        coveragePreset: z
+            .enum(coveragePresetValidator.members.map((value) => value.value))
+            .optional(),
         steps: z.array(qualificationStepSchema).min(1),
         limits: campaignLimitsSchema.partial().optional(),
         sourcesEnvelope: qualificationEnvelopeSchema.optional(),
@@ -563,6 +568,55 @@ export const analysisReceiptSchema = z
                 message: "Invalid analysis receipt accounting",
             });
     });
+
+/** Upper bound for validated OpenAI token usage at the prices pinned in the mandate. */
+export function analysisUsageChargeMicros(
+    pricing: z.infer<typeof analysisPricingSchema>,
+    receipt: z.infer<typeof analysisReceiptSchema>,
+): number {
+    const { input, output, cacheRead, cacheWrite, costMicros } = receipt;
+    if (
+        cacheRead === undefined ||
+        cacheWrite === undefined ||
+        costMicros === undefined ||
+        receipt.costBasis === undefined ||
+        receipt.observationHash === undefined
+    )
+        throw new Error("Verified analysis usage required");
+
+    const totalInput = input + cacheRead + cacheWrite;
+    if (totalInput > pricing.contextWindow || output > pricing.maxTokens)
+        throw new Error("Analysis usage exceeds the authorized capacity");
+    if (receipt.costBasis === "provider_reported") return costMicros;
+
+    const { tiers, ...base } = pricing.cost;
+    let rates = base;
+    let threshold = -1;
+    for (const tier of tiers ?? []) {
+        if (
+            totalInput > tier.inputTokensAbove &&
+            tier.inputTokensAbove > threshold
+        ) {
+            threshold = tier.inputTokensAbove;
+            rates = {
+                input: tier.input ?? base.input,
+                output: tier.output ?? base.output,
+                cacheRead: tier.cacheRead ?? base.cacheRead,
+                cacheWrite: tier.cacheWrite ?? base.cacheWrite,
+            };
+        }
+    }
+    const bound = Math.ceil(
+        input * rates.input +
+            output * rates.output +
+            cacheRead * rates.cacheRead +
+            cacheWrite * rates.cacheWrite,
+    );
+    const charged = Math.max(bound, costMicros);
+    if (!Number.isSafeInteger(charged))
+        throw new Error("Analysis usage cost is unrepresentable");
+    return charged;
+}
 export type AnalysisReceipt = z.infer<typeof analysisReceiptSchema>;
 const analysisAllowanceSchema = z
     .object({
@@ -580,6 +634,7 @@ export const analysisMandateSchema = z
     .object({
         scope: z.literal("evidence_review"),
         accounting: z.enum(["native_subscription", "api_cost"]).optional(),
+        settlementPolicy: z.literal("verified_usage_v1").optional(),
         pricing: analysisPricingSchema.optional(),
         routes: z
             .array(
@@ -605,6 +660,16 @@ export const analysisMandateSchema = z
     })
     .strict()
     .superRefine((m, ctx) => {
+        if (
+            m.settlementPolicy &&
+            (m.accounting !== "api_cost" ||
+                m.maxRequestCostMicros === undefined)
+        )
+            ctx.addIssue({
+                code: "custom",
+                message:
+                    "Verified analysis settlement requires an API request reservation",
+            });
         if (m.pricing !== undefined && m.accounting !== "api_cost")
             ctx.addIssue({
                 code: "custom",
@@ -734,6 +799,33 @@ export const newCampaignManifestSchema = campaignManifestSchema.superRefine(
                 message:
                     "Explicit researchDurationMs required for a new configurable Sources campaign",
             });
+    },
+);
+
+/** Pin the reviewer settlement rules before presenting a new campaign for authorization. */
+export const campaignPreparationSchema = newCampaignManifestSchema.transform(
+    (manifest) => {
+        if (
+            manifest.version !== 3 ||
+            manifest.analysis.accounting !== "api_cost"
+        )
+            return manifest;
+        const { analysis } = manifest;
+        if (!analysis.pricing) throw new Error("Missing analysis pricing");
+        return {
+            ...manifest,
+            analysis: {
+                ...analysis,
+                settlementPolicy: "verified_usage_v1" as const,
+                maxRequestCostMicros:
+                    analysis.maxRequestCostMicros ??
+                    Math.max(
+                        1,
+                        analysisPricingAuthority(analysis.pricing)
+                            .maximumCostMicros,
+                    ),
+            },
+        };
     },
 );
 export type CampaignManifest = z.infer<typeof campaignManifestSchema>;
