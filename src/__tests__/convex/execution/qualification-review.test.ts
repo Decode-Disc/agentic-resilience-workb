@@ -985,3 +985,335 @@ for (const { subscription, compaction, fault } of [
             process.exitCode = exitCode;
         }
     }, 60000);
+
+async function createDiagnosticReviewHarness(options: {
+    timeoutMs?: number;
+    fetchImpl: (
+        input: Parameters<typeof fetch>[0],
+        init?: RequestInit,
+    ) => Promise<Response>;
+}) {
+    const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
+    const { preflightId } = await createAdmittedPreflight(t);
+    await t.run(async (ctx) => {
+        const preflight = await ctx.db.get(preflightId);
+        assert(preflight?.ownerVisitorId);
+        const visitor = await ctx.db.get(preflight.ownerVisitorId);
+        assert(visitor);
+        await ctx.db.patch(visitor.invitationId, { slotKey: "analyst-4" });
+    });
+    vi.stubEnv("WORKBENCH_REVIEW_REASONING", "off");
+    vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
+    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
+    const manifest = campaignManifestSchema.parse({
+        ...configurableCampaign(),
+        version: 3,
+        mode: "deterministic",
+        batteryHash: "a".repeat(64),
+        perLot: emptyCampaignLimits(),
+        total: emptyCampaignLimits(),
+        analysis: {
+            ...qualificationReviewApiAnalysis("gpt-4o-mini"),
+            settlementPolicy: "verified_usage_v1",
+            perLot: { requests: 3, costMicros: 300000 },
+            total: { requests: 3, costMicros: 300000 },
+            timeoutMs: options.timeoutMs ?? 10000,
+        },
+    });
+    const campaignId = await t.mutation(
+        internal.qualificationCampaigns.authorize,
+        { manifest },
+    );
+    const lotId = await t.mutation(internal.qualificationCampaigns.admit, {
+        campaignId,
+        key: "lot-1",
+        candidateHash: "b".repeat(64),
+        changedPaths: [],
+    });
+    await t.mutation(internal.qualificationCampaigns.beginCleanup, { lotId });
+    const root = mkdtempSync(join(tmpdir(), "pi-campaign-diag-"));
+    const lotRoot = join(root, "lots", "lot-1");
+    mkdirSync(lotRoot, { recursive: true });
+    writeFileSync(
+        join(root, "campaign.json"),
+        JSON.stringify({ campaignId, manifest, fingerprints: {} }),
+    );
+    writeFileSync(
+        join(lotRoot, "campaign-lot.json"),
+        JSON.stringify({
+            manifest,
+            candidateHash: "b".repeat(64),
+            fingerprints: {},
+        }),
+    );
+    writeFileSync(
+        join(lotRoot, "campaign-result.json"),
+        JSON.stringify({ completed: true, cleanupCompleted: true }),
+    );
+    writeFileSync(
+        join(lotRoot, "published.json"),
+        "Synthetic evidence fixture: the framing was saved.",
+    );
+    const template = campaignReviewTemplate(lotRoot);
+    writeFileSync(
+        join(lotRoot, "review-template.json"),
+        JSON.stringify(template),
+    );
+    const client = new ConvexHttpClient("http://127.0.0.1:3210");
+    vi.spyOn(client, "mutation").mockImplementation((...args) =>
+        t.mutation(
+            makeFunctionReference<"mutation", Record<string, Value>, Value>(
+                getFunctionName(args[0]),
+            ),
+            args[1] ?? {},
+        ),
+    );
+    vi.spyOn(client, "query").mockImplementation((...args) =>
+        t.query(
+            makeFunctionReference<"query", Record<string, Value>, Value>(
+                getFunctionName(args[0]),
+            ),
+            args[1] ?? {},
+        ),
+    );
+    const modelRuntime = await qualificationReviewRuntime("openai");
+    const { runAccountableCampaignReview } = await import(
+        "@evaluations/workbench-browser/campaign-review"
+    );
+    const stageOptions = {
+        root: lotRoot,
+        evidenceHash: template.evidenceHash,
+        reconciled: false,
+        review: (evidenceRoot: string) =>
+            runAccountableCampaignReview({
+                root: lotRoot,
+                evidenceRoot,
+                template,
+                manifest,
+                campaignId,
+                lotId,
+                client,
+                modelRuntime,
+                transport: {
+                    kind: "mock-openai" as const,
+                    fetch: (input, init) => options.fetchImpl(input, init),
+                },
+            }),
+        assess: async () =>
+            assert.fail("No assessment on failed review dispatch"),
+    };
+    return { t, lotId, lotRoot, template, stageOptions };
+}
+
+test("automated review retains sanitized dispatch, mid-stream SSE, and HTTP 5xx diagnostics while blocking redispatch", async () => {
+    const { lotRoot, template, stageOptions } =
+        await createDiagnosticReviewHarness({
+            fetchImpl: async () => {
+                throw new Error(
+                    "connect ECONNRESET https://api.openai.com/v1/responses?secret=1 Bearer sk-synthetic-offline-qualification-key",
+                );
+            },
+        });
+    const dispatchFailure = await runCampaignReviewStage(stageOptions);
+    expect(dispatchFailure).toMatchObject({
+        status: "pending",
+        reason: "unknown_dispatch_outcome",
+        diagnostic: {
+            attempt: 1,
+            purpose: "investigation",
+            phase: "request_dispatch",
+            bytesRead: 0,
+            chunksRead: 0,
+            stopReason: "error",
+            transportError: {
+                name: "Error",
+                causeHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+            },
+        },
+    });
+    const persisted = JSON.parse(
+        readFileSync(join(lotRoot, "automated-review-status.json"), "utf8"),
+    );
+    expect(persisted).toEqual(dispatchFailure);
+    const serialized = JSON.stringify(persisted);
+    expect(serialized).not.toContain("sk-synthetic-offline-qualification-key");
+    expect(serialized).not.toContain("api.openai.com");
+    expect(serialized).toContain("[redacted]");
+    expect(
+        existsSync(
+            join(
+                lotRoot,
+                `automated-review-response-analysis-${template.evidenceHash.slice(0, 16)}-1.json`,
+            ),
+        ),
+    ).toBe(false);
+
+    // Mid-stream SSE drop after 200 headers: retain partial SSE metadata without reasoning/secrets or response cache file.
+    let streamAttempts = 0;
+    const streamDrop = await createDiagnosticReviewHarness({
+        fetchImpl: async () => {
+            streamAttempts++;
+            const encoder = new TextEncoder();
+            let pulls = 0;
+            const stream = new ReadableStream<Uint8Array>({
+                pull(controller) {
+                    pulls++;
+                    if (pulls === 1) {
+                        controller.enqueue(
+                            encoder.encode(
+                                [
+                                    'data: {"type":"response.created","response":{"id":"resp-midstream-30","status":"in_progress"}}',
+                                    "",
+                                    'data: {"type":"response.reasoning.encrypted","encrypted_content":"DO_NOT_COPY_ENCRYPTED_REASONING"}',
+                                    "",
+                                    'data: {"type":"response.failed","response":{"id":"resp-midstream-30","status":"failed","error":{"type":"server_error","code":"stream_reset","message":"Upstream reset Bearer sk-secret123"}}}',
+                                    "",
+                                    "",
+                                ].join("\n"),
+                            ),
+                        );
+                        return;
+                    }
+                    controller.error(
+                        new Error(
+                            "Premature close Bearer sk-secret456 token=leak",
+                        ),
+                    );
+                },
+            });
+            return new Response(stream, {
+                status: 200,
+                headers: {
+                    "content-type": "text/event-stream; charset=utf-8",
+                    "x-request-id": "req-openai-midstream-30",
+                },
+            });
+        },
+    });
+    const streamResult = await runCampaignReviewStage(streamDrop.stageOptions);
+    expect(streamResult).toMatchObject({
+        status: "pending",
+        reason: "unknown_dispatch_outcome",
+        diagnostic: {
+            attempt: 1,
+            purpose: "investigation",
+            phase: "stream_read",
+            httpStatus: 200,
+            requestId: "req-openai-midstream-30",
+            stopReason: "error",
+            transportError: {
+                name: "Error",
+                causeHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+            },
+            sseSummary: {
+                lastEventType: "response.failed",
+                responseId: "resp-midstream-30",
+                responseStatus: "failed",
+                completedUsageSeen: false,
+                providerError: {
+                    type: "server_error",
+                    code: "stream_reset",
+                    message: "Upstream reset Bearer [redacted]",
+                },
+            },
+        },
+    });
+    const streamSerialized = readFileSync(
+        join(streamDrop.lotRoot, "automated-review-status.json"),
+        "utf8",
+    );
+    expect(streamSerialized).not.toContain("DO_NOT_COPY_ENCRYPTED_REASONING");
+    expect(streamSerialized).not.toContain("sk-secret123");
+    expect(streamSerialized).not.toContain("sk-secret456");
+    expect(streamSerialized).not.toContain("token=leak");
+    expect(
+        existsSync(
+            join(
+                streamDrop.lotRoot,
+                `automated-review-response-analysis-${streamDrop.template.evidenceHash.slice(0, 16)}-1.json`,
+            ),
+        ),
+    ).toBe(false);
+    // Re-running after unknown outcome must block redispatch without issuing another HTTP request.
+    await runCampaignReviewStage(streamDrop.stageOptions);
+    expect(streamAttempts).toBe(1);
+
+    // HTTP 502 response retains httpStatus and sanitized providerMessage alongside unknown_dispatch_outcome.
+    const badGateway = await createDiagnosticReviewHarness({
+        fetchImpl: async () =>
+            new Response(
+                JSON.stringify({
+                    error: {
+                        message:
+                            "Bad gateway from https://api.openai.com/v1/responses Bearer sk-secret789",
+                    },
+                }),
+                {
+                    status: 502,
+                    headers: {
+                        "content-type": "application/json",
+                        "x-request-id": "req-openai-502",
+                    },
+                },
+            ),
+    });
+    const badGatewayResult = await runCampaignReviewStage(
+        badGateway.stageOptions,
+    );
+    expect(badGatewayResult).toMatchObject({
+        status: "pending",
+        reason: "unknown_dispatch_outcome",
+        diagnostic: {
+            attempt: 1,
+            purpose: "investigation",
+            phase: "response_persist",
+            httpStatus: 502,
+            requestId: "req-openai-502",
+            stopReason: "error",
+        },
+    });
+    const badGatewaySerialized = readFileSync(
+        join(badGateway.lotRoot, "automated-review-status.json"),
+        "utf8",
+    );
+    expect(badGatewaySerialized).not.toContain("sk-secret789");
+    expect(badGatewaySerialized).not.toContain("api.openai.com");
+});
+
+test("automated review preserves execution_deadline when timeout aborts an in-flight call", async () => {
+    const { lotRoot, stageOptions } = await createDiagnosticReviewHarness({
+        timeoutMs: 300,
+        fetchImpl: (_input, init) =>
+            new Promise<Response>((_resolve, reject) => {
+                const abort = () =>
+                    reject(
+                        Object.assign(new Error("The operation was aborted"), {
+                            name: "AbortError",
+                        }),
+                    );
+                if (init?.signal?.aborted) {
+                    abort();
+                    return;
+                }
+                init?.signal?.addEventListener("abort", abort, { once: true });
+            }),
+    });
+    const result = await runCampaignReviewStage(stageOptions);
+    expect(result).toMatchObject({
+        status: "pending",
+        reason: "execution_deadline",
+        diagnostic: {
+            attempt: 1,
+            purpose: "investigation",
+            stopReason: "aborted",
+        },
+    });
+    expect(
+        JSON.parse(
+            readFileSync(join(lotRoot, "automated-review-status.json"), "utf8"),
+        ),
+    ).toMatchObject({
+        status: "pending",
+        reason: "execution_deadline",
+    });
+});

@@ -71,6 +71,218 @@ export type CampaignReviewTransport = {
     ) => ReturnType<typeof globalThis.fetch>;
 };
 
+export type ReviewDispatchPhase =
+    | "request_dispatch"
+    | "response_headers"
+    | "stream_read"
+    | "response_decode"
+    | "response_persist"
+    | "provider_stream";
+
+export type ReviewDispatchDiagnostic = {
+    attempt: number;
+    purpose: AnalysisCallPurpose;
+    phase: ReviewDispatchPhase;
+    httpStatus?: number;
+    contentType?: string;
+    requestId?: string;
+    bytesRead: number;
+    chunksRead: number;
+    stopReason?: "error" | "aborted";
+    providerMessage?: string;
+    transportError?: {
+        name: string;
+        code?: string;
+        causeCode?: string;
+        message: string;
+        causeHash: string;
+    };
+    sseSummary?: {
+        lastEventType?: string;
+        responseId?: string;
+        responseStatus?: string;
+        completedUsageSeen: boolean;
+        providerError?: {
+            type?: string;
+            code?: string;
+            message?: string;
+        };
+    };
+};
+
+function sanitizeDiagnosticText(
+    value: string,
+    secrets: readonly string[],
+    limit = 512,
+) {
+    let redacted = value;
+    for (const secret of secrets)
+        if (secret.length > 0)
+            redacted = redacted.replaceAll(secret, "[redacted]");
+    return redacted
+        .replace(/\bBearer\s+[^\s;,]+/gi, "Bearer [redacted]")
+        .replace(/\b(?:sk|pk|rk)-[a-z0-9_-]+/gi, "[redacted]")
+        .replace(
+            /(["']?(?:api[_-]?key|token|secret|password|authorization)["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s;,]+)/gi,
+            "$1[redacted]",
+        )
+        .replace(/https?:\/\/[^\s]+/gi, "[url redacted]")
+        .slice(0, limit);
+}
+
+function sanitizeTransportError(error: unknown, secrets: readonly string[]) {
+    const name =
+        typeof error === "object" &&
+        error !== null &&
+        "name" in error &&
+        typeof error.name === "string"
+            ? error.name
+            : "UnknownError";
+    const code =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        typeof error.code === "string"
+            ? error.code
+            : undefined;
+    const cause =
+        typeof error === "object" && error !== null && "cause" in error
+            ? error.cause
+            : undefined;
+    const causeCode =
+        typeof cause === "object" &&
+        cause !== null &&
+        "code" in cause &&
+        typeof cause.code === "string"
+            ? cause.code
+            : undefined;
+    const message =
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error &&
+        typeof error.message === "string"
+            ? error.message
+            : "Non-Error exception";
+    return {
+        name: sanitizeDiagnosticText(name, secrets, 80),
+        ...(code ? { code: sanitizeDiagnosticText(code, secrets, 80) } : {}),
+        ...(causeCode
+            ? { causeCode: sanitizeDiagnosticText(causeCode, secrets, 80) }
+            : {}),
+        message: sanitizeDiagnosticText(message, secrets, 512),
+        causeHash: sha256(`${name}\n${message}`),
+    };
+}
+
+function summarizePartialSse(
+    chunks: readonly Uint8Array[],
+    secrets: readonly string[],
+): ReviewDispatchDiagnostic["sseSummary"] {
+    if (chunks.length === 0) return undefined;
+    const decoded = new TextDecoder("utf-8", { fatal: false }).decode(
+        Buffer.concat(chunks),
+    );
+    let lastEventType: string | undefined;
+    let responseId: string | undefined;
+    let responseStatus: string | undefined;
+    let completedUsageSeen = false;
+    let providerError:
+        | { type?: string; code?: string; message?: string }
+        | undefined;
+    const extractError = (candidate: unknown) => {
+        if (
+            !candidate ||
+            typeof candidate !== "object" ||
+            Array.isArray(candidate)
+        )
+            return;
+        const record = candidate as Record<string, unknown>;
+        const type =
+            typeof record.type === "string"
+                ? sanitizeDiagnosticText(record.type, secrets, 80)
+                : undefined;
+        const code =
+            typeof record.code === "string"
+                ? sanitizeDiagnosticText(record.code, secrets, 80)
+                : undefined;
+        const message =
+            typeof record.message === "string"
+                ? sanitizeDiagnosticText(record.message, secrets, 512)
+                : undefined;
+        if (type || code || message)
+            providerError = {
+                ...(type ? { type } : {}),
+                ...(code ? { code } : {}),
+                ...(message ? { message } : {}),
+            };
+    };
+    for (const raw of decoded.split("\n")) {
+        const line = raw.trimEnd();
+        if (line.startsWith("event: ")) {
+            const eventName = line.slice(7).trim();
+            if (eventName)
+                lastEventType = sanitizeDiagnosticText(eventName, secrets, 80);
+            continue;
+        }
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") {
+            lastEventType = "DONE";
+            continue;
+        }
+        let frame: unknown;
+        try {
+            frame = JSON.parse(data);
+        } catch {
+            continue;
+        }
+        if (!frame || typeof frame !== "object" || Array.isArray(frame))
+            continue;
+        const record = frame as Record<string, unknown>;
+        if (typeof record.type === "string")
+            lastEventType = sanitizeDiagnosticText(record.type, secrets, 80);
+        if (
+            record.response &&
+            typeof record.response === "object" &&
+            !Array.isArray(record.response)
+        ) {
+            const resp = record.response as Record<string, unknown>;
+            if (typeof resp.id === "string")
+                responseId = sanitizeDiagnosticText(resp.id, secrets, 128);
+            if (typeof resp.status === "string")
+                responseStatus = sanitizeDiagnosticText(
+                    resp.status,
+                    secrets,
+                    80,
+                );
+            if (
+                (record.type === "response.completed" ||
+                    record.type === "response.incomplete") &&
+                resp.usage &&
+                typeof resp.usage === "object"
+            )
+                completedUsageSeen = true;
+            extractError(resp.error);
+        }
+        extractError(record.error);
+    }
+    if (
+        !lastEventType &&
+        !responseId &&
+        !responseStatus &&
+        !completedUsageSeen &&
+        !providerError
+    )
+        return undefined;
+    return {
+        ...(lastEventType ? { lastEventType } : {}),
+        ...(responseId ? { responseId } : {}),
+        ...(responseStatus ? { responseStatus } : {}),
+        completedUsageSeen,
+        ...(providerError ? { providerError } : {}),
+    };
+}
+
 function readReviewJson<S extends z.ZodType>(
     path: string,
     schema: S,
@@ -463,12 +675,16 @@ export async function runAccountableCampaignReview(options: {
             };
         }
     }
+    const configuredApiKey = apiCost
+        ? reviewerSetting("OPENAI_API_KEY")
+        : undefined;
+    const diagnosticSecrets = configuredApiKey ? [configuredApiKey] : [];
     const reserveRef = makeFunctionReference<
         "mutation",
         FunctionArgs<typeof internal.qualificationCampaigns.reserveAnalysis>,
         null
     >(getFunctionName(internal.qualificationCampaigns.reserveAnalysis));
-    let responseStatus: number | undefined;
+    let latestTransport: ReviewDispatchDiagnostic | undefined;
     const usageEvidence = new Map<
         number,
         z.output<typeof apiUsageEventSchema> | null
@@ -480,6 +696,9 @@ export async function runAccountableCampaignReview(options: {
         runtime,
         model,
         limits: manifest.analysis,
+        diagnosticSecrets,
+        getAttemptDiagnostic: (attempt) =>
+            latestTransport?.attempt === attempt ? latestTransport : undefined,
         ...(apiCost
             ? {
                   serviceTier: "default" as const,
@@ -509,74 +728,122 @@ export async function runAccountableCampaignReview(options: {
         transport: {
             kind: "metered-openai",
             fetch: (attempt, purpose) => async (input, init) => {
-                const request = new Request(input, init);
-                const body = new Uint8Array(await request.arrayBuffer());
-                const requestHash = sha256(body);
-                const path = responsePath(attempt);
-                if (existsSync(path)) {
-                    const record = readReviewJson(path, responseRecord);
-                    assert.equal(
-                        record.requestHash,
+                const transportState: ReviewDispatchDiagnostic = {
+                    attempt,
+                    purpose,
+                    phase: "request_dispatch",
+                    bytesRead: 0,
+                    chunksRead: 0,
+                };
+                latestTransport = transportState;
+                const chunks: Uint8Array[] = [];
+                try {
+                    const request = new Request(input, init);
+                    const body = new Uint8Array(await request.arrayBuffer());
+                    const requestHash = sha256(body);
+                    const path = responsePath(attempt);
+                    if (existsSync(path)) {
+                        transportState.phase = "response_persist";
+                        const record = readReviewJson(path, responseRecord);
+                        assert.equal(
+                            record.requestHash,
+                            requestHash,
+                            "Retained analysis request changed",
+                        );
+                        transportState.httpStatus = record.status;
+                        transportState.contentType =
+                            record.contentType.slice(0, 128) || undefined;
+                        transportState.bytesRead = Buffer.byteLength(
+                            record.body,
+                        );
+                        transportState.chunksRead = 1;
+                        return new Response(record.body, {
+                            status: record.status,
+                            headers: { "content-type": record.contentType },
+                        });
+                    }
+                    const requestOptions = {
+                        method: request.method,
+                        headers: request.headers,
+                        body,
+                        signal: request.signal,
+                    };
+                    const response = options.transport
+                        ? await options.transport.fetch(
+                              request.url,
+                              requestOptions,
+                              purpose,
+                          )
+                        : await transport.fetch(request.url, requestOptions);
+                    transportState.phase = "response_headers";
+                    transportState.httpStatus = response.status;
+                    transportState.contentType =
+                        response.headers.get("content-type")?.slice(0, 128) ??
+                        undefined;
+                    const requestId =
+                        response.headers.get("x-request-id") ??
+                        response.headers.get("openai-request-id");
+                    if (requestId)
+                        transportState.requestId = sanitizeDiagnosticText(
+                            requestId,
+                            diagnosticSecrets,
+                            128,
+                        );
+                    if (response.body) {
+                        transportState.phase = "stream_read";
+                        const reader = response.body.getReader();
+                        try {
+                            for (;;) {
+                                const next = await reader.read();
+                                if (next.done) break;
+                                transportState.chunksRead++;
+                                transportState.bytesRead +=
+                                    next.value.byteLength;
+                                if (
+                                    transportState.bytesRead >
+                                    REVIEW_WIRE_RESPONSE_MAX_BYTES
+                                )
+                                    throw new Error(
+                                        "Analysis response limit exceeded",
+                                    );
+                                chunks.push(next.value);
+                            }
+                        } finally {
+                            await reader.cancel().catch(() => {});
+                        }
+                    }
+                    transportState.phase = "response_decode";
+                    const record = responseRecord.parse({
+                        purpose,
                         requestHash,
-                        "Retained analysis request changed",
-                    );
-                    responseStatus = record.status;
+                        status: response.status,
+                        contentType: response.headers.get("content-type") ?? "",
+                        body: new TextDecoder("utf-8", {
+                            fatal: true,
+                        }).decode(Buffer.concat(chunks)),
+                    });
+                    transportState.phase = "response_persist";
+                    writeFileSync(path, `${JSON.stringify(record)}\n`, {
+                        flag: "wx",
+                        mode: 0o600,
+                        flush: true,
+                    });
                     return new Response(record.body, {
                         status: record.status,
                         headers: { "content-type": record.contentType },
                     });
+                } catch (error) {
+                    transportState.transportError = sanitizeTransportError(
+                        error,
+                        diagnosticSecrets,
+                    );
+                    const sseSummary = summarizePartialSse(
+                        chunks,
+                        diagnosticSecrets,
+                    );
+                    if (sseSummary) transportState.sseSummary = sseSummary;
+                    throw error;
                 }
-                const requestOptions = {
-                    method: request.method,
-                    headers: request.headers,
-                    body,
-                    signal: request.signal,
-                };
-                const response = options.transport
-                    ? await options.transport.fetch(
-                          request.url,
-                          requestOptions,
-                          purpose,
-                      )
-                    : await transport.fetch(request.url, requestOptions);
-                const chunks: Uint8Array[] = [];
-                let bytes = 0;
-                if (response.body) {
-                    const reader = response.body.getReader();
-                    try {
-                        for (;;) {
-                            const next = await reader.read();
-                            if (next.done) break;
-                            bytes += next.value.byteLength;
-                            if (bytes > REVIEW_WIRE_RESPONSE_MAX_BYTES)
-                                throw new Error(
-                                    "Analysis response limit exceeded",
-                                );
-                            chunks.push(next.value);
-                        }
-                    } finally {
-                        await reader.cancel();
-                    }
-                }
-                const record = responseRecord.parse({
-                    purpose,
-                    requestHash,
-                    status: response.status,
-                    contentType: response.headers.get("content-type") ?? "",
-                    body: new TextDecoder("utf-8", { fatal: true }).decode(
-                        Buffer.concat(chunks),
-                    ),
-                });
-                writeFileSync(path, `${JSON.stringify(record)}\n`, {
-                    flag: "wx",
-                    mode: 0o600,
-                    flush: true,
-                });
-                responseStatus = record.status;
-                return new Response(record.body, {
-                    status: record.status,
-                    headers: { "content-type": record.contentType },
-                });
             },
         },
         reserve: async (attempt, purpose) => {
@@ -705,9 +972,9 @@ export async function runAccountableCampaignReview(options: {
         result.status === "pending" &&
         result.reason === "unknown_dispatch_outcome"
     ) {
-        if (responseStatus === 401)
+        if (latestTransport?.httpStatus === 401)
             return { ...result, reason: "provider_authentication_failed" };
-        if (responseStatus === 429)
+        if (latestTransport?.httpStatus === 429)
             return { ...result, reason: "provider_rate_limited" };
     }
     return result;
@@ -733,6 +1000,10 @@ export async function runPiCampaignReview(options: {
         maxOutputTokens?: number;
         timeoutMs: number;
     };
+    diagnosticSecrets?: readonly string[];
+    getAttemptDiagnostic?: (
+        attempt: number,
+    ) => ReviewDispatchDiagnostic | undefined;
     reserve: (
         attempt: number,
         purpose: AnalysisCallPurpose,
@@ -937,7 +1208,10 @@ export async function runPiCampaignReview(options: {
         reviewerSetting("WORKBENCH_REVIEW_REASONING") ??
         "high";
     const protocol = retained?.protocol ?? "investigator_v2";
+    const diagnosticSecrets = options.diagnosticSecrets ?? [];
     let calls = 0;
+    let activeAttempt = 0;
+    let lastAttemptDiagnostic: ReviewDispatchDiagnostic | undefined;
     let failure: string | undefined;
     let reportError: Error | undefined;
     const loader: ResourceLoader = {
@@ -1227,6 +1501,8 @@ export async function runPiCampaignReview(options: {
             ? "compaction"
             : "investigation";
         const attempt = ++calls;
+        activeAttempt = attempt;
+        lastAttemptDiagnostic = undefined;
         try {
             await options.reserve(attempt, purpose);
         } catch (error) {
@@ -1330,7 +1606,46 @@ export async function runPiCampaignReview(options: {
                     message.stopReason === "error" ||
                     message.stopReason === "aborted"
                 ) {
-                    failure = "unknown_dispatch_outcome";
+                    failure ??= "unknown_dispatch_outcome";
+                    const transportDiagnostic =
+                        options.getAttemptDiagnostic?.(attempt);
+                    const providerMessage =
+                        "errorMessage" in message &&
+                        typeof message.errorMessage === "string" &&
+                        message.errorMessage.trim()
+                            ? sanitizeDiagnosticText(
+                                  message.errorMessage,
+                                  diagnosticSecrets,
+                                  512,
+                              )
+                            : undefined;
+                    lastAttemptDiagnostic = {
+                        attempt,
+                        purpose,
+                        phase: transportDiagnostic?.phase ?? "provider_stream",
+                        ...(transportDiagnostic?.httpStatus !== undefined
+                            ? { httpStatus: transportDiagnostic.httpStatus }
+                            : {}),
+                        ...(transportDiagnostic?.contentType
+                            ? { contentType: transportDiagnostic.contentType }
+                            : {}),
+                        ...(transportDiagnostic?.requestId
+                            ? { requestId: transportDiagnostic.requestId }
+                            : {}),
+                        bytesRead: transportDiagnostic?.bytesRead ?? 0,
+                        chunksRead: transportDiagnostic?.chunksRead ?? 0,
+                        stopReason: message.stopReason,
+                        ...(providerMessage ? { providerMessage } : {}),
+                        ...(transportDiagnostic?.transportError
+                            ? {
+                                  transportError:
+                                      transportDiagnostic.transportError,
+                              }
+                            : {}),
+                        ...(transportDiagnostic?.sseSummary
+                            ? { sseSummary: transportDiagnostic.sseSummary }
+                            : {}),
+                    };
                 } else {
                     try {
                         if (
@@ -1428,13 +1743,20 @@ export async function runPiCampaignReview(options: {
                 failure ||
                 final?.role !== "assistant" ||
                 final.stopReason !== "stop"
-            )
+            ) {
+                const diagnostic =
+                    lastAttemptDiagnostic ??
+                    (activeAttempt > 0
+                        ? options.getAttemptDiagnostic?.(activeAttempt)
+                        : undefined);
                 return {
                     status: "pending" as const,
                     reason:
                         failure ??
                         (invalid ? "invalid_review" : "review_unavailable"),
+                    ...(diagnostic ? { diagnostic } : {}),
                 };
+            }
             const text = session.getLastAssistantText();
             if (!text || Buffer.byteLength(text) > REVIEW_REPORT_MAX_BYTES)
                 return { status: "pending" as const, reason: "invalid_review" };
