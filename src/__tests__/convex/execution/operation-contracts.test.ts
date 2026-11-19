@@ -58,6 +58,28 @@ test("only_delegation_declares_a_child_mission", () => {
     );
 });
 
+test("scheduled effects require one valid server-owned action target", () => {
+    const scheduled = registeredAgentDefinitions().find(
+        (binding) => binding.id === "sources_v1",
+    )?.operations.submit_documentary_qualification;
+    expect(scheduled?.scheduledAction).toBeDefined();
+    for (const invalid of [
+        { ...scheduled, scheduledAction: {} },
+        { ...scheduled, execute: commonOperations.consult_run_state.execute },
+        {
+            ...commonOperations.consult_run_state,
+            scheduledAction: scheduled?.scheduledAction,
+        },
+    ]) {
+        expect(() =>
+            Reflect.apply(assertOperationContract, undefined, [
+                "invalid-target",
+                invalid,
+            ]),
+        ).toThrow("operation_contract_invalid");
+    }
+});
+
 test("read_cannot_wait_or_receive_mutation_capabilities", async () => {
     const operation = commonOperations.consult_run_state;
     type Read = typeof operation;

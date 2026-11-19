@@ -1,7 +1,10 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { afterEach, expect, test, vi } from "vitest";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    seedCapturedSources,
+    startSourcesOperation,
+} from "@/__tests__/setup/sources-mission";
 
 afterEach(() => vi.useRealTimers());
 
@@ -36,11 +39,11 @@ test("native acquisition shares the persisted preparation concurrency limit and 
             },
         );
         expect(
-            await f.t.mutation(internal.execution.operations.claim, {
+            await startSourcesOperation(f.t, {
                 requestId,
                 expectedGeneration: 4,
             }),
-        ).toMatchObject({ kind: "execute" });
+        ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
         requests.push(requestId);
     }
     for (const requestId of requests.slice(0, 2))
@@ -116,7 +119,7 @@ test("a framed research pause is applied before admitting Sources' next operatio
             },
         },
     );
-    const claim = await f.t.mutation(internal.execution.operations.claim, {
+    const claim = await startSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -159,11 +162,11 @@ test("a framed research pause is applied before admitting Sources' next operatio
         cursor: null,
     });
     expect(
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId,
             expectedGeneration: generation,
         }),
-    ).toMatchObject({ kind: "execute" });
+    ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
     const reserved = await f.t.mutation(internal.sourcesMission.reserve, {
         requestId,
         expectedGeneration: generation,
@@ -246,11 +249,11 @@ test("a requested pause refuses new native research dispatch while an engaged op
     const engagedId = await enqueue("engaged-search");
     const nextId = await enqueue("next-search");
     expect(
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId: engagedId,
             expectedGeneration: 4,
         }),
-    ).toMatchObject({ kind: "execute" });
+    ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
     await f.t
         .withIdentity({ subject: f.userId })
         .mutation(api.execution.researchControl.pause, {
@@ -258,7 +261,7 @@ test("a requested pause refuses new native research dispatch while an engaged op
             expectedGeneration: 4,
         });
     expect(
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId: nextId,
             expectedGeneration: 4,
         }),

@@ -3,7 +3,10 @@ import { domainSnapshot } from "@convex/execution/agentDefinition";
 import { readRetainedText } from "@convex/execution/retainedText";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    dispatchSourcesOperation,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
 vi.mock("@convex/integrations/documentaryControl", () => ({
@@ -106,7 +109,7 @@ async function qualifyObservedPassage() {
         },
     });
     assert(finished.requestIds[0]);
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId: finished.requestIds[0],
         expectedGeneration: 4,
     });
@@ -243,7 +246,7 @@ test.each([
     const requestId = finished.requestIds[0];
     assert(requestId);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -352,7 +355,7 @@ test.each([
     });
     const requestId = finished.requestIds[0];
     assert(requestId);
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -451,7 +454,7 @@ test("Sources adds to and corrects an observed qualification without model-suppl
         },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -537,7 +540,7 @@ test("Sources preserves the invocation's observed qualification when another wri
         input: { expectedTaskId: f.qualification._id },
     });
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -601,7 +604,7 @@ test.each([
     if (caller === "native")
         expect(
             (
-                await f.t.action(internal.execution.operations.dispatch, {
+                await dispatchSourcesOperation(f.t, {
                     requestId: readRequestId,
                     expectedGeneration: 4,
                 })
@@ -644,7 +647,7 @@ test.each([
                   cause: "unobserved-passage",
                   input,
               });
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -741,7 +744,7 @@ test.each([
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -857,7 +860,7 @@ test("an unchanged observed contribution preserves its version and the earlier q
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),

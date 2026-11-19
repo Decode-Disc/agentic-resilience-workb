@@ -1,24 +1,33 @@
+import {
+    clearTimeout as clearRealTimeout,
+    setTimeout as setRealTimeout,
+} from "node:timers";
 import { internal } from "@convex/_generated/api";
 import type {
     DocumentaryContribution,
     documentarySubmissionValue,
 } from "@convex/domain/sourcesContracts";
+import { readRetainedText } from "@convex/execution/retainedText";
 import { runPiMission } from "@convex/integrations/piMission";
-import {
-    nodeActionGenerationDeadline,
-    RESOURCE_POLICY_VERSION,
-    SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS,
-} from "@convex/resourcePolicy";
 import { pinMissionModel } from "@convex/modelConfiguration";
 import {
     initializeQualificationUsage,
     readQualificationUsage,
     updateQualificationUsage,
 } from "@convex/qualificationUsage";
+import {
+    nodeActionGenerationDeadline,
+    RESOURCE_POLICY_VERSION,
+    SOURCES_QUALIFICATION_RESEARCH_WINDOW_MS,
+} from "@convex/resourcePolicy";
 import type { Infer } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import { providerFixtureResponse } from "@/__tests__/setup/model-stream";
+import {
+    dispatchSourcesOperation,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -31,7 +40,7 @@ function documentaryReply(init?: RequestInit) {
     const wire = JSON.parse(String(init?.body));
     const ids: string[] =
         wire.response_format.json_schema.schema.properties.findings.required;
-    return Response.json({
+    return providerFixtureResponse({
         id: "offline-valid",
         model: "z-ai/glm-5.3-flash",
         choices: [
@@ -66,6 +75,470 @@ function documentaryReply(init?: RequestInit) {
         },
     });
 }
+
+test("Sources returns a durable wait before documentary I/O and retains its eventual result", async () => {
+    vi.useFakeTimers();
+    const f = await fixture();
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    vi.stubGlobal("fetch", async (_url: unknown, init?: RequestInit) => {
+        entered();
+        await gate;
+        return documentaryReply(init);
+    });
+    const dispatch = f.t.action(internal.execution.operations.dispatch, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    let worker: Promise<unknown> | undefined;
+    try {
+        const first = await Promise.race([
+            dispatch,
+            started.then(() => ({ kind: "synchronous_io" })),
+        ]);
+        expect(first.kind).toBe("waiting");
+        expect(await f.t.run((ctx) => ctx.db.get(f.requestId))).toMatchObject({
+            status: "waiting",
+            waitReference: expect.any(String),
+            scheduledJobId: expect.any(String),
+        });
+        worker = f.t.action(internal.sourcesMissionActions.execute, {
+            requestId: f.requestId,
+            expectedGeneration: 4,
+        });
+        await started;
+        expect(
+            await f.t.action(internal.sourcesMissionActions.execute, {
+                requestId: f.requestId,
+                expectedGeneration: 4,
+            }),
+        ).toBeNull();
+    } finally {
+        release();
+        await dispatch;
+        await worker;
+    }
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    expect(result).toMatchObject({ kind: "success" });
+    expect(await f.t.run((ctx) => ctx.db.get(f.requestId))).toMatchObject({
+        status: "completed",
+        outcome: { kind: "success" },
+    });
+    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    expect(preparation?.sourcesMission?.qualifications).toHaveLength(1);
+    expect(preparation?.sourcesMission?.work).toHaveLength(1);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toHaveLength(1);
+});
+
+test("an interrupted structured stream keeps its visible prefix without adopting it", async () => {
+    const f = await fixture();
+    const prefix = '{"coherence":true,';
+    vi.stubGlobal("fetch", async () => {
+        let pulled = false;
+        return new Response(
+            new ReadableStream(
+                {
+                    pull(controller) {
+                        if (pulled) {
+                            controller.error(
+                                new DOMException(
+                                    "interrupted stream",
+                                    "TimeoutError",
+                                ),
+                            );
+                            return;
+                        }
+                        pulled = true;
+                        controller.enqueue(
+                            new TextEncoder().encode(
+                                `data: ${JSON.stringify({ id: "partial-control", choices: [{ index: 0, delta: { content: prefix } }] })}\n\n`,
+                            ),
+                        );
+                    },
+                },
+                { highWaterMark: 0 },
+            ),
+            {
+                headers: {
+                    "content-type": "text/event-stream",
+                    "x-generation-id": "partial-control",
+                },
+            },
+        );
+    });
+    await dispatchSourcesOperation(f.t, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    const invocation = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentInvocations")
+            .withIndex("by_mission", (q) => q.eq("missionId", undefined))
+            .first(),
+    );
+    expect(invocation).toHaveProperty("visibleOutput.textId");
+    const visible = invocation?.visibleOutput;
+    assert(visible);
+    expect(visible.complete).toBe(false);
+    expect(await f.t.run((ctx) => readRetainedText(ctx, visible.textId))).toBe(
+        prefix,
+    );
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.qualifications,
+    ).toEqual([]);
+});
+
+test("a scheduled Sources wait blocks another effect while saved-material reads remain available", async () => {
+    const f = await fixture();
+    const args = { requestId: f.requestId, expectedGeneration: 4 };
+    const waiting = await f.t.action(
+        internal.execution.operations.dispatch,
+        args,
+    );
+    expect(waiting.kind).toBe("waiting");
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, args),
+    ).toEqual(waiting);
+    const next = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        cause: "second-effect",
+        input: {
+            kind: "discover_sources_for_need",
+            needId: "common-context",
+            query: "Additional evidence",
+        },
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: next,
+            expectedGeneration: 4,
+        }),
+    ).toEqual({ kind: "unavailable", code: "operation_in_progress" });
+    const read = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        cause: "read-while-waiting",
+        input: { kind: "consult_mission_state" },
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: read,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({ kind: "success" });
+    expect(await f.t.run((ctx) => ctx.db.get(next))).toMatchObject({
+        status: "pending",
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(f.preparationId))).toMatchObject({
+        sourcesMission: { work: [] },
+    });
+});
+
+test("a revision refusal before worker start settles waiting work and permits the next effect", async () => {
+    const f = await fixture();
+    const args = { requestId: f.requestId, expectedGeneration: 4 };
+    await f.t.action(internal.execution.operations.dispatch, args);
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        await ctx.db.patch(f.preparationId, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                needsRevision: preparation.sourcesMission.needsRevision + 1,
+            },
+        });
+    });
+    expect(
+        await f.t.action(internal.sourcesMissionActions.execute, args),
+    ).toMatchObject({ kind: "refused", code: "version_conflict" });
+    expect((await f.t.run((ctx) => ctx.db.get(f.requestId)))?.status).toBe(
+        "completed",
+    );
+    const next = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        cause: "after-refused-start",
+        input: {
+            kind: "discover_sources_for_need",
+            needId: "common-context",
+            query: "New evidence",
+        },
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: next,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({ kind: "waiting" });
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+});
+
+test("an already-claimed inline Sources request retains its outcome contract", async () => {
+    const f = await fixture();
+    mockControlReply("context_only");
+    await f.t.mutation(internal.execution.operations.claim, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.requestId, {
+            status: "running",
+            scheduledJobId: undefined,
+        }),
+    );
+    expect(
+        await f.t.action(internal.sourcesMissionActions.execute, {
+            requestId: f.requestId,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({ kind: "success" });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.qualifications,
+    ).toHaveLength(1);
+});
+
+test("a queued Sources job cannot start under a changed generation", async () => {
+    const f = await fixture();
+    const args = { requestId: f.requestId, expectedGeneration: 4 };
+    await f.t.action(internal.execution.operations.dispatch, args);
+    await f.t.run((ctx) => ctx.db.patch(f.runId, { executionGeneration: 5 }));
+    expect(
+        await f.t.action(internal.sourcesMissionActions.execute, args),
+    ).toMatchObject({ kind: "refused", code: "stale_execution" });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.requestId)))?.scheduledStartedAt,
+    ).toBeUndefined();
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+    expect(await f.t.run((ctx) => ctx.db.get(f.preparationId))).toMatchObject({
+        sourcesMission: { work: [] },
+    });
+});
+
+test("cancellation cancels a queued Sources job before any work starts", async () => {
+    const f = await fixture();
+    const args = { requestId: f.requestId, expectedGeneration: 4 };
+    await f.t.action(internal.execution.operations.dispatch, args);
+    const request = await f.t.run((ctx) => ctx.db.get(f.requestId));
+    const scheduledJobId = request?.scheduledJobId;
+    assert(scheduledJobId);
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, {
+            executionStatus: "cancelled",
+            executionGeneration: 5,
+        }),
+    );
+    await f.t.mutation(
+        internal.execution.cancellation.continueRunCancellation,
+        { runId: f.runId, cancelledAt: Date.now(), cancelledGeneration: 4 },
+    );
+    const job = await f.t.run((ctx) => ctx.db.system.get(scheduledJobId));
+    expect(job?.state.kind).toBe("canceled");
+    expect(
+        await f.t.action(internal.sourcesMissionActions.execute, args),
+    ).toBeNull();
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+    expect(await f.t.run((ctx) => ctx.db.get(f.preparationId))).toMatchObject({
+        sourcesMission: { work: [] },
+    });
+});
+
+test("rebinding result adoption cannot start an old scheduled job in a new generation", async () => {
+    const f = await fixture();
+    await f.t.action(internal.execution.operations.dispatch, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, { executionGeneration: 5 });
+        await ctx.db.patch(f.missionId, { generation: 5 });
+        await ctx.db.patch(f.preparationId, { executionGeneration: 5 });
+        await ctx.db.patch(f.requestId, { adoptionGeneration: 5 });
+    });
+    expect(
+        await f.t.mutation(
+            internal.execution.operations.beginScheduledExecution,
+            { requestId: f.requestId, expectedGeneration: 5 },
+        ),
+    ).toBe(false);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.requestId)))?.scheduledStartedAt,
+    ).toBeUndefined();
+});
+
+test.each([
+    "discovery",
+    "acquisition",
+    "check",
+] as const)("Sources %s records its result through the scheduled worker", async (family) => {
+    const f = await fixture();
+    vi.stubEnv("EXA_API_KEY", "offline-only");
+    const source = await f.t.run((ctx) => ctx.db.get(f.sourceId));
+    assert(source);
+    vi.stubGlobal("fetch", async (url: unknown, init?: RequestInit) =>
+        String(url).includes("openrouter")
+            ? documentaryReply(init)
+            : providerFixtureResponse({
+                  results:
+                      family === "acquisition"
+                          ? [
+                                {
+                                    id: source.canonicalUrl,
+                                    url: source.canonicalUrl,
+                                    title: "Workflow documentation",
+                                    text: "Workflow software supports enterprise teams and their operational processes.",
+                                },
+                            ]
+                          : [],
+                  searchTime: 1,
+                  costDollars: { total: 0.01 },
+              }),
+    );
+    const input =
+        family === "discovery"
+            ? {
+                  kind: "discover_sources_for_need" as const,
+                  needId: "common-context",
+                  query: "Additional evidence",
+              }
+            : family === "acquisition"
+              ? {
+                    kind: "make_source_consultable" as const,
+                    needId: "common-context",
+                    sourceId: f.sourceId,
+                }
+              : {
+                    kind: "request_documentary_check" as const,
+                    needId: "common-context",
+                    sourceId: f.sourceId,
+                    proposition: "The source describes workflow software.",
+                    evidence: [
+                        {
+                            readRequestId: f.readRequestId,
+                            passageOrder: f.passage.order,
+                        },
+                    ],
+                };
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: `scheduled-${family}`,
+            input,
+        },
+    );
+    const args = { requestId, expectedGeneration: 4 };
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, args),
+    ).toMatchObject({ kind: "waiting" });
+    const outcome = await f.t.action(
+        internal.sourcesMissionActions.execute,
+        args,
+    );
+    expect(outcome).toMatchObject({ kind: "success" });
+    expect(
+        await f.t.action(internal.sourcesMissionActions.execute, args),
+    ).toBeNull();
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, args),
+    ).toMatchObject({ kind: "success" });
+    expect(await f.t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        status: "completed",
+        scheduledStartedAt: expect.any(Number),
+        outcome: { kind: "success" },
+    });
+    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    expect(preparation?.sourcesMission?.work).toHaveLength(1);
+    expect(preparation?.sourcesMission?.work[0]?.requestId).toBe(requestId);
+    if (family === "discovery")
+        expect(preparation?.sourcesMission?.searches).toBe(1);
+    if (family === "check")
+        expect(preparation?.sourcesMission?.controls).toBe(1);
+    if (family === "acquisition") {
+        assert(outcome?.kind === "success");
+        expect(preparation?.sourcesMission?.captureIds).toContain(
+            JSON.parse(outcome.valueJson).captureId,
+        );
+    }
+});
+
+test("a transaction rollback cannot leave a scheduled Sources job or waiting request behind", async () => {
+    const f = await fixture();
+    const before = await f.t.run((ctx) =>
+        ctx.db.system.query("_scheduled_functions").collect(),
+    );
+    await expect(
+        f.t.run(async (ctx) => {
+            await ctx.runMutation(internal.execution.operations.claim, {
+                requestId: f.requestId,
+                expectedGeneration: 4,
+            });
+            throw new Error("abort scheduling transaction");
+        }),
+    ).rejects.toThrow("abort scheduling transaction");
+    expect(await f.t.run((ctx) => ctx.db.get(f.requestId))).toMatchObject({
+        status: "pending",
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.requestId)))?.scheduledJobId,
+    ).toBeUndefined();
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db.system.query("_scheduled_functions").collect(),
+        ),
+    ).toEqual(before);
+});
+
+test("a lost scheduled worker remains unknown and cannot be restarted by delivery or polling", async () => {
+    const f = await fixture();
+    const args = { requestId: f.requestId, expectedGeneration: 4 };
+    await f.t.action(internal.execution.operations.dispatch, args);
+    expect(
+        await f.t.mutation(
+            internal.execution.operations.beginScheduledExecution,
+            args,
+        ),
+    ).toBe(true);
+    const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
+    assert(mission);
+    vi.setSystemTime(mission.deadlineAt);
+    await f.t.mutation(internal.execution.operations.expire, args);
+    expect(await f.t.run((ctx) => ctx.db.get(f.requestId))).toMatchObject({
+        status: "unknown",
+    });
+    expect(
+        await f.t.action(internal.sourcesMissionActions.execute, args),
+    ).toBeNull();
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, args),
+    ).toMatchObject({ kind: "refused" });
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+    expect(await f.t.run((ctx) => ctx.db.get(f.preparationId))).toMatchObject({
+        sourcesMission: { work: [] },
+    });
+});
 
 test("a paid documentary result past its qualification window preserves billing without adopting material", async () => {
     vi.useFakeTimers();
@@ -135,7 +608,7 @@ test("a paid documentary result past its qualification window preserves billing 
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId: f.requestId,
             expectedGeneration: 4,
         }),
@@ -179,7 +652,7 @@ test("a real documentary examination retains exact evidence through the Sources 
             return documentaryReply(init);
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -295,20 +768,20 @@ test.each([
                 ? call.leaseExpiresAt - call.createdAt
                 : undefined;
         return new Promise<Response>((resolve, reject) => {
-            const timer = setTimeout(() => {
+            const timer = setRealTimeout(() => {
                 void respond(url as RequestInfo, init).then(resolve, reject);
             }, 3500);
             init?.signal?.addEventListener(
                 "abort",
                 () => {
-                    clearTimeout(timer);
+                    clearRealTimeout(timer);
                     reject(init.signal?.reason);
                 },
                 { once: true },
             );
         });
     });
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -336,7 +809,7 @@ test("the documentary provider lease cannot outlive remaining preparation author
     });
     mockControlReply("context_only");
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId: f.requestId,
             expectedGeneration: 4,
         }),
@@ -346,6 +819,7 @@ test("the documentary provider lease cannot outlive remaining preparation author
 });
 
 async function fixture(kind: DocumentaryContribution["kind"] = "context") {
+    vi.useFakeTimers();
     const f = await seedCapturedSources();
     vi.stubEnv("OPENROUTER_API_KEY", "offline-only");
     await installModel(f.t, { model: "z-ai/glm-5.3-flash" }, "sources");
@@ -401,7 +875,7 @@ function mockControlReply(permittedUse: "documentary" | "context_only") {
         vi.fn<typeof fetch>(async (_url, init) => {
             const wire = JSON.parse(String(init?.body));
             const input = JSON.parse(wire.messages.at(-1).content);
-            return Response.json({
+            return providerFixtureResponse({
                 id: "offline-permission-control",
                 model: "z-ai/glm-5.3-flash",
                 choices: [
@@ -447,7 +921,7 @@ test.each([
 ] as const)("an incompatible documentary permission for %s cannot become an admitted control", async (kind) => {
     const f = await fixture(kind);
     mockControlReply("documentary");
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -464,7 +938,7 @@ test.each([
 test("a successful submission returns its effective permitted use with the pinned contribution identity", async () => {
     const f = await fixture();
     mockControlReply("context_only");
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -488,7 +962,7 @@ test("a successful submission returns its effective permitted use with the pinne
 test("a reused historical control cannot bypass the contribution-kind permission guard", async () => {
     const f = await fixture("attributed_argument");
     mockControlReply("context_only");
-    const first = await f.t.action(internal.execution.operations.dispatch, {
+    const first = await dispatchSourcesOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -549,7 +1023,7 @@ test("a reused historical control cannot bypass the contribution-kind permission
             },
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -573,7 +1047,7 @@ test("an unfinished real documentary examination reaches Sources with precise bo
     let calls = 0;
     vi.stubGlobal("fetch", async () => {
         calls++;
-        return Response.json({
+        return providerFixtureResponse({
             id: `offline-${calls}`,
             model: "z-ai/glm-5.3-flash",
             choices: [
@@ -595,7 +1069,7 @@ test("an unfinished real documentary examination reaches Sources with precise bo
             },
         });
     });
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -660,7 +1134,7 @@ test("the native Sources continuation actually receives the unfinished examinati
         "fetch",
         async (_url: unknown, init: RequestInit | undefined) => {
             const wire = JSON.parse(String(init?.body));
-            if (wire.stream) {
+            if (wire.stream && !wire.response_format) {
                 nativeRequests++;
                 expect(JSON.stringify(wire.messages)).toContain(
                     "documentary_control_unfinished",
@@ -684,7 +1158,7 @@ test("the native Sources continuation actually receives the unfinished examinati
                     { headers: { "content-type": "text/event-stream" } },
                 );
             }
-            return Response.json({
+            return providerFixtureResponse({
                 id: "offline-invalid",
                 model: "z-ai/glm-5.3-flash",
                 choices: [
@@ -707,7 +1181,7 @@ test("the native Sources continuation actually receives the unfinished examinati
             });
         },
     );
-    await f.t.action(internal.execution.operations.dispatch, {
+    await dispatchSourcesOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -755,7 +1229,7 @@ test.each([
                 )
             ) {
                 billingReads++;
-                return Response.json({
+                return providerFixtureResponse({
                     data: {
                         id: "documentary-generation",
                         total_cost: 0.0002137,
@@ -788,7 +1262,7 @@ test.each([
                 ),
                 {
                     headers: {
-                        "content-type": "application/json",
+                        "content-type": "text/event-stream",
                         ...(hasIdentity
                             ? { "x-generation-id": "documentary-generation" }
                             : {}),
@@ -798,7 +1272,7 @@ test.each([
             );
         }),
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
@@ -912,7 +1386,7 @@ test.each([
         });
     expect(after.preparation?.sourcesMission?.qualifications).toEqual([]);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId: f.requestId,
             expectedGeneration: 4,
         }),
@@ -989,7 +1463,7 @@ test("an oversized Sources submission returns the capacity field and its correct
             },
         },
     );
-    const refused = await f.t.action(internal.execution.operations.dispatch, {
+    const refused = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -1023,7 +1497,7 @@ test("an oversized Sources submission returns the capacity field and its correct
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId: correctedId,
             expectedGeneration: 4,
         }),
@@ -1042,7 +1516,7 @@ test("an oversized Sources submission returns the capacity field and its correct
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId: overflowId,
             expectedGeneration: 4,
         }),

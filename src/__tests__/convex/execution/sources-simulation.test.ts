@@ -6,6 +6,7 @@ import {
 } from "@convex/qualificationCampaignPolicy";
 import { type FunctionArgs, makeFunctionReference } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
+import { dispatchSourcesOperation } from "@/__tests__/setup/sources-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 const enabled = makeFunctionReference<
@@ -177,7 +178,7 @@ test("simulated discovery, acquisition, reads and control use real operations wi
             },
         },
     );
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -222,10 +223,10 @@ test("simulated discovery, acquisition, reads and control use real operations wi
             cause: `simulation-${input.kind}`,
             input,
         });
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            { requestId: id, expectedGeneration: 4 },
-        );
+        const outcome = await dispatchSourcesOperation(f.t, {
+            requestId: id,
+            expectedGeneration: 4,
+        });
         if (outcome.kind !== "success")
             throw new Error(JSON.stringify(outcome));
         return { id, outcome };

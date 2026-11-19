@@ -5,6 +5,7 @@ import {
     type MutationCtx,
 } from "@convex/_generated/server";
 import { cancelRunExecution } from "@convex/domain/runCancellation";
+import { deleteRetainedTextBatch } from "@convex/execution/retainedText";
 import { DOSSIER_PURGE_BATCH } from "@convex/resourcePolicy";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -341,14 +342,25 @@ const steps: Record<
                 .withIndex("by_run_and_status", (q) => q.eq("runId", runId))
                 .take(DOSSIER_PURGE_BATCH),
         ),
-    agentInvocations: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("agentInvocations")
-                .withIndex("by_run_and_task_key", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
+    agentInvocations: async (ctx, runId) => {
+        const invocations = await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_run_and_task_key", (q) => q.eq("runId", runId))
+            .take(DOSSIER_PURGE_BATCH);
+        for (const invocation of invocations) {
+            if (!invocation.visibleOutput) continue;
+            const done = await deleteRetainedTextBatch(
+                ctx,
+                invocation.visibleOutput.textId,
+                `${invocation._id}:visible`,
+                DOSSIER_PURGE_BATCH,
+            );
+            if (!done) return true;
+            await ctx.db.patch(invocation._id, { visibleOutput: undefined });
+            return true;
+        }
+        return drop(ctx, invocations);
+    },
     workbenchInstructions: async (ctx, runId) =>
         drop(
             ctx,

@@ -106,6 +106,13 @@ const missionFields = {
     workflowId: v.optional(v.string()),
     provenance: v.optional(v.union(v.literal("live"), v.literal("simulation"))),
     lastInvocationId: v.optional(v.id("agentInvocations")),
+    firstProviderInput: v.optional(
+        v.object({
+            invocationId: v.id("agentInvocations"),
+            providerCallId: v.id("providerCalls"),
+            contentHash: v.string(),
+        }),
+    ),
     lastSettledInvocationId: v.optional(v.id("agentInvocations")),
     noProgressTurns: v.number(),
     recoveryRead: v.optional(
@@ -158,6 +165,15 @@ export const executionTables = {
         .index("by_lease_until", ["leaseUntil"]),
     retainedTexts: defineTable({
         key: v.string(),
+        stream: v.optional(
+            v.object({
+                sealed: v.boolean(),
+                nextSequence: v.number(),
+                lastAppendHash: v.optional(v.string()),
+                fragments: v.number(),
+                tail: v.string(),
+            }),
+        ),
         ...textManifestValidator.fields,
         received: v.number(),
         receivedBytes: v.number(),
@@ -328,6 +344,15 @@ export const executionTables = {
         .index("by_run_and_status", ["runId", "status"])
         .index("by_pi_active_writer", ["piActiveWriter"]),
     agentInvocations: defineTable({
+        visibleOutput: v.optional(
+            v.object({
+                textId: v.id("retainedTexts"),
+                complete: v.boolean(),
+                contentHash: v.optional(v.string()),
+                sizeBytes: v.optional(v.number()),
+                terminalReason: v.optional(v.string()),
+            }),
+        ),
         purpose: v.optional(v.literal("compaction")),
         generationBackend: v.optional(agentBackendValidator),
         generationStorageRef: v.optional(v.string()),
@@ -396,6 +421,8 @@ export const executionTables = {
         adoptionGeneration: v.optional(v.number()),
         waitNotified: v.optional(v.boolean()),
         expiryJobId: v.optional(v.id("_scheduled_functions")),
+        scheduledJobId: v.optional(v.id("_scheduled_functions")),
+        scheduledStartedAt: v.optional(v.number()),
         invocationId: v.optional(v.id("agentInvocations")),
         actor: v.union(v.literal("system"), v.literal("agent")),
         cause: v.string(),

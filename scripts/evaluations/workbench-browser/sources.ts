@@ -406,7 +406,7 @@ export async function hydrateSourcesTranscriptPage(
 ): Promise<TranscriptPage> {
     async function content(
         invocationId: Id<"agentInvocations">,
-        part: "input" | "request" | "reply",
+        part: "input" | "request" | "reply" | "visible",
         contentHash: string | undefined,
         sizeBytes?: number,
     ) {
@@ -453,18 +453,28 @@ export async function hydrateSourcesTranscriptPage(
     return {
         ...transcript,
         page: await Promise.all(
-            transcript.page.map(async (invocation) =>
-                invocation.inputTextId
+            transcript.page.map(async (invocation) => ({
+                ...invocation,
+                ...(invocation.inputTextId
                     ? {
-                          ...invocation,
                           inputJson: await content(
                               invocation._id,
                               "input",
                               invocation.inputContentHash,
                           ),
                       }
-                    : invocation,
-            ),
+                    : {}),
+                ...(invocation.visibleOutput?.contentHash
+                    ? {
+                          visibleOutputText: await content(
+                              invocation._id,
+                              "visible",
+                              invocation.visibleOutput.contentHash,
+                              invocation.visibleOutput.sizeBytes,
+                          ),
+                      }
+                    : {}),
+            })),
         ),
         payloads: await Promise.all(
             transcript.payloads.map(async (payload) =>

@@ -866,12 +866,46 @@ export async function runPiMission(
                                         "evaluation_dossier_not_authorized",
                                     );
                                 request.headers.delete("authorization");
-                                return fetch(
-                                    new Request(
-                                        `${origin}/chat/completions`,
-                                        request,
-                                    ),
+                                const body = await request.text();
+                                const correlation = JSON.stringify({
+                                    invocationId: retained._id,
+                                    generation: args.expectedGeneration,
+                                    bodyHash: sha256Hex(body),
+                                });
+                                request.headers.set(
+                                    "x-workbench-relay-dispatch",
+                                    correlation,
                                 );
+                                const response = await fetch(
+                                    `${origin}/chat/completions`,
+                                    {
+                                        method: request.method,
+                                        headers: Object.fromEntries(
+                                            request.headers,
+                                        ),
+                                        body,
+                                        signal: request.signal,
+                                        redirect: "error",
+                                    },
+                                );
+                                if (
+                                    response.status === 400 &&
+                                    response.headers.get(
+                                        "x-workbench-relay-not-dispatched",
+                                    ) === correlation
+                                ) {
+                                    await lifecycle.observeProvider?.({
+                                        diagnostic: protectedDiagnostic(
+                                            new Error(
+                                                `relay_not_dispatched ${correlation}`,
+                                            ),
+                                            "provider_transport",
+                                        ),
+                                    });
+                                    preparationCode =
+                                        "qualification_relay_refused";
+                                }
+                                return response;
                             },
                             onHeaders: async ({
                                 status,

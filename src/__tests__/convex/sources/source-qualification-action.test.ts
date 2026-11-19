@@ -13,6 +13,7 @@ import {
 } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import { providerFixtureResponse } from "@/__tests__/setup/model-stream";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
@@ -32,44 +33,38 @@ const qualification: SourceQualification = {
     limitations: [],
 };
 const success = () =>
-    new Response(
-        JSON.stringify({
-            id: "test-qualification",
-            created: 1,
-            model: "test-model",
-            provider: "test-provider",
-            choices: [
-                {
-                    index: 0,
-                    message: {
-                        role: "assistant",
-                        content: JSON.stringify({
-                            companyMatch: "uncertain",
-                            companyPassageKeys: [],
-                            documentKind: "unknown",
-                            reportingPeriodEnd: null,
-                            reportingPeriodPassageKeys: [],
-                            contributions: Object.fromEntries(
-                                SOURCE_COVERAGE_ROLES.map((role) => [
-                                    role,
-                                    null,
-                                ]),
-                            ),
-                            limitations: [],
-                        }),
-                    },
-                    finish_reason: "stop",
+    providerFixtureResponse({
+        id: "test-qualification",
+        created: 1,
+        model: "test-model",
+        provider: "test-provider",
+        choices: [
+            {
+                index: 0,
+                message: {
+                    role: "assistant",
+                    content: JSON.stringify({
+                        companyMatch: "uncertain",
+                        companyPassageKeys: [],
+                        documentKind: "unknown",
+                        reportingPeriodEnd: null,
+                        reportingPeriodPassageKeys: [],
+                        contributions: Object.fromEntries(
+                            SOURCE_COVERAGE_ROLES.map((role) => [role, null]),
+                        ),
+                        limitations: [],
+                    }),
                 },
-            ],
-            usage: {
-                prompt_tokens: 100,
-                completion_tokens: 50,
-                total_tokens: 150,
-                cost: 0.0001,
+                finish_reason: "stop",
             },
-        }),
-        { headers: { "Content-Type": "application/json" } },
-    );
+        ],
+        usage: {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            cost: 0.0001,
+        },
+    });
 
 async function capturedCandidate(
     text = "ServiceNow provides workflow software.",

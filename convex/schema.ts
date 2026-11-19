@@ -202,6 +202,7 @@ export default defineSchema({
         activeLotId: v.optional(v.id("qualificationLots")),
     }).index("by_owner_and_key", ["ownerVisitorId", "key"]),
     qualificationUsage: defineTable({
+        conflicts: v.optional(v.number()),
         contextId: v.id("browserTestContexts"),
         runId: v.optional(v.id("researchRuns")),
         usage: zodToConvex(campaignLimitsSchema),

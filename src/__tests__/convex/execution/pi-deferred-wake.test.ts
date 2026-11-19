@@ -139,6 +139,13 @@ test("retaining a result after access revocation does not notify a new Pi execut
 
 test("an expired Pi child notifies its waiting parent through the retained operation result", async () => {
     const f = await waitingMission();
+    await f.t.mutation(
+        internal.domain.conversationValidation.completeDeferred,
+        {
+            requestId: f.requestId,
+            expectedGeneration: 1,
+        },
+    );
     await f.t.run((ctx) =>
         ctx.db.patch(f.runId, { executionStatus: "running" }),
     );
@@ -227,3 +234,129 @@ test("a result notification survives a busy wake and the previous writer closing
         status: "completed",
     });
 }, 30000);
+
+async function scheduledResearchWait() {
+    const { seedCapturedSources } = await import(
+        "@/__tests__/setup/sources-mission"
+    );
+    const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
+    const { schedulePiMission } = await import("@convex/execution/piControl");
+    const { contextObservationSequence } = await import(
+        "@convex/execution/journal"
+    );
+    vi.useFakeTimers();
+    const f = await seedCapturedSources();
+    await seedPiHistory(f.t, f.missionId, 4, 1, 64);
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "owned-wait",
+            input: {
+                kind: "discover_sources_for_need",
+                needId: "common-context",
+                query: "Current documentary work",
+            },
+        },
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({ kind: "waiting" });
+    const before = await f.t.run(async (ctx) => {
+        const session = await ctx.db
+            .query("piSessions")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .unique();
+        if (!session) throw Error("missing session");
+        await ctx.db.patch(session._id, {
+            observationSequence: await contextObservationSequence(ctx, f.runId),
+        });
+        await schedulePiMission(ctx, f.missionId, 4);
+        return session;
+    });
+    return { ...f, before, requestId };
+}
+
+test("an unchanged owned scheduled research wait defers hydration but a new observation still claims its writer", async () => {
+    const { recordContextObservation } = await import(
+        "@convex/execution/journal"
+    );
+    const f = await scheduledResearchWait();
+    const before = f.before;
+    const first = await f.t.run((ctx) => ctx.db.get(f.missionId));
+    if (!first?.piWakeToken) throw Error("no wake");
+    expect(
+        await f.t.mutation(internal.execution.piControl.prepare, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            token: first.piWakeToken,
+            writer: "idle-fallback",
+        }),
+    ).toBe(false);
+    expect(await f.t.run((ctx) => ctx.db.get(before._id))).toMatchObject({
+        epoch: before.epoch,
+        writer: before.writer,
+    });
+    const deferred = await f.t.run((ctx) => ctx.db.get(f.missionId));
+    expect((deferred?.piWakeAt ?? 0) - Date.now()).toBeGreaterThanOrEqual(
+        30_000,
+    );
+    await f.t.run((ctx) =>
+        recordContextObservation(ctx, f.runId, {
+            key: "changed-while-waiting",
+            topic: "research",
+            actor: { type: "system" },
+            value: { changed: true },
+        }),
+    );
+    const next = await f.t.run((ctx) => ctx.db.get(f.missionId));
+    if (!next?.piWakeToken) throw Error("no fallback");
+    expect(
+        await f.t.mutation(internal.execution.piControl.prepare, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            token: next.piWakeToken,
+            writer: "new-observation",
+        }),
+    ).toBe(true);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(before._id)))?.epoch,
+    ).toBeGreaterThan(before.epoch);
+});
+
+test("a retained scheduled result resumes immediately after an unchanged fallback was deferred", async () => {
+    const f = await scheduledResearchWait();
+    const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
+    if (!mission?.piWakeToken) throw Error("no wake");
+    expect(
+        await f.t.mutation(internal.execution.piControl.prepare, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            token: mission.piWakeToken,
+            writer: "unchanged",
+        }),
+    ).toBe(false);
+    await f.t.mutation(internal.execution.operations.recordResult, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+        outcome: { kind: "unavailable", code: "fixture_result" },
+    });
+    const ready = await f.t.run((ctx) => ctx.db.get(f.missionId));
+    expect(ready?.piWakeAt).toBe(Date.now());
+    if (!ready?.piWakeToken) throw Error("no immediate wake");
+    expect(
+        await f.t.mutation(internal.execution.piControl.prepare, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            token: ready.piWakeToken,
+            writer: "retained-result",
+        }),
+    ).toBe(true);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.before._id)))?.epoch,
+    ).toBeGreaterThan(f.before.epoch);
+});

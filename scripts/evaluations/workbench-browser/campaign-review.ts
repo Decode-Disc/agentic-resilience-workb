@@ -826,6 +826,29 @@ export async function runPiCampaignReview(options: {
                 : captured.manifest.scenarios.map(
                       ({ id, company, framing }) => ({ id, company, framing }),
                   ),
+        milestoneEvidence:
+            captured.manifest.version === 1
+                ? []
+                : captured.manifest.scenarios.map(({ id }) => ({
+                      scenario: id,
+                      savedFraming: existsSync(
+                          join(root, id, "agent-saved-framing.json"),
+                      )
+                          ? `${id}/agent-saved-framing.json`
+                          : null,
+                      firstSourcesInput: existsSync(
+                          join(root, id, "actual-start-input.json"),
+                      )
+                          ? `${id}/actual-start-input.json`
+                          : null,
+                      sourcesPrepared: existsSync(
+                          join(root, id, "sources-prepared-observation.json"),
+                      )
+                          ? `${id}/sources-prepared-observation.json`
+                          : null,
+                      interpretation:
+                          "Assess the saved program, confirmed dispatched input and completed preparation independently. Missing evidence is inconclusive; earlier milestones never establish completed preparation or analytical usefulness.",
+                  })),
         mechanical: contextFile("campaign-result.json"),
         reconciliation: contextFile("reconciliation.json"),
         archivedSourcePrefix: "code/",

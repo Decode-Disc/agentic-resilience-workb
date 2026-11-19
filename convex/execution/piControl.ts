@@ -9,6 +9,7 @@ import {
 import {
     NATIVE_WORKER_POLICY,
     PERSISTENCE_PAGE_SIZE,
+    PI_OPERATION_WAIT_POLL_MS,
     PI_SESSION_LEASE_MS,
 } from "@convex/resourcePolicy";
 import schema from "@convex/schema";
@@ -22,7 +23,11 @@ import {
     requireMissionAuthority,
 } from "./authority";
 import { readTurnInstructions } from "./conversations";
-import { admittedInputJson, invocationRawOutputJson } from "./journal";
+import {
+    admittedInputJson,
+    contextObservationSequence,
+    invocationRawOutputJson,
+} from "./journal";
 import { needsNativeSettlement, sessionForMission } from "./piStore";
 import { suspendInterruptedResearch } from "./researchControl";
 import { nativeInputsValidator } from "./schema";
@@ -306,6 +311,57 @@ async function recordWorkerFailure(
         await suspendInterruptedResearch(ctx, mission);
 }
 
+/** Research-only scheduled waits have no conversational steering queue; uncertainty takes normal replay. */
+async function unchangedScheduledWait(
+    ctx: MutationCtx,
+    mission: Doc<"agentMissions">,
+    session: Doc<"piSessions"> | null,
+) {
+    if (
+        mission.executionScope !== "research" ||
+        mission.conversationTurnId ||
+        mission.piActiveWriter ||
+        mission.piRebinding ||
+        mission.piResultWakePending ||
+        !session ||
+        session.conversationId ||
+        session.missionId !== mission._id ||
+        session.generation !== mission.generation ||
+        session.sequence === 0 ||
+        session.observationSequence === undefined ||
+        session.observationSequence !==
+            (await contextObservationSequence(ctx, mission.runId))
+    )
+        return false;
+    for (const status of ["pending", "running", "observed", "unknown"] as const)
+        if (
+            await ctx.db
+                .query("agentOperationRequests")
+                .withIndex("by_mission_and_status", (q) =>
+                    q.eq("missionId", mission._id).eq("status", status),
+                )
+                .first()
+        )
+            return false;
+    const waiting = await ctx.db
+        .query("agentOperationRequests")
+        .withIndex("by_mission_and_status", (q) =>
+            q.eq("missionId", mission._id).eq("status", "waiting"),
+        )
+        .take(2);
+    const request = waiting[0];
+    if (
+        waiting.length !== 1 ||
+        !request?.scheduledJobId ||
+        request.expectedGeneration !== mission.generation ||
+        request.outcome ||
+        request.effect
+    )
+        return false;
+    const job = await ctx.db.system.get(request.scheduledJobId);
+    return job?.state.kind === "pending" || job?.state.kind === "inProgress";
+}
+
 export const prepare = internalMutation({
     args: {
         missionId: v.id("agentMissions"),
@@ -366,6 +422,18 @@ export const prepare = internalMutation({
                     mission._id,
                     args.expectedGeneration,
                     session.leaseUntil,
+                );
+                return false;
+            }
+            if (
+                !settling &&
+                (await unchangedScheduledWait(ctx, mission, session))
+            ) {
+                await schedulePiMission(
+                    ctx,
+                    mission._id,
+                    args.expectedGeneration,
+                    Date.now() + PI_OPERATION_WAIT_POLL_MS,
                 );
                 return false;
             }

@@ -11,6 +11,7 @@ import {
     fixtureModelDescriptor,
     modelAttemptAuthority,
 } from "@/__tests__/setup/model-configuration";
+import { streamingModelFetch } from "@/__tests__/setup/model-stream";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
 test("retains an original observable turn before the generation runtime receives it", async () => {
@@ -27,7 +28,7 @@ test("retains an original observable turn before the generation runtime receives
             observed = result;
             events.push("observation");
         },
-        fetch: async () => {
+        fetch: streamingModelFetch(async () => {
             events.push("provider");
             return new Response(
                 JSON.stringify({
@@ -63,7 +64,7 @@ test("retains an original observable turn before the generation runtime receives
                 }),
                 { headers: { "Content-Type": "application/json" } },
             );
-        },
+        }),
     };
     const result = await invokeDeferredAgentTurn({
         route: {
@@ -118,7 +119,7 @@ test("journals the serialized HTTP request before dispatch and the original repl
                 requestJson = snapshot;
                 events.push("journal");
             },
-            fetch: async (_url, init) => {
+            fetch: streamingModelFetch(async (_url, init) => {
                 wireJson = String(init?.body);
                 events.push("dispatch");
                 return new Response(
@@ -146,7 +147,7 @@ test("journals the serialized HTTP request before dispatch and the original repl
                     }),
                     { headers: { "Content-Type": "application/json" } },
                 );
-            },
+            }),
         },
         instructions: "Use the retained evidence.",
         prompt: "What does it establish?",
@@ -189,7 +190,7 @@ test("a current deferred turn refuses missing model capabilities before HTTP", a
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "offline-only",
-            fetch: request,
+            fetch: streamingModelFetch(request),
         },
         instructions: "Reply.",
         prompt: "Continue.",
@@ -210,7 +211,7 @@ test("blocks a deferred agent turn when no authorized route exists", async () =>
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "",
-            fetch: request,
+            fetch: streamingModelFetch(request),
         },
         instructions: "Inspect the approved material.",
         prompt: "Continue the investigation.",
@@ -236,7 +237,7 @@ test("a backend preparation failure is explicitly not dispatched", async () => {
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: request,
+            fetch: streamingModelFetch(request),
         },
         instructions: "Inspect.",
         prompt: "Continue.",
@@ -266,7 +267,7 @@ test("a failed request checkpoint prevents dispatch and returns an explicit non-
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: request,
+            fetch: streamingModelFetch(request),
             beforeDispatch: async () => {
                 throw new Error("checkpoint unavailable");
             },
@@ -350,7 +351,7 @@ test("returns typed tool requests for persisted dispatch without an SDK loop", a
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: request,
+            fetch: streamingModelFetch(request),
             beforeDispatch: async (json) => {
                 requestSnapshot = json;
             },
@@ -444,7 +445,7 @@ test("returns final assistant text for persisted completion parsing", async () =
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: request,
+            fetch: streamingModelFetch(request),
         },
         instructions: "Inspect the approved material.",
         prompt: "Report whether inspection is complete.",
@@ -472,7 +473,7 @@ test("blocks tools with inline execution callbacks before provider dispatch", as
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: request,
+            fetch: streamingModelFetch(request),
         },
         instructions: "Inspect the approved material.",
         prompt: "Find pricing evidence.",
@@ -535,7 +536,7 @@ test("serializes canonical mission tools and accepts a real Convex source ID", a
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: request,
+            fetch: streamingModelFetch(request),
         },
         instructions: savedMaterialInspectionDefinition.instructions,
         prompt: "Read the requested retained passage.",
@@ -609,7 +610,7 @@ test("a response containing only invalid tool calls cannot trigger an SDK repair
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: request,
+            fetch: streamingModelFetch(request),
         },
         instructions: "Inspect approved material.",
         prompt: "Continue.",
@@ -640,30 +641,32 @@ test("invalid structured output retains the original observable reply before sch
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: async () =>
-                new Response(
-                    JSON.stringify({
-                        id: "invalid-journal",
-                        created: 1,
-                        model: "test/journal",
-                        choices: [
-                            {
-                                index: 0,
-                                message: {
-                                    role: "assistant",
-                                    content: original,
+            fetch: streamingModelFetch(
+                async () =>
+                    new Response(
+                        JSON.stringify({
+                            id: "invalid-journal",
+                            created: 1,
+                            model: "test/journal",
+                            choices: [
+                                {
+                                    index: 0,
+                                    message: {
+                                        role: "assistant",
+                                        content: original,
+                                    },
+                                    finish_reason: "stop",
                                 },
-                                finish_reason: "stop",
+                            ],
+                            usage: {
+                                prompt_tokens: 1,
+                                completion_tokens: 1,
+                                total_tokens: 2,
                             },
-                        ],
-                        usage: {
-                            prompt_tokens: 1,
-                            completion_tokens: 1,
-                            total_tokens: 2,
-                        },
-                    }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
+                        }),
+                        { headers: { "Content-Type": "application/json" } },
+                    ),
+            ),
         },
     });
     expect(result.status).toBe("failed");
@@ -684,7 +687,7 @@ test("one-shot cancellation retains the actual DOM abort cause rather than a gen
             observeProvider: async (observation) => {
                 diagnostic = observation.diagnostic;
             },
-            fetch: async () => {
+            fetch: streamingModelFetch(async () => {
                 cancellation.abort(
                     new DOMException(
                         "Preparation deadline elapsed",
@@ -692,7 +695,7 @@ test("one-shot cancellation retains the actual DOM abort cause rather than a gen
                     ),
                 );
                 throw new Error("Generic transport cancellation");
-            },
+            }),
         },
         instructions: "Read.",
         prompt: "Material.",

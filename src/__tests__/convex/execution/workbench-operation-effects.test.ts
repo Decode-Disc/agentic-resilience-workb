@@ -577,7 +577,7 @@ test("an edit between claim and framing effect returns a refusal without overwri
     });
     const operation =
         getAgentDefinition("workbench_v1").operations.adjust_framing;
-    assert(operation);
+    assert(operation?.effectKind === "atomic_effect");
     expect(
         await t.action((ctx) =>
             operation.execute(ctx, {

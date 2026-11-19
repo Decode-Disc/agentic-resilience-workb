@@ -3,6 +3,7 @@ import { extractObservedDestinations } from "@convex/integrations/evidenceNormal
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import {
+    dispatchSourcesOperation,
     recordDocumentaryRead,
     seedCapturedSources,
 } from "@/__tests__/setup/sources-mission";
@@ -150,10 +151,10 @@ test("admission stops before control I/O while every previously admitted qualifi
             },
         );
         const callsBefore = examiner.mock.calls.length;
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            { requestId, expectedGeneration: 4 },
-        );
+        const outcome = await dispatchSourcesOperation(f.t, {
+            requestId,
+            expectedGeneration: 4,
+        });
         if (outcome.kind !== "success") {
             expect(outcome).toMatchObject({
                 kind: "unavailable",

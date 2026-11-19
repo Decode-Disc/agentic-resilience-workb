@@ -7,7 +7,11 @@ import { workflow } from "@convex/workflow";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedObservedSources } from "@/__tests__/setup/sources-mission";
+import {
+    dispatchSourcesOperation,
+    seedObservedSources,
+    startSourcesOperation,
+} from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
 vi.mock("@convex/integrations/documentaryControl", () => ({
@@ -157,11 +161,11 @@ test.each([
         },
     );
     expect(
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
-    ).toMatchObject({ kind: "execute" });
+    ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
     const before = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     assert(before?.sourcesMission);
     expect(before.sourcesMission.work).toEqual([]);
@@ -241,7 +245,7 @@ test.each([
             },
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await startSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -433,7 +437,7 @@ test("analyst settlement waits for native qualification and receives its existin
             },
         },
     );
-    const processing = f.t.action(internal.execution.operations.dispatch, {
+    const processing = dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -538,7 +542,7 @@ test("reservation admission preserves the shared completion response ceiling bef
                 },
             },
         );
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         });
@@ -638,7 +642,7 @@ test("unqualified work retains storage headroom for unfinished explanations thro
                 },
             },
         );
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         });

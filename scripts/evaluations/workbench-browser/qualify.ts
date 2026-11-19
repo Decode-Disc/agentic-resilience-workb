@@ -22,6 +22,7 @@ import {
     getFunctionName,
     makeFunctionReference,
 } from "convex/server";
+import { QUALIFICATION_ACCOUNTING_POLICY } from "../../../convex/qualificationCampaignPolicy.ts";
 import {
     RESOURCE_POLICY_VERSION,
     QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
@@ -183,6 +184,7 @@ export async function runWorkbenchQualification(
         live ? maximumRequests : 0,
     );
     const protocol = {
+        costAccountingPolicy: QUALIFICATION_ACCOUNTING_POLICY,
         version: 2,
         resourcePolicy: RESOURCE_POLICY_VERSION,
         mode: selectedMode,

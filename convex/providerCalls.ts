@@ -2,6 +2,7 @@ import {
     RESPONSE_CONTROL_LIMITS,
     responseReviewOperationKey,
 } from "@convex/domain/workbenchResponseControlContracts";
+import { operationHasStarted } from "@convex/execution/executionProtocol";
 import { resolveReasoningPreference } from "@convex/integrations/modelRouting";
 import { readResponseControlPolicy } from "@convex/modelConfiguration";
 import {
@@ -1363,7 +1364,7 @@ export const recordAttempt = internalMutation({
                         request.runId !== args.runId ||
                         request.expectedGeneration !==
                             args.executionGeneration ||
-                        request.status !== "running" ||
+                        !operationHasStarted(request) ||
                         (args.missionId &&
                             request.missionId !== args.missionId))
                 )

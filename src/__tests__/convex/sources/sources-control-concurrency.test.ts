@@ -4,8 +4,10 @@ import type { SourcesOperation } from "@convex/domain/sourcesContracts";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import {
+    dispatchSourcesOperation,
     recordDocumentaryRead,
     seedObservedSources,
+    startSourcesOperation,
 } from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
@@ -80,7 +82,7 @@ test.each([
         input: input(second, "Second contribution", f.readRequestId),
     });
     for (const requestId of [firstId, secondId])
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         });
@@ -261,14 +263,14 @@ test("overlapping native qualifications cannot admit material that exceeds final
     }
     const firstId = requestIds[0];
     assert(firstId);
-    const first = f.t.action(internal.execution.operations.dispatch, {
+    const first = dispatchSourcesOperation(f.t, {
         requestId: firstId,
         expectedGeneration: 4,
     });
     await entered;
     const remaining = Promise.all(
         requestIds.slice(1).map((requestId) =>
-            f.t.action(internal.execution.operations.dispatch, {
+            dispatchSourcesOperation(f.t, {
                 requestId,
                 expectedGeneration: 4,
             }),

@@ -262,6 +262,17 @@ export function openQualificationJournal(
                 observationHash: previous.receipt.observationHash,
             });
         },
+        leaveUnrun(scenarios: string[], reason: string) {
+            for (const scenario of scenarios)
+                if (!entries.some((entry) => entry.scenario === scenario))
+                    append({
+                        event: "unrun",
+                        scenario,
+                        executionIntegrity: "unrun",
+                        semanticTask: "not_assessed",
+                        reason,
+                    });
+        },
         begin(scenario: string) {
             const previous = entries.filter((e) => e.scenario === scenario);
             if (previous.some((e) => e.event === "finished")) return false;
@@ -285,7 +296,9 @@ export function openQualificationJournal(
             append({ ...result, event: "finished", scenario });
         },
         results() {
-            return entries.filter((e) => e.event === "finished");
+            return entries.filter(
+                (e) => e.event === "finished" || e.event === "unrun",
+            );
         },
     };
 }

@@ -25,6 +25,7 @@ import {
 } from "../../../convex/resourcePolicy.ts";
 import { openQualificationJournal } from "./journal.ts";
 import { sha256 } from "./protocol.ts";
+import { readRelayContinuation } from "./relay.mjs";
 import { hydrateSourcesTranscriptPage } from "./sources.ts";
 
 function ref<
@@ -365,676 +366,820 @@ export async function runCampaignScenarios(
         .toMatchObject({ status: "active" });
     assert.equal(errors.length, 0, "Browser initialization failed");
     const failedScenarios: string[] = [];
-    for (const c of prepared(root).cases) {
-        const scenario = manifest.scenarios.find((s) => s.id === c.id);
-        assert(scenario);
-        assert(journal.begin(c.id), "Scenario already completed");
-        const directory = join(root, c.id);
-        mkdirSync(directory, { recursive: true, mode: 0o700 });
-        let activeStep = "initialize";
-        const errorStart: number = errors.length;
-        let failed = false;
-        let held = false;
-        let armed:
-            | undefined
-            | "malformed_response"
-            | "http_refusal"
-            | "concurrent_edit";
-        let controlKey: string | undefined;
-        const requiredFaults: Array<{ key: string; event: string }> = [];
-        const requestKey = () =>
-            `qualification:${sha256(JSON.stringify([c.fixtureKey, activeStep]))}`;
-        const inspect = () =>
-            client.query(
-                ref(internal.execution.fixtures.qualificationSnapshot),
-                { runId: c.runId, fixtureKey: c.fixtureKey },
-            );
-        type Snapshot = Awaited<ReturnType<typeof inspect>>;
-        const settled = (s: Snapshot) =>
-            s.nativeSettled &&
-            !s.conversation?.activeTurnId &&
-            !s.conversation?.queuedCount;
-        const wait = async (
-            state:
-                | "conversation_settled"
-                | "sources_prepared"
-                | "paused"
-                | "running",
-        ) => {
-            let deadlineAt =
-                manifest.mode === "deterministic"
-                    ? Math.min(
-                          manifest.expiresAt,
-                          Date.now() +
-                              TOOLING_POLICY.deterministicObservationTimeoutMs,
-                      )
-                    : manifest.expiresAt;
-            let contextExpiresAt: number | undefined;
-            const ready = async () => {
-                assert(!interrupted(), "Campaign interrupted");
-                const s = await inspect();
-                contextExpiresAt = s.contextExpiresAt;
+    try {
+        for (const c of prepared(root).cases) {
+            const scenario = manifest.scenarios.find((s) => s.id === c.id);
+            assert(scenario);
+            assert(journal.begin(c.id), "Scenario already completed");
+            const directory = join(root, c.id);
+            mkdirSync(directory, { recursive: true, mode: 0o700 });
+            let activeStep = "initialize";
+            const errorStart: number = errors.length;
+            let failed = false;
+            let held = false;
+            let armed:
+                | undefined
+                | "malformed_response"
+                | "http_refusal"
+                | "concurrent_edit";
+            let controlKey: string | undefined;
+            const requiredFaults: Array<{ key: string; event: string }> = [];
+            const requestKey = () =>
+                `qualification:${sha256(JSON.stringify([c.fixtureKey, activeStep]))}`;
+            type Snapshot = FunctionReturnType<
+                typeof internal.execution.fixtures.qualificationSnapshot
+            >;
+            let latestSnapshot: Snapshot | undefined;
+            let savedFraming: string | undefined;
+            const hydratedInputs = new Set<string>();
+            const inspect = async (): Promise<Snapshot> => {
+                const snapshot = await client.query(
+                    ref(internal.execution.fixtures.qualificationSnapshot),
+                    { runId: c.runId, fixtureKey: c.fixtureKey },
+                );
+                latestSnapshot = snapshot;
                 if (
-                    state !== "conversation_settled" &&
-                    ["failed", "cancelled"].includes(s.run.executionStatus)
-                )
-                    throw new Error(
-                        `Research ${s.run.executionStatus} before ${state} (phase: ${s.run.lifecycleState})`,
-                    );
-                if (
-                    (state === "conversation_settled" ||
-                        state === "sources_prepared") &&
-                    s.conversation?.activeTurnId &&
-                    s.mission?.status === "blocked" &&
-                    !s.mission.piActiveWriter
-                )
-                    throw new Error(
-                        `Conversation blocked before native settlement: ${s.mission.blockCode ?? "mission_blocked"}`,
-                    );
-                if (
-                    state === "sources_prepared" &&
-                    scenario.initialFixture?.id === "sources_correction" &&
-                    s.run.lifecycleState !== "sources_prepared" &&
-                    s.sourcesMission &&
-                    ["completed", "blocked"].includes(s.sourcesMission.status)
+                    scenario.framingRequest &&
+                    snapshot.framing?.origin === "workbench" &&
+                    savedFraming !== snapshot.framing._id
                 ) {
+                    save(directory, "agent-saved-framing", snapshot.framing);
+                    save(
+                        directory,
+                        `saved-framing-${snapshot.framing._id}`,
+                        snapshot.framing,
+                    );
+                    savedFraming = snapshot.framing._id;
+                }
+                const first = snapshot.firstSourcesInput;
+                if (first) {
+                    save(directory, "sources-input-observation", first);
+                    const key = `${first.invocationId}:${first.contentHash}`;
+                    if (
+                        first.dispatch === "observed" &&
+                        first.contentHash &&
+                        !hydratedInputs.has(key)
+                    ) {
+                        const transcript = await client.query(
+                            ref(
+                                internal.execution.fixtures
+                                    .inspectSourcesInvocations,
+                            ),
+                            {
+                                runId: c.runId,
+                                fixtureKey: c.fixtureKey,
+                                invocationId: first.invocationId,
+                                paginationOpts: { cursor: null, numItems: 1 },
+                            },
+                        );
+                        assert(
+                            transcript.page.length === 1 &&
+                                transcript.page[0]?._id === first.invocationId,
+                            "First Sources input identity changed",
+                        );
+                        const request = transcript.payloads.find(
+                            (p) => p.part === "request",
+                        );
+                        assert(
+                            request?.contentHash === first.contentHash,
+                            "First Sources request hash changed",
+                        );
+                        const hydrated = await hydrateSourcesTranscriptPage(
+                            {
+                                ...transcript,
+                                page: transcript.page.map((i) => ({
+                                    ...i,
+                                    visibleOutput: undefined,
+                                })),
+                                payloads: [request],
+                            },
+                            (args) =>
+                                client.query(
+                                    ref(
+                                        internal.execution.fixtures
+                                            .inspectSourcesTextFragments,
+                                    ),
+                                    {
+                                        ...args,
+                                        runId: c.runId,
+                                        fixtureKey: c.fixtureKey,
+                                    },
+                                ),
+                        );
+                        save(directory, "actual-start-input", {
+                            binding: first,
+                            transcript: hydrated,
+                        });
+                        hydratedInputs.add(key);
+                    }
+                }
+                return snapshot;
+            };
+            const settled = (s: Snapshot) =>
+                s.nativeSettled &&
+                !s.conversation?.activeTurnId &&
+                !s.conversation?.queuedCount;
+            const wait = async (
+                state:
+                    | "conversation_settled"
+                    | "sources_prepared"
+                    | "paused"
+                    | "running",
+            ) => {
+                let deadlineAt =
+                    manifest.mode === "deterministic"
+                        ? Math.min(
+                              manifest.expiresAt,
+                              Date.now() +
+                                  TOOLING_POLICY.deterministicObservationTimeoutMs,
+                          )
+                        : manifest.expiresAt;
+                let contextExpiresAt: number | undefined;
+                const ready = async () => {
+                    assert(!interrupted(), "Campaign interrupted");
+                    const s = await inspect();
+                    contextExpiresAt = s.contextExpiresAt;
+                    if (
+                        state !== "conversation_settled" &&
+                        ["failed", "cancelled"].includes(s.run.executionStatus)
+                    )
+                        throw new Error(
+                            `Research ${s.run.executionStatus} before ${state} (phase: ${s.run.lifecycleState})`,
+                        );
+                    if (
+                        (state === "conversation_settled" ||
+                            state === "sources_prepared") &&
+                        s.conversation?.activeTurnId &&
+                        s.mission?.status === "blocked" &&
+                        !s.mission.piActiveWriter
+                    )
+                        throw new Error(
+                            `Conversation blocked before native settlement: ${s.mission.blockCode ?? "mission_blocked"}`,
+                        );
+                    if (
+                        state === "sources_prepared" &&
+                        scenario.initialFixture?.id === "sources_correction" &&
+                        s.run.lifecycleState !== "sources_prepared" &&
+                        s.sourcesMission &&
+                        ["completed", "blocked"].includes(
+                            s.sourcesMission.status,
+                        )
+                    ) {
+                        await client.mutation(
+                            ref(
+                                internal.qualificationInitialFixtureSetup
+                                    .finish,
+                            ),
+                            {
+                                runId: c.runId,
+                                fixtureKey: c.fixtureKey,
+                                scenarioId: c.id,
+                            },
+                        );
+                        return false;
+                    }
+                    if (
+                        state === "sources_prepared" &&
+                        s.run.lifecycleState !== "sources_prepared" &&
+                        s.run.executionStatus === "paused" &&
+                        s.sourcesMission?.status === "blocked" &&
+                        !s.sourcesMission.piActiveWriter &&
+                        s.sourcesMission.deadlineAt <= Date.now()
+                    )
+                        throw new Error(
+                            `Sources blocked before sources_prepared: ${s.sourcesMission.blockCode ?? "mission_blocked"}`,
+                        );
+                    if (state === "conversation_settled") return settled(s);
+                    if (state === "sources_prepared")
+                        return (
+                            settled(s) &&
+                            s.run.lifecycleState === "sources_prepared" &&
+                            s.run.executionStatus === "idle" &&
+                            !!s.sourcesMission &&
+                            [
+                                "completed",
+                                "blocked",
+                                "failed",
+                                "cancelled",
+                            ].includes(s.sourcesMission.status)
+                        );
+                    return s.run.executionStatus === state;
+                };
+                const intervals =
+                    TOOLING_POLICY.observationIntervalsMs.values();
+                let interval: number = TOOLING_POLICY.observationIntervalsMs[0];
+                while (!(await ready())) {
+                    if (manifest.mode === "live") {
+                        assert(
+                            typeof contextExpiresAt === "number" &&
+                                Number.isFinite(contextExpiresAt),
+                            "Qualification observation authority unavailable",
+                        );
+                        deadlineAt = Math.min(deadlineAt, contextExpiresAt);
+                    }
+                    const remainingMs = deadlineAt - Date.now();
+                    assert(
+                        remainingMs > 0,
+                        `Qualification observation authority expired before ${state}`,
+                    );
+                    interval = intervals.next().value ?? interval;
+                    await new Promise((resolve) =>
+                        setTimeout(resolve, Math.min(interval, remainingMs)),
+                    );
+                }
+                if (state === "sources_prepared")
+                    save(
+                        directory,
+                        "sources-prepared-observation",
+                        latestSnapshot,
+                    );
+            };
+            const release = () => {
+                if (controlKey)
+                    writeFileSync(
+                        join(root, `release-${controlKey}`),
+                        "release",
+                        {
+                            mode: 0o600,
+                        },
+                    );
+            };
+            const framing = async (
+                content: QualificationScenario["framing"],
+            ) => {
+                const before = await inspect();
+                assert(before.framing);
+                await admitted.mutation(api.framing.save, {
+                    runId: c.runId,
+                    expectedRevision: before.framing.revision,
+                    requestKey: requestKey(),
+                    content,
+                });
+                const question = content.questions[0];
+                assert(question);
+                if (page)
+                    await expect(
+                        page.getByRole("button", {
+                            name: question.shortLabel,
+                            exact: true,
+                        }),
+                    ).toBeVisible({
+                        timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
+                    });
+            };
+            try {
+                save(root, "control", {
+                    runId: c.runId,
+                    mode: manifest.mode,
+                    scenario: `${c.id}-initial`,
+                });
+                save(
+                    directory,
+                    "retrieval-mode",
+                    scenario.framingReplay
+                        ? {
+                              mode: "frozen_replay",
+                              materialHash: scenario.framingReplay.materialHash,
+                              case: scenario.framingReplay.case,
+                              modelMode: manifest.mode,
+                              framingExternalRetrievalCalls: 0,
+                              scope: "pre_start_framing",
+                          }
+                        : { mode: "live_discovery", modelMode: manifest.mode },
+                );
+                if (scenario.initialFixture) {
+                    activeStep = "initial-fixture";
+                    save(
+                        directory,
+                        "initial-fixture-intent",
+                        scenario.initialFixture,
+                    );
+                    const scope = {
+                        runId: c.runId,
+                        fixtureKey: c.fixtureKey,
+                        scenarioId: c.id,
+                    };
+                    const initial = await client.action(
+                        ref(internal.qualificationInitialFixtureSetup.install),
+                        scope,
+                    );
+                    save(directory, "initial-fixture", {
+                        ...scenario.initialFixture,
+                        ...initial,
+                        provenance:
+                            "retained_illustrative_material_not_live_evidence",
+                    });
+                    if (scenario.initialFixture.id === "sources_correction")
+                        await client.mutation(
+                            ref(
+                                internal.qualificationInitialFixtureSetup
+                                    .activate,
+                            ),
+                            scope,
+                        );
+                } else
                     await client.mutation(
-                        ref(internal.qualificationInitialFixtureSetup.finish),
+                        ref(internal.execution.fixtures.activateWorkbench),
                         {
                             runId: c.runId,
                             fixtureKey: c.fixtureKey,
-                            scenarioId: c.id,
+                            researchAngle:
+                                scenario.framingRequest?.text ??
+                                scenario.framing.scope,
                         },
                     );
-                    return false;
+                if (page) {
+                    await page.setViewportSize({ width: 1440, height: 1000 });
+                    await page.goto(`${web}/workspace/${c.runId}`);
                 }
-                if (
-                    state === "sources_prepared" &&
-                    s.run.lifecycleState !== "sources_prepared" &&
-                    s.run.executionStatus === "paused" &&
-                    s.sourcesMission?.status === "blocked" &&
-                    !s.sourcesMission.piActiveWriter &&
-                    s.sourcesMission.deadlineAt <= Date.now()
-                )
-                    throw new Error(
-                        `Sources blocked before sources_prepared: ${s.sourcesMission.blockCode ?? "mission_blocked"}`,
-                    );
-                if (state === "conversation_settled") return settled(s);
-                if (state === "sources_prepared")
-                    return (
-                        settled(s) &&
-                        s.run.lifecycleState === "sources_prepared" &&
-                        s.run.executionStatus === "idle" &&
-                        !!s.sourcesMission &&
-                        [
-                            "completed",
-                            "blocked",
-                            "failed",
-                            "cancelled",
-                        ].includes(s.sourcesMission.status)
-                    );
-                return s.run.executionStatus === state;
-            };
-            const intervals = TOOLING_POLICY.observationIntervalsMs.values();
-            let interval: number = TOOLING_POLICY.observationIntervalsMs[0];
-            while (!(await ready())) {
-                if (manifest.mode === "live") {
+                await wait("conversation_settled");
+                if (scenario.framingRequest) {
+                    const saved = await inspect();
                     assert(
-                        typeof contextExpiresAt === "number" &&
-                            Number.isFinite(contextExpiresAt),
-                        "Qualification observation authority unavailable",
+                        saved.framing && saved.framing.origin === "workbench",
+                        "Fresh framing must be saved by Workbench before scenario actions",
                     );
-                    deadlineAt = Math.min(deadlineAt, contextExpiresAt);
+                    save(directory, "agent-saved-framing", saved.framing);
                 }
-                const remainingMs = deadlineAt - Date.now();
-                assert(
-                    remainingMs > 0,
-                    `Qualification observation authority expired before ${state}`,
-                );
-                interval = intervals.next().value ?? interval;
-                await new Promise((resolve) =>
-                    setTimeout(resolve, Math.min(interval, remainingMs)),
-                );
-            }
-        };
-        const release = () => {
-            if (controlKey)
-                writeFileSync(join(root, `release-${controlKey}`), "release", {
-                    mode: 0o600,
-                });
-        };
-        const framing = async (content: QualificationScenario["framing"]) => {
-            const before = await inspect();
-            assert(before.framing);
-            await admitted.mutation(api.framing.save, {
-                runId: c.runId,
-                expectedRevision: before.framing.revision,
-                requestKey: requestKey(),
-                content,
-            });
-            const question = content.questions[0];
-            assert(question);
-            if (page)
-                await expect(
-                    page.getByRole("button", {
-                        name: question.shortLabel,
-                        exact: true,
-                    }),
-                ).toBeVisible({
-                    timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
-                });
-        };
-        try {
-            save(root, "control", {
-                runId: c.runId,
-                mode: manifest.mode,
-                scenario: `${c.id}-initial`,
-            });
-            save(
-                directory,
-                "retrieval-mode",
-                scenario.framingReplay
-                    ? {
-                          mode: "frozen_replay",
-                          materialHash: scenario.framingReplay.materialHash,
-                          case: scenario.framingReplay.case,
-                          modelMode: manifest.mode,
-                          framingExternalRetrievalCalls: 0,
-                          scope: "pre_start_framing",
-                      }
-                    : { mode: "live_discovery", modelMode: manifest.mode },
-            );
-            if (scenario.initialFixture) {
-                activeStep = "initial-fixture";
-                save(
-                    directory,
-                    "initial-fixture-intent",
-                    scenario.initialFixture,
-                );
-                const scope = {
-                    runId: c.runId,
-                    fixtureKey: c.fixtureKey,
-                    scenarioId: c.id,
-                };
-                const initial = await client.action(
-                    ref(internal.qualificationInitialFixtureSetup.install),
-                    scope,
-                );
-                save(directory, "initial-fixture", {
-                    ...scenario.initialFixture,
-                    ...initial,
-                    provenance:
-                        "retained_illustrative_material_not_live_evidence",
-                });
-                if (scenario.initialFixture.id === "sources_correction")
-                    await client.mutation(
-                        ref(internal.qualificationInitialFixtureSetup.activate),
-                        scope,
-                    );
-            } else
-                await client.mutation(
-                    ref(internal.execution.fixtures.activateWorkbench),
-                    {
-                        runId: c.runId,
-                        fixtureKey: c.fixtureKey,
-                        researchAngle:
-                            scenario.framingRequest?.text ??
-                            scenario.framing.scope,
-                    },
-                );
-            if (page) {
-                await page.setViewportSize({ width: 1440, height: 1000 });
-                await page.goto(`${web}/workspace/${c.runId}`);
-            }
-            await wait("conversation_settled");
-            if (scenario.framingRequest) {
-                const saved = await inspect();
-                assert(
-                    saved.framing && saved.framing.origin === "workbench",
-                    "Fresh framing must be saved by Workbench before scenario actions",
-                );
-                save(directory, "agent-saved-framing", saved.framing);
-            }
-            for (const step of scenario.steps) {
-                activeStep = step.id;
-                assert(!interrupted(), "Campaign interrupted");
-                save(directory, `${step.id}-before`, await inspect());
-                switch (step.action) {
-                    case "save_framing":
-                        assert(
-                            !scenario.framingRequest,
-                            "Fresh framing cannot use a scripted save",
-                        );
-                        await framing(step.content ?? scenario.framing);
-                        break;
-                    case "send_message": {
-                        const previous = (await inspect()).lastMessage?._id;
-                        controlKey = `${c.id}-${step.id}`;
-                        save(root, "control", {
-                            runId: c.runId,
-                            mode: manifest.mode,
-                            scenario: controlKey,
-                            hold: armed === "concurrent_edit",
-                            injectInvalidFraming:
-                                armed === "malformed_response",
-                            injectHttpRefusal: armed === "http_refusal",
-                        });
-                        const expectedFault = armed;
-                        if (expectedFault)
-                            requiredFaults.push({
-                                key: controlKey,
-                                event:
-                                    expectedFault === "concurrent_edit"
-                                        ? "gate_armed"
-                                        : "fault_applied",
-                            });
-                        armed = undefined;
-                        if (page) {
-                            await expect
-                                .poll(
-                                    async () =>
-                                        (await page
-                                            .getByRole("textbox")
-                                            .isVisible()) ||
-                                        (await page
-                                            .getByRole("button", {
-                                                name: "Ask AI",
-                                                exact: true,
-                                            })
-                                            .isVisible()),
-                                    {
-                                        timeout:
-                                            TOOLING_POLICY.browserInteractionTimeoutMs,
-                                    },
-                                )
-                                .toBe(true);
-                            if (!(await page.getByRole("textbox").isVisible()))
-                                await page
-                                    .getByRole("button", {
-                                        name: "Ask AI",
-                                        exact: true,
-                                    })
-                                    .click();
-                            await expect(page.getByRole("textbox")).toBeVisible(
-                                {
-                                    timeout:
-                                        TOOLING_POLICY.browserInteractionTimeoutMs,
-                                },
-                            );
-                            await page.getByRole("textbox").fill(step.text);
-                            await page
-                                .getByRole("button", {
-                                    name: /Send (message|refinement)/,
-                                })
-                                .click();
-                        } else {
-                            await admitted.mutation(
-                                api.execution.conversations.submit,
-                                {
-                                    runId: c.runId,
-                                    requestKey: requestKey(),
-                                    text: step.text,
-                                    delivery: "queue",
-                                },
-                            );
-                        }
-                        await expect
-                            .poll(
-                                async () => (await inspect()).lastMessage?._id,
-                                {
-                                    timeout:
-                                        TOOLING_POLICY.browserInteractionTimeoutMs,
-                                },
-                            )
-                            .not.toBe(previous);
-                        if (step.wait !== "started") {
+                for (const step of scenario.steps) {
+                    activeStep = step.id;
+                    assert(!interrupted(), "Campaign interrupted");
+                    save(directory, `${step.id}-before`, await inspect());
+                    switch (step.action) {
+                        case "save_framing":
                             assert(
-                                expectedFault !== "concurrent_edit",
-                                "Concurrent edit requires a started turn before the configured framing edit",
+                                !scenario.framingRequest,
+                                "Fresh framing cannot use a scripted save",
                             );
-                            await wait("conversation_settled");
-                        } else {
-                            await expect
-                                .poll(
-                                    async () =>
-                                        !!(await inspect()).conversation
-                                            ?.activeTurnId,
-                                    {
-                                        timeout:
-                                            TOOLING_POLICY.browserInteractionTimeoutMs,
-                                    },
-                                )
-                                .toBe(true);
-                            if (expectedFault === "concurrent_edit")
+                            await framing(step.content ?? scenario.framing);
+                            break;
+                        case "send_message": {
+                            const previous = (await inspect()).lastMessage?._id;
+                            controlKey = `${c.id}-${step.id}`;
+                            save(root, "control", {
+                                runId: c.runId,
+                                mode: manifest.mode,
+                                scenario: controlKey,
+                                hold: armed === "concurrent_edit",
+                                injectInvalidFraming:
+                                    armed === "malformed_response",
+                                injectHttpRefusal: armed === "http_refusal",
+                            });
+                            const expectedFault = armed;
+                            if (expectedFault)
+                                requiredFaults.push({
+                                    key: controlKey,
+                                    event:
+                                        expectedFault === "concurrent_edit"
+                                            ? "gate_armed"
+                                            : "fault_applied",
+                                });
+                            armed = undefined;
+                            if (page) {
                                 await expect
                                     .poll(
-                                        () =>
-                                            existsSync(
-                                                join(
-                                                    root,
-                                                    `gate-${controlKey}.json`,
-                                                ),
-                                            ),
+                                        async () =>
+                                            (await page
+                                                .getByRole("textbox")
+                                                .isVisible()) ||
+                                            (await page
+                                                .getByRole("button", {
+                                                    name: "Ask AI",
+                                                    exact: true,
+                                                })
+                                                .isVisible()),
                                         {
                                             timeout:
-                                                TOOLING_POLICY.gateObservationTimeoutMs,
+                                                TOOLING_POLICY.browserInteractionTimeoutMs,
                                         },
                                     )
                                     .toBe(true);
-                        }
-                        break;
-                    }
-                    case "start_research":
-                        if (page)
-                            await page
-                                .getByRole("button", {
-                                    name: "Start research",
-                                    exact: true,
-                                })
-                                .click();
-                        else {
-                            const framing = (await inspect()).framing;
-                            assert(
-                                framing,
-                                "Current framing required before research start",
-                            );
-                            await admitted.mutation(api.framing.startResearch, {
-                                runId: c.runId,
-                                expectedRevision: framing.revision,
-                                requestKey: requestKey(),
-                            });
-                        }
-                        break;
-                    case "pause_research":
-                        if (page)
-                            await page
-                                .getByRole("button", {
-                                    name: "Pause research",
-                                    exact: true,
-                                })
-                                .click();
-                        else
-                            await admitted.mutation(
-                                api.execution.researchControl.pause,
-                                {
-                                    runId: c.runId,
-                                    expectedGeneration: (await inspect()).run
-                                        .executionGeneration,
-                                },
-                            );
-                        await wait("paused");
-                        break;
-                    case "resume_research":
-                        if (page)
-                            await page
-                                .getByRole("button", {
-                                    name: "Resume research",
-                                    exact: true,
-                                })
-                                .click();
-                        else
-                            await admitted.mutation(
-                                api.execution.researchControl.resume,
-                                {
-                                    runId: c.runId,
-                                    expectedGeneration: (await inspect()).run
-                                        .executionGeneration,
-                                },
-                            );
-                        break;
-                    case "stop_response":
-                        if (page)
-                            await page
-                                .getByRole("button", {
-                                    name: "Stop generation",
-                                    exact: true,
-                                })
-                                .click();
-                        else {
-                            const turnId = (await inspect()).conversation
-                                ?.activeTurnId;
-                            assert(
-                                turnId,
-                                "Active turn required before stopping a response",
-                            );
-                            await admitted.mutation(
-                                api.execution.conversations.stopResponse,
-                                { runId: c.runId, turnId },
-                            );
-                        }
-                        if (held) {
-                            await client.mutation(
-                                ref(
-                                    internal.execution.piControl
-                                        .holdPublication,
-                                ),
-                                { held: false },
-                            );
-                            held = false;
-                        }
-                        release();
-                        await wait("conversation_settled");
-                        break;
-                    case "reload":
-                        assert(page, "Reload requires browser execution");
-                        await page.reload();
-                        await expect(
-                            page
-                                .getByRole("textbox")
-                                .or(
-                                    page.getByRole("button", {
-                                        name: "Ask AI",
-                                        exact: true,
-                                    }),
+                                if (
+                                    !(await page
+                                        .getByRole("textbox")
+                                        .isVisible())
                                 )
-                                .first(),
-                        ).toBeVisible({
-                            timeout: TOOLING_POLICY.browserInteractionTimeoutMs,
-                        });
-                        break;
-                    case "navigate":
-                        assert(page, "Navigation requires browser execution");
-                        if (step.target === "dossier_list")
-                            await page.goto(`${web}/workspace/dossiers`);
-                        else if (step.target === "dossier")
-                            await page.goto(`${web}/workspace/${c.runId}`);
-                        else
-                            await page.goto(
-                                `${web}/workspace/${c.runId}?section=progress&detail=${step.target}`,
-                            );
-                        break;
-                    case "viewport":
-                        assert(page, "Viewport requires browser execution");
-                        await page.setViewportSize({
-                            width: step.width,
-                            height: step.height,
-                        });
-                        break;
-                    case "wait_for":
-                        if (step.state === "conversation_settled") release();
-                        await wait(step.state);
-                        if (
-                            step.state === "sources_prepared" &&
-                            scenario.framingRequest
-                        ) {
-                            const handoff = await inspect();
-                            const fixed = handoff.framing;
-                            const sources = handoff.preparation?.sourcesMission;
-                            assert(
-                                fixed &&
-                                    sources &&
-                                    handoff.run.fixedFramingRevisionId ===
-                                        fixed._id,
-                                "The actual Start must fix the agent-saved revision",
-                            );
-                            assert.equal(
-                                sources.coveragePolicy?.preset,
-                                scenario.coveragePreset,
-                            );
-                            for (const question of fixed.content.questions)
-                                assert.equal(
-                                    sources.needs.find((need) =>
-                                        need.questionIds.includes(question.id),
-                                    )?.information,
-                                    question.text,
+                                    await page
+                                        .getByRole("button", {
+                                            name: "Ask AI",
+                                            exact: true,
+                                        })
+                                        .click();
+                                await expect(
+                                    page.getByRole("textbox"),
+                                ).toBeVisible({
+                                    timeout:
+                                        TOOLING_POLICY.browserInteractionTimeoutMs,
+                                });
+                                await page.getByRole("textbox").fill(step.text);
+                                await page
+                                    .getByRole("button", {
+                                        name: /Send (message|refinement)/,
+                                    })
+                                    .click();
+                            } else {
+                                await admitted.mutation(
+                                    api.execution.conversations.submit,
+                                    {
+                                        runId: c.runId,
+                                        requestKey: requestKey(),
+                                        text: step.text,
+                                        delivery: "queue",
+                                    },
                                 );
-                            assert(
-                                sources.needs.some(
-                                    (need) =>
-                                        need.commonContext &&
-                                        need.information.includes(
-                                            fixed.content.scope,
-                                        ),
-                                ),
-                            );
-                            save(directory, "actual-start-handoff", {
-                                fixed,
-                                coveragePolicy: sources.coveragePolicy,
-                                needs: sources.needs,
-                                mission: handoff.sourcesMission,
+                            }
+                            await expect
+                                .poll(
+                                    async () =>
+                                        (await inspect()).lastMessage?._id,
+                                    {
+                                        timeout:
+                                            TOOLING_POLICY.browserInteractionTimeoutMs,
+                                    },
+                                )
+                                .not.toBe(previous);
+                            if (step.wait !== "started") {
+                                assert(
+                                    expectedFault !== "concurrent_edit",
+                                    "Concurrent edit requires a started turn before the configured framing edit",
+                                );
+                                await wait("conversation_settled");
+                            } else {
+                                await expect
+                                    .poll(
+                                        async () =>
+                                            !!(await inspect()).conversation
+                                                ?.activeTurnId,
+                                        {
+                                            timeout:
+                                                TOOLING_POLICY.browserInteractionTimeoutMs,
+                                        },
+                                    )
+                                    .toBe(true);
+                                if (expectedFault === "concurrent_edit")
+                                    await expect
+                                        .poll(
+                                            () =>
+                                                existsSync(
+                                                    join(
+                                                        root,
+                                                        `gate-${controlKey}.json`,
+                                                    ),
+                                                ),
+                                            {
+                                                timeout:
+                                                    TOOLING_POLICY.gateObservationTimeoutMs,
+                                            },
+                                        )
+                                        .toBe(true);
+                            }
+                            break;
+                        }
+                        case "start_research":
+                            if (page)
+                                await page
+                                    .getByRole("button", {
+                                        name: "Start research",
+                                        exact: true,
+                                    })
+                                    .click();
+                            else {
+                                const framing = (await inspect()).framing;
+                                assert(
+                                    framing,
+                                    "Current framing required before research start",
+                                );
+                                await admitted.mutation(
+                                    api.framing.startResearch,
+                                    {
+                                        runId: c.runId,
+                                        expectedRevision: framing.revision,
+                                        requestKey: requestKey(),
+                                    },
+                                );
+                            }
+                            break;
+                        case "pause_research":
+                            if (page)
+                                await page
+                                    .getByRole("button", {
+                                        name: "Pause research",
+                                        exact: true,
+                                    })
+                                    .click();
+                            else
+                                await admitted.mutation(
+                                    api.execution.researchControl.pause,
+                                    {
+                                        runId: c.runId,
+                                        expectedGeneration: (await inspect())
+                                            .run.executionGeneration,
+                                    },
+                                );
+                            await wait("paused");
+                            break;
+                        case "resume_research":
+                            if (page)
+                                await page
+                                    .getByRole("button", {
+                                        name: "Resume research",
+                                        exact: true,
+                                    })
+                                    .click();
+                            else
+                                await admitted.mutation(
+                                    api.execution.researchControl.resume,
+                                    {
+                                        runId: c.runId,
+                                        expectedGeneration: (await inspect())
+                                            .run.executionGeneration,
+                                    },
+                                );
+                            break;
+                        case "stop_response":
+                            if (page)
+                                await page
+                                    .getByRole("button", {
+                                        name: "Stop generation",
+                                        exact: true,
+                                    })
+                                    .click();
+                            else {
+                                const turnId = (await inspect()).conversation
+                                    ?.activeTurnId;
+                                assert(
+                                    turnId,
+                                    "Active turn required before stopping a response",
+                                );
+                                await admitted.mutation(
+                                    api.execution.conversations.stopResponse,
+                                    { runId: c.runId, turnId },
+                                );
+                            }
+                            if (held) {
+                                await client.mutation(
+                                    ref(
+                                        internal.execution.piControl
+                                            .holdPublication,
+                                    ),
+                                    { held: false },
+                                );
+                                held = false;
+                            }
+                            release();
+                            await wait("conversation_settled");
+                            break;
+                        case "reload":
+                            assert(page, "Reload requires browser execution");
+                            await page.reload();
+                            await expect(
+                                page
+                                    .getByRole("textbox")
+                                    .or(
+                                        page.getByRole("button", {
+                                            name: "Ask AI",
+                                            exact: true,
+                                        }),
+                                    )
+                                    .first(),
+                            ).toBeVisible({
+                                timeout:
+                                    TOOLING_POLICY.browserInteractionTimeoutMs,
                             });
-                        }
-                        break;
-                    case "fault": {
-                        if (step.recipe === "stop_before_generation") {
-                            assert(!held, "Publication gate already held");
-                            await client.mutation(
-                                ref(
-                                    internal.execution.piControl
-                                        .holdPublication,
-                                ),
-                                { held: true },
-                            );
-                            held = true;
-                        } else {
+                            break;
+                        case "navigate":
                             assert(
-                                manifest.mode === "live" &&
-                                    manifest.capability === "workbench",
-                                "Transport faults require live Workbench relay",
+                                page,
+                                "Navigation requires browser execution",
                             );
-                            assert(
-                                !armed,
-                                "Consume the preceding fault before arming another",
-                            );
-                            armed = step.recipe;
+                            if (step.target === "dossier_list")
+                                await page.goto(`${web}/workspace/dossiers`);
+                            else if (step.target === "dossier")
+                                await page.goto(`${web}/workspace/${c.runId}`);
+                            else
+                                await page.goto(
+                                    `${web}/workspace/${c.runId}?section=progress&detail=${step.target}`,
+                                );
+                            break;
+                        case "viewport":
+                            assert(page, "Viewport requires browser execution");
+                            await page.setViewportSize({
+                                width: step.width,
+                                height: step.height,
+                            });
+                            break;
+                        case "wait_for":
+                            if (step.state === "conversation_settled")
+                                release();
+                            await wait(step.state);
+                            if (
+                                step.state === "sources_prepared" &&
+                                scenario.framingRequest
+                            ) {
+                                const handoff = await inspect();
+                                const fixed = handoff.framing;
+                                const sources =
+                                    handoff.preparation?.sourcesMission;
+                                assert(
+                                    fixed &&
+                                        sources &&
+                                        handoff.run.fixedFramingRevisionId ===
+                                            fixed._id,
+                                    "The actual Start must fix the agent-saved revision",
+                                );
+                                assert.equal(
+                                    sources.coveragePolicy?.preset,
+                                    scenario.coveragePreset,
+                                );
+                                for (const question of fixed.content.questions)
+                                    assert.equal(
+                                        sources.needs.find((need) =>
+                                            need.questionIds.includes(
+                                                question.id,
+                                            ),
+                                        )?.information,
+                                        question.text,
+                                    );
+                                assert(
+                                    sources.needs.some(
+                                        (need) =>
+                                            need.commonContext &&
+                                            need.information.includes(
+                                                fixed.content.scope,
+                                            ),
+                                    ),
+                                );
+                                save(directory, "actual-start-handoff", {
+                                    fixed,
+                                    coveragePolicy: sources.coveragePolicy,
+                                    needs: sources.needs,
+                                    mission: handoff.sourcesMission,
+                                });
+                            }
+                            break;
+                        case "fault": {
+                            if (step.recipe === "stop_before_generation") {
+                                assert(!held, "Publication gate already held");
+                                await client.mutation(
+                                    ref(
+                                        internal.execution.piControl
+                                            .holdPublication,
+                                    ),
+                                    { held: true },
+                                );
+                                held = true;
+                            } else {
+                                assert(
+                                    manifest.mode === "live" &&
+                                        manifest.capability === "workbench",
+                                    "Transport faults require live Workbench relay",
+                                );
+                                assert(
+                                    !armed,
+                                    "Consume the preceding fault before arming another",
+                                );
+                                armed = step.recipe;
+                            }
+                            break;
                         }
-                        break;
                     }
+                    save(directory, `${step.id}-after`, await inspect());
+                    if (page)
+                        await page.screenshot({
+                            path: join(directory, `${step.id}.png`),
+                            fullPage: true,
+                        });
                 }
-                save(directory, `${step.id}-after`, await inspect());
+                assert(!armed && !held, "Unconsumed fault recipe");
+                release();
+                await wait("conversation_settled");
+                if (requiredFaults.length) {
+                    const ledger = readFileSync(
+                        join(root, "ledger.jsonl"),
+                        "utf8",
+                    )
+                        .trim()
+                        .split("\n")
+                        .map((line) => JSON.parse(line));
+                    for (const required of requiredFaults)
+                        assert(
+                            ledger.some(
+                                (e) =>
+                                    e.event === required.event &&
+                                    e.scenario === required.key,
+                            ),
+                            "Declared transport fault did not fire",
+                        );
+                }
                 if (page)
-                    await page.screenshot({
-                        path: join(directory, `${step.id}.png`),
-                        fullPage: true,
+                    save(directory, "published-ui", {
+                        text: await page.locator("body").innerText(),
                     });
-            }
-            assert(!armed && !held, "Unconsumed fault recipe");
-            release();
-            await wait("conversation_settled");
-            if (requiredFaults.length) {
-                const ledger = readFileSync(join(root, "ledger.jsonl"), "utf8")
-                    .trim()
-                    .split("\n")
-                    .map((line) => JSON.parse(line));
-                for (const required of requiredFaults)
-                    assert(
-                        ledger.some(
-                            (e) =>
-                                e.event === required.event &&
-                                e.scenario === required.key,
-                        ),
-                        "Declared transport fault did not fire",
-                    );
-            }
-            if (page)
-                save(directory, "published-ui", {
-                    text: await page.locator("body").innerText(),
-                });
-            else save(directory, "published-backend", await inspect());
-            assert.equal(
-                errors.length - errorStart,
-                0,
-                "Browser errors retained in scenario failure",
-            );
-            journal.finish(c.id, {
-                executionIntegrity: "passed",
-                semanticTask: "not_assessed",
-            });
-        } catch (error) {
-            save(directory, "failure", {
-                step: activeStep,
-                errors: errors.slice(errorStart),
-                reason:
-                    error instanceof Error ? error.message : "Scenario failed",
-            });
-            if (page)
-                await page.screenshot({
-                    path: join(directory, "failure.png"),
-                    fullPage: true,
-                });
-            failed = true;
-        } finally {
-            release();
-            if (held)
-                await client.mutation(
-                    ref(internal.execution.piControl.holdPublication),
-                    { held: false },
+                else save(directory, "published-backend", await inspect());
+                assert.equal(
+                    errors.length - errorStart,
+                    0,
+                    "Browser errors retained in scenario failure",
                 );
-        }
-        if (failed) {
-            if (!page) {
+                journal.finish(c.id, {
+                    executionIntegrity: "passed",
+                    semanticTask: "not_assessed",
+                });
+            } catch (error) {
+                failed = true;
                 journal.finish(c.id, {
                     executionIntegrity: "failed",
                     semanticTask: "not_assessed",
                 });
-                throw new Error(
-                    "Backend evaluation stopped at its first failing scenario; evidence retained",
-                );
+                failedScenarios.push(c.id);
+                if (latestSnapshot)
+                    save(directory, "latest-snapshot", latestSnapshot);
+                save(directory, "failure", {
+                    step: activeStep,
+                    errors: errors.slice(errorStart),
+                    reason:
+                        error instanceof Error
+                            ? error.message
+                            : "Scenario failed",
+                });
+                if (page)
+                    await page.screenshot({
+                        path: join(directory, "failure.png"),
+                        fullPage: true,
+                    });
+            } finally {
+                release();
+                if (held)
+                    await client.mutation(
+                        ref(internal.execution.piControl.holdPublication),
+                        { held: false },
+                    );
             }
-            assert(
-                !interrupted(),
-                "Campaign interrupted after scenario failure",
-            );
-            const [state, publication] = await Promise.all([
-                inspect(),
-                client.query(
-                    ref(internal.execution.piControl.publicationStatus),
-                    {},
-                ),
-            ]);
-            const accounting = state.accounting;
-            assert(
-                settled(state) &&
-                    state.run.executionStatus === "idle" &&
-                    (!state.sourcesMission ||
-                        [
-                            "completed",
-                            "blocked",
-                            "failed",
-                            "cancelled",
-                        ].includes(state.sourcesMission.status)) &&
-                    accounting &&
-                    !accounting.pending &&
-                    !accounting.unknown &&
-                    !accounting.overruns &&
-                    !publication.held &&
-                    !publication.hasActiveWorkers,
-                "Failed scenario is not quiet and reconciled; independent continuation refused",
-            );
-            save(directory, "independent-continuation", {
-                executionStatus: state.run.executionStatus,
-                sourcesStatus: state.sourcesMission?.status ?? null,
-                pending: accounting.pending,
-                unknown: accounting.unknown,
-                overruns: accounting.overruns,
-                publication,
-            });
-            journal.finish(c.id, {
-                executionIntegrity: "failed",
-                semanticTask: "not_assessed",
-            });
-            failedScenarios.push(c.id);
+            if (failed) {
+                assert(
+                    !interrupted(),
+                    "Campaign interrupted after scenario failure",
+                );
+                const [state, publication, continuation] = await Promise.all([
+                    inspect(),
+                    client.query(
+                        ref(internal.execution.piControl.publicationStatus),
+                        {},
+                    ),
+                    client.query(
+                        ref(
+                            internal.execution.fixtures
+                                .qualificationContinuation,
+                        ),
+                        { runId: c.runId, fixtureKey: c.fixtureKey },
+                    ),
+                ]);
+                const accounting = continuation.accounting;
+                const relay = readRelayContinuation(root);
+                assert(
+                    settled(state) &&
+                        state.run.executionStatus === "idle" &&
+                        (!state.sourcesMission ||
+                            [
+                                "completed",
+                                "blocked",
+                                "failed",
+                                "cancelled",
+                            ].includes(state.sourcesMission.status)) &&
+                        accounting &&
+                        continuation.accountingSettled &&
+                        continuation.authorized &&
+                        !continuation.hasEngagedEffects &&
+                        relay.safe &&
+                        manifest.expiresAt > Date.now() &&
+                        (manifest.mode !== "live" ||
+                            (accounting.usage &&
+                                accounting.usage.model <
+                                    manifest.perLot.model &&
+                                accounting.usage.costUsd <
+                                    manifest.perLot.costUsd)) &&
+                        !publication.held &&
+                        !publication.hasActiveWorkers,
+                    "Failed scenario is not quiet and reconciled; independent continuation refused",
+                );
+                save(directory, "independent-continuation", {
+                    executionStatus: state.run.executionStatus,
+                    sourcesStatus: state.sourcesMission?.status ?? null,
+                    pending: accounting.pending,
+                    unknown: accounting.unknown,
+                    overruns: accounting.overruns,
+                    conflicts: accounting.conflicts ?? 0,
+                    relay,
+                    publication,
+                });
+            }
         }
+    } catch (error) {
+        journal.leaveUnrun(
+            prepared(root).cases.map((c) => c.id),
+            "independent_continuation_refused",
+        );
+        throw error;
     }
     await inspectCampaignScenarios(client, root);
     if (manifest.mode === "deterministic")

@@ -4,7 +4,10 @@ import { completeSources } from "@convex/domain/sources";
 import { execute } from "@convex/sourcesMissionActions";
 import { type FunctionArgs, getFunctionName } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    dispatchSourcesOperation,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 
 vi.mock("node:dns/promises", async (importOriginal) => ({
     ...(await importOriginal<typeof import("node:dns/promises")>()),
@@ -63,7 +66,7 @@ test("confirmed discovery survives a committed settlement whose acknowledgement 
             requestId,
             expectedGeneration: 4,
         }),
-    ).toMatchObject({ kind: "execute" });
+    ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
     const registered = execute as typeof execute & {
         _handler(
             ctx: ActionCtx,
@@ -98,7 +101,10 @@ test("confirmed discovery survives a committed settlement whose acknowledgement 
                 { requestId, expectedGeneration: 4 },
             ),
         ),
-    ).rejects.toThrow("simulated lost settlement acknowledgement");
+    ).resolves.toMatchObject({
+        kind: "unavailable",
+        code: "operation_outcome_unknown",
+    });
     const calls = await f.t.run((ctx) =>
         ctx.db
             .query("providerCalls")
@@ -117,7 +123,10 @@ test("confirmed discovery survives a committed settlement whose acknowledgement 
         await f.t.action((ctx) =>
             registered._handler(ctx, { requestId, expectedGeneration: 4 }),
         ),
-    ).toMatchObject({ kind: "unavailable", code: "operation_outcome_unknown" });
+    ).toBeNull();
+    expect((await f.t.run((ctx) => ctx.db.get(requestId)))?.status).toBe(
+        "unknown",
+    );
     expect(fetch).toHaveBeenCalledTimes(1);
     const body = fetch.mock.calls[0]?.[1].body;
     assert(typeof body === "string");
@@ -167,7 +176,7 @@ test("mixed discovery retains usable candidates and partial provider status", as
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -239,7 +248,7 @@ test.each([
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -313,7 +322,7 @@ test("a confirmed discovery reply after cancellation settles facts without adopt
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -382,7 +391,7 @@ test("full candidate capacity refuses discovery before provider work and does no
             },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -435,7 +444,7 @@ test("discovery retains provider-declared cost and search telemetry", async () =
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),

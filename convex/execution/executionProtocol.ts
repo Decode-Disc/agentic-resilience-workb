@@ -1,6 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionCtx, QueryCtx } from "@convex/_generated/server";
 import type { ModelRoute } from "@convex/integrations/modelRouting";
+import type { FunctionReference } from "convex/server";
 import {
     type Infer,
     type PropertyValidators,
@@ -108,6 +109,7 @@ export type AgentOperationDefinition = AgentOperationContract &
         | {
               effectKind: "read";
               childMission?: never;
+              scheduledAction?: never;
               execute(
                   ctx: Pick<ActionCtx, "runQuery">,
                   args: OperationExecuteArgs,
@@ -122,17 +124,32 @@ export type AgentOperationDefinition = AgentOperationContract &
         | {
               effectKind: "atomic_effect";
               childMission?: never;
+              scheduledAction?: never;
               execute: EffectExecutor;
           }
-        | {
+        | ({
               effectKind: "durable_effect";
               /** Only advisory observations may finish unavailable after an uncertain call; no effect is retried. */
               unknownOutcome?: { kind: "unavailable"; code: string };
               childMission?: never;
-              execute: EffectExecutor;
-          }
+          } & (
+              | { execute: EffectExecutor; scheduledAction?: never }
+              | {
+                    execute?: never;
+                    scheduledAction: FunctionReference<
+                        "action",
+                        "internal",
+                        {
+                            requestId: Id<"agentOperationRequests">;
+                            expectedGeneration: number;
+                        },
+                        unknown
+                    >;
+                }
+          ))
         | {
               effectKind: "delegation";
+              scheduledAction?: never;
               execute: EffectExecutor;
               childMission(request: Doc<"agentOperationRequests">): {
                   definitionId: Doc<"agentMissions">["definitionId"];
@@ -141,6 +158,16 @@ export type AgentOperationDefinition = AgentOperationContract &
               };
           }
     );
+
+/** Waiting is executable only after the scheduler's worker has claimed its retained job. */
+export function operationHasStarted(request: Doc<"agentOperationRequests">) {
+    return (
+        request.status === "running" ||
+        (request.status === "waiting" &&
+            request.scheduledJobId !== undefined &&
+            request.scheduledStartedAt !== undefined)
+    );
+}
 
 export const agentBackendValidator = v.object({
     id: v.string(),

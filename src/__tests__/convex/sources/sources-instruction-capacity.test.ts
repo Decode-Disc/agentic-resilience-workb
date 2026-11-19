@@ -7,8 +7,10 @@ import { extractObservedDestinations } from "@convex/integrations/evidenceNormal
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import {
+    dispatchSourcesOperation,
     recordDocumentaryRead,
     seedObservedSources,
+    startSourcesOperation,
 } from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
@@ -254,13 +256,10 @@ test.each([
                 },
             },
         );
-        const outcome = await f.t.action(
-            internal.execution.operations.dispatch,
-            {
-                requestId,
-                expectedGeneration: 4,
-            },
-        );
+        const outcome = await dispatchSourcesOperation(f.t, {
+            requestId,
+            expectedGeneration: 4,
+        });
         if (large && outcome.kind !== "success") {
             expect(outcome).toMatchObject({
                 kind: "unavailable",
@@ -466,7 +465,7 @@ test("unavailable controls and later requests retain explicit outcomes within co
                 },
             },
         );
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         });
@@ -609,7 +608,7 @@ test.each([
             input,
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await startSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });

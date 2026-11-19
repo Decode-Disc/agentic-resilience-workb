@@ -7,6 +7,7 @@ import {
     directedWorkbenchDefinition,
     workbenchDefinition,
 } from "@convex/domain/workbenchAgent";
+import { getFunctionName } from "convex/server";
 import {
     type AgentDefinition,
     agentMethodInstructions,
@@ -39,7 +40,10 @@ export function assertOperationContract(
         !["read", "atomic_effect", "durable_effect", "delegation"].includes(
             operation.effectKind,
         ) ||
-        typeof operation.execute !== "function" ||
+        (operation.scheduledAction !== undefined
+            ? operation.effectKind !== "durable_effect" ||
+              operation.execute !== undefined
+            : typeof operation.execute !== "function") ||
         typeof operation.resultValidator?.safeParse !== "function" ||
         typeof operation.pin !== "function" ||
         typeof operation.identity !== "function" ||
@@ -50,6 +54,13 @@ export function assertOperationContract(
             (typeof operation.childMission === "function")
     )
         throw executionError("operation_contract_invalid");
+    if (operation.scheduledAction !== undefined) {
+        try {
+            getFunctionName(operation.scheduledAction);
+        } catch {
+            throw executionError("operation_contract_invalid");
+        }
+    }
     if (!closedResultObject(operationResultSchema(operation.resultValidator)))
         throw executionError("operation_contract_invalid");
 }

@@ -1,6 +1,7 @@
-import type { Id } from "@convex/_generated/dataModel";
-import type { FunctionReturnType } from "convex/server";
 import { api, internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { appendRetainedText } from "@convex/execution/retainedText";
+import type { FunctionReturnType } from "convex/server";
 import { expect, test } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
@@ -353,4 +354,37 @@ test("administrator pages the exact complete fragmented request with the same au
             paginationOpts: { numItems: 1, cursor: null },
         }),
     ).rejects.toThrow();
+});
+
+test("only an active administrator can read a committed open diagnostic prefix after worker loss", async () => {
+    const f = await journalFixture();
+    await f.t.run(async (ctx) => {
+        const textId = await appendRetainedText(
+            ctx,
+            `${f.invocationId}:visible`,
+            0,
+            "committed before crash",
+        );
+        await ctx.db.patch(f.invocationId, {
+            visibleOutput: { textId, complete: false },
+        });
+    });
+    const args = {
+        runId: f.runId,
+        invocationId: f.invocationId,
+        paginationOpts: { cursor: null, numItems: 1 },
+    };
+    const client = f.t.withIdentity({ subject: `${f.userId}|journal-test` });
+    await expect(
+        client.query(api.adminOperations.readInvocationVisibleOutput, args),
+    ).rejects.toThrow("Unauthorized");
+    await f.t.run((ctx) => ctx.db.patch(f.visitorId, { role: "admin" }));
+    const output = await client.query(
+        api.adminOperations.readInvocationVisibleOutput,
+        args,
+    );
+    expect(output?.capture).toMatchObject({ complete: false });
+    expect(output?.fragments.page).toEqual([
+        { index: 0, content: "committed before crash" },
+    ]);
 });

@@ -3,6 +3,7 @@ import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { modelOperationOutcome } from "@convex/execution/agentDefinition";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
+    dispatchSourcesOperation,
     recordDocumentaryRead,
     seedCapturedSources,
     seedObservedSources,
@@ -59,7 +60,7 @@ test.each([
                   cause: "diagnose-passage",
                   input,
               });
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -161,7 +162,7 @@ test.each([
                   cause: "diagnose",
                   input,
               });
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });

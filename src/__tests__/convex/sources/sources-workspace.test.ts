@@ -3,7 +3,11 @@ import { completeSources } from "@convex/domain/sources";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    dispatchSourcesOperation,
+    seedCapturedSources,
+    startSourcesOperation,
+} from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
 vi.mock("@convex/integrations/documentaryControl", () => ({
@@ -131,7 +135,7 @@ async function qualifyWithConflict(
             },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -340,7 +344,7 @@ test("coverage handoff freezes unfinished searches for Sources and Workbench", a
             },
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await startSourcesOperation(f.t, {
         requestId,
         expectedGeneration,
     });

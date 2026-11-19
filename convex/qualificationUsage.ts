@@ -33,6 +33,7 @@ const empty = () => ({
     pending: 0,
     unknown: 0,
     overruns: 0,
+    conflicts: 0,
 });
 export function qualificationReceiptUsage(call: Doc<"providerCalls">) {
     const value = empty();
@@ -51,6 +52,9 @@ export function qualificationReceiptUsage(call: Doc<"providerCalls">) {
     )
         value.usage.costUsd = call.reportedCost;
     value.pending = call.status === "started" ? 1 : 0;
+    if (call.status !== "started" && call.dispatchOutcome === "not_dispatched")
+        value.usage.costUsd = 0;
+    value.conflicts = call.billing?.state === "conflict" ? 1 : 0;
     value.unknown =
         call.status !== "started" && preparationFailureClass(call) === "unknown"
             ? 1
@@ -116,9 +120,20 @@ export async function updateQualificationUsage(
             pending: row.pending + next.pending - previous.pending,
             unknown: row.unknown + next.unknown - previous.unknown,
             overruns: row.overruns + next.overruns - previous.overruns,
+            conflicts:
+                row.conflicts === undefined
+                    ? undefined
+                    : row.conflicts + next.conflicts - previous.conflicts,
         });
     }
 }
+/** Missing legacy conflict counters preserve uncertainty until an explicit reconciliation. */
+export function qualificationUsageResolved(
+    row: Doc<"qualificationUsage"> | null,
+) {
+    return !!row && row.unknown === 0 && row.conflicts === 0;
+}
+
 /** Reservation, including an optional case cap, is atomic with the actual provider receipt. */
 export async function assertQualificationAllowance(
     ctx: MutationCtx,
@@ -178,7 +193,7 @@ export async function assertQualificationAllowance(
     ] as const) {
         const row = await readQualificationUsage(ctx, contextId, scopedRunId);
         if (!row) throw new Error("Qualification usage unavailable");
-        if (row.unknown)
+        if (!qualificationUsageResolved(row))
             throw sourcePreparationError("qualification_outcome_unresolved");
         const ceiling: Partial<CampaignLimits> = limits;
         if (

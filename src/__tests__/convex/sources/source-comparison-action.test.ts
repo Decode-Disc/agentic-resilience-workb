@@ -18,6 +18,7 @@ import {
     getFunctionName,
 } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
+import { streamingModelFetch } from "@/__tests__/setup/model-stream";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
@@ -105,7 +106,7 @@ test("stores a local not-run result when no comparable primary passage exists", 
         },
     );
     const request = vi.fn<typeof fetch>();
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
 
     const result = await t.action(
         internal.sourcePreparationActions.compareSource,
@@ -367,7 +368,7 @@ async function completedComparison() {
     const request = vi.fn<typeof fetch>(async () =>
         comparisonResponse(fixture.response),
     );
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const result = await fixture.t.action(
         internal.sourcePreparationActions.compareSource,
         {
@@ -450,7 +451,7 @@ test("the current action persists individual premises and an unresolved overall 
             ],
         }),
     );
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const args = { preparationId, sourceCaptureId, qualificationTaskId };
     const result = await t.action(
         internal.sourcePreparationActions.compareSource,
@@ -524,7 +525,7 @@ test("a current comparison reuses exact evidence without rebuilding its retrieva
     const request = vi.fn<typeof fetch>(async () =>
         comparisonResponse(response),
     );
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const first = await t.action(
         internal.sourcePreparationActions.compareSource,
         { preparationId, sourceCaptureId, qualificationTaskId },
@@ -918,7 +919,9 @@ test("a targeted supplement rechecks pinned earlier arguments without reopening 
     ).rejects.toThrow("source_outside_preparation");
     vi.stubGlobal(
         "fetch",
-        vi.fn<typeof fetch>(async () => comparisonResponse(response)),
+        streamingModelFetch(
+            vi.fn<typeof fetch>(async () => comparisonResponse(response)),
+        ),
     );
     const result = await t.action(
         internal.sourcePreparationActions.compareSource,
@@ -975,7 +978,7 @@ test.each([
     const request = vi.fn<typeof fetch>(async () =>
         comparisonResponse(response),
     );
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
 
     const result = await t.action(
         internal.sourcePreparationActions.compareSource,
@@ -1120,7 +1123,7 @@ test.each([
         });
         return comparisonResponse(response);
     });
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     expect(
         await t.action(internal.sourcePreparationActions.compareSource, {
             preparationId,
@@ -1161,7 +1164,7 @@ test("cancellation after a retryable provider failure prevents fallback", async 
             status: 503,
         });
     });
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     expect(
         await t.action(internal.sourcePreparationActions.compareSource, {
             preparationId,
@@ -1208,7 +1211,7 @@ test("comparison shares the dossier model allowance and reserves nothing when ex
     const request = vi.fn<typeof fetch>(async () =>
         comparisonResponse(response),
     );
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     expect(
         await t.action(internal.sourcePreparationActions.compareSource, {
             preparationId,
@@ -1271,7 +1274,7 @@ test("a manual target reuses an older same-dossier primary capture without readi
     const request = vi.fn<typeof fetch>(async () =>
         comparisonResponse(response),
     );
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     expect(
         await t.action(internal.sourcePreparationActions.compareSource, {
             preparationId,
@@ -1347,7 +1350,7 @@ test("versioned comparison delivers extra retrieved evidence to the provider, pe
             ],
         });
     });
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const args = { preparationId, sourceCaptureId, qualificationTaskId };
     const result = await t.action(
         internal.sourcePreparationActions.compareSource,
@@ -1424,7 +1427,7 @@ test.each([
                 status: 503,
             }),
     );
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     expect(
         await t.action(internal.sourcePreparationActions.compareSource, {
             preparationId,
@@ -1539,7 +1542,7 @@ test("an exact legacy comparison can be revalidated at the model limit without p
     const request = vi.fn<typeof fetch>(async () =>
         comparisonResponse(response),
     );
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const compared = await t.action(
         internal.sourcePreparationActions.compareSource,
         { preparationId, sourceCaptureId, qualificationTaskId },
@@ -1660,7 +1663,7 @@ test("keeps a conflicted contribution inspectable without dispatching a paid com
         });
     });
     const request = vi.fn<typeof fetch>();
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const result = await t.action(
         internal.sourcePreparationActions.compareSource,
         { preparationId, sourceCaptureId, qualificationTaskId },
@@ -1730,7 +1733,7 @@ test("a scoped conflict does not add retrieval queries to an independent compari
             ],
         }),
     );
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     await t.action(async (ctx) => {
         const queries = vi.spyOn(ctx, "runQuery");
         try {

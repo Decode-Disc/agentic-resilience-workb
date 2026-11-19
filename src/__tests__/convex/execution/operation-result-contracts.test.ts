@@ -19,7 +19,11 @@ import {
 import { v } from "convex/values";
 import { assert, expect, expectTypeOf, test } from "vitest";
 import { z } from "zod";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    dispatchSourcesOperation,
+    seedCapturedSources,
+    startSourcesOperation,
+} from "@/__tests__/setup/sources-mission";
 
 test("every registered operation declares its result schema", () => {
     for (const definition of registeredAgentDefinitions())
@@ -56,7 +60,7 @@ test("malformed documentary success stays observed but cannot be adopted or repl
         },
     });
     expect(
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId: id,
             expectedGeneration: 4,
         }),
@@ -73,7 +77,7 @@ test("malformed documentary success stays observed but cannot be adopted or repl
     expect(retained?.outcome).toEqual({ kind: "success", valueJson });
     expect(retained?.adoptionRefusalCode).toBe("operation_adoption_failed");
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId: id,
             expectedGeneration: 4,
         }),
@@ -100,7 +104,7 @@ test("native settlement replay preserves the adoption refusal and rechecks curre
         },
     );
     expect(
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -118,7 +122,7 @@ test("native settlement replay preserves the adoption refusal and rechecks curre
         await f.t.mutation(internal.execution.operations.recordResult, args),
     ).toEqual(refused);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -176,7 +180,7 @@ test.each([
                   missionId: f.missionId,
               });
     expect(
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -230,7 +234,7 @@ test.each([
             ),
         ).toEqual(refused);
         expect(
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchSourcesOperation(f.t, {
                 requestId,
                 expectedGeneration: 4,
             }),
@@ -291,7 +295,7 @@ test("acquisition returns the source and immutable capture consumed by the share
             needId: "common-context",
         },
     });
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchSourcesOperation(f.t, {
         requestId: id,
         expectedGeneration: 4,
     });
@@ -305,7 +309,7 @@ test("acquisition returns the source and immutable capture consumed by the share
     expect(value).not.toHaveProperty("sourceCaptureId");
     expect(value.contentHash).toBeTruthy();
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId: previousRead,
             expectedGeneration: 4,
         }),
@@ -320,10 +324,10 @@ test("acquisition returns the source and immutable capture consumed by the share
             passageOrder: 0,
         },
     });
-    const readOutcome = await f.t.action(
-        internal.execution.operations.dispatch,
-        { requestId: read, expectedGeneration: 4 },
-    );
+    const readOutcome = await dispatchSourcesOperation(f.t, {
+        requestId: read,
+        expectedGeneration: 4,
+    });
     assert(readOutcome.kind === "success");
     expect(JSON.parse(readOutcome.valueJson)).toMatchObject({
         sourceId: value.sourceId,
@@ -363,7 +367,7 @@ test("wrong-table input retains a field-level diagnostic and delivers it to Sour
     });
     const requestId = finished.requestIds[0];
     assert(requestId);
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -452,11 +456,11 @@ test("a result ID from another table cannot become an adopted documentary contro
         },
     });
     expect(
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId: id,
             expectedGeneration: 4,
         }),
-    ).toMatchObject({ kind: "execute" });
+    ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
     const valueJson = JSON.stringify({
         taskId: f.sourceId,
         control: { findings: [], coherence: true, limitations: [] },
@@ -508,7 +512,7 @@ test("nested invalid containers describe the declared type rather than the recei
     const id = result.requestIds[0];
     assert(id);
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId: id,
             expectedGeneration: 4,
         }),

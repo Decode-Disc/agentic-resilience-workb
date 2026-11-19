@@ -15,7 +15,10 @@ import {
 } from "./savedMaterialOperations";
 import { sourceMaterialReferenceValidator } from "./sourceRetrievalPolicy";
 export const savedMaterialOperationBehavior: Pick<
-    Extract<AgentOperationDefinition, { effectKind: "durable_effect" }>,
+    Extract<
+        AgentOperationDefinition,
+        { effectKind: "durable_effect"; execute: unknown }
+    >,
     | "nativeAuthority"
     | "effectKind"
     | "pin"

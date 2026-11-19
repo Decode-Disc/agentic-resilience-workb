@@ -532,6 +532,31 @@ export async function retainInvocationPayload(
         };
     }
     const { contentHash, code } = payload;
+    if (
+        part === "request" &&
+        payload.state === "complete" &&
+        contentHash &&
+        invocation.missionId &&
+        invocation.providerCallId &&
+        invocation.purpose !== "compaction"
+    ) {
+        const mission = await ctx.db.get(invocation.missionId);
+        const firstReceipt = mission?.firstProviderInput
+            ? await ctx.db.get(mission.firstProviderInput.providerCallId)
+            : null;
+        if (
+            mission &&
+            (!mission.firstProviderInput ||
+                firstReceipt?.dispatchOutcome === "not_dispatched")
+        )
+            await ctx.db.patch(mission._id, {
+                firstProviderInput: {
+                    invocationId: invocation._id,
+                    providerCallId: invocation.providerCallId,
+                    contentHash,
+                },
+            });
+    }
     const existing = await ctx.db
         .query("agentInvocationPayloads")
         .withIndex("by_invocation_and_part", (q) =>

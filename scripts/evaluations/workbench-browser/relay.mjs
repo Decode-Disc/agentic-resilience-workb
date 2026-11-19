@@ -17,12 +17,55 @@ import {
     QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
 } from "../../../convex/resourcePolicy.ts";
 
+/** One ledger fold at a case boundary; unknown external work never becomes idle by polling. */
+export function readRelayContinuation(root) {
+    const path = `${root}/ledger.jsonl`;
+    if (!existsSync(path)) return { safe: true, reason: null };
+    const entries = readFileSync(path, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map(JSON.parse);
+    const calls = new Map();
+    let unsafe = false;
+    for (const entry of entries) {
+        if (entry.event === "halt" || entry.event === "uncertain")
+            unsafe = true;
+        if (entry.event !== "dispatch" && entry.event !== "response") continue;
+        const call = calls.get(entry.call) ?? {
+            dispatched: false,
+            responses: 0,
+            cost: undefined,
+        };
+        if (entry.event === "dispatch") call.dispatched = true;
+        else {
+            call.responses++;
+            if (
+                entry.outcome !== "response_received" ||
+                entry.billing !== "reported" ||
+                !Number.isFinite(entry.cost) ||
+                entry.cost < 0 ||
+                (call.cost !== undefined && call.cost !== entry.cost)
+            )
+                unsafe = true;
+            call.cost ??= entry.cost;
+        }
+        calls.set(entry.call, call);
+    }
+    for (const call of calls.values())
+        if (call.dispatched && !call.responses) unsafe = true;
+    return {
+        safe: !unsafe,
+        reason: unsafe ? "relay_outcome_unresolved" : null,
+    };
+}
+
 /** Retains observable provider facts even when the consumer closes after the terminal SSE frame. */
 function sseFacts(body) {
     let usage, cost, generationId, provider;
     let terminal = false,
         done = false,
-        invalidFrame = false;
+        invalidFrame = false,
+        billingConflict = false;
     for (const raw of body.split("\n")) {
         const line = raw.trimEnd();
         if (line === "data: [DONE]") {
@@ -42,8 +85,11 @@ function sseFacts(body) {
             continue;
         }
         if (frame.usage) usage = frame.usage;
-        if (Number.isFinite(frame.usage?.cost) && frame.usage.cost >= 0)
-            cost = frame.usage.cost;
+        if (Number.isFinite(frame.usage?.cost) && frame.usage.cost >= 0) {
+            if (cost !== undefined && cost !== frame.usage.cost)
+                billingConflict = true;
+            cost ??= frame.usage.cost;
+        }
         if (
             Array.isArray(frame.choices) &&
             frame.choices.some(
@@ -62,6 +108,7 @@ function sseFacts(body) {
         terminal,
         done,
         invalidFrame,
+        billingConflict,
     };
 }
 
@@ -106,20 +153,56 @@ export function createQualificationRelay(
         reserved = prior
             .filter((r) => r.event === "dispatch")
             .reduce((s, r) => s + r.reserveUsd, 0),
-        cost = prior
-            .filter((r) => r.event === "response" || r.event === "uncertain")
-            .reduce((s, r) => s + (r.cost ?? 0), 0),
+        cost = 0,
         fatal;
     const knownFinal =
-        protocol.manifest?.costAccountingPolicy === "known_final_v1";
+        (protocol.manifest?.costAccountingPolicy ??
+            protocol.costAccountingPolicy) === "known_final_v1";
     let budgetedUsd = 0;
     const inFlightReservations = new Map();
+    const reservations = new Map();
+    const settledCosts = new Map();
+    const observedCosts = new Map();
+    const conflictedCalls = new Set();
     const account = (entry) => {
+        if (
+            (entry.event === "response" || entry.event === "uncertain") &&
+            Number.isFinite(entry.cost) &&
+            entry.cost >= 0
+        ) {
+            const previous = observedCosts.get(entry.call);
+            if (previous === undefined) {
+                observedCosts.set(entry.call, entry.cost);
+                cost += entry.cost;
+            }
+            if (
+                (previous !== undefined && previous !== entry.cost) ||
+                entry.billing === "conflict"
+            ) {
+                fatal = "Conflicting provider cost observations";
+                if (
+                    !conflictedCalls.has(entry.call) &&
+                    settledCosts.has(entry.call)
+                ) {
+                    budgetedUsd +=
+                        reservations.get(entry.call) -
+                        settledCosts.get(entry.call);
+                    inFlightReservations.set(
+                        entry.call,
+                        reservations.get(entry.call),
+                    );
+                }
+                conflictedCalls.add(entry.call);
+            }
+        }
+
         if (entry.event === "dispatch") {
+            reservations.set(entry.call, entry.reserveUsd);
             inFlightReservations.set(entry.call, entry.reserveUsd);
             budgetedUsd += entry.reserveUsd;
         } else if (
             knownFinal &&
+            !conflictedCalls.has(entry.call) &&
             entry.event === "response" &&
             entry.outcome === "response_received" &&
             entry.billing === "reported" &&
@@ -128,6 +211,7 @@ export function createQualificationRelay(
         ) {
             const reservation = inFlightReservations.get(entry.call);
             if (reservation === undefined) return;
+            settledCosts.set(entry.call, entry.cost);
             inFlightReservations.delete(entry.call);
             budgetedUsd += entry.cost - reservation;
         }
@@ -145,7 +229,8 @@ export function createQualificationRelay(
                 ),
         )
     )
-        fatal = "Prior unresolved dispatch or halt; no restart retry permitted";
+        fatal ??=
+            "Prior unresolved dispatch or halt; no restart retry permitted";
     const gated = new Set(
             prior
                 .filter((e) => e.event === "gate_armed")
@@ -168,6 +253,7 @@ export function createQualificationRelay(
     const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     return http.createServer(async (req, res) => {
         let dispatched = false,
+            correlation,
             call,
             control,
             httpStatus,
@@ -187,6 +273,23 @@ export function createQualificationRelay(
                 input.push(part);
             }
             const text = Buffer.concat(input).toString("utf8");
+            if (req.headers["x-workbench-relay-dispatch"]) {
+                const supplied = JSON.parse(
+                    req.headers["x-workbench-relay-dispatch"],
+                );
+                if (
+                    typeof supplied?.invocationId === "string" &&
+                    Number.isSafeInteger(supplied.generation) &&
+                    supplied.generation >= 0 &&
+                    supplied.bodyHash === digest(text)
+                )
+                    correlation = {
+                        invocationId: supplied.invocationId,
+                        generation: supplied.generation,
+                        bodyHash: supplied.bodyHash,
+                    };
+                else throw new Error("Invalid relay request correlation");
+            }
             control = JSON.parse(readFileSync(`${root}/control.json`, "utf8"));
             if (fatal) throw new Error(fatal);
             if (
@@ -278,6 +381,18 @@ export function createQualificationRelay(
                     throw new Error("Invalid prepared relay capabilities");
                 route = prepared;
             }
+            const policy =
+                protocol.manifest?.costAccountingPolicy ??
+                protocol.costAccountingPolicy;
+            if (
+                policy !== "known_final_v1" ||
+                route.costAccountingPolicy !== policy ||
+                (protocol.costAccountingPolicy !== undefined &&
+                    protocol.costAccountingPolicy !== policy)
+            )
+                throw new Error(
+                    "Explicit matching cost accounting policy required",
+                );
             const { contextWindow, maxTokens } = route.descriptor;
             const constraints = states[0].constraints;
             if (constraints?.resourcePolicy !== RESOURCE_POLICY_VERSION)
@@ -483,8 +598,13 @@ export function createQualificationRelay(
                 done,
                 invalidFrame,
                 cost: reportedCost,
+                billingConflict,
             } = sseFacts(response.ok ? body : "");
-            if (reportedCost !== undefined) cost += reportedCost;
+            if (billingConflict) {
+                fatal = "Conflicting provider cost observations";
+                event({ event: "halt", call, reason: fatal });
+            }
+
             const retryable =
                 [408, 429].includes(response.status) || response.status >= 500;
             const retryAfter = response.headers.get("retry-after");
@@ -502,7 +622,11 @@ export function createQualificationRelay(
                 status: response.status,
                 usage,
                 cost: reportedCost,
-                billing: reportedCost === undefined ? "unknown" : "reported",
+                billing: billingConflict
+                    ? "conflict"
+                    : reportedCost === undefined
+                      ? "unknown"
+                      : "reported",
                 outcome: response.ok
                     ? terminal && done && !invalidFrame
                         ? "response_received"
@@ -618,8 +742,6 @@ export function createQualificationRelay(
                         ? readFileSync(partialPath, "utf8")
                         : "",
                 );
-                if (!responseRecorded && facts.cost !== undefined)
-                    cost += facts.cost;
                 if (
                     !responseRecorded &&
                     abort.signal.aborted &&
@@ -638,8 +760,11 @@ export function createQualificationRelay(
                         cost: facts.cost,
                         generationId: facts.generationId,
                         provider: facts.provider,
-                        billing:
-                            facts.cost === undefined ? "unknown" : "reported",
+                        billing: facts.billingConflict
+                            ? "conflict"
+                            : facts.cost === undefined
+                              ? "unknown"
+                              : "reported",
                         outcome: "response_received",
                         transport: "closed_after_terminal",
                         elapsedMs: Date.now() - startedAt,
@@ -655,13 +780,18 @@ export function createQualificationRelay(
                                   cost: facts.cost,
                                   generationId: facts.generationId,
                                   provider: facts.provider,
-                                  billing:
-                                      facts.cost === undefined
-                                          ? "unknown"
-                                          : "reported",
+                                  billing: facts.billingConflict
+                                      ? "conflict"
+                                      : facts.cost === undefined
+                                        ? "unknown"
+                                        : "reported",
                               }
                             : {}),
                     });
+                }
+                if (facts.billingConflict) {
+                    fatal = "Conflicting reported charges for one dispatch";
+                    event({ event: "halt", call, reason: fatal });
                 }
                 const reserve = prior.find(
                     (entry) =>
@@ -678,6 +808,7 @@ export function createQualificationRelay(
             } else
                 event({
                     event: "refused_before_dispatch",
+                    ...(correlation ? { correlation } : {}),
                     reason,
                     scenario: control?.scenario,
                 });
@@ -691,7 +822,15 @@ export function createQualificationRelay(
             if (res.headersSent) {
                 res.destroy();
             } else if (!res.destroyed) {
-                res.writeHead(400, { "content-type": "application/json" });
+                res.writeHead(400, {
+                    "content-type": "application/json",
+                    ...(!dispatched && correlation
+                        ? {
+                              "x-workbench-relay-not-dispatched":
+                                  JSON.stringify(correlation),
+                          }
+                        : {}),
+                });
                 res.end(JSON.stringify({ error: { message: reason } }));
             }
         }

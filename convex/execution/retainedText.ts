@@ -21,6 +21,138 @@ export const textFragmentValidator = v.object({
     content: v.string(),
 });
 
+/** Ordered append identity is independent of immutable packed-fragment layout. */
+export async function appendRetainedText(
+    ctx: MutationCtx,
+    key: string,
+    sequence: number,
+    content: string,
+) {
+    if (
+        !Number.isSafeInteger(sequence) ||
+        sequence < 0 ||
+        content.length > TEXT_FRAGMENT_CHARACTERS
+    )
+        throw executionError("retained_text_invalid");
+    let text = await ctx.db
+        .query("retainedTexts")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .unique();
+    const hash = sha256Hex(content);
+    if (text && !text.stream) throw executionError("retained_text_conflict");
+    if (
+        text?.stream &&
+        sequence === text.stream.nextSequence - 1 &&
+        text.stream.lastAppendHash === hash
+    )
+        return text._id;
+    if ((text?.stream?.nextSequence ?? 0) !== sequence || text?.stream?.sealed)
+        throw executionError("retained_text_sequence");
+    const textId =
+        text?._id ??
+        (await ctx.db.insert("retainedTexts", {
+            key,
+            contentHash: sha256Hex(""),
+            sizeBytes: 0,
+            characters: 0,
+            fragmentHashes: [],
+            received: 0,
+            receivedBytes: 0,
+            receivedCharacters: 0,
+            fragmentEnds: [],
+            stream: { sealed: false, nextSequence: 0, fragments: 0, tail: "" },
+        }));
+    text ??= await ctx.db.get(textId);
+    if (!text?.stream) throw executionError("retained_text_invalid");
+    let tail = text.stream.tail + content;
+    let fragments = text.stream.fragments;
+    let checkpoint = text.checkpoint;
+    while (tail.length >= TEXT_FRAGMENT_CHARACTERS) {
+        let end = TEXT_FRAGMENT_CHARACTERS;
+        const last = tail.charCodeAt(end - 1);
+        if (last >= 0xd800 && last <= 0xdbff) end--;
+        const fragment = tail.slice(0, end);
+        await ctx.db.insert("retainedTextFragments", {
+            textId,
+            index: fragments++,
+            content: fragment,
+        });
+        checkpoint = advanceSha256(
+            checkpoint,
+            new TextEncoder().encode(fragment),
+        );
+        tail = tail.slice(end);
+    }
+    const encoder = new TextEncoder();
+    await ctx.db.patch(textId, {
+        receivedBytes:
+            text.receivedBytes +
+            encoder.encode(text.stream.tail + content).length -
+            encoder.encode(text.stream.tail).length,
+        receivedCharacters: text.receivedCharacters + content.length,
+        checkpoint,
+        stream: {
+            sealed: false,
+            nextSequence: sequence + 1,
+            lastAppendHash: hash,
+            fragments,
+            tail,
+        },
+    });
+    return textId;
+}
+
+/** Seal builds the final immutable manifest once, after the producer has stopped. */
+export async function sealRetainedText(
+    ctx: MutationCtx,
+    textId: Id<"retainedTexts">,
+) {
+    const text = await ctx.db.get(textId);
+    if (!text?.stream) throw executionError("retained_text_invalid");
+    if (text.stream.sealed) return text;
+    const fragments = (
+        await ctx.db
+            .query("retainedTextFragments")
+            .withIndex("by_text_and_index", (q) => q.eq("textId", textId))
+            .take(text.stream.fragments + 1)
+    ).map(({ index, content }) => ({ index, content }));
+    if (fragments.length !== text.stream.fragments)
+        throw executionError("retained_text_incomplete");
+    let checkpoint = text.checkpoint;
+    if (text.stream.tail || !fragments.length) {
+        const content = text.stream.tail;
+        await ctx.db.insert("retainedTextFragments", {
+            textId,
+            index: fragments.length,
+            content,
+        });
+        checkpoint = advanceSha256(
+            checkpoint,
+            new TextEncoder().encode(content),
+        );
+        fragments.push({ index: fragments.length, content });
+    }
+    let end = 0;
+    const patch = {
+        contentHash: sha256CheckpointHex(
+            checkpoint ?? advanceSha256(undefined, new Uint8Array()),
+        ),
+        sizeBytes: text.receivedBytes,
+        characters: text.receivedCharacters,
+        fragmentHashes: fragments.map((fragment) =>
+            sha256Hex(fragment.content),
+        ),
+        fragmentEnds: fragments.map((fragment) => {
+            end += fragment.content.length;
+            return end;
+        }),
+        received: fragments.length,
+        stream: { ...text.stream, sealed: true, tail: "" },
+    };
+    await ctx.db.patch(textId, patch);
+    return { ...text, ...patch };
+}
+
 /** Splits UTF-16 without cutting a surrogate pair; hashes describe the exact UTF-8 bytes. */
 export function retainedTextParts(content: string) {
     const parts: string[] = [];
@@ -79,6 +211,7 @@ export async function stageRetainedText(
         .query("retainedTexts")
         .withIndex("by_key", (q) => q.eq("key", key))
         .unique();
+    if (existing?.stream) throw executionError("retained_text_conflict");
     if (
         existing &&
         (existing.contentHash !== manifest.contentHash ||
@@ -152,6 +285,7 @@ export async function completeRetainedText(
     const text = await ctx.db.get(textId);
     if (
         !text ||
+        (text.stream && !text.stream.sealed) ||
         text.received !== text.fragmentHashes.length ||
         text.receivedBytes !== text.sizeBytes ||
         text.receivedCharacters !== text.characters
@@ -183,6 +317,30 @@ export async function retainedTextFragment(
 }
 
 /** Content-bound cursors cannot skip a missing fragment or cross logical records. */
+/** Protected diagnostic snapshots may expose a committed open prefix; immutable readers still require sealing. */
+export async function retainedDiagnosticText(
+    ctx: QueryCtx,
+    textId: Id<"retainedTexts">,
+    key: string,
+) {
+    const text = await ctx.db.get(textId);
+    if (!text || text.key !== key)
+        throw executionError("retained_text_conflict");
+    if (!text.stream || text.stream.sealed)
+        return completeRetainedText(ctx, textId);
+    return {
+        ...text,
+        contentHash: sha256CheckpointHex(
+            advanceSha256(
+                text.checkpoint,
+                new TextEncoder().encode(text.stream.tail),
+            ),
+        ),
+        sizeBytes: text.receivedBytes,
+        characters: text.receivedCharacters,
+    };
+}
+
 export async function retainedTextPage(
     ctx: QueryCtx,
     text: Doc<"retainedTexts">,
@@ -194,6 +352,10 @@ export async function retainedTextPage(
         options.numItems > 4
     )
         throw new Error("Snapshot page too large");
+    const open = text.stream && !text.stream.sealed ? text.stream : undefined;
+    const count = open
+        ? open.fragments + (open.tail || !open.fragments ? 1 : 0)
+        : text.fragmentHashes.length;
     const prefix = `${text._id}:${text.contentHash}:`;
     const cursor = options.cursor;
     if (
@@ -203,22 +365,22 @@ export async function retainedTextPage(
     )
         throw new Error("Snapshot cursor invalid");
     const start = cursor === null ? 0 : Number(cursor.slice(prefix.length));
-    if (
-        !Number.isSafeInteger(start) ||
-        start < 0 ||
-        start > text.fragmentHashes.length
-    )
+    if (!Number.isSafeInteger(start) || start < 0 || start > count)
         throw new Error("Snapshot cursor invalid");
-    const end = Math.min(text.fragmentHashes.length, start + options.numItems);
+    const end = Math.min(count, start + options.numItems);
     const page = [];
     for (let index = start; index < end; index++)
         page.push({
             index,
-            content: await retainedTextFragment(ctx, text, index),
+            content: open
+                ? index === open.fragments
+                    ? open.tail
+                    : await diagnosticFragment(ctx, text._id, index)
+                : await retainedTextFragment(ctx, text, index),
         });
     return {
         page,
-        isDone: end === text.fragmentHashes.length,
+        isDone: end === count,
         continueCursor: `${prefix}${end}`,
     };
 }
@@ -320,4 +482,39 @@ export async function operationObservationRange(
         characters: text.characters,
         content: await retainedTextRange(ctx, text, start, length),
     };
+}
+
+async function diagnosticFragment(
+    ctx: QueryCtx,
+    textId: Id<"retainedTexts">,
+    index: number,
+) {
+    const fragment = await ctx.db
+        .query("retainedTextFragments")
+        .withIndex("by_text_and_index", (q) =>
+            q.eq("textId", textId).eq("index", index),
+        )
+        .unique();
+    if (!fragment) throw executionError("retained_text_incomplete");
+    return fragment.content;
+}
+
+/** Deletes exclusively owned text children first, keeping each purge transaction bounded. */
+export async function deleteRetainedTextBatch(
+    ctx: MutationCtx,
+    textId: Id<"retainedTexts">,
+    key: string,
+    batchSize: number,
+) {
+    const text = await ctx.db.get(textId);
+    if (!text) return true;
+    if (text.key !== key) throw executionError("retained_text_conflict");
+    const fragments = await ctx.db
+        .query("retainedTextFragments")
+        .withIndex("by_text_and_index", (q) => q.eq("textId", textId))
+        .take(batchSize);
+    for (const fragment of fragments) await ctx.db.delete(fragment._id);
+    if (fragments.length) return false;
+    await ctx.db.delete(textId);
+    return true;
 }

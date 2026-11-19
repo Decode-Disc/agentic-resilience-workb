@@ -14,6 +14,7 @@ import {
     fixtureModelDescriptor,
     modelAttemptAuthority,
 } from "@/__tests__/setup/model-configuration";
+import { streamingModelFetch } from "@/__tests__/setup/model-stream";
 
 const company = {
     cik: "1373715",
@@ -135,7 +136,7 @@ test("new comparison calls use the admitted model capacity through the real tran
         {
             authority: modelAttemptAuthority(),
             apiKey: "offline-only",
-            fetch: async (_url, init) => {
+            fetch: streamingModelFetch(async (_url, init) => {
                 const wire = JSON.parse(String(init?.body));
                 limit = wire.max_tokens ?? wire.max_completion_tokens;
                 return Response.json({
@@ -157,7 +158,7 @@ test("new comparison calls use the admitted model capacity through the real tran
                         total_tokens: 20,
                     },
                 });
-            },
+            }),
         },
     );
     expect(result.status).toBe("succeeded");
@@ -206,7 +207,11 @@ test("preserves a complete explanation beyond 600 characters through the bounded
     const result = await compareSourceContributions(
         input,
         { ...sourceQualificationRoutes[0], descriptor: fixtureModelDescriptor },
-        { authority: modelAttemptAuthority(), apiKey: "test-only-key", fetch },
+        {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: streamingModelFetch(fetch),
+        },
     );
 
     expect(result).toMatchObject({ status: "succeeded" });
@@ -257,7 +262,11 @@ test("returns cached-ready inconclusive output without a provider request when n
     const result = await compareSourceContributions(
         input,
         sourceQualificationRoutes[0],
-        { authority: modelAttemptAuthority(), apiKey: "test-only-key", fetch },
+        {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: streamingModelFetch(fetch),
+        },
     );
 
     expect(result).toMatchObject({

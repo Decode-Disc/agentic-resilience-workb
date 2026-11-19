@@ -10,6 +10,7 @@ import {
     fixtureModelDescriptor,
     modelAttemptAuthority,
 } from "@/__tests__/setup/model-configuration";
+import { streamingModelFetch } from "@/__tests__/setup/model-stream";
 
 test.each([
     false,
@@ -60,7 +61,7 @@ test.each([
     const dependencies = {
         authority: modelAttemptAuthority(),
         apiKey: "test-only-key",
-        fetch,
+        fetch: streamingModelFetch(fetch),
     };
     const native = JSON.parse(
         preparePiModelPayload(
@@ -145,7 +146,7 @@ test.each([
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch,
+            fetch: streamingModelFetch(fetch),
         },
         instructions: "Reply briefly.",
         prompt: "Continue.",
@@ -210,7 +211,7 @@ test.each([
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch,
+            fetch: streamingModelFetch(fetch),
         },
         instructions: "Reply briefly.",
         prompt: "Continue.",

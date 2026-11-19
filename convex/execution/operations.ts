@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
+    type ActionCtx,
     internalAction,
     internalMutation,
     internalQuery,
@@ -32,6 +33,7 @@ import { requireInstructionVersion } from "./conversations";
 import { classifyDispatchFailure, protectedDiagnostic } from "./errors";
 import {
     type AgentOperationDefinition,
+    operationHasStarted,
     operationInputValidator,
     operationOutcomeValidator,
     type operationRefusalValidator,
@@ -70,6 +72,43 @@ import {
 
 type Outcome = Infer<typeof operationOutcomeValidator>;
 type Input = Infer<typeof requestInputValidator>;
+
+/** Runs in the scheduled action itself; no parent action remains open to await another worker. */
+export async function executeScheduledOperation(
+    ctx: ActionCtx,
+    args: {
+        requestId: Id<"agentOperationRequests">;
+        expectedGeneration: number;
+    },
+    execute: () => Promise<Outcome>,
+): Promise<Outcome | null> {
+    let phase: Parameters<typeof classifyDispatchFailure>[1] =
+        "before_callback";
+    try {
+        const started = await ctx.runMutation(
+            internal.execution.operations.beginScheduledExecution,
+            args,
+        );
+        if (!started) return null;
+        phase = "effect_callback";
+        const outcome = await execute();
+        return await ctx.runMutation(
+            internal.execution.operations.recordResult,
+            {
+                ...args,
+                outcome,
+            },
+        );
+    } catch (error) {
+        return ctx.runMutation(
+            internal.execution.operations.settleDispatchFailure,
+            {
+                ...args,
+                failure: classifyDispatchFailure(error, phase),
+            },
+        );
+    }
+}
 
 /** Binds settlement of an engaged operation to an authorized research workflow without redispatching it. */
 export async function registerOperationWaitEvent(
@@ -335,7 +374,7 @@ export async function retainOperationEffect(
             throw executionError("operation_result_conflict");
         return valueJson;
     }
-    if (request.status !== "running")
+    if (!operationHasStarted(request))
         throw executionError("operation_not_dispatched");
     await ctx.db.patch(request._id, { effect });
     await recordEvent(ctx, { ...request, effect }, "operation_effect_applied");
@@ -751,22 +790,24 @@ export const claim = internalMutation({
                     code: "research_paused",
                 },
             };
-        if (state.mission) {
+        if (state.mission && state.operation?.effectKind !== "read") {
             const missionId = state.mission._id;
-            const active = await ctx.db
-                .query("agentOperationRequests")
-                .withIndex("by_mission_and_status", (q) =>
-                    q.eq("missionId", missionId).eq("status", "running"),
-                )
-                .first();
-            if (active && active._id !== request._id)
-                return {
-                    kind: "outcome" as const,
-                    outcome: {
-                        kind: "unavailable" as const,
-                        code: "operation_in_progress",
-                    },
-                };
+            for (const status of ["running", "waiting"] as const) {
+                const active = await ctx.db
+                    .query("agentOperationRequests")
+                    .withIndex("by_mission_and_status", (q) =>
+                        q.eq("missionId", missionId).eq("status", status),
+                    )
+                    .first();
+                if (active && active._id !== request._id)
+                    return {
+                        kind: "outcome" as const,
+                        outcome: {
+                            kind: "unavailable" as const,
+                            code: "operation_in_progress",
+                        },
+                    };
+            }
         }
         const waitEventId =
             request.waitEventId ??
@@ -790,12 +831,31 @@ export const claim = internalMutation({
                           expectedGeneration: request.expectedGeneration,
                       },
                   );
+        const scheduledJobId = state.operation?.scheduledAction
+            ? await ctx.scheduler.runAfter(
+                  0,
+                  state.operation.scheduledAction,
+                  args,
+              )
+            : undefined;
+        const waitReference = scheduledJobId
+            ? `operation:${request._id}`
+            : undefined;
         await ctx.db.patch(request._id, {
-            status: "running",
+            status: scheduledJobId ? "waiting" : "running",
+            scheduledJobId,
+            waitReference,
             waitEventId,
             expiryJobId,
         });
         await recordEvent(ctx, request, "operation_dispatched");
+        if (waitReference) {
+            await recordEvent(ctx, request, "operation_waiting");
+            return {
+                kind: "outcome" as const,
+                outcome: { kind: "waiting" as const, reference: waitReference },
+            };
+        }
         if (request.input.kind === "invalid")
             throw executionError("invalid_operation_input");
         return {
@@ -804,6 +864,35 @@ export const claim = internalMutation({
             runId: state.runId,
             input: request.input,
         };
+    },
+});
+
+/** Only the first delivery of an owned scheduled operation may enter its external work. */
+export const beginScheduledExecution = internalMutation({
+    args: {
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+    },
+    returns: v.boolean(),
+    handler: async (ctx, args) => {
+        const request = await ctx.db.get(args.requestId);
+        if (
+            !request ||
+            request.expectedGeneration !== args.expectedGeneration ||
+            !(
+                (request.status === "waiting" && request.scheduledJobId) ||
+                (request.status === "running" && !request.scheduledJobId)
+            ) ||
+            request.scheduledStartedAt !== undefined ||
+            request.outcome
+        )
+            return false;
+        const state = await authority(ctx, request, args.expectedGeneration);
+        if (!state.operation?.scheduledAction)
+            throw executionError("operation_not_dispatched");
+        await ctx.db.patch(request._id, { scheduledStartedAt: Date.now() });
+        await recordEvent(ctx, request, "operation_execution_started");
+        return true;
     },
 });
 
@@ -1174,6 +1263,8 @@ export const dispatch = internalAction({
                   )
                 : undefined;
             const operation = operationFor(claimed.input, mission ?? undefined);
+            if (!operation.execute)
+                throw executionError("operation_not_dispatched");
             const executeArgs = {
                 ...args,
                 missionId: claimed.missionId,
@@ -1392,7 +1483,7 @@ export const stageObservationText = internalMutation({
     returns: v.null(),
     handler: async (ctx, args) => {
         const request = await ctx.db.get(args.requestId);
-        if (request?.status !== "running")
+        if (!request || !operationHasStarted(request))
             throw executionError("operation_not_dispatched");
         const admitted = await authority(ctx, request, args.expectedGeneration);
         if (admitted.operation?.effectKind !== "durable_effect")

@@ -133,24 +133,28 @@ export async function pauseResearchAtBoundary(
         !supportsResearchControl(run)
     )
         return false;
-    const running = await ctx.db
-        .query("agentOperationRequests")
-        .withIndex("by_run_and_status", (q) =>
-            q.eq("runId", runId).eq("status", "running"),
-        )
-        .take(9);
-    if (running.length > 8) return true;
-    for (const request of running) {
-        const owner = request.missionId
-            ? await ctx.db.get(request.missionId)
-            : null;
-        const scope = owner
-            ? getAgentDefinition(owner.definitionId, owner.definitionVersion)
-                  .executionScope
-            : request.input.kind === "invalid"
-              ? undefined
-              : getRegisteredOperation(request.input.kind)?.nativeAuthority;
-        if (scope === "research") return true;
+    for (const status of ["running", "waiting"] as const) {
+        const engaged = await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_run_and_status", (q) =>
+                q.eq("runId", runId).eq("status", status),
+            )
+            .take(9);
+        if (engaged.length > 8) return true;
+        for (const request of engaged) {
+            const owner = request.missionId
+                ? await ctx.db.get(request.missionId)
+                : null;
+            const scope = owner
+                ? getAgentDefinition(
+                      owner.definitionId,
+                      owner.definitionVersion,
+                  ).executionScope
+                : request.input.kind === "invalid"
+                  ? undefined
+                  : getRegisteredOperation(request.input.kind)?.nativeAuthority;
+            if (scope === "research") return true;
+        }
     }
     if (
         mission &&

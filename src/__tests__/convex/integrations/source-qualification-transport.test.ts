@@ -2,6 +2,7 @@ import { prepareQualificationInput } from "@convex/domain/sourceQualification";
 import { SOURCE_COVERAGE_ROLES } from "@convex/domain/sourceSelectionPolicy";
 import { qualifySourceDocument } from "@convex/integrations/sourceQualification";
 import { modelAttemptAuthority } from "@/__tests__/setup/model-configuration";
+import { streamingModelFetch } from "@/__tests__/setup/model-stream";
 
 // Frozen provider-metadata fixtures, not live catalogue defaults.
 const qualificationRoute = {
@@ -155,7 +156,7 @@ test.each([
         await qualifySourceDocument(input, route, {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: request,
+            fetch: streamingModelFetch(request),
         }),
     ).toMatchObject({ status: "succeeded", qualification });
     expect(request).toHaveBeenCalledOnce();
@@ -196,7 +197,7 @@ test("rejects an oversized decompressed provider body before parsing", async () 
             {
                 authority: modelAttemptAuthority(),
                 apiKey: "test-only-key",
-                fetch: request,
+                fetch: streamingModelFetch(request),
                 onResponse,
             },
         ),
@@ -241,7 +242,7 @@ test("makes the bounded HTTP failure available to an explicit diagnostic observe
             {
                 authority: modelAttemptAuthority(),
                 apiKey: "test-only-key",
-                fetch: request,
+                fetch: streamingModelFetch(request),
                 onResponse,
             },
         ),
@@ -285,7 +286,7 @@ test.each([
             {
                 authority: modelAttemptAuthority(),
                 apiKey: "test-only-key",
-                fetch: request,
+                fetch: streamingModelFetch(request),
             },
         ),
     ).toMatchObject({ status: "failed", errorCode, retryable });
@@ -312,7 +313,7 @@ test("missing credentials and prior cancellation perform no request", async () =
             {
                 authority: modelAttemptAuthority(),
                 apiKey: "test-only-key",
-                fetch: request,
+                fetch: streamingModelFetch(request),
                 signal: AbortSignal.abort(),
             },
         ),
@@ -362,7 +363,7 @@ test.each([
     await qualifySourceDocument(input, sourceQualificationRoutes[0], {
         authority: modelAttemptAuthority(),
         apiKey: "test-only-key",
-        fetch: request,
+        fetch: streamingModelFetch(request),
     });
     expect(request).toHaveBeenCalledOnce();
     const body = JSON.parse(String(request.mock.calls[0]?.[1]?.body));
@@ -423,7 +424,7 @@ test("retains a bounded rejected assistant output and the exact parsing reason w
         {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: request,
+            fetch: streamingModelFetch(request),
         },
     );
     expect(result).toMatchObject({
@@ -481,7 +482,7 @@ test.each([
             {
                 authority: modelAttemptAuthority(),
                 apiKey: "test-only-key",
-                fetch: request,
+                fetch: streamingModelFetch(request),
             },
         ),
     ).toMatchObject({
@@ -541,7 +542,7 @@ test("retains the original assistant text when documentary validation rejects a 
         {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
-            fetch: request,
+            fetch: streamingModelFetch(request),
         },
     );
     expect(result).toMatchObject({

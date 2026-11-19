@@ -80,6 +80,42 @@ export const sourcesTestEnvelope = {
 
 export const SOURCES_TEST_WINDOW_MINUTES = 15;
 
+/** Drives the real scheduled action explicitly, leaving unrelated fixture timers untouched. */
+export async function dispatchSourcesOperation(
+    t: Awaited<ReturnType<typeof seedCapturedSources>>["t"],
+    args: {
+        requestId: Id<"agentOperationRequests">;
+        expectedGeneration: number;
+    },
+) {
+    const result = await t.action(internal.execution.operations.dispatch, args);
+    if (result.kind !== "waiting") return result;
+    const request = await t.run((ctx) => ctx.db.get(args.requestId));
+    if (!request?.scheduledJobId)
+        throw new Error("Expected a scheduled Sources operation");
+    return (
+        (await t.action(internal.sourcesMissionActions.execute, args)) ??
+        t.action(internal.execution.operations.dispatch, args)
+    );
+}
+
+/** Enters the worker's start boundary for tests that exercise reservation/settlement separately. */
+export async function startSourcesOperation(
+    t: Awaited<ReturnType<typeof seedCapturedSources>>["t"],
+    args: {
+        requestId: Id<"agentOperationRequests">;
+        expectedGeneration: number;
+    },
+) {
+    const claimed = await t.mutation(internal.execution.operations.claim, args);
+    if (claimed.kind === "outcome" && claimed.outcome.kind === "waiting")
+        await t.mutation(
+            internal.execution.operations.beginScheduledExecution,
+            args,
+        );
+    return claimed;
+}
+
 /** Ordinary starts require explicit Sources activation; tests that start research opt in here. Pair with `vi.unstubAllEnvs()`. */
 export function activateSourcesMission(envelope = sourcesTestEnvelope) {
     vi.stubEnv("SOURCES_MISSION_ENABLED", "true");

@@ -174,12 +174,14 @@ test("an exact command applies the action and records an approved request", asyn
     });
     expect(invocation).toMatchObject({ kind: "ready" });
     if (invocation.kind !== "ready") return;
+    const mission = await t.run((ctx) => ctx.db.get(active.missionId));
+    assert(mission);
     const attempt = {
         missionId: active.missionId,
         invocationId: invocation.invocationId,
         runId,
         executionGeneration: 1,
-        workflowVersion: workbenchDefinition.version,
+        workflowVersion: mission.definitionVersion,
         stepKey: "agent_reasoning",
         service: "model" as const,
         operation: "agent_reasoning",

@@ -83,10 +83,81 @@ import {
 import { persistOperationRequest } from "./operations";
 import { pauseResearchAtBoundary } from "./researchControl";
 import {
+    appendRetainedText,
     retainedTextParts,
+    sealRetainedText,
     stageRetainedText,
     textFragmentValidator,
 } from "./retainedText";
+
+/** Late diagnostic bytes may be retained, but never grant permission for more external work. */
+export const appendVisibleOutput = internalMutation({
+    args: {
+        invocationId: v.id("agentInvocations"),
+        sequence: v.number(),
+        text: v.string(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const invocation = await ctx.db.get(args.invocationId);
+        const receipt = invocation?.providerCallId
+            ? await ctx.db.get(invocation.providerCallId)
+            : null;
+        if (
+            !invocation ||
+            invocation.missionId ||
+            receipt?.invocationId !== invocation._id ||
+            invocation.status !== "started"
+        )
+            throw executionError("invocation_unavailable");
+        const textId = await appendRetainedText(
+            ctx,
+            `${invocation._id}:visible`,
+            args.sequence,
+            args.text,
+        );
+        if (!invocation.visibleOutput)
+            await ctx.db.patch(invocation._id, {
+                visibleOutput: { textId, complete: false },
+            });
+        return null;
+    },
+});
+
+export const sealVisibleOutput = internalMutation({
+    args: {
+        invocationId: v.id("agentInvocations"),
+        complete: v.boolean(),
+        terminalReason: v.optional(v.string()),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const invocation = await ctx.db.get(args.invocationId);
+        if (!invocation || invocation.missionId)
+            throw executionError("invocation_unavailable");
+        if (!invocation.visibleOutput) return null;
+        const text = await sealRetainedText(
+            ctx,
+            invocation.visibleOutput.textId,
+        );
+        if (
+            invocation.visibleOutput.contentHash !== undefined &&
+            (invocation.visibleOutput.complete !== args.complete ||
+                invocation.visibleOutput.terminalReason !== args.terminalReason)
+        )
+            throw executionError("invocation_result_conflict");
+        await ctx.db.patch(invocation._id, {
+            visibleOutput: {
+                ...invocation.visibleOutput,
+                complete: args.complete,
+                terminalReason: args.terminalReason,
+                contentHash: text.contentHash,
+                sizeBytes: text.sizeBytes,
+            },
+        });
+        return null;
+    },
+});
 
 async function hasOutstandingOperations(
     ctx: QueryCtx,

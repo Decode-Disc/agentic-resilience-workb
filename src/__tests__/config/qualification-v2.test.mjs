@@ -7,6 +7,19 @@ import { runCampaign } from "../../../scripts/evaluations/workbench-browser/camp
 
 import { configurableCampaign } from "../setup/qualification-v2.ts";
 
+test("preparation pins the accounting policy before mandate authorization", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-accounting-pin-"));
+    const input = join(root, "input.json");
+    const draft = configurableCampaign();
+    delete draft.costAccountingPolicy;
+    writeFileSync(input, JSON.stringify(draft));
+    await runCampaign("prepare", root, { manifest: input });
+    const prepared = JSON.parse(
+        readFileSync(join(root, "campaign.json"), "utf8"),
+    );
+    assert.equal(prepared.manifest.costAccountingPolicy, "known_final_v1");
+});
+
 test("new Sources preparation requires explicit research authority without changing historical parsing", async () => {
     const root = mkdtempSync(
         join(tmpdir(), "qualification-research-authority-"),
@@ -179,9 +192,18 @@ async function independentScenarioProbe(t, overrides = {}) {
     const input = configurableCampaign();
     const manifest = campaignManifestSchema.parse({
         ...input,
+        ...(overrides.backend ? { executionSurface: "backend" } : {}),
         batteryHash: "a".repeat(64),
         scenarios: input.scenarios.slice(0, 2).map((s) => ({
             ...s,
+            ...(overrides.freshFraming
+                ? {
+                      framingRequest: {
+                          text: "Which workflow remains durable?",
+                          receivedAt: new Date().toISOString(),
+                      },
+                  }
+                : {}),
             steps: [
                 {
                     id: "settled",
@@ -246,15 +268,58 @@ async function independentScenarioProbe(t, overrides = {}) {
         conversation: { queuedCount: 0 },
         nativeSettled: true,
         sourcesMission: null,
-        accounting: { pending: 0, unknown: 0, overruns: 0 },
+        accounting: {
+            pending: 0,
+            unknown: 0,
+            overruns: 0,
+            conflicts: 0,
+            usage: { model: 0, costUsd: 0 },
+        },
+        lotAccounting:
+            overrides.snapshot && "accounting" in overrides.snapshot
+                ? overrides.snapshot.accounting
+                : {
+                      pending: 0,
+                      unknown: 0,
+                      overruns: 0,
+                      conflicts: 0,
+                      usage: { model: 0, costUsd: 0 },
+                  },
+        hasEngagedEffects: false,
+        continuationAuthorized: true,
         ...overrides.snapshot,
     };
     const client = {
         mutation: async (_reference, args) => {
             activated.push(args.runId);
+            if (
+                overrides.backend &&
+                args.runId === "fixture-claims" &&
+                !overrides.freshFraming
+            )
+                throw new Error("Settled backend case failure");
         },
-        query: async (reference) => {
+        query: async (reference, args) => {
             const name = getFunctionName(reference);
+            if (overrides.observeQuery) {
+                const result = overrides.observeQuery(name, args, snapshot);
+                if (result !== undefined) return result;
+            }
+            if (name === "visitors:current") return { status: "active" };
+            if (name === "execution/fixtures:qualificationContinuation")
+                return {
+                    accounting: snapshot.lotAccounting,
+                    accountingSettled:
+                        !!snapshot.lotAccounting &&
+                        [
+                            snapshot.lotAccounting.pending,
+                            snapshot.lotAccounting.unknown,
+                            snapshot.lotAccounting.overruns,
+                            snapshot.lotAccounting.conflicts,
+                        ].every((v) => v === 0),
+                    hasEngagedEffects: snapshot.hasEngagedEffects,
+                    authorized: snapshot.continuationAuthorized,
+                };
             if (name === "execution/fixtures:qualificationSnapshot")
                 return snapshot;
             if (name === "execution/piControl:publicationStatus")
@@ -268,13 +333,14 @@ async function independentScenarioProbe(t, overrides = {}) {
     };
     await assert.rejects(() =>
         runCampaignScenarios(
-            page,
+            overrides.backend ? null : page,
             client,
             "http://localhost:5173",
             "http://localhost:3210",
             root,
             manifest,
             () => overrides.interrupted ?? false,
+            overrides.backend ? client : undefined,
         ),
     );
     return { root, activated };
@@ -301,6 +367,49 @@ test("a terminal scenario failure remains failed while a quiet independent scena
     );
 });
 
+test("backend failures preserve failure and continue quiet independent cases", async (t) => {
+    const { root, activated } = await independentScenarioProbe(t, {
+        backend: true,
+    });
+    assert.deepEqual(activated, ["fixture-claims", "fixture-creative"]);
+    const events = readFileSync(join(root, "progress.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map(JSON.parse)
+        .filter((e) => e.event === "finished");
+    assert.deepEqual(
+        events.map((e) => [e.scenario, e.executionIntegrity]),
+        [
+            ["claims", "failed"],
+            ["creative", "passed"],
+        ],
+    );
+});
+
+test("a saved framing milestone survives a later blocked turn", async (t) => {
+    const framing = {
+        _id: "framing-before-failure",
+        origin: "workbench",
+        content: { scope: "Retained program", questions: [] },
+    };
+    const { root } = await independentScenarioProbe(t, {
+        backend: true,
+        freshFraming: true,
+        snapshot: {
+            framing,
+            conversation: { activeTurnId: "blocked-turn" },
+            mission: { status: "blocked", blockCode: "control_failed" },
+        },
+    });
+    assert.deepEqual(
+        JSON.parse(
+            readFileSync(join(root, "claims/agent-saved-framing.json"), "utf8"),
+        ),
+        framing,
+    );
+    assert.equal(existsSync(join(root, "claims/latest-snapshot.json")), true);
+});
+
 test("unsettled work, uncertain accounting, publication holds and interruption prevent independent continuation", async (t) => {
     for (const overrides of [
         { snapshot: { nativeSettled: false } },
@@ -310,13 +419,51 @@ test("unsettled work, uncertain accounting, publication holds and interruption p
         { snapshot: { accounting: { pending: 1, unknown: 0, overruns: 0 } } },
         { snapshot: { accounting: { pending: 0, unknown: 1, overruns: 0 } } },
         { snapshot: { accounting: { pending: 0, unknown: 0, overruns: 1 } } },
+        {
+            snapshot: {
+                accounting: {
+                    pending: 0,
+                    unknown: 0,
+                    overruns: 0,
+                    conflicts: 1,
+                },
+            },
+        },
+        { snapshot: { hasEngagedEffects: true } },
+        { snapshot: { continuationAuthorized: false } },
+        {
+            snapshot: {
+                accounting: {
+                    pending: 0,
+                    unknown: 0,
+                    overruns: 0,
+                    conflicts: 0,
+                    usage: { model: 60, costUsd: 0 },
+                },
+            },
+        },
         { publication: { hasActiveWorkers: true } },
         { publication: { held: true } },
         { interrupted: true },
         { screenshotFailure: true },
     ]) {
-        const { activated } = await independentScenarioProbe(t, overrides);
-        assert(!activated.includes("fixture-creative"));
+        const { root, activated } = await independentScenarioProbe(
+            t,
+            overrides,
+        );
+        const entries = readFileSync(join(root, "progress.jsonl"), "utf8")
+            .trim()
+            .split("\n")
+            .map(JSON.parse);
+        assert(
+            entries.some(
+                (e) => e.event === "unrun" && e.scenario === "creative",
+            ),
+        );
+        assert(
+            !activated.includes("fixture-creative"),
+            JSON.stringify(overrides),
+        );
     }
 });
 
@@ -959,7 +1106,7 @@ for (const status of ["failed", "cancelled", "idle"])
             );
             return;
         }
-        await assert.rejects(execute, /first failing scenario/);
+        await assert.rejects(execute, /not quiet and reconciled/);
         const failure = JSON.parse(
             readFileSync(join(root, "claims/failure.json"), "utf8"),
         );
@@ -971,7 +1118,7 @@ for (const status of ["failed", "cancelled", "idle"])
         assert.equal(existsSync(join(root, "creative")), false);
     });
 
-test("backend execution records the first failure without starting another scenario", async () => {
+test("unsafe backend execution records the first failure without starting another scenario", async () => {
     const root = mkdtempSync(join(tmpdir(), "backend-first-failure-"));
     const original = configurableCampaign();
     const manifest = campaignManifestSchema.parse({
@@ -1019,7 +1166,7 @@ test("backend execution records the first failure without starting another scena
                     },
                 },
             ),
-        /first failing scenario/,
+        /not quiet and reconciled/,
     );
     assert.match(
         readFileSync(join(root, "claims/failure.json"), "utf8"),
@@ -1134,7 +1281,7 @@ for (const workerCompletes of [false, true])
                 true,
             );
         } else {
-            await assert.rejects(execute, /first failing scenario/);
+            await assert.rejects(execute, /not quiet and reconciled/);
             assert.match(
                 readFileSync(join(root, "claims/failure.json"), "utf8"),
                 /qualification_budget_exhausted/,
@@ -1160,4 +1307,96 @@ test("new campaign preparation defaults to backend and freezes the choice withou
         }).executionSurface,
         undefined,
     );
+});
+
+test("a first dispatched Sources request is hydrated once and survives blocked preparation", async (t) => {
+    const archive = process.env.SOURCES_REPLAY_INPUT
+        ? JSON.parse(readFileSync(process.env.SOURCES_REPLAY_INPUT, "utf8"))
+        : null;
+    const wire = archive
+        ? archive.payloads.find(
+              (p) => p.part === "request" && p.state === "complete",
+          ).json
+        : JSON.stringify({
+              messages: [
+                  {
+                      role: "user",
+                      content: "actual dispatched economic question",
+                  },
+              ],
+          });
+    const contentHash = sha256(wire);
+    let hydrated = 0,
+        snapshots = 0,
+        snapshotBytes = 0,
+        fragmentReads = 0;
+    const binding = {
+        runId: "fixture-claims",
+        framingRevisionId: "fixed-revision",
+        preset: "balanced",
+        preparationId: "preparation",
+        missionId: "sources",
+        invocationId: "first-sources",
+        providerCallId: "receipt",
+        contentHash,
+        dispatch: "observed",
+    };
+    const { root } = await independentScenarioProbe(t, {
+        backend: true,
+        freshFraming: true,
+        snapshot: {
+            firstSourcesInput: binding,
+            conversation: { activeTurnId: "blocked-turn" },
+            mission: { status: "blocked", blockCode: "control_failed" },
+        },
+        observeQuery: (name, _args, snapshot) => {
+            if (name === "execution/fixtures:qualificationSnapshot") {
+                snapshots++;
+                snapshotBytes += Buffer.byteLength(JSON.stringify(snapshot));
+            }
+            if (name === "execution/fixtures:inspectSourcesTextFragments")
+                fragmentReads++;
+            if (name === "execution/fixtures:inspectSourcesInvocations") {
+                hydrated++;
+                return {
+                    page: [{ _id: "first-sources", inputJson: "{}" }],
+                    payloads: [
+                        {
+                            part: "request",
+                            state: "complete",
+                            contentHash,
+                            json: wire,
+                        },
+                    ],
+                    isDone: true,
+                    continueCursor: "",
+                };
+            }
+        },
+    });
+    const actual = JSON.parse(
+        readFileSync(join(root, "claims/actual-start-input.json"), "utf8"),
+    );
+    assert.deepEqual(actual.binding, binding);
+    assert.equal(actual.transcript.payloads[0].json, wire);
+    assert.equal(hydrated, 1);
+    assert(snapshots >= 2);
+    assert.equal(
+        JSON.parse(
+            readFileSync(join(root, "claims/latest-snapshot.json"), "utf8"),
+        ).run.executionStatus,
+        "idle",
+    );
+    if (process.env.SOURCES_REPLAY_METRICS)
+        writeFileSync(
+            process.env.SOURCES_REPLAY_METRICS,
+            JSON.stringify({
+                snapshotQueries: snapshots,
+                snapshotBytes,
+                requestBytes: Buffer.byteLength(wire),
+                hydrations: hydrated,
+                fragmentReads,
+                artifacts: 1,
+            }),
+        );
 });

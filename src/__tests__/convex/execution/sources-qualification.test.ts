@@ -15,7 +15,10 @@ import {
 import { type FunctionReturnType, makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    seedCapturedSources,
+    startSourcesOperation,
+} from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -429,7 +432,7 @@ async function fixture() {
                 },
             },
         );
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         });

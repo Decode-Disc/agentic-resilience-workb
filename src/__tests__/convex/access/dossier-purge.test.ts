@@ -1,4 +1,8 @@
 import { internal } from "@convex/_generated/api";
+import {
+    appendRetainedText,
+    sealRetainedText,
+} from "@convex/execution/retainedText";
 import { expect, test } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
@@ -81,4 +85,58 @@ test("only analyst research dossiers can be purged", async () => {
         }),
     ).rejects.toThrow("Only analyst research dossiers can be purged");
     expect(await f.t.run((ctx) => ctx.db.get(f.runId))).not.toBeNull();
+});
+
+test("purging an invocation removes its private diagnostic fragments and preserves shared immutable text", async () => {
+    const f = await seedCapturedSources();
+    const diagnostic = await f.t.run(async (ctx) => {
+        const invocationId = await ctx.db.insert("agentInvocations", {
+            runId: f.runId,
+            generation: 4,
+            definitionVersion: 1,
+            taskKey: "purge-capture",
+            status: "started",
+            provenance: "live",
+            inputJson: "{}",
+            createdAt: Date.now(),
+        });
+        const textId = await appendRetainedText(
+            ctx,
+            `${invocationId}:visible`,
+            0,
+            "private prefix",
+        );
+        const text = await sealRetainedText(ctx, textId);
+        await ctx.db.patch(invocationId, {
+            visibleOutput: {
+                textId,
+                complete: false,
+                contentHash: text.contentHash,
+                sizeBytes: text.sizeBytes,
+            },
+        });
+        const sharedId = await appendRetainedText(
+            ctx,
+            "other-owner",
+            0,
+            "preserved",
+        );
+        return { textId, sharedId };
+    });
+    await f.t.action(internal.dossierPurge.purgeResearchDossiers, {
+        runIds: [f.runId],
+        reason: "Remove private diagnostic ownership",
+    });
+    await f.t.run(async (ctx) => {
+        expect(await ctx.db.get(diagnostic.textId)).toBeNull();
+        expect(
+            await ctx.db
+                .query("retainedTextFragments")
+                .withIndex("by_text_and_index", (q) =>
+                    q.eq("textId", diagnostic.textId),
+                )
+                .collect(),
+        ).toEqual([]);
+        expect(await ctx.db.get(diagnostic.sharedId)).not.toBeNull();
+    });
 });

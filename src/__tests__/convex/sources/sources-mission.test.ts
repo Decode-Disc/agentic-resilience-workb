@@ -425,7 +425,11 @@ test("distinct need-bound queries retain distinct provider identities within the
                 requestId,
                 expectedGeneration: 3,
             }),
-        ).toMatchObject({ kind: "execute" });
+        ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
+        await f.t.mutation(
+            internal.execution.operations.beginScheduledExecution,
+            { requestId, expectedGeneration: 3 },
+        );
         hashes.push(
             (
                 await f.t.mutation(internal.sourcesMission.reserve, {
@@ -486,6 +490,10 @@ test("the coverage preset orients the reserved query without adding searches", a
             requestId,
             expectedGeneration: 3,
         });
+        await f.t.mutation(
+            internal.execution.operations.beginScheduledExecution,
+            { requestId, expectedGeneration: 3 },
+        );
         const reservation = await f.t.mutation(
             internal.sourcesMission.reserve,
             { requestId, expectedGeneration: 3 },

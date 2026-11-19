@@ -11,7 +11,10 @@ import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { ConvexError } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { seedObservedSources } from "@/__tests__/setup/sources-mission";
+import {
+    seedObservedSources,
+    startSourcesOperation,
+} from "@/__tests__/setup/sources-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -303,7 +306,7 @@ test("Sources distinguishes reserved work observations from exact completion ref
             },
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await startSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -321,7 +324,7 @@ test("Sources distinguishes reserved work observations from exact completion ref
     expect(context.context.activeWork.workOutcomes).toEqual([
         expect.objectContaining({
             requestId,
-            status: "running",
+            status: "waiting",
             outcome: null,
         }),
     ]);
@@ -423,7 +426,7 @@ test("all maximum-need accounting defects fit one correction without omitting af
             },
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await startSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });

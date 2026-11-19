@@ -2,7 +2,10 @@ import { internal } from "@convex/_generated/api";
 import { completeSources } from "@convex/domain/sources";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    dispatchSourcesOperation,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 
 const examiner = vi.hoisted(() => vi.fn());
 vi.mock("@convex/integrations/documentaryControl", () => ({
@@ -45,7 +48,7 @@ test("a fresh contextual read advances Sources once and repeated reading consume
         );
         assert(finished.kind === "waiting");
         for (const requestId of finished.requestIds)
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchSourcesOperation(f.t, {
                 requestId,
                 expectedGeneration: 4,
             });
@@ -160,7 +163,7 @@ test.each([
         return;
     }
     const requestId = await pending;
-    const result = await f.t.action(internal.execution.operations.dispatch, {
+    const result = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });

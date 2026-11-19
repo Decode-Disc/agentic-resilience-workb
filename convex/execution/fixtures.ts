@@ -38,6 +38,7 @@ import { campaignConfiguration } from "@convex/qualificationCampaignPolicy";
 import { requireCampaignLot } from "@convex/qualificationCampaigns";
 import {
     initializeQualificationUsage,
+    qualificationUsageResolved,
     readQualificationUsage,
 } from "@convex/qualificationUsage";
 import {
@@ -74,6 +75,7 @@ import { admittedInputJson } from "./journal";
 import {
     completeRetainedText,
     readRetainedText,
+    retainedDiagnosticText,
     retainedTextPage,
 } from "./retainedText";
 
@@ -83,7 +85,7 @@ async function readLocalFixtureRun(
     args: { runId: Id<"researchRuns">; fixtureKey: string },
 ) {
     const run = await ctx.db.get(args.runId);
-    if (!run || run.purpose !== "browser_test")
+    if (run?.purpose !== "browser_test")
         throw new Error("Local simulation scope required");
     const visitor = await requireBrowserTestRunOwner(ctx, run);
     const context = run.browserTestContextId
@@ -848,7 +850,10 @@ export const authorizeWorkbenchQualification = internalMutation({
             scope && scope.campaign.manifest.version !== 1
                 ? scope.campaign.manifest
                 : null;
-        if (configurable?.costAccountingPolicy === "conservative_v1")
+        if (
+            configurable &&
+            configurable.costAccountingPolicy !== "known_final_v1"
+        )
             throw new Error("resource_policy_unsupported");
         const dossierEntries =
             args.dossiers ??
@@ -1616,6 +1621,7 @@ export const inspectSourcesInvocations = internalQuery({
     args: {
         runId: v.id("researchRuns"),
         fixtureKey: v.string(),
+        invocationId: v.optional(v.id("agentInvocations")),
         paginationOpts: paginationOptsValidator,
     },
     returns: v.object({
@@ -1628,10 +1634,19 @@ export const inspectSourcesInvocations = internalQuery({
             throw new Error(
                 "Sources transcript inspection requires one invocation per page",
             );
-        const page = await ctx.db
-            .query("agentInvocations")
-            .withIndex("by_run_and_task_key", (q) => q.eq("runId", run._id))
-            .paginate(args.paginationOpts);
+        const selected = args.invocationId
+            ? await ctx.db.get(args.invocationId)
+            : null;
+        if (args.invocationId && (!selected || selected.runId !== run._id))
+            throw new Error("Transcript correlation mismatch");
+        const page = selected
+            ? { page: [selected], isDone: true, continueCursor: "" }
+            : await ctx.db
+                  .query("agentInvocations")
+                  .withIndex("by_run_and_task_key", (q) =>
+                      q.eq("runId", run._id),
+                  )
+                  .paginate(args.paginationOpts);
         const payloads = (
             await Promise.all(
                 page.page.map((invocation) =>
@@ -1644,7 +1659,25 @@ export const inspectSourcesInvocations = internalQuery({
                 ),
             )
         ).flat();
-        return { ...page, payloads };
+        const invocations = await Promise.all(
+            page.page.map(async (invocation) => {
+                if (!invocation.visibleOutput) return invocation;
+                const text = await retainedDiagnosticText(
+                    ctx,
+                    invocation.visibleOutput.textId,
+                    `${invocation._id}:visible`,
+                );
+                return {
+                    ...invocation,
+                    visibleOutput: {
+                        ...invocation.visibleOutput,
+                        contentHash: text.contentHash,
+                        sizeBytes: text.sizeBytes,
+                    },
+                };
+            }),
+        );
+        return { ...page, page: invocations, payloads };
     },
 });
 
@@ -1658,6 +1691,7 @@ export const inspectSourcesTextFragments = internalQuery({
             v.literal("input"),
             v.literal("request"),
             v.literal("reply"),
+            v.literal("visible"),
         ),
         paginationOpts: paginationOptsValidator,
     },
@@ -1670,7 +1704,7 @@ export const inspectSourcesTextFragments = internalQuery({
         if (!invocation || invocation.runId !== args.runId)
             throw new Error("Transcript correlation mismatch");
         const payload =
-            args.part === "input"
+            args.part === "input" || args.part === "visible"
                 ? null
                 : await ctx.db
                       .query("agentInvocationPayloads")
@@ -1679,26 +1713,40 @@ export const inspectSourcesTextFragments = internalQuery({
                               .eq("invocationId", invocation._id)
                               .eq(
                                   "part",
-                                  args.part === "input" ? "request" : args.part,
+                                  args.part === "reply" ? "reply" : "request",
                               ),
                       )
                       .unique();
         const textId =
-            args.part === "input" ? invocation.inputTextId : payload?.textId;
+            args.part === "visible"
+                ? invocation.visibleOutput?.textId
+                : args.part === "input"
+                  ? invocation.inputTextId
+                  : payload?.textId;
         const contentHash =
-            args.part === "input"
-                ? invocation.inputContentHash
-                : payload?.contentHash;
+            args.part === "visible"
+                ? invocation.visibleOutput?.contentHash
+                : args.part === "input"
+                  ? invocation.inputContentHash
+                  : payload?.contentHash;
         if (
             !textId ||
             (args.part !== "input" &&
+                args.part !== "visible" &&
                 (payload?.state !== "complete" || payload.runId !== args.runId))
         )
             throw new Error("Complete fragmented transcript not found");
-        const text = await completeRetainedText(ctx, textId);
+        const text =
+            args.part === "visible"
+                ? await retainedDiagnosticText(
+                      ctx,
+                      textId,
+                      `${invocation._id}:visible`,
+                  )
+                : await completeRetainedText(ctx, textId);
         if (
             text.key !== `${invocation._id}:${args.part}` ||
-            text.contentHash !== contentHash ||
+            (args.part !== "visible" && text.contentHash !== contentHash) ||
             (payload && text.sizeBytes !== payload.sizeBytes)
         )
             throw new Error("Transcript correlation mismatch");
@@ -1709,6 +1757,25 @@ export const inspectSourcesTextFragments = internalQuery({
 /** Small polling snapshot: no transcript scan or sample-dependent ceiling. */
 export const qualificationSnapshot = internalQuery({
     returns: v.object({
+        firstSourcesInput: v.union(
+            v.null(),
+            v.object({
+                runId: v.id("researchRuns"),
+                framingRevisionId: v.optional(v.id("framingRevisions")),
+                preset: schema.tables.researchRuns.validator.fields
+                    .coveragePreset,
+                preparationId: v.id("sourceSelectionProposalRebuilds"),
+                missionId: v.id("agentMissions"),
+                invocationId: v.id("agentInvocations"),
+                providerCallId: v.optional(v.id("providerCalls")),
+                contentHash: v.optional(v.string()),
+                dispatch: v.union(
+                    v.literal("observed"),
+                    v.literal("not_dispatched"),
+                    v.literal("unknown"),
+                ),
+            }),
+        ),
         contextExpiresAt: v.number(),
         accounting: v.union(schema.doc("qualificationUsage"), v.null()),
         run: schema.doc("researchRuns"),
@@ -1757,7 +1824,33 @@ export const qualificationSnapshot = internalQuery({
                   )
                   .unique()
             : null;
+        const first = sourcesMission?.firstProviderInput;
+        const firstReceipt = first
+            ? await ctx.db.get(first.providerCallId)
+            : null;
         return {
+            firstSourcesInput:
+                first && sourcesMission && run.sourcePreparationId
+                    ? {
+                          runId: run._id,
+                          framingRevisionId: run.fixedFramingRevisionId,
+                          preset: run.coveragePreset,
+                          preparationId: run.sourcePreparationId,
+                          missionId: sourcesMission._id,
+                          invocationId: first.invocationId,
+                          providerCallId: firstReceipt?._id,
+                          contentHash: first.contentHash,
+                          dispatch:
+                              firstReceipt?.dispatchOutcome === "not_dispatched"
+                                  ? ("not_dispatched" as const)
+                                  : firstReceipt?.dispatchOutcome ===
+                                          "response_received" ||
+                                      firstReceipt?.providerObservation
+                                          ?.httpStatus !== undefined
+                                    ? ("observed" as const)
+                                    : ("unknown" as const),
+                      }
+                    : null,
             contextExpiresAt: context.expiresAt,
             accounting: run.browserTestContextId
                 ? await readQualificationUsage(
@@ -1786,6 +1879,64 @@ export const qualificationSnapshot = internalQuery({
                 conversation,
                 session,
             ),
+        };
+    },
+});
+/** Assess shared lot state only at a case boundary, never on every polling snapshot. */
+export const qualificationContinuation = internalQuery({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.object({
+        accounting: v.union(schema.doc("qualificationUsage"), v.null()),
+        hasEngagedEffects: v.boolean(),
+        authorized: v.boolean(),
+        accountingSettled: v.boolean(),
+    }),
+    handler: async (ctx, args) => {
+        const { run, context } = await readLocalFixtureRun(ctx, args);
+        let hasEngagedEffects = false;
+        const lotRuns = context.paidQualification?.scenarios?.map(
+            (s) => s.runId,
+        ) ??
+            context.simulatedScenarios?.map((s) => s.runId) ?? [run._id];
+        for (const runId of lotRuns) {
+            for (const status of ["running", "waiting", "unknown"] as const) {
+                if (
+                    await ctx.db
+                        .query("agentOperationRequests")
+                        .withIndex("by_run_and_status", (q) =>
+                            q.eq("runId", runId).eq("status", status),
+                        )
+                        .first()
+                ) {
+                    hasEngagedEffects = true;
+                    break;
+                }
+            }
+            if (hasEngagedEffects) break;
+        }
+        const lot = context.campaignLotId
+            ? await ctx.db.get(context.campaignLotId)
+            : null;
+        const campaign = lot ? await ctx.db.get(lot.campaignId) : null;
+        const authorized =
+            context.status === "active" &&
+            context.expiresAt > Date.now() &&
+            lot?.status === "running" &&
+            campaign?.status === "active" &&
+            campaign.activeLotId === lot._id &&
+            campaign.manifest.expiresAt > Date.now() &&
+            (campaign.manifest.mode === "deterministic" ||
+                context.paidQualification?.costAccountingPolicy ===
+                    "known_final_v1");
+        const accounting = await readQualificationUsage(ctx, context._id);
+        return {
+            accounting,
+            hasEngagedEffects,
+            authorized,
+            accountingSettled:
+                qualificationUsageResolved(accounting) &&
+                accounting?.pending === 0 &&
+                accounting.overruns === 0,
         };
     },
 });
@@ -1900,6 +2051,7 @@ export const qualificationRoute = internalQuery({
     returns: effectiveModelConfiguration.extend({
         resourcePolicy: v.string(),
         deadlineAt: v.number(),
+        costAccountingPolicy: v.literal("known_final_v1"),
     }),
     handler: async (ctx, args) => {
         const { run } = await requireLocalFixtureRun(ctx, args);
@@ -1907,7 +2059,11 @@ export const qualificationRoute = internalQuery({
             ? await ctx.db.get(run.browserTestContextId)
             : null;
         const qualification = await readWorkbenchQualification(ctx, run);
-        if (!context || !qualification)
+        if (
+            !context ||
+            !qualification ||
+            context.paidQualification?.costAccountingPolicy !== "known_final_v1"
+        )
             throw new Error("Admitted qualification route required");
         const scope = context.campaignLotId
             ? await requireCampaignLot(ctx, context.campaignLotId)
@@ -1923,6 +2079,8 @@ export const qualificationRoute = internalQuery({
         return {
             resourcePolicy: RESOURCE_POLICY_VERSION,
             deadlineAt: qualification.deadlineAt,
+            costAccountingPolicy:
+                context.paidQualification.costAccountingPolicy,
             model: revision.model,
             provider: revision.provider,
             descriptor: revision.descriptor,

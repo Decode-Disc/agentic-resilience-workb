@@ -2,6 +2,7 @@ import { invokeOneShot } from "@convex/integrations/modelTransport";
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { modelAttemptAuthority } from "@/__tests__/setup/model-configuration";
+import { streamingModelFetch } from "@/__tests__/setup/model-stream";
 
 const route = {
     model: "example/structured",
@@ -31,10 +32,10 @@ test("new structured calls without pinned capabilities refuse before HTTP", asyn
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "offline-only",
-            fetch: async () => {
+            fetch: streamingModelFetch(async () => {
                 calls++;
                 throw new Error("HTTP must not run");
-            },
+            }),
         },
     });
     expect(result).toMatchObject({
@@ -60,7 +61,7 @@ test("structured output is reduced to the remaining context while retaining all 
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "offline-only",
-            fetch: async (_url, init) => {
+            fetch: streamingModelFetch(async (_url, init) => {
                 const wire = JSON.parse(String(init?.body));
                 limit = wire.max_tokens ?? wire.max_completion_tokens;
                 expect(JSON.stringify(wire.messages)).toContain(prompt);
@@ -83,7 +84,7 @@ test("structured output is reduced to the remaining context while retaining all 
                         total_tokens: 20,
                     },
                 });
-            },
+            }),
         },
     });
     expect(result.status).toBe("succeeded");
@@ -105,10 +106,10 @@ test("new structured calls refuse exhausted model context without trimming evide
         dependencies: {
             authority: modelAttemptAuthority(),
             apiKey: "offline-only",
-            fetch: async () => {
+            fetch: streamingModelFetch(async () => {
                 calls++;
                 throw new Error("HTTP must not run");
-            },
+            }),
         },
     });
     expect(result).toMatchObject({
@@ -137,7 +138,7 @@ test("new structured calls retain the effective model output limit before dispat
             ) => {
                 retained = metadata;
             },
-            fetch: async (_url, init) => {
+            fetch: streamingModelFetch(async (_url, init) => {
                 expect(retained).toEqual({ effectiveMaxOutputTokens: 20000 });
                 const wire = JSON.parse(String(init?.body));
                 outputLimit = wire.max_tokens ?? wire.max_completion_tokens;
@@ -160,7 +161,7 @@ test("new structured calls retain the effective model output limit before dispat
                         total_tokens: 20,
                     },
                 });
-            },
+            }),
         },
     });
     expect(result).toMatchObject({

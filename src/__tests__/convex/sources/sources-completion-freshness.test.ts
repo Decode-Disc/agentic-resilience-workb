@@ -1,3 +1,4 @@
+import { startSourcesOperation } from "@/__tests__/setup/sources-mission";
 import "@convex/execution/agentCatalog";
 import { internal } from "@convex/_generated/api";
 import { completeSources } from "@convex/domain/sources";
@@ -39,11 +40,11 @@ async function claimNativeCheck(
         },
     );
     expect(
-        await f.t.mutation(internal.execution.operations.claim, {
+        await startSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
-    ).toMatchObject({ kind: "execute" });
+    ).toMatchObject({ kind: "outcome", outcome: { kind: "waiting" } });
     return requestId;
 }
 

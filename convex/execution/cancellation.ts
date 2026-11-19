@@ -176,6 +176,8 @@ async function cancelMission(
     }
 
     for (const request of requestsToRefuse) {
+        if (request.scheduledJobId && request.scheduledStartedAt === undefined)
+            await ctx.scheduler.cancel(request.scheduledJobId);
         if (request.expiryJobId)
             await ctx.scheduler.cancel(request.expiryJobId);
         await ctx.db.patch(

@@ -5,6 +5,7 @@ import { readRetainedText } from "@convex/execution/retainedText";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import {
+    dispatchSourcesOperation,
     recordDocumentaryRead,
     seedCapturedSources,
 } from "@/__tests__/setup/sources-mission";
@@ -161,7 +162,7 @@ async function qualify(f: Awaited<ReturnType<typeof seedCapturedSources>>) {
     );
     return {
         requestId,
-        outcome: await f.t.action(internal.execution.operations.dispatch, {
+        outcome: await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -341,7 +342,7 @@ test.each([
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -410,7 +411,7 @@ test.each([
             },
         },
     );
-    const reading = await f.t.action(internal.execution.operations.dispatch, {
+    const reading = await dispatchSourcesOperation(f.t, {
         requestId: readRequestId,
         expectedGeneration: 4,
     });
@@ -515,7 +516,7 @@ test("one examination loads a shared capture once and supplies each exact contex
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -533,6 +534,7 @@ test("one examination loads a shared capture once and supplies each exact contex
 });
 
 test("controlled material is handed off partially with exact contribution versions and unfinished work", async () => {
+    vi.useFakeTimers();
     vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
     const f = await seedCapturedSources();
     await installModel(
@@ -597,7 +599,7 @@ test("controlled material is handed off partially with exact contribution versio
     expect(preparation.sourcesMission.qualifications).toHaveLength(1);
     expect(examiner).toHaveBeenCalledOnce();
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -743,7 +745,7 @@ test("need outcomes can reference canonical shared readings without duplicating 
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),

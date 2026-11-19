@@ -1,4 +1,6 @@
 import { z } from "zod";
+export const QUALIFICATION_ACCOUNTING_POLICY = "known_final_v1" as const;
+
 import { coveragePresetValidator } from "./domain/validators.ts";
 import { reasoningPreferenceValues } from "./modelConfigurationValues.ts";
 import { initialFixtureIds } from "./qualificationInitialFixtures.ts";
@@ -28,6 +30,9 @@ const role = z
 export const legacyCampaignManifestSchema = z
     .object({
         version: z.literal(1),
+        costAccountingPolicy: z
+            .enum(["conservative_v1", "known_final_v1"])
+            .optional(),
         key: z.string().regex(/^[a-z0-9-]{1,60}$/),
         objective: z.string().min(10).max(2000),
         capability: z.enum(["workbench", "sources"]),
@@ -852,6 +857,13 @@ export const newCampaignManifestSchema = campaignManifestSchema.superRefine(
 /** Pin the reviewer settlement rules before presenting a new campaign for authorization. */
 export const campaignPreparationSchema = newCampaignManifestSchema.transform(
     (manifest) => {
+        manifest = {
+            ...manifest,
+            costAccountingPolicy:
+                ("costAccountingPolicy" in manifest
+                    ? manifest.costAccountingPolicy
+                    : undefined) ?? QUALIFICATION_ACCOUNTING_POLICY,
+        };
         if (
             manifest.version !== 3 ||
             manifest.analysis.accounting !== "api_cost"

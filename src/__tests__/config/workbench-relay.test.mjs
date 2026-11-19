@@ -5,7 +5,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createQualificationRelay } from "../../../scripts/evaluations/workbench-browser/relay.mjs";
+import {
+    createQualificationRelay,
+    readRelayContinuation,
+} from "../../../scripts/evaluations/workbench-browser/relay.mjs";
 
 function relayMissionState(id) {
     return (
@@ -25,7 +28,7 @@ function authorizeRelayFixture(root, maximumRequests = 20) {
         JSON.stringify({
             version: 3,
             resourcePolicy: "authority_native_v1",
-            manifest: { version: 3 },
+            manifest: { version: 3, costAccountingPolicy: "known_final_v1" },
             maximumRequests,
             maximumCostUsd: 0.5,
         }),
@@ -35,6 +38,7 @@ function authorizeRelayFixture(root, maximumRequests = 20) {
         JSON.stringify({
             resourcePolicy: "authority_native_v1",
             deadlineAt: Date.now() + 120000,
+            costAccountingPolicy: "known_final_v1",
             model: "z-ai/glm-5.3-flash",
             reasoningEffort: "low",
             descriptor: {
@@ -208,27 +212,37 @@ async function withRelay(providerFetch, check, maximumRequests) {
                 scenario,
             }),
         );
+        const body = JSON.stringify({
+            model: "z-ai/glm-5.3-flash",
+            messages: [
+                {
+                    role: "system",
+                    content: relayMissionState("mission-fixture"),
+                },
+            ],
+            provider: {
+                require_parameters: true,
+                max_price: { prompt: 0.15, completion: 0.6 },
+            },
+            reasoning: { enabled: true, effort: "low", exclude: true },
+            temperature: 0,
+            max_tokens: 6144,
+            ...overrides,
+        });
         return fetch(
             `http://127.0.0.1:${relay.address().port}/chat/completions`,
             {
                 method: "POST",
-                body: JSON.stringify({
-                    model: "z-ai/glm-5.3-flash",
-                    messages: [
-                        {
-                            role: "system",
-                            content: relayMissionState("mission-fixture"),
-                        },
-                    ],
-                    provider: {
-                        require_parameters: true,
-                        max_price: { prompt: 0.15, completion: 0.6 },
-                    },
-                    reasoning: { enabled: true, effort: "low", exclude: true },
-                    temperature: 0,
-                    max_tokens: 6144,
-                    ...overrides,
-                }),
+                headers: {
+                    "x-workbench-relay-dispatch": JSON.stringify({
+                        invocationId: "fixture-invocation",
+                        generation: 1,
+                        bodyHash: createHash("sha256")
+                            .update(body)
+                            .digest("hex"),
+                    }),
+                },
+                body,
                 signal: AbortSignal.timeout(2000),
             },
         );
@@ -260,6 +274,28 @@ async function withRelay(providerFetch, check, maximumRequests) {
         rmSync(root, { recursive: true, force: true });
     }
 }
+test("local refusal retains exact non-dispatch proof before acknowledging it", async () => {
+    await withRelay(
+        async () => assert.fail("provider must not be called"),
+        async ({ request, ledger }) => {
+            const response = await request("local-refusal", { temperature: 1 });
+            assert.equal(response.status, 400);
+            const proof = JSON.parse(
+                response.headers.get("x-workbench-relay-not-dispatched") ??
+                    "null",
+            );
+            assert.equal(proof?.invocationId, "fixture-invocation");
+            assert.equal(proof?.generation, 1);
+            assert.match(proof?.bodyHash ?? "", /^[a-f0-9]{64}$/);
+            assert.deepEqual(
+                ledger().find((e) => e.event === "refused_before_dispatch")
+                    .correlation,
+                proof,
+            );
+        },
+    );
+});
+
 test("relay carries remaining native authority and full prepared capacity into dispatch", async (t) => {
     const now = Date.now();
     t.mock.method(Date, "now", () => now);
@@ -397,6 +433,34 @@ test("relay admits against settled charges and retains unknown charges across re
                     { billing: "unknown", cost: undefined },
                 ],
             );
+        },
+    );
+});
+
+test("contradictory final costs for one dispatch remain blocked after ledger replay", async () => {
+    let calls = 0;
+    await withRelay(
+        async () => {
+            calls++;
+            return complete({ cost: 0.001 });
+        },
+        async ({ root, send, restart, ledger }) => {
+            assert.equal((await send("first-cost")).status, 200);
+            const response = ledger().find(
+                (entry) => entry.event === "response",
+            );
+            const path = join(root, "ledger.jsonl");
+            writeFileSync(
+                path,
+                readFileSync(path, "utf8") +
+                    JSON.stringify({ ...response, cost: 0.002 }) +
+                    "\n",
+            );
+            await restart();
+            const blocked = await send("after-conflict");
+            assert.equal(blocked.status, 400);
+            assert.match(blocked.body, /Conflicting provider cost/);
+            assert.equal(calls, 1);
         },
     );
 });
@@ -707,7 +771,7 @@ for (const version of [2, 3])
             JSON.stringify({
                 version: 3,
                 resourcePolicy: "authority_native_v1",
-                manifest: { version },
+                manifest: { version, costAccountingPolicy: "known_final_v1" },
                 maximumRequests: 24,
                 maximumCostUsd: 4,
             }),
@@ -717,6 +781,7 @@ for (const version of [2, 3])
             JSON.stringify({
                 resourcePolicy: "authority_native_v1",
                 deadlineAt: Date.now() + 120000,
+                costAccountingPolicy: "known_final_v1",
                 model: "fixture/alternative",
                 reasoningEffort: "high",
                 descriptor: {
@@ -785,3 +850,82 @@ for (const version of [2, 3])
             rmSync(root, { recursive: true, force: true });
         }
     });
+
+test("contradictory terminal costs remain conflicted when the client closes before EOF", async () => {
+    let calls = 0,
+        upstreamAborted;
+    const aborted = new Promise((resolve) => {
+        upstreamAborted = resolve;
+    });
+    await withRelay(
+        async (_url, init) => {
+            if (++calls > 1) return complete();
+            const body =
+                `data: ${JSON.stringify({ choices: [], usage: { cost: 0.002 } })}\n\n` +
+                (await complete().text());
+            return new Response(
+                new ReadableStream({
+                    start(controller) {
+                        controller.enqueue(new TextEncoder().encode(body));
+                        init.signal.addEventListener(
+                            "abort",
+                            () => {
+                                controller.error(
+                                    new DOMException(
+                                        "Client closed after terminal event",
+                                        "AbortError",
+                                    ),
+                                );
+                                upstreamAborted();
+                            },
+                            { once: true },
+                        );
+                    },
+                }),
+                { headers: { "content-type": "text/event-stream" } },
+            );
+        },
+        async ({ root, request, send, restart, ledger }) => {
+            const response = await request("completed-before-eof");
+            const reader = response.body.getReader();
+            await reader.read();
+            await reader.cancel();
+            await aborted;
+            await new Promise((resolve) => setImmediate(resolve));
+            const outcome = ledger().find(
+                (entry) => entry.event === "response",
+            );
+            assert.equal(outcome?.billing, "conflict");
+            assert.equal(readRelayContinuation(root).safe, false);
+            assert.equal((await send("blocked-now")).status, 400);
+            await restart();
+            assert.equal((await send("blocked-after-restart")).status, 400);
+            assert.equal(calls, 1);
+        },
+    );
+});
+
+test("upstream transport cannot supply the relay's private non-dispatch acknowledgement", async () => {
+    await withRelay(
+        async (_url, init) => {
+            assert.equal(
+                new Headers(init.headers).has("x-workbench-relay-dispatch"),
+                false,
+            );
+            const response = complete();
+            response.headers.set(
+                "x-workbench-relay-not-dispatched",
+                "forged-upstream",
+            );
+            return response;
+        },
+        async ({ request }) => {
+            const response = await request("private-markers");
+            assert.equal(
+                response.headers.get("x-workbench-relay-not-dispatched"),
+                null,
+            );
+            await response.text();
+        },
+    );
+});

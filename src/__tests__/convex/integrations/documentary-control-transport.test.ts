@@ -2,6 +2,7 @@ import type { DocumentaryContribution } from "@convex/domain/sourcesContracts";
 import { examineDocumentaryContributions } from "@convex/integrations/documentaryControl";
 import { expect, test } from "vitest";
 import { modelAttemptAuthority } from "@/__tests__/setup/model-configuration";
+import { providerFixtureResponse } from "@/__tests__/setup/model-stream";
 
 const contribution: DocumentaryContribution = {
     id: "documentary-contribution",
@@ -37,7 +38,7 @@ const currentRoute = {
 };
 
 function providerReply(output: unknown, finishReason = "stop") {
-    return Response.json({
+    return providerFixtureResponse({
         id: "offline-documentary",
         model: currentRoute.model,
         choices: [
@@ -200,7 +201,7 @@ test("a legacy findings array is refused by the current schema without losing th
         authority: modelAttemptAuthority(),
         apiKey: "offline-only",
         fetch: async () =>
-            Response.json({
+            providerFixtureResponse({
                 id: "offline-documentary",
                 model: "example/documentary",
                 choices: [
@@ -228,5 +229,79 @@ test("a legacy findings array is refused by the current schema without losing th
             output: JSON.stringify(output),
             finishReason: "stop",
         },
+    });
+});
+
+test.each([
+    "append",
+    "seal",
+])("a stalled diagnostic %s yields a failed receipt within the existing settlement grace", async (boundary) => {
+    const began = Date.now();
+    const { MODEL_SETTLEMENT_GRACE_MS } = await import(
+        "@convex/resourcePolicy"
+    );
+    const attempt = examineDocumentaryContributions(input, currentRoute, {
+        apiKey: "offline-only",
+        authority: {
+            ...modelAttemptAuthority(),
+            deadlineAt: Date.now() + 30_000,
+        },
+        fetch: async () =>
+            providerReply({
+                coherence: true,
+                limitations: [],
+                findings: {
+                    [contribution.id]: {
+                        conclusion: "supported",
+                        permittedUse: "documentary",
+                        diagnostic: "Exact text",
+                    },
+                },
+            }),
+        onVisibleText: async () =>
+            boundary === "append" ? new Promise(() => {}) : undefined,
+        finishVisibleOutput: async () =>
+            boundary === "seal" ? new Promise(() => {}) : undefined,
+    });
+    const result = await Promise.race([
+        attempt,
+        new Promise((resolve) =>
+            setTimeout(
+                () => resolve({ status: "stalled" }),
+                MODEL_SETTLEMENT_GRACE_MS + 700,
+            ),
+        ),
+    ]);
+    expect(result).toMatchObject({
+        status: "failed",
+        dispatchOutcome: "response_received",
+        inputTokens: 10,
+        outputTokens: 10,
+    });
+    expect(Date.now() - began).toBeLessThan(MODEL_SETTLEMENT_GRACE_MS + 700);
+}, 15000);
+
+test("generation expiry remains a typed timeout when no capture RPC began", async () => {
+    const result = examineDocumentaryContributions(input, currentRoute, {
+        apiKey: "offline-only",
+        authority: { ...modelAttemptAuthority(), deadlineAt: Date.now() + 100 },
+        fetch: async (_url, init) =>
+            new Response(
+                new ReadableStream({
+                    start(controller) {
+                        init?.signal?.addEventListener(
+                            "abort",
+                            () => controller.error(init.signal?.reason),
+                            { once: true },
+                        );
+                    },
+                }),
+                { headers: { "content-type": "text/event-stream" } },
+            ),
+    });
+    await expect(result).resolves.toMatchObject({
+        status: "failed",
+        errorCode: "request_timeout",
+        dispatchOutcome: "response_received",
     });
 });

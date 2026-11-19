@@ -16,3 +16,7 @@ export function createQualificationRelay(
     key: string | undefined,
     providerFetch?: typeof fetch,
 ): Server;
+export function readRelayContinuation(root: string): {
+    safe: boolean;
+    reason: string | null;
+};

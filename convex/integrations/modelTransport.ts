@@ -17,19 +17,21 @@ import type {
 } from "@convex/execution/executionProtocol";
 import {
     MAX_PREPARATION_DIAGNOSTIC_BYTES,
+    MODEL_SETTLEMENT_GRACE_MS,
     MODEL_WIRE_RESPONSE_MAX_BYTES,
     resolveGenerationAuthority,
+    TEXT_FRAGMENT_CHARACTERS,
 } from "@convex/resourcePolicy";
 import { estimateTextTokens } from "@earendil-works/pi-ai/utils/estimate";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import type { ToolSet } from "ai";
+import type { TextStreamPart, ToolSet } from "ai";
 import {
     APICallError,
-    generateText,
     isStepCount,
     JSONParseError,
     NoObjectGeneratedError,
     Output,
+    streamText,
     ToolLoopAgent,
     wrapLanguageModel,
 } from "ai";
@@ -53,6 +55,11 @@ export type ProviderResponse = {
 };
 
 export type AttemptDependencies = {
+    onVisibleText?: (text: string, sequence: number) => Promise<void>;
+    finishVisibleOutput?: (
+        complete: boolean,
+        terminalReason?: string,
+    ) => Promise<void>;
     authority?: Pick<Doc<"agentMissions">, "resourcePolicy" | "deadlineAt">;
     apiKey: string;
     fetch?: typeof fetch;
@@ -164,6 +171,8 @@ type AttemptFailure = AttemptReceipt & {
 };
 
 type BoundedTransportState = {
+    streamError?: unknown;
+    visibleWriter?: ReturnType<typeof visibleOutputWriter>;
     structuredCapacity?: { contextWindow: number; maxTokens: number };
     requestBlockCode?: string;
     observableReplyJson?: string;
@@ -179,6 +188,80 @@ type BoundedTransportState = {
         generationError?: unknown;
     };
 };
+
+/** The stream and diagnostic RPCs share dispatch authority; cleanup shares its existing settlement grace. */
+function captureUntil<T>(
+    work: () => PromiseLike<T>,
+    signal: AbortSignal,
+): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const abort = () => reject(signal.reason);
+        if (signal.aborted) {
+            abort();
+            return;
+        }
+        signal.addEventListener("abort", abort, { once: true });
+        Promise.resolve()
+            .then(() => {
+                signal.throwIfAborted();
+                return work();
+            })
+            .then(resolve, reject)
+            .finally(() => signal.removeEventListener("abort", abort));
+    });
+}
+
+function visibleOutputWriter(
+    append: NonNullable<AttemptDependencies["onVisibleText"]>,
+    abort: (error: unknown) => void,
+    signal: AbortSignal,
+) {
+    let pending = "";
+    let sequence = 0;
+    let flight: Promise<void> | undefined;
+    let failure: unknown;
+    const start = () => {
+        flight ??= (async () => {
+            while (pending) {
+                let end = Math.min(pending.length, TEXT_FRAGMENT_CHARACTERS);
+                const last = pending.charCodeAt(end - 1);
+                if (end < pending.length && last >= 0xd800 && last <= 0xdbff)
+                    end--;
+                const text = pending.slice(0, end);
+                pending = pending.slice(end);
+                await captureUntil(() => append(text, sequence++), signal);
+            }
+        })()
+            .catch((error: unknown) => {
+                failure = error;
+                abort(error);
+            })
+            .finally(() => {
+                flight = undefined;
+            });
+    };
+    return {
+        async write(text: string) {
+            for (let offset = 0; offset < text.length; ) {
+                if (failure) throw failure;
+                const part = text.slice(
+                    offset,
+                    offset + TEXT_FRAGMENT_CHARACTERS,
+                );
+                offset += part.length;
+                pending += part;
+                start();
+                if (pending.length >= TEXT_FRAGMENT_CHARACTERS) await flight;
+            }
+        },
+        async flush() {
+            if (failure) throw failure;
+            if (pending) start();
+            await flight;
+            if (failure) throw failure;
+        },
+    };
+}
 
 export type AuthorizedAgentRoute = AgentModelRoute;
 export type DeferredAgentGenerationResult = AgentGenerationResult;
@@ -402,6 +485,28 @@ function createRoutedModel(
             extraBody: { reasoning: settings.reasoning },
         }),
         middleware: {
+            wrapStream: async ({ params, doStream }) => {
+                state.effectiveMaxOutputTokens = params.maxOutputTokens;
+                const result = await doStream();
+                // HTTP abort owns transport cancellation. Avoid the installed provider's unawaited reader.cancel rejection.
+                return {
+                    ...result,
+                    stream: result.stream.pipeThrough(
+                        new TransformStream({
+                            async transform(part, controller) {
+                                if (part.type === "error")
+                                    state.streamError ??= part.error;
+                                if (part.type === "text-delta")
+                                    await state.visibleWriter?.write(
+                                        part.delta,
+                                    );
+                                controller.enqueue(part);
+                            },
+                        }),
+                        { preventCancel: true },
+                    ),
+                };
+            },
             transformParams: async ({ params }) => {
                 if (!state.structuredCapacity) return params;
                 const estimatedInput = estimateTextTokens(
@@ -775,7 +880,43 @@ export async function invokeOneShot<T>(args: {
     const preflight = preflightFailure(route, dependencies);
     if (preflight) return preflight;
     const startedAt = Date.now();
-    const state: BoundedTransportState = { responseTooLarge: false };
+    const captureAbort = new AbortController();
+    const generationSignal = AbortSignal.any([
+        captureAbort.signal,
+        ...(dependencies.signal ? [dependencies.signal] : []),
+        AbortSignal.timeout(
+            Math.max(
+                1,
+                (dependencies.authority?.deadlineAt ?? startedAt) - Date.now(),
+            ),
+        ),
+    ]);
+    const settlementAbort = new AbortController();
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+    const allowSettlement = () => {
+        graceTimer ??= setTimeout(
+            () =>
+                settlementAbort.abort(
+                    executionError("response_retention_failed"),
+                ),
+            MODEL_SETTLEMENT_GRACE_MS,
+        );
+    };
+    generationSignal.addEventListener("abort", allowSettlement, { once: true });
+    let terminalReceipt: AttemptReceipt | undefined;
+    let captureSealed = false;
+    const state: BoundedTransportState = {
+        responseTooLarge: false,
+        visibleWriter: dependencies.onVisibleText
+            ? visibleOutputWriter(
+                  dependencies.onVisibleText,
+                  (error) => {
+                      if (!generationSignal.aborted) captureAbort.abort(error);
+                  },
+                  generationSignal,
+              )
+            : undefined,
+    };
     try {
         const authority = resolveGenerationAuthority(
             dependencies.authority,
@@ -789,7 +930,10 @@ export async function invokeOneShot<T>(args: {
                 maxTokens: maxOutputTokens,
             };
         const provider = createBoundedProvider(dependencies, state, route);
-        const result = await generateText({
+        const stream = streamText({
+            onError: ({ error }) => {
+                state.streamError ??= error;
+            },
             model: createRoutedModel(provider, route, dependencies, state),
             instructions: args.instructions,
             prompt: args.prompt,
@@ -799,12 +943,99 @@ export async function invokeOneShot<T>(args: {
             }),
             ...modelCallSettings(route, authority.deadlineAt).generation,
             maxOutputTokens,
-            abortSignal: AbortSignal.any([
-                ...(dependencies.signal ? [dependencies.signal] : []),
-                AbortSignal.timeout(authority.timeoutMs),
-            ]),
+            experimental_transform: () => {
+                let text = "";
+                let head:
+                    | Extract<TextStreamPart<ToolSet>, { type: "text-delta" }>
+                    | undefined;
+                const flush = (
+                    controller: TransformStreamDefaultController<
+                        TextStreamPart<ToolSet>
+                    >,
+                ) => {
+                    if (head) controller.enqueue({ ...head, text });
+                    text = "";
+                    head = undefined;
+                };
+                return new TransformStream<
+                    TextStreamPart<ToolSet>,
+                    TextStreamPart<ToolSet>
+                >({
+                    transform(part, controller) {
+                        if (part.type !== "text-delta") {
+                            flush(controller);
+                            controller.enqueue(part);
+                            return;
+                        }
+                        if (head && head.id !== part.id) flush(controller);
+                        head = part;
+                        text += part.text;
+                        if (text.length >= TEXT_FRAGMENT_CHARACTERS)
+                            flush(controller);
+                    },
+                    flush,
+                });
+            },
+            abortSignal: generationSignal,
         });
+        const output = Promise.resolve(stream.output);
+        void output.catch(() => undefined);
+        const completion = Promise.all([
+            stream.text,
+            stream.finishReason,
+            stream.usage,
+            stream.response,
+            stream.providerMetadata,
+        ]);
+        void completion.catch(() => undefined);
+        let streamError: unknown;
+        await captureUntil(
+            () =>
+                stream.consumeStream({
+                    onError: (error) => {
+                        streamError ??= error;
+                    },
+                }),
+            generationSignal,
+        );
+        if (streamError || state.streamError)
+            throw streamError ?? state.streamError;
+        const [text, finishReason, usage, response, providerMetadata] =
+            await completion;
+        const result = {
+            text,
+            finishReason,
+            usage,
+            response,
+            providerMetadata,
+        };
+        state.observableReplyJson = JSON.stringify({
+            version: 1,
+            content: [{ type: "text", text: result.text }],
+            finishReason: { unified: result.finishReason },
+        });
+        terminalReceipt = createAttemptReceipt(route, state, startedAt, result);
+        allowSettlement();
+        await captureUntil(
+            () => state.visibleWriter?.flush() ?? Promise.resolve(),
+            settlementAbort.signal,
+        );
+        try {
+            await captureUntil(
+                () =>
+                    dependencies.finishVisibleOutput?.(
+                        true,
+                        result.finishReason,
+                    ) ?? Promise.resolve(),
+                settlementAbort.signal,
+            );
+        } catch (error) {
+            captureAbort.abort(error);
+            throw error;
+        }
+        captureSealed = true;
         const receipt = createAttemptReceipt(route, state, startedAt, result);
+        const value = await output;
         if (result.finishReason !== "stop")
             return {
                 ...receipt,
@@ -820,19 +1051,80 @@ export async function invokeOneShot<T>(args: {
         return {
             ...receipt,
             status: "succeeded",
-            value: result.output,
+            value,
             assistantOutput: result.text,
         };
     } catch (error) {
+        allowSettlement();
+        let failure = error;
+        try {
+            await captureUntil(
+                () => state.visibleWriter?.flush() ?? Promise.resolve(),
+                settlementAbort.signal,
+            );
+        } catch (captureError) {
+            failure = captureError;
+            if (settlementAbort.signal.aborted || !generationSignal.aborted)
+                captureAbort.abort(captureError);
+        }
+        try {
+            await captureUntil(
+                () =>
+                    (captureSealed
+                        ? Promise.resolve()
+                        : dependencies.finishVisibleOutput?.(
+                              false,
+                              executionFailureCode(failure) ??
+                                  (failure instanceof Error
+                                      ? failure.name
+                                      : "stream_interrupted"),
+                          )) ?? Promise.resolve(),
+                settlementAbort.signal,
+            );
+        } catch (captureError) {
+            failure = captureError;
+            if (settlementAbort.signal.aborted || !generationSignal.aborted)
+                captureAbort.abort(captureError);
+        }
+        if (captureAbort.signal.aborted) {
+            if (state.dispatched)
+                await dependencies.observeProvider?.({
+                    diagnostic: protectedDiagnostic(
+                        failure,
+                        "provider_transport",
+                    ),
+                });
+            return {
+                ...(terminalReceipt ?? {
+                    model: route.model,
+                    latencyMs: Math.max(0, Date.now() - startedAt),
+                    httpStatus: state.httpStatus,
+                    dispatchOutcome: state.dispatched
+                        ? state.httpStatus === undefined
+                            ? "unknown"
+                            : "response_received"
+                        : "not_dispatched",
+                }),
+                status: "failed",
+                errorCode:
+                    executionFailureCode(failure) ??
+                    "response_retention_failed",
+                retryable: false,
+            };
+        }
         if (!state.dispatched)
             state.requestBlockCode ??= executionFailureCode(error);
-        return failedAttemptFromError({
-            error,
+        const failed = await failedAttemptFromError({
+            error: failure,
             route,
             dependencies,
             state,
             startedAt,
         });
+        return { ...failed, ...terminalReceipt };
+    } finally {
+        generationSignal.removeEventListener("abort", allowSettlement);
+        if (graceTimer !== undefined) clearTimeout(graceTimer);
     }
 }
 

@@ -1,7 +1,10 @@
 import { internal } from "@convex/_generated/api";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { assert, expect, test } from "vitest";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    dispatchSourcesOperation,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 
 test("an exhausted discovery allowance refuses only discovery and records its specific reason", async () => {
     const f = await seedCapturedSources();
@@ -32,7 +35,7 @@ test("an exhausted discovery allowance refuses only discovery and records its sp
             },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });
@@ -54,7 +57,7 @@ test("an exhausted discovery allowance refuses only discovery and records its sp
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId: readingId,
             expectedGeneration: 4,
         }),
@@ -143,7 +146,7 @@ test.each([
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -180,7 +183,7 @@ test("the preparation work capacity has a distinct refusal without consuming dis
         },
     );
     expect(
-        await f.t.action(internal.execution.operations.dispatch, {
+        await dispatchSourcesOperation(f.t, {
             requestId,
             expectedGeneration: 4,
         }),
@@ -207,7 +210,7 @@ test("seven saved-material searches do not consume the external discovery allowa
             },
         );
         expect(
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchSourcesOperation(f.t, {
                 requestId,
                 expectedGeneration: 4,
             }),
@@ -245,7 +248,7 @@ test("a limited passage page remains continuable without consuming discovery", a
             },
         },
     );
-    const outcome = await f.t.action(internal.execution.operations.dispatch, {
+    const outcome = await dispatchSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });

@@ -979,6 +979,7 @@ export const inspectJournalEvent = query({
 
 import {
     completeRetainedText,
+    retainedDiagnosticText,
     retainedTextPage,
 } from "@convex/execution/retainedText";
 
@@ -986,6 +987,47 @@ const invocationPayloadArgs = v.object({
     runId: v.id("researchRuns"),
     invocationId: v.id("agentInvocations"),
     part: v.union(v.literal("request"), v.literal("reply")),
+});
+
+/** Visible prefixes are protected diagnostics, never an analyst or replay input. */
+export const readInvocationVisibleOutput = query({
+    args: {
+        runId: v.id("researchRuns"),
+        invocationId: v.id("agentInvocations"),
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: v.union(
+        v.null(),
+        v.object({
+            capture:
+                schema.tables.agentInvocations.validator.fields.visibleOutput,
+            fragments: paginationResultValidator(
+                v.object({ index: v.number(), content: v.string() }),
+            ),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        const invocation = await ctx.db.get(args.invocationId);
+        if (!invocation || invocation.runId !== args.runId)
+            throw new Error("Journal entry not found");
+        if (!invocation.visibleOutput) return null;
+        const text = await retainedDiagnosticText(
+            ctx,
+            invocation.visibleOutput.textId,
+            `${invocation._id}:visible`,
+        );
+        if (text.key !== `${invocation._id}:visible`)
+            throw new Error("Journal correlation mismatch");
+        return {
+            capture: {
+                ...invocation.visibleOutput,
+                contentHash: text.contentHash,
+                sizeBytes: text.sizeBytes,
+            },
+            fragments: await retainedTextPage(ctx, text, args.paginationOpts),
+        };
+    },
 });
 
 /** Reads one bounded snapshot; legacy context is never invented into a provider request. */

@@ -173,7 +173,7 @@ test("an unconfirmed durable action is unknown immediately and is never blindly 
     });
     const operation = getAgentDefinition("saved_material_inspection_v1")
         .operations.read_in_context;
-    assert(operation?.effectKind === "durable_effect");
+    assert(operation?.effectKind === "durable_effect" && operation.execute);
     const original = { ...operation };
     vi.spyOn(operation, "execute").mockImplementation((ctx, input) =>
         original.execute(

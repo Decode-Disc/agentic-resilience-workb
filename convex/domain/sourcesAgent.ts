@@ -10,7 +10,6 @@ import {
     operationReuseIdentity,
 } from "@convex/execution/missionData";
 import { completionFeedbackValidator } from "@convex/execution/operationContracts";
-import { observeOperationOutcome } from "@convex/execution/operationResults";
 import {
     SOURCES_HANDOFF_READ_CAPACITY,
     SOURCES_MAX_EVIDENCE_REFERENCES,
@@ -121,20 +120,7 @@ const operation = (
             return { kind: "unavailable", code };
         }
     },
-    async execute(ctx, args) {
-        if (!args.requestId)
-            return {
-                outcome: { kind: "refused", code: "request_unavailable" },
-            };
-        return {
-            outcome: observeOperationOutcome(
-                await ctx.runAction(internal.sourcesMissionActions.execute, {
-                    requestId: args.requestId,
-                    expectedGeneration: args.expectedGeneration,
-                }),
-            ),
-        };
-    },
+    scheduledAction: internal.sourcesMissionActions.execute,
 });
 const sourcesInstructions = [
     "Prepare documentary material for the fixed activity and shared needs. Do not answer economic research questions or adopt analyst judgments.",

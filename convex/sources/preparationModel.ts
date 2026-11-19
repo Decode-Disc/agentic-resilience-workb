@@ -49,7 +49,12 @@ export async function executePreparationModel<
             route: SourceQualificationRoute,
             dependencies: Pick<
                 AttemptDependencies,
-                "authority" | "signal" | "beforeDispatch" | "observeProvider"
+                | "authority"
+                | "signal"
+                | "beforeDispatch"
+                | "observeProvider"
+                | "onVisibleText"
+                | "finishVisibleOutput"
             >,
         ) => Promise<Result>;
     },
@@ -173,6 +178,20 @@ export async function executePreparationModel<
                 signal: AbortSignal.timeout(
                     Math.max(1, deadlineAt - Date.now()),
                 ),
+                onVisibleText: async (text, sequence) => {
+                    await ctx.runMutation(
+                        internal.execution.invocationLifecycle
+                            .appendVisibleOutput,
+                        { invocationId, sequence, text },
+                    );
+                },
+                finishVisibleOutput: async (complete, terminalReason) => {
+                    await ctx.runMutation(
+                        internal.execution.invocationLifecycle
+                            .sealVisibleOutput,
+                        { invocationId, complete, terminalReason },
+                    );
+                },
                 beforeDispatch: async (requestJson, metadata) => {
                     const retained = await ctx.runMutation(
                         internal.execution.invocationLifecycle.retainRequest,

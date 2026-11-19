@@ -3,7 +3,10 @@ import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { extractObservedDestinations } from "@convex/integrations/evidenceNormalization";
 import { assert, expect, test } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import {
+    seedCapturedSources,
+    startSourcesOperation,
+} from "@/__tests__/setup/sources-mission";
 
 test.each([
     {
@@ -218,7 +221,7 @@ test("shared reading exposes acquisition destinations only to capable missions a
             },
         },
     );
-    await f.t.mutation(internal.execution.operations.claim, {
+    await startSourcesOperation(f.t, {
         requestId,
         expectedGeneration: 4,
     });

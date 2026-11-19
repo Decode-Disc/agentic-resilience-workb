@@ -70,6 +70,7 @@ import {
     requireSettlementAuthority,
 } from "@convex/execution/authority";
 import { executionError } from "@convex/execution/errors";
+import { operationHasStarted } from "@convex/execution/executionProtocol";
 import { recordContextObservation } from "@convex/execution/journal";
 import { registerOperationWaitEvent } from "@convex/execution/operations";
 import {
@@ -150,7 +151,8 @@ async function workContext(
 ) {
     const request = await ctx.db.get(args.requestId);
     if (
-        request?.status !== "running" ||
+        !request ||
+        !operationHasStarted(request) ||
         request.expectedGeneration !== args.expectedGeneration ||
         request.pin?.kind !== "sources_v1" ||
         !validate(sourcesOperationValidator, request.input)

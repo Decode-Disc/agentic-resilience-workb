@@ -26,6 +26,7 @@ const admit = makeFunctionReference<
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
 });
 const manifest = () =>
     campaignManifestSchema.parse({
@@ -173,7 +174,7 @@ async function liveFixture(
     }
     const m = campaignManifestSchema.parse({
         ...raw,
-        ...(costAccountingPolicy ? { costAccountingPolicy } : {}),
+        costAccountingPolicy: costAccountingPolicy ?? "known_final_v1",
         ...(researchDurationMs === undefined
             ? {}
             : { researchDurationMs, contextDurationMs: 50 * 60_000 }),
@@ -1053,3 +1054,301 @@ test.each([
         await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toHaveLength(1);
 });
+
+test("a proven local refusal is not a Sources input observation despite its HTTP status", async () => {
+    const f = await liveFixture();
+    const first = f.bindings[0];
+    if (!first) throw new Error("Missing first binding");
+    const started = await startQualifiedSources(f);
+    const context = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(first.runId);
+        const sourceMission = await ctx.db
+            .query("agentMissions")
+            .withIndex("by_run_and_request_key", (q) =>
+                q.eq("runId", first.runId),
+            )
+            .first();
+        if (!run || !sourceMission) throw new Error("Missing fixture mission");
+        const prepId = started.preparationId;
+        await ctx.db.patch(run._id, { sourcePreparationId: prepId });
+        await ctx.db.patch(sourceMission._id, {
+            requestKey: `sources:${prepId}`,
+        });
+        const invocationId = await ctx.db.insert("agentInvocations", {
+            runId: run._id,
+            missionId: sourceMission._id,
+            generation: run.executionGeneration,
+            definitionVersion: 1,
+            taskKey: "first-refused",
+            status: "started",
+            provenance: "live",
+            inputJson: "{}",
+            createdAt: Date.now(),
+        });
+        const receiptId = await ctx.db.insert("providerCalls", {
+            runId: run._id,
+            invocationId,
+            operationKey: "refused-local",
+            stepKey: "fixture",
+            executionGeneration: run.executionGeneration,
+            attempt: 1,
+            service: "model",
+            operation: "agent_reasoning",
+            status: "failed",
+            dispatchOutcome: "not_dispatched",
+            providerObservation: { httpStatus: 400, observedAt: Date.now() },
+            createdAt: Date.now(),
+        });
+        await ctx.db.patch(sourceMission._id, {
+            firstProviderInput: {
+                invocationId,
+                providerCallId: receiptId,
+                contentHash: "a".repeat(64),
+            },
+        });
+        return { runId: run._id, fixtureKey: first.fixtureKey };
+    });
+    const snapshot = await f.t.query(
+        internal.execution.fixtures.qualificationSnapshot,
+        context,
+    );
+    expect(snapshot.firstSourcesInput?.dispatch).toBe("not_dispatched");
+});
+
+test("the input pointer advances past proven non-dispatch but keeps an uncertain first attempt", async () => {
+    const f = await liveFixture();
+    const a = await f.attempt(0);
+    const b = await f.attempt(1);
+    const [first, second] = await f.t.run(async (ctx) => {
+        const ids = [];
+        for (const attempt of [a, b]) {
+            const receiptId = await ctx.db.insert("providerCalls", {
+                ...attempt,
+                status: "failed",
+                createdAt: Date.now(),
+                dispatchOutcome:
+                    attempt === a ? "not_dispatched" : "response_received",
+            });
+            await ctx.db.patch(attempt.invocationId, {
+                providerCallId: receiptId,
+            });
+            ids.push(receiptId);
+        }
+        return ids;
+    });
+    assert(first && second);
+    await f.t.run(async (ctx) => {
+        const invocation = await ctx.db.get(a.invocationId);
+        assert(invocation);
+        await retainInvocationPayload(
+            ctx,
+            invocation,
+            "request",
+            JSON.stringify({ wire: 1 }),
+        );
+        const next = await ctx.db.get(b.invocationId);
+        assert(next);
+        await retainInvocationPayload(
+            ctx,
+            next,
+            "request",
+            JSON.stringify({ wire: 2 }),
+        );
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(a.missionId)))?.firstProviderInput
+            ?.invocationId,
+    ).toBe(b.invocationId);
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(a.missionId, { firstProviderInput: undefined });
+        await ctx.db.patch(first, { dispatchOutcome: "unknown" });
+        const one = await ctx.db.get(a.invocationId);
+        const two = await ctx.db.get(b.invocationId);
+        assert(one && two);
+        await retainInvocationPayload(
+            ctx,
+            one,
+            "request",
+            JSON.stringify({ wire: 1 }),
+        );
+        await retainInvocationPayload(
+            ctx,
+            two,
+            "request",
+            JSON.stringify({ wire: 2 }),
+        );
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(a.missionId)))?.firstProviderInput
+            ?.invocationId,
+    ).toBe(a.invocationId);
+});
+
+test("legacy usage without conflict accounting cannot authorize another attempt", async () => {
+    const f = await liveFixture();
+    await f.t.run(async (ctx) => {
+        for (const row of await ctx.db
+            .query("qualificationUsage")
+            .withIndex("by_context_and_run", (q) =>
+                q.eq("contextId", f.contextId),
+            )
+            .collect())
+            await ctx.db.patch(row._id, { conflicts: undefined });
+    });
+    await expect(
+        f.t.mutation(internal.providerCalls.recordAttempt, await f.attempt(0)),
+    ).rejects.toThrow("qualification_outcome_unresolved");
+});
+
+test.each([
+    "matched",
+    "missing",
+    "changed",
+])("native financial reservations require a correlated relay acknowledgement (proof=%s)", async (proof) => {
+    const f = await liveFixture();
+    vi.stubEnv("OPENROUTER_API_KEY", "offline-only");
+    await f.t.run(async (ctx) => {
+        const context = await ctx.db.get(f.contextId);
+        assert(context?.paidQualification);
+        await ctx.db.patch(context._id, {
+            paidQualification: {
+                ...context.paidQualification,
+                relayOrigin: "http://127.0.0.1:43210",
+            },
+        });
+    });
+    let dispatches = 0;
+    const seen: string[] = [];
+    vi.stubGlobal(
+        "fetch",
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+            const request = new Request(input, init);
+            seen.push(
+                JSON.stringify({
+                    url: request.url,
+                    headers: [...request.headers.keys()],
+                    originalHeaders:
+                        input instanceof Request
+                            ? [...input.headers.keys()]
+                            : null,
+                    initHeaders: [...new Headers(init?.headers).keys()],
+                    redirect: init?.redirect,
+                }),
+            );
+            expect(new URL(request.url).origin).toBe("http://127.0.0.1:43210");
+            expect(request.headers.has("authorization")).toBe(false);
+            expect(init?.redirect).toBe("error");
+            const correlation = request.headers.get(
+                "x-workbench-relay-dispatch",
+            );
+            assert(correlation);
+            expect(JSON.parse(correlation).bodyHash).toBe(
+                sha256Hex(await request.text()),
+            );
+            dispatches++;
+            return Response.json(
+                { error: { message: "Local deterministic refusal" } },
+                {
+                    status: 400,
+                    headers:
+                        proof === "missing"
+                            ? {}
+                            : {
+                                  "x-workbench-relay-not-dispatched":
+                                      proof === "matched"
+                                          ? correlation
+                                          : JSON.stringify({
+                                                ...JSON.parse(correlation),
+                                                generation: 999,
+                                            }),
+                              },
+                },
+            );
+        },
+    );
+    const mission = await f.t.run(async (ctx) => {
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .unique();
+        const turn = conversation?.activeTurnId
+            ? await ctx.db.get(conversation.activeTurnId)
+            : null;
+        return turn?.missionId ? ctx.db.get(turn.missionId) : null;
+    });
+    assert(mission);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId: mission._id,
+        expectedGeneration: mission.generation,
+        simulation: false,
+    });
+    const ready = await f.t.run((ctx) => ctx.db.get(mission._id));
+    assert(ready?.piWakeToken);
+    await f.t.action(internal.execution.piWorker.run, {
+        missionId: mission._id,
+        expectedGeneration: mission.generation,
+        token: ready.piWakeToken,
+    });
+    const state = await f.t.run(async (ctx) => ({
+        calls: await ctx.db
+            .query("providerCalls")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .collect(),
+        usage: await ctx.db
+            .query("qualificationUsage")
+            .withIndex("by_context_and_run", (q) =>
+                q.eq("contextId", f.contextId).eq("runId", f.runId),
+            )
+            .unique(),
+    }));
+    const endMission = await f.t.run((ctx) => ctx.db.get(mission._id));
+    if (!dispatches) {
+        const invs = await f.t.run((ctx) =>
+            ctx.db
+                .query("agentInvocations")
+                .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
+                .collect(),
+        );
+        throw new Error(
+            JSON.stringify({
+                code: endMission?.blockCode,
+                seen,
+                fixtureRun: f.runId,
+                missionRun: mission.runId,
+                last: endMission?.lastInvocationId,
+                allReceipts: await f.t.run(async (ctx) =>
+                    (await ctx.db.query("providerCalls").collect()).map(
+                        (c) => ({
+                            id: c._id,
+                            runId: c.runId,
+                            invocationId: c.invocationId,
+                            status: c.status,
+                        }),
+                    ),
+                ),
+                invocations: invs.map((i) => ({
+                    status: i.status,
+                    providerCallId: i.providerCallId,
+                    output: i.outputJson,
+                    raw: i.rawOutputJson,
+                    received: i.receivedOutputJson,
+                })),
+            }),
+        );
+    }
+    expect({
+        dispatches,
+        blockCode: endMission?.blockCode,
+        requests: state.calls.map((c) => ({
+            status: c.status,
+            errorCode: c.errorCode,
+        })),
+    }).toMatchObject({ dispatches: 1 });
+    expect(state.calls).toHaveLength(1);
+    expect(state.calls[0]?.dispatchOutcome).toBe(
+        proof === "matched" ? "not_dispatched" : "response_received",
+    );
+    expect(state.usage?.usage.model).toBe(1);
+    if (proof === "matched") expect(state.usage?.usage.costUsd).toBe(0);
+    else expect(state.usage?.usage.costUsd).toBeGreaterThan(0);
+}, 30000);

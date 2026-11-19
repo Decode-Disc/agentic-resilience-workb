@@ -7,6 +7,7 @@ import { extractObservedDestinations } from "@convex/integrations/evidenceNormal
 import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
+    dispatchSourcesOperation,
     recordDocumentaryRead,
     seedCapturedSources,
 } from "@/__tests__/setup/sources-mission";
@@ -272,6 +273,10 @@ test.each([
                 requestId,
                 expectedGeneration: 4,
             });
+            await ctx.runMutation(
+                internal.execution.operations.beginScheduledExecution,
+                { requestId, expectedGeneration: 4 },
+            );
             await expect(
                 ctx.runMutation(internal.sourcesMission.reserve, {
                     requestId,
@@ -384,7 +389,7 @@ test.each([
             },
         );
         expect(
-            await f.t.action(internal.execution.operations.dispatch, {
+            await dispatchSourcesOperation(f.t, {
                 requestId,
                 expectedGeneration: 1,
             }),

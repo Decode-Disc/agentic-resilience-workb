@@ -8,7 +8,16 @@ import {
     retainExecutionEventPayload,
     retainInvocationPayload,
 } from "@convex/execution/journal";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
+import {
+    appendRetainedText,
+    completeRetainedText,
+    readRetainedText,
+    sealRetainedText,
+} from "@convex/execution/retainedText";
+import {
+    MAX_OPERATION_RESULT_BYTES,
+    TEXT_FRAGMENT_CHARACTERS,
+} from "@convex/resourcePolicy";
 import { makeFunctionReference } from "convex/server";
 import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -21,6 +30,52 @@ import {
 afterEach(() => {
     vi.unstubAllEnvs();
     vi.useRealTimers();
+});
+
+test("append storage packs slow Unicode chunks and rejects changed or out-of-order acknowledgements", async () => {
+    const f = await seedHistoryMission();
+    const head = `${"x".repeat(TEXT_FRAGMENT_CHARACTERS - 1)}\ud83d`;
+    const id = await f.t.run((ctx) =>
+        appendRetainedText(ctx, "diagnostic-stream", 0, head),
+    );
+    await expect(
+        f.t.run((ctx) => completeRetainedText(ctx, id)),
+    ).rejects.toThrow("retained_text_incomplete");
+    expect(
+        await f.t.run((ctx) =>
+            appendRetainedText(ctx, "diagnostic-stream", 0, head),
+        ),
+    ).toBe(id);
+    await expect(
+        f.t.run((ctx) =>
+            appendRetainedText(ctx, "diagnostic-stream", 0, "changed"),
+        ),
+    ).rejects.toThrow("retained_text_sequence");
+    await expect(
+        f.t.run((ctx) =>
+            appendRetainedText(ctx, "diagnostic-stream", 2, "gap"),
+        ),
+    ).rejects.toThrow("retained_text_sequence");
+    await f.t.run((ctx) =>
+        appendRetainedText(ctx, "diagnostic-stream", 1, "\ude00"),
+    );
+    for (let i = 2; i < 12; i++)
+        await f.t.run((ctx) =>
+            appendRetainedText(ctx, "diagnostic-stream", i, "a"),
+        );
+    await f.t.run((ctx) => sealRetainedText(ctx, id));
+    await f.t.run((ctx) => sealRetainedText(ctx, id));
+    const expected = `${head}\ude00${"a".repeat(10)}`;
+    expect(await f.t.run((ctx) => readRetainedText(ctx, id))).toBe(expected);
+    const text = await f.t.run((ctx) => ctx.db.get(id));
+    expect(text?.fragmentHashes).toHaveLength(2);
+    expect(text?.sizeBytes).toBe(new TextEncoder().encode(expected).length);
+    expect(text?.contentHash).toBe(sha256Hex(expected));
+    await expect(
+        f.t.run((ctx) =>
+            appendRetainedText(ctx, "diagnostic-stream", 12, "late"),
+        ),
+    ).rejects.toThrow("retained_text_sequence");
 });
 
 test.each([
