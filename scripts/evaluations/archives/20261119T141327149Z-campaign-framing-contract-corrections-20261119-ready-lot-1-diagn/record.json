@@ -1,0 +1,370 @@
+{
+    "schemaVersion": 1,
+    "id": "20261119T141327149Z-campaign-framing-contract-corrections-20261119-ready-lot-1-diagn",
+    "createdAt": "2026-11-19T14:13:27.149Z",
+    "git": {
+        "head": "64e8c2287fc090091a524dd8c9272ffe87314806",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-mission.json",
+            "archivePath": "external/review0/automated-review-mission.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-report-11-5b5d31bb92c54dd3410d52574ccc7c3853bb515d05ae39a77d4623f3d7b0b01e.md",
+            "archivePath": "external/review1/automated-review-report-11-5b5d31bb92c54dd3410d52574ccc7c3853bb515d05ae39a77d4623f3d7b0b01e.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-report-6-aeb3a8511a6d5f2e8dab38f0f6aab9fa6f3649863d3e88bd824cd3ff8b4a1d14.md",
+            "archivePath": "external/review2/automated-review-report-6-aeb3a8511a6d5f2e8dab38f0f6aab9fa6f3649863d3e88bd824cd3ff8b4a1d14.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-report.json",
+            "archivePath": "external/review3/automated-review-report.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-report.md",
+            "archivePath": "external/review4/automated-review-report.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-1.json",
+            "archivePath": "external/review5/automated-review-response-analysis-45d2dec3f76aab2f-1.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-10.json",
+            "archivePath": "external/review6/automated-review-response-analysis-45d2dec3f76aab2f-10.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-11.json",
+            "archivePath": "external/review7/automated-review-response-analysis-45d2dec3f76aab2f-11.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-12.json",
+            "archivePath": "external/review8/automated-review-response-analysis-45d2dec3f76aab2f-12.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-13.json",
+            "archivePath": "external/review9/automated-review-response-analysis-45d2dec3f76aab2f-13.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-14.json",
+            "archivePath": "external/review10/automated-review-response-analysis-45d2dec3f76aab2f-14.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-15.json",
+            "archivePath": "external/review11/automated-review-response-analysis-45d2dec3f76aab2f-15.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-16.json",
+            "archivePath": "external/review12/automated-review-response-analysis-45d2dec3f76aab2f-16.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-17.json",
+            "archivePath": "external/review13/automated-review-response-analysis-45d2dec3f76aab2f-17.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-18.json",
+            "archivePath": "external/review14/automated-review-response-analysis-45d2dec3f76aab2f-18.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-19.json",
+            "archivePath": "external/review15/automated-review-response-analysis-45d2dec3f76aab2f-19.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-2.json",
+            "archivePath": "external/review16/automated-review-response-analysis-45d2dec3f76aab2f-2.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-20.json",
+            "archivePath": "external/review17/automated-review-response-analysis-45d2dec3f76aab2f-20.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-21.json",
+            "archivePath": "external/review18/automated-review-response-analysis-45d2dec3f76aab2f-21.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-22.json",
+            "archivePath": "external/review19/automated-review-response-analysis-45d2dec3f76aab2f-22.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-23.json",
+            "archivePath": "external/review20/automated-review-response-analysis-45d2dec3f76aab2f-23.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-24.json",
+            "archivePath": "external/review21/automated-review-response-analysis-45d2dec3f76aab2f-24.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-25.json",
+            "archivePath": "external/review22/automated-review-response-analysis-45d2dec3f76aab2f-25.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-26.json",
+            "archivePath": "external/review23/automated-review-response-analysis-45d2dec3f76aab2f-26.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-27.json",
+            "archivePath": "external/review24/automated-review-response-analysis-45d2dec3f76aab2f-27.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-28.json",
+            "archivePath": "external/review25/automated-review-response-analysis-45d2dec3f76aab2f-28.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-29.json",
+            "archivePath": "external/review26/automated-review-response-analysis-45d2dec3f76aab2f-29.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-3.json",
+            "archivePath": "external/review27/automated-review-response-analysis-45d2dec3f76aab2f-3.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-4.json",
+            "archivePath": "external/review28/automated-review-response-analysis-45d2dec3f76aab2f-4.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-5.json",
+            "archivePath": "external/review29/automated-review-response-analysis-45d2dec3f76aab2f-5.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-6.json",
+            "archivePath": "external/review30/automated-review-response-analysis-45d2dec3f76aab2f-6.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-7.json",
+            "archivePath": "external/review31/automated-review-response-analysis-45d2dec3f76aab2f-7.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-8.json",
+            "archivePath": "external/review32/automated-review-response-analysis-45d2dec3f76aab2f-8.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-response-analysis-45d2dec3f76aab2f-9.json",
+            "archivePath": "external/review33/automated-review-response-analysis-45d2dec3f76aab2f-9.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-status.json",
+            "archivePath": "external/review34/automated-review-status.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/progress.jsonl",
+            "archivePath": "external/review35/progress.jsonl"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-evidence-45d2dec3f76aab2fc00dd793461556d446caf79d3330b603a34c95c711dd65b7/.complete",
+            "archivePath": "external/review36/.complete"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-evidence-45d2dec3f76aab2fc00dd793461556d446caf79d3330b603a34c95c711dd65b7/review-template.json",
+            "archivePath": "external/review37/review-template.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/lots/lot-1/automated-review-evidence-45d2dec3f76aab2fc00dd793461556d446caf79d3330b603a34c95c711dd65b7/evidence-index-45d2dec3f76aab2fc00dd793461556d446caf79d3330b603a34c95c711dd65b7.json",
+            "archivePath": "external/review38/evidence-index-45d2dec3f76aab2fc00dd793461556d446caf79d3330b603a34c95c711dd65b7.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/review0/automated-review-mission.json",
+            "bytes": 12819,
+            "sha256": "f47f5c7677a91e43e7bdff8833f7059e1f1635ff88a039a1db08a3781f0e3ede"
+        },
+        {
+            "path": "external/review1/automated-review-report-11-5b5d31bb92c54dd3410d52574ccc7c3853bb515d05ae39a77d4623f3d7b0b01e.md",
+            "bytes": 6116,
+            "sha256": "5b5d31bb92c54dd3410d52574ccc7c3853bb515d05ae39a77d4623f3d7b0b01e"
+        },
+        {
+            "path": "external/review10/automated-review-response-analysis-45d2dec3f76aab2f-14.json",
+            "bytes": 55446,
+            "sha256": "749352faeec6207abd0ff8d60864cfd3f467ff4a3206ac32ce7267049efd6aa2"
+        },
+        {
+            "path": "external/review11/automated-review-response-analysis-45d2dec3f76aab2f-15.json",
+            "bytes": 30064,
+            "sha256": "ce90452b2e68af3d3a268e5db8b78b6c8f9c3ab2dac8acd5d5388750a602aacb"
+        },
+        {
+            "path": "external/review12/automated-review-response-analysis-45d2dec3f76aab2f-16.json",
+            "bytes": 33339,
+            "sha256": "6da45dfdf065ca0247f70d4fd16acb58270d4f12d9a1dd1ac7a547ee8bc6d2d0"
+        },
+        {
+            "path": "external/review13/automated-review-response-analysis-45d2dec3f76aab2f-17.json",
+            "bytes": 54695,
+            "sha256": "1ef4c2c3e8a881d28a1ea90d1096b6c4f286c006728ae1be4626afaf9c0db899"
+        },
+        {
+            "path": "external/review14/automated-review-response-analysis-45d2dec3f76aab2f-18.json",
+            "bytes": 79356,
+            "sha256": "60550c4a847829f72ef8c0a99005f57af708623f70b9789318ce14a29d7dc294"
+        },
+        {
+            "path": "external/review15/automated-review-response-analysis-45d2dec3f76aab2f-19.json",
+            "bytes": 57125,
+            "sha256": "effb408a04e7ece5656d83913bec432829ad4442d7fe493622b99f7b82e088ed"
+        },
+        {
+            "path": "external/review16/automated-review-response-analysis-45d2dec3f76aab2f-2.json",
+            "bytes": 22580,
+            "sha256": "edf7e15fd73bb11c2d2c3c160ac3d128a7e10e07e3421ae992e5c825c20da05a"
+        },
+        {
+            "path": "external/review17/automated-review-response-analysis-45d2dec3f76aab2f-20.json",
+            "bytes": 55098,
+            "sha256": "b1336dc583c9d96647660caf730282f06f0f3ab747ef149946af579a7c0de730"
+        },
+        {
+            "path": "external/review18/automated-review-response-analysis-45d2dec3f76aab2f-21.json",
+            "bytes": 37466,
+            "sha256": "678691259c1c7e36b1f7bfa138fa136dd9ddb4e12d215a735c973a7a70f677e9"
+        },
+        {
+            "path": "external/review19/automated-review-response-analysis-45d2dec3f76aab2f-22.json",
+            "bytes": 59424,
+            "sha256": "2047dbdfd298e9dbbe797db9db2c1743c5508dc753d7bd576d0700a75be71096"
+        },
+        {
+            "path": "external/review2/automated-review-report-6-aeb3a8511a6d5f2e8dab38f0f6aab9fa6f3649863d3e88bd824cd3ff8b4a1d14.md",
+            "bytes": 2149,
+            "sha256": "aeb3a8511a6d5f2e8dab38f0f6aab9fa6f3649863d3e88bd824cd3ff8b4a1d14"
+        },
+        {
+            "path": "external/review20/automated-review-response-analysis-45d2dec3f76aab2f-23.json",
+            "bytes": 31622,
+            "sha256": "97c39916fd1643bb35c041a19cda9905851d30a99d0555e3a930eafa722b98ed"
+        },
+        {
+            "path": "external/review21/automated-review-response-analysis-45d2dec3f76aab2f-24.json",
+            "bytes": 58672,
+            "sha256": "da391ee47ac6996aca5f1a711cc277c4459265c2aeaae8668c9499b01acb1453"
+        },
+        {
+            "path": "external/review22/automated-review-response-analysis-45d2dec3f76aab2f-25.json",
+            "bytes": 61273,
+            "sha256": "6b62c5ceb74c9c4926e427a4f8208662f7f608bec9cad7850cf1f8d830598161"
+        },
+        {
+            "path": "external/review23/automated-review-response-analysis-45d2dec3f76aab2f-26.json",
+            "bytes": 21419,
+            "sha256": "49fcc45b9a143f74cec580f73d788588006b512f45f9ea4bce4ce1cecfdb0da2"
+        },
+        {
+            "path": "external/review24/automated-review-response-analysis-45d2dec3f76aab2f-27.json",
+            "bytes": 58146,
+            "sha256": "88a2c0be7d1ce154fc4bb396f6b6638ae5633ab4f7459ddf2f766ea966e30b05"
+        },
+        {
+            "path": "external/review25/automated-review-response-analysis-45d2dec3f76aab2f-28.json",
+            "bytes": 79718,
+            "sha256": "5e392b0f5c4f34467df992f281dd05ef80800ba2f5ee6870fb5cbd9388a6992c"
+        },
+        {
+            "path": "external/review26/automated-review-response-analysis-45d2dec3f76aab2f-29.json",
+            "bytes": 46587,
+            "sha256": "479f8607300a0cd7a721139779ec1eef7e3a9c45cfa9d967737d1fd602cb175b"
+        },
+        {
+            "path": "external/review27/automated-review-response-analysis-45d2dec3f76aab2f-3.json",
+            "bytes": 22616,
+            "sha256": "c8125748cd22d5dcc8ddf88262291abbfea0b4a34d19aab408652c9fa6ca12f6"
+        },
+        {
+            "path": "external/review28/automated-review-response-analysis-45d2dec3f76aab2f-4.json",
+            "bytes": 20745,
+            "sha256": "47c326890b517a5daea02cf2e4db8478174eaf03278e7986a8b4a1c9a66c0724"
+        },
+        {
+            "path": "external/review29/automated-review-response-analysis-45d2dec3f76aab2f-5.json",
+            "bytes": 18909,
+            "sha256": "ac37c8f6f5cf94440abafcbb082f2c104e48bf51c48583fc2fcac5a631195d82"
+        },
+        {
+            "path": "external/review3/automated-review-report.json",
+            "bytes": 967,
+            "sha256": "e47f9385ae216fa20add17ecc5678dcebf1fbadaee0f93667bae768d61ff9b48"
+        },
+        {
+            "path": "external/review30/automated-review-response-analysis-45d2dec3f76aab2f-6.json",
+            "bytes": 140054,
+            "sha256": "27a9240e7499900fa23c51dbcc3cb74d8c9d0babbbb3ac317b548f3860b97eff"
+        },
+        {
+            "path": "external/review31/automated-review-response-analysis-45d2dec3f76aab2f-7.json",
+            "bytes": 20727,
+            "sha256": "0fe33f2642a0a444694817fe4e2aee6e9e1b8f901bad9b9e88bfed99fffb33f6"
+        },
+        {
+            "path": "external/review32/automated-review-response-analysis-45d2dec3f76aab2f-8.json",
+            "bytes": 38355,
+            "sha256": "1b55f8cbe158b804817ccd471dbabe2812e25e3b473b7a1cede295476e4daa85"
+        },
+        {
+            "path": "external/review33/automated-review-response-analysis-45d2dec3f76aab2f-9.json",
+            "bytes": 35699,
+            "sha256": "0f338a036d30bd13ab19b26a3fbff12f85f6b4156229b0df81cd364396fe8e3c"
+        },
+        {
+            "path": "external/review34/automated-review-status.json",
+            "bytes": 66,
+            "sha256": "a1e946e66493ab4035705d0fef2224cd1ec11ef645fbdd47174e877baf2b4918"
+        },
+        {
+            "path": "external/review35/progress.jsonl",
+            "bytes": 57876,
+            "sha256": "2ef35084fab46f02058ec7969dc25d1cab5f9c2c40537c41d3a8913b31a32702"
+        },
+        {
+            "path": "external/review36/.complete",
+            "bytes": 64,
+            "sha256": "0dd7106ebcf577691686e011ee9400707b1302a0dbd17c8d27d83698bf1ad187"
+        },
+        {
+            "path": "external/review37/review-template.json",
+            "bytes": 3275,
+            "sha256": "b59850dc1671457e6132ad490e3b01669d6ca0fae6f04127183e187b8938e4ad"
+        },
+        {
+            "path": "external/review38/evidence-index-45d2dec3f76aab2fc00dd793461556d446caf79d3330b603a34c95c711dd65b7.json",
+            "bytes": 184649,
+            "sha256": "ae9902b35c4ef83cc50a5a83da8202ae80644efb6471192eddeeb16935854a44"
+        },
+        {
+            "path": "external/review4/automated-review-report.md",
+            "bytes": 6116,
+            "sha256": "5b5d31bb92c54dd3410d52574ccc7c3853bb515d05ae39a77d4623f3d7b0b01e"
+        },
+        {
+            "path": "external/review5/automated-review-response-analysis-45d2dec3f76aab2f-1.json",
+            "bytes": 16216,
+            "sha256": "b3210240e5b3cbb431d3a6da8006c2bca8c472543e5f128545d94a85f62cacb0"
+        },
+        {
+            "path": "external/review6/automated-review-response-analysis-45d2dec3f76aab2f-10.json",
+            "bytes": 36066,
+            "sha256": "5ead76579c3df526b0354d9a1c4ae5f44e97315c23e0f3e3ca326ef73f8e4ece"
+        },
+        {
+            "path": "external/review7/automated-review-response-analysis-45d2dec3f76aab2f-11.json",
+            "bytes": 381790,
+            "sha256": "19182426617353ce0799b5a89c74454befec8e0ae407df2e40286be521067afc"
+        },
+        {
+            "path": "external/review8/automated-review-response-analysis-45d2dec3f76aab2f-12.json",
+            "bytes": 55366,
+            "sha256": "adba4935778d200956e781f1f7201d0ec3c61c9a9c6a2061435100e88d9bf936"
+        },
+        {
+            "path": "external/review9/automated-review-response-analysis-45d2dec3f76aab2f-13.json",
+            "bytes": 32312,
+            "sha256": "3c9846a88b31d5188ae62f3b3687bf6c715294122f800e3607335db235f9e942"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261119T141327149Z-campaign-framing-contract-corrections-20261119-ready-lot-1-diagn.tar.gz",
+        "bytes": 379262,
+        "sha256": "ea95f03fd9b2754977ae2eb04a11912d9b6c0c6d5985ca0f1dce3f50e735883e"
+    },
+    "verification": "restored_and_verified"
+}

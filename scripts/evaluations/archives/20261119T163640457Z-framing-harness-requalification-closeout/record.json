@@ -1,0 +1,46 @@
+{
+    "schemaVersion": 1,
+    "id": "20261119T163640457Z-framing-harness-requalification-closeout",
+    "createdAt": "2026-11-19T16:36:40.457Z",
+    "git": {
+        "head": "5d7e35b176f32045df40ad83c5751192809cbdff",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-19-framing-harness-requalification.md",
+            "archivePath": "repository/docs/verification/2026-11-19-framing-harness-requalification.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/closed-status.json",
+            "archivePath": "external/closed-status/closed-status.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/authority-closed.json",
+            "archivePath": "external/authority/authority-closed.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/authority/authority-closed.json",
+            "bytes": 162,
+            "sha256": "23e711f201e8cc26d5b2e63eadfd516d5c262dabad089d5e039e4e7664e309ce"
+        },
+        {
+            "path": "external/closed-status/closed-status.json",
+            "bytes": 17578,
+            "sha256": "3614af28227cf48a5da9f185a2df5f73d622c67d78850ea71a04ec7adb50fbf7"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-19-framing-harness-requalification.md",
+            "bytes": 9605,
+            "sha256": "7a2ce911f046e45bc9db838f6224aa712fbbf35f84ebd320a273449309a8fc18"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261119T163640457Z-framing-harness-requalification-closeout.tar.gz",
+        "bytes": 7893,
+        "sha256": "2188c10ab69e431fb5ae2c7c6c5ce4ed47a49a7df49a2c297bd0a7c692f6adbf"
+    },
+    "verification": "restored_and_verified"
+}

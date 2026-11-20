@@ -1,0 +1,100 @@
+{
+    "schemaVersion": 1,
+    "id": "20261119T142037302Z-framing-requalification-closeout",
+    "createdAt": "2026-11-19T14:20:37.302Z",
+    "git": {
+        "head": "64e8c2287fc090091a524dd8c9272ffe87314806",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-19-workbench-framing-requalification.md",
+            "archivePath": "repository/docs/verification/2026-11-19-workbench-framing-requalification.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-19-workbench-framing-contract-corrections.md",
+            "archivePath": "repository/docs/verification/2026-11-19-workbench-framing-contract-corrections.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/closed-status.json",
+            "archivePath": "external/final-authority/closed-status.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119/closed-status.json",
+            "archivePath": "external/original-authority/closed-status.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119/preflight/e2bde8fd37729ff6df57cfc2554bd5d688e4c3674a00ceddf79972cc5f580b37/checks/domain-tests.log",
+            "archivePath": "external/initial-preflight/domain-tests.log"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119/preflight/39568cee3fb47a830518ea0e751e8baa995a40e04006e94a8a42940043eb6320/checks/domain-tests.log",
+            "archivePath": "external/scheduler-preflight/domain-tests.log"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119/simulation-scheduler-probe.log",
+            "archivePath": "external/scheduler-probe/simulation-scheduler-probe.log"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/preflight/5f266eadf4579f1d28b74c2dfb51570ba624b7c1e9cf06820b30b2b55efa83f3/validation.json",
+            "archivePath": "external/final-preflight/validation.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-contract-corrections-20261119-ready/preparation-delta.json",
+            "archivePath": "external/preparation-delta/preparation-delta.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/final-authority/closed-status.json",
+            "bytes": 16404,
+            "sha256": "1e71cad0b3fde84ad0015e5e40285e6df62ee9156e80332148527a0010ccea19"
+        },
+        {
+            "path": "external/final-preflight/validation.json",
+            "bytes": 689,
+            "sha256": "4c099ffb4f7fc9bf4b63791897d798f24b374b2cf872acfc7a53d5bc1fb9f18f"
+        },
+        {
+            "path": "external/initial-preflight/domain-tests.log",
+            "bytes": 3327,
+            "sha256": "dc23be29bbb15f64d15367e5d07a3e9cb6bb4da3f6191a829db400ce6b3000a0"
+        },
+        {
+            "path": "external/original-authority/closed-status.json",
+            "bytes": 14972,
+            "sha256": "7d886ff7f45436b2b80363e19620cfd248eeaa48baed3e29fd709b79b9d7099b"
+        },
+        {
+            "path": "external/preparation-delta/preparation-delta.json",
+            "bytes": 384,
+            "sha256": "e024e840d8db826aad5783faad26fe56e3cad51347373b34772a76ed2a692fbe"
+        },
+        {
+            "path": "external/scheduler-preflight/domain-tests.log",
+            "bytes": 1230,
+            "sha256": "c3ab3f9fab04172de8a313802d0674d8fafbf016127d007a9733a9d7e766ca2c"
+        },
+        {
+            "path": "external/scheduler-probe/simulation-scheduler-probe.log",
+            "bytes": 2392,
+            "sha256": "8a922eb28dda4a435f3cae25e979adf8cfbade18abaf2ed56db559785fd962b4"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-19-workbench-framing-contract-corrections.md",
+            "bytes": 9261,
+            "sha256": "e6d4ff8a9ab23d29c91bdcdf26145f6bcc85d9132c4d6362d077016bf7a4a251"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-19-workbench-framing-requalification.md",
+            "bytes": 11786,
+            "sha256": "5b96c3210391857be3ca607201f3e34568f247200f7a5182118842e5145823b3"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261119T142037302Z-framing-requalification-closeout.tar.gz",
+        "bytes": 14053,
+        "sha256": "d5b918db23e4f791d86d03d6c6eb1e430d7939298cfbcd2ff115657811d3b8a9"
+    },
+    "verification": "restored_and_verified"
+}

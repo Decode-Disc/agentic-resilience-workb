@@ -1,0 +1,46 @@
+{
+    "schemaVersion": 1,
+    "id": "20261119T180851838Z-ccc-balanced-provider-input-diagnosis",
+    "createdAt": "2026-11-19T18:08:51.838Z",
+    "git": {
+        "head": "5d7e35b176f32045df40ad83c5751192809cbdff",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-19-framing-harness-requalification.md",
+            "archivePath": "repository/docs/verification/2026-11-19-framing-harness-requalification.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/ccc-balanced-causal-checks.json",
+            "archivePath": "external/checks/ccc-balanced-causal-checks.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/ccc-balanced-arize-observable-evidence.json",
+            "archivePath": "external/provider-evidence/ccc-balanced-arize-observable-evidence.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/checks/ccc-balanced-causal-checks.json",
+            "bytes": 2450,
+            "sha256": "545ec0dfefa7cf2318a07973f26e0213f83bbce20ab30d2e1ca57f1ecf5a9625"
+        },
+        {
+            "path": "external/provider-evidence/ccc-balanced-arize-observable-evidence.json",
+            "bytes": 187885,
+            "sha256": "80daab74ef52aa5e5cb6a4d27e6cfdb8ea92736be3aa7aedb181ae4a9618a1ed"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-19-framing-harness-requalification.md",
+            "bytes": 12571,
+            "sha256": "48e8e8a1d714f1cde1fede55d223b994086696f6a5996db033347f6a48802933"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261119T180851838Z-ccc-balanced-provider-input-diagnosis.tar.gz",
+        "bytes": 54170,
+        "sha256": "88f3ef1074ace3aeee24c2077947c7f85b1efeea5caff7f7d4f8c7ac91d4a52b"
+    },
+    "verification": "restored_and_verified"
+}

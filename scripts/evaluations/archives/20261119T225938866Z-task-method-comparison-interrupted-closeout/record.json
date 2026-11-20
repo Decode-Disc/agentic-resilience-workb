@@ -1,0 +1,82 @@
+{
+    "schemaVersion": 1,
+    "id": "20261119T225938866Z-task-method-comparison-interrupted-closeout",
+    "createdAt": "2026-11-19T22:59:38.866Z",
+    "git": {
+        "head": "5d7e35b176f32045df40ad83c5751192809cbdff",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-19-task-method-qualification-interrupted.md",
+            "archivePath": "repository/docs/verification/2026-11-19-task-method-qualification-interrupted.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/artifacts/sources-frozen-qualification/closeout-reconciliation.json",
+            "archivePath": "repository/.agents/artifacts/sources-frozen-qualification/closeout-reconciliation.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/artifacts/sources-frozen-qualification/closeout-response-control-tests.log",
+            "archivePath": "repository/.agents/artifacts/sources-frozen-qualification/closeout-response-control-tests.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/artifacts/sources-frozen-qualification/restore-refreshed.log",
+            "archivePath": "repository/.agents/artifacts/sources-frozen-qualification/restore-refreshed.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/artifacts/sources-frozen-qualification/restored-source-profile.json",
+            "archivePath": "repository/.agents/artifacts/sources-frozen-qualification/restored-source-profile.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/artifacts/sources-frozen-qualification/format-proof.json",
+            "archivePath": "repository/.agents/artifacts/sources-frozen-qualification/format-proof.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/native-task-methods-20261119-ready/lots/lot-1/configuration.json",
+            "archivePath": "external/restored-configuration/configuration.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/restored-configuration/configuration.json",
+            "bytes": 9318,
+            "sha256": "5b37c8520c61db718d42e8b9568229e0896095cbb7fa6ef4416464d62ca5f14a"
+        },
+        {
+            "path": "repository/.agents/artifacts/sources-frozen-qualification/closeout-reconciliation.json",
+            "bytes": 1202,
+            "sha256": "73c38cbfb2343d0ea05abef394c5015b6fc9c7edde19b36bd06aeb6d5fe63a57"
+        },
+        {
+            "path": "repository/.agents/artifacts/sources-frozen-qualification/closeout-response-control-tests.log",
+            "bytes": 281,
+            "sha256": "ab148451755be0462e7bef8ee747f35ab399df01dd629a9c6a4ea31413f3d588"
+        },
+        {
+            "path": "repository/.agents/artifacts/sources-frozen-qualification/format-proof.json",
+            "bytes": 1048,
+            "sha256": "6536291e4ddee14c0945041518e3711ea12028b635aa7c7929c29ee6acadc3ac"
+        },
+        {
+            "path": "repository/.agents/artifacts/sources-frozen-qualification/restore-refreshed.log",
+            "bytes": 51,
+            "sha256": "e5fd6c2f491418b670ce7071bcad97b37f6058d2ce79b1d15829d2f018b05cd9"
+        },
+        {
+            "path": "repository/.agents/artifacts/sources-frozen-qualification/restored-source-profile.json",
+            "bytes": 356,
+            "sha256": "d0bdda6b14bb88d35184a07651605c4f8cdfff6d3c2acd0273629e9c66b68f2d"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-19-task-method-qualification-interrupted.md",
+            "bytes": 6530,
+            "sha256": "1aee52322b1c7eb870e7f212badc46014334e505b337db4e7ae92b4b9996d1ab"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261119T225938866Z-task-method-comparison-interrupted-closeout.tar.gz",
+        "bytes": 6928,
+        "sha256": "dfc710116579a86b707343e1a8440084c0bb96b1be924869df0744e7286debcc"
+    },
+    "verification": "restored_and_verified"
+}

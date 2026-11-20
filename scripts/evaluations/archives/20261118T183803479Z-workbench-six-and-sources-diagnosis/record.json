@@ -1,0 +1,138 @@
+{
+    "schemaVersion": 1,
+    "id": "20261118T183803479Z-workbench-six-and-sources-diagnosis",
+    "createdAt": "2026-11-18T18:38:03.479Z",
+    "git": {
+        "head": "cf757669701104f835a29fb1f0941d1c78ce3304",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-18-workbench-framing-live-and-sources-timeout.md",
+            "archivePath": "repository/docs/verification/2026-11-18-workbench-framing-live-and-sources-timeout.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-18-grounded-framing-and-coverage.md",
+            "archivePath": "repository/docs/verification/2026-11-18-grounded-framing-and-coverage.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-workbench-only-20261118/sources-timeout-diagnosis",
+            "archivePath": "external/sources-probe"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-workbench-only-20261118/evaluation-series.json",
+            "archivePath": "external/series/evaluation-series.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-workbench-only-20261118/serialized-input-checks.json",
+            "archivePath": "external/inputs/serialized-input-checks.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-workbench-only-20261118/h20-refusal-diagnosis.json",
+            "archivePath": "external/h20/h20-refusal-diagnosis.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-workbench-only-20261118/relay-budget-diagnosis.json",
+            "archivePath": "external/relay/relay-budget-diagnosis.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-workbench-only-20261118/verified-final-status.json",
+            "archivePath": "external/status-h20/verified-final-status.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-workbench-five-20261118/verified-final-status.json",
+            "archivePath": "external/status-ccc/verified-final-status.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-workbench-adverse-20261118/verified-final-status.json",
+            "archivePath": "external/status-unavailable/verified-final-status.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-workbench-undated-20261118/verified-final-status.json",
+            "archivePath": "external/status-undated/verified-final-status.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/h20/h20-refusal-diagnosis.json",
+            "bytes": 1974,
+            "sha256": "947f3317990423619f15c85107e347c412856e2145ea36d6e8360a0532fb5810"
+        },
+        {
+            "path": "external/inputs/serialized-input-checks.json",
+            "bytes": 2715,
+            "sha256": "023f705e37b07ac2505d0b0d3f5ca5ce5c8c57c6ba6be54bcd55b233c1ff7886"
+        },
+        {
+            "path": "external/relay/relay-budget-diagnosis.json",
+            "bytes": 512,
+            "sha256": "84b40862b9835f5a36fc261bcd647ccc4e30e7e9f92d0c27623681f3ec24d43e"
+        },
+        {
+            "path": "external/series/evaluation-series.json",
+            "bytes": 2600,
+            "sha256": "662e739d58d0154129da9954da10b7fa9a80dc8facf67fc6b336ec9858e0e24c"
+        },
+        {
+            "path": "external/sources-probe/convex-node-executor.cjs",
+            "bytes": 2617964,
+            "sha256": "0ef7ac5ccd32efef71a125822ab6a65b0b8dcd876a60b1375a2b1daef8b44aa8"
+        },
+        {
+            "path": "external/sources-probe/historical-timeline.json",
+            "bytes": 5021,
+            "sha256": "01925af8c0ff6cd241e23d6fb57e8cbae9b2e170ea9ae25c13e472cf69c8c6ac"
+        },
+        {
+            "path": "external/sources-probe/observation.txt",
+            "bytes": 441,
+            "sha256": "4fccc32b107f727a500f986d4b2faf0a930d550c40c110614ffb0e1384ef30c9"
+        },
+        {
+            "path": "external/sources-probe/probe.cjs",
+            "bytes": 2336,
+            "sha256": "9c3261af6861cd3e925bcfc4ba23e6297277f24ccb130defb7711d592a73dc58"
+        },
+        {
+            "path": "external/sources-probe/provenance.json",
+            "bytes": 675,
+            "sha256": "546f8ac99d1d7b9622eeec24edca611eb344c5c8f8adb586ef331706e35b6020"
+        },
+        {
+            "path": "external/status-ccc/verified-final-status.json",
+            "bytes": 12183,
+            "sha256": "9cac0deefde12e0e46ce25e50823f5fae1807d619b5b956310167cf13d1c6400"
+        },
+        {
+            "path": "external/status-h20/verified-final-status.json",
+            "bytes": 13702,
+            "sha256": "31746abac225f5a50c865a82db0d9dc51e0be4f4fb058d0fe7a29ba9425519ed"
+        },
+        {
+            "path": "external/status-unavailable/verified-final-status.json",
+            "bytes": 7325,
+            "sha256": "c25a41096c027ce4fea7afe151db0a7429f4b2d52b6d0a2ae12a820252466cec"
+        },
+        {
+            "path": "external/status-undated/verified-final-status.json",
+            "bytes": 5475,
+            "sha256": "0e58141ba93667903135bfc9f628921ad6e43f2e215327630855812646c8468c"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-18-grounded-framing-and-coverage.md",
+            "bytes": 38645,
+            "sha256": "6c1f7f7caa2845041bdd053c516107758b48669d5fb42158af841ab8dcf543bc"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-18-workbench-framing-live-and-sources-timeout.md",
+            "bytes": 16185,
+            "sha256": "8cda6fc122f9b6636e303a3a30e72abc8b2afd88511545a9450ab42d0a6e8982"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261118T183803479Z-workbench-six-and-sources-diagnosis.tar.gz",
+        "bytes": 606827,
+        "sha256": "a302230a5b40e2cd1a00d2cf2e3f3298aa7fd1457ff94886300e4958a8182bdd"
+    },
+    "verification": "restored_and_verified"
+}

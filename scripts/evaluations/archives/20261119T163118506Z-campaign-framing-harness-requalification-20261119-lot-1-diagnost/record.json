@@ -1,0 +1,289 @@
+{
+    "schemaVersion": 1,
+    "id": "20261119T163118506Z-campaign-framing-harness-requalification-20261119-lot-1-diagnost",
+    "createdAt": "2026-11-19T16:31:18.506Z",
+    "git": {
+        "head": "5d7e35b176f32045df40ad83c5751192809cbdff",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-mission.json",
+            "archivePath": "external/review0/automated-review-mission.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-report-15-297087ecacdf6c83c9ba74aa6864af1b347b7bfcd1947937751e6a5eec26aa66.md",
+            "archivePath": "external/review1/automated-review-report-15-297087ecacdf6c83c9ba74aa6864af1b347b7bfcd1947937751e6a5eec26aa66.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-report-6-3a15e978eb8ae44c65aef793a0f7a2b6d9ed342a79a1b8b3b1128acbe608b2eb.md",
+            "archivePath": "external/review2/automated-review-report-6-3a15e978eb8ae44c65aef793a0f7a2b6d9ed342a79a1b8b3b1128acbe608b2eb.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-report.json",
+            "archivePath": "external/review3/automated-review-report.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-report.md",
+            "archivePath": "external/review4/automated-review-report.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-1.json",
+            "archivePath": "external/review5/automated-review-response-analysis-286b0e8454cfa64f-1.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-10.json",
+            "archivePath": "external/review6/automated-review-response-analysis-286b0e8454cfa64f-10.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-11.json",
+            "archivePath": "external/review7/automated-review-response-analysis-286b0e8454cfa64f-11.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-12.json",
+            "archivePath": "external/review8/automated-review-response-analysis-286b0e8454cfa64f-12.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-13.json",
+            "archivePath": "external/review9/automated-review-response-analysis-286b0e8454cfa64f-13.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-14.json",
+            "archivePath": "external/review10/automated-review-response-analysis-286b0e8454cfa64f-14.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-15.json",
+            "archivePath": "external/review11/automated-review-response-analysis-286b0e8454cfa64f-15.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-16.json",
+            "archivePath": "external/review12/automated-review-response-analysis-286b0e8454cfa64f-16.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-17.json",
+            "archivePath": "external/review13/automated-review-response-analysis-286b0e8454cfa64f-17.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-18.json",
+            "archivePath": "external/review14/automated-review-response-analysis-286b0e8454cfa64f-18.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-19.json",
+            "archivePath": "external/review15/automated-review-response-analysis-286b0e8454cfa64f-19.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-2.json",
+            "archivePath": "external/review16/automated-review-response-analysis-286b0e8454cfa64f-2.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-20.json",
+            "archivePath": "external/review17/automated-review-response-analysis-286b0e8454cfa64f-20.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-3.json",
+            "archivePath": "external/review18/automated-review-response-analysis-286b0e8454cfa64f-3.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-4.json",
+            "archivePath": "external/review19/automated-review-response-analysis-286b0e8454cfa64f-4.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-5.json",
+            "archivePath": "external/review20/automated-review-response-analysis-286b0e8454cfa64f-5.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-6.json",
+            "archivePath": "external/review21/automated-review-response-analysis-286b0e8454cfa64f-6.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-7.json",
+            "archivePath": "external/review22/automated-review-response-analysis-286b0e8454cfa64f-7.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-8.json",
+            "archivePath": "external/review23/automated-review-response-analysis-286b0e8454cfa64f-8.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-response-analysis-286b0e8454cfa64f-9.json",
+            "archivePath": "external/review24/automated-review-response-analysis-286b0e8454cfa64f-9.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-status.json",
+            "archivePath": "external/review25/automated-review-status.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/progress.jsonl",
+            "archivePath": "external/review26/progress.jsonl"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-evidence-286b0e8454cfa64f0d5a69e4b531534c45a46e1284ce3bf31c13e48f59d78ec8/.complete",
+            "archivePath": "external/review27/.complete"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-evidence-286b0e8454cfa64f0d5a69e4b531534c45a46e1284ce3bf31c13e48f59d78ec8/review-template.json",
+            "archivePath": "external/review28/review-template.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-harness-requalification-20261119/lots/lot-1/automated-review-evidence-286b0e8454cfa64f0d5a69e4b531534c45a46e1284ce3bf31c13e48f59d78ec8/evidence-index-286b0e8454cfa64f0d5a69e4b531534c45a46e1284ce3bf31c13e48f59d78ec8.json",
+            "archivePath": "external/review29/evidence-index-286b0e8454cfa64f0d5a69e4b531534c45a46e1284ce3bf31c13e48f59d78ec8.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/review0/automated-review-mission.json",
+            "bytes": 12843,
+            "sha256": "e73006cd7cec50876434683431d2ba06ea95d09a1fa4c4babff1da3568010bdb"
+        },
+        {
+            "path": "external/review1/automated-review-report-15-297087ecacdf6c83c9ba74aa6864af1b347b7bfcd1947937751e6a5eec26aa66.md",
+            "bytes": 5422,
+            "sha256": "297087ecacdf6c83c9ba74aa6864af1b347b7bfcd1947937751e6a5eec26aa66"
+        },
+        {
+            "path": "external/review10/automated-review-response-analysis-286b0e8454cfa64f-14.json",
+            "bytes": 34646,
+            "sha256": "da42da1aafae60168645d8727fdbf4ccff7983103aff694d151046fb1e60ccb3"
+        },
+        {
+            "path": "external/review11/automated-review-response-analysis-286b0e8454cfa64f-15.json",
+            "bytes": 403474,
+            "sha256": "329d5f8f466c658eda82750293eb580828d1a5df4b127f431e0ec9f165020487"
+        },
+        {
+            "path": "external/review12/automated-review-response-analysis-286b0e8454cfa64f-16.json",
+            "bytes": 34093,
+            "sha256": "f8805a2280acf1822a3a5a55b6289f2170012422a29ef4523b021a79d34d9996"
+        },
+        {
+            "path": "external/review13/automated-review-response-analysis-286b0e8454cfa64f-17.json",
+            "bytes": 64277,
+            "sha256": "e93c1739789d1e72f46c07f2756a104d659ddd73a57bcf91cf779924d57986bb"
+        },
+        {
+            "path": "external/review14/automated-review-response-analysis-286b0e8454cfa64f-18.json",
+            "bytes": 40734,
+            "sha256": "262b181990360c799f09842c5fb259561e004464b5e56b4fd3ebd4003c34fb02"
+        },
+        {
+            "path": "external/review15/automated-review-response-analysis-286b0e8454cfa64f-19.json",
+            "bytes": 60837,
+            "sha256": "5f651277f78261f6779dff95a4572dca33ffa3114b972b6e4762bd3ede7c2c7c"
+        },
+        {
+            "path": "external/review16/automated-review-response-analysis-286b0e8454cfa64f-2.json",
+            "bytes": 18941,
+            "sha256": "6c91e99f7ac1f440dcb2b437d38c8e4d83ce40cb70f51c611c4bc7bec0ede31e"
+        },
+        {
+            "path": "external/review17/automated-review-response-analysis-286b0e8454cfa64f-20.json",
+            "bytes": 59748,
+            "sha256": "c31c401ce8566dcbb0d99469b060392a46444ecfd52cbdfe394a106e67d20e29"
+        },
+        {
+            "path": "external/review18/automated-review-response-analysis-286b0e8454cfa64f-3.json",
+            "bytes": 22428,
+            "sha256": "638964c972f372001742c129807fadead18b4ac45acd25c0236da006f5c489f6"
+        },
+        {
+            "path": "external/review19/automated-review-response-analysis-286b0e8454cfa64f-4.json",
+            "bytes": 19752,
+            "sha256": "6b02ed7a87a187427fdeefa8034e0892b5f0d71d53bc9895949a79044fa1619e"
+        },
+        {
+            "path": "external/review2/automated-review-report-6-3a15e978eb8ae44c65aef793a0f7a2b6d9ed342a79a1b8b3b1128acbe608b2eb.md",
+            "bytes": 2159,
+            "sha256": "3a15e978eb8ae44c65aef793a0f7a2b6d9ed342a79a1b8b3b1128acbe608b2eb"
+        },
+        {
+            "path": "external/review20/automated-review-response-analysis-286b0e8454cfa64f-5.json",
+            "bytes": 20867,
+            "sha256": "28734af85a6a0ad0f34ff4e0d8fb287629593af2c32173218100fec5c8221393"
+        },
+        {
+            "path": "external/review21/automated-review-response-analysis-286b0e8454cfa64f-6.json",
+            "bytes": 155213,
+            "sha256": "20b73da9750ff317fa415bf53666d10db1ccc3815274490b219f78749b411ae7"
+        },
+        {
+            "path": "external/review22/automated-review-response-analysis-286b0e8454cfa64f-7.json",
+            "bytes": 18992,
+            "sha256": "675ac8f9853b194b33d1bbe7d1be0e0d77249954d0f1c1ae08d545692e77cc89"
+        },
+        {
+            "path": "external/review23/automated-review-response-analysis-286b0e8454cfa64f-8.json",
+            "bytes": 34603,
+            "sha256": "504efbe04d5d37c8c2fa227082e1e7cf7fb76ef6d2236279686e87faa6bf49c8"
+        },
+        {
+            "path": "external/review24/automated-review-response-analysis-286b0e8454cfa64f-9.json",
+            "bytes": 24216,
+            "sha256": "87b61249b56970137fce646e8d36683d918801b4cdbe6d40ece03833f9b56872"
+        },
+        {
+            "path": "external/review25/automated-review-status.json",
+            "bytes": 860,
+            "sha256": "dc6299d12dd1460b9423b7534e08c8d3a2d8b03277ef339a94a8332170111faf"
+        },
+        {
+            "path": "external/review26/progress.jsonl",
+            "bytes": 40521,
+            "sha256": "98d0e3cc2e589172af62175c24483eedb3340c6c0657fd6e2e3f53c509164747"
+        },
+        {
+            "path": "external/review27/.complete",
+            "bytes": 64,
+            "sha256": "f8e7e1d8e93ca485df851570de21f87930c73e3f2308923bee467000beb980fc"
+        },
+        {
+            "path": "external/review28/review-template.json",
+            "bytes": 3275,
+            "sha256": "f4146aaad3766c08e7cc50deac34d3fd9d5640462b186047061e5fed887d58f6"
+        },
+        {
+            "path": "external/review29/evidence-index-286b0e8454cfa64f0d5a69e4b531534c45a46e1284ce3bf31c13e48f59d78ec8.json",
+            "bytes": 176012,
+            "sha256": "cc443cb1b415ace3b1cbc2d6f6746e8ed79a97a919e2bda762f73246130a55e9"
+        },
+        {
+            "path": "external/review3/automated-review-report.json",
+            "bytes": 967,
+            "sha256": "10b12fc71491584125f32106b0b4cca50a0ef6386d5c060579877aafbffd123f"
+        },
+        {
+            "path": "external/review4/automated-review-report.md",
+            "bytes": 5422,
+            "sha256": "297087ecacdf6c83c9ba74aa6864af1b347b7bfcd1947937751e6a5eec26aa66"
+        },
+        {
+            "path": "external/review5/automated-review-response-analysis-286b0e8454cfa64f-1.json",
+            "bytes": 16216,
+            "sha256": "b8a149cdf5dae3eadb7b78a1f1d19a11572a22a341dd41e1ce0a8405436ae859"
+        },
+        {
+            "path": "external/review6/automated-review-response-analysis-286b0e8454cfa64f-10.json",
+            "bytes": 36336,
+            "sha256": "5c28e8304e7a7d3da35db11bd1ed4574c3fdb4ebcac0139b8796b8a3c48a4ee8"
+        },
+        {
+            "path": "external/review7/automated-review-response-analysis-286b0e8454cfa64f-11.json",
+            "bytes": 36622,
+            "sha256": "bd78a45f4863fc05d02529cf8affa78ef550035fa258e150f1a23b5a638ab969"
+        },
+        {
+            "path": "external/review8/automated-review-response-analysis-286b0e8454cfa64f-12.json",
+            "bytes": 32303,
+            "sha256": "84777a2c0b0783912553199cbd5a95bf2ec70fb5f6336a82e3f2193b5e2ac4a2"
+        },
+        {
+            "path": "external/review9/automated-review-response-analysis-286b0e8454cfa64f-13.json",
+            "bytes": 34097,
+            "sha256": "bfa93bf1b9f40c5744783145259a093445e8e5f12fd83b7761a0bc3321e44be4"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261119T163118506Z-campaign-framing-harness-requalification-20261119-lot-1-diagnost.tar.gz",
+        "bytes": 257267,
+        "sha256": "cc7f94707e0f90eef3fa31871ff9eacf1dbddec46b68d00ca05071732f09501e"
+    },
+    "verification": "restored_and_verified"
+}

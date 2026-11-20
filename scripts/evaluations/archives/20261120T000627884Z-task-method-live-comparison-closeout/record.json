@@ -1,0 +1,128 @@
+{
+    "schemaVersion": 1,
+    "id": "20261120T000627884Z-task-method-live-comparison-closeout",
+    "createdAt": "2026-11-20T00:06:27.884Z",
+    "git": {
+        "head": "5d7e35b176f32045df40ad83c5751192809cbdff",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-20-task-method-live-comparison.md",
+            "archivePath": "repository/docs/verification/2026-11-20-task-method-live-comparison.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/artifacts/task-methods-live-replacement",
+            "archivePath": "repository/.agents/artifacts/task-methods-live-replacement"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/native-task-methods-20261120-input",
+            "archivePath": "external/mandate"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/native-task-methods-20261120-replacement/cleanup.json",
+            "archivePath": "external/cleanup/cleanup.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/native-task-methods-20261120-replacement/lots/lot-1/automated-review-assessment.json",
+            "archivePath": "external/control-assessment/automated-review-assessment.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/native-task-methods-20261120-replacement/lots/lot-2/automated-review-assessment.json",
+            "archivePath": "external/skills-assessment/automated-review-assessment.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/cleanup/cleanup.json",
+            "bytes": 45,
+            "sha256": "5dfa4c8ffc66a7bd9b6aa8bedf71185cec59b805ad698b4c0b3e6b266a8f5d3f"
+        },
+        {
+            "path": "external/control-assessment/automated-review-assessment.json",
+            "bytes": 105,
+            "sha256": "fce07b902db927db644edfcf8769ab631cf9061875fe45ac174f4965c5b1c6ce"
+        },
+        {
+            "path": "external/mandate/lineage.json",
+            "bytes": 855,
+            "sha256": "ea7827e9526d61380a5970c8e8076aae368171511790c95df9e06fca5476381e"
+        },
+        {
+            "path": "external/mandate/mandate.json",
+            "bytes": 338649,
+            "sha256": "a283d5a76bdb810f5739c2db486543e3bd4340f1625ad33f57fd04998e77301d"
+        },
+        {
+            "path": "external/skills-assessment/automated-review-assessment.json",
+            "bytes": 105,
+            "sha256": "51e4f30257355b9d9389dc51f1d79f71e532c7a66b3e9d836e1349a8e4903401"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/authorize.log",
+            "bytes": 196,
+            "sha256": "299b73fe965110f2a4bb84993e0abcf65d9c667b25b1d5b6562d4b1b41761b26"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/candidate-reference-check.json",
+            "bytes": 790,
+            "sha256": "70c1b57051226de621cb5973043100e00ecc713144a05d236747803b2fd209f9"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/close.log",
+            "bytes": 192,
+            "sha256": "febdee6ee4ca77f2f9969e195106d5fe3b7e7b75669f773905d50c89edee8a79"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/closeout-summary.json",
+            "bytes": 551,
+            "sha256": "0398c06569405e5a1a0eadb5b02be09edf91f464f911680b40cb6411b039c489"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/control-run.log",
+            "bytes": 1260,
+            "sha256": "83c167d3d9b12c2a54b60d805614b17db0f16876b8fcedfed6e7f79f56a5436f"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/docs-check.log",
+            "bytes": 440,
+            "sha256": "17d7a784449f7d56d9a394e909e685594684baf9fbaa98cfd97bec4952a7f327"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/final-status.json",
+            "bytes": 342917,
+            "sha256": "2833a6cce856f22426be8a6d04cad006ea9396208e62a93bbccf9fe23e4c1811"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/prepare.log",
+            "bytes": 295,
+            "sha256": "0edad5b91355781904523c5cfa7f75e367cbca13d936046e3551354bc1396e2f"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/skills-run.log",
+            "bytes": 1297,
+            "sha256": "b0507ff62d3a71bbb45bd756d778e894f3ca4e627b3d929b3259f2f461e692cb"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/status-after-control.json",
+            "bytes": 340698,
+            "sha256": "e158751a51fc08f646185900afb9a24dd7a12a6ea3d2c11724844ccf1808fcb6"
+        },
+        {
+            "path": "repository/.agents/artifacts/task-methods-live-replacement/workflow-model.json",
+            "bytes": 3727,
+            "sha256": "b34e79b361a7dd1c5f9ef3ce157f7b6ceb56eafce778d08031de784196fd0739"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-20-task-method-live-comparison.md",
+            "bytes": 10470,
+            "sha256": "b912db7f3c743c2736e30dea98390f072b3ad05587926873dd3a43af01542f26"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261120T000627884Z-task-method-live-comparison-closeout.tar.gz",
+        "bytes": 260495,
+        "sha256": "11e5303fc67e629c71d1b2ec2606f2b245029c3cf0d71668787a6d25ed47c69e"
+    },
+    "verification": "restored_and_verified"
+}
