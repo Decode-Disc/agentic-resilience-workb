@@ -78,6 +78,7 @@ import {
     DEFAULT_AGENT_BACKEND,
 } from "./executionProtocol";
 import { admittedInputJson } from "./journal";
+import { generationInterruption } from "./missionData";
 import {
     completeRetainedText,
     readRetainedText,
@@ -1795,6 +1796,45 @@ export const inspectSourcesTextFragments = internalQuery({
 });
 
 /** Small polling snapshot: no transcript scan or sample-dependent ceiling. */
+async function readScenarioExecution(ctx: QueryCtx, run: Doc<"researchRuns">) {
+    const conversation = await ctx.db
+        .query("agentConversations")
+        .withIndex("by_run", (q) => q.eq("runId", run._id))
+        .unique();
+    const session = conversation
+        ? await ctx.db
+              .query("piSessions")
+              .withIndex("by_conversation", (q) =>
+                  q.eq("conversationId", conversation._id),
+              )
+              .unique()
+        : null;
+    const turn = conversation?.activeTurnId
+        ? await ctx.db.get(conversation.activeTurnId)
+        : null;
+    const mission = turn?.missionId ? await ctx.db.get(turn.missionId) : null;
+    const sourcesMission = run.sourcePreparationId
+        ? await ctx.db
+              .query("agentMissions")
+              .withIndex("by_run_and_request_key", (q) =>
+                  q
+                      .eq("runId", run._id)
+                      .eq("requestKey", `sources:${run.sourcePreparationId}`),
+              )
+              .unique()
+        : null;
+    return { conversation, session, mission, sourcesMission };
+}
+
+const continuationConversationValidator = v.union(
+    v.object({ kind: v.literal("settled") }),
+    v.object({ kind: v.literal("quiet_blocked"), code: v.string() }),
+    v.object({
+        kind: v.literal("unsettled"),
+        code: v.optional(v.string()),
+    }),
+);
+
 export const qualificationSnapshot = internalQuery({
     returns: v.object({
         firstSourcesInput: v.union(
@@ -1833,37 +1873,8 @@ export const qualificationSnapshot = internalQuery({
     args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
     handler: async (ctx, args) => {
         const { run, context } = await readLocalFixtureRun(ctx, args);
-        const conversation = await ctx.db
-            .query("agentConversations")
-            .withIndex("by_run", (q) => q.eq("runId", run._id))
-            .unique();
-        const session = conversation
-            ? await ctx.db
-                  .query("piSessions")
-                  .withIndex("by_conversation", (q) =>
-                      q.eq("conversationId", conversation._id),
-                  )
-                  .unique()
-            : null;
-        const turn = conversation?.activeTurnId
-            ? await ctx.db.get(conversation.activeTurnId)
-            : null;
-        const mission = turn?.missionId
-            ? await ctx.db.get(turn.missionId)
-            : null;
-        const sourcesMission = run.sourcePreparationId
-            ? await ctx.db
-                  .query("agentMissions")
-                  .withIndex("by_run_and_request_key", (q) =>
-                      q
-                          .eq("runId", run._id)
-                          .eq(
-                              "requestKey",
-                              `sources:${run.sourcePreparationId}`,
-                          ),
-                  )
-                  .unique()
-            : null;
+        const { conversation, session, mission, sourcesMission } =
+            await readScenarioExecution(ctx, run);
         const first = sourcesMission?.firstProviderInput;
         const firstReceipt = first
             ? await ctx.db.get(first.providerCallId)
@@ -1930,9 +1941,56 @@ export const qualificationContinuation = internalQuery({
         hasEngagedEffects: v.boolean(),
         authorized: v.boolean(),
         accountingSettled: v.boolean(),
+        scenarioQuiet: v.boolean(),
+        executionStatus: v.string(),
+        sourcesStatus: v.union(v.string(), v.null()),
+        conversation: continuationConversationValidator,
     }),
     handler: async (ctx, args) => {
         const { run, context } = await readLocalFixtureRun(ctx, args);
+        const execution = await readScenarioExecution(ctx, run);
+        const nativeSettled = await fixtureConversationSettled(
+            ctx,
+            execution.conversation,
+            execution.session,
+        );
+        const quietConversation =
+            nativeSettled &&
+            !execution.conversation?.activeTurnId &&
+            !execution.conversation?.queuedCount;
+        const quietBlocked =
+            !quietConversation &&
+            execution.mission?.status === "blocked" &&
+            execution.mission.blockCode !== undefined &&
+            generationInterruption(execution.mission.blockCode) !== undefined &&
+            !execution.mission.piActiveWriter &&
+            !execution.mission.piWakeId &&
+            !execution.conversation?.queuedCount &&
+            execution.session !== null &&
+            execution.session.leaseUntil <= Date.now() &&
+            !execution.session.settlementFailureCode;
+        const conversation = quietConversation
+            ? { kind: "settled" as const }
+            : quietBlocked && execution.mission?.blockCode
+              ? {
+                    kind: "quiet_blocked" as const,
+                    code: execution.mission.blockCode,
+                }
+              : {
+                    kind: "unsettled" as const,
+                    ...(execution.mission?.blockCode
+                        ? { code: execution.mission.blockCode }
+                        : {}),
+                };
+        const sourcesQuiet =
+            !execution.sourcesMission ||
+            ["completed", "blocked", "failed", "cancelled"].includes(
+                execution.sourcesMission.status,
+            );
+        const scenarioQuiet =
+            run.executionStatus === "idle" &&
+            sourcesQuiet &&
+            conversation.kind !== "unsettled";
         let hasEngagedEffects = false;
         const lotRuns = context.paidQualification?.scenarios?.map(
             (s) => s.runId,
@@ -1977,6 +2035,10 @@ export const qualificationContinuation = internalQuery({
                 qualificationUsageResolved(accounting) &&
                 accounting?.pending === 0 &&
                 accounting.overruns === 0,
+            scenarioQuiet,
+            executionStatus: run.executionStatus,
+            sourcesStatus: execution.sourcesMission?.status ?? null,
+            conversation,
         };
     },
 });

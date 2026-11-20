@@ -7,6 +7,7 @@ import {
     directedFramingEventBasisInput,
     framingContentValidator,
     framingEventBasisInput,
+    initialDirectedFramingEventBasisInput,
     legacyFramingEventBasisInput,
 } from "./framingContracts";
 import { coverageRoleValidator } from "./sourceDiscoveryRecovery";
@@ -108,6 +109,10 @@ export const legacyNativeAdjustFramingInput = nativeAdjustFramingInput.extend({
 export const directedNativeAdjustFramingInput = nativeAdjustFramingInput.extend(
     { eventBasis: v.optional(directedFramingEventBasisInput) },
 );
+export const initialNativeAdjustFramingInput = nativeAdjustFramingInput.extend({
+    eventBasis: initialDirectedFramingEventBasisInput,
+});
+
 export const controlResearchInput = v.object({
     action: v.union(v.literal("pause"), v.literal("resume")),
     messageId: v.id("agentMessageDeliveries"),
@@ -263,6 +268,35 @@ export const publicContextResultValidator = v.object({
         }),
     ),
 });
+/** Retained documentary authority survives agent draft saves, but not a new instruction. */
+export function framingObservationRefusal(
+    observation: Doc<"agentOperationRequests"> | null,
+    authority: Pick<
+        Doc<"agentOperationRequests">,
+        "runId" | "missionId" | "instructionVersion"
+    > & { messageId: Id<"agentMessageDeliveries"> | undefined },
+): "source_reference_not_observed" | "framing_observation_stale" | undefined {
+    if (
+        !authority.messageId ||
+        !observation ||
+        observation.runId !== authority.runId ||
+        observation.missionId !== authority.missionId ||
+        observation.pin?.kind !== "framing_revision" ||
+        observation.status !== "completed" ||
+        observation.adoptedAt === undefined ||
+        observation.adoptionRefusalCode ||
+        observation.outcome?.kind !== "success" ||
+        !("messageId" in observation.input)
+    )
+        return "source_reference_not_observed";
+    if (
+        observation.input.messageId !== authority.messageId ||
+        observation.instructionVersion !== authority.instructionVersion
+    )
+        return "framing_observation_stale";
+    return undefined;
+}
+
 /** Only an adopted reading can be used as provenance. */
 export function observedPublicContext(
     request: Doc<"agentOperationRequests"> | null,
@@ -386,10 +420,21 @@ export const INITIAL_FRAMING_MESSAGE_KEY = "framing-intention";
 
 /** Versions with separate public search/read and provisional framing provenance. */
 export function supportsDirectedFraming(version: number): boolean {
-    return version === 5 || version === 6 || version === 7 || version === 8;
+    return (
+        version === 5 ||
+        version === 6 ||
+        version === 7 ||
+        version === 8 ||
+        version === 9
+    );
 }
 
 /** Versions explicitly preserving the corrected framing completion and discovery contract. */
 export function supportsFramingContractCorrections(version: number): boolean {
-    return version === 6 || version === 7 || version === 8;
+    return version === 6 || version === 7 || version === 8 || version === 9;
+}
+
+/** State-specific model schemas are introduced without changing pinned historical declarations. */
+export function supportsStatefulFramingSchema(version: number): boolean {
+    return version === 9;
 }

@@ -383,7 +383,7 @@ test("common conversation reading retrieves prior published turns and excludes q
             ),
         ).rejects.toThrow(error);
     }
-    for (let index = 0; index < 3; index++) {
+    for (let index = 0; index < 5; index++) {
         const invocation = await f.t.mutation(
             internal.execution.invocations.begin,
             {
@@ -424,11 +424,7 @@ test("common conversation reading retrieves prior published turns and excludes q
                 invocationId: invocation.invocationId,
                 expectedGeneration: 1,
             }),
-        ).toMatchObject(
-            index < 2
-                ? { kind: "ready" }
-                : { kind: "blocked", code: "repetition_stop" },
-        );
+        ).toMatchObject({ kind: "ready" });
     }
 });
 

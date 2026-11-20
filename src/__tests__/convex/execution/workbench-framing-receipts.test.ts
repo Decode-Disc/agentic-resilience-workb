@@ -193,7 +193,7 @@ test.each([
     "Resume research",
 ])("a preservation or control-only command removes framing writes (%s)", (text) => {
     const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
-        framing: { revision: 1, fixed: false },
+        framing: { revision: 1, fixed: false, scope: "" },
         conversationInstructions: {
             messages: [
                 {
@@ -209,7 +209,7 @@ test.each([
 
 test("an incomplete French preservation phrase does not turn the response read-only", () => {
     const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
-        framing: { revision: 1, fixed: false },
+        framing: { revision: 1, fixed: false, scope: "" },
         conversationInstructions: {
             messages: [{ messageId: "current", text: "Garde le programme." }],
         },
@@ -435,7 +435,7 @@ test.each([
     "Conserve le cadrage inchangé.",
 ])("an explicit preservation command keeps consultation available: %s", (text) => {
     const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
-        framing: { revision: 1, fixed: false },
+        framing: { revision: 1, fixed: false, scope: "" },
         conversationInstructions: {
             messages: [{ messageId: "current", text }],
         },
@@ -451,7 +451,7 @@ test.each([
 ])("partial, quoted or conditional text does not assert an unconditional preservation command: %s", (text) => {
     expect(
         agentToolSchemas(getAgentDefinition("workbench_v1"), {
-            framing: { revision: 1, fixed: false },
+            framing: { revision: 1, fixed: false, scope: "" },
             conversationInstructions: {
                 messages: [{ messageId: "current", text }],
             },
@@ -606,7 +606,7 @@ test("a control message cannot cause a framing write while a separate active edi
         },
     );
     const tools = agentToolSchemas(getAgentDefinition("workbench_v1"), {
-        framing: { revision: 1, fixed: false },
+        framing: { revision: 1, fixed: false, scope: "" },
         conversationInstructions: {
             messages: [
                 { messageId, text: "Start research now" },

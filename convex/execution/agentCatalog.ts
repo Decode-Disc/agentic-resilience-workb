@@ -13,6 +13,7 @@ import {
     workbenchMethodControlDefinition,
     workbenchV6Definition,
     workbenchV7Definition,
+    workbenchV9Definition,
 } from "@convex/domain/workbenchAgent";
 import { getFunctionName } from "convex/server";
 import {
@@ -30,7 +31,7 @@ import { operationResultSchema } from "./operationResults";
 function definitions() {
     return {
         [sourcesV5Definition.id]: sourcesV5Definition,
-        [workbenchV7Definition.id]: workbenchV7Definition,
+        [workbenchV9Definition.id]: workbenchV9Definition,
         [conversationValidationDefinition.id]: conversationValidationDefinition,
         [executionValidationDefinition.id]: executionValidationDefinition,
         [savedMaterialInspectionDefinition.id]:
@@ -138,6 +139,7 @@ function supportedDefinitions(): readonly AgentDefinition[] {
         workbenchDefinition,
         directedWorkbenchDefinition,
         workbenchV6Definition,
+        workbenchV7Definition,
         sourcesV4Definition,
         workbenchMethodControlDefinition,
         sourcesMethodControlDefinition,

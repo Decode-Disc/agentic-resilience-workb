@@ -1352,3 +1352,158 @@ test.each([
     if (proof === "matched") expect(state.usage?.usage.costUsd).toBe(0);
     else expect(state.usage?.usage.costUsd).toBeGreaterThan(0);
 }, 30000);
+
+test("qualificationContinuation treats a quiet local generation block as safe while refusing active, retrying or systemic blocks", async () => {
+    const f = await liveFixture();
+    const first = f.bindings[0];
+    if (!first) throw new Error("Missing first binding");
+    const setup = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(first.runId);
+        const mission = await ctx.db
+            .query("agentMissions")
+            .withIndex("by_run_and_request_key", (q) =>
+                q.eq("runId", first.runId),
+            )
+            .first();
+        if (!run || !mission) throw new Error("Missing fixture run or mission");
+        const now = Date.now();
+        const existingConversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .unique();
+        const conversationId =
+            existingConversation?._id ??
+            (await ctx.db.insert("agentConversations", {
+                runId: run._id,
+                storageRef: "conv-quiet-block",
+                queuedCount: 0,
+                createdAt: now,
+            }));
+        await ctx.db.patch(conversationId, { queuedCount: 0 });
+        const turnId = await ctx.db.insert("agentConversationTurns", {
+            runId: run._id,
+            conversationId,
+            status: "active",
+            instructionVersion: 1,
+            generation: run.executionGeneration,
+            messageCount: 1,
+            missionId: mission._id,
+            createdAt: now,
+        });
+        await ctx.db.patch(conversationId, { activeTurnId: turnId });
+        const existingSession = await ctx.db
+            .query("piSessions")
+            .withIndex("by_conversation", (q) =>
+                q.eq("conversationId", conversationId),
+            )
+            .unique();
+        const sessionId =
+            existingSession?._id ??
+            (await ctx.db.insert("piSessions", {
+                missionId: mission._id,
+                conversationId,
+                generation: run.executionGeneration,
+                writer: "worker-1",
+                epoch: 1,
+                leaseUntil: now - 1_000,
+                sequence: 2,
+                nextId: 3,
+            }));
+        await ctx.db.patch(sessionId, {
+            leaseUntil: now - 1_000,
+            settlementFailureCode: undefined,
+        });
+        await ctx.db.patch(mission._id, {
+            status: "blocked",
+            blockCode: "repetition_stop",
+            piActiveWriter: undefined,
+            piWakeId: undefined,
+        });
+        return {
+            runId: run._id,
+            fixtureKey: first.fixtureKey,
+            missionId: mission._id,
+            sessionId,
+            conversationId,
+            now,
+        };
+    });
+
+    const queryContinuation = () =>
+        f.t.query(internal.execution.fixtures.qualificationContinuation, {
+            runId: setup.runId,
+            fixtureKey: setup.fixtureKey,
+        });
+
+    expect(await queryContinuation()).toMatchObject({
+        scenarioQuiet: true,
+        executionStatus: "idle",
+        sourcesStatus: null,
+        conversation: { kind: "quiet_blocked", code: "repetition_stop" },
+    });
+
+    // Active lease must stay unsettled.
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.sessionId, { leaseUntil: Date.now() + 60_000 }),
+    );
+    expect(await queryContinuation()).toMatchObject({
+        scenarioQuiet: false,
+        conversation: { kind: "unsettled", code: "repetition_stop" },
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.sessionId, { leaseUntil: setup.now - 1_000 }),
+    );
+
+    // Active writer must stay unsettled.
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.missionId, { piActiveWriter: "worker-2" }),
+    );
+    expect(await queryContinuation()).toMatchObject({
+        scenarioQuiet: false,
+        conversation: { kind: "unsettled", code: "repetition_stop" },
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.missionId, { piActiveWriter: undefined }),
+    );
+
+    // Settlement failure must stay unsettled.
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.sessionId, {
+            settlementFailureCode: "native_settlement_incomplete",
+        }),
+    );
+    expect(await queryContinuation()).toMatchObject({
+        scenarioQuiet: false,
+        conversation: { kind: "unsettled", code: "repetition_stop" },
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.sessionId, { settlementFailureCode: undefined }),
+    );
+
+    // Systemic / non-generation block codes must stay unsettled.
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.missionId, {
+            blockCode: "qualification_budget_exhausted",
+        }),
+    );
+    expect(await queryContinuation()).toMatchObject({
+        scenarioQuiet: false,
+        conversation: {
+            kind: "unsettled",
+            code: "qualification_budget_exhausted",
+        },
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.missionId, { blockCode: "repetition_stop" }),
+    );
+
+    // Non-idle run status must refuse scenarioQuiet even with a quiet_blocked conversation.
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.runId, { executionStatus: "running" }),
+    );
+    expect(await queryContinuation()).toMatchObject({
+        scenarioQuiet: false,
+        executionStatus: "running",
+        conversation: { kind: "quiet_blocked", code: "repetition_stop" },
+    });
+});

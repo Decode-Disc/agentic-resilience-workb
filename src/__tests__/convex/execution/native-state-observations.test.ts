@@ -28,7 +28,10 @@ import { getFunctionName } from "convex/server";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import {
+    nativePiFixtureRoute,
+    nativeTextReply,
+} from "@/__tests__/setup/pi-native";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 import {
     activateSourcesMission,
@@ -273,13 +276,17 @@ test.each([
     ).toEqual(["The saved research program is ready for your review."]);
 }, 30000);
 
-test("repeated state reads still reach the existing non-progress stop without context-change instructions", async () => {
+test("repeated state reads can complete beyond the former stop without context-change instructions", async () => {
     const requests: NativeWireRequest[] = [];
     vi.stubEnv("OPENROUTER_API_KEY", "offline-fixture-only");
     vi.stubGlobal(
         "fetch",
         vi.fn<typeof fetch>(async (_url, init) => {
             requests.push(JSON.parse(String(init?.body)));
+            if (requests.length === 6)
+                return nativeTextReply(
+                    "The current dossier state remains unchanged.",
+                );
             return toolResponse(
                 "consult_mission_state",
                 {},
@@ -303,11 +310,10 @@ test("repeated state reads still reach the existing non-progress stop without co
         500,
     );
     expect(await f.t.run((ctx) => ctx.db.get(active.missionId))).toMatchObject({
-        status: "blocked",
-        blockCode: "repetition_stop",
-        noProgressTurns: 3,
+        status: "completed",
+        noProgressTurns: 4,
     });
-    expect(requests.length).toBeGreaterThan(1);
+    expect(requests).toHaveLength(6);
     for (const request of requests) {
         expect(
             request.messages.filter(
@@ -322,7 +328,7 @@ test("repeated state reads still reach the existing non-progress stop without co
     const operations = await f.t.run((ctx) =>
         ctx.db.query("agentOperationRequests").collect(),
     );
-    expect(operations).toHaveLength(requests.length);
+    expect(operations).toHaveLength(5);
     expect(
         operations.every((operation) => operation.status === "completed"),
     ).toBe(true);

@@ -1,16 +1,11 @@
 import { api, internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
-import { MAX_NO_PROGRESS_TURNS } from "@convex/resourcePolicy";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import {
     seedWorkbench,
     workbenchAdmissionInput,
 } from "@/__tests__/setup/workbench";
-import {
-    workbenchFailureCopy,
-    workbenchTurn,
-} from "@/lib/presentation/workbench";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -23,7 +18,13 @@ async function initialFraming(
     angle = "Can insurers bypass CCC during estimate review after the latest announcement?",
 ) {
     const version = pinnedVersion ?? getAgentDefinition("workbench_v1").version;
-    assert(version === 4 || version === 5 || version === 6 || version === 7);
+    assert(
+        version === 4 ||
+            version === 5 ||
+            version === 6 ||
+            version === 7 ||
+            version === 9,
+    );
     const f = await seedWorkbench(
         true,
         undefined,
@@ -163,48 +164,59 @@ test("a later explanatory turn does not require an initial program", async () =>
     });
 });
 
-test("repeated missing-program completion stops through shared non-progress containment", async () => {
+test("repeated missing-program completion permits correction beyond three invocations", async () => {
     const f = await initialFraming();
-    for (let attempt = 0; attempt < MAX_NO_PROGRESS_TURNS; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
         expect(await complete(f, `prose-${attempt}`)).toMatchObject({
             kind: "blocked",
-            code:
-                attempt === MAX_NO_PROGRESS_TURNS - 1
-                    ? "repetition_stop"
-                    : "completion_correction_required",
+            code: "completion_correction_required",
         });
     }
-    const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
-    expect(mission).toMatchObject({
-        status: "blocked",
-        blockCode: "repetition_stop",
+    expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
+        status: "ready",
+        noProgressTurns: 5,
     });
-    const snapshot = await f.client.query(api.workbench.snapshot, {
-        runId: f.runId,
-    });
-    assert(snapshot.activeWork);
-    expect(workbenchTurn(snapshot.activeWork)).toMatchObject({
-        state: "blocked",
-        entries: [],
-    });
-    expect(snapshot.framing).toMatchObject({
-        content: { scope: "", questions: [] },
-    });
-    expect(workbenchFailureCopy(mission?.blockCode)).toBe(
-        "This response could not finish. Your messages and recorded work remain available. Send another message to continue.",
+    const message = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_turn", (q) => q.eq("turnId", f.turnId))
+            .first(),
     );
-
+    assert(message);
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "corrected-program",
+            input: {
+                kind: "adjust_framing",
+                messageId: message._id,
+                expectedRevision: 1,
+                content,
+                eventBasis: { kind: "none" },
+            },
+        },
+    );
     expect(
-        (
-            await f.client.query(api.execution.conversations.listMessages, {
-                runId: f.runId,
-                paginationOpts: { numItems: 20, cursor: null },
-            })
-        ).page.filter((message) => message.role === "assistant"),
-    ).toEqual([]);
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "success" });
+    expect(await complete(f, "saved-completion")).toMatchObject({
+        kind: "completed",
+    });
     expect(
-        (await f.client.query(api.framing.get, { runId: f.runId }))?.revision,
-    ).toBe(1);
+        await f.client.query(api.framing.get, { runId: f.runId }),
+    ).toMatchObject({ revision: 2, content });
+    const history = await f.client.query(
+        api.execution.conversations.listMessages,
+        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
+    );
+    expect(
+        history.page.filter((message) => message.role === "assistant"),
+    ).toHaveLength(1);
 });
 
 test.each([

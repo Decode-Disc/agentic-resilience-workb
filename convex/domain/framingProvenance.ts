@@ -7,8 +7,10 @@ import type {
     framingContentValidator,
     provisionalOpenEvent,
 } from "./framingContracts";
+import { framingWriteState } from "./framingContracts";
 import { stableStringify } from "./sourcePassages";
 import {
+    framingObservationRefusal,
     observedPublicContext,
     observedPublicRead,
     supportsDirectedFraming,
@@ -83,37 +85,41 @@ async function requireFreshReadings(
     args: FramingWriteAuthority,
     basis: ReadingAssociation,
 ) {
-    const { current, mission, request, messageId } = args;
+    const { request, messageId } = args;
     const directed = "readIds" in basis;
     const readings = await publicBasisReadings(ctx, basis);
+    const authorityRefusal = readings.requests
+        .map((reading) =>
+            framingObservationRefusal(reading, { ...request, messageId }),
+        )
+        .find((refusal) => refusal !== undefined);
     if (
         !readings.valid ||
+        authorityRefusal ||
         readings.requests.some(
             (reading) =>
                 !reading ||
                 reading.input.kind !==
                     (directed
                         ? "read_public_context"
-                        : "verify_public_context") ||
-                reading.runId !== mission.runId ||
-                reading.missionId !== mission._id ||
-                reading.pin?.kind !== "framing_revision" ||
-                reading.pin.revisionId !== current._id ||
-                reading.instructionVersion !== request.instructionVersion ||
-                !("messageId" in reading.input) ||
-                reading.input.messageId !== messageId,
+                        : "verify_public_context"),
         )
     )
-        throw executionError("framing_public_lookup_invalid", [
-            {
-                path: directed
-                    ? "eventBasis.readIds"
-                    : "eventBasis.lookupRequestId",
-                expected: directed
-                    ? "The readIds of adopted read_public_context passages for this message and framing revision."
-                    : "The requestId of the adopted verify_public_context result for this message and framing revision.",
-            },
-        ]);
+        throw executionError(
+            authorityRefusal === "framing_observation_stale"
+                ? authorityRefusal
+                : "framing_public_lookup_invalid",
+            [
+                {
+                    path: directed
+                        ? "eventBasis.readIds"
+                        : "eventBasis.lookupRequestId",
+                    expected: directed
+                        ? "The readIds of adopted read_public_context passages for this active message and instruction authority."
+                        : "The requestId of the adopted verify_public_context result for this active message and instruction authority.",
+                },
+            ],
+        );
     const identities = directed ? basis.readIds : basis.referenceIndexes;
     if (
         !identities.length ||
@@ -136,7 +142,7 @@ async function requireFreshReadings(
     return readings;
 }
 
-/** Fresh associations require the causing message and revision; an unchanged authoritative association can survive a later edit. */
+/** Fresh associations require the causing message and instruction authority; an unchanged authoritative association can survive a later edit. */
 export async function validateFramingPublicBasis(
     ctx: QueryCtx,
     args: FramingWriteAuthority & { basis: PublicBasis; scope: string },
@@ -255,7 +261,7 @@ export async function prepareProvisionalFraming(
                         "Include eventBasis.activityExcerpt verbatim in content.scope. Correct the scope wording rather than changing unrelated conditional hypotheses.",
                 },
             ]);
-    } else if (!current.content.scope.trim()) {
+    } else if (framingWriteState(current.content) === "initial") {
         if (!scope.trim())
             throw executionError("framing_event_basis_invalid", [
                 {
@@ -267,7 +273,7 @@ export async function prepareProvisionalFraming(
             {
                 path: "eventBasis.activityExcerpt",
                 expected:
-                    "Copy a nonblank excerpt of the analyst's activity or open request verbatim from the active message and include it in content.scope.",
+                    "Supply eventBasis.activityExcerpt with a nonblank verbatim excerpt of the active analyst request. Changing content.scope alone does not supply this missing field.",
             },
         ]);
     } else if (scope !== current.content.scope) {

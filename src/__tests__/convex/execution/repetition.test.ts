@@ -2,7 +2,7 @@ import { internal } from "@convex/_generated/api";
 import { expect, test } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
-test("invalid requests stop after three turns without progress and a new request key cannot restart the objective", async () => {
+test("invalid requests remain diagnostic beyond three turns without duplicating the objective", async () => {
     const { t, args } = await seedInspectedEvidence();
     const start = {
         runId: args.runId,
@@ -15,7 +15,7 @@ test("invalid requests stop after three turns without progress and a new request
         internal.execution.missions.start,
         start,
     );
-    for (let turn = 0; turn < 3; turn++) {
+    for (let turn = 0; turn < 5; turn++) {
         const invocation = await t.mutation(
             internal.execution.invocations.begin,
             {
@@ -53,26 +53,25 @@ test("invalid requests stop after three turns without progress and a new request
             internal.execution.invocations.settle,
             { invocationId: invocation.invocationId, expectedGeneration: 4 },
         );
-        expect(settled.kind).toBe(turn === 2 ? "blocked" : "ready");
+        expect(settled.kind).toBe("ready");
     }
     expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
-        noProgressTurns: 3,
-        blockCode: "repetition_stop",
-        status: "blocked",
+        noProgressTurns: 5,
+        status: "ready",
         obligations: ["inspect_saved_material"],
     });
-    await expect(
-        t.mutation(internal.execution.invocations.begin, {
+    expect(
+        await t.mutation(internal.execution.missions.start, {
+            ...start,
+            requestKey: "renamed-loop",
+        }),
+    ).toBe(missionId);
+    expect(
+        await t.mutation(internal.execution.invocations.begin, {
             missionId,
             expectedGeneration: 4,
             taskKey: "new-turn",
             provenance: "simulation",
         }),
-    ).rejects.toThrow("repetition_stop");
-    await expect(
-        t.mutation(internal.execution.missions.start, {
-            ...start,
-            requestKey: "renamed-loop",
-        }),
-    ).rejects.toThrow("repetition_stop");
+    ).toMatchObject({ kind: "ready" });
 });

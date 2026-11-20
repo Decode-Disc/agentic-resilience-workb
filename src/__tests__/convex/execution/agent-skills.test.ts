@@ -1,8 +1,8 @@
 import { internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
-import packages from "@convex/integrations/agentSkillPackages.json";
-import { skillResource } from "@convex/execution/agentSkills";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { skillResource } from "@convex/execution/agentSkills";
+import packages from "@convex/integrations/agentSkillPackages.json";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     nativePiFixtureRoute,
@@ -29,16 +29,16 @@ afterEach(() => {
 });
 
 test("current bindings expose only their native mission catalogue and preserve retained bindings", () => {
-    for (const [id, version, name] of [
-        ["workbench_v1", 7, "workbench-framing"],
-        ["sources_v1", 5, "source-preparation"],
+    for (const [id, version, retainedVersion, name] of [
+        ["workbench_v1", 9, 6, "workbench-framing"],
+        ["sources_v1", 5, 4, "source-preparation"],
     ] as const) {
         const current = getAgentDefinition(id);
         expect(current.version).toBe(version);
         expect(current.instructions).toContain(`<name>${name}</name>`);
         expect(current.instructions).not.toContain("# Worked");
         expect(current.operations.read).toBeDefined();
-        const retained = getAgentDefinition(id, version - 1);
+        const retained = getAgentDefinition(id, retainedVersion);
         expect(retained.operations.read).toBeUndefined();
         expect(retained.instructions).not.toContain("<available_skills>");
     }
@@ -693,7 +693,7 @@ test("binding resolution refuses missing or modified packages instead of substit
 test.each([
     "first page",
     "EOF page",
-])("equivalent skill pages cannot evade repetition settlement: %s", async (page) => {
+])("equivalent skill pages remain reused while work continues beyond the former stop: %s", async (page) => {
     const f = await seedWorkbench(
         false,
         nativePiFixtureRoute,
@@ -708,6 +708,23 @@ test.each([
         "fetch",
         vi.fn(async () => {
             calls++;
+            if (calls === 6)
+                return nativeToolReply("adjust_framing", {
+                    content: {
+                        scope: "Investigate routing decisions.",
+                        questions: [
+                            {
+                                id: "routing",
+                                shortLabel: "Routing",
+                                text: "Who controls routing decisions?",
+                                rationale: "Locate authority.",
+                            },
+                        ],
+                    },
+                    eventBasis: { kind: "none" },
+                });
+            if (calls >= 7)
+                return nativeTextReply("The routing program is saved.");
             return nativeToolReply("read", {
                 path:
                     calls === 1
@@ -742,8 +759,8 @@ test.each([
     const missions = await f.t.run((ctx) =>
         ctx.db.query("agentMissions").collect(),
     );
-    expect(missions[0]?.blockCode).toBe("repetition_stop");
-    expect(calls).toBe(4);
+    expect(missions[0]?.status).toBe("completed");
+    expect(calls).toBe(7);
 });
 
 test.each([

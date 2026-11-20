@@ -269,8 +269,9 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
         if (canonical.nativeConversation)
             for (const framing of [
                 null,
-                { revision: 1, fixed: false },
-                { revision: 1, fixed: true },
+                { revision: 1, fixed: false, scope: "" },
+                { revision: 2, fixed: false, scope: "Existing workflow" },
+                { revision: 1, fixed: true, scope: "Fixed workflow" },
             ])
                 for (const controlAvailable of [false, true])
                     for (const material of [false, true])
@@ -318,7 +319,11 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
                             for (const single of [false, true])
                                 snapshots.push({
                                     framing: fixed
-                                        ? { revision: 1, fixed: true }
+                                        ? {
+                                              revision: 1,
+                                              fixed: true,
+                                              scope: "Fixed workflow",
+                                          }
                                         : null,
                                     modernSources: true,
                                     research: { controlAvailable },

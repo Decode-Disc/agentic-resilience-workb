@@ -2875,7 +2875,7 @@ test("selected publication reaches a later passage through native read continuat
     ).toBeUndefined();
 }, 30000);
 
-test("selected publication replay reaches the native repetition stop without repeated acquisition", async () => {
+test("selected publication replay can finish beyond three non-progress invocations without repeated acquisition", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
     vi.stubEnv("EXA_API_KEY", "fixture-only");
     vi.stubEnv(
@@ -2910,8 +2910,12 @@ test("selected publication replay reaches the native repetition stop without rep
                     ],
                 });
             }
-            if (++generations > 12)
-                throw new Error("Repetition guard did not stop the loop");
+            if (++generations === 8)
+                return reply(
+                    "The retained publication is available for inspection.",
+                );
+            if (generations > 8)
+                throw new Error("Expected completion after retained reads");
             if (generations === 1)
                 return toolReply("search_public_context", {
                     query: "same publication",
@@ -2943,11 +2947,10 @@ test("selected publication replay reaches the native repetition stop without rep
         ),
     );
     expect(mission).toMatchObject({
-        status: "blocked",
-        blockCode: "repetition_stop",
+        status: "completed",
     });
     expect(acquisitions).toBe(1);
-    expect(generations).toBeLessThan(12);
+    expect(generations).toBe(8);
 }, 30000);
 
 test.each([
@@ -3280,7 +3283,7 @@ test.each([
     "duplicate",
     "unadopted",
     "foreign mission",
-    "wrong revision",
+    "changed instructions",
     "undated",
 ] as const)("independent read provenance refuses %s associations and preserves the saved draft", async (failure) => {
     vi.stubEnv("EXA_API_KEY", "fixture-only");
@@ -3384,22 +3387,8 @@ test.each([
             const foreignId = await ctx.db.insert("agentMissions", fields);
             await ctx.db.patch(readId, { missionId: foreignId });
         });
-    if (failure === "wrong revision")
-        await t.run(async (ctx) => {
-            const run = await ctx.db.get(runId);
-            assert(run?.currentFramingRevisionId);
-            const framing = await ctx.db.get(run.currentFramingRevisionId);
-            assert(framing);
-            const { _id, _creationTime, ...fields } = framing;
-            const otherId = await ctx.db.insert("framingRevisions", {
-                ...fields,
-                revision: 99,
-                requestKey: "foreign-revision",
-            });
-            await ctx.db.patch(readId, {
-                pin: { kind: "framing_revision", revisionId: otherId },
-            });
-        });
+    if (failure === "changed instructions")
+        await t.run((ctx) => ctx.db.patch(readId, { instructionVersion: -1 }));
     const requestId = await t.mutation(internal.execution.operations.enqueue, {
         missionId: active.missionId,
         expectedGeneration: 1,
@@ -3432,11 +3421,13 @@ test.each([
     expect(outcome).toMatchObject({
         kind: "refused",
         code:
-            failure === "duplicate"
-                ? "framing_event_basis_invalid"
-                : failure === "undated"
-                  ? "framing_public_reference_undated"
-                  : "framing_public_lookup_invalid",
+            failure === "changed instructions"
+                ? "framing_observation_stale"
+                : failure === "duplicate"
+                  ? "framing_event_basis_invalid"
+                  : failure === "undated"
+                    ? "framing_public_reference_undated"
+                    : "framing_public_lookup_invalid",
     });
     expect(await client.query(api.framing.get, { runId })).toMatchObject({
         revision: 1,

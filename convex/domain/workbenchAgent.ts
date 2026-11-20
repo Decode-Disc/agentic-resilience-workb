@@ -20,7 +20,7 @@ import {
     completeResponseControl,
     responseControlContext,
 } from "@convex/responseControl";
-import { hasFramingProgram } from "./framingContracts";
+import { framingWriteState, hasFramingProgram } from "./framingContracts";
 import { readResearchState } from "./researchState";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
 import { sha256Hex } from "./sourcePassages";
@@ -34,6 +34,7 @@ import {
     explicitFramingPreservation,
     explicitResearchCommand,
     INITIAL_FRAMING_MESSAGE_KEY,
+    initialNativeAdjustFramingInput,
     legacyNativeAdjustFramingInput,
     modernSourceRequestInput,
     publicContextInput,
@@ -41,6 +42,7 @@ import {
     workbenchSchemas as schemas,
     supportsDirectedFraming,
     supportsFramingContractCorrections,
+    supportsStatefulFramingSchema,
 } from "./workbenchContracts";
 
 async function framingFailureReceipt(
@@ -188,10 +190,14 @@ function nativeWorkbenchOperation(
     single: boolean,
     modernSources = false,
     version = 4,
+    framingState: WorkbenchToolAvailability["framing"] = "established",
 ) {
-    const framingInput = supportsDirectedFraming(version)
-        ? directedNativeAdjustFramingInput
-        : legacyNativeAdjustFramingInput;
+    const framingInput =
+        supportsStatefulFramingSchema(version) && framingState === "initial"
+            ? initialNativeAdjustFramingInput
+            : supportsDirectedFraming(version)
+              ? directedNativeAdjustFramingInput
+              : legacyNativeAdjustFramingInput;
     if (name === "transmit_source_request" && modernSources)
         return {
             description:
@@ -239,7 +245,7 @@ function nativeWorkbenchOperation(
 
 type WorkbenchToolAvailability = {
     single: boolean;
-    framing: boolean;
+    framing: false | ReturnType<typeof framingWriteState>;
     approvals: boolean;
     sourceRequest: "legacy" | "modern" | null;
     savedMaterial: boolean;
@@ -276,6 +282,7 @@ function projectWorkbenchOperation(
         available.single,
         available.sourceRequest === "modern",
         version,
+        available.framing,
     );
 }
 
@@ -365,12 +372,14 @@ export const workbenchDefinition: AgentDefinition & {
                     single,
                     savedMaterial,
                     approvals: false,
-                    framing: true,
+                    framing: "established",
                     sourceRequest: null,
                     preparedNeeds: false,
                 } as const;
-                const launched = { ...framing, framing: false };
+                const launched = { ...framing, framing: false as const };
                 const variants: WorkbenchToolAvailability[] = [framing];
+                if (supportsStatefulFramingSchema(this.version))
+                    variants.push({ ...framing, framing: "initial" });
                 for (const approvals of [false, true]) {
                     variants.push(
                         { ...launched, approvals },
@@ -424,6 +433,14 @@ export const workbenchDefinition: AgentDefinition & {
     },
     textCompletion: (text) => ({ kind: "complete", text }),
     operationDiagnostic(code) {
+        if (code === "source_reference_not_observed")
+            return "Use a reference from an adopted observation in this mission. No document was read by this refused operation.";
+        if (code === "framing_observation_stale")
+            return "The observation belongs to earlier instructions or a different active message. Discover or read evidence under the current authorized request before using it.";
+        if (code === "source_candidate_invalid")
+            return "Select an index present in the observed search result's candidates. No document was read.";
+        if (code === "source_continuation_invalid")
+            return "Use a continuation from an observed reading of this exact target, or omit continuation to begin a newly authorized reading. No continuation was read.";
         if (code === "framing_open_preserve_program")
             return "The existing research program remains saved. Ask which event the analyst means before proposing a change that depends on it.";
         if (code === "framing_public_lookup_invalid")
@@ -652,7 +669,7 @@ export const workbenchDefinition: AgentDefinition & {
             {
                 single: messages.length === 1,
                 framing:
-                    !!snapshot.framing &&
+                    snapshot.framing &&
                     !snapshot.framing.fixed &&
                     !messages.some((message) =>
                         explicitFramingPreservation(message.text),
@@ -662,7 +679,11 @@ export const workbenchDefinition: AgentDefinition & {
                         messages.every((message) =>
                             explicitResearchCommand(message.text),
                         )
-                    ),
+                    )
+                        ? supportsStatefulFramingSchema(this.version)
+                            ? framingWriteState(snapshot.framing)
+                            : "established"
+                        : false,
                 approvals: !!snapshot.research?.controlAvailable,
                 sourceRequest: snapshot.framing?.fixed
                     ? snapshot.modernSources
@@ -778,7 +799,7 @@ export const workbenchDefinition: AgentDefinition & {
 type WorkbenchModelSnapshot = {
     responseControl?: { reminder?: string };
     modernSources?: boolean;
-    framing?: { revision: number; fixed: boolean } | null;
+    framing?: { revision: number; fixed: boolean; scope: string } | null;
     research?: { controlAvailable: boolean };
     availableMaterials?: unknown[];
     documentaryPreparation?: {
@@ -864,6 +885,12 @@ export const workbenchV7Definition: AgentDefinition & { id: "workbench_v1" } = {
             ...framingContractCorrections(""),
         ].join("\n");
     },
+};
+
+/** New conversations expose initial anchor requirements before generation. */
+export const workbenchV9Definition: AgentDefinition & { id: "workbench_v1" } = {
+    ...workbenchV7Definition,
+    version: 9,
 };
 
 /** Qualification-only control: current mechanics and resource access, retained inline method. */

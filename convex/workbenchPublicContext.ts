@@ -5,6 +5,7 @@ import { authorizeDocumentaryDiscovery } from "@convex/domain/sources";
 import {
     explicitFramingPreservation,
     explicitResearchCommand,
+    framingObservationRefusal,
     publicContextAllowanceValidator,
     publicReadResultValidator,
     publicSearchResultValidator,
@@ -147,29 +148,28 @@ export async function requirePublicContextRequest(
     ) {
         const { searchId, index } = request.input.target;
         const search = await ctx.db.get(searchId);
+        const refusal = framingObservationRefusal(search, {
+            ...request,
+            messageId,
+        });
+        if (refusal) throw executionError(refusal);
         if (
-            !Number.isSafeInteger(index) ||
-            index < 0 ||
             search?.input.kind !== "search_public_context" ||
-            search.missionId !== mission._id ||
-            search.runId !== run._id ||
-            search.input.messageId !== messageId ||
-            search.instructionVersion !== request.instructionVersion ||
-            search.pin?.kind !== "framing_revision" ||
-            search.pin.revisionId !== run.currentFramingRevisionId ||
-            search.status !== "completed" ||
-            search.adoptedAt === undefined ||
-            search.adoptionRefusalCode ||
             search.outcome?.kind !== "success"
         )
             throw executionError("source_reference_not_observed");
         const result: unknown = JSON.parse(search.outcome.valueJson);
         if (
             !validate(publicSearchResultValidator, result) ||
-            result.searchId !== search._id ||
-            !result.candidates[index]
+            result.searchId !== search._id
         )
             throw executionError("source_reference_not_observed");
+        if (
+            !Number.isSafeInteger(index) ||
+            index < 0 ||
+            !result.candidates[index]
+        )
+            throw executionError("source_candidate_invalid");
         selectedCandidate = result.candidates[index];
     }
     if (
@@ -323,22 +323,21 @@ export async function requirePublicContextRequest(
         request.input.continuation
     ) {
         const previous = await ctx.db.get(request.input.continuation);
+        const refusal = framingObservationRefusal(previous, {
+            ...request,
+            messageId,
+        });
+        if (refusal) throw executionError(refusal);
         if (
             previous?.input.kind !== "read_public_context" ||
-            previous.missionId !== mission._id ||
-            previous.runId !== run._id ||
-            previous.input.messageId !== messageId ||
-            previous.instructionVersion !== request.instructionVersion ||
-            stableStringify(previous.input.target) !==
-                stableStringify(request.input.target) ||
-            previous.pin?.kind !== "framing_revision" ||
-            previous.pin.revisionId !== run.currentFramingRevisionId ||
-            previous.status !== "completed" ||
-            previous.adoptedAt === undefined ||
-            previous.adoptionRefusalCode ||
             previous.outcome?.kind !== "success"
         )
             throw executionError("source_reference_not_observed");
+        if (
+            stableStringify(previous.input.target) !==
+            stableStringify(request.input.target)
+        )
+            throw executionError("source_continuation_invalid");
         const value: unknown = JSON.parse(previous.outcome.valueJson);
         if (
             !validate(publicReadResultValidator, value) ||
@@ -347,7 +346,7 @@ export async function requirePublicContextRequest(
             !value.range ||
             !value.reference
         )
-            throw executionError("source_reference_not_observed");
+            throw executionError("source_continuation_invalid");
         retainedRead = value;
     }
     return {

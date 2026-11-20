@@ -52,6 +52,7 @@ function recoverableWorkbenchRefusal(
             "framing_event_basis_invalid",
             "framing_open_preserve_program",
             "framing_public_lookup_invalid",
+            "framing_observation_stale",
             "framing_public_reference_undated",
             "framing_read_only",
             "framing_analyst_conflict",

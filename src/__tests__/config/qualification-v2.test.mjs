@@ -306,7 +306,16 @@ async function independentScenarioProbe(t, overrides = {}) {
                 if (result !== undefined) return result;
             }
             if (name === "visitors:current") return { status: "active" };
-            if (name === "execution/fixtures:qualificationContinuation")
+            if (name === "execution/fixtures:qualificationContinuation") {
+                const quietConversation =
+                    snapshot.nativeSettled &&
+                    !snapshot.conversation?.activeTurnId &&
+                    !snapshot.conversation?.queuedCount;
+                const sourcesQuiet =
+                    !snapshot.sourcesMission ||
+                    ["completed", "blocked", "failed", "cancelled"].includes(
+                        snapshot.sourcesMission.status,
+                    );
                 return {
                     accounting: snapshot.lotAccounting,
                     accountingSettled:
@@ -319,7 +328,22 @@ async function independentScenarioProbe(t, overrides = {}) {
                         ].every((v) => v === 0),
                     hasEngagedEffects: snapshot.hasEngagedEffects,
                     authorized: snapshot.continuationAuthorized,
+                    scenarioQuiet:
+                        snapshot.run.executionStatus === "idle" &&
+                        sourcesQuiet &&
+                        quietConversation,
+                    executionStatus: snapshot.run.executionStatus,
+                    sourcesStatus: snapshot.sourcesMission?.status ?? null,
+                    conversation: quietConversation
+                        ? { kind: "settled" }
+                        : {
+                              kind: "unsettled",
+                              ...(snapshot.mission?.blockCode
+                                  ? { code: snapshot.mission.blockCode }
+                                  : {}),
+                          },
                 };
+            }
             if (name === "execution/fixtures:qualificationSnapshot")
                 return snapshot;
             if (name === "execution/piControl:publicationStatus")
@@ -408,6 +432,73 @@ test("a saved framing milestone survives a later blocked turn", async (t) => {
         framing,
     );
     assert.equal(existsSync(join(root, "claims/latest-snapshot.json")), true);
+});
+
+test("a quiet local generation block continues independent scenarios while retaining the failed dossier", async (t) => {
+    const { root, activated } = await independentScenarioProbe(t, {
+        backend: true,
+        freshFraming: true,
+        snapshot: {
+            framing: {
+                _id: "framing-creative",
+                origin: "workbench",
+                content: { scope: "Creative program", questions: [] },
+            },
+        },
+        observeQuery: (name, args, snapshot) => {
+            if (args?.runId !== "fixture-claims") return undefined;
+            if (name === "execution/fixtures:qualificationSnapshot")
+                return {
+                    ...snapshot,
+                    nativeSettled: false,
+                    conversation: {
+                        activeTurnId: "blocked-turn",
+                        queuedCount: 0,
+                    },
+                    mission: {
+                        status: "blocked",
+                        blockCode: "repetition_stop",
+                    },
+                };
+            if (name === "execution/fixtures:qualificationContinuation")
+                return {
+                    accounting: snapshot.lotAccounting,
+                    accountingSettled: true,
+                    hasEngagedEffects: false,
+                    authorized: true,
+                    scenarioQuiet: true,
+                    executionStatus: "idle",
+                    sourcesStatus: null,
+                    conversation: {
+                        kind: "quiet_blocked",
+                        code: "repetition_stop",
+                    },
+                };
+            return undefined;
+        },
+    });
+    assert.deepEqual(activated, ["fixture-claims", "fixture-creative"]);
+    const events = readFileSync(join(root, "progress.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map(JSON.parse)
+        .filter((e) => e.event === "finished");
+    assert.deepEqual(
+        events.map((e) => [e.scenario, e.executionIntegrity]),
+        [
+            ["claims", "failed"],
+            ["creative", "passed"],
+        ],
+    );
+    assert.deepEqual(
+        JSON.parse(
+            readFileSync(
+                join(root, "claims/independent-continuation.json"),
+                "utf8",
+            ),
+        ).conversation,
+        { kind: "quiet_blocked", code: "repetition_stop" },
+    );
 });
 
 test("unsettled work, uncertain accounting, publication holds and interruption prevent independent continuation", async (t) => {
@@ -1352,7 +1443,20 @@ test("a first dispatched Sources request is hydrated once and survives blocked p
         observeQuery: (name, _args, snapshot) => {
             if (name === "execution/fixtures:qualificationSnapshot") {
                 snapshots++;
-                snapshotBytes += Buffer.byteLength(JSON.stringify(snapshot));
+                const polled =
+                    snapshots === 1
+                        ? {
+                              ...snapshot,
+                              contextExpiresAt: Date.now() + 60_000,
+                              nativeSettled: false,
+                              mission: {
+                                  status: "running",
+                                  piActiveWriter: "worker-1",
+                              },
+                          }
+                        : snapshot;
+                snapshotBytes += Buffer.byteLength(JSON.stringify(polled));
+                return polled;
             }
             if (name === "execution/fixtures:inspectSourcesTextFragments")
                 fragmentReads++;

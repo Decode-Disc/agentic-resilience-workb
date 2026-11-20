@@ -1138,8 +1138,7 @@ export async function runCampaignScenarios(
                     !interrupted(),
                     "Campaign interrupted after scenario failure",
                 );
-                const [state, publication, continuation] = await Promise.all([
-                    inspect(),
+                const [publication, continuation] = await Promise.all([
                     client.query(
                         ref(internal.execution.piControl.publicationStatus),
                         {},
@@ -1155,15 +1154,7 @@ export async function runCampaignScenarios(
                 const accounting = continuation.accounting;
                 const relay = readRelayContinuation(root);
                 assert(
-                    settled(state) &&
-                        state.run.executionStatus === "idle" &&
-                        (!state.sourcesMission ||
-                            [
-                                "completed",
-                                "blocked",
-                                "failed",
-                                "cancelled",
-                            ].includes(state.sourcesMission.status)) &&
+                    continuation.scenarioQuiet &&
                         accounting &&
                         continuation.accountingSettled &&
                         continuation.authorized &&
@@ -1181,8 +1172,9 @@ export async function runCampaignScenarios(
                     "Failed scenario is not quiet and reconciled; independent continuation refused",
                 );
                 save(directory, "independent-continuation", {
-                    executionStatus: state.run.executionStatus,
-                    sourcesStatus: state.sourcesMission?.status ?? null,
+                    executionStatus: continuation.executionStatus,
+                    sourcesStatus: continuation.sourcesStatus,
+                    conversation: continuation.conversation,
                     pending: accounting.pending,
                     unknown: accounting.unknown,
                     overruns: accounting.overruns,

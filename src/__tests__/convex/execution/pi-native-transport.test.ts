@@ -4,7 +4,7 @@ import type { ModelRoute } from "@convex/integrations/modelRouting";
 import { runPiMission } from "@convex/integrations/piMission";
 import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { getFunctionName } from "convex/server";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
@@ -276,7 +276,7 @@ test.each([
         vi.fn<typeof fetch>(async (_url, init) => {
             bodies.push(JSON.parse(String(init?.body)));
             return reply(
-                repeat || bodies.length === 1
+                bodies.length <= (repeat ? 5 : 1)
                     ? invalid
                     : { kind: "complete", captureIds: [f.captureId] },
                 "stop",
@@ -307,10 +307,10 @@ test.each([
             .collect(),
     }));
     expect(observed.mission).toMatchObject({
-        status: repeat ? "blocked" : "completed",
-        ...(repeat ? { blockCode: "repetition_stop", noProgressTurns: 3 } : {}),
+        status: "completed",
+        noProgressTurns: repeat ? 5 : 1,
     });
-    expect(observed.calls).toHaveLength(repeat ? 3 : 2);
+    expect(observed.calls).toHaveLength(repeat ? 6 : 2);
     expect(observed.calls[0]).toMatchObject({
         status: format === "malformed" ? "failed" : "succeeded",
         dispatchOutcome: "response_received",
@@ -321,8 +321,8 @@ test.each([
     });
     expect(
         observed.calls.reduce((sum, call) => sum + (call.reportedCost ?? 0), 0),
-    ).toBe(repeat ? 0.003 : 0.002);
-    expect(observed.invocations).toHaveLength(repeat ? 3 : 2);
+    ).toBe(repeat ? 0.006 : 0.002);
+    expect(observed.invocations).toHaveLength(repeat ? 6 : 2);
     expect(observed.invocations[0]).toMatchObject({
         correction: { code },
         blockCode: "completion_correction_required",
@@ -368,7 +368,7 @@ test.each([
                 ).toBe(2);
             }
             return reply(
-                repeat || bodies.length === 3
+                bodies.length <= (repeat ? 5 : 3)
                     ? malformed
                     : { kind: "complete", captureIds: [f.captureId] },
                 "stop",
@@ -393,21 +393,18 @@ test.each([
     const rejected = state.invocations.find((i) => i.correction);
     expect(rejected?.blockCode).toBe("completion_correction_required");
     expect(state.mission).toMatchObject({
-        status: repeat ? "blocked" : "completed",
+        status: "completed",
         deadlineAt: before?.deadlineAt,
         generation: before?.generation,
         progressKeys: before?.progressKeys,
-        noProgressTurns: repeat ? 3 : 2,
-        ...(repeat
-            ? { blockCode: "repetition_stop" }
-            : {
-                  result: {
-                      kind: "saved_material_inspection_v1",
-                      captureIds: [f.captureId],
-                  },
-              }),
+        noProgressTurns: repeat ? 5 : 3,
+        result: {
+            kind: "saved_material_inspection_v1",
+            captureIds: [f.captureId],
+        },
     });
-    expect(state.receipts).toHaveLength(4);
+    expect(state.receipts).toHaveLength(repeat ? 6 : 4);
+    expect(state.receipts.at(-1)?.status).toBe("succeeded");
     expect(state.receipts[2]).toMatchObject({
         status: "failed",
         errorCode: "invalid_output",
@@ -712,6 +709,13 @@ test.each([
     );
     vi.stubGlobal("fetch", network);
     const f = await fixture();
+    await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        await ctx.db.patch(f.missionId, {
+            modelLimits: { ...mission.modelLimits, work: 5 },
+        });
+    });
     await f.t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,
@@ -739,7 +743,7 @@ test.each([
         ).toBe(true);
         expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
             status: "blocked",
-            blockCode: "repetition_stop",
+            blockCode: "work_budget_exhausted",
         });
     } else {
         expect(observed.calls).toEqual([
@@ -786,6 +790,13 @@ test.each([
     );
     vi.stubGlobal("fetch", network);
     const f = await fixture();
+    await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        await ctx.db.patch(f.missionId, {
+            modelLimits: { ...mission.modelLimits, work: 5 },
+        });
+    });
     await f.t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,
@@ -803,13 +814,32 @@ test.each([
             .collect(),
         mission: await ctx.db.get(f.missionId),
     }));
+    const completeReplies = observed.replies.filter(
+        (reply) => reply.state === "complete",
+    );
+    expect(completeReplies).toHaveLength(observed.calls.length);
     expect(
-        observed.replies.map((p) => {
+        observed.replies
+            .filter((reply) => reply.state !== "complete")
+            .map(({ state, code, json }) => ({ state, code, json })),
+    ).toEqual(
+        exceedsCapacity
+            ? []
+            : [
+                  {
+                      state: "incomplete",
+                      code: "not_dispatched",
+                      json: undefined,
+                  },
+              ],
+    );
+    expect(
+        completeReplies.map((p) => {
             if (p.state !== "complete" || p.json === undefined)
                 throw new Error("Expected a complete observable reply");
             return JSON.parse(p.json).content[0].rawArguments;
         }),
-    ).toEqual(Array(observed.replies.length).fill(original));
+    ).toEqual(Array(completeReplies.length).fill(original));
     expect(JSON.stringify(observed.replies)).toContain("argumentsError");
     expect(JSON.stringify(observed.replies)).not.toContain(
         "NON_OBSERVABLE_REASONING",
@@ -847,7 +877,7 @@ test.each([
         ).toBe(true);
         expect(observed.mission).toMatchObject({
             status: "blocked",
-            blockCode: "repetition_stop",
+            blockCode: "work_budget_exhausted",
         });
     }
 }, 30000);

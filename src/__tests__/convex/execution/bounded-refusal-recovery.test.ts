@@ -10,7 +10,7 @@ test.each([
     ["inspection", "refuse"],
     ["sources", "complete"],
     ["inspection", "complete"],
-] as const)("%s permits one material restoration, then %s preserves the original failure limit", async (binding, next) => {
+] as const)("%s retains restoration diagnostics and permits %s beyond the former stop", async (binding, next) => {
     const f = await (async () => {
         if (binding === "sources") return seedCapturedSources();
         const inspected = await seedInspectedEvidence();
@@ -84,11 +84,18 @@ test.each([
     });
     expect(await f.t.run((ctx) => ctx.db.get(missionId))).toEqual(restored);
     if (next === "refuse") {
-        expect(
-            (await turn("third-refusal", "unregistered_operation", {}))
-                .settlement,
-        ).toMatchObject({ kind: "blocked", code: "repetition_stop" });
-    } else {
+        for (let index = 3; index <= 5; index++) {
+            expect(
+                (await turn(`refusal-${index}`, "unregistered_operation", {}))
+                    .settlement,
+            ).toMatchObject({ kind: "ready" });
+        }
+        expect(await f.t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
+            noProgressTurns: 5,
+            status: "ready",
+        });
+    }
+    {
         const begun = await f.t.mutation(internal.execution.invocations.begin, {
             missionId,
             expectedGeneration: 4,

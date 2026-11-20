@@ -50,6 +50,14 @@ export const directedFramingEventBasisInput = v.union(
     publicReadEvent,
 );
 
+/** Initial writes cannot inherit an activity anchor from an empty scope. */
+export const initialDirectedFramingEventBasisInput = v.union(
+    noEvent,
+    provisionalOpenEvent.extend({ activityExcerpt: v.string() }),
+    analystEvent,
+    publicReadEvent,
+);
+
 export const framingEventBasisInput = v.union(
     noEvent,
     provisionalOpenEvent,
@@ -81,4 +89,14 @@ export function hasFramingProgram(
     content: Infer<typeof framingContentValidator> | null | undefined,
 ): boolean {
     return Boolean(content?.scope.trim() && content.questions.length);
+}
+
+/** Shared initial-write distinction for model projection and business validation. */
+export function framingWriteState(
+    content:
+        | Pick<Infer<typeof framingContentValidator>, "scope">
+        | null
+        | undefined,
+): "initial" | "established" {
+    return content?.scope.trim() ? "established" : "initial";
 }

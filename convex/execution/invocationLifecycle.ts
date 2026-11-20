@@ -24,7 +24,6 @@ import {
 } from "@convex/providerCalls";
 import {
     MAX_CONTEXT_BYTES,
-    MAX_NO_PROGRESS_TURNS,
     MAX_OBSERVABLE_OUTPUT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
     MAX_WORKING_NOTES_BYTES,
@@ -1020,12 +1019,7 @@ export const settle = internalMutation({
         expectedGeneration: v.number(),
     },
     returns: v.object({
-        kind: v.union(
-            v.literal("ready"),
-            v.literal("waiting"),
-            v.literal("blocked"),
-        ),
-        code: v.optional(v.string()),
+        kind: v.union(v.literal("ready"), v.literal("waiting")),
     }),
     handler: async (ctx, args) => {
         const invocation = await ctx.db.get(args.invocationId);
@@ -1051,27 +1045,27 @@ export const settle = internalMutation({
                 return { kind: "waiting" as const };
             requests.push(request);
         }
-        const { noProgressTurns, stopped, recoveryRead } =
-            invocationProgressSettlement(mission, invocation, requests);
+        const { noProgressTurns, recoveryRead } = invocationProgressSettlement(
+            mission,
+            invocation,
+            requests,
+        );
         await ctx.db.patch(mission._id, {
             lastSettledInvocationId: invocation._id,
             noProgressTurns,
             recoveryRead,
-            status: stopped ? "blocked" : "ready",
-            blockCode: stopped ? "repetition_stop" : undefined,
+            status: "ready",
+            blockCode: undefined,
         });
         await recordMissionEvent(ctx, mission, {
-            kind: stopped ? "repetition_stopped" : "continuation_ready",
+            kind: "continuation_ready",
             cause: invocation.taskKey,
             invocationId: invocation._id,
             ...(recoveryRead?.restorationInvocationId === invocation._id
                 ? { observation: { recoveryRead, noProgressTurns } }
                 : {}),
-            ...(stopped ? { code: "repetition_stop" } : {}),
         });
-        return stopped
-            ? { kind: "blocked" as const, code: "repetition_stop" }
-            : { kind: "ready" as const };
+        return { kind: "ready" as const };
     },
 });
 
@@ -1209,7 +1203,7 @@ export const finish = internalMutation({
                 !validate(completionFeedbackValidator, feedback, { db: ctx.db })
             )
                 return block("operation_contract_invalid", true);
-            const { noProgressTurns, stopped, recoveryRead } =
+            const { noProgressTurns, recoveryRead } =
                 invocationProgressSettlement(mission, invocation, [], true);
             await ctx.db.patch(invocation._id, {
                 correction: feedback,
@@ -1219,12 +1213,12 @@ export const finish = internalMutation({
                 lastSettledInvocationId: invocation._id,
                 noProgressTurns,
                 recoveryRead,
-                status: stopped ? "blocked" : "ready",
-                blockCode: stopped ? "repetition_stop" : undefined,
+                status: "ready",
+                blockCode: undefined,
             });
             const refused = await block(
-                stopped ? "repetition_stop" : "completion_correction_required",
-                stopped,
+                "completion_correction_required",
+                false,
                 feedback,
             );
             return { ...refused, correction: feedback };
@@ -1500,7 +1494,7 @@ export const finish = internalMutation({
     },
 });
 
-/** Settle each invocation once while keeping the first completion refusal actionable. */
+/** Record each invocation's progress and restoration once; admission owns execution limits. */
 function invocationProgressSettlement(
     mission: Doc<"agentMissions">,
     invocation: Doc<"agentInvocations">,
@@ -1510,11 +1504,10 @@ function invocationProgressSettlement(
     if (mission.lastSettledInvocationId === invocation._id)
         return {
             noProgressTurns: mission.noProgressTurns,
-            stopped: mission.noProgressTurns >= MAX_NO_PROGRESS_TURNS,
             recoveryRead: mission.recoveryRead,
         };
     if (mission.progressKeys.length > (invocation.progressCount ?? 0))
-        return { noProgressTurns: 0, stopped: false, recoveryRead: undefined };
+        return { noProgressTurns: 0, recoveryRead: undefined };
     const definition = getAgentDefinition(
         mission.definitionId,
         mission.definitionVersion,
@@ -1557,14 +1550,10 @@ function invocationProgressSettlement(
               }
             : (mission.recoveryRead ??
               (refusal ? { refusalInvocationId: invocation._id } : undefined));
-    let noProgressTurns =
+    const noProgressTurns =
         mission.noProgressTurns + (restored || consultedContext ? 0 : 1);
-    // Prior consultations must not stop the first completion refusal before its feedback can be used.
-    if (rejectedCompletion && !mission.recoveryRead)
-        noProgressTurns = Math.min(noProgressTurns, MAX_NO_PROGRESS_TURNS - 1);
     return {
         noProgressTurns,
         recoveryRead,
-        stopped: noProgressTurns >= MAX_NO_PROGRESS_TURNS,
     };
 }

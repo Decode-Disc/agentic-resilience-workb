@@ -534,7 +534,7 @@ export async function runPiMission(
                 },
             );
             if (settled.kind !== "ready")
-                throw executionError(settled.code ?? "pending_operations");
+                throw executionError("pending_operations");
         }
     }
 

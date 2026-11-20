@@ -202,10 +202,12 @@ export function modelOperationOutcome(
                             ? "The operation outcome is unconfirmed. Do not repeat it or claim success or non-execution. Inspect retained state and wait for authorized recovery."
                             : outcome.code === "history_cursor_invalid"
                               ? "No history page was read. Omit cursor to start at the first page; for later pages copy only continueCursor returned by the same history operation. Use consult_conversation for prior analyst exchanges; consult_mission_state reads only the current mission."
-                              : (definition.operationDiagnostic?.(
-                                    outcome.code,
-                                ) ??
-                                "This result cannot advance the mission. Inspect recorded state and the reported prerequisite before choosing another action."),
+                              : "validation" in outcome && outcome.validation
+                                ? `Repair ${outcome.validation.path}: ${outcome.validation.expected}`
+                                : (definition.operationDiagnostic?.(
+                                      outcome.code,
+                                  ) ??
+                                  "This result cannot advance the mission. Inspect recorded state and the reported prerequisite before choosing another action."),
               }
             : {}),
     });
