@@ -1,6 +1,9 @@
 import { api, internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
-import { agentToolSchemas } from "@convex/execution/agentDefinition";
+import {
+    agentToolSchemas,
+    modelOperationOutcome,
+} from "@convex/execution/agentDefinition";
 import type { FunctionArgs } from "convex/server";
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -19,7 +22,11 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-async function activeWorkbench(text: string, version: 4 | 5 = 4, local = true) {
+async function activeWorkbench(
+    text: string,
+    version: 4 | 5 | 6 = 4,
+    local = true,
+) {
     const fixture = await seedWorkbench(
         local,
         local ? undefined : nativePiFixtureRoute,
@@ -58,6 +65,126 @@ async function activeWorkbench(text: string, version: 4 | 5 = 4, local = true) {
     assert(active);
     return { ...fixture, ...active, messageId };
 }
+
+test("framing refusal identifies a scope anchor mismatch and permits a corrected write", async () => {
+    const excerpt =
+        "Investigate NVIDIA data-center resilience after the April 2025 H20 export restrictions.";
+    const { t, client, runId, missionId, messageId } = await activeWorkbench(
+        excerpt,
+        5,
+    );
+    const before = await client.query(api.framing.get, { runId });
+    const questions = [
+        {
+            id: "exposure",
+            shortLabel: "Exposure",
+            text: "What exposure follows the restrictions?",
+            rationale: "Examine the analyst's question.",
+        },
+    ];
+    const rejectedId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 1,
+        cause: "paraphrased-scope",
+        input: {
+            kind: "adjust_framing",
+            messageId,
+            expectedRevision: 1,
+            eventBasis: { kind: "open", activityExcerpt: excerpt },
+            content: {
+                scope: "NVIDIA data-center resilience following H20 export licensing changes.",
+                questions,
+            },
+        },
+    });
+    const refused = await t.action(internal.execution.operations.dispatch, {
+        requestId: rejectedId,
+        expectedGeneration: 1,
+    });
+    expect(refused).toMatchObject({
+        kind: "refused",
+        code: "framing_event_basis_invalid",
+        validation: {
+            path: "content.scope",
+            expected: expect.stringContaining("activityExcerpt"),
+        },
+    });
+    expect(await client.query(api.framing.get, { runId })).toEqual(before);
+    const content = {
+        scope: `${excerpt} Assess the operational exposure.`,
+        questions,
+    };
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 1,
+        cause: "corrected-scope",
+        input: {
+            kind: "adjust_framing",
+            messageId,
+            expectedRevision: 1,
+            eventBasis: { kind: "open", activityExcerpt: excerpt },
+            content,
+        },
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "success" });
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 2,
+        content,
+    });
+    expect((await t.run((ctx) => ctx.db.get(rejectedId)))?.outcome).toEqual(
+        refused,
+    );
+    await t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 2,
+        content,
+    });
+});
+
+test("framing refusal identifies an invented analyst event without changing the draft", async () => {
+    const { t, client, runId, missionId, messageId } = await activeWorkbench(
+        "Investigate estimate review.",
+        5,
+    );
+    const before = await client.query(api.framing.get, { runId });
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 1,
+        cause: "invented-analyst-event",
+        input: {
+            kind: "adjust_framing",
+            messageId,
+            expectedRevision: 1,
+            eventBasis: {
+                kind: "analyst",
+                excerpt: "A new regulation prohibits estimate review.",
+            },
+            content: { scope: "Investigate estimate review", questions: [] },
+        },
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({
+        kind: "refused",
+        code: "framing_event_basis_invalid",
+        validation: {
+            path: "eventBasis.excerpt",
+            expected: expect.any(String),
+        },
+    });
+    expect(await client.query(api.framing.get, { runId })).toEqual(before);
+});
 
 test.each([
     "What did I ask you to change in my previous message? Keep the saved program unchanged.",
@@ -647,6 +774,7 @@ test.each([
     "invented analyst basis",
     "missing question",
     "duplicate condition",
+    "duplicate question",
     "unavailable read",
     "empty read basis",
     "unanchored scope change",
@@ -731,6 +859,7 @@ test.each([
                 scope,
                 questions: [
                     retained,
+                    ...(failure === "duplicate question" ? [retained] : []),
                     {
                         id: "check",
                         shortLabel: "Conditional check",
@@ -752,6 +881,20 @@ test.each([
             failure === "unavailable read"
                 ? "framing_public_lookup_invalid"
                 : "framing_event_basis_invalid",
+        validation: {
+            path: {
+                "invented activity": "eventBasis.activityExcerpt",
+                "invented analyst basis":
+                    "eventBasis.conditions[0].basis.excerpt",
+                "missing question": "eventBasis.conditions[0].questionId",
+                "duplicate condition": "eventBasis.conditions",
+                "duplicate question": "content.questions",
+                "unavailable read": "eventBasis.readIds",
+                "empty read basis": "eventBasis.readIds",
+                "unanchored scope change": "content.scope",
+            }[failure],
+            expected: expect.any(String),
+        },
     });
     expect(await client.query(api.framing.get, { runId })).toEqual(before);
 });
@@ -1011,3 +1154,334 @@ test.each([
         )?.information,
     ).toBe(expectedText);
 }, 30000);
+
+test("initial open framing refuses missing activityExcerpt instead of replacing a narrow scope with a generic baseline", async () => {
+    const { t, client, runId, missionId, messageId } = await activeWorkbench(
+        "Can insurers bypass CCC during estimate review after the latest announcement?",
+        6,
+    );
+    const narrowContent = {
+        scope: "Can insurers bypass CCC during estimate review after the latest announcement?",
+        questions: [
+            {
+                id: "bypass",
+                shortLabel: "Estimate review bypass",
+                text: "Which estimate-review steps can insurers perform outside CCC?",
+                rationale: "Identify workflow control points.",
+            },
+        ],
+    };
+    for (const [cause, eventBasis] of [
+        [
+            "open-conditions-without-excerpt",
+            {
+                kind: "open",
+                conditions: [
+                    {
+                        questionId: "bypass",
+                        hypothesis: "the announcement alters insurer bypass",
+                        basis: {
+                            kind: "analyst",
+                            excerpt:
+                                "Can insurers bypass CCC during estimate review after the latest announcement?",
+                        },
+                    },
+                ],
+            },
+        ],
+        ["bare-open-without-excerpt", { kind: "open" }],
+    ] satisfies readonly [
+        string,
+        Extract<
+            FunctionArgs<typeof internal.execution.operations.enqueue>["input"],
+            { kind: "adjust_framing" }
+        >["eventBasis"],
+    ][]) {
+        const refusedId = await t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId,
+                expectedGeneration: 1,
+                cause,
+                input: {
+                    kind: "adjust_framing",
+                    messageId,
+                    expectedRevision: 1,
+                    eventBasis,
+                    content: narrowContent,
+                },
+            },
+        );
+        expect(
+            await t.action(internal.execution.operations.dispatch, {
+                requestId: refusedId,
+                expectedGeneration: 1,
+            }),
+        ).toMatchObject({
+            kind: "refused",
+            code: "framing_event_basis_invalid",
+            validation: {
+                path: "eventBasis.activityExcerpt",
+                expected: expect.any(String),
+            },
+        });
+        expect(await client.query(api.framing.get, { runId })).toMatchObject({
+            revision: 1,
+            content: { scope: "", questions: [] },
+        });
+    }
+    const acceptedId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 1,
+        cause: "open-with-excerpt",
+        input: {
+            kind: "adjust_framing",
+            messageId,
+            expectedRevision: 1,
+            eventBasis: {
+                kind: "open",
+                activityExcerpt: "estimate review",
+                conditions: [],
+            },
+            content: narrowContent,
+        },
+    });
+    expect(
+        await t.action(internal.execution.operations.dispatch, {
+            requestId: acceptedId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "success" });
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 2,
+        content: narrowContent,
+        eventBasis: { kind: "open", activityExcerpt: "estimate review" },
+    });
+});
+
+test("discriminated union operation inputs report the failing nested field rather than the union kind", async () => {
+    const f = await activeWorkbench("Investigate estimate review.", 6);
+    const definition = getAgentDefinition("workbench_v1", 6);
+    const framingBegun = await f.t.mutation(
+        internal.execution.invocations.begin,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            taskKey: "union-feedback-framing",
+            provenance: "simulation",
+            nativeInput: await workbenchAdmissionInput(f.t, f.missionId),
+        },
+    );
+    assert(framingBegun.kind === "ready");
+    const framingFinish = await f.t.mutation(
+        internal.execution.invocations.finish,
+        {
+            invocationId: framingBegun.invocationId,
+            expectedGeneration: 1,
+            response: {
+                kind: "operations",
+                requests: [
+                    {
+                        callId: "bad-nested-read-id",
+                        name: "adjust_framing",
+                        inputJson: JSON.stringify({
+                            content: {
+                                scope: "Investigate estimate review",
+                                questions: [
+                                    {
+                                        id: "q1",
+                                        shortLabel: "Q1",
+                                        text: "Who controls review?",
+                                        rationale: "Check control.",
+                                    },
+                                    {
+                                        id: "q2",
+                                        shortLabel: "Q2",
+                                        text: "How does the deal affect pricing?",
+                                        rationale: "Check deal.",
+                                    },
+                                ],
+                            },
+                            eventBasis: {
+                                kind: "open",
+                                activityExcerpt: "estimate review",
+                                conditions: [
+                                    {
+                                        questionId: "q1",
+                                        hypothesis: "insurer review changes",
+                                        basis: {
+                                            kind: "analyst",
+                                            excerpt: "estimate review",
+                                        },
+                                    },
+                                    {
+                                        questionId: "q2",
+                                        hypothesis: "the deal alters terms",
+                                        basis: {
+                                            kind: "public",
+                                            readIds: [
+                                                "rd7dj26trpc384127wn8jgysz",
+                                            ],
+                                        },
+                                    },
+                                ],
+                            },
+                        }),
+                    },
+                    {
+                        callId: "missing-search-id",
+                        name: "read_public_context",
+                        inputJson: JSON.stringify({
+                            target: { kind: "candidate", index: 0 },
+                        }),
+                    },
+                    {
+                        callId: "bogus-target-kind",
+                        name: "read_public_context",
+                        inputJson: JSON.stringify({
+                            target: { kind: "bogus" },
+                        }),
+                    },
+                ],
+            },
+        },
+    );
+    const [badReadId, missingSearchId, bogusKindId] = framingFinish.requestIds;
+    assert(badReadId && missingSearchId && bogusKindId);
+    const badReadOutcome = await f.t.action(
+        internal.execution.operations.dispatch,
+        { requestId: badReadId, expectedGeneration: 1 },
+    );
+    expect(badReadOutcome).toMatchObject({
+        kind: "refused",
+        code: "invalid_operation_input",
+        validation: {
+            path: "eventBasis.conditions[1].basis.readIds[0]",
+            expected: "Id<agentOperationRequests>",
+        },
+    });
+    expect(
+        JSON.parse(modelOperationOutcome(definition, badReadOutcome)),
+    ).toMatchObject({
+        validation: {
+            path: "eventBasis.conditions[1].basis.readIds[0]",
+            expected: "Id<agentOperationRequests>",
+        },
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: missingSearchId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({
+        kind: "refused",
+        code: "invalid_operation_input",
+        validation: {
+            path: "target.searchId",
+            expected: "Id<agentOperationRequests>",
+        },
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: bogusKindId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({
+        kind: "refused",
+        code: "invalid_operation_input",
+        validation: {
+            path: "target.kind",
+            expected: "candidate | supplied",
+        },
+    });
+    const finishTurnBegun = await f.t.mutation(
+        internal.execution.invocations.begin,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            taskKey: "union-feedback-finish-turn",
+            provenance: "simulation",
+            nativeInput: await workbenchAdmissionInput(f.t, f.missionId),
+        },
+    );
+    assert(finishTurnBegun.kind === "ready");
+    await f.t.mutation(internal.execution.invocations.finish, {
+        invocationId: finishTurnBegun.invocationId,
+        expectedGeneration: 1,
+        response: { kind: "complete", text: "Framing remains open." },
+    });
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run?.currentFramingRevisionId);
+        await ctx.db.patch(f.runId, {
+            fixedFramingRevisionId: run.currentFramingRevisionId,
+            sourcesProtocol: "sources_mission_v1",
+            lifecycleState: "discovering_sources",
+        });
+    });
+    await f.client.mutation(api.execution.conversations.submit, {
+        runId: f.runId,
+        requestKey: "post-start-source-check",
+        text: "Inspect commercial terms.",
+        delivery: "queue",
+    });
+    const launchedTurn = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(launchedTurn);
+    const launchedBegun = await f.t.mutation(
+        internal.execution.invocations.begin,
+        {
+            missionId: launchedTurn.missionId,
+            expectedGeneration: 1,
+            taskKey: "union-feedback-source-request",
+            provenance: "simulation",
+            nativeInput: await workbenchAdmissionInput(
+                f.t,
+                launchedTurn.missionId,
+            ),
+        },
+    );
+    assert(launchedBegun.kind === "ready");
+    const launchedFinish = await f.t.mutation(
+        internal.execution.invocations.finish,
+        {
+            invocationId: launchedBegun.invocationId,
+            expectedGeneration: 1,
+            response: {
+                kind: "operations",
+                requests: [
+                    {
+                        callId: "missing-need-id",
+                        name: "transmit_source_request",
+                        inputJson: JSON.stringify({
+                            interpretedNeed: "Check filings",
+                            target: { kind: "existing_need" },
+                        }),
+                    },
+                ],
+            },
+        },
+    );
+    const missingNeedId = launchedFinish.requestIds[0];
+    assert(missingNeedId);
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: missingNeedId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({
+        kind: "refused",
+        code: "invalid_operation_input",
+        validation: {
+            path: "target.needId",
+            expected: "string",
+        },
+    });
+});

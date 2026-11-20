@@ -182,6 +182,7 @@ export const qualificationStepSchema = z.discriminatedUnion("action", [
             state: z.enum([
                 "conversation_settled",
                 "sources_prepared",
+                "sources_material_available",
                 "paused",
                 "running",
             ]),
@@ -230,6 +231,7 @@ export const framingReplaySchema = z
             "ccc",
             "lookupUnavailable",
             "insufficientDatedSupport",
+            "heldout",
         ]),
         unavailable: z.boolean(),
         documents: z.array(
@@ -244,6 +246,58 @@ export const framingReplaySchema = z
         ),
     })
     .strict();
+
+/** Frozen acquisition outcomes; semantic controls still use the campaign's actual model route. */
+export const sourcesReplaySchema = z
+    .object({
+        materialHash: z.string().regex(/^[a-f0-9]{64}$/),
+        documents: z
+            .array(
+                z
+                    .object({
+                        url: z.url().startsWith("https://"),
+                        title: z.string().min(1),
+                        publishedAt: z.iso.datetime().optional(),
+                        acquisition: z.discriminatedUnion("status", [
+                            z
+                                .object({
+                                    status: z.enum(["complete", "partial"]),
+                                    text: z.string().min(1),
+                                })
+                                .strict(),
+                            z
+                                .object({
+                                    status: z.literal("unavailable"),
+                                    code: z.enum([
+                                        "execution_interrupted",
+                                        "retrieval_unavailable",
+                                    ]),
+                                })
+                                .strict(),
+                        ]),
+                    })
+                    .strict(),
+            )
+            .min(1),
+    })
+    .strict()
+    .superRefine((replay, ctx) => {
+        if (
+            new Set(replay.documents.map((doc) => doc.url)).size !==
+            replay.documents.length
+        )
+            ctx.addIssue({
+                code: "custom",
+                message: "Frozen Sources URLs must be unique",
+            });
+    });
+
+/** Schema order restores canonical bytes after Convex reorders persisted object keys. */
+export function sourcesReplayContent(
+    replay: z.infer<typeof sourcesReplaySchema>,
+): string {
+    return JSON.stringify(sourcesReplaySchema.parse(replay).documents);
+}
 
 export const qualificationScenarioSchema = z
     .object({
@@ -270,6 +324,7 @@ export const qualificationScenarioSchema = z
             .optional(),
         framingPublicContext: z.literal(true).optional(),
         framingReplay: framingReplaySchema.optional(),
+        sourcesReplay: sourcesReplaySchema.optional(),
         coveragePreset: z
             .enum(coveragePresetValidator.members.map((value) => value.value))
             .optional(),
@@ -288,6 +343,7 @@ export const qualificationScenarioSchema = z
 export const qualificationConfigurationSchema = z
     .object({
         id: identity,
+        taskMethods: z.enum(["retained_control", "native_skills"]).optional(),
         purpose: z.enum(["quality", "harness_stress"]),
         models: z
             .object({ workbench: role, sources: role.optional() })
@@ -330,6 +386,36 @@ const v2 = z
 export const configurableCampaignManifestSchema = v2.superRefine((m, ctx) => {
     const issue = (message: string) =>
         ctx.addIssue({ code: "custom", message });
+    if (m.configurations.some((profile) => profile.taskMethods)) {
+        const arms = new Set(
+            m.configurations.map((profile) => profile.taskMethods),
+        );
+        if (
+            m.configurations.length !== 2 ||
+            !arms.has("retained_control") ||
+            !arms.has("native_skills")
+        )
+            issue(
+                "Task-method comparison requires both control and native-skills arms",
+            );
+        const settings = m.configurations.map(
+            ({ id: _id, taskMethods: _methods, ...settings }) =>
+                JSON.stringify(settings),
+        );
+        if (new Set(settings).size !== 1)
+            issue(
+                "Task-method comparison requires identical models, reasoning and control settings",
+            );
+    }
+    for (const scenario of m.scenarios) {
+        if (
+            scenario.sourcesReplay &&
+            (m.capability !== "sources" || scenario.initialFixture)
+        )
+            issue(
+                "Frozen Sources replay requires a Sources campaign and genuine Start, not an initial fixture",
+            );
+    }
     for (const key of ["model", "search", "acquisition", "costUsd"] as const)
         if (m.perLot[key] > m.total[key])
             issue("Per-lot allowance exceeds campaign total");

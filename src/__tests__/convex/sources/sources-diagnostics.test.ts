@@ -193,3 +193,115 @@ test.each([
         ).validation.path,
     ).toBe("changes[0].contribution.evidence");
 });
+
+test("Sources normalization refusal preserves qualification_observation_unavailable and its diagnostic", async () => {
+    const f = await seedObservedSources();
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        const capture = await ctx.db.get(f.captureId);
+        assert(preparation?.sourcesMission && capture?.contentHash);
+        const controlTaskId = await ctx.db.insert("aiTaskResults", {
+            runId: f.runId,
+            corpusRevisionId: preparation.corpusRevisionId,
+            taskType: "documentary_control",
+            schemaVersion: "1",
+            adapterVersion: "1",
+            inputHash: "fixture-control",
+            output: {
+                kind: "documentary_control",
+                preparationId: f.preparationId,
+                evidence: [],
+                inputHash: "fixture-control",
+                control: {
+                    findings: [],
+                    coherence: true,
+                    limitations: [],
+                },
+            },
+            executionMode: "showcase",
+            createdAt: 1,
+        });
+        const qualificationTaskId = await ctx.db.insert("aiTaskResults", {
+            runId: f.runId,
+            corpusRevisionId: preparation.corpusRevisionId,
+            taskType: "documentary_qualification",
+            schemaVersion: "1",
+            adapterVersion: "1",
+            inputHash: "fixture-qualification",
+            output: {
+                kind: "documentary_qualification",
+                preparationId: f.preparationId,
+                captureId: f.captureId,
+                contentHash: capture.contentHash,
+                version: 1,
+                contributions: [],
+                controlTaskId,
+            },
+            executionMode: "showcase",
+            createdAt: 1,
+        });
+        await ctx.db.patch(f.preparationId, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                qualifications: [qualificationTaskId, qualificationTaskId],
+            },
+        });
+    });
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "sources-normalization-refusal",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const finished = await f.t.mutation(internal.execution.invocations.finish, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 4,
+        response: {
+            kind: "operations",
+            requests: [
+                {
+                    callId: "ambiguous-qualification-observation",
+                    name: "submit_documentary_qualification",
+                    inputJson: JSON.stringify({
+                        sourceId: f.sourceId,
+                        captureId: f.captureId,
+                        changes: [
+                            {
+                                contribution: {
+                                    needIds: ["common-context"],
+                                    statement: "Attributed context.",
+                                    attribution: "Publisher",
+                                    period: "undated",
+                                    modality: "description",
+                                    kind: "context",
+                                    evidence: [
+                                        {
+                                            readRequestId: f.readRequestId,
+                                            passageOrder: f.passage.order,
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    }),
+                },
+            ],
+        },
+    });
+    const requestId = finished.requestIds[0];
+    assert(requestId);
+    const outcome = await dispatchSourcesOperation(f.t, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    expect(outcome).toMatchObject({
+        kind: "refused",
+        code: "qualification_observation_unavailable",
+    });
+    expect(
+        JSON.parse(
+            modelOperationOutcome(getAgentDefinition("sources_v1"), outcome),
+        ).diagnostic,
+    ).toContain("qualification");
+});

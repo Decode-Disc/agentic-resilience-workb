@@ -483,6 +483,7 @@ export async function runCampaignScenarios(
                 state:
                     | "conversation_settled"
                     | "sources_prepared"
+                    | "sources_material_available"
                     | "paused"
                     | "running",
             ) => {
@@ -550,6 +551,23 @@ export async function runCampaignScenarios(
                             `Sources blocked before sources_prepared: ${s.sourcesMission.blockCode ?? "mission_blocked"}`,
                         );
                     if (state === "conversation_settled") return settled(s);
+                    if (state === "sources_material_available") {
+                        if (
+                            (s.preparation?.sourcesMission?.captureIds.length ??
+                                0) > 0
+                        )
+                            return true;
+                        if (
+                            s.sourcesMission &&
+                            ["completed", "failed", "cancelled"].includes(
+                                s.sourcesMission.status,
+                            )
+                        )
+                            throw new Error(
+                                "Sources ended before retained material was available",
+                            );
+                        return false;
+                    }
                     if (state === "sources_prepared")
                         return (
                             settled(s) &&

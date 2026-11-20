@@ -11,11 +11,16 @@ import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationProgressKeys } from "@convex/execution/missionData";
 import { researchControlConfirmation } from "@convex/execution/researchControl";
+import {
+    requireRetainedMethodControl,
+    retainedMethodVersion,
+} from "@convex/qualificationAgentMethods";
 import { MAX_WORKBENCH_TURN_OPERATIONS } from "@convex/resourcePolicy";
 import {
     completeResponseControl,
     responseControlContext,
 } from "@convex/responseControl";
+import { hasFramingProgram } from "./framingContracts";
 import { readResearchState } from "./researchState";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
 import { sha256Hex } from "./sourcePassages";
@@ -28,10 +33,14 @@ import {
     directedNativeAdjustFramingInput,
     explicitFramingPreservation,
     explicitResearchCommand,
+    INITIAL_FRAMING_MESSAGE_KEY,
     legacyNativeAdjustFramingInput,
     modernSourceRequestInput,
+    publicContextInput,
     requestApprovalResult,
     workbenchSchemas as schemas,
+    supportsDirectedFraming,
+    supportsFramingContractCorrections,
 } from "./workbenchContracts";
 
 async function framingFailureReceipt(
@@ -180,10 +189,9 @@ function nativeWorkbenchOperation(
     modernSources = false,
     version = 4,
 ) {
-    const framingInput =
-        version === 5
-            ? directedNativeAdjustFramingInput
-            : legacyNativeAdjustFramingInput;
+    const framingInput = supportsDirectedFraming(version)
+        ? directedNativeAdjustFramingInput
+        : legacyNativeAdjustFramingInput;
     if (name === "transmit_source_request" && modernSources)
         return {
             description:
@@ -191,6 +199,13 @@ function nativeWorkbenchOperation(
             inputValidator: single
                 ? modernSourceRequestInput.omit("messageId")
                 : modernSourceRequestInput,
+        };
+    if (name === "search_public_context" && version === 5)
+        return {
+            ...operation,
+            inputValidator: single
+                ? publicContextInput.omit("messageId")
+                : publicContextInput,
         };
     if (name === "adjust_framing")
         return {
@@ -208,7 +223,8 @@ function nativeWorkbenchOperation(
             name === "transmit_source_request" ||
             name === "verify_public_context" ||
             name === "search_public_context" ||
-            name === "read_public_context") &&
+            name === "read_public_context" ||
+            name === "read") &&
         single
     )
         return {
@@ -245,7 +261,8 @@ function projectWorkbenchOperation(
         ((name === "adjust_framing" ||
             name === "verify_public_context" ||
             name === "search_public_context" ||
-            name === "read_public_context") &&
+            name === "read_public_context" ||
+            name === "read") &&
             !available.framing) ||
         (name === "request_approval" && !available.approvals) ||
         (name === "transmit_source_request" && !available.sourceRequest) ||
@@ -410,18 +427,23 @@ export const workbenchDefinition: AgentDefinition & {
         if (code === "framing_open_preserve_program")
             return "The existing research program remains saved. Ask which event the analyst means before proposing a change that depends on it.";
         if (code === "framing_public_lookup_invalid")
-            return this.version === 5
-                ? "Use readIds from this message's adopted read_public_context passages. Search IDs and framing request IDs cannot identify a reading."
+            return supportsDirectedFraming(this.version)
+                ? "Use readIds from this message's adopted read_public_context passages. Search IDs and framing request IDs cannot identify a reading. Repair the identifier without dropping valid public associations."
                 : "Use the requestId of this message's adopted verify_public_context operation from mission history. An adjust_framing requestId cannot identify a lookup.";
+        if (
+            code === "invalid_operation_input" &&
+            supportsDirectedFraming(this.version)
+        )
+            return "Repair the reported validation.path to match validation.expected without dropping valid public readIds associations or switching to an analyst basis unless the analyst named that event.";
         if (code === "framing_public_reference_undated")
-            return this.version === 5
+            return supportsDirectedFraming(this.version)
                 ? "The readIds identify adopted passages, but the event requires dated support. Include an applicable dated read or leave the event open."
                 : "The lookup identity is valid. Keep its lookupRequestId and follow the referenceIndexes guidance using the retained readings. If none supports the event, leave it open.";
         if (
             code === "framing_event_basis_required" ||
             code === "framing_event_basis_invalid"
         )
-            return this.version === 5
+            return supportsDirectedFraming(this.version)
                 ? "Supply a valid eventBasis: none for ordinary framing, open for an unresolved event, an exact analyst excerpt, or a public label with readIds from adopted passages."
                 : "Supply a valid eventBasis for the scope. Use none for ordinary framing, open for an unresolved event, a verbatim analyst excerpt, or dated references from this turn's adopted lookup.";
         if (code === "framing_read_only")
@@ -446,6 +468,10 @@ export const workbenchDefinition: AgentDefinition & {
             return "The observed version changed. Inspect the current program, preserve the analyst's edits and reconsider the action.";
         if (code === "human_prerequisite_required")
             return "Research is waiting for a human decision. Inspect the pending review; resuming cannot bypass it.";
+        if (code === "documentary_need_not_observed")
+            return "No prepared need was read. Select an observed needId from documentaryPreparation.needReferences.";
+        if (code === "instruction_not_observed")
+            return "The selected messageId is not part of the active turn. Select a messageId from conversationInstructions.messages.";
         if (
             code === "instruction_not_authorized" ||
             code === "explicit_research_intent_required"
@@ -475,6 +501,46 @@ export const workbenchDefinition: AgentDefinition & {
         });
         const run = await ctx.db.get(mission.runId);
         if (!run) throw executionError("run_unavailable");
+        if (
+            supportsFramingContractCorrections(this.version) &&
+            !run.fixedFramingRevisionId &&
+            !instructions.messages.some((message) =>
+                explicitFramingPreservation(message.text),
+            ) &&
+            !instructions.messages.every((message) =>
+                explicitResearchCommand(message.text),
+            )
+        ) {
+            const deliveries = await Promise.all(
+                instructions.messages.map((message) =>
+                    ctx.db.get(message.messageId),
+                ),
+            );
+            if (
+                deliveries.some(
+                    (message) =>
+                        message?.requestKey === INITIAL_FRAMING_MESSAGE_KEY,
+                )
+            ) {
+                const framing = run.currentFramingRevisionId
+                    ? await ctx.db.get(run.currentFramingRevisionId)
+                    : null;
+                if (!hasFramingProgram(framing?.content))
+                    return {
+                        kind: "correct",
+                        feedback: {
+                            code: "framing_program_required",
+                            issues: [
+                                {
+                                    path: "framing",
+                                    expected:
+                                        "Save a usable provisional program through adjust_framing before replying. An unresolved event can remain open; preserve analyst edits and current authority. A prose proposal alone is not a saved program.",
+                                },
+                            ],
+                        },
+                    };
+            }
+        }
         const requests = await ctx.db
             .query("agentOperationRequests")
             .withIndex("by_mission_and_status", (q) =>
@@ -618,7 +684,13 @@ export const workbenchDefinition: AgentDefinition & {
                 (id) => id === input.needId,
             )
         )
-            throw executionError("documentary_need_not_observed");
+            throw executionError("documentary_need_not_observed", [
+                {
+                    path: "needId",
+                    expected:
+                        "Select an observed needId from documentaryPreparation.needReferences.",
+                },
+            ]);
         if (
             name === "adjust_framing" ||
             name === "verify_public_context" ||
@@ -634,7 +706,13 @@ export const workbenchDefinition: AgentDefinition & {
                     ? messages[0]?.messageId
                     : input.messageId;
             if (!messages.some((m) => m.messageId === messageId))
-                throw executionError("instruction_not_observed");
+                throw executionError("instruction_not_observed", [
+                    {
+                        path: "messageId",
+                        expected:
+                            "Select a messageId from conversationInstructions.messages.",
+                    },
+                ]);
             return {
                 ...input,
                 messageId,
@@ -726,10 +804,8 @@ const phaseInstructions = new Set<string>([
     documentaryControlInstruction,
 ]);
 
-/** Default directed framing binding; the retained v4 definition serves already-pinned conversations. */
-export const directedWorkbenchDefinition: AgentDefinition & {
-    id: "workbench_v1";
-} = {
+/** Retained directed framing binding for conversations pinned to v5. */
+export const directedWorkbenchDefinition = {
     ...workbenchDefinition,
     version: 5,
     operations: directedWorkbenchOperations,
@@ -744,5 +820,67 @@ export const directedWorkbenchDefinition: AgentDefinition & {
         return run.fixedFramingRevisionId
             ? `Consult relevant dossier material before answering the analyst's economic question.\n${documentaryControlInstruction}`
             : `Interpret each analyst message as of its receivedAt date, including historical fragments recovered through consult_conversation. Missing historical dates remain unknown. Use domain.coverageGuidance to prioritize useful public readings; an absent preset is unknown. Continue factual checks while they could change the program; reserve economic judgment for research.\n${directedFramingMethod}`;
+    },
+} satisfies AgentDefinition & { id: "workbench_v1" };
+
+function framingContractCorrections(conditionalExample: string) {
+    return [
+        "The initial reply requires a saved program with a nonblank scope and research questions. If an event remains unresolved, save an open provisional program before clarifying it. Preserve explicit analyst instructions and edits.",
+        "An activityExcerpt must be copied verbatim from the active analyst request and appear verbatim in content.scope. On an initial open write, supply that verbatim activityExcerpt rather than omitting the anchor. Use the refusal's field and expected correction; do not replace the analyst's words with a paraphrase when satisfying that anchor.",
+        `A conditional question distinguishes a possible event or interpretation of the request from the economic effect to investigate. ${conditionalExample}Do not make the hypothesized condition the answer to the question itself. Use an analyst basis only for an event explicitly named in that verbatim excerpt, never for an event found only in search results. A condition hypothesis citing readIds may state only actors, dates and mechanisms present in those adopted passages. Keep questions common to all plausible events unconditional; attach conditions only to event-specific inquiries. An authentic passage identifier proves provenance, not relevance.`,
+        "Preserve the original message date and distinguish event dates from publication dates. Never substitute the latest dated announcement merely because clarification is absent, and never describe an announcement as the latest found in content.scope when search leads show newer dated announcements. Keep unresolved intent open and ask a focused clarification when its answer would change the program.",
+        "Public search applies the dossier coverage priority by default. Use the optional focus only for a specific documentary purpose, such as an official filing under independent scrutiny, and explain that purpose. A query orientation does not establish source independence or documentary support.",
+    ];
+}
+
+const retainedConditionalExample =
+    "For example: if the analyst means the ownership announcement, what changes to contracts or routing could affect bypass? ";
+
+/** Retained v6 binding keeps its original framing method and completion contract. */
+export const workbenchV6Definition: AgentDefinition & { id: "workbench_v1" } = {
+    ...directedWorkbenchDefinition,
+    version: 6,
+    method(run) {
+        const method = directedWorkbenchDefinition.method(run);
+        return run.fixedFramingRevisionId
+            ? method
+            : `${method}\n${framingContractCorrections(retainedConditionalExample).join("\n")}`;
+    },
+};
+
+/** On-demand framing methods; retained v6 instructions remain unchanged. */
+export const workbenchV7Definition: AgentDefinition & { id: "workbench_v1" } = {
+    ...workbenchV6Definition,
+    version: 7,
+    skills: {
+        packageId: "research-methods-v1",
+        skillName: "workbench-framing",
+    },
+    method(run) {
+        if (run.fixedFramingRevisionId)
+            return directedWorkbenchDefinition.method(run);
+        return [
+            "Consult the workbench-framing skill on demand to prepare the program. Interpret messages as of receivedAt and use domain.coverageGuidance. Start research remains the analyst's explicit decision.",
+            ...framingContractCorrections(""),
+        ].join("\n");
+    },
+};
+
+/** Qualification-only control: current mechanics and resource access, retained inline method. */
+export const workbenchMethodControlDefinition: AgentDefinition & {
+    id: "workbench_v1";
+} = {
+    ...workbenchV7Definition,
+    version: retainedMethodVersion("workbench_v1"),
+    skills: {
+        packageId: "research-methods-v1",
+        skillName: "workbench-framing",
+        catalogue: false,
+    },
+    instructions: workbenchV6Definition.instructions,
+    method: workbenchV6Definition.method,
+    async requireAuthority(ctx, mission, run) {
+        await requireRetainedMethodControl(ctx, mission, run);
+        await workbenchV7Definition.requireAuthority(ctx, mission, run);
     },
 };

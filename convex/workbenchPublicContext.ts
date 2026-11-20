@@ -1,12 +1,15 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
+import { authorizeDocumentaryDiscovery } from "@convex/domain/sources";
 import {
     explicitFramingPreservation,
     explicitResearchCommand,
     publicContextAllowanceValidator,
     publicReadResultValidator,
     publicSearchResultValidator,
+    supportsDirectedFraming,
+    supportsFramingContractCorrections,
 } from "@convex/domain/workbenchContracts";
 import { requireMissionAuthority } from "@convex/execution/authority";
 import {
@@ -99,7 +102,7 @@ export async function requirePublicContextRequest(
     if (
         (request.input.kind === "search_public_context" ||
             request.input.kind === "read_public_context") &&
-        mission.definitionVersion !== 5
+        !supportsDirectedFraming(mission.definitionVersion)
     )
         throw executionError("operation_not_allowed");
     const turn = mission.conversationTurnId
@@ -169,12 +172,22 @@ export async function requirePublicContextRequest(
             throw executionError("source_reference_not_observed");
         selectedCandidate = result.candidates[index];
     }
+    if (
+        request.input.kind === "search_public_context" &&
+        !supportsFramingContractCorrections(mission.definitionVersion) &&
+        request.input.focus !== undefined
+    )
+        throw executionError("operation_not_allowed");
     const query =
-        request.input.kind === "read_public_context"
-            ? request.input.target.kind === "supplied"
-                ? request.input.target.url
-                : (selectedCandidate?.url ?? "")
-            : request.input.query.trim();
+        request.input.kind === "search_public_context" &&
+        supportsFramingContractCorrections(mission.definitionVersion)
+            ? authorizeDocumentaryDiscovery(run.coveragePreset, request.input)
+                  .query
+            : request.input.kind === "read_public_context"
+              ? request.input.target.kind === "supplied"
+                  ? request.input.target.url
+                  : (selectedCandidate?.url ?? "")
+              : request.input.query.trim();
     if (
         !query ||
         (request.input.kind !== "read_public_context" &&
@@ -211,7 +224,7 @@ export async function requirePublicContextRequest(
             if (
                 (await requireBrowserFixtureContext(ctx, visitor)) !==
                     context._id ||
-                mission.definitionVersion !== 5
+                !supportsDirectedFraming(mission.definitionVersion)
             )
                 throw executionError("instruction_not_authorized");
             replay = scenario.framingReplay;

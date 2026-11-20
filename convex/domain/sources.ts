@@ -42,7 +42,6 @@ import {
     type authorizedDiscovery,
     type DocumentaryContribution,
     type DocumentaryContributionTally,
-    type discoverSourcesInput,
     type documentaryAssessmentAuthorValidator,
     type materializedQualificationInput,
     type preparedMaterialValidator,
@@ -411,13 +410,11 @@ export function coveragePresetGuidance(preset?: CoveragePreset) {
 }
 
 /** Resolve the exact provider input before reserving shared search capacity. */
-export function authorizeSourcesDiscovery(
-    policy: SourcesPreparation["coveragePolicy"],
-    input: Infer<typeof discoverSourcesInput>,
+export function authorizeDocumentaryDiscovery(
+    preset: CoveragePreset | undefined,
+    input: Infer<typeof authorizedDiscovery>,
 ): Infer<typeof authorizedDiscovery> {
-    const focus = policy
-        ? (input.focus ?? presetFocus[policy.preset])
-        : undefined;
+    const focus = preset ? (input.focus ?? presetFocus[preset]) : undefined;
     const query = focus
         ? `${input.query.trim()}
 ${discoveryOrientation[focus]}`

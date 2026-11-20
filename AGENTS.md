@@ -19,6 +19,10 @@ Read `PRODUCT.md` before product planning or implementation, relevant sections o
 | --- | --- | --- | --- |
 | `AGENTS.md` | reference | - | Agent conduct, authorization, development and verification rules. |
 | `PRODUCT.md` | reference | - | Stable product requirements, analyst workflow, invariants and acceptance; not edited for routine changes. |
+| `agent-skills/workbench-framing/SKILL.md` | reference | - | Runtime Workbench framing method. |
+| `agent-skills/source-preparation/SKILL.md` | reference | - | Runtime Sources preparation method. |
+| `agent-skills/references/documentary-method.md` | reference | - | Shared runtime documentary distinctions. |
+| `agent-skills/*/examples/**` | history | - | Worked teaching cases, separate from qualification. |
 | `context/TECH.md` | reference | 6000 | Architecture and detailed technical contracts. |
 | `docs/ROADMAP.md` | reference | - | Verified delivery state, gaps and implementation sequence. |
 | `DESIGN.md` | reference | - | Visual guidance and shared component design; executed tokens remain in their runtime owners. |

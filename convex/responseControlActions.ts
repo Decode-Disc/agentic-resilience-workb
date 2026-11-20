@@ -6,13 +6,13 @@ import {
     responseReviewResult,
 } from "@convex/domain/workbenchResponseControlContracts";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
-import { createBoundedModelFetch } from "@convex/integrations/modelTransport";
-import { checkResponseCoherence } from "@convex/integrations/responseCoherence";
 import {
-    MODEL_MAX_INPUT_PRICE_PER_MILLION,
-    RESPONSE_CONTROL_METADATA_TIMEOUT_MS,
-    resolveGenerationAuthority,
+    checkResponseCoherence,
+    verifyResponseControlModel,
+} from "@convex/integrations/responseCoherence";
+import {
     nodeActionGenerationDeadline,
+    resolveGenerationAuthority,
 } from "@convex/resourcePolicy";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
@@ -50,76 +50,16 @@ export const execute = internalAction({
         if (authority.kind === "blocked")
             return { status: "unavailable", reason: authority.code };
         // Catalogue validation is non-inference I/O and precedes paid admission.
-        let modelContextWindowTokens: number;
-        try {
-            const fetchCatalogue = createBoundedModelFetch(
-                {},
-                { responseTooLarge: false },
-            );
-            const response = await fetchCatalogue(
-                "https://openrouter.ai/api/v1/models?output_modalities=decisions",
-                {
-                    signal: AbortSignal.timeout(
-                        Math.min(
-                            RESPONSE_CONTROL_METADATA_TIMEOUT_MS,
-                            authority.timeoutMs,
-                        ),
-                    ),
-                },
-            );
-            if (!response.ok)
-                return {
-                    status: "unavailable",
-                    reason: "configuration_unavailable",
-                };
-            const catalogue: unknown = await response.json();
-            const entries =
-                catalogue &&
-                typeof catalogue === "object" &&
-                "data" in catalogue &&
-                Array.isArray(catalogue.data)
-                    ? catalogue.data
-                    : [];
-            const model: unknown = entries.find(
-                (m: unknown) =>
-                    m &&
-                    typeof m === "object" &&
-                    "id" in m &&
-                    m.id === job.policy.model,
-            );
-            const pricing =
-                model && typeof model === "object" && "pricing" in model
-                    ? model.pricing
-                    : undefined;
-            const contextWindow =
-                model && typeof model === "object" && "context_length" in model
-                    ? model.context_length
-                    : undefined;
-            if (
-                typeof contextWindow !== "number" ||
-                !Number.isSafeInteger(contextWindow) ||
-                contextWindow < 1 ||
-                !pricing ||
-                typeof pricing !== "object" ||
-                !("prompt" in pricing) ||
-                !("completion" in pricing) ||
-                !Number.isFinite(Number(pricing.prompt)) ||
-                Number(pricing.prompt) < 0 ||
-                Number(pricing.prompt) * 1e6 >
-                    MODEL_MAX_INPUT_PRICE_PER_MILLION ||
-                Number(pricing.completion) !== 0
-            )
-                return {
-                    status: "unavailable",
-                    reason: "configuration_unavailable",
-                };
-            modelContextWindowTokens = contextWindow;
-        } catch {
+        const verified = await verifyResponseControlModel({
+            model: job.policy.model,
+            timeoutMs: authority.timeoutMs,
+        });
+        if (!verified.ok)
             return {
                 status: "unavailable",
                 reason: "configuration_unavailable",
             };
-        }
+        const modelContextWindowTokens = verified.contextWindowTokens;
         const identity = {
             modelContextWindowTokens,
             operationRequestId: job.requestId,

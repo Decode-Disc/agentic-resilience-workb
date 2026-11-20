@@ -3,6 +3,7 @@ import { internalMutation } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
 import { readPreparationLimits } from "@convex/domain/sourcePreparationAuthority";
 import { pinMissionModel } from "@convex/modelConfiguration";
+import { taskMethodDefinitionVersion } from "@convex/qualificationAgentMethods";
 import {
     EXECUTION_WINDOW_MS,
     RESOURCE_POLICY_VERSION,
@@ -54,11 +55,18 @@ export const start = internalMutation({
         const conversation = conversationTurn
             ? await ctx.db.get(conversationTurn.conversationId)
             : null;
+        const initialRun = await ctx.db.get(args.runId);
         const definition = getAgentDefinition(
             args.definitionId,
             conversation?.definitionId === args.definitionId
                 ? (conversation.definitionVersion ?? 1)
-                : undefined,
+                : initialRun
+                  ? await taskMethodDefinitionVersion(
+                        ctx,
+                        initialRun,
+                        args.definitionId,
+                    )
+                  : undefined,
         );
         const executionScope = definition.executionScope;
         const { run, visitor } =

@@ -26,6 +26,7 @@ import {
     publicContextResultValidator,
     publicReadInput,
     publicReadResultValidator,
+    publicSearchInput,
     publicSearchResultValidator,
     requestApprovalInput,
     requestApprovalResultValidator,
@@ -485,7 +486,7 @@ export const directedWorkbenchOperations: Record<
         effectKind: "durable_effect",
         description:
             "Discover public leads about the confirmed company without reading publications. Inspect dates and titles, reformulate if useful, and select a publication separately. Candidates are not evidence.",
-        inputValidator: publicContextInput,
+        inputValidator: publicSearchInput,
         resultValidator: operationResultValidator(publicSearchResultValidator),
     },
 };

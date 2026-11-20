@@ -12,6 +12,7 @@ import {
     sourcesQualificationEnabled,
     sourcesQualificationEnvelope,
 } from "@convex/sourcesSimulation";
+import { hasFramingProgram } from "./framingContracts";
 import { stableStringify } from "./sourcePassages";
 import {
     activatedSourcesEnvelope,
@@ -161,7 +162,7 @@ export async function researchStartBlock(
         run.executionStatus !== "idle"
     )
         return "framing_fixed";
-    if (!framing?.content.scope.trim() || !framing.content.questions.length)
+    if (!framing || !hasFramingProgram(framing.content))
         return "framing_invalid";
     const qualification = await sourcesQualificationEnabled(ctx, run);
     if (!qualification && visitor.analysesReserved >= MAX_ANALYSES_PER_VISITOR)

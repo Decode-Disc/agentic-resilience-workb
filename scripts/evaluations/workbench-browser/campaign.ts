@@ -61,6 +61,7 @@ import {
     browserBatteryPath,
     candidateHash,
     prepareFramingReplay,
+    prepareSourcesReplay,
     preserveQualificationCandidate,
     qualificationFingerprints,
     sha256,
@@ -1403,6 +1404,13 @@ async function executeCampaign(
                 values.scenarios = values.scenarios.map(
                     (scenario: Record<string, unknown>) => ({
                         ...scenario,
+                        ...(scenario.sourcesReplay
+                            ? {
+                                  sourcesReplay: prepareSourcesReplay(
+                                      scenario.sourcesReplay,
+                                  ),
+                              }
+                            : {}),
                         ...(scenario.framingReplay
                             ? {
                                   framingReplay: prepareFramingReplay(

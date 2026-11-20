@@ -5,6 +5,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { reasoningPreferenceValues } from "../../../convex/modelConfigurationValues.ts";
+import {
+    sourcesReplayContent,
+    sourcesReplaySchema,
+} from "../../../convex/qualificationCampaignPolicy.ts";
 import { QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY } from "../../../convex/resourcePolicy.ts";
 import { qualificationDecision } from "./qualification.ts";
 
@@ -756,4 +760,45 @@ export function prepareFramingReplay(input: unknown) {
         unavailable: descriptor.case === "lookupUnavailable",
         documents,
     };
+}
+
+/** Freezes documentary replay at preparation; source files and canonical bytes are both checked. */
+export function prepareSourcesReplay(input: unknown) {
+    if (!input || typeof input !== "object") return input;
+    let replay = input;
+    if ("materialPath" in input) {
+        const descriptor = z
+            .object({
+                materialPath: z.string().min(1),
+                materialHash: z.string().regex(/^[a-f0-9]{64}$/),
+            })
+            .strict()
+            .parse(input);
+        const bytes = readFileSync(resolve(descriptor.materialPath));
+        assert.equal(
+            sha256(bytes),
+            descriptor.materialHash,
+            "Frozen Sources material hash changed",
+        );
+        const material = z
+            .object({ documents: sourcesReplaySchema.shape.documents })
+            .strict()
+            .parse(JSON.parse(bytes.toString("utf8")));
+        replay = {
+            ...material,
+            materialHash: sha256(
+                sourcesReplayContent({
+                    ...material,
+                    materialHash: "0".repeat(64),
+                }),
+            ),
+        };
+    }
+    const parsed = sourcesReplaySchema.parse(replay);
+    assert.equal(
+        sha256(sourcesReplayContent(parsed)),
+        parsed.materialHash,
+        "Frozen Sources content hash changed",
+    );
+    return parsed;
 }

@@ -13,6 +13,7 @@ import "@convex/sourcePreparationActions";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
+import { streamingModelFetch } from "@/__tests__/setup/model-stream";
 import { serializeFakeStorageWrites } from "@/__tests__/setup/convex-storage";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
@@ -145,71 +146,72 @@ test.each([
         ],
     });
     let cancelReading: (() => Promise<void>) | undefined;
-    globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
-        if (String(input).includes("openrouter.ai"))
-            return new Response(
-                JSON.stringify({
-                    id: "phase4-qualification",
-                    created: 1,
-                    model: "fixture-model",
-                    choices: [
-                        {
-                            index: 0,
-                            message: {
-                                role: "assistant",
-                                content: JSON.stringify({
-                                    companyMatch: "uncertain",
-                                    companyPassageKeys: [],
-                                    documentKind: "unknown",
-                                    reportingPeriodEnd: null,
-                                    reportingPeriodPassageKeys: [],
-                                    contributions: Object.fromEntries(
-                                        SOURCE_COVERAGE_ROLES.map((role) => [
-                                            role,
-                                            null,
-                                        ]),
-                                    ),
-                                    limitations: [],
-                                }),
+    globalThis.fetch = streamingModelFetch(
+        vi.fn(async (input: string | URL | Request) => {
+            if (String(input).includes("openrouter.ai"))
+                return new Response(
+                    JSON.stringify({
+                        id: "phase4-qualification",
+                        created: 1,
+                        model: "fixture-model",
+                        choices: [
+                            {
+                                index: 0,
+                                message: {
+                                    role: "assistant",
+                                    content: JSON.stringify({
+                                        companyMatch: "uncertain",
+                                        companyPassageKeys: [],
+                                        documentKind: "unknown",
+                                        reportingPeriodEnd: null,
+                                        reportingPeriodPassageKeys: [],
+                                        contributions: Object.fromEntries(
+                                            SOURCE_COVERAGE_ROLES.map(
+                                                (role) => [role, null],
+                                            ),
+                                        ),
+                                        limitations: [],
+                                    }),
+                                },
+                                finish_reason: "stop",
                             },
-                            finish_reason: "stop",
+                        ],
+                        usage: {
+                            prompt_tokens: 10,
+                            completion_tokens: 10,
+                            total_tokens: 20,
                         },
-                    ],
-                    usage: {
-                        prompt_tokens: 10,
-                        completion_tokens: 10,
-                        total_tokens: 20,
-                    },
-                }),
-                { headers: { "content-type": "application/json" } },
-            );
-        if (String(input).endsWith(".htm") && cancelReading)
-            await cancelReading();
-        return String(input).endsWith(".htm")
-            ? new Response(
-                  "<h1>Platform</h1><p>The public platform supports company workflows through documented integration APIs.</p>",
-                  { headers: { "content-type": "text/html" } },
-              )
-            : Promise.resolve(
-                  new Response(
-                      JSON.stringify({
-                          cik: "0001818201",
-                          name: "CCC Intelligent Solutions Holdings Inc.",
-                          tickers: ["CCCS"],
-                          exchanges: ["Nasdaq"],
-                          filings: {
-                              recent: {
-                                  accessionNumber: ["0001818201-26-000001"],
-                                  form: ["10-K"],
-                                  filingDate: ["2026-01-29"],
-                                  primaryDocument: ["annual-report.htm"],
+                    }),
+                    { headers: { "content-type": "application/json" } },
+                );
+            if (String(input).endsWith(".htm") && cancelReading)
+                await cancelReading();
+            return String(input).endsWith(".htm")
+                ? new Response(
+                      "<h1>Platform</h1><p>The public platform supports company workflows through documented integration APIs.</p>",
+                      { headers: { "content-type": "text/html" } },
+                  )
+                : Promise.resolve(
+                      new Response(
+                          JSON.stringify({
+                              cik: "0001818201",
+                              name: "CCC Intelligent Solutions Holdings Inc.",
+                              tickers: ["CCCS"],
+                              exchanges: ["Nasdaq"],
+                              filings: {
+                                  recent: {
+                                      accessionNumber: ["0001818201-26-000001"],
+                                      form: ["10-K"],
+                                      filingDate: ["2026-01-29"],
+                                      primaryDocument: ["annual-report.htm"],
+                                  },
                               },
-                          },
-                      }),
-                      { status: 200 },
-                  ),
-              );
-    });
+                          }),
+                          { status: 200 },
+                      ),
+                  );
+        }),
+    );
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     workflowTest.register(t);

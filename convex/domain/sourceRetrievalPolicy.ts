@@ -1,4 +1,11 @@
 import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
+import {
+    type DocumentDates,
+    documentDates,
+    documentDatesValidator,
+    recordedDocumentDate,
+    unambiguousDocumentTime,
+} from "@convex/domain/documentDates";
 import type { GenericDatabaseReader } from "convex/server";
 import { v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
@@ -9,6 +16,7 @@ export const SOURCE_RETRIEVAL_VERSION = "structured-v1";
 export const SOURCE_RETRIEVAL_RANKING_POLICY = "stable-passages-v1";
 
 export const sourceDocumentMetadataValidator = v.object({
+    dates: v.optional(documentDatesValidator),
     title: v.string(),
     publishedAt: v.union(v.number(), v.null()),
     date: v.union(v.string(), v.null()),
@@ -17,8 +25,38 @@ export const sourceDocumentMetadataValidator = v.object({
 });
 
 /** Preserve recorded document dates without inferring them from titles or acquisition times. */
-export function sourceDocumentMetadata(source: Doc<"sources">) {
+export function sourceDocumentMetadata(
+    source: Doc<"sources">,
+    dates?: DocumentDates,
+) {
     return {
+        dates:
+            dates ??
+            documentDates({
+                metadata:
+                    source.publishedAt === undefined
+                        ? []
+                        : [
+                              recordedDocumentDate(
+                                  source.origin === "sec"
+                                      ? "filing"
+                                      : "publication",
+                                  source.publishedAt,
+                                  {
+                                      kind:
+                                          source.origin === "sec"
+                                              ? "sec_field"
+                                              : "metadata",
+                                      label:
+                                          source.origin === "sec"
+                                              ? "filingDate"
+                                              : "publishedAt",
+                                      raw: String(source.publishedAt),
+                                  },
+                              ),
+                          ],
+                text: "",
+            }),
         title: source.title,
         publishedAt: source.publishedAt ?? null,
         date:
@@ -32,6 +70,28 @@ export function sourceDocumentMetadata(source: Doc<"sources">) {
                   ? ("filing" as const)
                   : ("publication" as const),
         form: source.secForm ?? null,
+    };
+}
+
+/** Adds dates observed in verified capture bytes and projects legacy aliases only when unambiguous. */
+export function capturedDocumentMetadata(
+    document: ReturnType<typeof sourceDocumentMetadata>,
+    text: string,
+) {
+    const dates = documentDates({
+        metadata: [],
+        previous: document.dates,
+        text,
+    });
+    const kind = document.dateKind ?? "publication";
+    const timestamp = unambiguousDocumentTime(dates[kind]);
+    return {
+        ...document,
+        dates,
+        publishedAt: timestamp ?? null,
+        date:
+            timestamp === undefined ? null : new Date(timestamp).toISOString(),
+        dateKind: timestamp === undefined ? null : kind,
     };
 }
 

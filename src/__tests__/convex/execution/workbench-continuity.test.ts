@@ -12,7 +12,14 @@ afterEach(() => {
 });
 
 test("new Workbench conversations pin the current version and refuse superseded unversioned execution", async () => {
-    const { t, runId } = await seedWorkbench();
+    const { t, runId } = await seedWorkbench(
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
+    );
     const conversation = await t.run((ctx) =>
         ctx.db
             .query("agentConversations")
@@ -114,7 +121,14 @@ test("a conversation journal rejects handover until its native tail settles, the
 });
 
 test("successive Workbench responses reopen one native journal and retain the analyst's original user messages", async () => {
-    const { t, client, runId } = await seedWorkbench(true);
+    const { t, client, runId } = await seedWorkbench(
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
+    );
     await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
     const first = await t.run((ctx) =>
         ctx.db

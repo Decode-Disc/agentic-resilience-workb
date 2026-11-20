@@ -1,3 +1,5 @@
+import type { Infer } from "convex/values";
+import type { publicReadResultValidator } from "@convex/domain/workbenchContracts";
 import { api, internal } from "@convex/_generated/api";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { MAX_EXA_TEXT_CHARACTERS } from "@convex/resourcePolicy";
@@ -81,6 +83,12 @@ async function enqueueLookup(
         | "search_public_context"
         | "read_public_context" = "verify_public_context",
     originalText?: string,
+    version?: 4 | 5 | 6 | 7,
+    preset:
+        | "balanced"
+        | "first_party_depth"
+        | "independent_scrutiny" = "balanced",
+    focus?: "mixed" | "official" | "independent",
 ) {
     vi.stubEnv(
         "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
@@ -95,7 +103,8 @@ async function enqueueLookup(
         undefined,
         originalText ?? `Read ${query}`,
         undefined,
-        kind !== "verify_public_context" ? 5 : 4,
+        version ?? (kind !== "verify_public_context" ? 5 : 4),
+        preset,
     );
     rateLimiterTest.register(fixture.t);
     const active = await fixture.t.mutation(
@@ -132,6 +141,9 @@ async function enqueueLookup(
                           kind,
                           messageId: message._id,
                           query,
+                          ...(kind === "search_public_context" && focus
+                              ? { focus }
+                              : {}),
                       },
         },
     );
@@ -217,7 +229,7 @@ test("two readings account for both SEC requests and supply adoptable dated prov
     const f = await enqueueLookup(secFiling, 2);
     const observation = await dispatchLookup(f);
     assert(observation.kind === "success", JSON.stringify(observation));
-    expect(JSON.parse(observation.valueJson)).toEqual({
+    expect(JSON.parse(observation.valueJson)).toMatchObject({
         status: "observed",
         references: [
             {
@@ -320,7 +332,7 @@ test.each([
     const f = await enqueueLookup(url);
     const outcome = await dispatchLookup(f);
     assert(outcome.kind === "success", JSON.stringify(outcome));
-    expect(JSON.parse(outcome.valueJson)).toEqual({
+    expect(JSON.parse(outcome.valueJson)).toMatchObject({
         status: dated ? "observed" : "inconclusive",
         references: [
             {
@@ -1084,7 +1096,7 @@ test("selected publication and supplied publication share passage progress acros
 
 test("selected publication continues past a blank first extent and attributes a date found in the next passage", async () => {
     vi.stubEnv("EXA_API_KEY", "fixture-only");
-    const text = `${" ".repeat(8192)}BOSTON, November 17, 2026 (GLOBE NEWSWIRE) — The insurer now retains validation rights.`;
+    const text = `${" ".repeat(8192)}BOSTON, November 17, 2026 (GLOBE NEWSWIRE) — The insurer now retains validation rights.${"x".repeat(16384)}`;
     let acquisitions = 0;
     vi.stubGlobal(
         "fetch",
@@ -1166,6 +1178,31 @@ test("selected publication continues past a blank first extent and attributes a 
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toHaveLength(2);
+    const thirdId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "retained-date-page",
+        input: {
+            kind: "read_public_context",
+            messageId: f.messageId,
+            target,
+            continuation: secondId,
+        },
+    });
+    const third = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: thirdId,
+        expectedGeneration: 1,
+    });
+    assert(third.kind === "success", JSON.stringify(third));
+    expect(
+        JSON.parse(third.valueJson).reference.dates.publication.evidence,
+    ).toEqual([
+        expect.objectContaining({
+            value: "2026-11-17",
+            precision: "day",
+            origin: expect.objectContaining({ kind: "dateline" }),
+        }),
+    ]);
     expect(acquisitions).toBe(1);
 });
 
@@ -1795,7 +1832,12 @@ test("conditional questions share one retained passage in the actual mission con
                   }),
         ),
     );
-    const f = await enqueueLookup("rights", 1, "search_public_context");
+    const f = await enqueueLookup(
+        "rights",
+        1,
+        "search_public_context",
+        "Company workflows",
+    );
     assert((await dispatchLookup(f)).kind === "success");
     const readId = await f.t.mutation(internal.execution.operations.enqueue, {
         missionId: f.missionId,
@@ -1830,6 +1872,7 @@ test("conditional questions share one retained passage in the actual mission con
             content: { scope: "Company workflows", questions },
             eventBasis: {
                 kind: "open",
+                activityExcerpt: "Company workflows",
                 conditions: questions.map((question) => ({
                     questionId: question.id,
                     hypothesis: `the ${question.id} condition holds`,
@@ -1868,4 +1911,431 @@ test("conditional questions share one retained passage in the actual mission con
     ]);
     for (const condition of wire.domain.framing.eventBasis.conditions)
         expect(condition.basis.readIds).toEqual([readId]);
+});
+
+test.each([
+    [
+        "balanced",
+        "Seek official material and independent sources that can challenge it.",
+    ],
+    [
+        "first_party_depth",
+        "Prioritize relevant issuer and regulatory publications.",
+    ],
+    [
+        "independent_scrutiny",
+        "Prioritize independent material that can test the account.",
+    ],
+] as const)("framing discovery applies the selected coverage priority before provider dispatch: %s", async (preset, orientation) => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const bodies: Array<{ query: string }> = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url, init) => {
+            bodies.push(JSON.parse(String(init.body)));
+            return Response.json({
+                results: [
+                    {
+                        id: "context",
+                        url: "https://example.org/context",
+                        title: "Workflow announcement",
+                        publishedDate: "2026-11-01",
+                    },
+                ],
+                costDollars: { total: 0.01 },
+            });
+        }),
+    );
+    const f = await enqueueLookup(
+        "recent announcement",
+        1,
+        "search_public_context",
+        undefined,
+        6,
+        preset,
+    );
+    const result = await dispatchLookup(f);
+    assert(result.kind === "success", JSON.stringify(result));
+    expect(JSON.parse(result.valueJson)).toMatchObject({
+        searchId: f.requestId,
+        candidates: [
+            {
+                url: "https://example.org/context",
+                title: "Workflow announcement",
+            },
+        ],
+    });
+    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    assert(run?.companySnapshot);
+    assert(bodies[0]);
+    expect(bodies[0].query).toBe(
+        `${run.companySnapshot.legalName}: recent announcement\n${orientation}`,
+    );
+    const receipts = await providerReceipts(f);
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({
+        status: "succeeded",
+        searchQuery: bodies[0].query,
+    });
+});
+
+test.each([
+    6, 7,
+] as const)("framing discovery can request an official filing under independent scrutiny on version %s", async (version) => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const bodies: Array<{ query: string }> = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url, init) => {
+            bodies.push(JSON.parse(String(init.body)));
+            return Response.json({ results: [], costDollars: { total: 0.01 } });
+        }),
+    );
+    const f = await enqueueLookup(
+        "filing",
+        1,
+        "search_public_context",
+        undefined,
+        version,
+        "independent_scrutiny",
+        "official",
+    );
+    expect(await dispatchLookup(f)).toMatchObject({ kind: "success" });
+    assert(bodies[0]);
+    expect(bodies[0].query).toBe(
+        "CCC Intelligent Solutions Holdings Inc.: filing\nPrioritize relevant issuer and regulatory publications.",
+    );
+    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    expect(run?.coveragePreset).toBe("independent_scrutiny");
+    expect(run?.publicContextAllowance).toEqual({ searches: 5, readings: 1 });
+    expect((await providerReceipts(f))[0]).toMatchObject({
+        searchQuery: bodies[0].query,
+        status: "succeeded",
+    });
+});
+
+test.each([
+    512, 513,
+])("framing discovery counts orientation within the %s character query", async (length) => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const fetcher = vi.fn(async () =>
+        Response.json({ results: [], costDollars: { total: 0.01 } }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const orientation =
+        "Prioritize relevant issuer and regulatory publications.";
+    const f = await enqueueLookup(
+        "x".repeat(length - orientation.length - 1),
+        1,
+        "search_public_context",
+        undefined,
+        6,
+        "first_party_depth",
+    );
+    const result = await dispatchLookup(f);
+    if (length === 512) {
+        expect(result).toMatchObject({ kind: "success" });
+        expect((await providerReceipts(f))[0]).toMatchObject({
+            status: "succeeded",
+            searchQuery: `CCC Intelligent Solutions Holdings Inc.: ${"x".repeat(length - orientation.length - 1)}\n${orientation}`,
+        });
+    } else {
+        expect(result).toMatchObject({
+            kind: "unavailable",
+            code: "discovery_query_invalid",
+            validation: { path: "query" },
+        });
+        expect(fetcher).not.toHaveBeenCalled();
+        expect(await providerReceipts(f)).toEqual([]);
+    }
+});
+
+test("retained v5 rejects a forged search focus before provider I/O", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const f = await enqueueLookup(
+        "filing",
+        1,
+        "search_public_context",
+        undefined,
+        5,
+        "balanced",
+        "official",
+    );
+    expect(await dispatchLookup(f)).toMatchObject({
+        kind: "unavailable",
+        code: "operation_not_allowed",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(await providerReceipts(f)).toEqual([]);
+});
+
+test("framing discovery refuses an invalid focus at input validation", async () => {
+    const f = await enqueueLookup(
+        "filing",
+        1,
+        "search_public_context",
+        undefined,
+        6,
+    );
+    const before = await f.t.run((ctx) =>
+        ctx.db.query("agentOperationRequests").collect(),
+    );
+    await expect(
+        f.t.mutation(internal.execution.operations.enqueue, {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "invalid-focus",
+            input: {
+                kind: "search_public_context",
+                messageId: f.messageId,
+                query: "filing",
+                // @ts-expect-error Exercise untrusted runtime input rather than a valid typed caller.
+                focus: "issuer-only",
+            },
+        }),
+    ).rejects.toThrow();
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db.query("agentOperationRequests").collect(),
+        ),
+    ).toEqual(before);
+    expect(await providerReceipts(f)).toEqual([]);
+});
+
+test.each([
+    ["CHICAGO, Oct. 29, 2026 (GLOBE NEWSWIRE) --", "2026-10-29"],
+    ["CHICAGO--(BUSINESS WIRE)--Jul. 30, 2024--", "2024-07-30"],
+])("explicit release datelines retain publication evidence: %s", async (text, date) => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const url =
+        date === "2026-10-29"
+            ? "https://ir.cccis.com/node/10861/pdf"
+            : "https://ir.cccis.com/news-releases/news-release-details/ccc-launches-cccr-intelligent-reinspection-help-auto-insurers";
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (endpoint) =>
+            Response.json({
+                results: String(endpoint).endsWith("/search")
+                    ? [
+                          {
+                              id: "release",
+                              url,
+                              title: "Captured release dateline",
+                          },
+                      ]
+                    : [{ id: "release", url, text }],
+            }),
+        ),
+    );
+    const f = await enqueueLookup("announcement", 1, "search_public_context");
+    assert((await dispatchLookup(f)).kind === "success");
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 1,
+            cause: "dated-release",
+            input: {
+                kind: "read_public_context",
+                messageId: f.messageId,
+                target: { kind: "candidate", searchId: f.requestId, index: 0 },
+            },
+        },
+    );
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 1,
+    });
+    assert(result.kind === "success", JSON.stringify(result));
+    expect(JSON.parse(result.valueJson).reference.dates).toMatchObject({
+        publication: {
+            status: "known",
+            evidence: [
+                {
+                    value: date,
+                    precision: "day",
+                    origin: { kind: "dateline", raw: text },
+                },
+            ],
+        },
+        event: { status: "unknown", evidence: [] },
+    });
+});
+
+test("independent stored and HTML publication dates retain their conflict", async () => {
+    const url = "https://example.com/article";
+    simulatePublisher(
+        () =>
+            new Response(
+                '<html><head><meta property="article:published_time" content="2026-10-29T12:00:00Z"></head><body><p>Routing rights are retained.</p></body></html>',
+                { headers: { "content-type": "text/html" } },
+            ),
+    );
+    const f = await enqueueLookup(url, 1, "read_public_context", undefined, 7);
+    await f.t.run((ctx) =>
+        ctx.db.insert("sources", {
+            runId: f.runId,
+            canonicalUrl: url,
+            title: "Article",
+            origin: "analyst_url",
+            category: "analyst",
+            publishedAt: Date.UTC(2026, 9, 28),
+            createdAt: Date.now(),
+        }),
+    );
+    const result = await dispatchLookup(f);
+    assert(result.kind === "success", JSON.stringify(result));
+    const reading = JSON.parse(result.valueJson).reference;
+    expect(reading.dates.publication.status).toBe("conflict");
+    expect(
+        reading.dates.publication.evidence.map(
+            (item: { value: string }) => item.value,
+        ),
+    ).toEqual(expect.arrayContaining(["2026-10-28", "2026-10-29T12:00:00Z"]));
+    expect(reading.publishedAt).toBeUndefined();
+});
+
+test("a dateline split across public read pages remains dated without reacquisition", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    const text =
+        "X".repeat(8170) +
+        "\nBOSTON, October 29, 2026 (GLOBE NEWSWIRE) -- Routing control remains manual.";
+    const request = vi.fn(async (url: Parameters<typeof fetch>[0]) =>
+        Response.json({
+            results: String(url).endsWith("/search")
+                ? [
+                      {
+                          id: "release",
+                          url: "https://example.com/release",
+                          title: "Release",
+                      },
+                  ]
+                : [{ id: "release", url: "https://example.com/release", text }],
+        }),
+    );
+    vi.stubGlobal("fetch", request);
+    const f = await enqueueLookup(
+        "routing",
+        1,
+        "search_public_context",
+        undefined,
+        7,
+    );
+    assert((await dispatchLookup(f)).kind === "success");
+    let continuation: typeof f.requestId | undefined;
+    let last: Infer<typeof publicReadResultValidator> | undefined;
+    let consumed = "";
+    do {
+        const readId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: f.missionId,
+                expectedGeneration: 1,
+                cause: `split-date-${consumed.length}`,
+                input: {
+                    kind: "read_public_context",
+                    messageId: f.messageId,
+                    target: {
+                        kind: "candidate",
+                        searchId: f.requestId,
+                        index: 0,
+                    },
+                    ...(continuation ? { continuation } : {}),
+                },
+            },
+        );
+        const outcome = await f.t.action(
+            internal.execution.operations.dispatch,
+            { requestId: readId, expectedGeneration: 1 },
+        );
+        assert(outcome.kind === "success", JSON.stringify(outcome));
+        last = JSON.parse(outcome.valueJson);
+        assert(last?.reference);
+        consumed += last.reference.excerpt;
+        continuation = last.continuation;
+    } while (continuation);
+    expect(consumed).toBe(text);
+    assert(last?.reference?.dates);
+    expect(last.reference.dates.publication).toMatchObject({
+        status: "known",
+        evidence: [{ value: "2026-10-29", precision: "day" }],
+    });
+    expect(last.reference.publishedAt).toBe("2026-10-29T00:00:00.000Z");
+    expect(
+        request.mock.calls.filter(([url]) => !String(url).endsWith("/search")),
+    ).toHaveLength(1);
+});
+
+test.each([
+    false,
+    true,
+])("continuation preserves conflicting event dates from historical aliases: %s", async (historical) => {
+    vi.stubEnv("SEC_USER_AGENT", "Fixture contact fixture@example.com");
+    simulatePublisher((url) =>
+        url === secSubmissions
+            ? Response.json({
+                  cik: "1818201",
+                  name: "Fixture issuer",
+                  tickers: ["FIX"],
+                  exchanges: ["NYSE"],
+                  filings: {
+                      recent: {
+                          accessionNumber: ["0000950170-25-000001"],
+                          filingDate: ["2025-04-15"],
+                          primaryDocument: ["filing.htm"],
+                      },
+                  },
+              })
+            : new Response(
+                  `<html><body><p>Date of Report (Date of earliest event reported): April 9, 2025</p><p>${"x".repeat(9000)}</p><p>Date of Report (Date of earliest event reported): April 10, 2025</p></body></html>`,
+                  { headers: { "content-type": "text/html" } },
+              ),
+    );
+    const f = await enqueueLookup(
+        secFiling,
+        2,
+        "read_public_context",
+        undefined,
+        7,
+    );
+    const first = await dispatchLookup(f);
+    assert(first.kind === "success", JSON.stringify(first));
+    const retained = JSON.parse(first.valueJson);
+    if (historical) {
+        delete retained.reference.dates;
+        retained.reference.eventAt = "2025-04-09T00:00:00.000Z";
+        await f.t.run((ctx) =>
+            ctx.db.patch(f.requestId, {
+                outcome: {
+                    kind: "success",
+                    valueJson: JSON.stringify(retained),
+                },
+            }),
+        );
+    }
+    const readId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        cause: "event-continuation",
+        input: {
+            kind: "read_public_context",
+            messageId: f.messageId,
+            target: { kind: "supplied", url: secFiling },
+            continuation: f.requestId,
+        },
+    });
+    const second = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: readId,
+        expectedGeneration: 1,
+    });
+    assert(second.kind === "success", JSON.stringify(second));
+    const reading = JSON.parse(second.valueJson).reference;
+    expect(reading.dates.event.status).toBe("conflict");
+    expect(
+        reading.dates.event.evidence.map(
+            (item: { value: string }) => item.value,
+        ),
+    ).toEqual(expect.arrayContaining(["2025-04-09", "2025-04-10"]));
+    expect(reading.eventAt).toBeUndefined();
 });

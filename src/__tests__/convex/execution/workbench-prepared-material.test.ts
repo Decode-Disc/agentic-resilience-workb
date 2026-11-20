@@ -1,4 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { modelOperationOutcome } from "@convex/execution/agentDefinition";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 import { workbenchAdmissionInput } from "@/__tests__/setup/workbench";
@@ -478,4 +480,174 @@ test.each([
             "revoked-owner": "not_authorized",
         }[variant],
     });
+});
+
+test("normalization refusals preserve domain refusal codes and diagnostics for unobserved needs and messages", async () => {
+    const f = await preparedConversation();
+    const client = f.t.withIdentity({ subject: f.userId });
+    const definition = getAgentDefinition("workbench_v1");
+    const needBegun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.turn.missionId,
+        expectedGeneration: 1,
+        taskKey: "normalization-refusal-need",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, f.turn.missionId),
+    });
+    assert(needBegun.kind === "ready");
+    const needFinished = await f.t.mutation(
+        internal.execution.invocations.finish,
+        {
+            invocationId: needBegun.invocationId,
+            expectedGeneration: 1,
+            response: {
+                kind: "operations",
+                requests: [
+                    {
+                        callId: "unobserved-need",
+                        name: "consult_prepared_material",
+                        inputJson: JSON.stringify({ needId: "invented-need" }),
+                    },
+                ],
+            },
+        },
+    );
+    const needReqId = needFinished.requestIds[0];
+    assert(needReqId);
+    const needOutcome = await f.t.action(
+        internal.execution.operations.dispatch,
+        {
+            requestId: needReqId,
+            expectedGeneration: 1,
+        },
+    );
+    expect(needOutcome).toMatchObject({
+        kind: "refused",
+        code: "documentary_need_not_observed",
+        validation: {
+            path: "needId",
+            expected: expect.stringContaining("needReferences"),
+        },
+    });
+    expect(
+        JSON.parse(modelOperationOutcome(definition, needOutcome)).diagnostic,
+    ).toContain("needReferences");
+    const endBegun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.turn.missionId,
+        expectedGeneration: 1,
+        taskKey: "normalization-end-first-turn",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, f.turn.missionId),
+    });
+    assert(endBegun.kind === "ready");
+    await f.t.mutation(internal.execution.invocations.finish, {
+        invocationId: endBegun.invocationId,
+        expectedGeneration: 1,
+        response: { kind: "complete", text: "Prepared limits explained." },
+    });
+    await f.t.run(async (ctx) => {
+        const framingId = await ctx.db.insert("framingRevisions", {
+            runId: f.runId,
+            revision: 1,
+            content: {
+                scope: "ServiceNow workflow",
+                questions: [
+                    {
+                        id: "q1",
+                        shortLabel: "Q1",
+                        text: "Who controls the workflow?",
+                        rationale: "Check control.",
+                    },
+                ],
+            },
+            contentHash: "fixed-framing-hash",
+            requestKey: "fixed-framing",
+            origin: "analyst",
+            createdAt: 1,
+        });
+        await ctx.db.patch(f.runId, {
+            currentFramingRevisionId: framingId,
+            fixedFramingRevisionId: framingId,
+            sourcesProtocol: "sources_mission_v1",
+        });
+    });
+    const unobservedMessageId = await f.t.run(async (ctx) => {
+        const earlier = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run_and_status", (q) => q.eq("runId", f.runId))
+            .first();
+        assert(earlier);
+        return earlier._id;
+    });
+    await client.mutation(api.execution.conversations.submit, {
+        runId: f.runId,
+        requestKey: "active-first-message",
+        text: "Check licensing terms.",
+        delivery: "queue",
+    });
+    await client.mutation(api.execution.conversations.submit, {
+        runId: f.runId,
+        requestKey: "active-second-message",
+        text: "Check commercial terms in the filings.",
+        delivery: "queue",
+    });
+    const activeTurn = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(activeTurn);
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: activeTurn.missionId,
+        expectedGeneration: 1,
+        taskKey: "normalization-refusal-message",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, activeTurn.missionId),
+    });
+    assert(begun.kind === "ready");
+    const finished = await f.t.mutation(internal.execution.invocations.finish, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 1,
+        response: {
+            kind: "operations",
+            requests: [
+                {
+                    callId: "unobserved-message",
+                    name: "transmit_source_request",
+                    inputJson: JSON.stringify({
+                        messageId: unobservedMessageId,
+                        interpretedNeed: "Check commercial terms.",
+                        target: {
+                            kind: "existing_need",
+                            needId: "common-context",
+                        },
+                    }),
+                },
+            ],
+        },
+    });
+    const messageReqId = finished.requestIds[0];
+    assert(messageReqId);
+    const messageOutcome = await f.t.action(
+        internal.execution.operations.dispatch,
+        {
+            requestId: messageReqId,
+            expectedGeneration: 1,
+        },
+    );
+    expect(messageOutcome).toMatchObject({
+        kind: "refused",
+        code: "instruction_not_observed",
+        validation: {
+            path: "messageId",
+            expected: expect.stringContaining("conversationInstructions"),
+        },
+    });
+    expect(
+        JSON.parse(modelOperationOutcome(definition, messageOutcome))
+            .diagnostic,
+    ).toContain("conversationInstructions");
 });

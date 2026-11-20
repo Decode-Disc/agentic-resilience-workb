@@ -29,7 +29,7 @@
         "lint": "biome lint . && node --experimental-strip-types scripts/check-imports.ts && node --experimental-strip-types scripts/check-execution-boundaries.ts && pnpm resource-policy:check",
         "format": "biome format --write .",
         "format:check": "biome format .",
-        "check": "pnpm docs:check && pnpm design:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
+        "check": "pnpm agent-skills:check && pnpm docs:check && pnpm design:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
         "docs:check": "node --experimental-strip-types scripts/check-documentation.ts",
         "resource-policy:sync": "node --experimental-strip-types scripts/sync-resource-policy.ts",
         "resource-policy:check": "node --experimental-strip-types scripts/sync-resource-policy.ts --check && node --experimental-strip-types scripts/check-resource-policy.ts",
@@ -43,7 +43,9 @@
         "dev:ports": "node --experimental-strip-types scripts/local-runtime.ts --ports",
         "dev:status": "node --experimental-strip-types scripts/local-dev.ts dev:status",
         "dev:stop": "node --experimental-strip-types scripts/local-dev.ts dev:stop",
-        "dev:restart": "node --experimental-strip-types scripts/local-dev.ts dev:restart"
+        "dev:restart": "node --experimental-strip-types scripts/local-dev.ts dev:restart",
+        "agent-skills:sync": "node --experimental-strip-types scripts/sync-agent-skills.ts",
+        "agent-skills:check": "node --experimental-strip-types scripts/sync-agent-skills.ts --check"
     },
     "dependencies": {
         "@assistant-ui/react": "0.15.31",
@@ -61,6 +63,7 @@
         "@dnd-kit/utilities": "3.2.2",
         "@earendil-works/chord": "1.4.0",
         "@earendil-works/pi-ai": "1.4.0",
+        "@earendil-works/pi-coding-agent": "1.5.0",
         "@earendil-works/pi-durable": "1.4.0",
         "@fontsource-variable/geist": "5.2.9",
         "@fontsource-variable/inter": "5.2.8",
@@ -107,7 +110,6 @@
     },
     "devDependencies": {
         "@biomejs/biome": "2.5.3",
-        "@earendil-works/pi-coding-agent": "1.5.0",
         "@playwright/test": "1.62.1",
         "@tailwindcss/language-server": "0.16.0",
         "@tanstack/router-cli": "1.167.19",

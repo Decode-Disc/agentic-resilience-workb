@@ -229,3 +229,48 @@ test("campaign model preflight prepares declared choices without changing role a
     assert.deepEqual(state.assignments, originalAssignments);
     assert.equal(state.models[0].currentRevisionId, "revision");
 });
+
+test("campaign model preflight rejects incompatible controllerModel before lot admission", async () => {
+    const manifest = configurableCampaign();
+    manifest.configurations[0].controllerModel = "z-ai/glm-5.3-flash";
+    const state = catalogue(true);
+    state.assignments.push({ agent: "sources", catalogId: "model" });
+    for (const profile of manifest.configurations)
+        for (const choice of Object.values(profile.models))
+            choice.model = "z-ai/glm-5.3-flash";
+    const verifiedModels = [];
+    let controllerCompatible = false;
+    const client = {
+        query: async () => structuredClone(state),
+        action: async (_ref, args) => {
+            if ("model" in args) {
+                verifiedModels.push(args.model);
+                if (!controllerCompatible)
+                    throw new Error("model_not_compatible");
+                return { model: args.model, contextWindowTokens: 32768 };
+            }
+            return { isDone: true, continueCursor: null };
+        },
+        mutation: async () =>
+            assert.fail("Preflight cannot mutate settings or admit a lot"),
+    };
+    await assert.rejects(
+        campaignConfiguration.prepareCampaignModels(client, manifest),
+        /model_not_compatible/,
+    );
+    assert.deepEqual(verifiedModels, ["z-ai/glm-5.3-flash"]);
+    controllerCompatible = true;
+    const prepared = await campaignConfiguration.prepareCampaignModels(
+        client,
+        manifest,
+    );
+    assert.equal(
+        prepared.some(
+            (entry) =>
+                entry.role === "controller" &&
+                entry.model === "z-ai/glm-5.3-flash" &&
+                entry.contextWindowTokens === 32768,
+        ),
+        true,
+    );
+});

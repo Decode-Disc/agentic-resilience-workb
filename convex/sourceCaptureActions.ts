@@ -83,22 +83,45 @@ export async function inspectSourceDocument(
             internal.sourcesSimulation.enabled,
             { runId: capture.runId },
         );
+        const replay = await ctx.runQuery(
+            internal.qualificationSourceReplay.read,
+            { runId: capture.runId },
+        );
+        const replayDocument = replay?.documents.find(
+            (doc) => doc.url === source.canonicalUrl,
+        );
+        if (
+            (replay && !replayDocument) ||
+            (source.providerReference?.startsWith("sources-replay:") && !replay)
+        )
+            throw sourcePreparationError("sources_replay_target_unavailable");
+        if (replayDocument?.acquisition.status === "unavailable")
+            throw sourcePreparationError(replayDocument.acquisition.code);
+        const frozen = simulation || replay !== null;
         if (
             simulation &&
+            !replay &&
             source.canonicalUrl !==
                 simulatedSourceCandidate(capture.runId).canonicalUrl
         )
             throw sourcePreparationError("acquisition_target_invalid");
         const exaClient =
-            source.origin === "sec"
+            source.origin === "sec" && !replay
                 ? undefined
-                : simulation
+                : frozen
                   ? {
                         getContents: async (urls: ReadonlyArray<string>) => ({
                             results: urls.map((url) => ({
-                                id: "sources-simulation-v1",
+                                id: replay
+                                    ? `sources-replay:${replay.materialHash}`
+                                    : "sources-simulation-v1",
                                 url,
-                                text: simulatedSourceText,
+                                text:
+                                    replayDocument &&
+                                    replayDocument.acquisition.status !==
+                                        "unavailable"
+                                        ? replayDocument.acquisition.text
+                                        : simulatedSourceText,
                             })),
                         }),
                     }
@@ -116,7 +139,7 @@ export async function inspectSourceDocument(
                 validatePublicSourceUrl(
                     source.canonicalUrl,
                     async (hostname) => {
-                        if (simulation) return ["93.184.216.34"];
+                        if (frozen) return ["93.184.216.34"];
                         const addresses = await lookup(hostname, {
                             all: true,
                             verbatim: true,
@@ -168,7 +191,7 @@ export async function inspectSourceDocument(
         const operationScope = `${preparation.operationKey}:step:source_preparation:source:${source._id}:capture:${capture._id}`;
         const acquisitionOperation =
             source.origin === "sec" ? "retrieve_filing_html" : "get_contents";
-        const acquisitionPlan = simulation
+        const acquisitionPlan = frozen
             ? { attempt: 1, errorCode: undefined }
             : await ctx.runQuery(
                   internal.providerCalls.nextPreparationAttemptForInput,
@@ -257,7 +280,7 @@ export async function inspectSourceDocument(
         const retrieval = exaClient
             ? await retrieveAndNormalizeExaFiling(
                   createExaContentsAdapter(exaClient, {
-                      ...(simulation
+                      ...(frozen
                           ? { maxAttempts: 1 }
                           : {
                                 recordAttempt,
@@ -293,6 +316,14 @@ export async function inspectSourceDocument(
                   },
               );
         if (boundaryError !== undefined) throw boundaryError;
+        if (replay && replayDocument && retrieval.status !== "failed") {
+            retrieval.retrievalVersion = `sources-replay:${replay.materialHash}`;
+            if (replayDocument.acquisition.status === "partial")
+                retrieval.status = "partial";
+            await ctx.runQuery(internal.qualificationSourceReplay.read, {
+                runId: capture.runId,
+            });
+        }
         if (
             retrieval.status === "failed" ||
             !retrieval.normalizedText ||

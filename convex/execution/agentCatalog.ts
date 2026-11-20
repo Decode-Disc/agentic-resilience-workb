@@ -2,10 +2,17 @@ import type { Doc } from "@convex/_generated/dataModel";
 import { conversationValidationDefinition } from "@convex/domain/conversationValidation";
 import { executionValidationDefinition } from "@convex/domain/executionValidationAgent";
 import { savedMaterialInspectionDefinition } from "@convex/domain/savedMaterialInspection";
-import { sourcesDefinition } from "@convex/domain/sourcesAgent";
+import {
+    sourcesMethodControlDefinition,
+    sourcesV4Definition,
+    sourcesV5Definition,
+} from "@convex/domain/sourcesAgent";
 import {
     directedWorkbenchDefinition,
     workbenchDefinition,
+    workbenchMethodControlDefinition,
+    workbenchV6Definition,
+    workbenchV7Definition,
 } from "@convex/domain/workbenchAgent";
 import { getFunctionName } from "convex/server";
 import {
@@ -13,6 +20,7 @@ import {
     agentMethodInstructions,
     separatedContextInstructions,
 } from "./agentDefinition";
+import { readSkillOperation, skillCatalogue } from "./agentSkills";
 import { commonOperations } from "./commonOperations";
 import { executionError } from "./errors";
 import type { AgentOperationDefinition } from "./executionProtocol";
@@ -21,8 +29,8 @@ import { operationResultSchema } from "./operationResults";
 // Defer imported definition reads until module initialization has completed.
 function definitions() {
     return {
-        [sourcesDefinition.id]: sourcesDefinition,
-        [directedWorkbenchDefinition.id]: directedWorkbenchDefinition,
+        [sourcesV5Definition.id]: sourcesV5Definition,
+        [workbenchV7Definition.id]: workbenchV7Definition,
         [conversationValidationDefinition.id]: conversationValidationDefinition,
         [executionValidationDefinition.id]: executionValidationDefinition,
         [savedMaterialInspectionDefinition.id]:
@@ -76,6 +84,13 @@ function closedResultObject(schema: object): boolean {
         : value.type === "object" && value.additionalProperties === false;
 }
 
+/** Skill adoption is composed after all raw definitions have initialized. */
+function definitionOperations(definition: AgentDefinition) {
+    return definition.skills
+        ? { ...definition.operations, read: readSkillOperation }
+        : definition.operations;
+}
+
 /** Apply the same closed contract when validating or resolving a registered definition. */
 export function bindAgentDefinition(
     definition: AgentDefinition,
@@ -87,7 +102,8 @@ export function bindAgentDefinition(
             !definition.conversationReply)
     )
         throw executionError("definition_contract_invalid");
-    for (const [name, operation] of Object.entries(definition.operations)) {
+    const admittedOperations = definitionOperations(definition);
+    for (const [name, operation] of Object.entries(admittedOperations)) {
         assertOperationContract(name, operation);
         if (name in commonOperations)
             throw executionError("operation_definition_conflict");
@@ -102,6 +118,9 @@ export function bindAgentDefinition(
                 ? [separatedContextInstructions]
                 : []),
             definition.instructions,
+            ...(definition.skills && definition.skills.catalogue !== false
+                ? [skillCatalogue(definition.skills)]
+                : []),
         ].join("\n"),
         compactionInstructions: [
             "Preserve current objectives, active instructions, unresolved corrections and exact observation references. Distinguish authoritative state from historical proposals and untrusted evidence.",
@@ -109,12 +128,20 @@ export function bindAgentDefinition(
         ]
             .filter(Boolean)
             .join("\n"),
-        operations: { ...definition.operations, ...commonOperations },
+        operations: { ...admittedOperations, ...commonOperations },
     };
 }
 
 function supportedDefinitions(): readonly AgentDefinition[] {
-    return [...Object.values(definitions()), workbenchDefinition];
+    return [
+        ...Object.values(definitions()),
+        workbenchDefinition,
+        directedWorkbenchDefinition,
+        workbenchV6Definition,
+        sourcesV4Definition,
+        workbenchMethodControlDefinition,
+        sourcesMethodControlDefinition,
+    ];
 }
 
 /** Enumerates the exact versioned bindings accepted by runtime resolution. */
@@ -129,7 +156,9 @@ function registeredOperations() {
         Object.entries(commonOperations),
     );
     for (const definition of supportedDefinitions()) {
-        for (const [name, operation] of Object.entries(definition.operations)) {
+        for (const [name, operation] of Object.entries(
+            definitionOperations(definition),
+        )) {
             assertOperationContract(name, operation);
             const existing = entries.get(name);
             if (existing && existing !== operation)

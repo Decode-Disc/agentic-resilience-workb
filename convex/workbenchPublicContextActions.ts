@@ -4,6 +4,13 @@ import { lookup } from "node:dns/promises";
 import { addAbortListener } from "node:events";
 import { internal } from "@convex/_generated/api";
 import { type ActionCtx, internalAction } from "@convex/_generated/server";
+import {
+    type DateEvidence,
+    type DocumentDates,
+    documentDates,
+    recordedDocumentDate,
+    unambiguousDocumentTime,
+} from "@convex/domain/documentDates";
 import { ManualSourceIntakeError } from "@convex/domain/manualSourceIntake";
 import {
     PublicSourceUrlError,
@@ -19,11 +26,12 @@ import type {
 import {
     executionError as executionFailure,
     executionFailureCode,
+    executionFailureValidation,
 } from "@convex/execution/errors";
 import { operationOutcomeValidator } from "@convex/execution/executionProtocol";
 import { retainedTextParts } from "@convex/execution/retainedText";
 import {
-    extractHtmlPublicationTime,
+    extractHtmlPublicationEvidence,
     normalizeSecHtml,
 } from "@convex/integrations/evidenceNormalization";
 import { ExaContentsError } from "@convex/integrations/exa";
@@ -64,63 +72,49 @@ type SuppliedReference = NonNullable<
     >["suppliedReference"]
 >;
 
-const englishMonthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
-
-function excerptDate(match: RegExpExecArray | null) {
-    if (!match) return undefined;
-    const [, month, dayText, yearText] = match;
-    const monthIndex = englishMonthNames.findIndex(
-        (name) => name.toLowerCase() === month?.toLowerCase(),
-    );
-    const day = Number(dayText);
-    const year = Number(yearText);
-    if (monthIndex < 0 || day < 1 || day > 31 || year < 1000) return undefined;
-    const timestamp = Date.UTC(year, monthIndex, day);
-    return new Date(timestamp).getUTCMonth() === monthIndex
-        ? timestamp
-        : undefined;
-}
-
-/** Only explicit document date labels support a date derived from an excerpt. */
+/** Only explicit document labels and retained metadata establish documentary dates. */
 function framingReading(
     url: string,
     excerpt: string,
     publishedAt?: number,
+    previous?: DocumentDates,
+    metadata: readonly DateEvidence[] = [],
 ): Readings[number] {
-    const eventAt = resolveDirectFilingUrl(url)
-        ? excerptDate(
-              /Date of Report\s*\(Date of earliest event reported\)\s*:\s*([a-z]+)\s+(\d{1,2}),\s*(\d{4})\b/iu.exec(
-                  excerpt,
-              ),
-          )
-        : undefined;
-    const dateline = excerptDate(
-        /^[^\n]*?,\s*([a-z]+)\s+(\d{1,2}),\s*(\d{4})\s*\(GLOBE NEWSWIRE\)\s*[-–—]/imu.exec(
-            excerpt,
-        ),
-    );
-    const publicationTime = publishedAt ?? dateline;
+    const dates = documentDates({
+        metadata: [
+            ...metadata,
+            ...(publishedAt === undefined
+                ? []
+                : [
+                      recordedDocumentDate(
+                          resolveDirectFilingUrl(url)
+                              ? "filing"
+                              : "publication",
+                          publishedAt,
+                          {
+                              kind: resolveDirectFilingUrl(url)
+                                  ? "sec_field"
+                                  : "metadata",
+                              label: resolveDirectFilingUrl(url)
+                                  ? "filingDate"
+                                  : "publishedAt",
+                              raw: String(publishedAt),
+                          },
+                      ),
+                  ]),
+        ],
+        text: excerpt,
+        previous,
+    });
     return {
         url,
         publisher: new URL(url).hostname,
         excerpt,
-        ...(publicationTime === undefined
-            ? {}
-            : { publishedAt: publicationTime }),
-        ...(eventAt === undefined ? {} : { eventAt }),
+        dates,
+        publishedAt: unambiguousDocumentTime(
+            resolveDirectFilingUrl(url) ? dates.filing : dates.publication,
+        ),
+        eventAt: unambiguousDocumentTime(dates.event),
     };
 }
 
@@ -138,7 +132,7 @@ function publicContextOutcome(references: Readings) {
     return { kind: "success" as const, valueJson: JSON.stringify(value) };
 }
 
-/** A retained page contributes progress only for visible, nonblank content, with dates attributed on that page. */
+/** A retained page contributes progress only for visible, nonblank content, with document-level dates from its verified acquired representation. */
 function publicReadPageOutcome(
     requestId: Request["requestId"],
     page: FunctionReturnType<
@@ -155,6 +149,7 @@ function publicReadPageOutcome(
               url: reading.url,
               publisher: reading.publisher,
               excerpt: reading.excerpt,
+              dates: reading.dates,
               ...(reading.publishedAt === undefined
                   ? {}
                   : {
@@ -482,6 +477,7 @@ async function readSuppliedReference(
                     value: {
                         url: filing.canonicalUrl,
                         text: filing.normalizedText,
+                        dateEvidence: [] as DateEvidence[],
                         publishedAt,
                     },
                 };
@@ -512,12 +508,8 @@ async function readSuppliedReference(
                 value: {
                     url: page.url,
                     text: normalizeSecHtml(page.text).normalizedText,
-                    publishedAt:
-                        knownPublishedAt ??
-                        (page.mediaType === "text/html" ||
-                        page.mediaType === "application/xhtml+xml"
-                            ? extractHtmlPublicationTime(page.text)
-                            : undefined),
+                    dateEvidence: extractHtmlPublicationEvidence(page.text),
+                    publishedAt: knownPublishedAt,
                 },
             };
         },
@@ -593,20 +585,37 @@ export const execute = internalAction({
                             kind: "unavailable",
                             code: "source_reference_not_observed",
                         };
+                    const retainedDates =
+                        previous.reference.dates ??
+                        framingReading(
+                            previous.reference.url,
+                            previous.reference.excerpt,
+                            previous.reference.publishedAt === undefined
+                                ? undefined
+                                : Date.parse(previous.reference.publishedAt),
+                            undefined,
+                            previous.reference.eventAt === undefined
+                                ? []
+                                : [
+                                      recordedDocumentDate(
+                                          "event",
+                                          Date.parse(
+                                              previous.reference.eventAt,
+                                          ),
+                                          {
+                                              kind: "metadata",
+                                              label: "eventAt",
+                                              raw: previous.reference.eventAt,
+                                          },
+                                      ),
+                                  ],
+                        ).dates;
                     const reading = framingReading(
                         previous.reference.url,
                         page.excerpt,
-                        previous.reference.publishedAt === undefined
-                            ? undefined
-                            : Date.parse(previous.reference.publishedAt),
+                        undefined,
+                        retainedDates,
                     );
-                    if (
-                        reading.eventAt === undefined &&
-                        previous.reference.eventAt !== undefined
-                    )
-                        reading.eventAt = Date.parse(
-                            previous.reference.eventAt,
-                        );
                     return publicReadPageOutcome(
                         args.requestId,
                         page,
@@ -616,6 +625,7 @@ export const execute = internalAction({
                     );
                 }
                 let text: string;
+                let dateEvidence: DateEvidence[] = [];
                 let publishedAt = reference.publishedAt;
                 let url = reference.url;
                 if (authority.replay) {
@@ -689,6 +699,7 @@ export const execute = internalAction({
                     );
                     if (result.kind === "unavailable") return result;
                     ({ text, url, publishedAt } = result.value);
+                    dateEvidence = result.value.dateEvidence;
                 }
                 const retained = retainedTextParts(text);
                 for (const [index, content] of retained.parts.entries())
@@ -706,7 +717,16 @@ export const execute = internalAction({
                 return publicReadPageOutcome(
                     args.requestId,
                     page,
-                    framingReading(url, page.excerpt, publishedAt),
+                    {
+                        ...framingReading(
+                            url,
+                            text,
+                            publishedAt,
+                            undefined,
+                            dateEvidence,
+                        ),
+                        excerpt: page.excerpt,
+                    },
                     authority.replay
                         ? "complete"
                         : authority.selectedCandidate && !reference.confirmedSec
@@ -737,6 +757,8 @@ export const execute = internalAction({
                                   result.value.url,
                                   excerpt,
                                   publishedAt,
+                                  undefined,
+                                  result.value.dateEvidence,
                               ),
                           ]
                         : [],
@@ -847,7 +869,14 @@ export const execute = internalAction({
             return publicContextOutcome(references);
         } catch (error) {
             const code = executionFailureCode(error);
-            if (code) return { kind: "unavailable", code };
+            if (code) {
+                const validation = executionFailureValidation(error);
+                return {
+                    kind: "unavailable",
+                    code,
+                    ...(validation ? { validation } : {}),
+                };
+            }
             throw error;
         }
     },

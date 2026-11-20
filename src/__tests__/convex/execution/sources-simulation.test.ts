@@ -124,6 +124,7 @@ test("the registered Sources simulator requests actual discovery instead of manu
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 test("simulated discovery, acquisition, reads and control use real operations without paid receipts", async () => {
+    vi.useFakeTimers();
     const f = await seedCapturedSources();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
     vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");

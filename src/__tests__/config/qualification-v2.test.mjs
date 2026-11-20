@@ -1400,3 +1400,205 @@ test("a first dispatched Sources request is hydrated once and survives blocked p
             }),
         );
 });
+
+test("campaign preparation freezes Sources replay bytes and refuses a changed corpus", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-sources-replay-"));
+    const materialPath = join(root, "sources.json");
+    const documents = [
+        {
+            url: "https://example.org/report",
+            title: "Retained report",
+            acquisition: {
+                status: "partial",
+                text: "An incomplete independent report.",
+            },
+        },
+    ];
+    const material = JSON.stringify({ documents });
+    writeFileSync(materialPath, material);
+    const draft = configurableCampaign();
+    draft.scenarios[0].sourcesReplay = {
+        materialPath,
+        materialHash: sha256(material),
+    };
+    const input = join(root, "input.json");
+    writeFileSync(input, JSON.stringify(draft));
+    await runCampaign("prepare", root, { manifest: input });
+    const prepared = JSON.parse(
+        readFileSync(join(root, "campaign.json"), "utf8"),
+    );
+    assert.deepEqual(prepared.manifest.scenarios[0].sourcesReplay, {
+        materialHash: sha256(JSON.stringify(documents)),
+        documents,
+    });
+    assert.equal(prepared.campaignId, undefined);
+    writeFileSync(materialPath, JSON.stringify({ documents: [] }));
+    await assert.rejects(
+        runCampaign("prepare", join(root, "changed"), { manifest: input }),
+        /Frozen Sources material hash changed/,
+    );
+});
+
+for (const completedWithoutMaterial of [false, true])
+    test(`Sources retained-material pause: terminal without material=${completedWithoutMaterial}`, async () => {
+        const root = mkdtempSync(
+            join(tmpdir(), "qualification-retained-pause-"),
+        );
+        const base = configurableCampaign();
+        const manifest = campaignManifestSchema.parse({
+            ...base,
+            executionSurface: "backend",
+            batteryHash: "a".repeat(64),
+            scenarios: [
+                {
+                    ...base.scenarios[0],
+                    steps: [
+                        {
+                            id: "retained",
+                            action: "wait_for",
+                            state: "sources_material_available",
+                        },
+                        { id: "pause", action: "pause_research" },
+                    ],
+                },
+            ],
+            expectations: base.expectations.slice(0, 1),
+        });
+        writeFileSync(
+            join(root, "protocol.json"),
+            `${JSON.stringify({ boundary: "backend" }, null, 2)}\n`,
+        );
+        writeFileSync(
+            join(root, "prepared.json"),
+            JSON.stringify({
+                cases: [
+                    {
+                        id: base.scenarios[0].id,
+                        runId: "fixture",
+                        fixtureKey: "fixture",
+                    },
+                ],
+            }),
+        );
+        let observations = 0,
+            paused = false;
+        const client = {
+            mutation: async (reference) => {
+                if (
+                    getFunctionName(reference) ===
+                    "execution/researchControl:pause"
+                ) {
+                    assert(observations >= 6, "Pause must wait for material");
+                    paused = true;
+                }
+            },
+            query: async (reference) => {
+                const name = getFunctionName(reference);
+                if (name === "visitors:current") return { status: "active" };
+                if (name === "execution/fixtures:qualificationSnapshot") {
+                    observations++;
+                    return {
+                        run: {
+                            executionStatus: paused
+                                ? "paused"
+                                : completedWithoutMaterial
+                                  ? "idle"
+                                  : "running",
+                            executionGeneration: 1,
+                        },
+                        conversation: { queuedCount: 0 },
+                        nativeSettled: true,
+                        contextExpiresAt: manifest.expiresAt,
+                        sourcesMission: completedWithoutMaterial
+                            ? { status: "completed" }
+                            : { status: "running" },
+                        preparation: {
+                            sourcesMission: {
+                                captureIds:
+                                    !completedWithoutMaterial &&
+                                    observations >= 6
+                                        ? ["capture"]
+                                        : [],
+                            },
+                        },
+                    };
+                }
+                return {
+                    page: [],
+                    payloads: [],
+                    isDone: true,
+                    continueCursor: "",
+                };
+            },
+        };
+        const execute = () =>
+            runCampaignScenarios(
+                null,
+                client,
+                undefined,
+                "http://127.0.0.1:3210",
+                root,
+                manifest,
+                () => completedWithoutMaterial && observations > 4,
+                client,
+            );
+        if (completedWithoutMaterial) {
+            await assert.rejects(execute);
+            const failure = JSON.parse(
+                readFileSync(
+                    join(root, base.scenarios[0].id, "failure.json"),
+                    "utf8",
+                ),
+            );
+            assert.match(
+                failure.reason,
+                /Sources ended before retained material/,
+            );
+            assert.equal(paused, false);
+            return;
+        }
+        await execute();
+        assert.equal(paused, true);
+        const before = JSON.parse(
+            readFileSync(
+                join(root, base.scenarios[0].id, "pause-before.json"),
+                "utf8",
+            ),
+        );
+        assert.deepEqual(before.preparation.sourcesMission.captureIds, [
+            "capture",
+        ]);
+    });
+
+test("a held-out framing corpus is frozen separately from historical case identities", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-heldout-"));
+    const draft = configurableCampaign();
+    draft.scenarios[0] = {
+        ...draft.scenarios[0],
+        framingRequest: {
+            text: "Does this announcement change review authority?",
+            receivedAt: "2026-11-18T09:00:00.000Z",
+        },
+        framingPublicContext: true,
+        framingReplay: {
+            case: "heldout",
+            materialHash: "c".repeat(64),
+            unavailable: false,
+            documents: [],
+        },
+        steps: [
+            {
+                id: "settled",
+                action: "wait_for",
+                state: "conversation_settled",
+            },
+        ],
+    };
+    const input = join(root, "input.json");
+    writeFileSync(input, JSON.stringify(draft));
+    await runCampaign("prepare", root, { manifest: input });
+    const prepared = JSON.parse(
+        readFileSync(join(root, "campaign.json"), "utf8"),
+    );
+    assert.equal(prepared.manifest.scenarios[0].framingReplay.case, "heldout");
+});

@@ -6,6 +6,7 @@ const { evaluationTransport, validateAnswers } = await import(
     ).href
 );
 
+import { streamingModelFetch } from "@/__tests__/setup/model-stream";
 import { expect, test, vi } from "vitest";
 import type {
     StudyCase,
@@ -497,43 +498,50 @@ test.each([
         vi.stubEnv("OPENROUTER_API_KEY", "synthetic-study-only-key");
         vi.stubGlobal(
             "fetch",
-            async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
-                const request = new Request(url, init);
-                expect(request.url).toBe(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                );
-                const body = await request.text();
-                requests.push(body);
-                expect(
-                    manifest.calls.map((call: StudyCall) => call.requestHash),
-                ).toContain(digest(body));
-                expect(JSON.parse(body).max_tokens).toBe(2048);
-                return new Response(
-                    JSON.stringify({
-                        id: "study-fixture",
-                        model,
-                        provider: "fixture",
-                        created: 1,
-                        choices: [
-                            {
-                                index: 0,
-                                message: {
-                                    role: "assistant",
-                                    content: JSON.stringify(output),
+            streamingModelFetch(
+                async (
+                    url: Parameters<typeof fetch>[0],
+                    init?: RequestInit,
+                ) => {
+                    const request = new Request(url, init);
+                    expect(request.url).toBe(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                    );
+                    const body = await request.text();
+                    requests.push(body);
+                    expect(
+                        manifest.calls.map(
+                            (call: StudyCall) => call.requestHash,
+                        ),
+                    ).toContain(digest(body));
+                    expect(JSON.parse(body).max_tokens).toBe(2048);
+                    return new Response(
+                        JSON.stringify({
+                            id: "study-fixture",
+                            model,
+                            provider: "fixture",
+                            created: 1,
+                            choices: [
+                                {
+                                    index: 0,
+                                    message: {
+                                        role: "assistant",
+                                        content: JSON.stringify(output),
+                                    },
+                                    finish_reason: "stop",
                                 },
-                                finish_reason: "stop",
+                            ],
+                            usage: {
+                                prompt_tokens: 200,
+                                completion_tokens: 50,
+                                total_tokens: 250,
+                                cost: 0.0001,
                             },
-                        ],
-                        usage: {
-                            prompt_tokens: 200,
-                            completion_tokens: 50,
-                            total_tokens: 250,
-                            cost: 0.0001,
-                        },
-                    }),
-                    { headers: { "content-type": "application/json" } },
-                );
-            },
+                        }),
+                        { headers: { "content-type": "application/json" } },
+                    );
+                },
+            ),
         );
         if (outcome === "cancelled-before-dispatch") {
             const once = process.once.bind(process);

@@ -6,6 +6,7 @@ import {
     internalMutation,
     internalQuery,
     type MutationCtx,
+    type QueryCtx,
 } from "@convex/_generated/server";
 import { readResearchState } from "@convex/domain/researchState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
@@ -20,6 +21,10 @@ import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition, getRegisteredOperation } from "./agentCatalog";
 import type { AgentProgress } from "./agentDefinition";
+import {
+    agentDefinitionIdValidator,
+    operationPinValidator,
+} from "./agentSchemas";
 import {
     executionError,
     executionFailureCode,
@@ -37,7 +42,7 @@ import {
     operationInputValidator,
     operationOutcomeValidator,
     type operationRefusalValidator,
-    type requestInputValidator,
+    requestInputValidator,
     validateOperationExecutionResult,
 } from "./executionProtocol";
 import {
@@ -222,7 +227,7 @@ async function recordEvent(
 }
 
 async function requestAtAdmission(
-    ctx: MutationCtx,
+    ctx: QueryCtx,
     request: Doc<"agentOperationRequests">,
 ) {
     const cause = await readOperationCause(
@@ -245,7 +250,7 @@ async function requestAtAdmission(
     };
 }
 async function authority(
-    ctx: MutationCtx,
+    ctx: QueryCtx,
     request: Doc<"agentOperationRequests">,
     expectedGeneration: number,
 ) {
@@ -271,7 +276,8 @@ async function authority(
             request.status !== "completed" ||
             !request.knownNotDispatched ||
             request.outcome?.kind !== "refused" ||
-            request.outcome.code !== "invalid_operation_input"
+            request.outcome.code !==
+                (request.input.refusalCode ?? "invalid_operation_input")
         )
             throw executionError("invalid_operation_input");
         return {
@@ -421,7 +427,9 @@ export async function persistOperationRequest(
     let operation: AgentOperationDefinition | undefined;
     try {
         if (args.input.kind === "invalid")
-            throw executionError("invalid_operation_input");
+            throw executionError(
+                args.input.refusalCode ?? "invalid_operation_input",
+            );
         operation = operationFor(args.input, mission);
         if (operation.systemOnly && args.actor !== "system")
             throw executionError("operation_not_allowed");
@@ -1490,5 +1498,44 @@ export const stageObservationText = internalMutation({
             throw executionError("operation_not_dispatched");
         await stageOperationObservation(ctx, request._id, args.fragment);
         return null;
+    },
+});
+
+/** Reads an engaged scheduled operation under the same generation and instruction authority as settlement. */
+export const readScheduledInput = internalQuery({
+    args: {
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+    },
+    returns: v.object({
+        input: requestInputValidator,
+        pin: operationPinValidator,
+        binding: v.optional(
+            v.object({ id: agentDefinitionIdValidator, version: v.number() }),
+        ),
+    }),
+    handler: async (ctx, args) => {
+        const request = await ctx.db.get(args.requestId);
+        if (
+            !request ||
+            !operationHasStarted(request) ||
+            request.status === "completed"
+        )
+            throw executionError("operation_not_dispatched");
+        const admitted = await authority(ctx, request, args.expectedGeneration);
+        if (!admitted.operation?.scheduledAction || !request.pin)
+            throw executionError("operation_not_dispatched");
+        return {
+            input: request.input,
+            pin: request.pin,
+            ...(admitted.mission
+                ? {
+                      binding: {
+                          id: admitted.mission.definitionId,
+                          version: admitted.mission.definitionVersion,
+                      },
+                  }
+                : {}),
+        };
     },
 });

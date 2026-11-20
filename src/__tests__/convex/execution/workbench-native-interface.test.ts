@@ -25,6 +25,283 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+test("framing refusal guides a native correction of the scope without changing the questions", async () => {
+    const excerpt =
+        "Investigate estimate review after the latest announcement.";
+    const content = {
+        scope: excerpt,
+        questions: [
+            {
+                id: "bypass",
+                shortLabel: "Bypass",
+                text: "Which dependencies constrain bypass?",
+                rationale: "Examine workflow dependencies.",
+            },
+        ],
+    };
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        undefined,
+        excerpt,
+        undefined,
+        5,
+    );
+    vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
+    const requests: string[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url, init) => {
+            requests.push(String(init.body));
+            if (requests.length === 1)
+                return toolReply("adjust_framing", {
+                    eventBasis: { kind: "open", activityExcerpt: excerpt },
+                    content: {
+                        ...content,
+                        scope: "Estimate-review resilience following an announcement.",
+                    },
+                });
+            if (requests.length === 2) {
+                expect(requests[1]).toContain("content.scope");
+                expect(requests[1]).toContain("verbatim");
+                return toolReply("adjust_framing", {
+                    eventBasis: { kind: "open", activityExcerpt: excerpt },
+                    content,
+                });
+            }
+            if (requests.length === 3)
+                return reply(
+                    "The provisional program is saved. Which announcement do you mean?",
+                );
+            throw new Error(
+                "Unexpected generation after the framing correction",
+            );
+        }),
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 120);
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 2,
+        content,
+    });
+    const history = await client.query(
+        api.execution.conversations.listMessages,
+        { runId, paginationOpts: { numItems: 20, cursor: null } },
+    );
+    expect(
+        history.page
+            .filter((message) => message.role === "assistant")
+            .map((message) => message.text),
+    ).toEqual([
+        "The provisional program is saved. Which announcement do you mean?",
+    ]);
+    const operations = await t.run((ctx) =>
+        ctx.db.query("agentOperationRequests").collect(),
+    );
+    expect(
+        operations
+            .filter((operation) => operation.input.kind === "adjust_framing")
+            .map((operation) => operation.outcome?.kind),
+    ).toEqual(["refused", "success"]);
+    expect(
+        (await t.run((ctx) => ctx.db.get(runId)))?.researchStartedAt,
+    ).toBeUndefined();
+});
+
+test.each([
+    false,
+    true,
+])("initial prose refusal continues natively to one saved provisional program (lookup unavailable: %s)", async (unavailable) => {
+    const original =
+        "Investigate estimate review after the latest announcement.";
+    const content = {
+        scope: original,
+        questions: [
+            {
+                id: "control",
+                shortLabel: "Control",
+                text: "Who can change validation rules?",
+                rationale: "Locate workflow authority.",
+            },
+        ],
+    };
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 1, readings: 1 }),
+    );
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        undefined,
+        original,
+        undefined,
+        6,
+    );
+    vi.stubEnv("EXA_API_KEY", "");
+    const originalMessage = await t.run((ctx) =>
+        ctx.db
+            .query("agentMessageDeliveries")
+            .filter((q) => q.eq(q.field("runId"), runId))
+            .first(),
+    );
+    assert(originalMessage);
+    const before = await t.run((ctx) => ctx.db.get(runId));
+    vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
+    const requests: string[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url, init) => {
+            requests.push(String(init.body));
+            expect(requests[0]).toContain(
+                new Date(originalMessage.createdAt).toISOString(),
+            );
+            expect(requests[0]).toContain(
+                "An activityExcerpt must be copied verbatim",
+            );
+            expect(requests[0]).toContain(
+                "Never substitute the latest dated announcement",
+            );
+            expect(requests[0]).toContain('"focus"');
+            if (unavailable && requests.length === 1)
+                return toolReply("search_public_context", {
+                    query: "latest announcement",
+                });
+            const step = requests.length - (unavailable ? 1 : 0);
+            if (step === 1)
+                return reply(
+                    "I propose investigating who controls validation. Which announcement do you mean?",
+                );
+            if (step === 2) {
+                expect(requests.at(-1)).toContain("framing_program_required");
+                expect(requests.at(-1)).toContain("adjust_framing");
+                expect(requests.at(-1)).toContain(original);
+                return toolReply("adjust_framing", {
+                    eventBasis: { kind: "open", activityExcerpt: original },
+                    content,
+                });
+            }
+            if (step === 3)
+                return reply(
+                    "The provisional program is saved. Which announcement do you mean?",
+                );
+            throw new Error(
+                "Unexpected generation after initial completion correction",
+            );
+        }),
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 120);
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 2,
+        content,
+    });
+    const history = await client.query(
+        api.execution.conversations.listMessages,
+        { runId, paginationOpts: { numItems: 20, cursor: null } },
+    );
+    expect(
+        history.page
+            .filter((message) => message.role === "assistant")
+            .map((message) => message.text),
+    ).toEqual([
+        "The provisional program is saved. Which announcement do you mean?",
+    ]);
+    if (unavailable) {
+        const operations = await t.run((ctx) =>
+            ctx.db.query("agentOperationRequests").collect(),
+        );
+        expect(operations).toContainEqual(
+            expect.objectContaining({
+                outcome: { kind: "unavailable", code: "missing_configuration" },
+            }),
+        );
+    }
+    const invocations = await t.run((ctx) =>
+        ctx.db.query("agentInvocations").collect(),
+    );
+    expect(invocations).toContainEqual(
+        expect.objectContaining({
+            correction: expect.objectContaining({
+                code: "framing_program_required",
+            }),
+        }),
+    );
+    const run = await t.run((ctx) => ctx.db.get(runId));
+    expect(run?.reservationStatus).toBe(before?.reservationStatus);
+    expect(run?.researchStartedAt).toBeUndefined();
+    expect(run?.fixedFramingRevisionId).toBeUndefined();
+});
+
+test("exhausted cumulative work budget blocks initial correction without publishing prose", async () => {
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        undefined,
+        "Investigate insurer estimate review.",
+        undefined,
+        6,
+    );
+    vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
+    const provider = vi.fn(async () => {
+        await t.run(async (ctx) => {
+            const mission = await ctx.db
+                .query("agentMissions")
+                .filter((q) => q.eq(q.field("runId"), runId))
+                .first();
+            const run = await ctx.db.get(runId);
+            assert(mission && run?.sourcePreparationBudget);
+            const budget = run.sourcePreparationBudget;
+            assert(budget.reserved > 0);
+            const priorWork =
+                mission.modelLimits.work - budget.work - budget.reserved;
+            await ctx.db.patch(runId, {
+                sourcePreparationBudget: {
+                    ...budget,
+                    work: budget.work + priorWork,
+                    dispatches: budget.dispatches + priorWork,
+                },
+            });
+        });
+        return reply("I propose examining insurer validation rights.");
+    });
+    vi.stubGlobal("fetch", provider);
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 120);
+    const mission = await t.run((ctx) =>
+        ctx.db
+            .query("agentMissions")
+            .filter((q) => q.eq(q.field("runId"), runId))
+            .first(),
+    );
+    expect(mission).toMatchObject({
+        status: "blocked",
+        blockCode: "work_budget_exhausted",
+    });
+    expect(provider).toHaveBeenCalledTimes(1);
+    const invocations = await t.run((ctx) =>
+        ctx.db.query("agentInvocations").collect(),
+    );
+    expect(invocations).toContainEqual(
+        expect.objectContaining({
+            correction: expect.objectContaining({
+                code: "framing_program_required",
+            }),
+        }),
+    );
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 1,
+        content: { scope: "", questions: [] },
+    });
+    expect(
+        (
+            await client.query(api.execution.conversations.listMessages, {
+                runId,
+                paginationOpts: { numItems: 20, cursor: null },
+            })
+        ).page.filter((message) => message.role === "assistant"),
+    ).toEqual([]);
+    expect(
+        (await t.run((ctx) => ctx.db.get(runId)))?.researchStartedAt,
+    ).toBeUndefined();
+});
+
 test("a direct analyst edit survives stale output and a fresh conflicting tool proposal in the same native conversation", async () => {
     const { t, client, runId } = await seedWorkbench(
         false,
@@ -373,7 +650,7 @@ test("native Workbench retains its active question and recorded document dates t
         .filter((message: { role: string }) => message.role === "tool")
         .at(-1);
     const value = JSON.parse(result.content).value;
-    expect(value.document).toEqual({
+    expect(value.document).toMatchObject({
         title: "Annual filing",
         publishedAt: 1771891200000,
         date: "2026-02-24T00:00:00.000Z",
@@ -2048,13 +2325,24 @@ test("Workbench reads public context before Start and pins a dated passage to th
                         expectedGeneration: 1,
                     }),
                 ).toEqual(observed.outcome);
-                expect(JSON.parse(observed.outcome.valueJson)).toEqual({
+                expect(JSON.parse(observed.outcome.valueJson)).toMatchObject({
                     status: "observed",
                     references: [
                         {
                             url,
                             excerpt,
                             publisher: "93.184.216.34",
+                            dates: {
+                                publication: {
+                                    status: "known",
+                                    evidence: [
+                                        {
+                                            value: "2025-04-16",
+                                            precision: "day",
+                                        },
+                                    ],
+                                },
+                            },
                             publishedAt: Date.parse(publishedDate),
                         },
                     ],
@@ -2662,7 +2950,9 @@ test("selected publication replay reaches the native repetition stop without rep
     expect(generations).toBeLessThan(12);
 }, 30000);
 
-test("independent read provenance saves two adopted passages and exposes the canonical draft before replying", async () => {
+test.each([
+    5, 6,
+] as const)("independent read provenance saves two adopted passages and exposes the canonical draft before replying (v%s)", async (version) => {
     vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
     vi.stubEnv("EXA_API_KEY", "fixture-only");
     vi.stubEnv(
@@ -2837,7 +3127,7 @@ test("independent read provenance saves two adopted passages and exposes the can
         60000,
         "Investigate estimate review following the recent validation-rights announcement.",
         undefined,
-        5,
+        version,
     );
     await fixture.t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
@@ -3921,4 +4211,181 @@ test("provisional estimate review refuses a missing conditional basis before any
     expect(
         await fixture.client.query(api.framing.get, { runId: fixture.runId }),
     ).toMatchObject({ revision: 1 });
+}, 30000);
+
+test("malformed public readId feedback guides v6 native recovery without dropping public reading associations", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv(
+        "WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE",
+        JSON.stringify({ searches: 2, readings: 2 }),
+    );
+    const scope =
+        "Can insurers bypass CCC during estimate review after the latest announcement?";
+    const common = {
+        id: "common",
+        shortLabel: "Review control",
+        text: "Which estimate-review dependencies bind insurers to CCC?",
+        rationale: "Check common workflow control.",
+    };
+    const conditional = {
+        id: "deal",
+        shortLabel: "Take-private effect",
+        text: "could ownership changes alter insurer switching incentives?",
+        rationale: "Check announcement impact.",
+    };
+    const hypothesis = "the latest announcement is the October 15 deal";
+    let call = 0;
+    let searchId = "";
+    let readId = "";
+    const errors: unknown[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+            if (String(url).endsWith("/search"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "deal-lead",
+                            url: "https://example.com/deal",
+                            title: "CCC take-private coverage",
+                            publishedDate: "2026-10-15",
+                        },
+                    ],
+                });
+            if (String(url).endsWith("/contents"))
+                return Response.json({
+                    results: [
+                        {
+                            id: "deal-lead",
+                            url: "https://example.com/deal",
+                            text: "Illustrative passage: CCC announced a take-private transaction on October 15, 2026.",
+                        },
+                    ],
+                });
+            try {
+                const request = JSON.parse(String(init?.body));
+                call++;
+                if (call === 1)
+                    return toolReply("search_public_context", {
+                        query: "CCC estimate review announcement",
+                    });
+                const lastTool = JSON.parse(
+                    request.messages
+                        .filter((m: { role: string }) => m.role === "tool")
+                        .at(-1).content,
+                );
+                if (call === 2) {
+                    expect(lastTool.kind).toBe("success");
+                    searchId = lastTool.value.searchId;
+                    return toolReply("read_public_context", {
+                        target: { kind: "candidate", searchId, index: 0 },
+                    });
+                }
+                if (call === 3) {
+                    expect(lastTool.kind).toBe("success");
+                    readId = lastTool.value.readId;
+                    return toolReply("adjust_framing", {
+                        content: {
+                            scope,
+                            questions: [common, conditional],
+                        },
+                        eventBasis: {
+                            kind: "open",
+                            activityExcerpt: "estimate review",
+                            conditions: [
+                                {
+                                    questionId: conditional.id,
+                                    hypothesis,
+                                    basis: {
+                                        kind: "public",
+                                        readIds: [readId.slice(0, 18)],
+                                    },
+                                },
+                            ],
+                        },
+                    });
+                }
+                if (call === 4) {
+                    expect(lastTool).toMatchObject({
+                        kind: "refused",
+                        code: "invalid_operation_input",
+                        validation: {
+                            path: "eventBasis.conditions[0].basis.readIds[0]",
+                            expected: "Id<agentOperationRequests>",
+                        },
+                    });
+                    expect(lastTool.diagnostic).toContain("readIds");
+                    return toolReply("adjust_framing", {
+                        content: {
+                            scope,
+                            questions: [common, conditional],
+                        },
+                        eventBasis: {
+                            kind: "open",
+                            activityExcerpt: "estimate review",
+                            conditions: [
+                                {
+                                    questionId: conditional.id,
+                                    hypothesis,
+                                    basis: {
+                                        kind: "public",
+                                        readIds: [readId],
+                                    },
+                                },
+                            ],
+                        },
+                    });
+                }
+                expect(lastTool.kind).toBe("success");
+                return reply(
+                    "The provisional estimate-review program is saved with the cited reading. Which announcement did you mean?",
+                );
+            } catch (error) {
+                errors.push(error);
+                throw error;
+            }
+        }),
+    );
+    const fixture = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        60000,
+        scope,
+        undefined,
+        6,
+    );
+    await fixture.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    if (errors.length) throw errors[0];
+    expect(call).toBe(5);
+    const saved = await fixture.client.query(api.framing.get, {
+        runId: fixture.runId,
+    });
+    expect(saved).toMatchObject({
+        revision: 2,
+        content: {
+            scope,
+            questions: [
+                common,
+                {
+                    ...conditional,
+                    text: `If ${hypothesis}, ${conditional.text}`,
+                },
+            ],
+        },
+        eventBasis: {
+            kind: "open",
+            activityExcerpt: "estimate review",
+            conditions: [
+                {
+                    questionId: conditional.id,
+                    hypothesis,
+                    basis: { kind: "public", readIds: [readId] },
+                },
+            ],
+        },
+    });
 }, 30000);

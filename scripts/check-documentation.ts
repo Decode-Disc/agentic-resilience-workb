@@ -363,7 +363,12 @@ function checkLink(path: string, content: string, link: Link) {
 try {
     const rules = readPolicy();
     collect("", rules, true);
-    for (const directory of ["context", "docs", "scripts/evaluations"]) {
+    for (const directory of [
+        "context",
+        "docs",
+        "scripts/evaluations",
+        "agent-skills",
+    ]) {
         if (existsSync(resolve(root, directory))) collect(directory, rules);
     }
     for (const rule of rules.filter(

@@ -12,6 +12,7 @@ import { operationSuccess } from "@convex/execution/operationResults";
 import { exaDiscoveryDisposition } from "@convex/integrations/exa";
 import { validateExaCandidates } from "@convex/integrations/exaCandidateValidation";
 import { configuredExaHttpDiscovery } from "@convex/integrations/exaSearchClient";
+import { sourcesReplayCandidates } from "@convex/qualificationSourceReplay";
 import { SOURCE_PUBLIC_ADDRESS_TIMEOUT_MS } from "@convex/resourcePolicy";
 import { simulatedSourceCandidate } from "@convex/sourcesSimulation";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
@@ -33,8 +34,12 @@ export async function discoverForNeed(
             code: "discovery_reservation_unavailable",
         };
     const { query } = discovery;
-    const searchExa = simulation ? undefined : configuredExaHttpDiscovery();
-    if (!simulation && !searchExa)
+    const replay = await ctx.runQuery(internal.qualificationSourceReplay.read, {
+        runId: preparation.runId,
+    });
+    const frozen = simulation || replay !== null;
+    const searchExa = frozen ? undefined : configuredExaHttpDiscovery();
+    if (!frozen && !searchExa)
         return {
             kind: "unavailable",
             code: "missing_configuration",
@@ -62,7 +67,7 @@ export async function discoverForNeed(
     );
     if (!searchLimit)
         return { kind: "refused", code: "source_candidate_limit" };
-    const claimed = simulation
+    const claimed = frozen
         ? null
         : await ctx.runMutation(internal.providerCalls.recordAttempt, {
               ...attempt,
@@ -78,14 +83,16 @@ export async function discoverForNeed(
     try {
         const found = !searchExa
             ? {
-                  candidates: [simulatedSourceCandidate(preparation.runId)],
+                  candidates: replay
+                      ? sourcesReplayCandidates(replay)
+                      : [simulatedSourceCandidate(preparation.runId)],
                   rejected: 0,
                   costDollars: 0,
                   searchTime: 0,
               }
             : await searchExa(query, searchLimit);
         responseReceived = true;
-        if (!simulation)
+        if (!frozen)
             await ctx.runMutation(internal.providerCalls.recordAttempt, {
                 ...attempt,
                 status: "succeeded",
@@ -104,7 +111,7 @@ export async function discoverForNeed(
         const validated = await validateExaCandidates(
             found.candidates.slice(0, searchLimit),
             async (hostname) =>
-                simulation
+                frozen
                     ? ["93.184.216.34"]
                     : (
                           await lookup(hostname, {
@@ -120,7 +127,7 @@ export async function discoverForNeed(
             rejected,
         );
         if (disposition === "failed") {
-            if (!simulation)
+            if (!frozen)
                 await ctx.runMutation(internal.providerCalls.recordAttempt, {
                     ...attempt,
                     status: "failed",
@@ -141,6 +148,10 @@ export async function discoverForNeed(
                 code: "invalid_provider_response",
             };
         }
+        if (replay)
+            await ctx.runQuery(internal.qualificationSourceReplay.read, {
+                runId: preparation.runId,
+            });
         const persisted = await ctx.runMutation(
             internal.sourceDiscovery.persistCandidates,
             {
@@ -179,7 +190,7 @@ export async function discoverForNeed(
             },
         );
     } catch (error) {
-        if (!simulation && !responseReceived)
+        if (!frozen && !responseReceived)
             await ctx.runMutation(internal.providerCalls.recordAttempt, {
                 ...attempt,
                 status: "failed",

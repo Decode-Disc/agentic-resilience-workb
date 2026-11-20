@@ -46,6 +46,8 @@ type AgentOperationContract = {
     systemOnly?: true;
     /** A successful result can restore exact retained material after a refusal, without inventing progress. */
     materialRead?: true;
+    /** A newly admitted successful context page can inform the next action without claiming domain progress. Replayed pages do not defer repetition settlement. */
+    contextRead?: true;
     identity(context: {
         mission?: Doc<"agentMissions">;
         runId: Id<"researchRuns">;
@@ -314,6 +316,7 @@ export const requestInputValidator = v.union(
         kind: v.literal("invalid"),
         name: v.string(),
         inputJson: v.string(),
+        refusalCode: v.optional(v.string()),
         validation: v.optional(validationFeedbackValidator),
     }),
 );

@@ -6,6 +6,7 @@ import { SOURCE_COVERAGE_ROLES } from "@convex/domain/sourceSelectionPolicy";
 import { workflow } from "@convex/workflow";
 import "@convex/sourcePreparationActions";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { streamingModelFetch } from "@/__tests__/setup/model-stream";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 import workflowTest from "./workflow-test-register.js";
@@ -36,7 +37,7 @@ test("the source-actions plan journals one reading action and replays without an
         }),
     );
     const request = vi.fn<typeof fetch>(async () => uncertainResponse());
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const handle = await t.run((ctx) =>
         workflow.start(ctx, prepareWorkflow, { preparationId }),
     );
@@ -101,7 +102,7 @@ test("a source qualifies while another source is still being inspected", async (
         qualifiedBeforeInspectionFinished ||= inspectionPending;
         return uncertainResponse();
     });
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const handle = await t.run((ctx) =>
         workflow.start(ctx, prepareWorkflow, { preparationId }),
     );
@@ -312,7 +313,7 @@ test.each([
         }
         return uncertainResponse();
     });
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const handle = await t.run((ctx) =>
         workflow.start(ctx, prepareWorkflow, { preparationId }),
     );
@@ -359,7 +360,7 @@ test.each([
         await capturedWorkflowCandidate();
     await t.run((ctx) => ctx.db.patch(preparationId, { executionPlanVersion }));
     const request = vi.fn<typeof fetch>(async () => uncertainResponse());
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const handle = await t.run((ctx) =>
         workflow.start(ctx, prepareWorkflow, { preparationId }),
     );
@@ -685,7 +686,7 @@ test.each([
             limitations: [],
         });
     });
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
 
     const handle = await t.run((ctx) =>
         workflow.start(ctx, prepareWorkflow, { preparationId }),
@@ -866,7 +867,7 @@ test("legacy preparation journal without a comparison snapshot skips comparison 
             limitations: [],
         }),
     );
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
 
     const handle = await t.run((ctx) =>
         workflow.start(ctx, prepareWorkflow, { preparationId }),
@@ -928,7 +929,7 @@ test.each([
         );
         return uncertainResponse();
     });
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const handle = await t.run((ctx) =>
         workflow.start(ctx, prepareWorkflow, { preparationId }),
     );
@@ -957,7 +958,7 @@ test("missing model configuration stops before acquisition and preserves an unap
     const request = vi.fn<typeof fetch>(async () => {
         throw new Error("Unexpected external request");
     });
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const { t, runId, corpusRevisionId } = await seedSourcePreparation({
         models: true,
     });
@@ -1061,7 +1062,7 @@ test("reads existing candidates before one three-search supplement and replay ca
         }
         throw new Error("Unexpected external boundary");
     });
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const handle = await t.run((ctx) =>
         workflow.start(ctx, prepareWorkflow, { preparationId }),
     );
@@ -1180,7 +1181,7 @@ test.each([
         }
         vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "1");
         const request = vi.fn<typeof fetch>(async () => uncertainResponse());
-        vi.stubGlobal("fetch", request);
+        vi.stubGlobal("fetch", streamingModelFetch(request));
         const handle = await t.run((ctx) =>
             workflow.start(ctx, prepareWorkflow, { preparationId }),
         );
@@ -1261,7 +1262,7 @@ test("a controlled documentary workflow retains an engaged model result across P
         });
         return uncertainResponse();
     });
-    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("fetch", streamingModelFetch(request));
     const handle = await t.run((ctx) =>
         workflow.start(ctx, prepareWorkflow, {
             preparationId,

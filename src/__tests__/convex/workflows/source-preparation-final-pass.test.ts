@@ -1,3 +1,4 @@
+import { providerFixtureResponse } from "@/__tests__/setup/model-stream";
 import { internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { SOURCE_QUALIFICATION_VERSION } from "@convex/domain/sourceQualification";
@@ -179,7 +180,7 @@ test.each([
             order.push("comparison");
             const body = JSON.parse(String(init?.body));
             const prompt = JSON.parse(body.messages.at(-1).content);
-            return Response.json({
+            return providerFixtureResponse({
                 id: "final-pass-response",
                 created: 1,
                 model: "fixture-model",

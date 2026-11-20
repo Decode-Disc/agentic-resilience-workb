@@ -46,6 +46,7 @@ export type AgentProgressMission = WithoutAccounting<Doc<"agentMissions">>;
 
 /** Definitions supply business rules; only the executor can change lifecycle or accounting. */
 export type AgentDefinition = {
+    skills?: import("./agentSkillContracts").AgentSkillBinding;
     id: AgentScope["kind"];
     identity: AgentIdentityId;
     version: number;

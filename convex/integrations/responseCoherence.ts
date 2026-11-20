@@ -4,14 +4,95 @@ import {
     RESPONSE_CONTROL_LIMITS,
     validCoherenceScores,
 } from "@convex/domain/workbenchResponseControlContracts";
-import { resolveGenerationAuthority } from "@convex/resourcePolicy";
+import {
+    MODEL_MAX_INPUT_PRICE_PER_MILLION,
+    RESPONSE_CONTROL_METADATA_TIMEOUT_MS,
+    resolveGenerationAuthority,
+} from "@convex/resourcePolicy";
 import { createBoundedModelFetch, readReportedCost } from "./modelTransport";
 
 const DECISIONS_ENDPOINT = "https://openrouter.ai/api/alpha/decisions";
+const DECISIONS_MODELS_CATALOGUE_URL =
+    "https://openrouter.ai/api/v1/models?output_modalities=decisions";
+const CONTROLLER_MODEL_PATTERN = /^[\w~.-]+\/[\w.-]+$/;
 function record(value: unknown): Record<string, unknown> | undefined {
     return value !== null && typeof value === "object" && !Array.isArray(value)
         ? (value as Record<string, unknown>)
         : undefined;
+}
+
+/** Verifies a response-controller model against OpenRouter's Decisions catalogue without inference. */
+export async function verifyResponseControlModel(args: {
+    model: string;
+    timeoutMs?: number;
+    fetch?: typeof fetch;
+}): Promise<
+    | { ok: true; model: string; contextWindowTokens: number }
+    | {
+          ok: false;
+          reason: "model_not_compatible" | "configuration_unavailable";
+      }
+> {
+    if (!CONTROLLER_MODEL_PATTERN.test(args.model))
+        return { ok: false, reason: "model_not_compatible" };
+    try {
+        const fetchCatalogue = createBoundedModelFetch(
+            { fetch: args.fetch },
+            { responseTooLarge: false },
+        );
+        const timeoutMs = Math.min(
+            RESPONSE_CONTROL_METADATA_TIMEOUT_MS,
+            args.timeoutMs ?? RESPONSE_CONTROL_METADATA_TIMEOUT_MS,
+        );
+        const response = await fetchCatalogue(DECISIONS_MODELS_CATALOGUE_URL, {
+            signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!response.ok)
+            return { ok: false, reason: "configuration_unavailable" };
+        const catalogue: unknown = await response.json();
+        const entries =
+            catalogue &&
+            typeof catalogue === "object" &&
+            "data" in catalogue &&
+            Array.isArray(catalogue.data)
+                ? catalogue.data
+                : [];
+        const matched: unknown = entries.find(
+            (m: unknown) =>
+                m && typeof m === "object" && "id" in m && m.id === args.model,
+        );
+        const pricing =
+            matched && typeof matched === "object" && "pricing" in matched
+                ? matched.pricing
+                : undefined;
+        const contextWindow =
+            matched &&
+            typeof matched === "object" &&
+            "context_length" in matched
+                ? matched.context_length
+                : undefined;
+        if (
+            typeof contextWindow !== "number" ||
+            !Number.isSafeInteger(contextWindow) ||
+            contextWindow < 1 ||
+            !pricing ||
+            typeof pricing !== "object" ||
+            !("prompt" in pricing) ||
+            !("completion" in pricing) ||
+            !Number.isFinite(Number(pricing.prompt)) ||
+            Number(pricing.prompt) < 0 ||
+            Number(pricing.prompt) * 1e6 > MODEL_MAX_INPUT_PRICE_PER_MILLION ||
+            Number(pricing.completion) !== 0
+        )
+            return { ok: false, reason: "model_not_compatible" };
+        return {
+            ok: true,
+            model: args.model,
+            contextWindowTokens: contextWindow,
+        };
+    } catch {
+        return { ok: false, reason: "configuration_unavailable" };
+    }
 }
 /** One native request, using the shared bounded HTTP reader and no provider pin or retry. */
 export async function checkResponseCoherence(args: {

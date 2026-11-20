@@ -218,10 +218,12 @@ test("links to the former Progress view open Overview, keeping their History ali
     expect(workspaceSearch({ section: "progress" })).toEqual({
         section: "overview",
     });
-    expect(workspaceSearch({ section: "progress", detail: "timeline" })).toEqual(
-        { section: "overview", detail: "timeline" },
+    expect(
+        workspaceSearch({ section: "progress", detail: "timeline" }),
+    ).toEqual({ section: "overview", detail: "timeline" });
+    expect(workspaceSearch({ section: "sources", detail: "timeline" })).toEqual(
+        {
+            section: "sources",
+        },
     );
-    expect(workspaceSearch({ section: "sources", detail: "timeline" })).toEqual({
-        section: "sources",
-    });
 });

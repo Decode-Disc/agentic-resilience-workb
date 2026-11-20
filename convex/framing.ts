@@ -25,6 +25,11 @@ import { activatedSourcesEnvelope } from "@convex/domain/sources";
 import { SOURCES_COVERAGE_VERSION } from "@convex/domain/sourcesContracts";
 import { coveragePresetValidator } from "@convex/domain/validators";
 import {
+    INITIAL_FRAMING_MESSAGE_KEY,
+    supportsDirectedFraming,
+    supportsFramingContractCorrections,
+} from "@convex/domain/workbenchContracts";
+import {
     requireDossierAuthority,
     requireMissionAuthority,
 } from "@convex/execution/authority";
@@ -102,7 +107,7 @@ export async function initializeFraming(
     }
     await submitAuthorizedMessage(ctx, {
         runId: run._id,
-        requestKey: "framing-intention",
+        requestKey: INITIAL_FRAMING_MESSAGE_KEY,
         ...(modelSelection ? { initialModel: modelSelection } : {}),
         text:
             run.researchAngle ??
@@ -399,7 +404,7 @@ export const applyFromWorkbench = internalMutation({
         )
             proposedBasis = currentRevision.eventBasis;
         if (
-            mission.definitionVersion === 5 &&
+            supportsDirectedFraming(mission.definitionVersion) &&
             proposedBasis?.kind === "open" &&
             proposedBasis.activityExcerpt === undefined &&
             proposedBasis.conditions === undefined &&
@@ -415,15 +420,16 @@ export const applyFromWorkbench = internalMutation({
         }
         if (
             proposedBasis?.kind === "open" &&
-            mission.definitionVersion !== 5 &&
+            !supportsDirectedFraming(mission.definitionVersion) &&
             (proposedBasis.activityExcerpt !== undefined ||
                 proposedBasis.conditions !== undefined)
         )
             throw executionError("framing_event_basis_invalid");
         if (
             proposedBasis?.kind === "open" &&
-            mission.definitionVersion === 5 &&
-            (proposedBasis.activityExcerpt !== undefined ||
+            supportsDirectedFraming(mission.definitionVersion) &&
+            (supportsFramingContractCorrections(mission.definitionVersion) ||
+                proposedBasis.activityExcerpt !== undefined ||
                 proposedBasis.conditions !== undefined ||
                 currentRevision.content.scope.trim())
         ) {
@@ -434,8 +440,6 @@ export const applyFromWorkbench = internalMutation({
                 mission,
                 request,
                 messageId: causingMessageId,
-                company:
-                    run.companySnapshot?.legalName ?? "the selected company",
             });
             content = prepared.content;
             proposedBasis = prepared.basis;
@@ -473,7 +477,13 @@ export const applyFromWorkbench = internalMutation({
                 !proposedBasis.excerpt.trim() ||
                 !message.text.includes(proposedBasis.excerpt)
             )
-                throw executionError("framing_event_basis_invalid");
+                throw executionError("framing_event_basis_invalid", [
+                    {
+                        path: "eventBasis.excerpt",
+                        expected:
+                            "Copy a nonblank exact excerpt identifying the event from the active analyst message; otherwise keep the event open or use adopted public readings.",
+                    },
+                ]);
             eventBasis = { ...proposedBasis, messageId: message.messageId };
         } else if (proposedBasis?.kind === "public") {
             eventBasis = await validateFramingPublicBasis(ctx, {

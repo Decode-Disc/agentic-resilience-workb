@@ -1,6 +1,8 @@
 "use node";
 
+import { executionError } from "@convex/execution/errors";
 import { browserModelMetadata } from "@convex/fixtures/browserModelMetadata";
+import { verifyResponseControlModel as verifyDecisionsModel } from "@convex/integrations/responseCoherence";
 import {
     MODEL_CATALOG_MAX_ENDPOINTS,
     MODEL_CATALOG_MAX_RESPONSE_BYTES,
@@ -255,6 +257,27 @@ export const prepare = action({
     args: modelPreparationInput.fields,
     returns: result,
     handler: prepareModel,
+});
+
+/** Verifies a response-controller model against OpenRouter's Decisions catalogue before campaign admission. */
+export const verifyResponseControlModel = action({
+    args: { model: v.string() },
+    returns: v.object({
+        model: v.string(),
+        contextWindowTokens: v.number(),
+    }),
+    handler: async (
+        ctx,
+        { model },
+    ): Promise<{ model: string; contextWindowTokens: number }> => {
+        await ctx.runQuery(internal.modelConfiguration.authorize, {});
+        const verified = await verifyDecisionsModel({ model });
+        if (!verified.ok) throw executionError(verified.reason);
+        return {
+            model: verified.model,
+            contextWindowTokens: verified.contextWindowTokens,
+        };
+    },
 });
 
 async function refreshRevision(

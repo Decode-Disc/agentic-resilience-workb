@@ -52,6 +52,7 @@ import {
     publishTurn,
     requireInstructionVersion,
 } from "./conversations";
+import { executionFailureValidation } from "./errors";
 import {
     HISTORICAL_AGENT_BACKEND,
     invocationReplyValidator,
@@ -1332,6 +1333,8 @@ export const finish = internalMutation({
                         operationInputFeedback(
                             definition.completionValidator,
                             error,
+                            args.response,
+                            ctx.db,
                         ),
                     ],
                 });
@@ -1402,6 +1405,10 @@ export const finish = internalMutation({
             let canonical = definition.nativeConversation
                 ? normalizeNativeHistoryInput(request.name, decoded)
                 : decoded;
+            let normalizationRefusal: string | undefined;
+            let normalizationValidation:
+                | { path: string; expected: string }
+                | undefined;
             if (definition.normalizeOperationInput) {
                 const operation = modelOperations[request.name];
                 if (
@@ -1417,7 +1424,11 @@ export const finish = internalMutation({
                             snapshot,
                         );
                     } catch (error) {
-                        if (!executionFailureCode(error)) throw error;
+                        const code = executionFailureCode(error);
+                        if (!code) throw error;
+                        normalizationRefusal = code;
+                        normalizationValidation =
+                            executionFailureValidation(error);
                         canonical = null;
                     }
                 }
@@ -1429,7 +1440,8 @@ export const finish = internalMutation({
                 !("kind" in canonical)
                     ? { ...canonical, kind: request.name }
                     : null;
-            let validation: { path: string; expected: string } | undefined;
+            let validation: { path: string; expected: string } | undefined =
+                normalizationValidation;
             const operation = modelOperations[request.name];
             let fieldsValid = !!operation;
             if (operation) {
@@ -1444,6 +1456,8 @@ export const finish = internalMutation({
                     validation = operationInputFeedback(
                         operation.inputValidator,
                         error,
+                        decoded,
+                        ctx.db,
                     );
                 }
             }
@@ -1461,6 +1475,9 @@ export const finish = internalMutation({
                               kind: "invalid" as const,
                               name: request.name,
                               inputJson: request.inputJson,
+                              ...(normalizationRefusal
+                                  ? { refusalCode: normalizationRefusal }
+                                  : {}),
                               ...(validation ? { validation } : {}),
                           },
                 }),
@@ -1502,6 +1519,15 @@ function invocationProgressSettlement(
         mission.definitionId,
         mission.definitionVersion,
     );
+    const consultedContext =
+        requests.length > 0 &&
+        requests.every(
+            (request) =>
+                request.outcome?.kind === "success" &&
+                !request.adoptionRefusalCode &&
+                request.invocationId === invocation._id &&
+                definition.operations[request.input.kind]?.contextRead,
+        );
     const restored =
         !!mission.recoveryRead &&
         !mission.recoveryRead.restorationInvocationId &&
@@ -1531,7 +1557,8 @@ function invocationProgressSettlement(
               }
             : (mission.recoveryRead ??
               (refusal ? { refusalInvocationId: invocation._id } : undefined));
-    let noProgressTurns = mission.noProgressTurns + (restored ? 0 : 1);
+    let noProgressTurns =
+        mission.noProgressTurns + (restored || consultedContext ? 0 : 1);
     // Prior consultations must not stop the first completion refusal before its feedback can be used.
     if (rejectedCompletion && !mission.recoveryRead)
         noProgressTurns = Math.min(noProgressTurns, MAX_NO_PROGRESS_TURNS - 1);

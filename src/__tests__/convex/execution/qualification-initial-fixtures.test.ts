@@ -35,6 +35,7 @@ import {
     nativeTextReply,
     nativeToolReply,
 } from "@/__tests__/setup/pi-native";
+import { methodComparisonManifest } from "@/__tests__/setup/qualification-method-comparison";
 import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
 import {
     activateSourcesMission,
@@ -73,9 +74,14 @@ async function fixture(
     )[] = [undefined],
     framingRequest?: { text: string; receivedAt: string },
     framingReplay?: QualificationScenario["framingReplay"],
+    taskMethods?: "retained_control" | "native_skills",
+    company?: QualificationScenario["company"],
 ) {
     const f = await seedWorkbench(true);
-    const raw = configurableCampaign();
+    const raw = taskMethods
+        ? methodComparisonManifest()
+        : configurableCampaign();
+    const configurationId = taskMethods?.replaceAll("_", "-") ?? "first";
     const baseline = raw.scenarios[0];
     assert(baseline);
     if (framingReplay?.case === "nvidia")
@@ -85,6 +91,7 @@ async function fixture(
             ticker: "NVDA",
             websiteUrl: "https://www.nvidia.com",
         };
+    if (company) baseline.company = company;
     const scenarios = presets.map((coveragePreset) => ({
         ...baseline,
         ...(framingReplay
@@ -139,7 +146,9 @@ async function fixture(
     const manifest = campaignManifestSchema.parse({
         ...raw,
         mode: "deterministic",
-        configurations: raw.configurations.slice(0, 1),
+        configurations: taskMethods
+            ? raw.configurations
+            : raw.configurations.slice(0, 1),
         scenarios,
         expectations: scenarios.map((scenario) => ({
             id: scenario.id,
@@ -156,6 +165,7 @@ async function fixture(
     const lotId = await f.t.mutation(internal.qualificationCampaigns.admit, {
         campaignId,
         key: "first",
+        configurationId,
         candidateHash: "b".repeat(64),
         changedPaths: [],
     });
@@ -201,7 +211,13 @@ async function fixture(
         scenarioId: string;
     }[];
     try {
-        await prepareCampaignScenarios(client, root, manifest, lotId, "first");
+        await prepareCampaignScenarios(
+            client,
+            root,
+            manifest,
+            lotId,
+            configurationId,
+        );
         const prepared = JSON.parse(
             readFileSync(join(root, "prepared.json"), "utf8"),
         );
@@ -876,14 +892,22 @@ test("original Nvidia request reaches the first native dispatch with an empty pr
     );
 });
 
-test.each([
-    ["nvidia", "balanced"],
-    ["ccc", "balanced"],
-    ["ccc", "first_party_depth"],
-    ["ccc", "independent_scrutiny"],
-    ["lookupUnavailable", "balanced"],
-    ["insufficientDatedSupport", "balanced"],
-] as const)("bound campaign replay supplies actual framing operations without network (%s, %s)", async (replayCase, preset) => {
+test.each(
+    (
+        [
+            ["nvidia", "balanced"],
+            ["ccc", "balanced"],
+            ["ccc", "first_party_depth"],
+            ["ccc", "independent_scrutiny"],
+            ["lookupUnavailable", "balanced"],
+            ["insufficientDatedSupport", "balanced"],
+        ] as const
+    ).flatMap(([replayCase, preset]) =>
+        (["retained_control", "native_skills"] as const).map(
+            (methods) => [replayCase, preset, methods] as const,
+        ),
+    ),
+)("bound campaign replay supplies actual framing operations without network (%s, %s, %s)", async (replayCase, preset, methods) => {
     const path = resolve(
         "scripts/evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json",
     );
@@ -907,6 +931,7 @@ test.each([
             receivedAt: "2026-11-18T09:00:00.000Z",
         },
         replay,
+        methods,
     );
     await f.t.mutation(internal.execution.fixtures.activateWorkbench, {
         runId: f.runId,
@@ -1063,3 +1088,197 @@ test.each([
         ),
     ).toEqual([]);
 });
+
+test("paired Sources fixture pins both agents before preparation and reads native resources", async () => {
+    const { getAgentDefinition } = await import(
+        "@convex/execution/agentCatalog"
+    );
+    const { agentToolSchemas } = await import(
+        "@convex/execution/agentDefinition"
+    );
+    const { buildMissionContext } = await import("@convex/execution/context");
+    const f = await fixture(
+        "sources_correction",
+        undefined,
+        undefined,
+        undefined,
+        "retained_control",
+    );
+    const state = await f.t.mutation(
+        internal.qualificationInitialFixtureSetup.seed,
+        f.args,
+    );
+    const mission = await f.t.run((ctx) => ctx.db.get(state.missionId));
+    expect(mission?.definitionVersion).toBe(6);
+    const conversation = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .unique(),
+    );
+    expect(conversation?.definitionVersion).toBe(8);
+    const control = getAgentDefinition("sources_v1", 6);
+    const treatment = getAgentDefinition("sources_v1", 5);
+    expect(control.context).toBe(treatment.context);
+    expect(control.instructions).toContain(
+        "Prepare each shared need by selecting relevant sources",
+    );
+    expect(control.instructions).not.toContain("<available_skills>");
+    const context = await f.t.run((ctx) =>
+        buildMissionContext(ctx, state.missionId, state.generation),
+    );
+    assert(context.kind === "ready");
+    expect(agentToolSchemas(control, JSON.parse(context.inputJson))).toEqual(
+        agentToolSchemas(treatment, JSON.parse(context.inputJson)),
+    );
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: state.missionId,
+            expectedGeneration: state.generation,
+            cause: "read-control-method",
+            input: {
+                kind: "read",
+                path: "/agent-skills/research-methods-v1/source-preparation/SKILL.md",
+            },
+        },
+    );
+    await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: state.generation,
+    });
+    await f.t.action(internal.integrations.agentSkillReader.execute, {
+        requestId,
+        expectedGeneration: state.generation,
+    });
+    const request = await f.t.run((ctx) => ctx.db.get(requestId));
+    expect(request?.status).toBe("completed");
+    assert(request?.outcome?.kind === "success");
+    expect(JSON.parse(request.outcome.valueJson)).toMatchObject({
+        packageId: "research-methods-v1",
+        resourceHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        text: expect.stringContaining("#"),
+    });
+    expect(
+        await f.t.run((ctx) =>
+            ctx.db
+                .query("providerCalls")
+                .withIndex("by_run", (q) => q.eq("runId", f.runId))
+                .collect(),
+        ),
+    ).toEqual([]);
+});
+
+const frozenMethodCases: { scenarios: QualificationScenario[] } = JSON.parse(
+    readFileSync(
+        "scripts/evaluations/workbench-browser/fixtures/native-task-methods-20261119/cases.json",
+        "utf8",
+    ),
+);
+for (const scenario of frozenMethodCases.scenarios.filter(
+    (s) => s.framingReplay,
+)) {
+    test.each([
+        "retained_control",
+        "native_skills",
+    ] as const)(`${scenario.id}: %s receives the frozen historical or held-out observations`, async (method) => {
+        assert(scenario.framingReplay && scenario.framingRequest);
+        const f = await fixture(
+            "sources_correction",
+            [scenario.coveragePreset],
+            scenario.framingRequest,
+            scenario.framingReplay,
+            method,
+            scenario.company,
+        );
+        await f.t.mutation(internal.execution.fixtures.activateWorkbench, {
+            runId: f.runId,
+            fixtureKey: f.args.fixtureKey,
+        });
+        const active = await f.t.mutation(
+            internal.execution.conversations.startTurn,
+            {
+                runId: f.runId,
+                definitionId: "workbench_v1",
+                scope: { kind: "workbench_v1" },
+                simulation: true,
+            },
+        );
+        assert(active);
+        const message = await f.t.run((ctx) =>
+            ctx.db
+                .query("agentMessageDeliveries")
+                .withIndex("by_turn", (q) => q.eq("turnId", active.turnId))
+                .first(),
+        );
+        assert(message);
+        const network = vi.fn<typeof fetch>(async () => {
+            throw new Error("Frozen case accessed network");
+        });
+        vi.stubGlobal("fetch", network);
+        const searchId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: active.missionId,
+                expectedGeneration: 1,
+                cause: "frozen-search",
+                input: {
+                    kind: "search_public_context",
+                    messageId: message._id,
+                    query: "announcement workflow and relevant event",
+                },
+            },
+        );
+        const searched = await f.t.action(
+            internal.execution.operations.dispatch,
+            { requestId: searchId, expectedGeneration: 1 },
+        );
+        if (scenario.framingReplay.unavailable)
+            expect(searched).toMatchObject({
+                kind: "unavailable",
+                code: "missing_configuration",
+            });
+        else {
+            assert(searched.kind === "success", JSON.stringify(searched));
+            expect(
+                JSON.parse(searched.valueJson).candidates.map(
+                    (c: { url: string }) => c.url,
+                ),
+            ).toEqual(scenario.framingReplay.documents.map((d) => d.url));
+            for (const [
+                index,
+                doc,
+            ] of scenario.framingReplay.documents.entries()) {
+                const requestId = await f.t.mutation(
+                    internal.execution.operations.enqueue,
+                    {
+                        missionId: active.missionId,
+                        expectedGeneration: 1,
+                        cause: "frozen-read",
+                        input: {
+                            kind: "read_public_context",
+                            messageId: message._id,
+                            target: { kind: "candidate", searchId, index },
+                        },
+                    },
+                );
+                const read = await f.t.action(
+                    internal.execution.operations.dispatch,
+                    { requestId, expectedGeneration: 1 },
+                );
+                assert(read.kind === "success", JSON.stringify(read));
+                const value = JSON.parse(read.valueJson);
+                expect(value.document.contentHash).toBe(sha256Hex(doc.text));
+                expect(value.document.characters).toBe(doc.text.length);
+                expect(doc.text).toContain(value.reference.excerpt);
+                expect(value.replayCorpusHash).toBe(
+                    scenario.framingReplay.materialHash,
+                );
+            }
+        }
+        expect(network).not.toHaveBeenCalled();
+        expect(
+            await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+        ).toEqual([]);
+    });
+}

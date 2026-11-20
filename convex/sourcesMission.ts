@@ -20,7 +20,7 @@ import {
 } from "@convex/domain/sourceSelectionPolicy";
 import {
     assertSourcesCompletionCapacity,
-    authorizeSourcesDiscovery,
+    authorizeDocumentaryDiscovery,
     controlledSourcesContributions,
     hasEngagedSourcesControl,
     initializeSources,
@@ -257,7 +257,10 @@ export const reserve = internalMutation({
         if (block) throw executionError(block);
         const discovery =
             input.kind === "discover_sources_for_need"
-                ? authorizeSourcesDiscovery(data.coveragePolicy, input)
+                ? authorizeDocumentaryDiscovery(
+                      data.coveragePolicy?.preset,
+                      input,
+                  )
                 : undefined;
         const capacity =
             input.kind === "discover_sources_for_need"

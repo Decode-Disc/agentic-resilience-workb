@@ -34,10 +34,8 @@ import {
 import {
     GIT_METADATA_TIMEOUT_MS,
     RESOURCE_POLICY_VERSION,
-    REVIEW_CACHED_RESPONSE_MAX_CHARACTERS,
     REVIEW_EVIDENCE_POLICY,
     REVIEW_REPORT_MAX_BYTES,
-    REVIEW_WIRE_RESPONSE_MAX_BYTES,
     resolveGenerationAuthority,
     QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
 } from "../../../convex/resourcePolicy.ts";
@@ -171,115 +169,6 @@ function sanitizeTransportError(error: unknown, secrets: readonly string[]) {
             : {}),
         message: sanitizeDiagnosticText(message, secrets, 512),
         causeHash: sha256(`${name}\n${message}`),
-    };
-}
-
-function summarizePartialSse(
-    chunks: readonly Uint8Array[],
-    secrets: readonly string[],
-): ReviewDispatchDiagnostic["sseSummary"] {
-    if (chunks.length === 0) return undefined;
-    const decoded = new TextDecoder("utf-8", { fatal: false }).decode(
-        Buffer.concat(chunks),
-    );
-    let lastEventType: string | undefined;
-    let responseId: string | undefined;
-    let responseStatus: string | undefined;
-    let completedUsageSeen = false;
-    let providerError:
-        | { type?: string; code?: string; message?: string }
-        | undefined;
-    const extractError = (candidate: unknown) => {
-        if (
-            !candidate ||
-            typeof candidate !== "object" ||
-            Array.isArray(candidate)
-        )
-            return;
-        const record = candidate as Record<string, unknown>;
-        const type =
-            typeof record.type === "string"
-                ? sanitizeDiagnosticText(record.type, secrets, 80)
-                : undefined;
-        const code =
-            typeof record.code === "string"
-                ? sanitizeDiagnosticText(record.code, secrets, 80)
-                : undefined;
-        const message =
-            typeof record.message === "string"
-                ? sanitizeDiagnosticText(record.message, secrets, 512)
-                : undefined;
-        if (type || code || message)
-            providerError = {
-                ...(type ? { type } : {}),
-                ...(code ? { code } : {}),
-                ...(message ? { message } : {}),
-            };
-    };
-    for (const raw of decoded.split("\n")) {
-        const line = raw.trimEnd();
-        if (line.startsWith("event: ")) {
-            const eventName = line.slice(7).trim();
-            if (eventName)
-                lastEventType = sanitizeDiagnosticText(eventName, secrets, 80);
-            continue;
-        }
-        if (!line.startsWith("data: ")) continue;
-        const data = line.slice(6).trim();
-        if (data === "[DONE]") {
-            lastEventType = "DONE";
-            continue;
-        }
-        let frame: unknown;
-        try {
-            frame = JSON.parse(data);
-        } catch {
-            continue;
-        }
-        if (!frame || typeof frame !== "object" || Array.isArray(frame))
-            continue;
-        const record = frame as Record<string, unknown>;
-        if (typeof record.type === "string")
-            lastEventType = sanitizeDiagnosticText(record.type, secrets, 80);
-        if (
-            record.response &&
-            typeof record.response === "object" &&
-            !Array.isArray(record.response)
-        ) {
-            const resp = record.response as Record<string, unknown>;
-            if (typeof resp.id === "string")
-                responseId = sanitizeDiagnosticText(resp.id, secrets, 128);
-            if (typeof resp.status === "string")
-                responseStatus = sanitizeDiagnosticText(
-                    resp.status,
-                    secrets,
-                    80,
-                );
-            if (
-                (record.type === "response.completed" ||
-                    record.type === "response.incomplete") &&
-                resp.usage &&
-                typeof resp.usage === "object"
-            )
-                completedUsageSeen = true;
-            extractError(resp.error);
-        }
-        extractError(record.error);
-    }
-    if (
-        !lastEventType &&
-        !responseId &&
-        !responseStatus &&
-        !completedUsageSeen &&
-        !providerError
-    )
-        return undefined;
-    return {
-        ...(lastEventType ? { lastEventType } : {}),
-        ...(responseId ? { responseId } : {}),
-        ...(responseStatus ? { responseStatus } : {}),
-        completedUsageSeen,
-        ...(providerError ? { providerError } : {}),
     };
 }
 
@@ -492,9 +381,244 @@ const responseRecord = z
         requestHash: z.string().regex(/^[a-f0-9]{64}$/),
         status: z.number().int().min(200).max(599),
         contentType: z.string().max(200),
-        body: z.string().max(REVIEW_CACHED_RESPONSE_MAX_CHARACTERS),
+        body: z.string(),
     })
     .strict();
+
+function createSseStreamObserver(
+    secrets: readonly string[],
+    requireVerifiedUsage: boolean,
+) {
+    let lastEventType: string | undefined;
+    let responseId: string | undefined;
+    let responseStatus: string | undefined;
+    let completedUsageSeen = false;
+    let providerError:
+        | { type?: string; code?: string; message?: string }
+        | undefined;
+    let utf8Invalid = false;
+    let terminalReached = false;
+    let lastAcceptedLineBlank = false;
+    let pendingLineParts: Uint8Array[] = [];
+    const acceptedLines: Uint8Array[] = [];
+    const deferredPostTerminalLines: Uint8Array[] = [];
+
+    const extractError = (candidate: unknown) => {
+        if (
+            !candidate ||
+            typeof candidate !== "object" ||
+            Array.isArray(candidate)
+        )
+            return false;
+        const record = candidate as Record<string, unknown>;
+        const type =
+            typeof record.type === "string"
+                ? sanitizeDiagnosticText(record.type, secrets, 80)
+                : undefined;
+        const code =
+            typeof record.code === "string"
+                ? sanitizeDiagnosticText(record.code, secrets, 80)
+                : undefined;
+        const message =
+            typeof record.message === "string"
+                ? sanitizeDiagnosticText(record.message, secrets, 512)
+                : undefined;
+        if (!type && !code && !message) return false;
+        providerError = {
+            ...(type ? { type } : {}),
+            ...(code ? { code } : {}),
+            ...(message ? { message } : {}),
+        };
+        return true;
+    };
+
+    const inspectLineText = (rawLine: string) => {
+        const line = rawLine.trimEnd();
+        if (line.startsWith("event: ")) {
+            const eventName = line.slice(7).trim();
+            if (eventName)
+                lastEventType = sanitizeDiagnosticText(eventName, secrets, 80);
+            return { isBlank: false, isDone: false, isValidTerminal: false };
+        }
+        if (line === "")
+            return { isBlank: true, isDone: false, isValidTerminal: false };
+        if (!line.startsWith("data: "))
+            return { isBlank: false, isDone: false, isValidTerminal: false };
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") {
+            lastEventType = "DONE";
+            return { isBlank: false, isDone: true, isValidTerminal: false };
+        }
+        let frame: unknown;
+        try {
+            frame = JSON.parse(data);
+        } catch {
+            return { isBlank: false, isDone: false, isValidTerminal: false };
+        }
+        if (!frame || typeof frame !== "object" || Array.isArray(frame))
+            return { isBlank: false, isDone: false, isValidTerminal: false };
+        const record = frame as Record<string, unknown>;
+        if (typeof record.type === "string")
+            lastEventType = sanitizeDiagnosticText(record.type, secrets, 80);
+        let sawError = extractError(record.error);
+        let hasResponseObject = false;
+        if (
+            record.response &&
+            typeof record.response === "object" &&
+            !Array.isArray(record.response)
+        ) {
+            hasResponseObject = true;
+            const resp = record.response as Record<string, unknown>;
+            if (typeof resp.id === "string")
+                responseId = sanitizeDiagnosticText(resp.id, secrets, 128);
+            if (typeof resp.status === "string")
+                responseStatus = sanitizeDiagnosticText(
+                    resp.status,
+                    secrets,
+                    80,
+                );
+            if (
+                (record.type === "response.completed" ||
+                    record.type === "response.incomplete") &&
+                resp.usage &&
+                typeof resp.usage === "object"
+            )
+                completedUsageSeen = true;
+            if (extractError(resp.error)) sawError = true;
+        }
+        const isTerminalType =
+            record.type === "response.completed" ||
+            record.type === "response.incomplete";
+        const isValidTerminal =
+            isTerminalType &&
+            !sawError &&
+            !utf8Invalid &&
+            (requireVerifiedUsage
+                ? apiUsageEventSchema.safeParse(frame).success
+                : hasResponseObject);
+        return { isBlank: false, isDone: false, isValidTerminal };
+    };
+
+    return {
+        pushChunk(chunk: Uint8Array, filterForSse200: boolean): Uint8Array[] {
+            if (!filterForSse200) {
+                acceptedLines.push(chunk);
+                return [chunk];
+            }
+            const toEmit: Uint8Array[] = [];
+            let lineStart = 0;
+            for (let i = 0; i < chunk.byteLength; i++) {
+                if (chunk[i] !== 0x0a) continue;
+                const slice = chunk.subarray(lineStart, i + 1);
+                const lineBytes =
+                    pendingLineParts.length === 0
+                        ? slice
+                        : new Uint8Array(
+                              Buffer.concat([...pendingLineParts, slice]),
+                          );
+                pendingLineParts = [];
+                lineStart = i + 1;
+                let decodedLine = "";
+                try {
+                    decodedLine = new TextDecoder("utf-8", {
+                        fatal: true,
+                    }).decode(lineBytes);
+                } catch {
+                    utf8Invalid = true;
+                    terminalReached = false;
+                }
+                const info = utf8Invalid
+                    ? { isBlank: false, isDone: false, isValidTerminal: false }
+                    : inspectLineText(decodedLine);
+                if (!terminalReached) {
+                    acceptedLines.push(lineBytes);
+                    toEmit.push(lineBytes);
+                    lastAcceptedLineBlank = info.isBlank;
+                    if (info.isValidTerminal) terminalReached = true;
+                } else if (
+                    (info.isBlank || info.isDone) &&
+                    deferredPostTerminalLines.length === 0
+                ) {
+                    acceptedLines.push(lineBytes);
+                    toEmit.push(lineBytes);
+                    lastAcceptedLineBlank = info.isBlank;
+                } else {
+                    deferredPostTerminalLines.push(lineBytes);
+                }
+            }
+            if (lineStart < chunk.byteLength)
+                pendingLineParts.push(chunk.subarray(lineStart));
+            return toEmit;
+        },
+        flushNormalEnd(): Uint8Array[] {
+            const flushed: Uint8Array[] = [];
+            for (const line of deferredPostTerminalLines) {
+                acceptedLines.push(line);
+                flushed.push(line);
+            }
+            deferredPostTerminalLines.length = 0;
+            if (pendingLineParts.length > 0) {
+                const tail = new Uint8Array(Buffer.concat(pendingLineParts));
+                pendingLineParts = [];
+                try {
+                    const text = new TextDecoder("utf-8", {
+                        fatal: true,
+                    }).decode(tail);
+                    inspectLineText(text);
+                } catch {
+                    utf8Invalid = true;
+                }
+                acceptedLines.push(tail);
+                flushed.push(tail);
+            }
+            return flushed;
+        },
+        canRecoverPostTerminal(isSse200: boolean, aborted: boolean) {
+            return (
+                !aborted &&
+                isSse200 &&
+                terminalReached &&
+                !utf8Invalid &&
+                !providerError
+            );
+        },
+        finalizePostTerminalRecovery(): Uint8Array[] {
+            if (lastAcceptedLineBlank) return [];
+            const newline = new Uint8Array([0x0a]);
+            acceptedLines.push(newline);
+            lastAcceptedLineBlank = true;
+            return [newline];
+        },
+        decodeAcceptedBody(): string {
+            return new TextDecoder("utf-8", { fatal: true }).decode(
+                Buffer.concat(acceptedLines),
+            );
+        },
+        summary(): ReviewDispatchDiagnostic["sseSummary"] {
+            if (pendingLineParts.length > 0) {
+                const tail = new TextDecoder("utf-8", { fatal: false }).decode(
+                    Buffer.concat(pendingLineParts),
+                );
+                inspectLineText(tail);
+            }
+            if (
+                !lastEventType &&
+                !responseId &&
+                !responseStatus &&
+                !completedUsageSeen &&
+                !providerError
+            )
+                return undefined;
+            return {
+                ...(lastEventType ? { lastEventType } : {}),
+                ...(responseId ? { responseId } : {}),
+                ...(responseStatus ? { responseStatus } : {}),
+                completedUsageSeen,
+                ...(providerError ? { providerError } : {}),
+            };
+        },
+    };
+}
 
 /** Connects native Pi review to immutable campaign authority, observations and per-request accounting. */
 export async function runAccountableCampaignReview(options: {
@@ -736,7 +860,10 @@ export async function runAccountableCampaignReview(options: {
                     chunksRead: 0,
                 };
                 latestTransport = transportState;
-                const chunks: Uint8Array[] = [];
+                const observer = createSseStreamObserver(
+                    diagnosticSecrets,
+                    apiCost,
+                );
                 try {
                     const request = new Request(input, init);
                     const body = new Uint8Array(await request.arrayBuffer());
@@ -777,9 +904,10 @@ export async function runAccountableCampaignReview(options: {
                         : await transport.fetch(request.url, requestOptions);
                     transportState.phase = "response_headers";
                     transportState.httpStatus = response.status;
+                    const rawContentType =
+                        response.headers.get("content-type") ?? "";
                     transportState.contentType =
-                        response.headers.get("content-type")?.slice(0, 128) ??
-                        undefined;
+                        rawContentType.slice(0, 128) || undefined;
                     const requestId =
                         response.headers.get("x-request-id") ??
                         response.headers.get("openai-request-id");
@@ -789,58 +917,106 @@ export async function runAccountableCampaignReview(options: {
                             diagnosticSecrets,
                             128,
                         );
-                    if (response.body) {
-                        transportState.phase = "stream_read";
-                        const reader = response.body.getReader();
-                        try {
-                            for (;;) {
-                                const next = await reader.read();
-                                if (next.done) break;
-                                transportState.chunksRead++;
-                                transportState.bytesRead +=
-                                    next.value.byteLength;
-                                if (
-                                    transportState.bytesRead >
-                                    REVIEW_WIRE_RESPONSE_MAX_BYTES
-                                )
-                                    throw new Error(
-                                        "Analysis response limit exceeded",
-                                    );
-                                chunks.push(next.value);
-                            }
-                        } finally {
-                            await reader.cancel().catch(() => {});
-                        }
+                    const isSse200 =
+                        response.status === 200 &&
+                        rawContentType
+                            .toLowerCase()
+                            .includes("text/event-stream");
+                    const persistAcceptedResponse = () => {
+                        transportState.phase = "response_decode";
+                        const record = responseRecord.parse({
+                            purpose,
+                            requestHash,
+                            status: response.status,
+                            contentType: rawContentType,
+                            body: observer.decodeAcceptedBody(),
+                        });
+                        transportState.phase = "response_persist";
+                        writeFileSync(path, `${JSON.stringify(record)}\n`, {
+                            flag: "wx",
+                            mode: 0o600,
+                            flush: true,
+                        });
+                    };
+                    if (!response.body) {
+                        persistAcceptedResponse();
+                        return new Response("", {
+                            status: response.status,
+                            headers: { "content-type": rawContentType },
+                        });
                     }
-                    transportState.phase = "response_decode";
-                    const record = responseRecord.parse({
-                        purpose,
-                        requestHash,
+                    transportState.phase = "stream_read";
+                    const reader = response.body.getReader();
+                    const stream = new ReadableStream<Uint8Array>({
+                        async pull(controller) {
+                            try {
+                                for (;;) {
+                                    const next = await reader.read();
+                                    if (next.done) {
+                                        for (const part of observer.flushNormalEnd())
+                                            controller.enqueue(part);
+                                        persistAcceptedResponse();
+                                        await reader.cancel().catch(() => {});
+                                        controller.close();
+                                        return;
+                                    }
+                                    transportState.chunksRead++;
+                                    transportState.bytesRead +=
+                                        next.value.byteLength;
+                                    const emitted = observer.pushChunk(
+                                        next.value,
+                                        isSse200,
+                                    );
+                                    if (emitted.length > 0) {
+                                        for (const part of emitted)
+                                            controller.enqueue(part);
+                                        return;
+                                    }
+                                }
+                            } catch (error) {
+                                let streamError: unknown = error;
+                                await reader.cancel().catch(() => {});
+                                if (
+                                    observer.canRecoverPostTerminal(
+                                        isSse200,
+                                        Boolean(request.signal?.aborted),
+                                    )
+                                ) {
+                                    try {
+                                        for (const part of observer.finalizePostTerminalRecovery())
+                                            controller.enqueue(part);
+                                        persistAcceptedResponse();
+                                        controller.close();
+                                        return;
+                                    } catch (persistError) {
+                                        streamError = persistError;
+                                    }
+                                }
+                                transportState.transportError =
+                                    sanitizeTransportError(
+                                        streamError,
+                                        diagnosticSecrets,
+                                    );
+                                const sseSummary = observer.summary();
+                                if (sseSummary)
+                                    transportState.sseSummary = sseSummary;
+                                controller.error(streamError);
+                            }
+                        },
+                        async cancel() {
+                            await reader.cancel().catch(() => {});
+                        },
+                    });
+                    return new Response(stream, {
                         status: response.status,
-                        contentType: response.headers.get("content-type") ?? "",
-                        body: new TextDecoder("utf-8", {
-                            fatal: true,
-                        }).decode(Buffer.concat(chunks)),
-                    });
-                    transportState.phase = "response_persist";
-                    writeFileSync(path, `${JSON.stringify(record)}\n`, {
-                        flag: "wx",
-                        mode: 0o600,
-                        flush: true,
-                    });
-                    return new Response(record.body, {
-                        status: record.status,
-                        headers: { "content-type": record.contentType },
+                        headers: { "content-type": rawContentType },
                     });
                 } catch (error) {
                     transportState.transportError = sanitizeTransportError(
                         error,
                         diagnosticSecrets,
                     );
-                    const sseSummary = summarizePartialSse(
-                        chunks,
-                        diagnosticSecrets,
-                    );
+                    const sseSummary = observer.summary();
                     if (sseSummary) transportState.sseSummary = sseSummary;
                     throw error;
                 }

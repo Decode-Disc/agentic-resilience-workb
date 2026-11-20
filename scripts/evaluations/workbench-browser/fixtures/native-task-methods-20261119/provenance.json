@@ -1,0 +1,77 @@
+{
+    "preparedAt": "2026-11-19T22:31:22.397024+00:00",
+    "provenance": [
+        {
+            "id": "rd7967z5pp3y9afzb8pf0sbhjs8jhjst",
+            "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000082/nvda-20250409.htm",
+            "sha256": "196c4b1d8b3da706f4047dea94e7ef343a6b281bb368859006fbc4a3746977a3",
+            "characters": 5043,
+            "origin": "Retained local Convex operation observation from framing-harness-requalification-20261119; full bytes verified against original contentHash",
+            "acquisitionCompleteness": "complete"
+        },
+        {
+            "id": "rd7bp7c9vz0rkxgeq5x2f9s6ah8jh4ya",
+            "url": "https://ir.cccis.com/news-releases/news-release-details/ccc-launches-cccr-intelligent-reinspection-help-auto-insurers",
+            "sha256": "b9a0bbf40b28f822a58cf8687a9c1919c09e3f0780b41fd85c6d34ef687a3281",
+            "characters": 6559,
+            "origin": "Retained local Convex operation observation from framing-harness-requalification-20261119; full bytes verified against original contentHash",
+            "acquisitionCompleteness": "unknown"
+        },
+        {
+            "id": "rd75jg1cg79qyw1m2zt4w83tq98jgwve",
+            "url": "https://ir.cccis.com/node/10861/pdf",
+            "sha256": "51eb97e9efb8d1d86f7a66fccd5894ab829a630552d15f602f02e86173aaa259",
+            "characters": 29857,
+            "origin": "Retained local Convex operation observation from framing-harness-requalification-20261119; full bytes verified against original contentHash",
+            "acquisitionCompleteness": "unknown"
+        },
+        {
+            "id": "rd79zq7d63sejsmme9tq3043s18jg6p0",
+            "url": "https://www.cccis.com/news-and-insights/posts/ccc-intelligent-solutions-signs-definitive-agreement-to-be-acquired-by-gtcr-and-elliott",
+            "sha256": "a11838c180fc5e4cb09a3c4e97adaea76f20c88fd807e4810d547314c9d851ca",
+            "characters": 16106,
+            "origin": "Retained local Convex operation observation from framing-harness-requalification-20261119; full bytes verified against original contentHash",
+            "acquisitionCompleteness": "unknown"
+        },
+        {
+            "id": "rd7en6hjnnkh240shskf24gy0h8jh9x7",
+            "url": "https://www.collisionrepairmag.com/news/collision-repair/market-trends/article/16425631/ccc-debt-drive-ccc-buyout-may-push-interest-payments-up",
+            "sha256": "2fa06650e38983eca9a1c6ddd2a6a72547d7d17498a205a403cf25a468b78dfa",
+            "characters": 3609,
+            "origin": "Retained local Convex operation observation from framing-harness-requalification-20261119; full bytes verified against original contentHash",
+            "acquisitionCompleteness": "unknown"
+        },
+        {
+            "id": "rd74tef4ydk3w51tsstcjr80pn8jhyhy",
+            "url": "https://www.cccis.com/news-and-insights/posts/ccc-launches-intelligent-reinspection",
+            "sha256": "0e18d1dcbb4325da78446434d45f8ded0b02556bb40a280554773b02c0d568b1",
+            "characters": 7564,
+            "origin": "Retained local Convex operation observation from framing-harness-requalification-20261119; full bytes verified against original contentHash",
+            "acquisitionCompleteness": "unknown"
+        },
+        {
+            "id": "adobe-analysis",
+            "url": "https://drillr.ai/research/adbe-adobe-thesis-2026-firefly-premium-tier-tests-ai-monetization-against-genai",
+            "sha256": "23b86416417669988fce4348a34ef7ddf9337c53fe619b52d5f5ec4f17bfea69",
+            "origin": "scripts/evaluations/source-selection/fixtures/cross-company-20261020/captures/adobe-analysis.txt",
+            "capturedAt": "2026-10-20T20:51:21.553Z",
+            "publishedAtBasis": "Explicit publication label in captured article"
+        },
+        {
+            "id": "adobe-news",
+            "url": "https://techcrunch.com/2026/06/18/adobe-adds-its-ai-assistant-to-premiere-illustrator-and-indesign/",
+            "sha256": "faaede9720ded6489d6749d8544207bee271925ae0e651504d3eafed6b324067",
+            "origin": "scripts/evaluations/source-selection/fixtures/cross-company-20261020/captures/adobe-news.txt",
+            "capturedAt": "2026-10-20T20:51:22.906Z",
+            "publishedAtBasis": "Explicit publication label in captured article"
+        }
+    ],
+    "transformations": {
+        "historical": "Union of all six actual retained read observations; search result selection is now a common frozen corpus, not replay of the historical search index. Full document bytes are unchanged.",
+        "sourcesComplete": "Complete means all retained normalized capture bytes, not independently verified completeness of the original publisher document. Historical acquisition completeness remains unknown.",
+        "partial": "Issuer release truncated immediately before the paragraph beginning Using AI-powered analysis. The remainder is intentionally inaccessible, with partial acquisition metadata.",
+        "syndication": "Two issuer publication surfaces of the same 2024 reinspection announcement; independent Collision Repair Mag reporting concerns 2026 financing, not independent verification of review outcomes.",
+        "interruption": "Normal research pause after first retained capture; pending customer retrieval is a declared synthetic unavailable URL. Captures before pause depend on the model, so missing retention or missing unfinished work is not a passing case.",
+        "heldout": "Adobe documents were captured in an earlier source-selection study; they are held out from the task-method teaching examples, not globally unseen research material."
+    }
+}

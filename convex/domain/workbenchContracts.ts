@@ -1,4 +1,5 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import { documentDatesValidator } from "@convex/domain/documentDates";
 import { approvalActionValidator } from "@convex/execution/approvalContracts";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -9,6 +10,7 @@ import {
     legacyFramingEventBasisInput,
 } from "./framingContracts";
 import { coverageRoleValidator } from "./sourceDiscoveryRecovery";
+import { discoveryFocus } from "./sourcesContracts";
 import {
     responseReviewInput,
     responseReviewPin,
@@ -192,6 +194,9 @@ export const publicContextInput = v.object({
     messageId: v.id("agentMessageDeliveries"),
     query: v.string(),
 });
+export const publicSearchInput = publicContextInput.extend({
+    focus: v.optional(discoveryFocus),
+});
 export const publicReadInput = v.object({
     continuation: v.optional(v.id("agentOperationRequests")),
     messageId: v.id("agentMessageDeliveries"),
@@ -229,6 +234,7 @@ export const publicReadResultValidator = v.object({
             excerpt: v.string(),
             publishedAt: v.optional(v.string()),
             eventAt: v.optional(v.string()),
+            dates: v.optional(documentDatesValidator),
         }),
     ),
 });
@@ -253,6 +259,7 @@ export const publicContextResultValidator = v.object({
             excerpt: v.string(),
             publishedAt: v.optional(v.number()),
             eventAt: v.optional(v.number()),
+            dates: v.optional(documentDatesValidator),
         }),
     ),
 });
@@ -310,7 +317,7 @@ export const workbenchSchemas = {
         }),
         v.object({
             kind: v.literal("search_public_context"),
-            ...publicContextInput.fields,
+            ...publicSearchInput.fields,
         }),
         v.object({
             kind: v.literal("verify_public_context"),
@@ -374,3 +381,15 @@ export const workbenchInstructionTransmissionStatus = v.union(
     v.literal("limited"),
     v.literal("blocked"),
 );
+
+export const INITIAL_FRAMING_MESSAGE_KEY = "framing-intention";
+
+/** Versions with separate public search/read and provisional framing provenance. */
+export function supportsDirectedFraming(version: number): boolean {
+    return version === 5 || version === 6 || version === 7 || version === 8;
+}
+
+/** Versions explicitly preserving the corrected framing completion and discovery contract. */
+export function supportsFramingContractCorrections(version: number): boolean {
+    return version === 6 || version === 7 || version === 8;
+}

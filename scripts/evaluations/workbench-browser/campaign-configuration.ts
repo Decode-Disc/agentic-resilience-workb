@@ -42,7 +42,7 @@ export async function prepareCampaignModels(
         ? [campaignConfiguration(manifest, configurationId)]
         : campaignConfigurations(manifest);
     const prepared = [];
-    for (const profile of profiles)
+    for (const profile of profiles) {
         for (const role of campaignModelRoles(manifest)) {
             const choice = profile.models[role];
             assert(choice);
@@ -52,6 +52,18 @@ export async function prepareCampaignModels(
                 ...(await prepareQualificationModel(client, choice)),
             });
         }
+        if (profile.controllerModel) {
+            const controller = await client.action(
+                api.modelConfigurationActions.verifyResponseControlModel,
+                { model: profile.controllerModel },
+            );
+            prepared.push({
+                configurationId: profile.id,
+                role: "controller" as const,
+                ...controller,
+            });
+        }
+    }
     return prepared;
 }
 
@@ -135,6 +147,11 @@ export async function configureCampaign(
     }
     const current = await client.query(api.modelConfiguration.list, {});
     const policy = current.responseControl;
+    if (profile.controllerModel)
+        await client.action(
+            api.modelConfigurationActions.verifyResponseControlModel,
+            { model: profile.controllerModel },
+        );
     if (
         policy.enabled !== !!profile.controllerModel ||
         (profile.controllerModel && policy.model !== profile.controllerModel)

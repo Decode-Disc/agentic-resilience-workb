@@ -4,6 +4,7 @@ import { savedMaterialSchemas } from "@convex/domain/savedMaterialOperations";
 import { sourcesSchemas } from "@convex/domain/sourcesContracts";
 import { workbenchSchemas } from "@convex/domain/workbenchContracts";
 import { v } from "convex/values";
+import { skillReadOperationInput, skillReadPin } from "./agentSkillContracts";
 import { historyReadPinValidator } from "./operationContracts";
 
 // Pure schema registration stays independent of runtime bindings and generated function types.
@@ -39,6 +40,7 @@ export const consultConversationInputValidator = v.object({
 });
 export const consultRunStateInputValidator = v.object({});
 export const operationInputValidator = v.union(
+    skillReadOperationInput,
     v.object({
         kind: v.literal("consult_conversation"),
         ...consultConversationInputValidator.fields,
@@ -54,6 +56,7 @@ export const operationInputValidator = v.union(
     ...registeredSchemas.map((schema) => schema.operation),
 );
 export const operationPinValidator = v.union(
+    skillReadPin,
     historyReadPinValidator,
     v.object({ kind: v.literal("run_state"), stateHash: v.string() }),
     v.object({ kind: v.literal("mission_history") }),

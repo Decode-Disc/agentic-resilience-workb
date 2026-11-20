@@ -15,8 +15,10 @@ import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import {
     activatedSourcesEnvelope,
+    initializeSources,
     readSourcesMission,
 } from "@convex/domain/sources";
+import { INITIAL_FRAMING_MESSAGE_KEY } from "@convex/domain/workbenchContracts";
 import { initializeFraming } from "@convex/framing";
 import {
     agentInputByteLength,
@@ -34,6 +36,10 @@ import {
     qualificationReasoningSelection,
 } from "@convex/modelConfigurationSchema";
 import { requireQualifiedBrowserMission } from "@convex/providerCalls";
+import {
+    retainedMethodVersion,
+    taskMethodDefinitionVersion,
+} from "@convex/qualificationAgentMethods";
 import { campaignConfiguration } from "@convex/qualificationCampaignPolicy";
 import { requireCampaignLot } from "@convex/qualificationCampaigns";
 import {
@@ -970,7 +976,17 @@ export const authorizeWorkbenchQualification = internalMutation({
                 !sourcesModel
             )
                 throw new Error("Invalid Sources qualification lot");
-            const definition = getAgentDefinition("sources_v1");
+            const definition = getAgentDefinition(
+                "sources_v1",
+                configurable &&
+                    scope &&
+                    campaignConfiguration(
+                        configurable,
+                        scope.lot.configurationId,
+                    ).taskMethods === "retained_control"
+                    ? retainedMethodVersion("sources_v1")
+                    : undefined,
+            );
             for (const operations of definition.nativeToolSets?.(
                 definition.operations,
             ) ?? [agentToolSchemas(definition)]) {
@@ -1238,6 +1254,26 @@ export async function initialCampaignWorkbenchModel(
     return initialModel;
 }
 
+async function pinCampaignWorkbench(
+    ctx: MutationCtx,
+    run: Doc<"researchRuns">,
+) {
+    const version = await taskMethodDefinitionVersion(ctx, run, "workbench_v1");
+    if (version === undefined) return;
+    const conversation = await ctx.db
+        .query("agentConversations")
+        .withIndex("by_run", (q) => q.eq("runId", run._id))
+        .unique();
+    if (!conversation || conversation.definitionVersion === version) return;
+    const started = await ctx.db
+        .query("agentMissions")
+        .withIndex("by_run_and_status", (q) => q.eq("runId", run._id))
+        .first();
+    if (started || conversation.activeTurnId)
+        throw new Error("Fresh comparison conversation required");
+    await ctx.db.patch(conversation._id, { definitionVersion: version });
+}
+
 export const activateWorkbench = internalMutation({
     args: {
         runId: v.id("researchRuns"),
@@ -1267,7 +1303,10 @@ export const activateWorkbench = internalMutation({
             args.researchAngle !== framingRequest.text
         )
             throw new Error("Campaign framing request mismatch");
-        if (run.startMode === "framed") return run._id;
+        if (run.startMode === "framed") {
+            await pinCampaignWorkbench(ctx, run);
+            return run._id;
+        }
         if (run.workflowId)
             await workflow.cancel(ctx, run.workflowId as WorkflowId);
         await ctx.db.patch(run._id, {
@@ -1284,13 +1323,14 @@ export const activateWorkbench = internalMutation({
         });
         const initialModel = await initialCampaignWorkbenchModel(ctx, run);
         await initializeFraming(ctx, run._id, initialModel);
+        await pinCampaignWorkbench(ctx, run);
         if (framingRequest) {
             const delivery = await ctx.db
                 .query("agentMessageDeliveries")
                 .withIndex("by_run_and_key", (q) =>
                     q
                         .eq("runId", run._id)
-                        .eq("requestKey", "framing-intention"),
+                        .eq("requestKey", INITIAL_FRAMING_MESSAGE_KEY),
                 )
                 .unique();
             if (delivery?.status !== "queued" || delivery.turnId)
@@ -2408,5 +2448,188 @@ export const requestApprovalFixture = internalAction({
             },
         );
         return null;
+    },
+});
+
+/** Model-free local proof of the deployed native reader through the admitted operation lifecycle. */
+export const prepareSkillReadFixture = internalMutation({
+    args: {
+        fixtureKey: v.string(),
+        slotKey: v.optional(v.string()),
+        agent: v.optional(
+            v.union(v.literal("workbench"), v.literal("sources")),
+        ),
+        path: v.optional(v.string()),
+    },
+    returns: v.object({
+        runId: v.id("researchRuns"),
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+        snapshotHash: v.string(),
+    }),
+    handler: async (
+        ctx,
+        args,
+    ): Promise<{
+        runId: Id<"researchRuns">;
+        requestId: Id<"agentOperationRequests">;
+        expectedGeneration: number;
+        snapshotHash: string;
+    }> => {
+        const slotKey = args.slotKey ?? BROWSER_TEST_SLOT;
+        await requireBrowserTestOwner(ctx, slotKey);
+        const base = await ctx.runMutation(
+            internal.e2eFixtures.seedSourceReviewScenario,
+            { slotKey, fixtureKey: args.fixtureKey },
+        );
+        if (args.agent === "sources") {
+            const owned = await requireLocalFixtureRun(ctx, {
+                runId: base.runId,
+                fixtureKey: args.fixtureKey,
+            });
+            const envelope = activatedSourcesEnvelope();
+            if (!envelope)
+                throw new Error("Sources fixture envelope unavailable");
+            await ctx.db.patch(base.runId, {
+                lifecycleState: "corpus_approved",
+                executionStatus: "idle",
+                pauseReason: undefined,
+            });
+            const run = await ctx.db.get(base.runId);
+            if (!run) throw new Error("Fixture run required");
+            const generation = await claimCorpusApprovedRunExecution(ctx, {
+                visitor: owned.visitor,
+                run,
+                now: Date.now(),
+            });
+            await ctx.db.patch(base.runId, {
+                lifecycleState: "discovering_sources",
+                sourcesProtocol: "sources_mission_v1",
+                sourcesEnvelope: envelope,
+            });
+            const preparationId = await ctx.runMutation(
+                internal.sourcePreparation.claimForDiscovery,
+                {
+                    runId: base.runId,
+                    corpusRevisionId: base.corpusRevisionId,
+                    expectedExecutionGeneration: generation,
+                },
+            );
+            const data = await initializeSources(ctx, preparationId, envelope);
+            await ctx.db.patch(preparationId, { sourcesMission: data });
+            const missionId = await ctx.runMutation(
+                internal.execution.missions.start,
+                {
+                    runId: base.runId,
+                    expectedGeneration: generation,
+                    definitionId: "sources_v1",
+                    scope: { kind: "sources_v1", preparationId },
+                    requestKey: "native-skill-fixture",
+                },
+            );
+            const requestId = await ctx.runMutation(
+                internal.execution.operations.enqueue,
+                {
+                    missionId,
+                    expectedGeneration: generation,
+                    cause: "native-skill-fixture",
+                    input: {
+                        kind: "read",
+                        path:
+                            args.path ??
+                            "/agent-skills/research-methods-v1/source-preparation/SKILL.md",
+                    },
+                },
+            );
+            return {
+                runId: base.runId,
+                requestId,
+                expectedGeneration: generation,
+                snapshotHash: await skillFixtureSnapshot(ctx, base.runId),
+            };
+        }
+        await ctx.runMutation(internal.execution.fixtures.activateWorkbench, {
+            runId: base.runId,
+            fixtureKey: args.fixtureKey,
+        });
+        const turn = await ctx.runMutation(
+            internal.execution.conversations.startTurn,
+            {
+                runId: base.runId,
+                definitionId: "workbench_v1",
+                scope: { kind: "workbench_v1" },
+                simulation: true,
+            },
+        );
+        if (!turn) throw new Error("Fixture turn required");
+        const mission = await ctx.db.get(turn.missionId);
+        if (!mission) throw new Error("Fixture mission required");
+        const requestId = await ctx.runMutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: mission._id,
+                expectedGeneration: mission.generation,
+                cause: "native-skill-fixture",
+                input: {
+                    kind: "read",
+                    path:
+                        args.path ??
+                        "/agent-skills/research-methods-v1/workbench-framing/SKILL.md",
+                },
+            },
+        );
+        return {
+            runId: base.runId,
+            requestId,
+            expectedGeneration: mission.generation,
+            snapshotHash: await skillFixtureSnapshot(ctx, base.runId),
+        };
+    },
+});
+
+async function skillFixtureSnapshot(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+): Promise<string> {
+    const run = await ctx.db.get(runId);
+    if (!run) throw new Error("Fixture run required");
+    return sha256Hex(
+        stableStringify({
+            corpus: run.activeCorpusRevisionId
+                ? await ctx.db.get(run.activeCorpusRevisionId)
+                : null,
+            preparation: run.sourcePreparationId
+                ? await ctx.db.get(run.sourcePreparationId)
+                : null,
+            sources: await ctx.db
+                .query("sources")
+                .withIndex("by_run_and_url", (q) => q.eq("runId", runId))
+                .take(9),
+        }),
+    );
+}
+
+export const inspectSkillReadFixture = internalQuery({
+    args: {
+        runId: v.id("researchRuns"),
+        fixtureKey: v.string(),
+        requestId: v.id("agentOperationRequests"),
+    },
+    returns: v.object({ snapshotHash: v.string(), requestJson: v.string() }),
+    handler: async (
+        ctx,
+        args,
+    ): Promise<{ snapshotHash: string; requestJson: string }> => {
+        await requireLocalFixtureRun(ctx, args);
+        const request = await ctx.db.get(args.requestId);
+        const mission = request?.missionId
+            ? await ctx.db.get(request.missionId)
+            : null;
+        if (mission?.runId !== args.runId)
+            throw new Error("Fixture request required");
+        return {
+            snapshotHash: await skillFixtureSnapshot(ctx, args.runId),
+            requestJson: JSON.stringify(request),
+        };
     },
 });

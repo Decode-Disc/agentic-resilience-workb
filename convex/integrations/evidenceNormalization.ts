@@ -1,3 +1,8 @@
+import {
+    type DateEvidence,
+    documentDates,
+    unambiguousDocumentTime,
+} from "@convex/domain/documentDates";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { MAX_NORMALIZED_ARTIFACT_BYTES } from "@convex/resourcePolicy";
 
@@ -7,10 +12,10 @@ export const PDF_NORMALIZER_VERSION = "pdf-fixture-v1";
 export const QUALIFICATION_NORMALIZER_VERSION = "qualification-text-v1";
 
 /** Reads the publisher's explicit article publication metadata from the fetched HTML head. */
-export function extractHtmlPublicationTime(html: string): number | undefined {
+export function extractHtmlPublicationEvidence(html: string): DateEvidence[] {
     let inHead = false;
     let templateDepth = 0;
-    let publishedAt: number | undefined;
+    const evidence: DateEvidence[] = [];
     const tags =
         /<!--[\s\S]*?(?:-->|$)|<(script|style|title|noscript)(?=\s|\/?>)(?:"[^"]*"|'[^']*'|[^'"<>])*?>[\s\S]*?(?:<\/\1\s*>|$)|<\/?([a-z][\w:-]*)(?=\s|\/?>)(?:"[^"]*"|'[^']*'|[^'"<>])*?>/giu;
     for (const [tag, , name] of html.matchAll(tags)) {
@@ -23,11 +28,11 @@ export function extractHtmlPublicationTime(html: string): number | undefined {
         if (templateDepth) continue;
         switch (element) {
             case "head":
-                if (closing) return publishedAt;
+                if (closing) return evidence;
                 inHead = true;
                 break;
             case "body":
-                return publishedAt;
+                return evidence;
             case "meta": {
                 if (!inHead || closing) break;
                 const attributes = new Map<string, string>();
@@ -55,22 +60,40 @@ export function extractHtmlPublicationTime(html: string): number | undefined {
                     /^(\d{4}-\d{2}-\d{2})(?:T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-][0-2]\d:[0-5]\d))?$/u.exec(
                         value,
                     )?.[1];
-                if (!date) return undefined;
+                if (!date) break;
                 const day = Date.parse(date);
                 const timestamp = Date.parse(value);
                 if (
                     !Number.isFinite(timestamp) ||
                     !Number.isFinite(day) ||
-                    !new Date(day).toISOString().startsWith(`${date}T`) ||
-                    (publishedAt !== undefined && publishedAt !== timestamp)
+                    !new Date(day).toISOString().startsWith(`${date}T`)
                 )
-                    return undefined;
-                publishedAt = timestamp;
+                    break;
+                evidence.push({
+                    kind: "publication",
+                    value,
+                    precision: value.includes("T") ? "instant" : "day",
+                    origin: {
+                        kind: "metadata",
+                        label: "article:published_time",
+                        raw: value,
+                    },
+                });
                 break;
             }
         }
     }
-    return publishedAt;
+    return evidence;
+}
+
+/** Compatibility projection refuses conflicting explicit publication indications. */
+export function extractHtmlPublicationTime(html: string): number | undefined {
+    return unambiguousDocumentTime(
+        documentDates({
+            metadata: extractHtmlPublicationEvidence(html),
+            text: "",
+        }).publication,
+    );
 }
 
 export type NormalizedArtifact = {

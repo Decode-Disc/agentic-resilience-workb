@@ -1,5 +1,8 @@
 import { RESPONSE_CONTROL_LIMITS } from "@convex/domain/workbenchResponseControlContracts";
-import { checkResponseCoherence } from "@convex/integrations/responseCoherence";
+import {
+    checkResponseCoherence,
+    verifyResponseControlModel,
+} from "@convex/integrations/responseCoherence";
 import { expect, test, vi } from "vitest";
 import { modelAttemptAuthority } from "@/__tests__/setup/model-configuration";
 
@@ -113,4 +116,68 @@ test("native transport preserves probabilities and redacts accidental credential
         scores: { supported: 0.9 },
     });
     expect(result.rawResponseJson).not.toContain("test-key");
+});
+
+test("response-control model verification rejects non-Decisions models, invalid pricing, and catalogue outages", async () => {
+    const catalogueFetch = vi.fn(async (url: unknown) => {
+        expect(String(url)).toBe(
+            "https://openrouter.ai/api/v1/models?output_modalities=decisions",
+        );
+        return Response.json({
+            data: [
+                {
+                    id: "openrouter/decisions-ok",
+                    context_length: 32768,
+                    pricing: { prompt: "0.0000001", completion: "0" },
+                },
+                {
+                    id: "openrouter/decisions-paid-completion",
+                    context_length: 32768,
+                    pricing: { prompt: "0.0000001", completion: "0.000001" },
+                },
+                {
+                    id: "openrouter/decisions-over-price",
+                    context_length: 32768,
+                    pricing: { prompt: "0.0000002", completion: "0" },
+                },
+            ],
+        });
+    });
+    await expect(
+        verifyResponseControlModel({
+            model: "z-ai/glm-5.3-flash",
+            fetch: catalogueFetch,
+        }),
+    ).resolves.toEqual({ ok: false, reason: "model_not_compatible" });
+    await expect(
+        verifyResponseControlModel({
+            model: "openrouter/decisions-paid-completion",
+            fetch: catalogueFetch,
+        }),
+    ).resolves.toEqual({ ok: false, reason: "model_not_compatible" });
+    await expect(
+        verifyResponseControlModel({
+            model: "openrouter/decisions-over-price",
+            fetch: catalogueFetch,
+        }),
+    ).resolves.toEqual({ ok: false, reason: "model_not_compatible" });
+    await expect(
+        verifyResponseControlModel({
+            model: "openrouter/decisions-ok",
+            fetch: catalogueFetch,
+        }),
+    ).resolves.toEqual({
+        ok: true,
+        model: "openrouter/decisions-ok",
+        contextWindowTokens: 32768,
+    });
+    const outageFetch = vi.fn(
+        async () => new Response("unavailable", { status: 503 }),
+    );
+    await expect(
+        verifyResponseControlModel({
+            model: "openrouter/decisions-ok",
+            fetch: outageFetch,
+        }),
+    ).resolves.toEqual({ ok: false, reason: "configuration_unavailable" });
 });

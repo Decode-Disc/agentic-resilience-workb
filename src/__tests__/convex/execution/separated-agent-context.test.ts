@@ -469,10 +469,11 @@ test("all maximum-need accounting defects fit one correction without omitting af
     }
 });
 
-test("directed framing selects v5 by default while retaining explicit v4 resolution", () => {
+test("directed framing selects v7 by default while retaining explicit v4, v5 and v6 resolution", () => {
     const retained = getAgentDefinition("workbench_v1", 4);
     const directed = getAgentDefinition("workbench_v1", 5);
-    expect(getAgentDefinition("workbench_v1").version).toBe(5);
+    expect(getAgentDefinition("workbench_v1").version).toBe(7);
+    expect(getAgentDefinition("workbench_v1", 6).version).toBe(6);
     expect(directed.version).toBe(5);
     expect(directed.operations).toHaveProperty("search_public_context");
     expect(directed.operations).not.toHaveProperty("verify_public_context");

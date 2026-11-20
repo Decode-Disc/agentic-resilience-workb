@@ -28,6 +28,7 @@ import {
     resolveAgentModel,
 } from "@convex/modelConfiguration";
 import type { initialModelSelection } from "@convex/modelConfigurationSchema";
+import { taskMethodDefinitionVersion } from "@convex/qualificationAgentMethods";
 import {
     HISTORY_PAGE_SIZE,
     MAX_CONTEXT_BYTES,
@@ -368,7 +369,11 @@ export async function ensureDossierConversation(
                 ? {
                       definitionId: "workbench_v1" as const,
                       definitionVersion:
-                          getAgentDefinition("workbench_v1").version,
+                          (await taskMethodDefinitionVersion(
+                              ctx,
+                              run,
+                              "workbench_v1",
+                          )) ?? getAgentDefinition("workbench_v1").version,
                   }
                 : {}),
             runId: run._id,

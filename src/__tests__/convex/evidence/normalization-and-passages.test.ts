@@ -9,6 +9,8 @@ import {
     sha256Hex,
 } from "@convex/domain/sourcePassages";
 import {
+    extractHtmlPublicationEvidence,
+    extractHtmlPublicationTime,
     normalizeExaText,
     normalizePdfPages,
     normalizeSecHtml,
@@ -244,4 +246,13 @@ describe("evidenceNormalization", () => {
             normalizePdfPages([{ pageNumber: 1, text: huge }], options),
         ).toThrow(/exceeds.*limit/i);
     });
+});
+
+test("HTML publication indications retain conflicts instead of choosing one tag", () => {
+    const html =
+        '<head><meta property="article:published_time" content="2026-10-28"><meta property="article:published_time" content="2026-10-29"></head>';
+    expect(
+        extractHtmlPublicationEvidence(html).map((item) => item.value),
+    ).toEqual(["2026-10-28", "2026-10-29"]);
+    expect(extractHtmlPublicationTime(html)).toBeUndefined();
 });

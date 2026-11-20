@@ -14,8 +14,10 @@ import {
 } from "@convex/execution/agentDefinition";
 import { commonOperations } from "@convex/execution/commonOperations";
 import { validateOperationExecutionResult } from "@convex/execution/executionProtocol";
+import { retainedMethodVersion } from "@convex/qualificationAgentMethods";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
+import { admitMethodComparison } from "@/__tests__/setup/qualification-method-comparison";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 import { workbenchAdmissionInput } from "@/__tests__/setup/workbench";
 
@@ -24,6 +26,26 @@ afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
 });
+
+/** Conformance starts from an active mission; seed its immutable owning campaign. */
+async function comparisonAuthority(
+    f:
+        | Awaited<ReturnType<typeof seedHistoryMission>>
+        | Awaited<ReturnType<typeof seedInspectedEvidence>>,
+    binding: AgentDefinition,
+) {
+    if (
+        (binding.id !== "workbench_v1" && binding.id !== "sources_v1") ||
+        binding.version !== retainedMethodVersion(binding.id)
+    )
+        return;
+    const lot = await admitMethodComparison(f.t, f.runId);
+    await f.t.run((ctx) =>
+        ctx.db.patch(lot.contextId, {
+            simulatedScenarios: [{ id: lot.scenarioId, runId: f.runId }],
+        }),
+    );
+}
 
 async function fixture(binding: AgentDefinition) {
     if (binding.executionScope === "conversation") {
@@ -40,6 +62,7 @@ async function fixture(binding: AgentDefinition) {
                 obligations: initial.obligations,
             }),
         );
+        await comparisonAuthority(f, binding);
         return { ...f, generation: 1 };
     }
     const f = await seedInspectedEvidence();
@@ -97,6 +120,7 @@ async function fixture(binding: AgentDefinition) {
             : binding.id === "saved_material_inspection_v1"
               ? { kind: binding.id, corpusRevisionId: f.corpusRevisionId }
               : { kind: "execution_validation_v1", values: [3, 7] };
+    await comparisonAuthority(f, binding);
     const missionId = await f.t.mutation(internal.execution.missions.start, {
         runId: f.runId,
         expectedGeneration: 4,
@@ -104,6 +128,9 @@ async function fixture(binding: AgentDefinition) {
         scope,
         requestKey: "conformance",
     });
+    await f.t.run((ctx) =>
+        ctx.db.patch(missionId, { definitionVersion: binding.version }),
+    );
     return { ...f, missionId, generation: 4 };
 }
 

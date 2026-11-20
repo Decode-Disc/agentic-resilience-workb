@@ -9,6 +9,7 @@ import {
     sourcePreparationError,
 } from "@convex/domain/sourcePreparationAuthority";
 import {
+    capturedDocumentMetadata,
     fuseRetrievalRanks,
     retrievalMetadataValidator,
     retrievalModeValidator,
@@ -866,7 +867,10 @@ export const readApprovedMaterialForMission = internalAction({
             return {
                 status: "ready",
                 kind: "search",
-                document: current.document,
+                document: capturedDocumentMetadata(
+                    current.document,
+                    stored.text,
+                ),
                 captureId: result.captureId,
                 contentHash: result.contentHash,
                 canonicalUrl: result.canonicalUrl,
@@ -971,7 +975,10 @@ export const readApprovedMaterialForMission = internalAction({
             return {
                 status: "ready",
                 kind: "context",
-                document: current.document,
+                document: capturedDocumentMetadata(
+                    current.document,
+                    stored.text,
+                ),
                 captureId: result.capture.captureId,
                 contentHash: result.capture.contentHash,
                 captureOmittedPassageCount:

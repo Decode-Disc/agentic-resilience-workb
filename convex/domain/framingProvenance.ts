@@ -11,6 +11,7 @@ import { stableStringify } from "./sourcePassages";
 import {
     observedPublicContext,
     observedPublicRead,
+    supportsDirectedFraming,
 } from "./workbenchContracts";
 
 type PublicBasis = Extract<
@@ -123,7 +124,15 @@ async function requireFreshReadings(
                 (index) => !Number.isSafeInteger(index),
             ))
     )
-        throw executionError("framing_event_basis_invalid");
+        throw executionError("framing_event_basis_invalid", [
+            {
+                path: directed
+                    ? "eventBasis.readIds"
+                    : "eventBasis.referenceIndexes",
+                expected:
+                    "Select distinct adopted readings with nonblank passages; the reading association must not be empty.",
+            },
+        ]);
     return readings;
 }
 
@@ -134,13 +143,13 @@ export async function validateFramingPublicBasis(
 ) {
     const { basis, current, scope, mission } = args;
     const directed = "readIds" in basis;
-    if (directed && mission.definitionVersion !== 5)
+    if (directed && !supportsDirectedFraming(mission.definitionVersion))
         throw executionError("framing_event_basis_invalid");
     const inherited =
         current.content.scope === scope &&
         stableStringify(current.eventBasis) === stableStringify(basis);
     if (inherited) return basis;
-    if (!directed && mission.definitionVersion === 5)
+    if (!directed && supportsDirectedFraming(mission.definitionVersion))
         throw executionError("framing_event_basis_invalid");
     const readings = await requireFreshReadings(ctx, args, basis);
     if (!basis.label.trim())
@@ -207,7 +216,6 @@ export async function prepareProvisionalFraming(
     args: FramingWriteAuthority & {
         basis: Infer<typeof provisionalOpenEvent>;
         content: Infer<typeof framingContentValidator>;
-        company: string;
     },
 ) {
     const { basis, content, current, mission, messageId } = args;
@@ -215,34 +223,84 @@ export async function prepareProvisionalFraming(
     const original = instructions?.messages.find(
         (message) => message.messageId === messageId,
     )?.text;
-    if (!original) throw executionError("framing_event_basis_invalid");
+    if (!original)
+        throw executionError("framing_event_basis_invalid", [
+            {
+                path: "messageId",
+                expected:
+                    "Use the active analyst message that authorizes this framing proposal.",
+            },
+        ]);
     const previous =
         current.eventBasis?.kind === "open" ? current.eventBasis : undefined;
     const excerpt = basis.activityExcerpt;
-    let scope = content.scope;
+    const scope = content.scope;
     if (excerpt !== undefined) {
         const inherited =
             current.content.scope === scope &&
             previous?.activityExcerpt === excerpt;
-        if (
-            !excerpt.trim() ||
-            !scope.includes(excerpt) ||
-            (!inherited && !original.includes(excerpt))
-        )
-            throw executionError("framing_event_basis_invalid");
+        if (!excerpt.trim() || (!inherited && !original.includes(excerpt)))
+            throw executionError("framing_event_basis_invalid", [
+                {
+                    path: "eventBasis.activityExcerpt",
+                    expected:
+                        "Copy a nonblank activity excerpt exactly from the active analyst message, or preserve the unchanged authorized scope and its activity excerpt.",
+                },
+            ]);
+        if (!scope.includes(excerpt))
+            throw executionError("framing_event_basis_invalid", [
+                {
+                    path: "content.scope",
+                    expected:
+                        "Include eventBasis.activityExcerpt verbatim in content.scope. Correct the scope wording rather than changing unrelated conditional hypotheses.",
+                },
+            ]);
     } else if (!current.content.scope.trim()) {
-        scope = companyProvisionalProgram(args.company).scope;
+        if (!scope.trim())
+            throw executionError("framing_event_basis_invalid", [
+                {
+                    path: "content.scope",
+                    expected: "Supply a nonblank scope.",
+                },
+            ]);
+        throw executionError("framing_event_basis_invalid", [
+            {
+                path: "eventBasis.activityExcerpt",
+                expected:
+                    "Copy a nonblank excerpt of the analyst's activity or open request verbatim from the active message and include it in content.scope.",
+            },
+        ]);
     } else if (scope !== current.content.scope) {
-        throw executionError("framing_event_basis_invalid");
+        throw executionError("framing_event_basis_invalid", [
+            {
+                path: "content.scope",
+                expected:
+                    "Preserve the authorized scope, or supply an exact analyst activityExcerpt also included in the changed scope.",
+            },
+        ]);
     }
     const conditions = basis.conditions ?? [];
     if (
         new Set(conditions.map((condition) => condition.questionId)).size !==
-            conditions.length ||
-        new Set(content.questions.map((question) => question.id)).size !==
-            content.questions.length
+        conditions.length
     )
-        throw executionError("framing_event_basis_invalid");
+        throw executionError("framing_event_basis_invalid", [
+            {
+                path: "eventBasis.conditions",
+                expected:
+                    "Associate at most one condition with each questionId.",
+            },
+        ]);
+    if (
+        new Set(content.questions.map((question) => question.id)).size !==
+        content.questions.length
+    )
+        throw executionError("framing_event_basis_invalid", [
+            {
+                path: "content.questions",
+                expected: "Use a distinct id for each question.",
+            },
+        ]);
     const questions = content.questions.map((question) => {
         const old = previous?.conditions?.find(
             (item) => item.questionId === question.id,
@@ -259,12 +317,25 @@ export async function prepareProvisionalFraming(
                 : question.text;
         return { ...question, text };
     });
-    for (const condition of conditions) {
+    for (const [index, condition] of conditions.entries()) {
         const question = questions.find(
             (item) => item.id === condition.questionId,
         );
-        if (!question || !condition.hypothesis.trim())
-            throw executionError("framing_event_basis_invalid");
+        if (!question)
+            throw executionError("framing_event_basis_invalid", [
+                {
+                    path: `eventBasis.conditions[${index}].questionId`,
+                    expected: "Refer to an id present in content.questions.",
+                },
+            ]);
+        if (!condition.hypothesis.trim())
+            throw executionError("framing_event_basis_invalid", [
+                {
+                    path: `eventBasis.conditions[${index}].hypothesis`,
+                    expected:
+                        "Supply a nonblank hypothesis or remove this condition.",
+                },
+            ]);
         const prefix = `If ${condition.hypothesis}, `;
         const canonicalText = question.text.startsWith(prefix)
             ? question.text
@@ -287,7 +358,13 @@ export async function prepareProvisionalFraming(
                     !condition.basis.excerpt.trim() ||
                     !original.includes(condition.basis.excerpt)
                 )
-                    throw executionError("framing_event_basis_invalid");
+                    throw executionError("framing_event_basis_invalid", [
+                        {
+                            path: `eventBasis.conditions[${index}].basis.excerpt`,
+                            expected:
+                                "Use a nonblank exact excerpt from the active analyst message; do not attribute an invented hypothesis to the analyst.",
+                        },
+                    ]);
             } else {
                 await requireFreshReadings(ctx, args, condition.basis);
             }

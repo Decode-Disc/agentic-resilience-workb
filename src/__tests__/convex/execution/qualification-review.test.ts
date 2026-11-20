@@ -1317,3 +1317,289 @@ test("automated review preserves execution_deadline when timeout aborts an in-fl
         reason: "execution_deadline",
     });
 });
+
+test("automated review completes, settles, and replays SSE responses exceeding 1 MiB", async () => {
+    let requests = 0;
+    let largeAttemptHash = "";
+    const { t, lotId, lotRoot, template, stageOptions } =
+        await createDiagnosticReviewHarness({
+            fetchImpl: async () => {
+                requests++;
+                const reviewPayload = {
+                    ...template,
+                    cases: template.cases.map((item) => ({
+                        ...item,
+                        checks: Object.fromEntries(
+                            Object.keys(item.checks).map((key) => [
+                                key,
+                                "passed",
+                            ]),
+                        ),
+                        finding:
+                            "The synthetic fixture records the expected saved framing.",
+                        evidence: ["published.json"],
+                    })),
+                };
+                if (requests === 1) {
+                    const largeEncryptedReasoning = "R".repeat(1_250_000);
+                    const toolCallItem = {
+                        id: "fc-large-1",
+                        type: "function_call",
+                        call_id: "call-large-1",
+                        name: "read",
+                        arguments: JSON.stringify({ path: "published.json" }),
+                        status: "completed",
+                    };
+                    const reasoningItem = {
+                        id: "rs-large-1",
+                        type: "reasoning",
+                        summary: [{ type: "summary_text", text: "Checked." }],
+                        encrypted_content: largeEncryptedReasoning,
+                        status: "completed",
+                    };
+                    const sseEvents = [
+                        {
+                            type: "response.created",
+                            response: { id: "resp-large-1" },
+                        },
+                        {
+                            type: "response.output_item.added",
+                            output_index: 0,
+                            item: {
+                                id: "rs-large-1",
+                                type: "reasoning",
+                                summary: [],
+                            },
+                        },
+                        {
+                            type: "response.output_item.done",
+                            output_index: 0,
+                            item: reasoningItem,
+                        },
+                        {
+                            type: "response.output_item.added",
+                            output_index: 1,
+                            item: { ...toolCallItem, arguments: "" },
+                        },
+                        {
+                            type: "response.function_call_arguments.delta",
+                            item_id: "fc-large-1",
+                            output_index: 1,
+                            delta: toolCallItem.arguments,
+                        },
+                        {
+                            type: "response.function_call_arguments.done",
+                            item_id: "fc-large-1",
+                            output_index: 1,
+                            arguments: toolCallItem.arguments,
+                        },
+                        {
+                            type: "response.output_item.done",
+                            output_index: 1,
+                            item: toolCallItem,
+                        },
+                        {
+                            type: "response.completed",
+                            response: {
+                                id: "resp-large-1",
+                                status: "completed",
+                                output: [reasoningItem, toolCallItem],
+                                usage: {
+                                    input_tokens: 1200,
+                                    output_tokens: 300,
+                                    input_tokens_details: {
+                                        cached_tokens: 200,
+                                    },
+                                },
+                            },
+                        },
+                    ];
+                    const sseBody = `${sseEvents.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("")}data: [DONE]\n\n`;
+                    assert(Buffer.byteLength(sseBody) > 1_048_576);
+                    return new Response(sseBody, {
+                        status: 200,
+                        headers: {
+                            "content-type": "text/event-stream; charset=utf-8",
+                        },
+                    });
+                }
+                return qualificationReviewResponse(
+                    qualificationReviewReport(reviewPayload),
+                    requests,
+                    null,
+                    {
+                        input_tokens: 400,
+                        output_tokens: 100,
+                        input_tokens_details: { cached_tokens: 0 },
+                    },
+                );
+            },
+        });
+    const stage = await runCampaignReviewStage(stageOptions);
+    expect(stage.status).toBe("awaiting_reconciliation");
+    expect(requests).toBe(2);
+    const largeResponsePath = join(
+        lotRoot,
+        `automated-review-response-analysis-${template.evidenceHash.slice(0, 16)}-1.json`,
+    );
+    expect(existsSync(largeResponsePath)).toBe(true);
+    const savedLarge = JSON.parse(readFileSync(largeResponsePath, "utf8"));
+    expect(Buffer.byteLength(savedLarge.body)).toBeGreaterThan(1_048_576);
+    const attempts = await t.run((ctx) =>
+        ctx.db
+            .query("qualificationAnalysisAttempts")
+            .withIndex("by_lot_and_attempt", (q) => q.eq("lotId", lotId))
+            .collect(),
+    );
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toMatchObject({
+        status: "settled",
+        receipt: { input: 1000, cacheRead: 200, output: 300 },
+    });
+    largeAttemptHash = attempts[0]?.receipt?.observationHash ?? "";
+    expect(largeAttemptHash).toMatch(/^[a-f0-9]{64}$/);
+    // Replay on recovery reuses the >1 MiB cached response without re-dispatching HTTP.
+    unlinkSync(join(lotRoot, "automated-review-result.json"));
+    const replayed = await runCampaignReviewStage(stageOptions);
+    expect(replayed.status).toBe("awaiting_reconciliation");
+    expect(requests).toBe(2);
+});
+
+test("automated review settles verified usage when HTTP 200 SSE drops after terminal response.completed", async () => {
+    let requests = 0;
+    const { t, lotId, lotRoot, template, stageOptions } =
+        await createDiagnosticReviewHarness({
+            fetchImpl: async () => {
+                requests++;
+                const reviewPayload = {
+                    ...template,
+                    cases: template.cases.map((item) => ({
+                        ...item,
+                        checks: Object.fromEntries(
+                            Object.keys(item.checks).map((key) => [
+                                key,
+                                "passed",
+                            ]),
+                        ),
+                        finding:
+                            "The synthetic fixture records the expected saved framing.",
+                        evidence: ["published.json"],
+                    })),
+                };
+                const reportText = qualificationReviewReport(reviewPayload);
+                const msgItem = {
+                    id: "msg-post-terminal-1",
+                    type: "message",
+                    role: "assistant",
+                    content: [
+                        {
+                            type: "output_text",
+                            text: reportText,
+                            annotations: [],
+                        },
+                    ],
+                    status: "completed",
+                };
+                const terminalFrames = [
+                    {
+                        type: "response.created",
+                        response: { id: "resp-post-terminal-1" },
+                    },
+                    {
+                        type: "response.output_item.added",
+                        output_index: 0,
+                        item: { ...msgItem, content: [] },
+                    },
+                    {
+                        type: "response.content_part.added",
+                        item_id: msgItem.id,
+                        output_index: 0,
+                        content_index: 0,
+                        part: {
+                            type: "output_text",
+                            text: "",
+                            annotations: [],
+                        },
+                    },
+                    {
+                        type: "response.output_text.delta",
+                        item_id: msgItem.id,
+                        output_index: 0,
+                        content_index: 0,
+                        delta: reportText,
+                    },
+                    {
+                        type: "response.output_text.done",
+                        item_id: msgItem.id,
+                        output_index: 0,
+                        content_index: 0,
+                        text: reportText,
+                    },
+                    {
+                        type: "response.output_item.done",
+                        output_index: 0,
+                        item: msgItem,
+                    },
+                    {
+                        type: "response.completed",
+                        response: {
+                            id: "resp-post-terminal-1",
+                            status: "completed",
+                            output: [msgItem],
+                            usage: {
+                                input_tokens: 500,
+                                output_tokens: 250,
+                                input_tokens_details: { cached_tokens: 100 },
+                            },
+                        },
+                    },
+                ];
+                const encoder = new TextEncoder();
+                let pulls = 0;
+                const stream = new ReadableStream<Uint8Array>({
+                    pull(controller) {
+                        pulls++;
+                        if (pulls === 1) {
+                            controller.enqueue(
+                                encoder.encode(
+                                    `${terminalFrames.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("")}data: {"type":"incomplete_trailing_frame"`,
+                                ),
+                            );
+                            return;
+                        }
+                        controller.error(
+                            new Error("ECONNRESET after response.completed"),
+                        );
+                    },
+                });
+                return new Response(stream, {
+                    status: 200,
+                    headers: {
+                        "content-type": "text/event-stream; charset=utf-8",
+                    },
+                });
+            },
+        });
+    const stage = await runCampaignReviewStage(stageOptions);
+    expect(stage.status).toBe("awaiting_reconciliation");
+    expect(requests).toBe(1);
+    const responseFilePath = join(
+        lotRoot,
+        `automated-review-response-analysis-${template.evidenceHash.slice(0, 16)}-1.json`,
+    );
+    expect(existsSync(responseFilePath)).toBe(true);
+    const saved = JSON.parse(readFileSync(responseFilePath, "utf8"));
+    expect(saved.body).not.toContain("incomplete_trailing_frame");
+    expect(saved.body).toContain('"type":"response.completed"');
+    const attempts = await t.run((ctx) =>
+        ctx.db
+            .query("qualificationAnalysisAttempts")
+            .withIndex("by_lot_and_attempt", (q) => q.eq("lotId", lotId))
+            .collect(),
+    );
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+        status: "settled",
+        receipt: { input: 400, cacheRead: 100, output: 250 },
+    });
+});

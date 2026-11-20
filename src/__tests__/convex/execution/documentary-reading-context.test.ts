@@ -81,7 +81,21 @@ test.each([
         );
         assert(outcome.kind === "success");
         const value = JSON.parse(outcome.valueJson);
-        expect(value.document).toEqual(expected);
+        expect(value.document).toMatchObject(expected);
+        expect(value.document.dates).toMatchObject({
+            [metadata.dateKind ?? "publication"]: {
+                status: metadata.publishedAt === null ? "unknown" : "known",
+            },
+        });
+        if (metadata.dateKind === "filing")
+            expect(value.document.dates.filing.evidence).toMatchObject([
+                {
+                    value: "2026-02-24",
+                    precision: "day",
+                    origin: { kind: "sec_field", label: "filingDate" },
+                },
+            ]);
+
         expect(value).toMatchObject({
             sourceId: f.sourceId,
             captureId: f.captureId,
@@ -236,4 +250,51 @@ test("shared reading exposes acquisition destinations only to capable missions a
         category: "observed_destination",
         providerReference: `capture:${f.captureId}:link:0`,
     });
+});
+
+test("saved material dates reconcile the verified capture with its metadata without changing capture identity", async () => {
+    const text =
+        "BOSTON, October 29, 2026 (GLOBE NEWSWIRE) -- The workflow remains controlled by the insurer.";
+    const f = await seedInspectedEvidence({ text });
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.sourceId, {
+            origin: "exa",
+            publishedAt: Date.UTC(2026, 9, 28),
+        }),
+    );
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.runId,
+        corpusRevisionId: f.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "capture-dateline",
+        expectedGeneration: 4,
+    });
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId,
+            expectedGeneration: 4,
+            cause: "dated-capture",
+            input: {
+                kind: "search_available_material",
+                sourceId: f.sourceId,
+                query: "workflow",
+            },
+        },
+    );
+    const result = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    assert(result.kind === "success", JSON.stringify(result));
+    const value = JSON.parse(result.valueJson);
+    expect(value.captureId).toBe(f.captureId);
+    expect(value.document.dates.publication.status).toBe("conflict");
+    expect(
+        value.document.dates.publication.evidence.map(
+            (item: { value: string }) => item.value,
+        ),
+    ).toEqual(["2026-10-28", "2026-10-29"]);
+    expect(value.document.publishedAt).toBeNull();
+    expect(value.document.date).toBeNull();
 });

@@ -1,5 +1,6 @@
 import { observedDestinationValidator } from "@convex/domain/sourcesContracts";
 import { recordContextObservation } from "@convex/execution/journal";
+import { readSourcesReplay } from "@convex/qualificationSourceReplay";
 import { getDocumentSize, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
@@ -370,6 +371,16 @@ export const finalize = internalMutation({
             if (capture.contentHash !== args.contentHash)
                 throw sourcePreparationError("capture_identity_changed");
             return capture._id;
+        }
+        if (args.retrievalVersion.startsWith("sources-replay:")) {
+            const replay = await readSourcesReplay(ctx, capture.runId);
+            if (
+                !replay ||
+                args.retrievalVersion !==
+                    `sources-replay:${replay.materialHash}` ||
+                !replay.documents.some((doc) => doc.url === args.resolvedUrl)
+            )
+                throw sourcePreparationError("sources_replay_not_authorized");
         }
         if (
             capture.status !== "uploaded" ||

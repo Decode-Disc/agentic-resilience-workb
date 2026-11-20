@@ -1,5 +1,9 @@
 import { internal } from "@convex/_generated/api";
 import { stableStringify } from "@convex/domain/sourcePassages";
+import {
+    readSourcesReplay,
+    sourcesReplayCandidates,
+} from "@convex/qualificationSourceReplay";
 import { patchQualificationReceipt } from "@convex/qualificationUsage";
 import {
     simulatedSourceCandidate,
@@ -125,9 +129,12 @@ export const persistCandidates = internalMutation({
                 recoveredFamily =
                     supplement.supplementQueries?.[queryIndex]?.discoveryIntent;
         }
+        const replay = preparationState?.preparation.sourcesMission
+            ? await readSourcesReplay(ctx, run._id)
+            : null;
         if (
             preparationState?.preparation.sourcesMission &&
-            (await sourcesSimulationEnabled(ctx, run._id))
+            (replay || (await sourcesSimulationEnabled(ctx, run._id)))
         ) {
             const work = preparationState.preparation.sourcesMission.work.find(
                 (w) =>
@@ -138,13 +145,22 @@ export const persistCandidates = internalMutation({
                 !work ||
                 args.providerCompletion ||
                 stableStringify(args.candidates) !==
-                    stableStringify([
-                        {
-                            ...simulatedSourceCandidate(run._id),
+                    stableStringify(
+                        (replay
+                            ? sourcesReplayCandidates(replay).slice(
+                                  0,
+                                  args.candidates.length,
+                              )
+                            : [simulatedSourceCandidate(run._id)]
+                        ).map((candidate) => ({
+                            ...candidate,
                             origin: "exa",
                             category: "research_lead",
-                        },
-                    ])
+                        })),
+                    ) ||
+                (replay &&
+                    (args.candidates.length === 0 ||
+                        args.candidates.length > replay.documents.length))
             )
                 throw sourcePreparationError("discovery_result_invalid");
             await ctx.runQuery(internal.sourcesMission.assertActive, {

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 
 const noEvent = v.object({ kind: v.literal("none") });
 const openEvent = v.object({ kind: v.literal("open") });
@@ -75,3 +75,10 @@ export const framingContentValidator = v.object({
     scope: v.string(),
     questions: v.array(framingQuestionValidator),
 });
+
+/** Structural program prerequisite shared by initial completion and analyst Start. */
+export function hasFramingProgram(
+    content: Infer<typeof framingContentValidator> | null | undefined,
+): boolean {
+    return Boolean(content?.scope.trim() && content.questions.length);
+}

@@ -341,10 +341,6 @@ export const BILLING_LOOKUP_LEASE_MS = 30_000;
 
 /** Cumulative model-response wire bytes, including SSE framing and reasoning. Adequacy remains unverified. */
 export const MODEL_WIRE_RESPONSE_MAX_BYTES = 1024 * 1024;
-export const REVIEW_WIRE_RESPONSE_MAX_BYTES = 1024 * 1024;
-/** Valid decoded UTF-16 units cannot exceed original UTF-8 byte count. This is only a coarse cache-shape check. */
-export const REVIEW_CACHED_RESPONSE_MAX_CHARACTERS =
-    REVIEW_WIRE_RESPONSE_MAX_BYTES;
 export const REVIEW_REPORT_MAX_BYTES = 256 * 1024;
 /** Local frozen-evidence paging/retention, not native context capacity. Overflow is explicit or cursor-backed. */
 export const REVIEW_EVIDENCE_POLICY = {

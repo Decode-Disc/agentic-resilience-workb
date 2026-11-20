@@ -20,7 +20,7 @@ export const sourcesCoveragePolicy = v.object({
     version: sourcesCoverageVersion,
     preset: coveragePresetValidator,
 });
-const discoveryFocus = v.union(
+export const discoveryFocus = v.union(
     v.literal("mixed"),
     v.literal("official"),
     v.literal("independent"),

@@ -1336,12 +1336,24 @@ export async function runPiMission(
             (message) => stream.end(message),
             (error) => {
                 stop(error);
-                stream.end(
-                    fauxAssistantMessage([], {
-                        stopReason: "error",
-                        errorMessage: "execution_interrupted",
-                    }),
-                );
+                const end = () =>
+                    stream.end(
+                        fauxAssistantMessage([], {
+                            stopReason: "error",
+                            errorMessage: "execution_interrupted",
+                        }),
+                    );
+                if (
+                    executionFailureCode(error) === "pi_slice_complete" &&
+                    options?.signal &&
+                    !options.signal.aborted
+                ) {
+                    // Close the native task before ending the stream: a planned yield
+                    // must retain its checkpoint, not commit a terminal model error.
+                    options.signal.addEventListener("abort", end, {
+                        once: true,
+                    });
+                } else end();
             },
         );
         return stream;
