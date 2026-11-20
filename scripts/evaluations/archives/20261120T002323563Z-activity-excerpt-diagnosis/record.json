@@ -1,0 +1,151 @@
+{
+    "schemaVersion": 1,
+    "id": "20261120T002323563Z-activity-excerpt-diagnosis",
+    "createdAt": "2026-11-20T00:23:23.563Z",
+    "git": {
+        "head": "a18e82a71de38db7fe34cba75e51447129e19464",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-20-activity-excerpt-diagnosis.md",
+            "archivePath": "repository/docs/verification/2026-11-20-activity-excerpt-diagnosis.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/artifacts/activity-excerpt-diagnosis",
+            "archivePath": "repository/.agents/artifacts/activity-excerpt-diagnosis"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/framingContracts.ts",
+            "archivePath": "repository/convex/domain/framingContracts.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/framingProvenance.ts",
+            "archivePath": "repository/convex/domain/framingProvenance.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/workbenchAgent.ts",
+            "archivePath": "repository/convex/domain/workbenchAgent.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/agentDefinition.ts",
+            "archivePath": "repository/convex/execution/agentDefinition.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/workbench-framing-receipts.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/workbench-framing-receipts.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/setup/workbench.ts",
+            "archivePath": "repository/src/__tests__/setup/workbench.ts"
+        }
+    ],
+    "files": [
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/baseline.log",
+            "bytes": 282,
+            "sha256": "2820ca9717ccc4f38fa13625e55d5cc2dc7a165464a13108bfe31c3107967b73"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/cross-case-writes.json",
+            "bytes": 4268,
+            "sha256": "0941f463b8b43220b1cb1a4d0aaac8a52839a4c2086c634d1bd7b209ff9bbd8a"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/delivery-checks.json",
+            "bytes": 3322,
+            "sha256": "19bf09dbea9dd7e7bd692d72531e6d95f04ad32cf43f54f41f0f7d1c284a2d04"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/docs-check.log",
+            "bytes": 440,
+            "sha256": "fc504698838d102bab2039da82686a82b832c98df157139856f88dcb64355961"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/initial-wire.json",
+            "bytes": 30353,
+            "sha256": "d7e4d1e8a5a25d674d6c129e39f56adfd3a20c92ecf29c17c1d652a202d6ac39"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/openrouter-generations.json",
+            "bytes": 5595,
+            "sha256": "d4bcc24144ccb369de4e226f3324bc06cacaa70bfe7edd3cad97a03f9ef20eab"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/rejected-inputs.json",
+            "bytes": 8236,
+            "sha256": "64f793710f725763ada5a2eda6407ad9ad082b5b7e9cd6e5a8f639d065d9a5a3"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/replay.log",
+            "bytes": 268,
+            "sha256": "fb17d02752d45fc09605e23697536375763b81255de635bcf9e347effcae7a91"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/replay.test.ts.txt",
+            "bytes": 4503,
+            "sha256": "d2767def49271feeb994f35be983596c364b1ae947cde93c024397ce70d8a048"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/source-parity.json",
+            "bytes": 283,
+            "sha256": "bdc8a218f6a1b35b3dca0ae7aae568ba8a46e8d013b260857bb501a0397eb07c"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/wire-timeline.json",
+            "bytes": 974468,
+            "sha256": "a3d566cd48135f7d9eb29d68406d00064719e37755089de8acff337c184b242b"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/write-generation-receipts.json",
+            "bytes": 979,
+            "sha256": "d00da6412cc11e4bd3a8237eb380fdf651526939e4bf798b482cc94b3312c5cc"
+        },
+        {
+            "path": "repository/.agents/artifacts/activity-excerpt-diagnosis/write-usage-comparison.json",
+            "bytes": 4627,
+            "sha256": "b3558ac93b65e9f8a3f009642e846662430d7909a30e459958e569889bb10266"
+        },
+        {
+            "path": "repository/convex/domain/framingContracts.ts",
+            "bytes": 2313,
+            "sha256": "d1d1431320b2ea6bfcfeb863b558e7c729035b48970c01dabebff851f5ea9e50"
+        },
+        {
+            "path": "repository/convex/domain/framingProvenance.ts",
+            "bytes": 16984,
+            "sha256": "8d71e0a64a1c3343ef2692b2f28000712981f68ebbb4184184bc59b0d136f748"
+        },
+        {
+            "path": "repository/convex/domain/workbenchAgent.ts",
+            "bytes": 50780,
+            "sha256": "e343c45f16fdb51006470a9aff8b50e7b0aebe083e370e8fbf34e70073961253"
+        },
+        {
+            "path": "repository/convex/execution/agentDefinition.ts",
+            "bytes": 10903,
+            "sha256": "913df100fe2a3c95a72ad1c339bdc9e991339a4de034834d2a1808a061021e92"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-20-activity-excerpt-diagnosis.md",
+            "bytes": 9905,
+            "sha256": "2a3a2c3afc1513e06f91620b95817858b75b38f7b10d44e8c4ffb34bc4c79491"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/workbench-framing-receipts.test.ts",
+            "bytes": 52732,
+            "sha256": "9731915656ab6cf1adf2ce9994601470cd082709046f227b930c9832a0937244"
+        },
+        {
+            "path": "repository/src/__tests__/setup/workbench.ts",
+            "bytes": 4954,
+            "sha256": "b0fcee731c20da74916175cb0d4e38fbd9265e51e1133d56e285a31fb3674644"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261120T002323563Z-activity-excerpt-diagnosis.tar.gz",
+        "bytes": 279210,
+        "sha256": "206cb1ee2a6ffae4eb37d9e6702722862e244933d8111bb37d5c0d0dd58d9885"
+    },
+    "verification": "restored_and_verified"
+}

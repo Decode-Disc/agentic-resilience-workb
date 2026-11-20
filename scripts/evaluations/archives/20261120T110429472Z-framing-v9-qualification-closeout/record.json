@@ -1,0 +1,64 @@
+{
+    "schemaVersion": 1,
+    "id": "20261120T110429472Z-framing-v9-qualification-closeout",
+    "createdAt": "2026-11-20T11:04:29.472Z",
+    "git": {
+        "head": "a18e82a71de38db7fe34cba75e51447129e19464",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-20-framing-v9-live-qualification.md",
+            "archivePath": "repository/docs/verification/2026-11-20-framing-v9-live-qualification.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-v9-qualification-20261120-ready/operator-closeout.json",
+            "archivePath": "external/accounting/operator-closeout.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-v9-qualification-20261120-ready/operator-observations.jsonl",
+            "archivePath": "external/observations/operator-observations.jsonl"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-v9-qualification-20261120-ready/operator-cost-note.md",
+            "archivePath": "external/cost-note/operator-cost-note.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-v9-qualification-20261120-ready/source-attribution-failed-controls.json",
+            "archivePath": "external/failed-controls/source-attribution-failed-controls.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/accounting/operator-closeout.json",
+            "bytes": 843,
+            "sha256": "8fa12a89edf6959e6f14ea2b3dde75b4372da06fdd865979628f6ec1cff44b35"
+        },
+        {
+            "path": "external/cost-note/operator-cost-note.md",
+            "bytes": 1261,
+            "sha256": "4a521d97936775d4faa4778b5d58794b684070a7e0238ed984d72f0a8bde2d83"
+        },
+        {
+            "path": "external/failed-controls/source-attribution-failed-controls.json",
+            "bytes": 4610,
+            "sha256": "b1d0f99b3f8ab4ce8220a342c9deb86e072be9ab58734246b32d320daf26d724"
+        },
+        {
+            "path": "external/observations/operator-observations.jsonl",
+            "bytes": 1172,
+            "sha256": "5dbaea88583afa6553cd6a87fa5fdfd82382aff96f26e59044e737bb5c06aeb8"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-20-framing-v9-live-qualification.md",
+            "bytes": 14176,
+            "sha256": "db63ba4eab2784df747a11301543f3a3b3b1b7c6a2e46e2241936e6d3c432612"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261120T110429472Z-framing-v9-qualification-closeout.tar.gz",
+        "bytes": 8918,
+        "sha256": "19fbcc9b788643a1884d39bc52e074fc544849d405f3b3275be2042df8b750f1"
+    },
+    "verification": "restored_and_verified"
+}
