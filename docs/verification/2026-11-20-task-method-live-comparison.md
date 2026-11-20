@@ -1,5 +1,7 @@
 # Native task-method live comparison
 
+Implementation follow-up, November 20, 2026: the [framing and execution corrections](2026-11-20-framing-continuity-and-execution-corrections.md) supersede the unresolved structural correction status below. New conversations use a state-dependent schema; shared observation authority survives provisional saves; non-progress no longer stops execution after three invocations. The original observations and semantic qualification limits remain unchanged. Current contracts belong to [TECH](../../context/TECH.md).
+
 Verified November 20, 2026. The authorized replacement comparison is closed with both independent assessments recorded as failed. Five replies completed across seven attempted cases; seventeen of the intended twenty-four cases were unrun. Native skills are implemented, but their general usefulness and the Sources method remain unqualified. No production correction or repeated lot was made during this campaign.
 
 ## Conditions and coverage
@@ -16,6 +18,8 @@ Candidate hash: `87c76c9edf096121ca532cd9da4447789518107cab38e551bb6edc9324d8129
 Settled replies are not full semantic passes. Both reviewers left several documentary, preset and request checks inconclusive; their assessments remain intact. Sources never started in either arm. After each blocked conversation, the runner refused independent continuation because native settlement and turn closure were absent. Cleanup subsequently succeeded; it does not retroactively qualify unrun cases.
 
 ## Confirmed findings and next boundaries
+
+Follow-up, November 20, 2026: the [activity-excerpt investigation](2026-11-20-activity-excerpt-diagnosis.md) qualifies the non-correction attribution below. Native Balanced also omitted the anchor before repairing it. Both captured first-party drafts pass the model-facing schema but fail its state-dependent business requirement; adding only the missing field succeeds in a real-module replay. Delivery remains verified, while the interface and feedback weaknesses require attention alongside the model's observed mistake.
 
 ### Provisional saving invalidates an unread candidate
 

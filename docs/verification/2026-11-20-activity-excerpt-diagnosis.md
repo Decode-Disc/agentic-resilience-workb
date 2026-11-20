@@ -1,0 +1,55 @@
+# Missing activity excerpt in native framing writes
+
+Implementation follow-up, November 20, 2026: the [framing and execution corrections](2026-11-20-framing-continuity-and-execution-corrections.md) supersede the unresolved structural correction status below. New conversations use a state-dependent schema; shared observation authority survives provisional saves; non-progress no longer stops execution after three invocations. The original observations and semantic qualification limits remain unchanged. Current contracts belong to [TECH](../../context/TECH.md).
+
+Investigated November 20, 2026 using the retained [live comparison](2026-11-20-task-method-live-comparison.md), current production owners, deterministic operation replay and three read-only OpenRouter generation lookups. No new inference, production edit, deployment or campaign was performed. The field is `activityExcerpt`.
+
+## Conclusion
+
+The immediate failure was an omission in the model's native tool arguments, followed by a correction to the wrong field. The harness did not remove the anchor or lose the refusal. However, describing this only as model non-correction is incomplete: the model-facing schema accepts omission in a state where the business operation necessarily rejects it. The conditional requirement is left to prose instructions and recovery feedback. That is an evidenced interface weakness, not proof that it alone caused the model's omission.
+
+The omission also occurred in native-skills CCC Balanced, which repaired it on the next write. Neither an isolated first-party failure nor a general inability of GLM to populate the field describes the evidence accurately. These few observations establish no frequency or causal effect of skills versus inline methods.
+
+## Exact sequence
+
+In native-skills CCC first-party depth, all fourteen provider requests contain the original analyst message, high reasoning configuration and the system instruction requiring a verbatim activity excerpt for the first open write. The framing skill was read completely on the first call. Its worked examples and shared reference were not read; the method itself contains no tool-argument example, while the mechanical obligation already appears in the system instruction.
+
+1. Call 9 emits an `adjust_framing` proposal containing `content.scope` and an open `eventBasis` with conditions, but no `activityExcerpt`. The scope already begins with the exact analyst question. A nested condition's `basis.excerpt` also contains that question; it is a different field with a different responsibility.
+2. The operation refuses the write with `validation.path: eventBasis.activityExcerpt`. Its `expected` says to copy an excerpt from the analyst's request and include it in `content.scope`; a generic diagnostic then enumerates the event-basis alternatives without naming the missing field.
+3. Call 10 receives that exact refusal as the tool result attached to the previous call. It changes only `content.scope`, reducing 701 characters to the 77-character original question. `eventBasis`, including its missing anchor, is unchanged. The operation refuses again.
+4. Calls 11–14 retain both rejected writes and both refusals. The model consults history, rereads already observed material, repeats a search, then consults dossier state. No third framing write occurs. The final state read consumes the last no-progress turn and the mission blocks without a saved program or published final reply.
+
+The original analyst words therefore were neither missing nor difficult to recover. The observed mistake is supplying those words in the scope and nested condition while failing to add the separate activity anchor. Confusion between these locations is a supported interpretation of the changed arguments, not access to the model's internal reasoning.
+
+## Contract and executable checks
+
+[`provisionalOpenEvent`](../../convex/domain/framingContracts.ts) declares `activityExcerpt: v.optional(v.string())`. [`nativeWorkbenchOperation`](../../convex/domain/workbenchAgent.ts) projects that input to the model while removing server-owned revision/message fields. The actual serialized tool schema has `required: ["kind"]` for the open-event branch; `activityExcerpt` has only `type: string`, with no field description. The same schema is offered across all fourteen calls.
+
+[`prepareProvisionalFraming`](../../convex/domain/framingProvenance.ts) has a narrower state-dependent rule: an initial nonblank open scope requires the excerpt, while an unchanged existing scope can omit it. Thus making it universally required in persisted records is not an established correction. The tool interface can be more precise without changing historical storage or weakening authority, but the chosen projection must respect native tool preparation and retained agent versions.
+
+The existing regression for an initial open write without the anchor passed, reproducing refusal and preservation of the empty framing. A separate temporary integration probe imported the real v7 definition, context builder, schema, operation queue/dispatch and public framing query. It replayed both captured proposals with only execution identities rebound to a real test dossier. Both passed the model-visible validator, survived normalization unchanged and were refused by the business owner, leaving revision 1 empty. Adding only the exact activity excerpt to the second proposal made it persist at revision 2 with all five questions. A subsequent write preserving that scope could omit the excerpt and succeed. The probe passed and was removed from the test suite; its source and outputs are retained as diagnostic evidence.
+
+This demonstrates a valid repair path and the difference between the broad schema and conditional business rule. It does not prove that GLM would choose that repair after an interface change. The accepted replay also retains the draft's false attribution of discovered events to the analyst; structural success must not be mistaken for semantic correctness.
+
+## Alternatives checked
+
+- **Field stripped by the harness:** ruled out at the retained native-reply boundary. Both native assistant replies already omit it. Normalization preserves their `eventBasis` unchanged in the executable probe.
+- **Refusal or instruction lost in continuation:** ruled out in the captured provider requests. Both tool results match their call IDs; every previous non-system message is preserved exactly as later requests grow. The explicit initial-write instruction is present in all fourteen system messages. There is no compaction or history truncation in this sequence.
+- **Unavailable skill or write operation:** ruled out. The complete skill read succeeded, and `adjust_framing` remains offered after refusal. Reading a skill does not demonstrate following it; its supporting examples were not consulted.
+- **Provider truncation or wrong effort setting:** not supported. The wire requests consistently specify `reasoning: { effort: "high", enabled: true, exclude: true }`. The two relevant native replies end with `tool_calls`, not an output limit. OpenRouter independently confirms successful Wafer responses from `z-ai/glm-5.3-flash-20260826`, no cancellation, and 790/674 output tokens. Their prompt counts are 14,216/15,151, not evidence of context exhaustion.
+- **Zero reported reasoning explains the omission:** unresolved as a contributing factor, insufficient as an explanation. OpenRouter confirms zero native reasoning tokens for those two writes, while the initial skill-reading call has 130. However, the native Balanced write omitted the same field with 1,139 reported reasoning tokens and then repaired it with 29. A retained-control write supplied the field with zero. These counters do not establish the model's internal cause or prove that high was disabled.
+- **Ambiguous feedback contributes to the wrong repair:** plausible, not experimentally isolated. The path is precise, but the explanatory sentence emphasizes copying text into `content.scope`, and the generic diagnostic broadens back to event-basis alternatives. The observed repair changes exactly the scope, even though it already contained the analyst words. This merits a correction at the existing diagnostic owner, not a claim that feedback delivery failed.
+
+## Recommended bounded correction
+
+Prioritize the existing model-facing framing contract: expose the anchor obligation accurately for initial open writes, with its purpose and relationship to scope, while preserving the legitimate unchanged-scope case and existing authority checks. Use the existing operation projection and native schema preparation; do not introduce another agent loop or duplicate validator. Keep the field-specific missing-property outcome unambiguous rather than adding another general instruction to the skill or root prompt. A state-derived value may be server-owned only where it does not silently invent the analyst's intended activity.
+
+Verify the exact captured drafts through the real operation boundary, preservation of user wording, unchanged-scope compatibility and truthful publication after correction. Keep semantic attribution failures separate. Raising the repetition allowance, removing the anchor check, or silently substituting a generic scope would not address the demonstrated contract weakness. No such correction has been implemented or qualified by this investigation.
+
+## Evidence and limits
+
+The decisive archived paths are the skills lot's `ccc-first-party-depth/requests-1.json` and paginated `invocations-*.json` under `observations/after-cleanup-8a588746-ac17-44c6-84ba-18158a6f4984/`; invocation file numbering is not chronological. Calls 9 and 10 are `r57bv403v8wy8r69drkwa81vg98jgbw0` and `r57cwh4ecrfxaqje0g6fv8b1h18jhh80`. OpenRouter generation IDs are `gen-1795132639-APTkw12pl0iPYenO5cIj` and `gen-1795132654-w1fdJnqrFLbnDryctIuW`; the initial-call comparison is `gen-1795132543-mffG6ZmydeJthYl6XOEJ`.
+
+The relevant production source files match their frozen campaign copies byte for byte. Checks were confined to the existing selected regression, the temporary real-module replay, retained-wire comparisons and provider metadata. No broad test suite, browser, additional model generation or provider-switch experiment was run. The investigation qualifies the delivered contract and observed recovery sequence, not the unobservable internal reason for the model's choice.
+
+The [verified local diagnostic archive](../../scripts/evaluations/archives/20261120T002323563Z-activity-excerpt-diagnosis/record.json) preserves twenty files totaling 1,186,195 bytes before compression: extracted wire timeline and schemas, captured rejected inputs, cross-case comparisons, provider metadata, replay source/results, selected owning code and this report before addition of this link. The original full qualification archives remain linked from the comparison report. Restoration verification establishes byte preservation, not model reliability. Documentation review keeps these findings in dated evidence and qualifies the earlier report in place; it changes no product or execution contract.
