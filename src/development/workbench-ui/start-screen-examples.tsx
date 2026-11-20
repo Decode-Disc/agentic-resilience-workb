@@ -962,9 +962,7 @@ function ResearchExample({
                     }
                     title="Sources"
                     attribution={
-                        done ? undefined : (
-                            <AgentByline agent={SOURCES_AGENT} />
-                        )
+                        done ? undefined : <AgentByline agent={SOURCES_AGENT} />
                     }
                 />
             }

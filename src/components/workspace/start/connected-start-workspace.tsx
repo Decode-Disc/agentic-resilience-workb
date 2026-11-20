@@ -1200,7 +1200,9 @@ function StartWorkspaceContent({
                                     }
                                     attribution={
                                         stageResult ? undefined : (
-                                            <AgentByline agent={SOURCES_AGENT} />
+                                            <AgentByline
+                                                agent={SOURCES_AGENT}
+                                            />
                                         )
                                     }
                                     actions={

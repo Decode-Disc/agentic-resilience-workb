@@ -9,7 +9,6 @@ import {
 import { stageIcons } from "@/lib/presentation/stage-icons";
 import { cn } from "@/lib/utils";
 
-
 export interface WorkspaceDockSection {
     key: keyof typeof stageIcons;
     label: string;
