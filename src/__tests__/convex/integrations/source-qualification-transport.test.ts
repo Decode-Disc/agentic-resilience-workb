@@ -557,3 +557,98 @@ test("retains the original assistant text when documentary validation rejects a 
     });
     expect(result).not.toHaveProperty("assistantOutput");
 });
+
+test("streaming qualification above 1 MiB of SSE wire frames completes without response_too_large", async () => {
+    const validOutput = JSON.stringify({
+        companyMatch: "subject",
+        companyPassageKeys: ["p0"],
+        documentKind: "official_product_documentation",
+        reportingPeriodEnd: null,
+        reportingPeriodPassageKeys: [],
+        contributions: Object.fromEntries(
+            SOURCE_COVERAGE_ROLES.map((role) => [
+                role,
+                role === "official_product_platform"
+                    ? [
+                          {
+                              summary: "ServiceNow provides workflow software.",
+                              relevance:
+                                  "Describes the company's workflow offering.",
+                              scope: "Issuer product description, not independent proof of adoption.",
+                              kind: "asserted_fact",
+                              passageKeys: ["p0"],
+                              period: "unspecified",
+                              periodPassageKeys: [],
+                              dependsOnFlaggedAssertion: false,
+                          },
+                      ]
+                    : null,
+            ]),
+        ),
+        limitations: [],
+    });
+    const reasoningFrame = `data: ${JSON.stringify({
+        id: "gen-qual-large",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: sourceQualificationRoutes[0].model,
+        choices: [
+            {
+                index: 0,
+                delta: { reasoning: "a".repeat(4096) },
+                finish_reason: null,
+            },
+        ],
+    })}\n\n`;
+    const finalFrame = `data: ${JSON.stringify({
+        id: "gen-qual-large",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: sourceQualificationRoutes[0].model,
+        choices: [
+            {
+                index: 0,
+                delta: { content: validOutput },
+                finish_reason: "stop",
+            },
+        ],
+        usage: {
+            prompt_tokens: 40,
+            completion_tokens: 30,
+            total_tokens: 70,
+            cost: 0.0012,
+        },
+    })}\n\ndata: [DONE]\n\n`;
+    const frameCount = Math.ceil(
+        (1024 * 1024 + 65_536) / reasoningFrame.length,
+    );
+    const encoder = new TextEncoder();
+    const result = await qualifySourceDocument(
+        preparedExample(),
+        sourceQualificationRoutes[0],
+        {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: async () =>
+                new Response(
+                    new ReadableStream({
+                        start(controller) {
+                            for (let i = 0; i < frameCount; i++)
+                                controller.enqueue(
+                                    encoder.encode(reasoningFrame),
+                                );
+                            controller.enqueue(encoder.encode(finalFrame));
+                            controller.close();
+                        },
+                    }),
+                    { headers: { "content-type": "text/event-stream" } },
+                ),
+        },
+    );
+    expect(result).toMatchObject({
+        status: "succeeded",
+        inputTokens: 40,
+        outputTokens: 30,
+        reportedCost: 0.0012,
+    });
+});

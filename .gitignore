@@ -23,6 +23,7 @@ dist-ssr/
 *.local
 __unconfig*
 
+.agents/artifacts
 .codex/
 # .claude/
 .pi/

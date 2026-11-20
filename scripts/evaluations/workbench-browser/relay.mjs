@@ -12,6 +12,7 @@ import { parseEnv } from "node:util";
 import {
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
+    MODEL_NON_STREAMING_RESPONSE_MAX_BYTES,
     RESOURCE_POLICY_VERSION,
     resolveGenerationAuthority,
     QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY,
@@ -570,12 +571,20 @@ export function createQualificationRelay(
                     ),
                 );
             if (!bufferedFault) forwardHeaders();
+            const streaming =
+                response.headers
+                    .get("content-type")
+                    ?.split(";")[0]
+                    ?.trim()
+                    .toLowerCase() === "text/event-stream";
             const chunks = [];
             let bytes = 0;
             for await (const chunk of response.body) {
-                bytes += chunk.length;
-                if (bytes > TOOLING_POLICY.relayResponseMaxBytes)
-                    throw new Error("Response byte bound");
+                if (!streaming) {
+                    bytes += chunk.length;
+                    if (bytes > MODEL_NON_STREAMING_RESPONSE_MAX_BYTES)
+                        throw new Error("Non-streaming response byte bound");
+                }
                 chunks.push(chunk);
                 appendFileSync(`${root}/upstream-${call}.sse`, chunk);
                 if (!bufferedFault) {

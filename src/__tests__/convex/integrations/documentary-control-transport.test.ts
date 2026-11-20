@@ -305,3 +305,75 @@ test("generation expiry remains a typed timeout when no capture RPC began", asyn
         dispatchOutcome: "response_received",
     });
 });
+
+test("streaming documentary control above 1 MiB of SSE reasoning frames completes and settles usage", async () => {
+    const { contributionId: _id, ...value } = finding;
+    const finalContent = JSON.stringify({
+        coherence: true,
+        limitations: [],
+        findings: { [contribution.id]: value },
+    });
+    const reasoningPad = "r".repeat(4096);
+    const reasoningFrame = `data: ${JSON.stringify({
+        id: "gen-doc-large",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: currentRoute.model,
+        choices: [
+            {
+                index: 0,
+                delta: { reasoning: reasoningPad },
+                finish_reason: null,
+            },
+        ],
+    })}\n\n`;
+    const contentFrame = `data: ${JSON.stringify({
+        id: "gen-doc-large",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: currentRoute.model,
+        choices: [
+            {
+                index: 0,
+                delta: { content: finalContent },
+                finish_reason: "stop",
+            },
+        ],
+        usage: {
+            prompt_tokens: 120,
+            completion_tokens: 90,
+            total_tokens: 210,
+            cost: 0.0031,
+        },
+    })}\n\ndata: [DONE]\n\n`;
+    const frameCount = Math.ceil(
+        (1024 * 1024 + 65_536) / reasoningFrame.length,
+    );
+    const encoder = new TextEncoder();
+    const result = await examineDocumentaryContributions(input, currentRoute, {
+        apiKey: "offline-only",
+        authority: modelAttemptAuthority(),
+        fetch: async () =>
+            new Response(
+                new ReadableStream({
+                    start(controller) {
+                        for (let i = 0; i < frameCount; i++)
+                            controller.enqueue(encoder.encode(reasoningFrame));
+                        controller.enqueue(encoder.encode(contentFrame));
+                        controller.close();
+                    },
+                }),
+                {
+                    headers: {
+                        "content-type": "Text/Event-Stream; charset=utf-8",
+                    },
+                },
+            ),
+    });
+    expect(result).toMatchObject({
+        status: "succeeded",
+        inputTokens: 120,
+        outputTokens: 90,
+        reportedCost: 0.0031,
+    });
+});

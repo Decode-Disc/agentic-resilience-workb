@@ -17,8 +17,8 @@ import type {
 } from "@convex/execution/executionProtocol";
 import {
     MAX_PREPARATION_DIAGNOSTIC_BYTES,
+    MODEL_NON_STREAMING_RESPONSE_MAX_BYTES,
     MODEL_SETTLEMENT_GRACE_MS,
-    MODEL_WIRE_RESPONSE_MAX_BYTES,
     resolveGenerationAuthority,
     TEXT_FRAGMENT_CHARACTERS,
 } from "@convex/resourcePolicy";
@@ -329,8 +329,11 @@ export function createBoundedModelFetch(
         let bytes = 0;
         const reader = response.body?.getReader();
         const streaming =
-            response.headers.get("content-type")?.split(";")[0]?.trim() ===
-            "text/event-stream";
+            response.headers
+                .get("content-type")
+                ?.split(";")[0]
+                ?.trim()
+                .toLowerCase() === "text/event-stream";
         const observe = () => {
             const body = new Uint8Array(bytes);
             let offset = 0;
@@ -349,7 +352,7 @@ export function createBoundedModelFetch(
         };
         const retain = async (chunk: Uint8Array) => {
             bytes += chunk.byteLength;
-            if (bytes > MODEL_WIRE_RESPONSE_MAX_BYTES) {
+            if (!streaming && bytes > MODEL_NON_STREAMING_RESPONSE_MAX_BYTES) {
                 state.responseTooLarge = true;
                 await reader?.cancel();
                 throw new Error(

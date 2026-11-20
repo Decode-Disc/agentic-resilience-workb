@@ -338,8 +338,8 @@ export const IO_PROVIDER_LEASE_MS = {
 /** Billing lookup exclusivity/recheck interval, never evidence that a generation finished. */
 export const BILLING_LOOKUP_LEASE_MS = 30_000;
 
-/** Cumulative model-response wire bytes, including SSE framing and reasoning. Adequacy remains unverified. */
-export const MODEL_WIRE_RESPONSE_MAX_BYTES = 1024 * 1024;
+/** Buffered non-streaming provider responses (JSON/error bodies); streaming text/event-stream is governed by model capacity, budget and deadlines. */
+export const MODEL_NON_STREAMING_RESPONSE_MAX_BYTES = 1024 * 1024;
 export const REVIEW_REPORT_MAX_BYTES = 256 * 1024;
 /** Local frozen-evidence paging/retention, not native context capacity. Overflow is explicit or cursor-backed. */
 export const REVIEW_EVIDENCE_POLICY = {
@@ -425,7 +425,6 @@ export const QUALIFICATION_TOOLING_POLICY = {
     relayGatePollMs: 25,
     relayRefusalCooldownMs: 15_000,
     relayRequestMaxBytes: 131_072,
-    relayResponseMaxBytes: 1_048_576,
     observationIntervalsMs: [500, 1_000],
     legacyObservationIntervalsMs: [1_000, 2_000],
     gateObservationIntervalsMs: [100, 500],

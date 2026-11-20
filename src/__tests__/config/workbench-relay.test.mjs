@@ -929,3 +929,100 @@ test("upstream transport cannot supply the relay's private non-dispatch acknowle
         },
     );
 });
+
+test("relay forwards and settles a streaming SSE response above 1 MiB without halting", async () => {
+    const reasoningFrame = `data: ${JSON.stringify({
+        id: "gen-relay-large",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: "example/model",
+        choices: [
+            {
+                index: 0,
+                delta: { reasoning: "x".repeat(4096) },
+                finish_reason: null,
+            },
+        ],
+    })}\n\n`;
+    const finalFrame = `data: ${JSON.stringify({
+        id: "gen-relay-large",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: "example/model",
+        choices: [
+            {
+                index: 0,
+                delta: { content: "ok" },
+                finish_reason: "stop",
+            },
+        ],
+        usage: {
+            prompt_tokens: 50,
+            completion_tokens: 25,
+            total_tokens: 75,
+            cost: 0.0042,
+        },
+    })}\n\ndata: [DONE]\n\n`;
+    const frameCount = Math.ceil(
+        (1024 * 1024 + 65_536) / reasoningFrame.length,
+    );
+    const encoder = new TextEncoder();
+    await withRelay(
+        async () =>
+            new Response(
+                new ReadableStream({
+                    start(controller) {
+                        for (let i = 0; i < frameCount; i++)
+                            controller.enqueue(encoder.encode(reasoningFrame));
+                        controller.enqueue(encoder.encode(finalFrame));
+                        controller.close();
+                    },
+                }),
+                {
+                    status: 200,
+                    headers: { "content-type": "text/event-stream" },
+                },
+            ),
+        async ({ root, send, ledger }) => {
+            const response = await send("large-sse");
+            assert.equal(response.status, 200);
+            assert.ok(Buffer.byteLength(response.body) > 1024 * 1024);
+            assert.ok(
+                Buffer.byteLength(
+                    readFileSync(join(root, "upstream-1.sse"), "utf8"),
+                ) >
+                    1024 * 1024,
+            );
+            assert.equal(readRelayContinuation(root).safe, true);
+            assert.equal(
+                ledger().filter((entry) => entry.event === "halt").length,
+                0,
+            );
+            const settled = ledger().find(
+                (entry) => entry.event === "response",
+            );
+            assert.equal(settled?.billing, "reported");
+            assert.equal(settled?.cost, 0.0042);
+        },
+    );
+});
+
+test("relay rejects an oversized non-streaming upstream body above the non-streaming byte bound", async () => {
+    await withRelay(
+        async () =>
+            new Response("x".repeat(1024 * 1024 + 1), {
+                status: 502,
+                headers: { "content-type": "text/html" },
+            }),
+        async ({ send, ledger }) => {
+            await assert.rejects(() => send("oversized-non-sse"));
+            const uncertain = ledger().find(
+                (entry) => entry.event === "uncertain",
+            );
+            assert.match(
+                uncertain?.reason ?? "",
+                /Non-streaming response byte bound/,
+            );
+        },
+    );
+});
