@@ -7,6 +7,7 @@ import type { DocumentaryNeed } from "@/components/workbench-ui/documentary-need
 import {
     ClaimGlyph,
     type ClaimTone,
+    readingLabels as captureReadingLabels,
     WorkbenchIcon,
 } from "@/components/workbench-ui/glyphs";
 import type { SourceMatrixRow } from "@/components/workbench-ui/source-matrix";
@@ -259,10 +260,8 @@ const docTags: Partial<Record<SourcesRow["documentKind"], string>> = {
 };
 /** Capture completeness, not agent reading; mirrors the library's reading labels. */
 const readingLabels: Record<SourcesRow["reading"], string> = {
-    full: "Complete capture",
-    partial: "Partial capture",
+    ...captureReadingLabels,
     capturing: "Capturing",
-    unavailable: "Unavailable",
     not_captured: "Not captured",
 };
 
@@ -294,7 +293,7 @@ function rowMeta(row: SourcesRow) {
 }
 
 function readingState(reading: SourcesRow["reading"]) {
-    return reading === "full" || reading === "partial"
+    return reading === "full" || reading === "partial" || reading === "unknown"
         ? reading
         : ("unavailable" as const);
 }
@@ -370,7 +369,7 @@ export function sourcesMatrixRow(row: SourcesRow): SourceMatrixRow {
         relationship: relationshipLabels[row.authorityTier],
         reading: readingState(row.reading),
         readingLabel: readingLabels[row.reading],
-        missing: row.reading !== "full" && row.reading !== "partial",
+        missing: readingState(row.reading) === "unavailable",
         quiet:
             row.membership === "not_retained" || row.membership === "excluded",
         contributions: tally
@@ -427,6 +426,7 @@ export const sourcesMatrixFilters = [
             { id: "any", label: "Any capture" },
             { id: "full", label: "Complete" },
             { id: "partial", label: "Partial" },
+            { id: "unknown", label: "Completeness unverified" },
             { id: "unread", label: "Not captured" },
         ],
     },
@@ -504,7 +504,7 @@ export function filterSourcesRows(
         if (
             reading !== "any" &&
             (reading === "unread"
-                ? row.reading === "full" || row.reading === "partial"
+                ? readingState(row.reading) !== "unavailable"
                 : row.reading !== reading)
         )
             return false;
@@ -728,6 +728,7 @@ export function sourcesPreparationView(
             captured: overview.reading.captured,
             full: overview.reading.full,
             partial: overview.reading.partial,
+            unknown: overview.reading.unknown,
             unavailable: overview.reading.unavailable,
             notCaptured: overview.reading.notCaptured,
             // After handoff, controls describe the retained material; before it, everything checked so far.

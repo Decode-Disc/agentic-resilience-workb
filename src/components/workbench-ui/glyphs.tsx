@@ -469,11 +469,12 @@ export function EvidenceBadge({
     );
 }
 
-export type ReadingState = "full" | "partial" | "unavailable";
+export type ReadingState = "full" | "partial" | "unknown" | "unavailable";
 /** Capture completeness, not how much the agent read: a complete capture is not proof of complete reading. */
 export const readingLabels: Record<ReadingState, string> = {
     full: "Complete capture",
     partial: "Partial capture",
+    unknown: "Completeness unverified",
     unavailable: "Unavailable",
 };
 
@@ -482,11 +483,13 @@ export const readingColors: Record<ReadingState, string> = {
     full: "var(--brand-purple)",
     partial:
         "repeating-linear-gradient(90deg, var(--foreground) 0 3px, color-mix(in oklab, var(--foreground) 18%, transparent) 3px 5px)",
+    unknown: "var(--muted-foreground)",
     unavailable: "color-mix(in oklab, var(--foreground) 12%, transparent)",
 };
 const readingGlyphColors: Record<ReadingState, string> = {
     full: "var(--brand-purple)",
     partial: "var(--foreground)",
+    unknown: "var(--muted-foreground)",
     unavailable: "var(--muted-foreground)",
 };
 
@@ -535,7 +538,9 @@ export function ReadingGlyph({
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="1.6"
-                    strokeDasharray="3 3"
+                    strokeDasharray={
+                        state === "unavailable" ? "3 3" : undefined
+                    }
                 />
             )}
         </svg>
@@ -552,7 +557,10 @@ export function ReadingBar({
     height = 8,
     width,
 }: {
-    counts: Record<ReadingState, number> & { notCaptured?: number };
+    counts: Record<Exclude<ReadingState, "unknown">, number> & {
+        unknown?: number;
+        notCaptured?: number;
+    };
     height?: number;
     width?: CSSProperties["width"];
 }) {
@@ -568,7 +576,15 @@ export function ReadingBar({
                 overflow: "hidden",
                 flexShrink: 0,
             }}>
-            {(["full", "partial", "unavailable", "notCaptured"] as const).map(
+            {(
+                [
+                    "full",
+                    "partial",
+                    "unknown",
+                    "unavailable",
+                    "notCaptured",
+                ] as const
+            ).map(
                 (state) =>
                     (counts[state] ?? 0) > 0 && (
                         <span

@@ -125,6 +125,7 @@ export interface SourcesPreparationView {
         passages?: number;
         full: number;
         partial: number;
+        unknown?: number;
         unavailable: number;
         /** Candidates never captured: open leads, not judged irrelevant. */
         notCaptured?: number;
@@ -395,6 +396,7 @@ function PreparationStages({ view }: { view: SourcesPreparationView }) {
                         counts={{
                             full: reading.full,
                             partial: reading.partial,
+                            unknown: reading.unknown,
                             unavailable: reading.unavailable,
                             notCaptured: reading.notCaptured,
                         }}
@@ -406,6 +408,11 @@ function PreparationStages({ view }: { view: SourcesPreparationView }) {
                         <span>
                             <b>{reading.partial}</b> partial
                         </span>
+                        {(reading.unknown ?? 0) > 0 && (
+                            <span>
+                                <b>{reading.unknown}</b> completeness unverified
+                            </span>
+                        )}
                         {reading.unavailable > 0 && (
                             <span>
                                 <b>{reading.unavailable}</b> unavailable
@@ -680,7 +687,7 @@ export function SourcesMatrixScreen({
                 rows={pageItems}
                 currentId={currentId}
                 onOpen={onOpenSource}
-                availabilityHelp="The extent of the saved capture. A complete capture does not establish that its contents were read or qualified."
+                availabilityHelp="Whether a document was captured, and whether the stored copy is complete. Reading and qualification are tracked separately."
                 contributionTerms={contributionTerms}
                 contributionScale={18}
                 note="Included, read, contributing and usable are four separate facts."

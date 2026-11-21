@@ -165,19 +165,44 @@ test("matrix explains its columns and contribution classes", async ({
     await page.goto("/?layout=sources&screen=matrix&theme=light");
     const help = page.getByRole("button", { name: "About Availability" });
     await expect(help).toHaveAccessibleDescription(
-        /How much of the document was actually read/,
+        /whether the stored copy is complete/,
     );
     await help.hover();
     await expect(
         page
             .getByRole("dialog")
-            .filter({ hasText: "How much of the document was actually read" }),
+            .filter({ hasText: "whether the stored copy is complete" }),
     ).toBeVisible();
     await expect(
         page.getByRole("button", {
             name: "18 contributions: 12 facts, 4 inferences, 2 counter-evidence",
         }),
     ).toBeVisible();
+});
+
+test("Sources shows an available capture with unverified completeness on desktop and mobile", async ({
+    page,
+}) => {
+    for (const viewport of [
+        { width: 1440, height: 900 },
+        { width: 390, height: 844 },
+    ]) {
+        await page.setViewportSize(viewport);
+        await page.goto("/?layout=sources&screen=matrix&theme=light");
+        await page
+            .getByRole("searchbox", { name: "Search sources" })
+            .fill("Industry overview");
+        const row = page
+            .getByRole("row")
+            .filter({ hasText: "Industry overview · reused" });
+        await expect(
+            row.getByText("Completeness unverified", { exact: true }),
+        ).toBeVisible();
+        await row
+            .getByRole("button", { name: "Industry overview · reused" })
+            .click();
+        await expect(page).toHaveURL(/screen=reader/);
+    }
 });
 
 test("matrix pages through every source and keeps the current source in view", async ({
@@ -209,7 +234,7 @@ test.describe("on a touch screen", () => {
         await page.getByRole("button", { name: "About Availability" }).tap();
         await expect(
             page.getByRole("dialog").filter({
-                hasText: "How much of the document was actually read",
+                hasText: "whether the stored copy is complete",
             }),
         ).toBeVisible();
         await page.keyboard.press("Escape");

@@ -7,6 +7,7 @@ import {
     type SourcesRow,
     sortSourcesRows,
     sourcesFilterValues,
+    sourcesMatrixRow,
     sourcesPhasePresentation,
 } from "@/lib/presentation/sources";
 import { sourcesLocation, workspaceSearch } from "@/lib/workspace/navigation";
@@ -68,6 +69,29 @@ test("selection filters keep retained, context-only, not retained and excluded a
     expect(ids({ reading: "unread" })).toEqual(["unread"]);
     expect(ids({}, "FILING")).toEqual(["filing"]);
     expect(ids({ use: "unknown-option" })).toHaveLength(rows.length);
+});
+
+test("an available representation with unknown completeness remains a captured document", () => {
+    const saved = row({ sourceId: "saved", reading: "unknown" });
+    expect(sourcesMatrixRow(saved)).toMatchObject({
+        reading: "unknown",
+        readingLabel: "Completeness unverified",
+        missing: false,
+    });
+    expect(
+        filterSourcesRows(
+            [saved],
+            "",
+            sourcesFilterValues({ reading: "unread" }),
+        ),
+    ).toEqual([]);
+    expect(
+        filterSourcesRows(
+            [saved],
+            "",
+            sourcesFilterValues({ reading: "unknown" }),
+        ),
+    ).toEqual([saved]);
 });
 
 test("Sources locations survive the URL only within the Sources section", () => {
