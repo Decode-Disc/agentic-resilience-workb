@@ -1,0 +1,135 @@
+{
+    "schemaVersion": 1,
+    "id": "20261121T135131913Z-citation-count-and-coverage-diagnosis",
+    "createdAt": "2026-11-21T13:51:31.913Z",
+    "git": {
+        "head": "a326030371e5546dabc5820ad58715753fc77ab1",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/docs/verification/2026-11-21-citation-count-publication-diagnosis.md",
+            "archivePath": "repository/docs/verification/2026-11-21-citation-count-publication-diagnosis.md"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/scripts/evaluations/workbench-browser/scenarios.ts",
+            "archivePath": "repository/scripts/evaluations/workbench-browser/scenarios.ts"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/src/__tests__/config/qualification-v2.test.mjs",
+            "archivePath": "repository/src/__tests__/config/qualification-v2.test.mjs"
+        },
+        {
+            "origin": "/tmp/workbench-citation-diagnosis-20261121-dkpknjvd",
+            "archivePath": "external/diagnostic"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/diagnostic/archive-result.log",
+            "bytes": 380,
+            "sha256": "21dbbf88420eed23e33fe16514a9105cc7e9f02c12930795a0ff89823fae2d3c"
+        },
+        {
+            "path": "external/diagnostic/citation-count-native-control-green.log",
+            "bytes": 281,
+            "sha256": "b7da78ad2a4b5ff54f7bfd59bb62442b1a46f88fa0f2d315604fb158e154b6c7"
+        },
+        {
+            "path": "external/diagnostic/citation-count-native-red-final.log",
+            "bytes": 1149,
+            "sha256": "9ee93b1f5366fc25b71e3f15844aab137d870e6a22348c5a91b1b8abe9ae53fb"
+        },
+        {
+            "path": "external/diagnostic/coverage-format.log",
+            "bytes": 40,
+            "sha256": "6ee0e598f15b5fee57ffa9554f9cafb713fe07f1c60a4b843913f17adbd94d9f"
+        },
+        {
+            "path": "external/diagnostic/coverage-handoff-focused-green.log",
+            "bytes": 609,
+            "sha256": "d514af6900bdb6711e8c85808c728dfc3133e5e7037851cbb69ad6940541595c"
+        },
+        {
+            "path": "external/diagnostic/coverage-handoff-green.log",
+            "bytes": 223,
+            "sha256": "7df729273f9a0a87090cfc7248d2a72588defd40347390c201ad28666a9451fd"
+        },
+        {
+            "path": "external/diagnostic/coverage-handoff-red.log",
+            "bytes": 1689,
+            "sha256": "c2c6ba3b9b231cefa7c0c613c7ab7444b9b700ae2e5efdf00dad27e846a72063"
+        },
+        {
+            "path": "external/diagnostic/coverage-imports.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "external/diagnostic/coverage-original-replay-green.log",
+            "bytes": 194,
+            "sha256": "cc0f0904ec0750549e21f10a74034a93e2331cad16b2d9af658dbeb3026be753"
+        },
+        {
+            "path": "external/diagnostic/coverage-protocol-green.log",
+            "bytes": 4281,
+            "sha256": "9537beb79b4e004a9c99303332895047e666cb56db515f4797d51c4e9fb1938a"
+        },
+        {
+            "path": "external/diagnostic/coverage-types.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "external/diagnostic/docs-check.log",
+            "bytes": 440,
+            "sha256": "e04eb05c6f023e08c659e4bf0e035f4a4311623ebc0caed716cb8acf0e1c962c"
+        },
+        {
+            "path": "external/diagnostic/live-citation-proof.json",
+            "bytes": 1085,
+            "sha256": "cffd55a1a0116e57e2f695e4d00f48c4c8f50168eaa1f0948567ebaf677ee015"
+        },
+        {
+            "path": "external/diagnostic/publication.test.ts",
+            "bytes": 9030,
+            "sha256": "886ac3a00c0ea903323e5bd69214a451b00d53f97eaa0a97f60d5afc25b866d2"
+        },
+        {
+            "path": "external/diagnostic/README.md",
+            "bytes": 1295,
+            "sha256": "6a6c34e40d2ee2f29717703239d2812698ff06a7845a86ea31a7f301a3d23f61"
+        },
+        {
+            "path": "external/diagnostic/replay-handoff.mts",
+            "bytes": 3246,
+            "sha256": "69ddc95628a3f9b5673926a10727cee6415b29e7f3bb0503587dca453fa22d10"
+        },
+        {
+            "path": "external/diagnostic/vitest.config.ts",
+            "bytes": 537,
+            "sha256": "e514478018f5a6ba331b44b8bc6483886652136617e6e7c8226a5c10654ac5bd"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-citation-count-publication-diagnosis.md",
+            "bytes": 8371,
+            "sha256": "e5836cc4e0db237433f328fd43ad8f573938a1e8af4a352079a88099c9a5c081"
+        },
+        {
+            "path": "repository/scripts/evaluations/workbench-browser/scenarios.ts",
+            "bytes": 55128,
+            "sha256": "f0cc4d19cdf0dc94efd67d40f6d4b4b2857a6a405f352e7d5478d4fe5411bb94"
+        },
+        {
+            "path": "repository/src/__tests__/config/qualification-v2.test.mjs",
+            "bytes": 69812,
+            "sha256": "bc0d7daba0f8a3c964b4f873d2bcb5ba79f54df04f62375d577348d101b7e975"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261121T135131913Z-citation-count-and-coverage-diagnosis.tar.gz",
+        "bytes": 34089,
+        "sha256": "75adfa09aeab29f1d6ee0023f9f7a5f143d46b2106f77c5cfa39a82e634d7724"
+    },
+    "verification": "restored_and_verified"
+}

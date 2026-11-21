@@ -1704,3 +1704,212 @@ test("a held-out framing corpus is frozen separately from historical case identi
     );
     assert.equal(prepared.manifest.scenarios[0].framingReplay.case, "heldout");
 });
+
+for (const { name, requested, resolved, prepared, rejects } of [
+    {
+        name: "omitted default",
+        requested: undefined,
+        resolved: "balanced",
+        prepared: "balanced",
+        rejects: false,
+    },
+    {
+        name: "explicit nondefault",
+        requested: "first_party_depth",
+        resolved: "first_party_depth",
+        prepared: "first_party_depth",
+        rejects: false,
+    },
+    {
+        name: "changed default",
+        requested: undefined,
+        resolved: "balanced",
+        prepared: "independent_scrutiny",
+        rejects: true,
+    },
+    {
+        name: "changed explicit",
+        requested: "first_party_depth",
+        resolved: "first_party_depth",
+        prepared: "balanced",
+        rejects: true,
+    },
+])
+    test(`Sources coverage handoff preserves the following consultation only for matching ${name} coverage`, async () => {
+        const root = mkdtempSync(join(tmpdir(), "coverage-handoff-default-"));
+        const base = configurableCampaign();
+        const scenario = {
+            ...base.scenarios[0],
+            framingRequest: {
+                text: base.scenarios[0].framing.scope,
+                receivedAt: "2026-11-21T00:00:00.000Z",
+            },
+            steps: [
+                {
+                    id: "handoff",
+                    action: "wait_for",
+                    state: "sources_prepared",
+                },
+                {
+                    id: "consult",
+                    action: "send_message",
+                    text: "Explain the prepared evidence.",
+                },
+            ],
+        };
+        if (requested) scenario.coveragePreset = requested;
+        else delete scenario.coveragePreset;
+        const manifest = campaignManifestSchema.parse({
+            ...base,
+            mode: "deterministic",
+            executionSurface: "backend",
+            scenarios: [scenario],
+            expectations: base.expectations.slice(0, 1),
+            perLot: { model: 0, search: 0, acquisition: 0, costUsd: 0 },
+            total: { model: 0, search: 0, acquisition: 0, costUsd: 0 },
+            batteryHash: "a".repeat(64),
+        });
+        writeFileSync(
+            join(root, "protocol.json"),
+            `${JSON.stringify({ boundary: "backend" }, null, 2)}\n`,
+        );
+        writeFileSync(
+            join(root, "prepared.json"),
+            JSON.stringify({
+                cases: [
+                    { id: scenario.id, runId: "run", fixtureKey: "fixture" },
+                ],
+            }),
+        );
+        const snapshot = {
+            nativeSettled: true,
+            conversation: { queuedCount: 0 },
+            framing: {
+                _id: "framing",
+                origin: "workbench",
+                revision: 2,
+                content: scenario.framing,
+            },
+            run: {
+                lifecycleState: "sources_prepared",
+                executionStatus: "idle",
+                coveragePreset: resolved,
+                fixedFramingRevisionId: "framing",
+            },
+            preparation: {
+                sourcesMission: {
+                    coveragePolicy: {
+                        preset: prepared,
+                        version: "sources_coverage_v1",
+                    },
+                    needs: [
+                        ...scenario.framing.questions.map((q) => ({
+                            questionIds: [q.id],
+                            information: q.text,
+                        })),
+                        {
+                            commonContext: true,
+                            questionIds: [],
+                            information: scenario.framing.scope,
+                        },
+                    ],
+                },
+            },
+            sourcesMission: { status: "completed" },
+            lastMessage: { _id: "initial" },
+        };
+        const submitted = [];
+        const client = {
+            query: async (reference) =>
+                getFunctionName(reference) ===
+                "execution/fixtures:qualificationSnapshot"
+                    ? structuredClone(snapshot)
+                    : {
+                          page: [],
+                          payloads: [],
+                          downloads: [],
+                          isDone: true,
+                          continueCursor: "",
+                      },
+            mutation: async (reference) => {
+                assert.equal(
+                    getFunctionName(reference),
+                    "execution/fixtures:activateWorkbench",
+                );
+            },
+        };
+        const execute = async () => {
+            try {
+                await runCampaignScenarios(
+                    null,
+                    client,
+                    undefined,
+                    "http://127.0.0.1:3210",
+                    root,
+                    manifest,
+                    () => false,
+                    {
+                        query: async () => ({ status: "active" }),
+                        mutation: async (reference, args) => {
+                            assert.equal(
+                                getFunctionName(reference),
+                                "execution/conversations:submit",
+                            );
+                            submitted.push(args.text);
+                            snapshot.lastMessage = { _id: "consultation" };
+                        },
+                    },
+                );
+            } catch (error) {
+                const path = join(root, scenario.id, "failure.json");
+                if (existsSync(path))
+                    throw new Error(
+                        JSON.parse(readFileSync(path, "utf8")).reason,
+                        { cause: error },
+                    );
+                throw error;
+            }
+        };
+        if (rejects) {
+            await assert.rejects(
+                execute,
+                /Expected values to be strictly equal/,
+            );
+            assert.deepEqual(submitted, []);
+            const failure = JSON.parse(
+                readFileSync(join(root, scenario.id, "failure.json"), "utf8"),
+            );
+            assert.equal(failure.step, "handoff");
+            assert.equal(
+                existsSync(
+                    join(root, scenario.id, "actual-start-handoff.json"),
+                ),
+                false,
+            );
+            return;
+        }
+        await execute();
+        assert.deepEqual(submitted, ["Explain the prepared evidence."]);
+        assert.deepEqual(
+            JSON.parse(
+                readFileSync(
+                    join(root, scenario.id, "actual-start-handoff.json"),
+                    "utf8",
+                ),
+            ).coveragePolicy,
+            snapshot.preparation.sourcesMission.coveragePolicy,
+        );
+        assert.equal(
+            JSON.parse(
+                readFileSync(
+                    join(root, scenario.id, "consult-after.json"),
+                    "utf8",
+                ),
+            ).lastMessage._id,
+            "consultation",
+        );
+        assert.equal(
+            existsSync(join(root, scenario.id, "failure.json")),
+            false,
+        );
+    });

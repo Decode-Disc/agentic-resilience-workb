@@ -1,0 +1,77 @@
+{
+    "schemaVersion": 1,
+    "id": "20261121T150920815Z-citation-provider-trace-correlation",
+    "createdAt": "2026-11-21T15:09:20.815Z",
+    "git": {
+        "head": "a326030371e5546dabc5820ad58715753fc77ab1",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/docs/verification/2026-11-21-citation-count-publication-diagnosis.md",
+            "archivePath": "repository/docs/verification/2026-11-21-citation-count-publication-diagnosis.md"
+        },
+        {
+            "origin": "/tmp/workbench-provider-trace-diagnosis-20261121",
+            "archivePath": "external/traces"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/traces/arize-generations-visible.json",
+            "bytes": 24165,
+            "sha256": "2ea9b211406ae5cfad51d08e789b36baefe24f4d3765bc9890d74eab5c7f1520"
+        },
+        {
+            "path": "external/traces/arize-visible-trace.json",
+            "bytes": 128982,
+            "sha256": "2c5230d3433a4a6838700e907d2ed92c1294d4dd6f36843f742a27d06689d95d"
+        },
+        {
+            "path": "external/traces/compare-traces.py",
+            "bytes": 3830,
+            "sha256": "df99ec33bea1d476c1500f70d248da0ab3a95b94df4c7670d9771e2fcf6dfd37"
+        },
+        {
+            "path": "external/traces/cross-source-comparison.json",
+            "bytes": 414,
+            "sha256": "41114f758168f848a60784fab25a6def4182e150cc5606c710b9560e6937fb3c"
+        },
+        {
+            "path": "external/traces/docs-check.log",
+            "bytes": 440,
+            "sha256": "ffd0131d7dfe65831bc91c81fa5f43b74081205e8d2ffb26550609fa702b4bb4"
+        },
+        {
+            "path": "external/traces/generation-chain-comparison.json",
+            "bytes": 2071,
+            "sha256": "5e334c379fbc1843200a4bc6bde3a621f02fcde3ff40c5320c9be6a2b5a91f87"
+        },
+        {
+            "path": "external/traces/openrouter-generation.json",
+            "bytes": 565,
+            "sha256": "4e19e2d8905abcd81a1d293f658f1639e8dc9aa9a13fb481c81f9a9725d4ddd0"
+        },
+        {
+            "path": "external/traces/openrouter-read.mts",
+            "bytes": 1533,
+            "sha256": "8c01de6b6d22e4a821db85a1c9ce415c604fd2a7f2cf5a1c2598f67dec431a8f"
+        },
+        {
+            "path": "external/traces/verified-trace-comparison.json",
+            "bytes": 823,
+            "sha256": "518ce4252f208129f224ececc2dfd47f789429cf86b30fa5efb6cbb9916e4759"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-citation-count-publication-diagnosis.md",
+            "bytes": 11946,
+            "sha256": "3adf2a44563f14f78b194f91e4db4f58b45cc76df30ac84e0ec0ec5766badcf9"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261121T150920815Z-citation-provider-trace-correlation.tar.gz",
+        "bytes": 39007,
+        "sha256": "114e6e96b6e246eb0c9f54b92a9198e6d020b6f0adc340a6990b6c52c3c3880b"
+    },
+    "verification": "restored_and_verified"
+}

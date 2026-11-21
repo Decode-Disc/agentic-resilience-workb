@@ -1017,7 +1017,8 @@ export async function runCampaignScenarios(
                                 );
                                 assert.equal(
                                     sources.coveragePolicy?.preset,
-                                    scenario.coveragePreset,
+                                    scenario.coveragePreset ??
+                                        handoff.run.coveragePreset,
                                 );
                                 for (const question of fixed.content.questions)
                                     assert.equal(

@@ -1,0 +1,125 @@
+{
+    "schemaVersion": 1,
+    "id": "20261121T132821486Z-documentary-window-ready-closeout",
+    "createdAt": "2026-11-21T13:28:21.486Z",
+    "git": {
+        "head": "a326030371e5546dabc5820ad58715753fc77ab1",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/docs/verification/2026-11-21-documentary-qualification-replacement.md",
+            "archivePath": "repository/docs/verification/2026-11-21-documentary-qualification-replacement.md"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/docs/verification/2026-11-21-documentary-evaluator-rerun.md",
+            "archivePath": "repository/docs/verification/2026-11-21-documentary-evaluator-rerun.md"
+        },
+        {
+            "origin": "/tmp/workbench-documentary-window-ready-20261121-mbngbres/closeout",
+            "archivePath": "external/closeout"
+        },
+        {
+            "origin": "/tmp/workbench-documentary-window-ready-20261121-mbngbres/early-review/published-messages.json",
+            "archivePath": "external/publication/published-messages.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/closeout/assessment.log",
+            "bytes": 575,
+            "sha256": "b27a29b8e748b2899035aacdb648b5c3e2d976004e83a815e7e842fb223ff31d"
+        },
+        {
+            "path": "external/closeout/close.log",
+            "bytes": 176,
+            "sha256": "ac388930060eaa3257de58c5cfc10271f8f15e3821f322d9cf4bfa6fe7feb0a6"
+        },
+        {
+            "path": "external/closeout/docs-check.log",
+            "bytes": 440,
+            "sha256": "63abe768280989d87496fc902384b15484ee16359fbb19089dc7f4fc07c65035"
+        },
+        {
+            "path": "external/closeout/environment-restoration.json",
+            "bytes": 205,
+            "sha256": "9b4ab8a09ce126ca2b9f887978ad3e01a7609f8c53e1d4a9ac0e78886200f73d"
+        },
+        {
+            "path": "external/closeout/handoff-checks.json",
+            "bytes": 343,
+            "sha256": "3a900ad8ebf0df55f14389e8b473e44f026a2bf1491a6f7637b655f81f6c5d6d"
+        },
+        {
+            "path": "external/closeout/manual-evidence-summary.json",
+            "bytes": 4784,
+            "sha256": "9600d2bbb2f84c77da5a91748ccfa6c8fda004d0516683e267dcd3bf1bc64aea"
+        },
+        {
+            "path": "external/closeout/pre-admission-interruption.json",
+            "bytes": 386,
+            "sha256": "9227f2a34b0ae799a350980669ea80c54902dfb046a1a886f61b40f77d4f299b"
+        },
+        {
+            "path": "external/closeout/pre-admission-interruption.log",
+            "bytes": 409,
+            "sha256": "e150d92fbf8e65847a8cd3e02235568cf227430a15c3ea20a89416632cb8a588"
+        },
+        {
+            "path": "external/closeout/preparation-probe.json",
+            "bytes": 930,
+            "sha256": "5866af7775bd46e33e252807ae5bea087e2e13f9be47cfc72abc7d744946674b"
+        },
+        {
+            "path": "external/closeout/review.json",
+            "bytes": 4519,
+            "sha256": "be6d66682a3ec73fe331de504a226af994ce51fbecbcff95d87f182c13124830"
+        },
+        {
+            "path": "external/closeout/runtime-after-preflight.json",
+            "bytes": 716,
+            "sha256": "2d17865726d4b16d4f4c1b1e184432e0dd48174f118075792fab968cd88759dd"
+        },
+        {
+            "path": "external/closeout/runtime-before.json",
+            "bytes": 3664,
+            "sha256": "a6eaeb906f32615d145f4c4d7594fb2115dfa3a25cefa23dd5445b5d5f8231fb"
+        },
+        {
+            "path": "external/closeout/runtime-final.json",
+            "bytes": 3664,
+            "sha256": "621a066ef6439e88523458a036951ab7e9533d998f9cab6a964b30270c01ebdf"
+        },
+        {
+            "path": "external/closeout/status-final.log",
+            "bytes": 765083,
+            "sha256": "a3900656df3de999764d870d28c16bfa871ed857821ead58f90e78b6350e8e24"
+        },
+        {
+            "path": "external/closeout/teardown.json",
+            "bytes": 108,
+            "sha256": "bd1e93c046cd46356b3bf770f8ee438f599e66fff055d5f4bb6c4ea6e47095d7"
+        },
+        {
+            "path": "external/publication/published-messages.json",
+            "bytes": 13586,
+            "sha256": "6e7946c3e298a7f2da6eb4f798428d456e874a1261e35f5e385ce9ec4a528ca7"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-documentary-evaluator-rerun.md",
+            "bytes": 9869,
+            "sha256": "749a49b23b94ae475eb8af7153a607895f4b1c719c6bef86fb93715cd9fe27da"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-documentary-qualification-replacement.md",
+            "bytes": 8780,
+            "sha256": "8eb9458a6a44f908686b77740254c0dc070640e407d683d0666863d8008f4e41"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261121T132821486Z-documentary-window-ready-closeout.tar.gz",
+        "bytes": 224449,
+        "sha256": "5023439c2cff40142b87ac7bcf8783d082f1a9bfc18b0184a67447e5476f7624"
+    },
+    "verification": "restored_and_verified"
+}
