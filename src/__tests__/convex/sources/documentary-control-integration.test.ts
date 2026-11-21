@@ -2,7 +2,7 @@ import {
     clearTimeout as clearRealTimeout,
     setTimeout as setRealTimeout,
 } from "node:timers";
-import { internal } from "@convex/_generated/api";
+import { api, internal } from "@convex/_generated/api";
 import type {
     DocumentaryContribution,
     documentarySubmissionValue,
@@ -28,6 +28,12 @@ import {
     dispatchSourcesOperation,
     seedCapturedSources,
 } from "@/__tests__/setup/sources-mission";
+
+vi.mock("node:dns/promises", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("node:dns/promises")>();
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]);
+    return { ...actual, default: { ...actual, lookup }, lookup };
+});
 
 afterEach(() => {
     vi.useRealTimers();
@@ -818,7 +824,9 @@ test("the documentary provider lease cannot outlive remaining preparation author
     expect(call?.leaseExpiresAt).toBe(deadlineAt + 10000);
 });
 
-async function fixture(kind: DocumentaryContribution["kind"] = "context") {
+async function documentaryControlFixture(
+    kind: DocumentaryContribution["kind"],
+) {
     vi.useFakeTimers();
     const f = await seedCapturedSources();
     vi.stubEnv("OPENROUTER_API_KEY", "offline-only");
@@ -857,16 +865,21 @@ async function fixture(kind: DocumentaryContribution["kind"] = "context") {
             },
         ],
     };
+    return { ...f, input };
+}
+
+async function fixture(kind: DocumentaryContribution["kind"] = "context") {
+    const f = await documentaryControlFixture(kind);
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
             missionId: f.missionId,
             expectedGeneration: 4,
             cause: "real-documentary-examiner",
-            input,
+            input: f.input,
         },
     );
-    return { ...f, requestId, input };
+    return { ...f, requestId };
 }
 
 function mockControlReply(permittedUse: "documentary" | "context_only") {
@@ -1550,4 +1563,249 @@ test("an oversized Sources submission returns the capacity field and its correct
         taskId,
     ]);
     expect(retained.calls).toHaveLength(1);
+});
+
+test("Sources refresh reserves one new provider attempt and preserves the earlier captured bytes", async () => {
+    const f = await seedCapturedSources();
+    await f.t.run((ctx) => ctx.db.patch(f.missionId, { definitionVersion: 7 }));
+    vi.stubEnv("EXA_API_KEY", "offline-only");
+    const source = await f.t.run((ctx) => ctx.db.get(f.sourceId));
+    assert(source);
+    const original =
+        "The initial publication lists local approval of enterprise workflows.";
+    const revised =
+        "The updated publication lists centralized approval of enterprise workflows.";
+    const provider = vi.fn();
+    for (const text of [original, revised])
+        provider.mockImplementationOnce(async () =>
+            providerFixtureResponse({
+                results: [
+                    { id: source.canonicalUrl, url: source.canonicalUrl, text },
+                ],
+                searchTime: 1,
+                costDollars: { total: 0.01 },
+            }),
+        );
+    vi.stubGlobal("fetch", provider);
+    const acquire = async (reference: string, cause: string) => {
+        const requestId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: f.missionId,
+                expectedGeneration: 4,
+                cause,
+                input: { kind: "acquire_document", reference },
+            },
+        );
+        const result = await dispatchSourcesOperation(f.t, {
+            requestId,
+            expectedGeneration: 4,
+        });
+        assert(result.kind === "success", JSON.stringify(result));
+        return JSON.parse(result.valueJson);
+    };
+    const first = await acquire(
+        JSON.stringify({ version: 2, issuer: "source", sourceId: f.sourceId }),
+        "capture-first",
+    );
+    const context = await f.t.query(internal.execution.context.build, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+    });
+    assert(context.kind === "ready");
+    const entry = JSON.parse(context.inputJson).activeWork.captures.find(
+        (capture: { captureId: string }) =>
+            capture.captureId === first.captureId,
+    );
+    const refresh = entry.readingReferences[0].refreshReference;
+    const second = await acquire(refresh, "capture-revised");
+    expect(second).toMatchObject({ sourceId: first.sourceId });
+    expect(second.captureId).not.toBe(first.captureId);
+    expect(second.contentHash).not.toBe(first.contentHash);
+    expect((await acquire(refresh, "reuse-revised")).captureId).toBe(
+        second.captureId,
+    );
+    const state = await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        const older = await ctx.db.get("sourceCaptures", first.captureId);
+        const newer = await ctx.db.get("sourceCaptures", second.captureId);
+        assert(older?.storageId && newer?.storageId);
+        return {
+            ids: preparation?.sourcesMission?.captureIds,
+            originalText: await (
+                await ctx.storage.get(older.storageId)
+            )?.text(),
+            refreshedText: await (
+                await ctx.storage.get(newer.storageId)
+            )?.text(),
+        };
+    });
+    expect(state).toMatchObject({
+        ids: expect.arrayContaining([first.captureId, second.captureId]),
+        originalText: original,
+        refreshedText: revised,
+    });
+    expect(provider).toHaveBeenCalledTimes(2);
+});
+
+test("Sources 7 controls the capture cited before a newer capture was registered", async () => {
+    const f = await documentaryControlFixture("context");
+
+    await f.t.run((ctx) => ctx.db.patch(f.missionId, { definitionVersion: 7 }));
+    const readRequestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "review-v7-first-capture",
+            input: {
+                kind: "search_available_material",
+                reference: JSON.stringify({
+                    issuer: "capture",
+                    captureId: f.captureId,
+                    version: 2,
+                }),
+                query: "workflow",
+            },
+        },
+    );
+    const read = await dispatchSourcesOperation(f.t, {
+        requestId: readRequestId,
+        expectedGeneration: 4,
+    });
+    assert(read.kind === "success", JSON.stringify(read));
+    const passageOrder = JSON.parse(read.valueJson).passages[0]?.passageOrder;
+    expect(passageOrder).toBeTypeOf("number");
+    const submission = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "review-v7-submit-first-capture",
+            input: {
+                ...f.input,
+                changes: f.input.changes.map(({ contribution }) => ({
+                    contribution: {
+                        ...contribution,
+                        evidence: [{ readRequestId, passageOrder }],
+                    },
+                })),
+            },
+        },
+    );
+    const newer = await f.t.run(async (ctx) => {
+        const capture = await ctx.db.get(f.captureId);
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(capture && preparation?.sourcesMission);
+        const { _id, _creationTime, ...original } = capture;
+        const captureId = await ctx.db.insert("sourceCaptures", {
+            ...original,
+            captureKey: `review-second-capture-${_id}`,
+            updatedAt: original.updatedAt + 1,
+        });
+        await ctx.db.patch(preparation._id, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                captureIds: [
+                    ...preparation.sourcesMission.captureIds,
+                    captureId,
+                ],
+            },
+        });
+        return captureId;
+    });
+    expect(newer).not.toBe(f.captureId);
+    const evidence: unknown[] = [];
+    vi.stubGlobal("fetch", async (_url: unknown, init?: RequestInit) => {
+        const wire = JSON.parse(String(init?.body));
+        evidence.push(...JSON.parse(wire.messages.at(-1).content).evidence);
+        return documentaryReply(init);
+    });
+    const outcome = await dispatchSourcesOperation(f.t, {
+        requestId: submission,
+        expectedGeneration: 4,
+    });
+    assert(outcome.kind === "success", JSON.stringify(outcome));
+    const expected = {
+        captureId: f.captureId,
+        contentHash: f.passage.contentHash,
+        passage: expect.objectContaining({
+            order: passageOrder,
+            quotation: f.passage.quotation,
+        }),
+    };
+    expect(evidence).toEqual([expect.objectContaining(expected)]);
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "complete-exact-capture",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready", JSON.stringify(begun));
+    const completed = await f.t.mutation(
+        internal.execution.invocations.finish,
+        {
+            invocationId: begun.invocationId,
+            expectedGeneration: 4,
+            response: {
+                kind: "complete",
+                needs: [{ needId: "common-context", unfinished: [] }],
+            },
+        },
+    );
+    expect(completed.kind).toBe("completed");
+    await f.t.mutation(internal.sourcesMission.finish, {
+        preparationId: f.preparationId,
+        missionId: f.missionId,
+        expectedGeneration: 4,
+    });
+    const reader = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.getSource, {
+            runId: f.runId,
+            sourceId: f.sourceId,
+        });
+    expect(reader?.capture).toMatchObject({ captureId: f.captureId });
+    expect(
+        reader?.sections.flatMap((section) => section.passages),
+    ).toContainEqual({
+        order: passageOrder,
+        quotation: f.passage.quotation,
+    });
+});
+
+test("Sources control uses publication metadata retained only on the capture", async () => {
+    const f = await fixture();
+    const { sourceDocumentMetadata } = await import(
+        "@convex/domain/sourceRetrievalPolicy"
+    );
+    const publishedAt = Date.parse("2020-01-11T00:00:00.000Z");
+    await f.t.run(async (ctx) => {
+        const source = await ctx.db.get(f.sourceId);
+        assert(source);
+        await ctx.db.patch(f.sourceId, {
+            origin: "exa",
+            publishedAt: undefined,
+        });
+        await ctx.db.patch(f.captureId, {
+            document: sourceDocumentMetadata({
+                ...source,
+                origin: "exa",
+                publishedAt,
+            }),
+        });
+    });
+    const received: unknown[] = [];
+    vi.stubGlobal("fetch", async (_url: unknown, init?: RequestInit) => {
+        const wire = JSON.parse(String(init?.body));
+        const input = JSON.parse(wire.messages.at(-1).content);
+        received.push(input.evidence[0].document);
+        return documentaryReply(init);
+    });
+    const outcome = await dispatchSourcesOperation(f.t, {
+        requestId: f.requestId,
+        expectedGeneration: 4,
+    });
+    assert(outcome.kind === "success", JSON.stringify(outcome));
+    expect(received).toEqual([expect.objectContaining({ publishedAt })]);
 });

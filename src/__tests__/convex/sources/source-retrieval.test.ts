@@ -767,3 +767,134 @@ test("a failed prefetched search waits for its sibling and propagates the failur
     expect(started).toBe(2);
     expect(completed).toBe(2);
 });
+
+test("an interrupted corpus-scoped build cannot publish gaps and a local replay completes it", async () => {
+    const {
+        t,
+        runId,
+        corpusRevisionId,
+        preparationId,
+        distractorId: captureId,
+    } = await indexedCaptureSubset();
+    const scope = `${runId}:document:structured-v1`;
+    const legacyScope = `${runId}:${corpusRevisionId}:structured-v1`;
+    const passages = await t.run(async (ctx) => {
+        const state = await ctx.db
+            .query("sourceSearchCaptures")
+            .withIndex("by_scope_and_capture", (q) =>
+                q.eq("scopeKey", scope).eq("captureId", captureId),
+            )
+            .unique();
+        if (!state) throw new Error("Missing index fixture");
+        await ctx.db.delete(state._id);
+        const rows = await ctx.db
+            .query("sourceSearchPassages")
+            .withIndex("by_scope_capture_order", (q) =>
+                q.eq("scopeKey", scope).eq("captureId", captureId),
+            )
+            .take(301);
+        for (const row of rows) {
+            if (row.order < 64)
+                await ctx.db.patch(row._id, { scopeKey: legacyScope });
+            else await ctx.db.delete(row._id);
+        }
+        return rows.map(
+            ({ order, startOffset, endOffset, quotation, headingPath }) => ({
+                order,
+                startOffset,
+                endOffset,
+                quotation,
+                headingPath,
+            }),
+        );
+    });
+    expect(passages).toHaveLength(300);
+    const publish = {
+        preparationId,
+        captureId,
+        candidateCount: passages.length,
+    };
+    await expect(
+        t.mutation(internal.sourceRetrieval.finishIndex, publish),
+    ).rejects.toThrow("retrieval_index_incomplete");
+    expect(
+        await t.query(internal.sourceRetrieval.getIndexState, {
+            preparationId,
+            captureId,
+        }),
+    ).toBeNull();
+
+    for (let start = 0; start < passages.length; start += 64)
+        await t.mutation(internal.sourceRetrieval.putBatch, {
+            preparationId,
+            captureId,
+            passages: passages.slice(start, start + 64),
+        });
+    await t.mutation(internal.sourceRetrieval.finishIndex, publish);
+    expect(
+        await t.query(internal.sourceRetrieval.getIndexState, {
+            preparationId,
+            captureId,
+        }),
+    ).toMatchObject({ candidateCount: passages.length });
+    const batch = await t.query(internal.sourceRetrieval.getEmbeddingBatch, {
+        preparationId,
+        captureId,
+        orders: [0, 63, 64, 299],
+    });
+    expect(new Set(batch.map((row) => row.scopeKey)).size).toBe(1);
+    expect(batch.map((row) => row.quotation)).toEqual(
+        [0, 63, 64, 299].map((order) => passages[order]?.quotation),
+    );
+});
+
+test("a published corpus-scoped index can gain hybrid vectors in its original namespace", async () => {
+    const { t, runId, corpusRevisionId, preparationId, captureIds } =
+        await indexedCaptureSubset();
+    const captureId = captureIds[0];
+    if (!captureId) throw new Error("Missing capture fixture");
+    const canonical = `${runId}:document:structured-v1`;
+    const historical = `${runId}:${corpusRevisionId}:structured-v1`;
+    const profile = SOURCE_EMBEDDING_PROFILE.id;
+    const rowId = await t.run(async (ctx) => {
+        const state = await ctx.db
+            .query("sourceSearchCaptures")
+            .withIndex("by_scope_and_capture", (q) =>
+                q.eq("scopeKey", canonical).eq("captureId", captureId),
+            )
+            .unique();
+        const row = await ctx.db
+            .query("sourceSearchPassages")
+            .withIndex("by_scope_capture_order", (q) =>
+                q.eq("scopeKey", canonical).eq("captureId", captureId),
+            )
+            .first();
+        if (!state || !row) throw new Error("Missing index fixture");
+        await ctx.db.patch(state._id, { scopeKey: historical });
+        await ctx.db.patch(row._id, { scopeKey: historical });
+        await ctx.db.insert("sourceEmbeddingCache", {
+            profile,
+            textHash: sha256Hex(row.searchText),
+            vector: Array.from({ length: 1024 }, (_, i) => (i === 0 ? 1 : 0)),
+        });
+        return row._id;
+    });
+    expect(
+        await t.action(internal.sourceRetrievalActions.indexCapture, {
+            preparationId,
+            captureId,
+            mode: "hybrid",
+            allowProviderCalls: false,
+        }),
+    ).toMatchObject({ embeddingComplete: true, candidateCount: 1 });
+    expect(
+        await t.query(internal.sourceRetrieval.getIndexState, {
+            preparationId,
+            captureId,
+        }),
+    ).toMatchObject({ scopeKey: historical, embeddingProfile: profile });
+    expect(await t.run((ctx) => ctx.db.get(rowId))).toMatchObject({
+        scopeKey: historical,
+        embeddingScopeKey: `${historical}:${profile}:${captureId}`,
+    });
+});

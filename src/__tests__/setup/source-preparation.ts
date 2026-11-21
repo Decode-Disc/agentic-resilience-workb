@@ -11,7 +11,7 @@ import {
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
-import { defineSchema } from "convex/server";
+import { defineSchema, type FunctionArgs } from "convex/server";
 import { convexTest } from "convex-test";
 import { vi } from "vitest";
 import { installModel } from "./model-configuration";
@@ -436,4 +436,20 @@ export async function seedInspectedEvidence(
             executionGeneration: 4,
         },
     };
+}
+
+/** Assigns a retained inspection binding for fixtures that send the sourceId/passageOrder contract. */
+export async function startRetainedInspection(
+    t: Awaited<ReturnType<typeof seedInspectedEvidence>>["t"],
+    args: Omit<
+        FunctionArgs<typeof internal.execution.missions.start>,
+        "definitionId"
+    >,
+) {
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        ...args,
+        definitionId: "saved_material_inspection_v1",
+    });
+    await t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 2 }));
+    return missionId;
 }

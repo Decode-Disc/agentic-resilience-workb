@@ -1,21 +1,19 @@
 import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
 import { assertSourcesCompletionCapacity } from "@convex/domain/sources";
-import { registeredAgentDefinitions } from "@convex/execution/agentCatalog";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { expect, test } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 test("Sources is a research binding using canonical shared reading operations", () => {
-    const definitions = registeredAgentDefinitions();
-    const sources = definitions.find(
-        (definition) => definition.id === "sources_v1",
-    );
+    const sources = getAgentDefinition("sources_v1");
+    expect(sources.version).toBe(7);
+    expect(getAgentDefinition("workbench_v1").version).toBe(11);
     expect(sources).toBeDefined();
     expect(sources?.executionScope).toBe("research");
     expect(sources?.nativeConversation).toBeUndefined();
-    const inspection = definitions.find(
-        (definition) => definition.id === "saved_material_inspection_v1",
-    );
+    const inspection = getAgentDefinition("saved_material_inspection_v1");
+    expect(inspection.version).toBe(3);
     expect(sources?.operations.read_in_context).toBe(
         inspection?.operations.read_in_context,
     );
@@ -25,11 +23,15 @@ test("Sources is a research binding using canonical shared reading operations", 
             "discover_sources_for_need",
             "search_available_material",
             "read_in_context",
-            "make_source_consultable",
+            "acquire_document",
             "submit_documentary_qualification",
             "request_documentary_check",
         ]),
     );
+    expect(inspection.operations.acquire_document).toBeUndefined();
+    expect(
+        getAgentDefinition("sources_v1", 5).operations.make_source_consultable,
+    ).toBeDefined();
 });
 
 import { internal } from "@convex/_generated/api";
@@ -104,6 +106,7 @@ test("Sources reads its prepared capture without fabricating corpus approval", a
         scope: { kind: "sources_v1", preparationId },
         requestKey: "sources-read",
     });
+    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 5 }));
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {

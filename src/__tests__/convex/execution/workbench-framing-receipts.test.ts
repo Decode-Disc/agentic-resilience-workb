@@ -1,10 +1,12 @@
 import { api, internal } from "@convex/_generated/api";
+import type { provisionalOpenEvent } from "@convex/domain/framingContracts";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import {
     agentToolSchemas,
     modelOperationOutcome,
 } from "@convex/execution/agentDefinition";
 import type { FunctionArgs } from "convex/server";
+import type { Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
@@ -24,7 +26,7 @@ afterEach(() => {
 
 async function activeWorkbench(
     text: string,
-    version: 4 | 5 | 6 = 4,
+    version: 4 | 5 | 6 | 11 = 4,
     local = true,
 ) {
     const fixture = await seedWorkbench(
@@ -356,10 +358,18 @@ const failureReceipt =
     "The proposed framing change was not saved. No framing change from this response is waiting to run.";
 
 test.each([
-    false,
-    true,
-])("the latest admission determines the receipt even when an old failed request is reused: %s", async (reuseFailure) => {
-    const fixture = await activeWorkbench("Rewrite the switching question.");
+    { reuseFailure: false, version: 4 },
+    { reuseFailure: true, version: 4 },
+    { reuseFailure: false, version: 11 },
+    { reuseFailure: true, version: 11 },
+] as const)("the latest admission determines the receipt for v$version with reuse=$reuseFailure", async ({
+    reuseFailure,
+    version,
+}) => {
+    const fixture = await activeWorkbench(
+        "Rewrite the switching question.",
+        version,
+    );
     const { t, client, runId } = fixture;
     const failed = await respond(fixture, "first-failure", {
         kind: "operations",
@@ -422,7 +432,14 @@ test.each([
     const text = history.page.find(
         (message) => message.role === "assistant",
     )?.text;
-    expect(text?.includes(failureReceipt)).toBe(reuseFailure);
+    const explanation = "The current program remains available.";
+    expect(text).toBe(
+        version === 4
+            ? reuseFailure
+                ? `${explanation}\n\n${failureReceipt}`
+                : explanation
+            : `${explanation}\n\n${reuseFailure ? "The latest proposed framing change was not saved. An earlier change was saved." : "Framing saved."} No public citation was recorded.`,
+    );
     expect(await client.query(api.framing.get, { runId })).toMatchObject({
         revision: 2,
         content: { scope: "Claims coordination" },
@@ -808,10 +825,7 @@ test.each([
             input: { kind: "consult_mission_state" },
         },
     );
-    const basis: Extract<
-        FunctionArgs<typeof internal.execution.operations.enqueue>["input"],
-        { kind: "adjust_framing" }
-    >["eventBasis"] = {
+    const basis: Infer<typeof provisionalOpenEvent> = {
         kind: "open",
         activityExcerpt: "estimate review",
         conditions: [

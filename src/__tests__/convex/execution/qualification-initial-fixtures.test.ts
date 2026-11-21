@@ -43,10 +43,11 @@ import {
 } from "@/__tests__/setup/sources-mission";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
-vi.mock("node:dns/promises", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("node:dns/promises")>()),
-    lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
-}));
+vi.mock("node:dns/promises", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("node:dns/promises")>();
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]);
+    return { ...actual, default: { ...actual, lookup }, lookup };
+});
 
 afterEach(() => {
     vi.useRealTimers();
@@ -352,11 +353,7 @@ test("initial fixture retention refuses cancellation after the adopted documenta
             missionId: state.missionId,
             expectedGeneration: state.generation,
             cause: "fixture-read-before-cancel",
-            input: {
-                kind: "search_available_material",
-                sourceId: state.sourceId,
-                query: "documentary workflow",
-            },
+            input: state.readingInput,
         },
     );
     expect(

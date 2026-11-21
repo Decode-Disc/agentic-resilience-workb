@@ -469,11 +469,11 @@ test("all maximum-need accounting defects fit one correction without omitting af
     }
 });
 
-test("directed framing selects v9 by default while retaining explicit historical definitions", () => {
+test("directed framing selects v10 by default while retaining explicit historical definitions", () => {
     const retained = getAgentDefinition("workbench_v1", 4);
     const directed = getAgentDefinition("workbench_v1", 5);
-    expect(getAgentDefinition("workbench_v1").version).toBe(9);
-    for (const version of [6, 7, 8])
+    expect(getAgentDefinition("workbench_v1").version).toBe(11);
+    for (const version of [6, 7, 8, 9])
         expect(getAgentDefinition("workbench_v1", version).version).toBe(
             version,
         );

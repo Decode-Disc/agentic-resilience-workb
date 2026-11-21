@@ -700,3 +700,92 @@ test("retained context counts follow the frozen capture when a newer capture is 
             ?.result,
     ).toEqual(frozen?.sourcesMission?.result);
 });
+
+test("a corpus-scoped index keeps an already qualified excerpt readable and retained across upgrade", async () => {
+    const f = await seedCapturedSources();
+    const requestId = await qualifyWithConflict(
+        f,
+        ["supported"],
+        "context_only",
+    );
+    await f.t.run(async (ctx) => {
+        const scopeKey = `${f.runId}:${f.corpusRevisionId}:structured-v1`;
+        for (const passage of await ctx.db
+            .query("sourceSearchPassages")
+            .collect()) {
+            if (passage.captureId === f.captureId)
+                await ctx.db.patch(passage._id, { scopeKey });
+        }
+        for (const index of await ctx.db
+            .query("sourceSearchCaptures")
+            .collect()) {
+            if (index.captureId === f.captureId)
+                await ctx.db.patch(index._id, { scopeKey });
+        }
+    });
+    const owner = f.t.withIdentity({ subject: f.userId });
+    const reader = await owner.query(api.sourcesWorkspace.getSource, {
+        runId: f.runId,
+        sourceId: f.sourceId,
+    });
+    expect(
+        reader?.sections.flatMap((section) => section.passages),
+    ).toContainEqual({
+        order: f.passage.order,
+        quotation: f.passage.quotation,
+    });
+    await f.t.run((ctx) =>
+        completeSources(ctx, f.preparationId, {
+            kind: "complete",
+            needsRevision: 1,
+            needs: [
+                {
+                    needId: "common-context",
+                    unfinished: [],
+                    workRequestIds: [requestId],
+                },
+            ],
+        }),
+    );
+    const prepared = await owner.query(api.sourcesMission.getPreparedMaterial, {
+        runId: f.runId,
+    });
+    expect(prepared?.material?.documents).toContainEqual(
+        expect.objectContaining({
+            sourceId: f.sourceId,
+            captureId: f.captureId,
+        }),
+    );
+});
+
+test("Sources counts an unselected capture with unknown completeness as available after handoff", async () => {
+    const f = await seedCapturedSources();
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.captureId, {
+            representationCompleteness: "unknown",
+            readingCompleteness: undefined,
+        });
+        await completeSources(ctx, f.preparationId, {
+            kind: "complete",
+            needsRevision: 1,
+            needs: [
+                {
+                    needId: "common-context",
+                    unfinished: ["No qualifying evidence was recorded."],
+                    workRequestIds: [],
+                },
+            ],
+        });
+    });
+    const overview = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.sourcesWorkspace.overview, { runId: f.runId });
+    expect(overview).toMatchObject({
+        reading: { captured: 1, unknown: 1 },
+        organize: {
+            notRetained: 1,
+            notRetainedCaptured: 1,
+            notRetainedWithoutAvailableCapture: 0,
+        },
+    });
+});

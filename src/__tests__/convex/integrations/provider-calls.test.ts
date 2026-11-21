@@ -14,10 +14,11 @@ import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 import rateLimiterTest from "./rate-limiter-test-register.js";
 
-vi.mock("node:dns/promises", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("node:dns/promises")>()),
-    lookup: async () => [{ address: "93.184.216.34", family: 4 }],
-}));
+vi.mock("node:dns/promises", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("node:dns/promises")>();
+    const lookup = async () => [{ address: "93.184.216.34", family: 4 }];
+    return { ...actual, default: { ...actual, lookup }, lookup };
+});
 
 const modules = import.meta.glob("/convex/**/*.ts");
 

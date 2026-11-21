@@ -1,4 +1,5 @@
 import { internal } from "@convex/_generated/api";
+import { savedMaterialBinding } from "@convex/domain/savedMaterialOperations";
 import { initializeSources } from "@convex/domain/sources";
 import {
     bindAgentDefinition,
@@ -14,6 +15,7 @@ import {
 } from "@convex/execution/agentDefinition";
 import { commonOperations } from "@convex/execution/commonOperations";
 import { validateOperationExecutionResult } from "@convex/execution/executionProtocol";
+import { readFramingCitationPolicy } from "@convex/framingCitationPolicy";
 import { retainedMethodVersion } from "@convex/qualificationAgentMethods";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
@@ -62,6 +64,17 @@ async function fixture(binding: AgentDefinition) {
                 obligations: initial.obligations,
             }),
         );
+        if (
+            binding.id === "workbench_v1" &&
+            savedMaterialBinding(binding.id, binding.version) === "referenced"
+        )
+            await f.t.run(async (ctx) => {
+                const mission = await ctx.db.get(f.missionId);
+                assert(mission?.conversationTurnId);
+                await ctx.db.patch(mission.conversationTurnId, {
+                    framingCitationPolicy: await readFramingCitationPolicy(ctx),
+                });
+            });
         await comparisonAuthority(f, binding);
         return { ...f, generation: 1 };
     }

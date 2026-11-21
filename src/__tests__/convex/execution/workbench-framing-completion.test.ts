@@ -18,13 +18,6 @@ async function initialFraming(
     angle = "Can insurers bypass CCC during estimate review after the latest announcement?",
 ) {
     const version = pinnedVersion ?? getAgentDefinition("workbench_v1").version;
-    assert(
-        version === 4 ||
-            version === 5 ||
-            version === 6 ||
-            version === 7 ||
-            version === 9,
-    );
     const f = await seedWorkbench(
         true,
         undefined,

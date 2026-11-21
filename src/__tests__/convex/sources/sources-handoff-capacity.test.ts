@@ -365,8 +365,8 @@ test.each([
             expectedGeneration: 1,
         });
         assert(context.kind === "ready");
-        const status = JSON.parse(context.inputJson).domain
-            .documentaryPreparation;
+        const domain = JSON.parse(context.inputJson).domain;
+        const status = domain.documentaryPreparation;
         expect(status.result).toMatchObject({
             outcome: "complete",
             documentCount: 48,
@@ -375,6 +375,11 @@ test.each([
             new TextEncoder().encode(JSON.stringify(status)).length,
         ).toBeGreaterThan(32 * 1024);
         expect(status.controlledContributions.length).toBeGreaterThan(0);
+        const material = domain.availableMaterials.find(
+            (item: { sourceId: string }) => item.sourceId === f.sourceId,
+        );
+        const reference = material?.readingReferences[0]?.reference;
+        assert(reference);
         const requestId = await f.t.mutation(
             internal.execution.operations.enqueue,
             {
@@ -383,7 +388,7 @@ test.each([
                 cause: "inspect-retained",
                 input: {
                     kind: "search_available_material",
-                    sourceId: f.sourceId,
+                    reference,
                     query: "workflow",
                 },
             },

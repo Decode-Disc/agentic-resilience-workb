@@ -5,17 +5,19 @@ import {
     registeredAgentDefinitions,
 } from "@convex/execution/agentCatalog";
 import { pauseResearchAtBoundary } from "@convex/execution/researchControl";
+import { retainedMethodVersion } from "@convex/qualificationAgentMethods";
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
+import { admitMethodComparison } from "@/__tests__/setup/qualification-method-comparison";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
 import {
     activateSourcesMission,
     sourcesTestEnvelope,
 } from "@/__tests__/setup/sources-mission";
-import type { seedWorkbench } from "@/__tests__/setup/workbench";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 // Research starts run through the Sources mission; there is no corpus-approval fallback.
 beforeEach(() => activateSourcesMission());
@@ -29,17 +31,14 @@ afterEach(() => {
 test.each([
     1, 2,
 ])("dispatches persisted framing operation version %i only when supported", async (version) => {
-    vi.useFakeTimers();
-    const t = convexTest(schema, modules);
-    agentTest.register(t);
-    workflowTest.register(t);
-    const { userId, preflightId } = await createAdmittedPreflight(t),
-        client = t.withIdentity({ subject: userId });
-    const { runId } = await client.mutation(api.framing.confirmCompany, {
-        preflightId,
-        idempotencyKey: "framing-outcome",
-        coveragePreset: "balanced",
-    });
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        10,
+    );
     const active = await t.mutation(
         internal.execution.conversations.startTurn,
         {
@@ -359,6 +358,68 @@ test("a superseded research-control request cannot resume a newer analyst pause"
     });
 });
 
+test("a historical framing caller can acknowledge and replay a saved adjustment", async () => {
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        10,
+    );
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const requestId = await t.mutation(internal.execution.operations.enqueue, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        cause: "historical-framing-rpc",
+        input: {
+            kind: "adjust_framing",
+            messageId: await activeMessage(t, active.turnId),
+            expectedRevision: 1,
+            content: { scope: "Claims", questions: [] },
+        },
+    });
+    const args = { requestId, expectedGeneration: 1 };
+    await t.mutation(internal.execution.operations.claim, args);
+
+    // The historical worker encodes the numeric RPC result as the revision.
+    const revision = await t.mutation(
+        internal.framing.applyFromWorkbench,
+        args,
+    );
+    expect(await t.mutation(internal.framing.applyFromWorkbench, args)).toBe(
+        revision,
+    );
+    const outcome = {
+        kind: "success" as const,
+        valueJson: JSON.stringify({ revision }),
+    };
+    expect(
+        await t.mutation(internal.execution.operations.recordResult, {
+            ...args,
+            outcome,
+        }),
+    ).toEqual({ kind: "success", valueJson: '{"revision":2}' });
+    expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        status: "completed",
+        adoptedAt: expect.any(Number),
+        effect: { outcome },
+    });
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 2,
+        content: { scope: "Claims" },
+    });
+});
+
 test("an applied framing receipt is adopted after dispatch is interrupted without applying twice", async () => {
     vi.useFakeTimers();
     const t = convexTest(schema, modules);
@@ -405,24 +466,43 @@ test("an applied framing receipt is adopted after dispatch is interrupted withou
             requestId,
             expectedGeneration: 1,
         }),
-    ).toMatchObject({ kind: "success" });
+    ).toMatchObject({
+        kind: "success",
+        valueJson:
+            '{"revision":2,"eventBasis":"unspecified","publicCitations":{"event":[],"conditions":[]}}',
+    });
     expect(await client.query(api.framing.get, { runId })).toMatchObject({
         revision: 2,
     });
 });
 
-async function framedTurn(key: string, launch = false) {
-    vi.useFakeTimers();
-    const t = convexTest(schema, modules);
-    agentTest.register(t);
-    workflowTest.register(t);
-    const { userId, preflightId } = await createAdmittedPreflight(t),
-        client = t.withIdentity({ subject: userId });
-    const { runId } = await client.mutation(api.framing.confirmCompany, {
-        preflightId,
-        idempotencyKey: key,
-        coveragePreset: "balanced",
-    });
+async function framedTurn(
+    key: string,
+    launch = false,
+    retainedControl = false,
+) {
+    const { t, client, runId } = await seedWorkbench(
+        retainedControl,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
+    );
+    if (retainedControl) {
+        const fixtureKey = key.replaceAll("_", "-");
+        const { scenarioId } = await admitMethodComparison(t, runId);
+        await t.run((ctx) =>
+            ctx.db.patch(runId, { reservationKey: `browser:${fixtureKey}` }),
+        );
+        await t.mutation(internal.execution.fixtures.bindCampaignScenarios, {
+            dossiers: [{ runId, fixtureKey, scenarioId }],
+        });
+        await t.mutation(internal.execution.fixtures.activateWorkbench, {
+            runId,
+            fixtureKey,
+        });
+    }
     if (launch) {
         await client.mutation(api.framing.save, {
             runId,
@@ -452,7 +532,7 @@ async function framedTurn(key: string, launch = false) {
             runId,
             definitionId: "workbench_v1",
             scope: { kind: "workbench_v1" },
-            simulation: false,
+            simulation: retainedControl,
         },
     );
     if (!active) throw Error("Expected turn");
@@ -727,7 +807,7 @@ test("the current framing operation preserves analyst authority", async () => {
         assert(turn);
         const request = await ctx.db.get(requestId);
         assert(request);
-        expect(request.operationVersion).toBe(2);
+        expect(request.operationVersion).toBe(3);
         await ctx.db.patch(requestId, {
             instructionVersion: turn.instructionVersion,
             input: {
@@ -904,15 +984,26 @@ test.each(
     name,
     operation,
 }) => {
+    const retainedControl =
+        definition.version === retainedMethodVersion("workbench_v1");
     const { t, client, runId, active } = await framedTurn(
         `receipt-${definition.version}-${name}`,
         name !== "adjust_framing",
+        retainedControl,
     );
-    await t.run((ctx) =>
-        ctx.db.patch(active.missionId, {
+    if (retainedControl) {
+        expect(
+            await t.run((ctx) => ctx.db.get(active.missionId)),
+        ).toMatchObject({
             definitionVersion: definition.version,
-        }),
-    );
+        });
+    } else {
+        await t.run((ctx) =>
+            ctx.db.patch(active.missionId, {
+                definitionVersion: definition.version,
+            }),
+        );
+    }
     const messageId = await client.mutation(
         api.execution.conversations.submit,
         {

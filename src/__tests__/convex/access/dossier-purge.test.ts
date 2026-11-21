@@ -1,10 +1,22 @@
 import { internal } from "@convex/_generated/api";
 import {
     appendRetainedText,
+    retainedTextParts,
     sealRetainedText,
+    stageOperationObservation,
 } from "@convex/execution/retainedText";
-import { expect, test } from "vitest";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    recordDocumentaryRead,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
+
+import { seedWorkbench } from "@/__tests__/setup/workbench";
+
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+});
 
 const runOwned = [
     "sources",
@@ -87,6 +99,48 @@ test("only analyst research dossiers can be purged", async () => {
     expect(await f.t.run((ctx) => ctx.db.get(f.runId))).not.toBeNull();
 });
 
+test("purging a dossier removes the retained text owned by its operation requests", async () => {
+    const f = await seedCapturedSources();
+    const { operationId, textId } = await f.t.run(async (ctx) => {
+        const operationId = await recordDocumentaryRead(ctx, {
+            runId: f.runId,
+            captureId: f.captureId,
+            evidence: [],
+        });
+        const retained = retainedTextParts(
+            "Retained evidence with a second page. ".repeat(5000),
+        );
+        for (const [index, content] of retained.parts.entries())
+            await stageOperationObservation(ctx, operationId, {
+                ...retained.manifest,
+                index,
+                content,
+            });
+        const text = await ctx.db
+            .query("retainedTexts")
+            .withIndex("by_key", (q) =>
+                q.eq("key", `operation:${operationId}:observation`),
+            )
+            .unique();
+        if (!text) throw new Error("fixture retained text");
+        return { operationId, textId: text._id };
+    });
+    await f.t.action(internal.dossierPurge.purgeResearchDossiers, {
+        runIds: [f.runId],
+        reason: "Remove operation-owned retained evidence",
+    });
+    await f.t.run(async (ctx) => {
+        expect(await ctx.db.get(operationId)).toBeNull();
+        expect(await ctx.db.get(textId)).toBeNull();
+        expect(
+            await ctx.db
+                .query("retainedTextFragments")
+                .withIndex("by_text_and_index", (q) => q.eq("textId", textId))
+                .first(),
+        ).toBeNull();
+    });
+});
+
 test("purging an invocation removes its private diagnostic fragments and preserves shared immutable text", async () => {
     const f = await seedCapturedSources();
     const diagnostic = await f.t.run(async (ctx) => {
@@ -140,3 +194,98 @@ test("purging an invocation removes its private diagnostic fragments and preserv
         expect(await ctx.db.get(diagnostic.sharedId)).not.toBeNull();
     });
 });
+
+test("a purge fences an idle framing turn immediately and restores its quota only once", async () => {
+    const { t, runId } = await seedWorkbench();
+    const turn = await t.mutation(internal.execution.conversations.startTurn, {
+        runId,
+        definitionId: "workbench_v1",
+        scope: { kind: "workbench_v1" },
+        simulation: false,
+    });
+    assert(turn);
+    const ownerId = await t.run(async (ctx) => {
+        const run = await ctx.db.get(runId);
+        assert(run?.ownerVisitorId);
+        expect(run.executionStatus).toBe("idle");
+        await ctx.db.patch(runId, { reservationStatus: "consumed" });
+        await ctx.db.patch(run.ownerVisitorId, { analysesReserved: 2 });
+        return run.ownerVisitorId;
+    });
+    const args = { runId, reason: "Retire this active framing dossier" };
+    await t.mutation(internal.dossierPurge.beginPurge, args);
+    await expect(
+        t.query(internal.execution.context.build, {
+            missionId: turn.missionId,
+            expectedGeneration: 1,
+        }),
+    ).rejects.toThrow("not_authorized");
+    await t.mutation(internal.dossierPurge.beginPurge, args);
+    expect(await t.run((ctx) => ctx.db.get(ownerId))).toMatchObject({
+        analysesReserved: 1,
+    });
+    expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
+        withdrawnAt: expect.any(Number),
+    });
+});
+
+test("purge finishes a maximum-size retained observation within transaction limits", async () => {
+    const { t, runId } = await seedWorkbench(
+        false,
+        undefined,
+        60000,
+        undefined,
+        undefined,
+        5,
+        "balanced",
+        true,
+    );
+    const operationId = await t.run((ctx) =>
+        ctx.db.insert("agentOperationRequests", {
+            runId,
+            actor: "system",
+            cause: "old-public-observation",
+            logicalKey: "old-public-observation",
+            input: { kind: "consult_run_state" },
+            operationVersion: 1,
+            expectedGeneration: 1,
+            status: "completed",
+            createdAt: 1,
+        }),
+    );
+    const retained = retainedTextParts("界".repeat(5592405) + "x");
+    expect(retained.manifest.sizeBytes).toBe(16 * 1024 * 1024);
+    for (const [index, content] of retained.parts.entries())
+        await t.run((ctx) =>
+            stageOperationObservation(ctx, operationId, {
+                ...retained.manifest,
+                index,
+                content,
+            }),
+        );
+    const textId = await t.run(async (ctx) => {
+        const stored = await ctx.db
+            .query("retainedTexts")
+            .withIndex("by_key", (q) =>
+                q.eq("key", `operation:${operationId}:observation`),
+            )
+            .unique();
+        assert(stored);
+        return stored._id;
+    });
+    await t.action(internal.dossierPurge.purgeResearchDossiers, {
+        runIds: [runId],
+        reason: "Remove all retained fragments",
+    });
+    await t.run(async (ctx) => {
+        expect(await ctx.db.get(runId)).toBeNull();
+        expect(await ctx.db.get(operationId)).toBeNull();
+        expect(await ctx.db.get(textId)).toBeNull();
+        expect(
+            await ctx.db
+                .query("retainedTextFragments")
+                .withIndex("by_text_and_index", (q) => q.eq("textId", textId))
+                .first(),
+        ).toBeNull();
+    });
+}, 30000);

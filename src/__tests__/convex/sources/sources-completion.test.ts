@@ -1,5 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { documentaryReference } from "@convex/domain/savedMaterialOperations";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
 import { executionFailureCode } from "@convex/execution/errors";
 import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
@@ -7,11 +8,18 @@ import { workflow } from "@convex/workflow";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
+import { providerFixtureResponse } from "@/__tests__/setup/model-stream";
 import {
     dispatchSourcesOperation,
     seedObservedSources,
     startSourcesOperation,
 } from "@/__tests__/setup/sources-mission";
+
+vi.mock("node:dns/promises", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("node:dns/promises")>();
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]);
+    return { ...actual, default: { ...actual, lookup }, lookup };
+});
 
 const examiner = vi.hoisted(() => vi.fn());
 vi.mock("@convex/integrations/documentaryControl", () => ({
@@ -20,6 +28,7 @@ vi.mock("@convex/integrations/documentaryControl", () => ({
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     examiner.mockReset();
 });
 
@@ -489,6 +498,159 @@ test("analyst settlement waits for native qualification and receives its existin
             expectedGeneration: 4,
         }),
     ).toBeNull();
+    expect((await f.t.run((ctx) => ctx.db.get(f.runId)))?.lifecycleState).toBe(
+        "sources_prepared",
+    );
+});
+
+test.each([
+    "before reservation",
+    "during retrieval",
+] as const)("terminal Sources settlement waits for a claimed acquisition %s", async (stage) => {
+    vi.useFakeTimers();
+    const f = await seedCompletion();
+    await f.t.run((ctx) => ctx.db.patch(f.missionId, { definitionVersion: 7 }));
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "acquisition-before-reservation",
+            input: {
+                kind: "acquire_document",
+                reference: documentaryReference({
+                    issuer: "source",
+                    sourceId: f.sourceId,
+                }),
+            },
+        },
+    );
+    const args = { requestId, expectedGeneration: 4 };
+    let enter: () => void = () => {};
+    let release: () => void = () => {};
+    const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let processing: ReturnType<typeof dispatchSourcesOperation> | undefined;
+    if (stage === "during retrieval") {
+        vi.stubEnv("EXA_API_KEY", "fixture-only");
+        const source = await f.t.run((ctx) => ctx.db.get(f.sourceId));
+        assert(source);
+        vi.stubGlobal("fetch", async (url: string) => {
+            expect(url).toMatch(/\/contents$/u);
+            enter();
+            await held;
+            return providerFixtureResponse({
+                results: [
+                    {
+                        id: source.canonicalUrl,
+                        url: source.canonicalUrl,
+                        text: "The publication describes enterprise workflow approvals.",
+                    },
+                ],
+            });
+        });
+        processing = dispatchSourcesOperation(f.t, args);
+        await Promise.race([
+            entered,
+            processing.then((outcome) => {
+                throw new Error(
+                    `Acquisition settled before retrieval: ${JSON.stringify(outcome)}`,
+                );
+            }),
+        ]);
+    } else {
+        expect(await startSourcesOperation(f.t, args)).toMatchObject({
+            kind: "outcome",
+            outcome: { kind: "waiting" },
+        });
+    }
+    const settle = () =>
+        f.t.mutation(internal.sourcesMission.finish, {
+            preparationId: f.preparationId,
+            missionId: f.missionId,
+            expectedGeneration: 4,
+        });
+    try {
+        await f.t.run(async (ctx) => {
+            await ctx.db.patch(f.missionId, {
+                status: "blocked",
+                blockCode: "resource_limit",
+            });
+            await ctx.db.patch(f.preparationId, {
+                settlementRequestedAt: Date.now(),
+            });
+        });
+        expect(await settle()).toMatchObject({ kind: "waiting" });
+        expect(
+            (await f.t.run((ctx) => ctx.db.get(f.preparationId)))
+                ?.sourcesMission?.result,
+        ).toBeUndefined();
+    } finally {
+        release();
+        await processing;
+    }
+    if (!processing)
+        await f.t.mutation(internal.execution.operations.recordResult, {
+            ...args,
+            outcome: { kind: "unavailable", code: "missing_configuration" },
+        });
+    if (stage === "during retrieval") {
+        const turnId = await f.t.mutation(
+            internal.execution.conversations.claimTurn,
+            { runId: f.runId, single: true },
+        );
+        assert(turnId);
+        const workbenchId = await f.t.mutation(
+            internal.execution.missions.start,
+            {
+                runId: f.runId,
+                definitionId: "workbench_v1",
+                scope: { kind: "workbench_v1" },
+                conversationTurnId: turnId,
+                expectedGeneration: 1,
+                requestKey: "workbench-settlement-consultation",
+            },
+        );
+        const context = await f.t.query(internal.execution.context.build, {
+            missionId: workbenchId,
+            expectedGeneration: 1,
+        });
+        assert(context.kind === "ready");
+        const material = JSON.parse(context.inputJson).domain
+            .availableMaterials[0];
+        const readId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: workbenchId,
+                expectedGeneration: 1,
+                cause: "concurrent-workbench-read",
+                input: {
+                    kind: "read_in_context",
+                    reference: material.readingReferences[0].reference,
+                },
+            },
+        );
+        expect(
+            await f.t.mutation(internal.execution.operations.claim, {
+                requestId: readId,
+                expectedGeneration: 1,
+            }),
+        ).toMatchObject({ kind: "execute" });
+        expect(await f.t.run((ctx) => ctx.db.get(readId))).toMatchObject({
+            status: "running",
+            pin: {
+                scope: {
+                    kind: "workbench_read",
+                    preparationId: f.preparationId,
+                },
+            },
+        });
+    }
+    expect(await settle()).toBeNull();
     expect((await f.t.run((ctx) => ctx.db.get(f.runId)))?.lifecycleState).toBe(
         "sources_prepared",
     );

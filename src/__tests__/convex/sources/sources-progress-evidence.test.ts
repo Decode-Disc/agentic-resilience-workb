@@ -16,7 +16,7 @@ afterEach(() => {
     examiner.mockReset();
 });
 
-test("a fresh contextual read advances Sources once and repeated reading consumes non-progress allowance", async () => {
+test("a fresh contextual read advances Sources once and repeats only increment the diagnostic", async () => {
     const f = await seedCapturedSources();
     for (let turn = 0; turn < 4; turn++) {
         const begun = await f.t.mutation(internal.execution.invocations.begin, {
@@ -58,8 +58,8 @@ test("a fresh contextual read advances Sources once and repeated reading consume
         });
         const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
         expect(mission?.noProgressTurns).toBe(turn);
-        expect(mission?.status).toBe(turn === 3 ? "blocked" : "ready");
-        if (turn === 3) expect(mission?.blockCode).toBe("repetition_stop");
+        expect(mission).toMatchObject({ status: "ready" });
+        expect(mission?.blockCode).toBeUndefined();
     }
 });
 

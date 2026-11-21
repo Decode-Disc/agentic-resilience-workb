@@ -605,12 +605,20 @@ test("empty conversation adds no facts and a large native state does not block e
         (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toEqual([]);
     const { initializeFraming } = await import("@convex/framing");
+    const { readFramingCitationPolicy } = await import(
+        "@convex/framingCitationPolicy"
+    );
     await f.t.run(async (ctx) => {
         await ctx.db.patch(f.runId, {
             startMode: "framed",
             lifecycleState: "framing",
         });
         await initializeFraming(ctx, f.runId);
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission?.conversationTurnId);
+        await ctx.db.patch(mission.conversationTurnId, {
+            framingCitationPolicy: await readFramingCitationPolicy(ctx),
+        });
         await ctx.db.patch(f.missionId, {
             definitionId: "workbench_v1",
             definitionVersion: getAgentDefinition("workbench_v1").version,

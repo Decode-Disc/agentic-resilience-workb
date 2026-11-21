@@ -22,14 +22,19 @@ export async function seedWorkbench(
     contextDurationMs = 60000,
     researchAngle?: string,
     company?: Parameters<typeof createAdmittedPreflight>[1],
-    definitionVersion: 4 | 5 | 6 | 7 | null = 5,
+    definitionVersion: 4 | 5 | 6 | 7 | 10 | 11 | null = 5,
     coveragePreset:
         | "balanced"
         | "first_party_depth"
         | "independent_scrutiny" = "balanced",
+    transactionLimits = false,
 ) {
     vi.useFakeTimers();
-    const t = convexTest(schema, import.meta.glob("/convex/**/*.ts"));
+    const t = convexTest({
+        schema,
+        modules: import.meta.glob("/convex/**/*.ts"),
+        transactionLimits,
+    });
     agentTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t, company);

@@ -7,7 +7,10 @@ import { modelOperationOutcome } from "@convex/execution/agentDefinition";
 import { commonOperations } from "@convex/execution/commonOperations";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
-import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+import {
+    seedInspectedEvidence,
+    startRetainedInspection,
+} from "@/__tests__/setup/source-preparation";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -164,10 +167,9 @@ test("a confirmed framing effect survives a lost action acknowledgement without 
 
 test("an unconfirmed durable action is unknown immediately and is never blindly retried", async () => {
     const { t, args, sourceId } = await seedInspectedEvidence();
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "uncertain",
         expectedGeneration: 4,
     });
@@ -395,10 +397,9 @@ test("native dispatch persists exact retained reading once and continuation rece
             throw new Error("Unexpected external I/O");
         }),
     );
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "native-read",
         expectedGeneration: 4,
     });
@@ -478,10 +479,9 @@ test("native dispatch persists exact retained reading once and continuation rece
 
 test("a source refusal after admission is retained and prevents cached result reuse or completion", async () => {
     const { t, args, sourceId, captureId } = await seedInspectedEvidence();
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "revoked-read",
         expectedGeneration: 4,
     });
@@ -534,10 +534,9 @@ test("a source refusal after admission is retained and prevents cached result re
 
 test("every mixed batch request has a persisted outcome and later dispatch rechecks generation", async () => {
     const { t, args, sourceId } = await seedInspectedEvidence();
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "mixed-batch",
         expectedGeneration: 4,
     });

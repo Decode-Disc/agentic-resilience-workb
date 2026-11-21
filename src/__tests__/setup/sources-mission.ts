@@ -1,7 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
-import { SOURCE_RETRIEVAL_VERSION } from "@convex/domain/sourceRetrievalPolicy";
+import { sourceCaptureScopeKey } from "@convex/domain/sourceRetrievalPolicy";
 import { initializeSources } from "@convex/domain/sources";
 import { vi } from "vitest";
 import { seedInspectedEvidence } from "./source-preparation";
@@ -93,8 +93,12 @@ export async function dispatchSourcesOperation(
     const request = await t.run((ctx) => ctx.db.get(args.requestId));
     if (!request?.scheduledJobId)
         throw new Error("Expected a scheduled Sources operation");
+    const action =
+        request.input.kind === "acquire_document"
+            ? internal.sourceCaptureActions.acquireDocument
+            : internal.sourcesMissionActions.execute;
     return (
-        (await t.action(internal.sourcesMissionActions.execute, args)) ??
+        (await t.action(action, args)) ??
         t.action(internal.execution.operations.dispatch, args)
     );
 }
@@ -166,6 +170,8 @@ export async function seedCapturedSources(options: { text?: string } = {}) {
         scope: { kind: "sources_v1", preparationId },
         requestKey: "sources-fixture",
     });
+    // These fixtures supply retained sourceId/passageOrder receipts to existing callers.
+    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 5 }));
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
@@ -190,10 +196,7 @@ export async function seedCapturedSources(options: { text?: string } = {}) {
             .query("sourceSearchPassages")
             .withIndex("by_scope_capture_order", (q) =>
                 q
-                    .eq(
-                        "scopeKey",
-                        `${f.runId}:${f.corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`,
-                    )
+                    .eq("scopeKey", sourceCaptureScopeKey(f.runId))
                     .eq("captureId", f.captureId),
             )
             .first(),

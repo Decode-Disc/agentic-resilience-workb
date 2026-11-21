@@ -1,7 +1,10 @@
 import { internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
-import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+import {
+    seedInspectedEvidence,
+    startRetainedInspection,
+} from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -37,11 +40,10 @@ async function simulatedMissionFixture() {
             throw new Error("Unexpected provider I/O");
         }),
     );
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "workflow",
         expectedGeneration: 4,
     });

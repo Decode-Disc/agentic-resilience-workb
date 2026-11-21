@@ -13,10 +13,8 @@ import { seedWorkbenchMaterials } from "@/__tests__/setup/workbench-materials";
 
 vi.mock("node:dns/promises", async (importOriginal) => {
     const actual = await importOriginal<typeof import("node:dns/promises")>();
-    return {
-        ...actual,
-        lookup: async () => [{ address: "93.184.216.34", family: 4 }],
-    };
+    const lookup = async () => [{ address: "93.184.216.34", family: 4 }];
+    return { ...actual, default: { ...actual, lookup }, lookup };
 });
 
 afterEach(() => {
@@ -749,6 +747,234 @@ test("native tools omit mechanical revisions, persist canonical arguments and re
     );
     expect(toolOutput).not.toContain("valueJson");
     expect(toolOutput).toContain("revision");
+}, 30000);
+
+test.each([
+    false,
+    true,
+])("native framing reports the written citation outcome with response control enabled=%s", async (controlEnabled) => {
+    const angle = "Investigate estimate review after the latest announcement.";
+    const explanation =
+        "The saved scope leaves the announcement open. Which one do you mean?";
+    const falseClaim = "I saved a public citation for the announcement.";
+    const reviews: unknown[] = [];
+    const confirmation =
+        "Framing saved. The event remains open. No public citation was recorded.";
+    const payloads: Array<Array<{ role: string; content: string }>> = [];
+    vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+            if (String(url).includes("/models?"))
+                return Response.json({
+                    data: [
+                        {
+                            id: "typesafe/jev-1.14",
+                            context_length: 262144,
+                            pricing: { prompt: "0.000000042", completion: "0" },
+                        },
+                    ],
+                });
+            const request = JSON.parse(String(init?.body));
+            if (String(url).endsWith("/decisions")) {
+                reviews.push(request.state);
+                const first = reviews.length === 1;
+                return Response.json({
+                    answers: {
+                        assessment: {
+                            type: "choice",
+                            choice: first ? "contradicted" : "supported",
+                            confidence: 0.96,
+                            probabilities: {
+                                contradicted: first ? 0.96 : 0.02,
+                                supported: first ? 0.02 : 0.96,
+                                insufficient_information: 0.02,
+                            },
+                        },
+                    },
+                    usage: { cost: 0.00002 },
+                });
+            }
+            payloads.push(request.messages);
+            if (payloads.length === 1)
+                return toolReply("adjust_framing", {
+                    eventBasis: { kind: "open", activityExcerpt: angle },
+                    content: {
+                        scope: angle,
+                        questions: [
+                            {
+                                id: "review",
+                                shortLabel: "Review",
+                                text: "Who sets the validation rules?",
+                                rationale: "Locate approval authority.",
+                            },
+                        ],
+                    },
+                });
+            if (payloads.length === 2) return reply(falseClaim);
+            if (controlEnabled && payloads.length === 3) {
+                expect(request.tools ?? []).toEqual([]);
+                return reply(explanation);
+            }
+            return reply("The announcement is still open.");
+        }),
+    );
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        undefined,
+        angle,
+        undefined,
+        null,
+    );
+    if (controlEnabled)
+        await t.run((ctx) =>
+            ctx.db.insert("responseControlSettings", {
+                key: "global",
+                revision: 1,
+                updatedAt: Date.now(),
+                enabled: true,
+                model: "typesafe/jev-1.14",
+                contradictionThreshold: 0.9,
+                supportThreshold: 0.8,
+            }),
+        );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    if (controlEnabled)
+        for (let checks = 0; checks < 2; checks++) {
+            const mission = await t.run((ctx) =>
+                ctx.db.query("agentMissions").first(),
+            );
+            assert(mission?.piWakeToken && mission.piWakeAt);
+            vi.setSystemTime(Math.max(Date.now(), mission.piWakeAt) + 1);
+            await t.action(internal.execution.piWorker.run, {
+                missionId: mission._id,
+                expectedGeneration: mission.generation,
+                token: mission.piWakeToken,
+            });
+        }
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 2,
+        eventBasis: { kind: "open" },
+    });
+    const tool = payloads[1]
+        ?.filter((message) => message.role === "tool")
+        .at(-1);
+    assert(tool);
+    expect(JSON.parse(tool.content)).toEqual({
+        kind: "success",
+        value: {
+            revision: 2,
+            eventBasis: "open",
+            publicCitations: { event: [], conditions: [] },
+        },
+    });
+    const published = `${controlEnabled ? explanation : falseClaim}\n\n${confirmation}`;
+    const messages = await client.query(
+        api.execution.conversations.listMessages,
+        {
+            runId,
+            paginationOpts: { numItems: 20, cursor: null },
+        },
+    );
+    expect(
+        messages.page
+            .filter((message) => message.role === "assistant")
+            .map((message) => message.text),
+    ).toEqual([published]);
+    expect(reviews).toHaveLength(controlEnabled ? 2 : 0);
+    if (controlEnabled)
+        expect(reviews[0]).toMatchObject({
+            candidate_reply: falseClaim,
+            authoritative_facts: {
+                framingWrite: {
+                    saved: { publicCitations: { event: [], conditions: [] } },
+                },
+            },
+        });
+    const savedRevisions = await t.run((ctx) =>
+        ctx.db
+            .query("framingRevisions")
+            .withIndex("by_run_and_key", (q) => q.eq("runId", runId))
+            .collect(),
+    );
+    expect(savedRevisions.map((row) => row.revision).sort()).toEqual([1, 2]);
+    const subsequent = payloads.length;
+    await client.mutation(api.execution.conversations.submit, {
+        runId,
+        requestKey: "recall-framing",
+        text: "What is still open?",
+        delivery: "queue",
+    });
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    expect(
+        payloads[subsequent]?.filter(
+            (message) =>
+                message.role === "assistant" && message.content === published,
+        ),
+    ).toHaveLength(1);
+}, 30000);
+
+test("a documentary token copied into the framing scope is refused before it is saved", async () => {
+    const angle = "Investigate estimate review.";
+    const token =
+        '{"issuer":"operation","operationId":"k57872050bmfpf5b54cfeqnsa18jkq5b","item":"passage","index":0,"version":2}';
+    let generations = 0;
+    let refusal: unknown;
+    vi.stubEnv("OPENROUTER_API_KEY", "local-fixture-only");
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (_url, init) => {
+            const request = JSON.parse(String(init?.body));
+            generations++;
+            if (generations === 2) {
+                refusal = JSON.parse(
+                    request.messages.findLast(
+                        (message: { role: string }) => message.role === "tool",
+                    ).content,
+                );
+            }
+            if (generations === 3)
+                return reply("The corrected program is saved.");
+            if (generations > 3)
+                throw new Error("Unexpected extra framing generation");
+            return toolReply("adjust_framing", {
+                eventBasis: { kind: "open", activityExcerpt: angle },
+                content: {
+                    scope:
+                        generations === 1
+                            ? `${angle} Passage: ${token}`
+                            : angle,
+                    questions: [
+                        {
+                            id: "review",
+                            shortLabel: "Review",
+                            text: "Who sets the validation rules?",
+                            rationale: "Locate approval authority.",
+                        },
+                    ],
+                },
+            });
+        }),
+    );
+    const { t, client, runId } = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        undefined,
+        angle,
+        undefined,
+        null,
+    );
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(10), 500);
+    expect(refusal).toMatchObject({
+        kind: "refused",
+        code: "framing_documentary_reference_in_text",
+        validation: { path: "content.scope" },
+    });
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({
+        revision: 2,
+        content: { scope: angle },
+    });
 }, 30000);
 
 test.each([

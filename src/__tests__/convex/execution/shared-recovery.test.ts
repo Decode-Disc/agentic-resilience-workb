@@ -230,7 +230,7 @@ test("Sources correction identifies the affected need with its exact domain iden
 });
 
 test("the real Pi worker corrects Sources completion after non-progress consultations and preserves its gaps", async () => {
-    const { sourcesDefinition } = await import("@convex/domain/sourcesAgent");
+    const { sourcesV5Definition } = await import("@convex/domain/sourcesAgent");
     const f = await seedCapturedSources();
     vi.useFakeTimers();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
@@ -270,8 +270,8 @@ test("the real Pi worker corrects Sources completion after non-progress consulta
             throw new Error("Unexpected external I/O");
         }),
     );
-    const original = sourcesDefinition.simulate;
-    sourcesDefinition.simulate = (input: unknown) => {
+    const original = sourcesV5Definition.simulate;
+    sourcesV5Definition.simulate = (input: unknown) => {
         const state = input as {
             triggeringRequestsAndResults: { input: { kind: string } }[];
             activeWork: {
@@ -417,8 +417,8 @@ test("the real Pi worker corrects Sources completion after non-progress consulta
             ),
         ).toBe(true);
     } finally {
-        if (original) sourcesDefinition.simulate = original;
-        else delete sourcesDefinition.simulate;
+        if (original) sourcesV5Definition.simulate = original;
+        else delete sourcesV5Definition.simulate;
         vi.useRealTimers();
         vi.unstubAllEnvs();
     }

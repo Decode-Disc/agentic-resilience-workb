@@ -697,7 +697,7 @@ test("same-source capture does not inherit another capture's qualification", asy
         expect.arrayContaining([
             expect.objectContaining({
                 sourceId: f.sourceId,
-                capture: expect.objectContaining({ captureId }),
+                captureId,
                 documentaryState: expect.objectContaining({
                     qualification: { status: "not_recorded" },
                     contributions: null,

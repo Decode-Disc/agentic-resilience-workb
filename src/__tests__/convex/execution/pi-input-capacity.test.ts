@@ -1,10 +1,17 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { api, internal } from "@convex/_generated/api";
-import { registeredAgentDefinitions } from "@convex/execution/agentCatalog";
+import {
+    getAgentDefinition,
+    registeredAgentDefinitions,
+} from "@convex/execution/agentCatalog";
 import {
     type AgentDefinition,
     agentToolSchemas,
 } from "@convex/execution/agentDefinition";
+import {
+    operationResultKey,
+    operationResultValidator,
+} from "@convex/execution/operationResults";
 import {
     PI_MISSION_EXTENSION,
     PI_MISSION_INPUT,
@@ -41,6 +48,7 @@ import {
     Harness,
     MemoryStorage,
 } from "@earendil-works/pi-durable";
+import { v } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
@@ -49,6 +57,44 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+});
+
+test("runtime and prepared tools fingerprint their selected result contract", () => {
+    const retained = getAgentDefinition("saved_material_inspection_v1", 2);
+    const operation = retained.operations.read_in_context;
+    assert(operation);
+    const resultValidator = operationResultValidator(
+        v.object({ reference: v.string(), text: v.string() }),
+    );
+    const selected = {
+        description: operation.description,
+        inputValidator: v.object({
+            kind: v.literal("read_in_context"),
+            reference: v.string(),
+        }),
+        resultValidator,
+    };
+    const definition = {
+        operations: { read_in_context: operation },
+        modelOperation: () => selected,
+    };
+    const expected = {
+        read_in_context: {
+            description: selected.description,
+            inputValidator: selected.inputValidator,
+            resultContractKey: operationResultKey(resultValidator),
+        },
+    };
+    expect(agentToolSchemas(definition)).toEqual(expected);
+    expect(
+        agentToolSchemas(definition, undefined, { read_in_context: selected }),
+    ).toEqual(expected);
+    expect(agentToolSchemas(retained).read_in_context?.resultContractKey).toBe(
+        "b10830e5df63d263bd2e33437e5499fec0c27247b6629329427c7f936e75fd1d",
+    );
+    expect(expected.read_in_context.resultContractKey).not.toBe(
+        operationResultKey(operation.resultValidator),
+    );
 });
 
 test("required mission state keeps the newline-delimited journal boundary", () => {
@@ -69,7 +115,10 @@ test("required mission state keeps the newline-delimited journal boundary", () =
     ]);
 });
 
-async function minimalTranscript(definition: AgentDefinition) {
+async function minimalTranscript(
+    definition: AgentDefinition,
+    projected = agentToolSchemas(definition),
+) {
     const faux = fauxProvider({
         models: [
             {
@@ -87,16 +136,13 @@ async function minimalTranscript(definition: AgentDefinition) {
         },
     ]);
     const tools = await Promise.all(
-        Object.entries(agentToolSchemas(definition)).map(
-            async ([name, operation]) =>
-                defineTool({
-                    ...(await piToolMetadata(name, operation)),
-                    async execute() {
-                        throw new Error(
-                            "Profile calibration cannot execute tools",
-                        );
-                    },
-                }),
+        Object.entries(projected).map(async ([name, operation]) =>
+            defineTool({
+                ...(await piToolMetadata(name, operation)),
+                async execute() {
+                    throw new Error("Profile calibration cannot execute tools");
+                },
+            }),
         ),
     );
     const registry = createRegistry();
@@ -337,24 +383,32 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
                                             : [],
                                     },
                                 });
+        const runtimeTools = snapshots.map((snapshot) =>
+            agentToolSchemas(canonical, snapshot),
+        );
+        const preparedTools =
+            canonical
+                .nativeToolSets?.(canonical.operations)
+                .map((variant) =>
+                    agentToolSchemas(canonical, undefined, variant),
+                ) ?? [];
+        const runtimeToolSignatures = new Set(
+            runtimeTools.flatMap((variant) =>
+                Object.entries(variant).map((entry) => JSON.stringify(entry)),
+            ),
+        );
+        for (const variant of preparedTools)
+            for (const [name, tool] of Object.entries(variant))
+                expect(
+                    runtimeToolSignatures.has(JSON.stringify([name, tool])),
+                    `${canonical.id} v${canonical.version} ${name}`,
+                ).toBe(true);
         const seen = new Set<string>();
-        for (const snapshot of snapshots) {
-            const projected = agentToolSchemas(canonical, snapshot);
+        for (const projected of [...runtimeTools, ...preparedTools]) {
             const signature = JSON.stringify(projected);
             if (seen.has(signature)) continue;
             seen.add(signature);
-            const definition = {
-                ...canonical,
-                modelOperation: undefined,
-                operations: Object.fromEntries(
-                    Object.entries(projected).map(([name, schema]) => {
-                        const operation = canonical.operations[name];
-                        assert(operation);
-                        return [name, { ...operation, ...schema }];
-                    }),
-                ),
-            };
-            const history = await minimalTranscript(definition);
+            const history = await minimalTranscript(canonical, projected);
             const routes = [
                 SIMULATION_MODEL_ROUTE,
                 nativePiFixtureRoute,
@@ -365,15 +419,15 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
             for (const route of routes) {
                 if (!route) continue;
                 const input = {
-                    instructions: definition.instructions,
-                    operations: agentToolSchemas(definition),
-                    definitionVersion: definition.version,
+                    instructions: canonical.instructions,
+                    operations: projected,
+                    definitionVersion: canonical.version,
                     nativeRoute: route,
                     nativeConversation: canonical.nativeConversation,
                     contextRendering: canonical.contextRendering,
                 };
                 const overhead = await nativeBytes(
-                    definition,
+                    canonical,
                     history,
                     "",
                     route,
@@ -387,7 +441,7 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
                     "x".repeat(64000),
                 ]) {
                     const prompt = JSON.stringify(
-                        definition.nativeConversation
+                        canonical.nativeConversation
                             ? {
                                   conversationInstructions: {
                                       messages: [{ text }],
@@ -398,7 +452,7 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
                     samples.push({
                         input: { ...input, prompt },
                         actual: await nativeBytes(
-                            definition,
+                            canonical,
                             history,
                             prompt,
                             route,

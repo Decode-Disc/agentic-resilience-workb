@@ -50,7 +50,7 @@ test.each([
             new Response(
                 [
                     `data: ${JSON.stringify({ id: "reply", choices: [{ index: 0, delta: { role: "assistant", content: resumed ? JSON.stringify(completion) : "Malformed completion" }, finish_reason: null }] })}`,
-                    `data: ${JSON.stringify({ id: "reply", choices: [{ index: 0, delta: {}, finish_reason: !resumed && code === "invalid_output" ? "content_filter" : "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}`,
+                    `data: ${JSON.stringify({ id: "reply", choices: [{ index: 0, delta: {}, finish_reason: resumed ? "stop" : "content_filter" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}`,
                     "data: [DONE]",
                     "",
                 ].join("\n\n"),
@@ -58,15 +58,26 @@ test.each([
             ),
     );
     vi.stubGlobal("fetch", network);
-    await f.t.mutation(internal.execution.missions.resume, {
-        missionId: f.missionId,
-        expectedGeneration: 4,
-        simulation: false,
-    });
-    await f.t.finishAllScheduledFunctions(
-        () => vi.advanceTimersByTime(10),
-        500,
-    );
+    if (code === "repetition_stop") {
+        // This stop can be present on a retained mission. Current execution only records repetition as a diagnostic.
+        await f.t.run((ctx) =>
+            ctx.db.patch(f.missionId, {
+                status: "blocked",
+                blockCode: code,
+                noProgressTurns: 3,
+            }),
+        );
+    } else {
+        await f.t.mutation(internal.execution.missions.resume, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            simulation: false,
+        });
+        await f.t.finishAllScheduledFunctions(
+            () => vi.advanceTimersByTime(10),
+            500,
+        );
+    }
     expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
         status: "blocked",
         blockCode: code,

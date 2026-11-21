@@ -1,7 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
-import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import {
     retainedTextParts,
     stageRetainedText,
@@ -386,6 +385,8 @@ async function fixture() {
         });
         return { secondId, modelRevisionId: catalog.currentRevisionId };
     });
+    const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
+    assert(mission);
     const attempt = async (key: string) => {
         const inputJson = JSON.stringify({ key });
         const invocationId = await f.t.run((ctx) =>
@@ -394,7 +395,7 @@ async function fixture() {
                 runId: f.runId,
                 corpusRevisionId: f.corpusRevisionId,
                 generation: 4,
-                definitionVersion: getAgentDefinition("sources_v1").version,
+                definitionVersion: mission.definitionVersion,
                 taskKey: key,
                 provenance: "live",
                 status: "started",
@@ -408,7 +409,7 @@ async function fixture() {
             missionId: f.missionId,
             invocationId,
             executionGeneration: 4,
-            workflowVersion: getAgentDefinition("sources_v1").version,
+            workflowVersion: mission.definitionVersion,
             stepKey: "agent_reasoning",
             service: "model" as const,
             operation: "agent_reasoning",

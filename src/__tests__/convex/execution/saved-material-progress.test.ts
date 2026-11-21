@@ -3,7 +3,10 @@ import type { QueryCtx } from "@convex/_generated/server";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { ConvexError } from "convex/values";
 import { afterEach, expect, test, vi } from "vitest";
-import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+import {
+    seedInspectedEvidence,
+    startRetainedInspection,
+} from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -24,10 +27,9 @@ test("overlapping search results count each inspected passage only once", async 
             throw new Error("Unexpected external I/O");
         }),
     );
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "overlapping-search-progress",
         expectedGeneration: 4,
     });
@@ -82,10 +84,9 @@ test.each([
     const quotation =
         "ServiceNow provides workflow software through its platform.";
     const startOffset = text.indexOf(quotation);
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: `single-capture-context-read-${indexState}`,
         expectedGeneration: args.executionGeneration,
     });
@@ -126,10 +127,9 @@ test.each([
 ] as const)("saved-material context reads preserve the %s capture refusal", async (condition, kind, code) => {
     const { t, args, sourceId, captureId, visitorId } =
         await seedInspectedEvidence();
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: `context-refusal-${condition}`,
         expectedGeneration: args.executionGeneration,
     });
@@ -192,6 +192,9 @@ test("Workbench records the unit progress key of a successful contextual reading
         simulation: false,
     });
     if (!turn) throw new Error("Expected Workbench turn");
+    await t.run((ctx) =>
+        ctx.db.patch(turn.missionId, { definitionVersion: 9 }),
+    );
     const requestId = await t.mutation(internal.execution.operations.enqueue, {
         missionId: turn.missionId,
         expectedGeneration: 1,
@@ -224,10 +227,9 @@ test("documentary search pages reach passages beyond the first response and refu
             `# Section ${index}\n\nSubscription revenue relates to section ${index}. ${"Subscription conditions remain specific. ".repeat(50)}`,
     ).join("\n\n");
     const { t, args, sourceId } = await seedInspectedEvidence({ text });
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "paged-search",
         expectedGeneration: 4,
     });
@@ -283,10 +285,9 @@ test("documentary search pages reach passages beyond the first response and refu
 test("requested context ranges continue with exact Unicode offsets without manufacturing new passage progress", async () => {
     const text = `# Documentary context\n\n${"Reported qualification 🧭 with a specific limitation. ".repeat(1000)}`;
     const { t, args, sourceId } = await seedInspectedEvidence({ text });
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "context-pages",
         expectedGeneration: 4,
     });
@@ -351,10 +352,9 @@ test.each([
                 `# Section ${index}\n\nSubscription revenue depends on section ${index}.`,
         ).join("\n\n"),
     });
-    const missionId = await f.t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(f.t, {
         runId: f.args.runId,
         corpusRevisionId: f.args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "invalid-documentary-continuation",
         expectedGeneration: 4,
     });
@@ -488,5 +488,48 @@ test.each([
         }
     } finally {
         spy.mockRestore();
+    }
+});
+
+test("an empty search leaves inspection incomplete until a passage is displayed", async () => {
+    const { t, args, captureId } = await seedInspectedEvidence();
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        expectedGeneration: 4,
+        requestKey: "inspect-missing-then-observed",
+    });
+    const reference = JSON.stringify({
+        issuer: "capture",
+        captureId,
+        version: 2,
+    });
+    for (const [query, matched] of [
+        ["zxrmq", false],
+        ["workflow", true],
+    ] as const) {
+        const requestId = await t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId,
+                expectedGeneration: 4,
+                cause: query,
+                input: { kind: "search_available_material", reference, query },
+            },
+        );
+        const outcome = await t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 4,
+        });
+        expect(outcome.kind, JSON.stringify(outcome)).toBe("success");
+        if (outcome.kind !== "success")
+            throw Error("Expected completed search");
+        const result = JSON.parse(outcome.valueJson);
+        expect(result.captureId).toBe(captureId);
+        expect(result.passages.length > 0).toBe(matched);
+        expect(
+            (await t.run((ctx) => ctx.db.get(missionId)))?.obligations,
+        ).toEqual(matched ? [] : ["inspect_saved_material"]);
     }
 });

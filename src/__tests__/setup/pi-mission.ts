@@ -1,6 +1,9 @@
 import { internal } from "@convex/_generated/api";
 import { vi } from "vitest";
-import { seedInspectedEvidence } from "./source-preparation";
+import {
+    seedInspectedEvidence,
+    startRetainedInspection,
+} from "./source-preparation";
 
 export async function seedPiMission() {
     vi.useFakeTimers();
@@ -29,10 +32,9 @@ export async function seedPiMission() {
             throw new Error("Unexpected provider I/O");
         }),
     );
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "pi-workflow",
         generationBackend: { id: "pi-durable", version: 1 },
         expectedGeneration: 4,

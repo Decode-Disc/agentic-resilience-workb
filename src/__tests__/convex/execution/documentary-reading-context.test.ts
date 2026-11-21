@@ -2,7 +2,10 @@ import { api, internal } from "@convex/_generated/api";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { extractObservedDestinations } from "@convex/integrations/evidenceNormalization";
 import { assert, expect, test } from "vitest";
-import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+import {
+    seedInspectedEvidence,
+    startRetainedInspection,
+} from "@/__tests__/setup/source-preparation";
 import {
     seedCapturedSources,
     startSourcesOperation,
@@ -33,10 +36,9 @@ test.each([
             secForm: metadata.form ?? undefined,
         }),
     );
-    const missionId = await f.t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(f.t, {
         runId: f.runId,
         corpusRevisionId: f.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "document-metadata",
         expectedGeneration: 4,
     });
@@ -188,6 +190,7 @@ test("shared reading exposes acquisition destinations only to capable missions a
         expectedGeneration: 1,
         requestKey: "explain-retained",
     });
+    await f.t.run((ctx) => ctx.db.patch(workbenchId, { definitionVersion: 9 }));
     const statuses = [];
     for (const [missionId, expectedGeneration] of [
         [f.missionId, 4],
@@ -262,10 +265,9 @@ test("saved material dates reconcile the verified capture with its metadata with
             publishedAt: Date.UTC(2026, 9, 28),
         }),
     );
-    const missionId = await f.t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(f.t, {
         runId: f.runId,
         corpusRevisionId: f.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "capture-dateline",
         expectedGeneration: 4,
     });
@@ -297,4 +299,110 @@ test("saved material dates reconcile the verified capture with its metadata with
     ).toEqual(["2026-10-28", "2026-10-29"]);
     expect(value.document.publishedAt).toBeNull();
     expect(value.document.date).toBeNull();
+});
+
+test("a pinned Sources reader opens capture bytes of unverified completeness", async () => {
+    const f = await seedCapturedSources();
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.captureId, {
+            representationCompleteness: "unknown",
+            readingCompleteness: undefined,
+        }),
+    );
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "read-unverified-representation",
+            input: {
+                kind: "read_in_context",
+                sourceId: f.sourceId,
+                passageOrder: f.passage.order,
+            },
+        },
+    );
+    const read = await f.t.action(internal.execution.operations.dispatch, {
+        requestId,
+        expectedGeneration: 4,
+    });
+    assert(read.kind === "success", JSON.stringify(read));
+    const value = JSON.parse(read.valueJson);
+    expect(value).toMatchObject({ captureId: f.captureId });
+    expect(read.valueJson).toContain(f.passage.quotation);
+    expect(value.documentaryStatus.capture).not.toHaveProperty(
+        "representationCompleteness",
+    );
+});
+
+test("Sources 7 can reserve an observed link before its destination is a candidate", async () => {
+    const f = await seedCapturedSources();
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.missionId, { definitionVersion: 7 });
+        await ctx.db.patch(f.captureId, {
+            observedDestinations: extractObservedDestinations(
+                '<a href="https://example.com/observed-report">Exact linked annual report</a>',
+                "https://example.com",
+            ),
+        });
+    });
+    const readId = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        cause: "observe-link",
+        input: {
+            kind: "read_in_context",
+            reference: JSON.stringify({
+                issuer: "capture",
+                captureId: f.captureId,
+                version: 2,
+            }),
+        },
+    });
+    const read = await f.t.action(internal.execution.operations.dispatch, {
+        requestId: readId,
+        expectedGeneration: 4,
+    });
+    assert(read.kind === "success", JSON.stringify(read));
+    const [link] = JSON.parse(read.valueJson).observedDestinations ?? [];
+    expect(link).toEqual(
+        expect.objectContaining({
+            urlPreview: "https://example.com/observed-report",
+            acquisitionReference: expect.any(String),
+        }),
+    );
+    const acquire = async (reference: string) =>
+        f.t.mutation(internal.execution.operations.enqueue, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            cause: "acquire-observed-link",
+            input: { kind: "acquire_document", reference },
+        });
+    const forged = JSON.stringify({
+        ...JSON.parse(link.acquisitionReference),
+        index: 99,
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: await acquire(forged),
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({ code: "observed_destination_unavailable" });
+    const args = {
+        requestId: await acquire(link.acquisitionReference),
+        expectedGeneration: 4,
+    };
+    await startSourcesOperation(f.t, args);
+    const reserved = await f.t.mutation(internal.sourcesMission.reserve, args);
+    const sourceId = reserved.sourceId;
+    assert(sourceId);
+    expect(await f.t.run((ctx) => ctx.db.get(sourceId))).toMatchObject({
+        canonicalUrl: "https://example.com/observed-report",
+        category: "observed_destination",
+        providerReference: `capture:${f.captureId}:link:0`,
+    });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
+            ?.acquisitions,
+    ).toBe(1);
 });

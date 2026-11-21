@@ -1,9 +1,9 @@
-import type { Infer } from "convex/values";
-import type { publicReadResultValidator } from "@convex/domain/workbenchContracts";
 import { api, internal } from "@convex/_generated/api";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import type { publicReadResultValidator } from "@convex/domain/workbenchContracts";
 import { MAX_EXA_TEXT_CHARACTERS } from "@convex/resourcePolicy";
 import { requestPinnedPublicSource } from "@convex/sourceActions";
+import type { Infer } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
@@ -760,6 +760,19 @@ test("selected publication continues the retained representation to its decisive
     expect(content).toBe(text);
     expect(content).toContain(decisive);
     expect(acquisitions).toBe(1);
+    const capture = await f.t.run((ctx) =>
+        ctx.db.query("sourceCaptures").unique(),
+    );
+    expect(capture).toMatchObject({
+        contentHash: documentHash,
+        status: "committed",
+        retainedImport: { attemptRevision: 1 },
+    });
+    assert(capture?.storageId);
+    const id = capture.storageId;
+    expect(
+        await f.t.run(async (ctx) => (await ctx.storage.get(id))?.text()),
+    ).toBe(text);
 });
 
 test.each([
@@ -869,7 +882,7 @@ test("selected publication refuses invalid locators and retains prior readings a
     for (const index of [-1, 0.5, 2])
         expect((await read(index)).outcome).toMatchObject({
             kind: "unavailable",
-            code: "source_reference_not_observed",
+            code: "source_candidate_invalid",
         });
     expect(reads).toBe(0);
     const first = await read(0);
@@ -1207,13 +1220,13 @@ test("selected publication continues past a blank first extent and attributes a 
 });
 
 test.each([
-    "different target",
-    "search cursor",
-    "unadopted page",
-    "foreign dossier",
-    "foreign mission",
-    "stale revision",
-] as const)("selected publication refuses a %s continuation before external I/O", async (failure) => {
+    ["different target", "source_continuation_invalid"],
+    ["search cursor", "source_reference_not_observed"],
+    ["unadopted page", "source_reference_not_observed"],
+    ["foreign dossier", "source_reference_not_observed"],
+    ["foreign mission", "source_reference_not_observed"],
+    ["stale revision", "framing_observation_stale"],
+] as const)("selected publication refuses a %s continuation before external I/O", async (failure, code) => {
     vi.stubEnv("EXA_API_KEY", "fixture-only");
     let acquisitions = 0;
     vi.stubGlobal(
@@ -1311,7 +1324,7 @@ test.each([
         }),
     ).toMatchObject({
         kind: "unavailable",
-        code: "source_reference_not_observed",
+        code,
     });
     expect(acquisitions).toBe(1);
     expect(await providerReceipts(f)).toHaveLength(2);

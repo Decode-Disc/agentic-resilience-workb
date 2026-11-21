@@ -2,13 +2,13 @@ import { startSourcesOperation } from "@/__tests__/setup/sources-mission";
 import "@convex/execution/agentCatalog";
 import { internal } from "@convex/_generated/api";
 import { completeSources } from "@convex/domain/sources";
-import { sourcesDefinition } from "@convex/domain/sourcesAgent";
+import { sourcesV5Definition } from "@convex/domain/sourcesAgent";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedObservedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
-    delete sourcesDefinition.simulate;
+    delete sourcesV5Definition.simulate;
     vi.restoreAllMocks();
     vi.useRealTimers();
     vi.unstubAllEnvs();
@@ -89,7 +89,7 @@ test("Pi refreshes a retained completion after late reservation and completes wi
         }),
     );
     const requestId = await claimNativeCheck(f);
-    sourcesDefinition.simulate = (input: unknown) => {
+    sourcesV5Definition.simulate = (input: unknown) => {
         const { activeWork } = input as { activeWork: SourcesPreparation };
         return {
             kind: "complete",

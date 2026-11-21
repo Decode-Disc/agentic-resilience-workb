@@ -1,4 +1,5 @@
 import { createBoundedModelFetch } from "@convex/integrations/modelTransport";
+import { MODEL_NON_STREAMING_RESPONSE_MAX_BYTES } from "@convex/resourcePolicy";
 import { assert, expect, test, vi } from "vitest";
 
 test.each([
@@ -91,8 +92,7 @@ test("delivers SSE before EOF and observes a complete response only after EOF", 
     }
 });
 
-test("bounds cumulative SSE bytes and cancels the upstream without a complete observation", async () => {
-    let upstream!: ReadableStreamDefaultController<Uint8Array>;
+test("bounds buffered provider response bytes and cancels the upstream without a complete observation", async () => {
     const cancel = vi.fn();
     const onResponse = vi.fn();
     const state = { responseTooLarge: false };
@@ -103,22 +103,25 @@ test("bounds cumulative SSE bytes and cancels the upstream without a complete ob
                     new Response(
                         new ReadableStream<Uint8Array>({
                             start(controller) {
-                                upstream = controller;
+                                controller.enqueue(
+                                    new Uint8Array(
+                                        MODEL_NON_STREAMING_RESPONSE_MAX_BYTES,
+                                    ),
+                                );
+                                controller.enqueue(new Uint8Array(1));
                             },
                             cancel,
                         }),
-                        { headers: { "content-type": "text/event-stream" } },
+                        { headers: { "content-type": "application/json" } },
                     ),
             ),
             onResponse,
         },
         state,
     );
-    const response = await bounded("https://fixture.invalid");
-    const reading = response.arrayBuffer();
-    upstream.enqueue(new Uint8Array(1024 * 1024));
-    upstream.enqueue(new Uint8Array(1));
-    await expect(reading).rejects.toThrow("byte bound");
+    await expect(bounded("https://fixture.invalid")).rejects.toThrow(
+        "byte bound",
+    );
     expect(state.responseTooLarge).toBe(true);
     expect(cancel).toHaveBeenCalledOnce();
     expect(onResponse).not.toHaveBeenCalled();

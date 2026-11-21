@@ -4,6 +4,7 @@ import { seedConversation } from "@/__tests__/setup/agent-harness";
 import {
     seedInspectedEvidence,
     seedSourcePreparation,
+    startRetainedInspection,
 } from "@/__tests__/setup/source-preparation";
 
 test("native dossier consultation uses the persisted dispatcher without creating a mission or claiming research", async () => {
@@ -119,10 +120,9 @@ test("confirmed native results survive an authorized generation resume without a
         await import("@/__tests__/convex/workflows/workflow-test-register.js")
     ).default;
     workflowTest.register(t);
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "retained-native-result",
         expectedGeneration: 4,
     });

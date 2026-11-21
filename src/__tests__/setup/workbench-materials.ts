@@ -89,12 +89,21 @@ export async function seedWorkbenchMaterials(
             text: `Inspect material ${index}.`,
             delivery: "queue",
         });
-    const start = () =>
-        t.mutation(internal.execution.conversations.startTurn, {
+    const start = async () => {
+        await t.run(async (ctx) => {
+            const conversation = await ctx.db
+                .query("agentConversations")
+                .withIndex("by_run", (q) => q.eq("runId", runId))
+                .unique();
+            if (conversation)
+                await ctx.db.patch(conversation._id, { definitionVersion: 9 });
+        });
+        return t.mutation(internal.execution.conversations.startTurn, {
             runId,
             definitionId: "workbench_v1",
             scope: { kind: "workbench_v1" },
             simulation: false,
         });
+    };
     return { ...fixture, client, start };
 }

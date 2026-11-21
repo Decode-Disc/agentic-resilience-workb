@@ -1,5 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import {
     campaignManifestSchema,
     emptyCampaignLimits,
@@ -213,6 +214,23 @@ test("simulated discovery, acquisition, reads and control use real operations wi
             .unique(),
     );
     if (!source) throw new Error("Discovery did not retain its candidate");
+    const definition = getAgentDefinition("sources_v1");
+    const observed = await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.missionId, {
+            definitionVersion: definition.version,
+        });
+        const mission = await ctx.db.get(f.missionId);
+        const run = await ctx.db.get(f.runId);
+        if (!mission || !run) throw new Error("Missing simulation authority");
+        return definition.context(ctx, mission, run);
+    });
+    if (observed.kind !== "ready") throw new Error(JSON.stringify(observed));
+    const candidate = (
+        observed.context.activeWork as {
+            candidates: { sourceId: string; acquisitionReference: string }[];
+        }
+    ).candidates.find((entry) => entry.sourceId === source._id);
+    if (!candidate) throw new Error("Discovery candidate not exposed");
     const execute = async (
         input: FunctionArgs<
             typeof internal.execution.operations.enqueue
@@ -233,9 +251,8 @@ test("simulated discovery, acquisition, reads and control use real operations wi
         return { id, outcome };
     };
     const acquisition = await execute({
-        kind: "make_source_consultable",
-        needId: need.id,
-        sourceId: source._id,
+        kind: "acquire_document",
+        reference: candidate.acquisitionReference,
     });
     const capture = await f.t.run((ctx) =>
         ctx.db
@@ -253,15 +270,14 @@ test("simulated discovery, acquisition, reads and control use real operations wi
     expect(JSON.parse(acquisition.outcome.valueJson)).toMatchObject({
         captureId,
     });
-    await execute({
+    const search = await execute({
         kind: "search_available_material",
-        sourceId: source._id,
+        reference: JSON.parse(acquisition.outcome.valueJson).readingReference,
         query: "workflow",
     });
     const reading = await execute({
         kind: "read_in_context",
-        sourceId: source._id,
-        passageOrder: 0,
+        reference: JSON.parse(search.outcome.valueJson).passages[0].reference,
     });
     await execute({
         kind: "submit_documentary_qualification",
@@ -278,7 +294,13 @@ test("simulated discovery, acquisition, reads and control use real operations wi
                     modality: "Illustrative description",
                     attribution: "Simulation fixture; not live",
                     kind: "context",
-                    evidence: [{ readRequestId: reading.id, passageOrder: 0 }],
+                    evidence: [
+                        {
+                            readRequestId: reading.id,
+                            passageOrder: JSON.parse(reading.outcome.valueJson)
+                                .indexedPassage.passageOrder,
+                        },
+                    ],
                 },
             },
         ],

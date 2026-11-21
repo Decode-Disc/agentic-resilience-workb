@@ -267,6 +267,19 @@ async function capturedComparison(
         const primaryStorageId = await ctx.storage.store(
             new Blob([primaryText], { type: "text/plain" }),
         );
+        const rootOperationId = primaryText.startsWith("\uFEFF")
+            ? await ctx.db.insert("agentOperationRequests", {
+                  runId,
+                  actor: "system",
+                  cause: "retained-primary",
+                  logicalKey: "retained-primary",
+                  input: { kind: "consult_run_state" },
+                  operationVersion: 1,
+                  expectedGeneration: 3,
+                  status: "completed",
+                  createdAt: 1,
+              })
+            : undefined;
         const primaryCaptureId = await ctx.db.insert("sourceCaptures", {
             runId,
             corpusRevisionId,
@@ -281,6 +294,9 @@ async function capturedComparison(
             resolvedUrl:
                 "https://www.sec.gov/Archives/edgar/data/1373715/000137371526000005/annual-report.htm",
             storageId: primaryStorageId,
+            ...(rootOperationId
+                ? { retainedImport: { rootOperationId, attemptRevision: 1 } }
+                : {}),
             contentHash: sha256Hex(primaryText),
             byteCount: new TextEncoder().encode(primaryText).byteLength,
             mediaType: "text/plain",
@@ -1305,11 +1321,13 @@ test("a manual target reuses an older same-dossier primary capture without readi
 });
 
 test("versioned comparison delivers extra retrieved evidence to the provider, persists its exact citation and reuses the result", async () => {
-    const primaryText = Array.from(
-        { length: 12 },
-        (_, i) =>
-            `# Disclosure ${i}\n\nThe company competes in workflow software and subscription pricing. ${"Context about enterprise workflows. ".repeat(35)} Unique disclosure ${i}.`,
-    ).join("\n\n");
+    const primaryText =
+        "\uFEFF" +
+        Array.from(
+            { length: 12 },
+            (_, i) =>
+                `# Disclosure ${i}\n\nThe company competes in workflow software and subscription pricing. ${"Context about enterprise workflows. ".repeat(35)} Unique disclosure ${i}.`,
+        ).join("\n\n");
     const fixture = await capturedComparison(primaryText);
     const { t, preparationId, sourceCaptureId, qualificationTaskId } = fixture;
     await t.run((ctx) =>

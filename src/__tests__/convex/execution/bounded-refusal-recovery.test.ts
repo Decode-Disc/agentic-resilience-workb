@@ -1,6 +1,9 @@
 import { internal } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+import {
+    seedInspectedEvidence,
+    startRetainedInspection,
+} from "@/__tests__/setup/source-preparation";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -14,16 +17,12 @@ test.each([
     const f = await (async () => {
         if (binding === "sources") return seedCapturedSources();
         const inspected = await seedInspectedEvidence();
-        const missionId = await inspected.t.mutation(
-            internal.execution.missions.start,
-            {
-                runId: inspected.runId,
-                corpusRevisionId: inspected.corpusRevisionId,
-                expectedGeneration: 4,
-                definitionId: "saved_material_inspection_v1",
-                requestKey: "bounded-recovery",
-            },
-        );
+        const missionId = await startRetainedInspection(inspected.t, {
+            runId: inspected.runId,
+            corpusRevisionId: inspected.corpusRevisionId,
+            expectedGeneration: 4,
+            requestKey: "bounded-recovery",
+        });
         return { ...inspected, missionId };
     })();
     const missionId = f.missionId;

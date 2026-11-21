@@ -1,13 +1,13 @@
 import "@convex/execution/agentCatalog";
 import { internal } from "@convex/_generated/api";
-import { sourcesDefinition } from "@convex/domain/sourcesAgent";
+import { sourcesV5Definition } from "@convex/domain/sourcesAgent";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
 import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
-    delete sourcesDefinition.simulate;
+    delete sourcesV5Definition.simulate;
     vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
@@ -133,9 +133,8 @@ test.each([
 });
 
 test.each([
-    false,
-    true,
-])("Pi corrects missing need accounting, bounded when repeated: %s", async (repeat) => {
+    1, 4,
+])("Pi preserves every missing-need correction before adopting a valid completion after %i refusals", async (refusalCount) => {
     vi.useFakeTimers();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
     vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3212");
@@ -171,7 +170,7 @@ test.each([
             browserTestContextId: contextId,
         }),
     );
-    sourcesDefinition.simulate = (input: unknown) => {
+    sourcesV5Definition.simulate = (input: unknown) => {
         const { activeWork } = input as {
             activeWork: SourcesPreparation & { noProgressTurns: number };
         };
@@ -180,7 +179,7 @@ test.each([
 
             workingNotes: "Completion note.",
             needs:
-                repeat || activeWork.noProgressTurns === 0
+                activeWork.noProgressTurns < refusalCount
                     ? []
                     : activeWork.needs.map((n) => ({
                           needId: n.id,
@@ -205,8 +204,12 @@ test.each([
             .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
             .collect(),
     );
-    expect(mission.status).toBe(repeat ? "blocked" : "completed");
-    expect(invocations).toHaveLength(repeat ? 3 : 2);
+    expect(mission).toMatchObject({
+        status: "completed",
+        workingNotes: "Completion note.",
+    });
+    expect(mission.blockCode).toBeUndefined();
+    expect(invocations).toHaveLength(refusalCount + 1);
     assert(invocations[0]);
     expect(invocations[0].outputJson).toContain('"needs":[]');
     const correctiveInputs = await f.t.run(async (ctx) =>
@@ -269,8 +272,6 @@ test.each([
             texts.some((text) => text.includes('"id":"common-context"')),
         ).toBe(true);
     }
-    expect(mission.workingNotes).toBe(repeat ? "" : "Completion note.");
-    if (repeat) expect(mission.blockCode).toBe("repetition_stop");
     const requests = await f.t.run((ctx) =>
         ctx.db
             .query("agentOperationRequests")

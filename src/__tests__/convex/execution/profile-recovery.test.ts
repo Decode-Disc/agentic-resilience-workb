@@ -1,6 +1,9 @@
 import { api, internal } from "@convex/_generated/api";
 import { buildMissionContext } from "@convex/execution/context";
 import { Harness } from "@earendil-works/pi-durable";
+import { prepareQualificationModel } from "@evaluations/workbench-browser/model-preparation";
+import { ConvexHttpClient } from "convex/browser";
+import { convexToJson, type Value } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
@@ -11,6 +14,99 @@ afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+});
+
+test("qualification repairs missing current-binding profiles despite a compatible catalogue", async () => {
+    const f = await seedWorkbench(
+        false,
+        undefined,
+        60_000,
+        undefined,
+        undefined,
+        11,
+    );
+    const installed = await installModel(f.t, nativePiFixtureRoute);
+    vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
+    const original = await installed.admin.query(
+        api.modelConfiguration.list,
+        {},
+    );
+    expect(
+        original.models.find((m) => m._id === installed.catalogId)?.compatible,
+    ).toBe(true);
+    await f.t.run(async (ctx) => {
+        for (const profile of await ctx.db
+            .query("nativeInputProfiles")
+            .collect())
+            await ctx.db.delete(profile._id);
+    });
+    const args = {
+        runId: f.runId,
+        definitionId: "workbench_v1" as const,
+        scope: { kind: "workbench_v1" as const },
+        simulation: false,
+    };
+    await expect(
+        f.t.mutation(internal.execution.conversations.startTurn, args),
+    ).rejects.toThrow("model_input_profile_unavailable");
+    vi.stubGlobal("fetch", () => {
+        throw new Error("Profile preparation cannot dispatch inference");
+    });
+    const client = new ConvexHttpClient("http://127.0.0.1:3210", {
+        logger: false,
+        fetch: async (_url, init) => {
+            const request: unknown = JSON.parse(String(init?.body));
+            assert(request && typeof request === "object" && "path" in request);
+            let value: Value;
+            if (request.path === "modelConfiguration:list")
+                value = await installed.admin.query(
+                    api.modelConfiguration.list,
+                    {},
+                );
+            else {
+                expect(request.path).toBe(
+                    "modelConfigurationActions:refreshProfiles",
+                );
+                assert("args" in request && Array.isArray(request.args));
+                expect(request.args[0]).toEqual({
+                    catalogId: installed.catalogId,
+                    cursor: null,
+                });
+                value = await installed.admin.action(
+                    api.modelConfigurationActions.refreshProfiles,
+                    {
+                        catalogId: installed.catalogId,
+                        cursor: null,
+                    },
+                );
+            }
+            return Response.json({
+                status: "success",
+                value: convexToJson(value),
+            });
+        },
+    });
+    await prepareQualificationModel(client);
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        args,
+    );
+    assert(active);
+    expect(
+        await f.t.run((ctx) => buildMissionContext(ctx, active.missionId, 1)),
+    ).toMatchObject({ kind: "ready" });
+    const after = await installed.admin.query(api.modelConfiguration.list, {});
+    expect(after.assignments).toEqual(original.assignments);
+    expect(
+        after.models.find((m) => m._id === installed.catalogId)
+            ?.currentRevisionId,
+    ).toBe(
+        original.models.find((m) => m._id === installed.catalogId)
+            ?.currentRevisionId,
+    );
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
 });
 
 test("refresh reuses retained exact profiles while the native serializer is unavailable, then restores a missing profile", async () => {

@@ -13,10 +13,8 @@ import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 vi.mock("node:dns/promises", async (importOriginal) => {
     const original = await importOriginal<typeof import("node:dns/promises")>();
-    return {
-        ...original,
-        lookup: async () => [{ address: "93.184.216.34", family: 4 }],
-    };
+    const lookup = async () => [{ address: "93.184.216.34", family: 4 }];
+    return { ...original, default: { ...original, lookup }, lookup };
 });
 
 const originalPackages = [...packages.packages];
@@ -30,8 +28,8 @@ afterEach(() => {
 
 test("current bindings expose only their native mission catalogue and preserve retained bindings", () => {
     for (const [id, version, retainedVersion, name] of [
-        ["workbench_v1", 9, 6, "workbench-framing"],
-        ["sources_v1", 5, 4, "source-preparation"],
+        ["workbench_v1", 11, 6, "workbench-framing"],
+        ["sources_v1", 7, 4, "source-preparation"],
     ] as const) {
         const current = getAgentDefinition(id);
         expect(current.version).toBe(version);
@@ -71,7 +69,7 @@ test("native read runs through scheduled settlement and retains its exact packag
             cause: "consult-method",
             input: {
                 kind: "read",
-                path: "/agent-skills/research-methods-v1/workbench-framing/SKILL.md",
+                path: "/agent-skills/research-methods-v2/workbench-framing/SKILL.md",
             },
         },
     );
@@ -88,8 +86,8 @@ test("native read runs through scheduled settlement and retains its exact packag
     assert(request?.outcome?.kind === "success", JSON.stringify(request));
     const value = JSON.parse(request.outcome.valueJson);
     expect(value).toMatchObject({
-        packageId: "research-methods-v1",
-        path: "/agent-skills/research-methods-v1/workbench-framing/SKILL.md",
+        packageId: "research-methods-v2",
+        path: "/agent-skills/research-methods-v2/workbench-framing/SKILL.md",
         text: expect.stringContaining("# Framing an economic inquiry"),
     });
     expect(value.resourceHash).toMatch(/^[a-f0-9]{64}$/);
@@ -126,10 +124,10 @@ test("native read runs through scheduled settlement and retains its exact packag
     expect(JSON.parse(page.outcome.valueJson).text).toContain("offset=5");
     const { createReadTool } = await import("@earendil-works/pi-coding-agent");
     const { skillResource } = await import("@convex/execution/agentSkills");
-    const binding = getAgentDefinition("workbench_v1", 7).skills;
+    const binding = getAgentDefinition("workbench_v1").skills;
     assert(binding);
     const native = createReadTool(
-        "/agent-skills/research-methods-v1/workbench-framing/",
+        "/agent-skills/research-methods-v2/workbench-framing/",
         {
             operations: {
                 access: async (path) => {
@@ -158,7 +156,7 @@ test("native read runs through scheduled settlement and retains its exact packag
         "/etc/passwd",
         "../source-preparation/SKILL.md",
         "../../../../etc/passwd",
-        "/agent-skills/research-methods-v1/source-preparation/SKILL.md",
+        "/agent-skills/research-methods-v2/source-preparation/SKILL.md",
     ]) {
         const deniedId = await f.t.mutation(
             internal.execution.operations.enqueue,
@@ -187,7 +185,7 @@ test("native read runs through scheduled settlement and retains its exact packag
             cause: "invalid-native-offset",
             input: {
                 kind: "read",
-                path: "/agent-skills/research-methods-v1/workbench-framing/SKILL.md",
+                path: "/agent-skills/research-methods-v2/workbench-framing/SKILL.md",
                 offset: 0,
             },
         },

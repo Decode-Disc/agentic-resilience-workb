@@ -492,7 +492,7 @@ test("native preparation binds the method and actual tool declarations as well a
         expectedGeneration: 4,
     });
     assert(context.kind === "ready");
-    const definition = getAgentDefinition("sources_v1");
+    const definition = getAgentDefinition("sources_v1", 5);
     const prepared = {
         missionId: f.missionId,
         expectedGeneration: 4,
@@ -540,7 +540,7 @@ test("dispatch rechecks a documentary exclusion committed after native admission
         expectedGeneration: 4,
     });
     assert(context.kind === "ready");
-    const definition = getAgentDefinition("sources_v1");
+    const definition = getAgentDefinition("sources_v1", 5);
     const begun = await f.t.mutation(internal.execution.invocations.begin, {
         missionId: f.missionId,
         expectedGeneration: 4,

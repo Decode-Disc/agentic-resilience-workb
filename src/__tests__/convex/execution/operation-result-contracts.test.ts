@@ -403,7 +403,11 @@ test("result table identities participate in preparation without changing provid
         operationResultValidator(v.object({ sourceId: v.id(table) }));
     const tools = (table: "sources" | "sourceCaptures") =>
         agentToolSchemas({
-            ...sourcesDefinition,
+            modelOperation: () => ({
+                description: operation.description,
+                inputValidator: operation.inputValidator,
+                resultValidator: contract(table),
+            }),
             operations: {
                 read_in_context: {
                     ...operation,

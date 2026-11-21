@@ -8,7 +8,10 @@ import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
-import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+import {
+    seedInspectedEvidence,
+    startRetainedInspection,
+} from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -148,10 +151,9 @@ test.each([
 
 test("duplicate completion references are refused before accepting an artifact", async () => {
     const { t, args, sourceId, captureId } = await seedInspectedEvidence();
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "duplicate-completion",
         expectedGeneration: 4,
     });
@@ -191,10 +193,9 @@ test("duplicate completion references are refused before accepting an artifact",
 
 test("a reused earlier request supplies its awaited result after newer requests", async () => {
     const { t, args, sourceId } = await seedInspectedEvidence();
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "reused-context",
         expectedGeneration: 4,
     });
@@ -330,10 +331,9 @@ test("required context over capacity blocks without discarding notes or obligati
 
 test("a returned batch is persisted before dispatch and cannot complete with unfinished obligations", async () => {
     const { t, args, sourceId } = await seedInspectedEvidence();
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "handoff",
         expectedGeneration: 4,
     });
@@ -441,10 +441,9 @@ test("late cancelled output is retained but cannot create requests or advance th
 
 test("logical request identity ignores JSON argument key order", async () => {
     const { t, args, sourceId } = await seedInspectedEvidence();
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "logical-identity",
         expectedGeneration: 4,
     });

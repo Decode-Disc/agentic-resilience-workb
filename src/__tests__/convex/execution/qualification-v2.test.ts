@@ -209,6 +209,12 @@ async function liveFixture(
             ? await ctx.db.get(original.companyId)
             : null;
         assert(company);
+        const originalCorpus = original.activeCorpusRevisionId
+            ? await ctx.db.get(original.activeCorpusRevisionId)
+            : null;
+        const originalFraming = original.currentFramingRevisionId
+            ? await ctx.db.get(original.currentFramingRevisionId)
+            : null;
         const {
             _id: _companyId,
             _creationTime: _companyTime,
@@ -240,6 +246,29 @@ async function liveFixture(
                     ? f.runId
                     : await ctx.db.insert("researchRuns", values);
             if (index === 0) await ctx.db.patch(runId, values);
+            else {
+                assert(originalCorpus && originalFraming);
+                const {
+                    _id: _corpusId,
+                    _creationTime: _corpusTime,
+                    ...corpus
+                } = originalCorpus;
+                const {
+                    _id: _framingId,
+                    _creationTime: _framingTime,
+                    ...framing
+                } = originalFraming;
+                await ctx.db.patch(runId, {
+                    activeCorpusRevisionId: await ctx.db.insert(
+                        "corpusRevisions",
+                        { ...corpus, runId },
+                    ),
+                    currentFramingRevisionId: await ctx.db.insert(
+                        "framingRevisions",
+                        { ...framing, runId },
+                    ),
+                });
+            }
             entries.push({ runId, fixtureKey, scenarioId: scenario.id });
         }
         return entries;
@@ -389,6 +418,32 @@ async function startQualifiedSources(
         preparationId,
     };
 }
+
+test("a qualified Sources grant still requires the deployment preparation window before Start", async () => {
+    const f = await liveFixture();
+    const configuredWindow = process.env.SOURCES_PREPARATION_WINDOW_MINUTES;
+    assert(configuredWindow);
+    vi.stubEnv("SOURCES_PREPARATION_WINDOW_MINUTES", undefined);
+    await expect(startQualifiedSources(f)).rejects.toThrow(
+        "sources_configuration_unavailable",
+    );
+    expect(await f.t.run((ctx) => ctx.db.get(f.runId))).toMatchObject({
+        lifecycleState: "framing",
+        executionStatus: "idle",
+    });
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+    vi.stubEnv("SOURCES_PREPARATION_WINDOW_MINUTES", configuredWindow);
+    await f.client.mutation(api.framing.startResearch, {
+        runId: f.runId,
+        expectedRevision: 2,
+        requestKey: "duration-start",
+    });
+    const started = await f.t.run((ctx) => ctx.db.get(f.runId));
+    expect(started?.researchStartedAt).toEqual(expect.any(Number));
+    expect(started?.sourcesEnvelope).toBeDefined();
+});
 
 test.each([
     25, 75,

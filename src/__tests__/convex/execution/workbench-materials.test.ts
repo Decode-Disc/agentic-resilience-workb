@@ -117,7 +117,7 @@ test("ended documentary treatment has the same current outcome in model context 
     );
     await t.run(async (ctx) => {
         const capture = await ctx.db.get(captureId);
-        assert(capture);
+        assert(capture?.preparationId);
         await ctx.db.patch(capture.preparationId, { status: "complete" });
         const message = await ctx.db.query("agentMessageDeliveries").first();
         assert(message);

@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
-import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+import {
+    seedInspectedEvidence,
+    startRetainedInspection,
+} from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
     vi.unstubAllEnvs();
@@ -332,10 +335,9 @@ test("the validation binding loses authority when local fixtures are disabled", 
 
 test("a legacy mission keeps its stored requests, hash identities and flat completion through old function paths", async () => {
     const { t, args, sourceId, captureId } = await seedInspectedEvidence();
-    const missionId = await t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(t, {
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "legacy",
         expectedGeneration: 4,
     });

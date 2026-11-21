@@ -7,7 +7,10 @@ import { getFunctionName } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
-import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+import {
+    seedInspectedEvidence,
+    startRetainedInspection,
+} from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -216,11 +219,10 @@ async function fixture(reasoningEffort?: ModelRoute["reasoningEffort"]) {
               }
             : {},
     );
-    const missionId = await f.t.mutation(internal.execution.missions.start, {
+    const missionId = await startRetainedInspection(f.t, {
         runId: f.args.runId,
         corpusRevisionId: f.args.corpusRevisionId,
         expectedGeneration: 4,
-        definitionId: "saved_material_inspection_v1",
         requestKey: "native-transport",
     });
     const requestId = await f.t.mutation(
