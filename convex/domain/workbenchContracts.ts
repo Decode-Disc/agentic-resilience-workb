@@ -1,15 +1,20 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { documentDatesValidator } from "@convex/domain/documentDates";
 import { approvalActionValidator } from "@convex/execution/approvalContracts";
+import { operationResultValidator } from "@convex/execution/operationResults";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import {
     directedFramingEventBasisInput,
+    documentaryFramingEventBasisInput,
     framingContentValidator,
     framingEventBasisInput,
     initialDirectedFramingEventBasisInput,
+    initialDocumentaryFramingEventBasisInput,
     legacyFramingEventBasisInput,
+    WORKBENCH_FRAMING_RECEIPT_VERSION,
 } from "./framingContracts";
+import { savedMaterialBinding } from "./savedMaterialOperations";
 import { coverageRoleValidator } from "./sourceDiscoveryRecovery";
 import { discoveryFocus } from "./sourcesContracts";
 import {
@@ -112,6 +117,14 @@ export const directedNativeAdjustFramingInput = nativeAdjustFramingInput.extend(
 export const initialNativeAdjustFramingInput = nativeAdjustFramingInput.extend({
     eventBasis: initialDirectedFramingEventBasisInput,
 });
+export const documentaryNativeAdjustFramingInput =
+    nativeAdjustFramingInput.extend({
+        eventBasis: v.optional(documentaryFramingEventBasisInput),
+    });
+export const initialDocumentaryNativeAdjustFramingInput =
+    nativeAdjustFramingInput.extend({
+        eventBasis: initialDocumentaryFramingEventBasisInput,
+    });
 
 export const controlResearchInput = v.object({
     action: v.union(v.literal("pause"), v.literal("resume")),
@@ -243,18 +256,39 @@ export const publicReadResultValidator = v.object({
         }),
     ),
 });
+const publicSearchCandidate = v.object({
+    url: v.string(),
+    title: v.string(),
+    publisher: v.string(),
+    publishedAt: v.optional(v.string()),
+});
 export const publicSearchResultValidator = v.object({
     replayCorpusHash: v.optional(v.string()),
     searchId: v.id("agentOperationRequests"),
-    candidates: v.array(
-        v.object({
-            url: v.string(),
-            title: v.string(),
-            publisher: v.string(),
-            publishedAt: v.optional(v.string()),
-        }),
-    ),
+    candidates: v.array(publicSearchCandidate),
 });
+export const referencedPublicSearchResultValidator =
+    publicSearchResultValidator.extend({
+        candidates: v.array(
+            publicSearchCandidate.extend({ reference: v.string() }),
+        ),
+    });
+export const publicSearchOutcomeValidator = v.union(
+    referencedPublicSearchResultValidator,
+    publicSearchResultValidator,
+);
+const legacyPublicSearchResult = operationResultValidator(
+    publicSearchResultValidator,
+);
+const referencedPublicSearchResult = operationResultValidator(
+    referencedPublicSearchResultValidator,
+);
+
+export function publicSearchWireResult(version: number) {
+    return savedMaterialBinding("workbench_v1", version) === "referenced"
+        ? referencedPublicSearchResult
+        : legacyPublicSearchResult;
+}
 export const publicContextResultValidator = v.object({
     status: v.union(v.literal("observed"), v.literal("inconclusive")),
     references: v.array(
@@ -281,16 +315,32 @@ export function framingObservationRefusal(
         !observation ||
         observation.runId !== authority.runId ||
         observation.missionId !== authority.missionId ||
-        observation.pin?.kind !== "framing_revision" ||
+        (observation.pin?.kind !== "framing_revision" &&
+            !(
+                observation.pin?.kind === "documentary_v1" &&
+                observation.pin.scope.kind === "framing"
+            )) ||
         observation.status !== "completed" ||
         observation.adoptedAt === undefined ||
         observation.adoptionRefusalCode ||
-        observation.outcome?.kind !== "success" ||
-        !("messageId" in observation.input)
+        observation.outcome?.kind !== "success"
     )
         return "source_reference_not_observed";
+    const cause =
+        observation.pin.kind === "documentary_v1" &&
+        observation.pin.scope.kind === "framing"
+            ? observation.pin.scope.cause
+            : {
+                  messageId:
+                      "messageId" in observation.input
+                          ? observation.input.messageId
+                          : undefined,
+                  instructionVersion: observation.instructionVersion,
+              };
+    if (!cause.messageId) return "source_reference_not_observed";
     if (
-        observation.input.messageId !== authority.messageId ||
+        cause.messageId !== authority.messageId ||
+        cause.instructionVersion !== authority.instructionVersion ||
         observation.instructionVersion !== authority.instructionVersion
     )
         return "framing_observation_stale";
@@ -313,8 +363,7 @@ export function observedPublicContext(
     return validate(publicContextResultValidator, result) ? result : undefined;
 }
 
-/** Only an adopted, nonblank reading can support a public framing association. */
-export function observedPublicRead(
+export function adoptedPublicRead(
     request: Doc<"agentOperationRequests"> | null,
 ) {
     if (
@@ -327,12 +376,29 @@ export function observedPublicRead(
         return undefined;
     const value: unknown = JSON.parse(request.outcome.valueJson);
     return validate(publicReadResultValidator, value) &&
-        value.readId === request._id &&
-        value.status === "observed" &&
-        value.reference?.excerpt.trim()
+        value.readId === request._id
         ? value
         : undefined;
 }
+
+/** Only an adopted, nonblank reading can support a public framing association. */
+export function observedPublicRead(
+    request: Doc<"agentOperationRequests"> | null,
+) {
+    const value = adoptedPublicRead(request);
+    return value?.status === "observed" && value.reference?.excerpt.trim()
+        ? value
+        : undefined;
+}
+
+export const retainedPublicReadPage = v.object({
+    readId: v.id("agentOperationRequests"),
+    contentHash: v.string(),
+    characters: v.number(),
+    start: v.number(),
+    end: v.number(),
+    excerpt: v.string(),
+});
 
 export const workbenchSchemas = {
     id: v.literal("workbench_v1"),
@@ -425,16 +491,32 @@ export function supportsDirectedFraming(version: number): boolean {
         version === 6 ||
         version === 7 ||
         version === 8 ||
-        version === 9
+        version === 9 ||
+        savedMaterialBinding("workbench_v1", version) === "referenced"
     );
 }
 
 /** Versions explicitly preserving the corrected framing completion and discovery contract. */
 export function supportsFramingContractCorrections(version: number): boolean {
-    return version === 6 || version === 7 || version === 8 || version === 9;
+    return (
+        version === 6 ||
+        version === 7 ||
+        version === 8 ||
+        version === 9 ||
+        savedMaterialBinding("workbench_v1", version) === "referenced"
+    );
 }
 
 /** State-specific model schemas are introduced without changing pinned historical declarations. */
 export function supportsStatefulFramingSchema(version: number): boolean {
-    return version === 9;
+    return (
+        version === 9 ||
+        savedMaterialBinding("workbench_v1", version) === "referenced"
+    );
+}
+
+export function supportsFramingWriteReceipt(
+    version: number | undefined,
+): boolean {
+    return version === WORKBENCH_FRAMING_RECEIPT_VERSION;
 }

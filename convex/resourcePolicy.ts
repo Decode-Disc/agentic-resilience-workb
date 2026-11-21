@@ -251,6 +251,10 @@ export const MAX_FRAMING_AUTHORITY_REVISIONS = 128;
 // Reserve the remaining result budget for documentary permissions and observed-link previews.
 export const MAX_SAVED_MATERIAL_SEARCH_RESULT_BYTES = 30 * 1024;
 
+// Context selection and page sizes use UTF-16 offsets in verified capture text.
+export const SOURCE_CONTEXT_NEIGHBOR_CHARACTERS = 512;
+export const SOURCE_CONTEXT_PAGE_CHARACTERS = 6000;
+
 export const MAX_INSPECTED_CAPTURES = 64;
 
 export const SOURCE_COMPARISON_MAX_INPUT_BYTES = 128 * 1024;

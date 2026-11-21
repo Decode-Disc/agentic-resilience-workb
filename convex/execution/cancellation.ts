@@ -40,8 +40,9 @@ export const continueRunCancellation = internalMutation({
             // Jobs queued by the previous deployment have no generation; only the unchanged cancellation can identify it.
             const run = await ctx.db.get(args.runId);
             if (
-                run?.executionStatus !== "cancelled" ||
-                run.updatedAt !== args.cancelledAt
+                run?.withdrawnAt !== args.cancelledAt &&
+                (run?.executionStatus !== "cancelled" ||
+                    run.updatedAt !== args.cancelledAt)
             )
                 return null;
             cancelledGeneration = run.executionGeneration - 1;
@@ -78,8 +79,9 @@ async function cancelMissionPage(
         if (mission.executionScope === "conversation") {
             const run = await ctx.db.get(args.runId);
             if (
-                run?.executionStatus !== "cancelled" ||
-                run.updatedAt !== args.cancelledAt
+                run?.withdrawnAt !== args.cancelledAt &&
+                (run?.executionStatus !== "cancelled" ||
+                    run.updatedAt !== args.cancelledAt)
             )
                 continue;
         } else if (mission.generation > args.cancelledGeneration) continue;

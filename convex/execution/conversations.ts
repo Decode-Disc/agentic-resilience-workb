@@ -7,7 +7,9 @@ import {
     type QueryCtx,
     query,
 } from "@convex/_generated/server";
+import { savedMaterialBinding } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { readFramingCitationPolicy } from "@convex/framingCitationPolicy";
 import {
     createConversationStorage,
     readConversationMessages,
@@ -558,6 +560,16 @@ export const claimTurn = internalMutation({
             .take(single ? 1 : HISTORY_PAGE_SIZE);
         if (!messages.length) return null;
         const turnId = await ctx.db.insert("agentConversationTurns", {
+            ...(conversation.definitionId === "workbench_v1" &&
+            savedMaterialBinding(
+                conversation.definitionId,
+                conversation.definitionVersion,
+            ) === "referenced"
+                ? {
+                      framingCitationPolicy:
+                          await readFramingCitationPolicy(ctx),
+                  }
+                : {}),
             responseControl: {
                 policy: await readResponseControlPolicy(ctx),
                 checks: [],
@@ -588,12 +600,16 @@ export const claimTurn = internalMutation({
 
 export const analystConversationTurn = schema
     .doc("agentConversationTurns")
-    .omit("responseControl");
+    .omit("responseControl", "framingCitationPolicy");
 /** Public conversation views omit raw drafts, review requests and protected diagnostic observations. */
 export function conversationTurnForAnalyst(
     turn: Doc<"agentConversationTurns">,
 ) {
-    const { responseControl: _audit, ...visible } = turn;
+    const {
+        responseControl: _audit,
+        framingCitationPolicy: _citationPolicy,
+        ...visible
+    } = turn;
     return {
         ...visible,
         preview:

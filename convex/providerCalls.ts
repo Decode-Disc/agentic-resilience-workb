@@ -1,3 +1,4 @@
+import { requireSourcesAcquisitionRequest } from "@convex/domain/documentaryAccess";
 import {
     RESPONSE_CONTROL_LIMITS,
     responseReviewOperationKey,
@@ -16,6 +17,7 @@ import {
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
 } from "@convex/resourcePolicy";
 import {
+    framingProviderInputHash,
     framingSecReadInput,
     requirePublicContextRequest,
 } from "@convex/workbenchPublicContext";
@@ -676,6 +678,34 @@ export const recordAttempt = internalMutation({
         args,
     ): Promise<Infer<typeof recordAttemptResultValidator>> => {
         const now = Date.now();
+        if (
+            args.status === "started" &&
+            args.operationRequestId &&
+            args.preparationId
+        ) {
+            const request = await ctx.db.get(args.operationRequestId);
+            if (request?.input.kind === "acquire_document") {
+                const acquisition = await requireSourcesAcquisitionRequest(
+                    ctx,
+                    request,
+                    args.executionGeneration ?? -1,
+                );
+                if (
+                    args.runId !== acquisition.run._id ||
+                    args.preparationId !== acquisition.preparation._id ||
+                    !acquisition.source ||
+                    args.sourceId !== acquisition.source._id ||
+                    args.inputHash !==
+                        acquisition.pin.target.requestInputHash ||
+                    !acquisition.data.work.some(
+                        (work) =>
+                            work.requestId === request._id &&
+                            work.sourceId === args.sourceId,
+                    )
+                )
+                    throw sourcePreparationError("attempt_identity_conflict");
+            }
+        }
         const framingLookup =
             args.operation === "framing_context_search" ||
             args.operation === "framing_context_read";
@@ -717,7 +747,8 @@ export const recordAttempt = internalMutation({
                 : undefined;
         if (
             framingAuthority &&
-            ((framingAuthority.operation === "read_public_context" &&
+            (((framingAuthority.operation === "read_public_context" ||
+                framingAuthority.operation === "acquire_document") &&
                 args.operation !== "framing_context_read") ||
                 (framingAuthority.operation === "search_public_context" &&
                     args.operation !== "framing_context_search") ||
@@ -750,7 +781,10 @@ export const recordAttempt = internalMutation({
                     ))
         )
             throw sourcePreparationError("attempt_identity_conflict");
-        if (framingAuthority?.operation === "read_public_context") {
+        if (
+            framingAuthority?.operation === "read_public_context" ||
+            framingAuthority?.operation === "acquire_document"
+        ) {
             const reference = framingAuthority.suppliedReference;
             if (framingAuthority.retainedRead || !reference)
                 throw sourcePreparationError("attempt_identity_conflict");
@@ -763,7 +797,13 @@ export const recordAttempt = internalMutation({
                           },
                       }
                     : reference;
-                if (args.inputHash !== sha256Hex(stableStringify(expected)))
+                if (
+                    args.inputHash !==
+                    framingProviderInputHash(
+                        expected,
+                        framingAuthority.acquisitionInputHash,
+                    )
+                )
                     throw sourcePreparationError("attempt_identity_conflict");
             }
         }
@@ -772,7 +812,14 @@ export const recordAttempt = internalMutation({
                 framingAuthority.suppliedReference,
                 args.stepKey,
             );
-            if (!input || args.inputHash !== sha256Hex(stableStringify(input)))
+            if (
+                !input ||
+                args.inputHash !==
+                    framingProviderInputHash(
+                        input,
+                        framingAuthority.acquisitionInputHash,
+                    )
+            )
                 throw sourcePreparationError("attempt_identity_conflict");
         }
         let qualification: Awaited<

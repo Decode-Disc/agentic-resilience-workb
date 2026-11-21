@@ -14,6 +14,8 @@ import { z } from "zod";
 export const SOURCE_EMBEDDING_PROFILE_VERSION = "evidence-embedding-v1";
 export const SOURCE_RETRIEVAL_VERSION = "structured-v1";
 export const SOURCE_RETRIEVAL_RANKING_POLICY = "stable-passages-v1";
+export const sourceCaptureScopeKey = (runId: Id<"researchRuns">) =>
+    `${runId}:document:${SOURCE_RETRIEVAL_VERSION}`;
 
 export const sourceDocumentMetadataValidator = v.object({
     dates: v.optional(documentDatesValidator),
@@ -26,7 +28,10 @@ export const sourceDocumentMetadataValidator = v.object({
 
 /** Preserve recorded document dates without inferring them from titles or acquisition times. */
 export function sourceDocumentMetadata(
-    source: Doc<"sources">,
+    source: Pick<
+        Doc<"sources">,
+        "origin" | "publishedAt" | "secForm" | "title"
+    >,
     dates?: DocumentDates,
 ) {
     return {
@@ -219,6 +224,44 @@ export function fuseRetrievalRanks(
         .map(([id]) => id);
 }
 
+/** Resolves a published index for a retained capture in its authorized corpus. */
+export function captureIndexAtScope(
+    db: GenericDatabaseReader<DataModel>,
+    scopeKey: string,
+    captureId: Id<"sourceCaptures">,
+) {
+    return db
+        .query("sourceSearchCaptures")
+        .withIndex("by_scope_and_capture", (q) =>
+            q.eq("scopeKey", scopeKey).eq("captureId", captureId),
+        )
+        .unique();
+}
+
+export async function findCaptureIndex(
+    db: GenericDatabaseReader<DataModel>,
+    revision: {
+        runId: Id<"researchRuns">;
+        corpusRevisionId: Id<"corpusRevisions">;
+    },
+    captureId: Id<"sourceCaptures">,
+    observe?: (
+        read: () => Promise<Doc<"sourceSearchCaptures"> | null>,
+    ) => Promise<Doc<"sourceSearchCaptures"> | null>,
+) {
+    const atScope = async (scopeKey: string) => {
+        const read = () => captureIndexAtScope(db, scopeKey, captureId);
+        const state = await (observe ? observe(read) : read());
+        return state?.building ? null : state;
+    };
+    return (
+        (await atScope(sourceCaptureScopeKey(revision.runId))) ??
+        atScope(
+            `${revision.runId}:${revision.corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`,
+        )
+    );
+}
+
 /** Reads completion and validates vector scope without loading document bodies. */
 export async function readCaptureIndexState(
     db: GenericDatabaseReader<DataModel>,
@@ -228,17 +271,7 @@ export async function readCaptureIndexState(
     },
     captureId: Id<"sourceCaptures">,
 ) {
-    const state = await db
-        .query("sourceSearchCaptures")
-        .withIndex("by_scope_and_capture", (q) =>
-            q
-                .eq(
-                    "scopeKey",
-                    `${revision.runId}:${revision.corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`,
-                )
-                .eq("captureId", captureId),
-        )
-        .unique();
+    const state = await findCaptureIndex(db, revision, captureId);
     if (state?.embeddingProfile && state.candidateCount > 0) {
         // finishIndex publishes completion only after every batch has been linked.
         const first = await db

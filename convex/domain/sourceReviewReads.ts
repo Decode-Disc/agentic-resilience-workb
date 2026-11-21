@@ -10,7 +10,10 @@ import {
     readPreparationSourceDecision,
     sourcePreparationError,
 } from "./sourcePreparationAuthority";
-import { SOURCE_RETRIEVAL_VERSION } from "./sourceRetrievalPolicy";
+import {
+    findCaptureIndex,
+    sourceCaptureScopeKey,
+} from "./sourceRetrievalPolicy";
 import {
     readComparisonHistory,
     readPinnedComparisonReview,
@@ -104,26 +107,53 @@ export class SourceReviewReads {
         }
         return value;
     }
+    private readonly indexScopes = new Map<string, Promise<string>>();
+    private indexScope(
+        corpusRevisionId: Id<"corpusRevisions">,
+        captureId: Id<"sourceCaptures">,
+    ) {
+        const key = `${corpusRevisionId}:${captureId}`;
+        let scope = this.indexScopes.get(key);
+        if (!scope) {
+            scope = findCaptureIndex(
+                this.db,
+                { runId: this.runId, corpusRevisionId },
+                captureId,
+                async (read) => {
+                    this.range();
+                    return this.observe(await read());
+                },
+            ).then(
+                (index) => index?.scopeKey ?? sourceCaptureScopeKey(this.runId),
+            );
+            this.indexScopes.set(key, scope);
+        }
+        return scope;
+    }
+
     passage(
         corpusRevisionId: Id<"corpusRevisions">,
         captureId: Id<"sourceCaptures">,
         order: number,
     ) {
-        const scopeKey = `${this.runId}:${corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`;
-        const key = `${scopeKey}:${captureId}:${order}`;
+        const key = `${corpusRevisionId}:${captureId}:${order}`;
         let value = this.passages.get(key);
         if (!value) {
-            this.range();
-            value = this.db
-                .query("sourceSearchPassages")
-                .withIndex("by_scope_capture_order", (q) =>
-                    q
-                        .eq("scopeKey", scopeKey)
-                        .eq("captureId", captureId)
-                        .eq("order", order),
-                )
-                .unique()
-                .then((row) => this.observe(row));
+            value = this.indexScope(corpusRevisionId, captureId).then(
+                async (scopeKey) => {
+                    this.range();
+                    const row = await this.db
+                        .query("sourceSearchPassages")
+                        .withIndex("by_scope_capture_order", (q) =>
+                            q
+                                .eq("scopeKey", scopeKey)
+                                .eq("captureId", captureId)
+                                .eq("order", order),
+                        )
+                        .unique();
+                    return this.observe(row);
+                },
+            );
             this.passages.set(key, value);
         }
         return value;
@@ -136,12 +166,11 @@ export class SourceReviewReads {
             passageOrder: number;
         }[],
     ) {
-        const scopeKey = `${this.runId}:${corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`;
         const grouped = new Map<Id<"sourceCaptures">, Set<number>>();
         for (const reference of references) {
             if (
                 this.passages.has(
-                    `${scopeKey}:${reference.captureId}:${reference.passageOrder}`,
+                    `${corpusRevisionId}:${reference.captureId}:${reference.passageOrder}`,
                 )
             )
                 continue;
@@ -151,6 +180,7 @@ export class SourceReviewReads {
             grouped.set(reference.captureId, orders);
         }
         for (const [captureId, values] of grouped) {
+            const scopeKey = await this.indexScope(corpusRevisionId, captureId);
             const orders = [...values].sort((a, b) => a - b);
             for (let i = 0; i < orders.length; ) {
                 const first = orders[i];
@@ -184,7 +214,7 @@ export class SourceReviewReads {
                 }
                 for (let order = first; order <= last; order++)
                     this.passages.set(
-                        `${scopeKey}:${captureId}:${order}`,
+                        `${corpusRevisionId}:${captureId}:${order}`,
                         Promise.resolve(byOrder.get(order) ?? null),
                     );
                 i = end + 1;
@@ -217,6 +247,24 @@ export class SourceReviewReads {
                         .eq("status", status),
                 )
                 .first()
+                .then((row) => {
+                    if (row) return row;
+                    this.range();
+                    return this.db
+                        .query("agentOperationRequests")
+                        .withIndex(
+                            "by_documentary_preparation_and_status",
+                            (q) =>
+                                q
+                                    .eq(
+                                        "pin.scope.preparationId",
+                                        preparationId,
+                                    )
+                                    .eq("pin.scope.kind", "sources")
+                                    .eq("status", status),
+                        )
+                        .first();
+                })
                 .then((row) => {
                     this.observe(row);
                     if (row) this.requests.set(row._id, Promise.resolve(row));

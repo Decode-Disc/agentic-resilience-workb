@@ -6,7 +6,11 @@ import {
     mutation,
     query,
 } from "@convex/_generated/server";
-import { framingContentValidator } from "@convex/domain/framingContracts";
+import {
+    FRAMING_RECEIPT_OPERATION_VERSION,
+    framingContentValidator,
+    framingRevisionResult,
+} from "@convex/domain/framingContracts";
 import {
     requireFramingEditAuthority,
     researchQuestionCapacity,
@@ -16,6 +20,8 @@ import {
     companyProvisionalProgram,
     framingBasisAfterEdit,
     prepareProvisionalFraming,
+    requireFramingDocumentaryFields,
+    savedFramingReceipt,
     validateFramingPublicBasis,
 } from "@convex/domain/framingProvenance";
 import { MAX_RESEARCH_PLAN_QUESTIONS } from "@convex/domain/researchPlan";
@@ -42,6 +48,7 @@ import { executionError } from "@convex/execution/errors";
 import { recordContextObservation } from "@convex/execution/journal";
 import { retainOperationEffect } from "@convex/execution/operations";
 import { recordResearchObservation } from "@convex/execution/researchControl";
+import { turnFramingCitationPolicy } from "@convex/framingCitationPolicy";
 import { initialModelSelection } from "@convex/modelConfigurationSchema";
 import { sourcePreparationEnabled } from "@convex/resourceLimits";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
@@ -50,6 +57,7 @@ import { sourcesQualificationEnvelope } from "@convex/sourcesSimulation";
 import { configuredPublicContextAllowance } from "@convex/workbenchPublicContext";
 import { workflow } from "@convex/workflow";
 import { type Infer, v } from "convex/values";
+import { validate } from "convex-helpers/validators";
 
 export const confirmCompany = mutation({
     args: {
@@ -354,13 +362,14 @@ async function saveFraming(
     }
     return revision;
 }
+/** Older workers expect a number. V3 dispatch preserves the retained receipt bytes. */
 export const applyFromWorkbench = internalMutation({
     args: {
         requestId: v.id("agentOperationRequests"),
         expectedGeneration: v.number(),
     },
-    returns: v.number(),
-    handler: async (ctx, args): Promise<number> => {
+    returns: v.union(v.number(), v.string()),
+    handler: async (ctx, args): Promise<number | string> => {
         const request = await ctx.db.get(args.requestId);
         if (!request?.missionId || request.input.kind !== "adjust_framing")
             throw executionError("operation_not_allowed");
@@ -376,16 +385,16 @@ export const applyFromWorkbench = internalMutation({
             mission,
             request.instructionVersion,
         );
+        const citationPolicy = await turnFramingCitationPolicy(ctx, mission);
+        const reportsCitations =
+            request.operationVersion === FRAMING_RECEIPT_OPERATION_VERSION;
         if (request.effect?.outcome.kind === "success") {
-            const value: unknown = JSON.parse(request.effect.outcome.valueJson);
-            if (
-                !value ||
-                typeof value !== "object" ||
-                !("revision" in value) ||
-                typeof value.revision !== "number"
-            )
+            const { valueJson } = request.effect.outcome;
+            if (reportsCitations) return valueJson;
+            const retained: unknown = JSON.parse(valueJson);
+            if (!validate(framingRevisionResult, retained))
                 throw executionError("operation_result_conflict");
-            return value.revision;
+            return retained.revision;
         }
         const currentRevision = run.currentFramingRevisionId
             ? await ctx.db.get(run.currentFramingRevisionId)
@@ -440,6 +449,7 @@ export const applyFromWorkbench = internalMutation({
                 mission,
                 request,
                 messageId: causingMessageId,
+                citationPolicy,
             });
             content = prepared.content;
             proposedBasis = prepared.basis;
@@ -455,7 +465,7 @@ export const applyFromWorkbench = internalMutation({
                 run.companySnapshot?.legalName ?? "the selected company";
             content = companyProvisionalProgram(company);
         }
-        if (request.operationVersion === 2)
+        if (request.operationVersion === 2 || reportsCitations)
             await requireFramingEditAuthority(ctx, mission, {
                 messageId: causingMessageId,
                 proposed: content,
@@ -493,10 +503,12 @@ export const applyFromWorkbench = internalMutation({
                 mission,
                 request,
                 messageId: causingMessageId,
+                citationPolicy,
             });
         } else {
             eventBasis = proposedBasis;
         }
+        if (reportsCitations) requireFramingDocumentaryFields(content);
         const revision = await saveFraming(
             ctx,
             {
@@ -512,15 +524,21 @@ export const applyFromWorkbench = internalMutation({
         const current = await ctx.db.get(mission.runId);
         if (!current?.currentFramingRevisionId)
             throw executionError("framing_version_conflict");
-        await retainOperationEffect(
+        const written = await ctx.db.get(current.currentFramingRevisionId);
+        if (
+            written?.revision !== revision ||
+            written.requestKey !== `operation:${request._id}`
+        )
+            throw executionError("framing_version_conflict");
+        const value = reportsCitations
+            ? savedFramingReceipt(written)
+            : { revision };
+        const valueJson = await retainOperationEffect(
             ctx,
             request,
-            {
-                kind: "framing_revision",
-                revisionId: current.currentFramingRevisionId,
-            },
-            { revision },
+            { kind: "framing_revision", revisionId: written._id },
+            value,
         );
-        return revision;
+        return reportsCitations ? valueJson : revision;
     },
 });

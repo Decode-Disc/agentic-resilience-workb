@@ -1,3 +1,9 @@
+import {
+    documentaryReference,
+    referencedSavedMaterialOperation,
+    savedMaterialBinding,
+    savedMaterialOperationValidator,
+} from "@convex/domain/savedMaterialOperations";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
 import {
@@ -49,6 +55,10 @@ const fixtureState = v.object({
     generation: v.number(),
     normalizerVersion: v.string(),
     sourceId: v.id("sources"),
+    readingInput: v.union(
+        referencedSavedMaterialOperation,
+        savedMaterialOperationValidator,
+    ),
 });
 type FixtureState = Infer<typeof fixtureState>;
 
@@ -192,6 +202,8 @@ export const seed = internalMutation({
                 requestKey: sourcesMissionKey(preparationId),
             },
         );
+        const mission = await ctx.db.get(missionId);
+        if (!mission) throw executionError("mission_unavailable");
         return {
             preparationId,
             missionId,
@@ -199,6 +211,21 @@ export const seed = internalMutation({
             captureId: reserved.capture._id,
             generation: run.executionGeneration,
             normalizerVersion: reserved.capture.normalizerVersion,
+            readingInput: {
+                kind: "search_available_material",
+                query: "documentary workflow",
+                ...(savedMaterialBinding(
+                    mission.definitionId,
+                    mission.definitionVersion,
+                ) === "referenced"
+                    ? {
+                          reference: documentaryReference({
+                              issuer: "capture",
+                              captureId: reserved.capture._id,
+                          }),
+                      }
+                    : { sourceId }),
+            },
         };
     },
 });
@@ -361,11 +388,7 @@ export const install = internalAction({
                 missionId: state.missionId,
                 expectedGeneration: state.generation,
                 cause: "initial-fixture-read",
-                input: {
-                    kind: "search_available_material",
-                    sourceId: state.sourceId,
-                    query: "documentary workflow",
-                },
+                input: state.readingInput,
             },
         );
         const outcome = await ctx.runAction(

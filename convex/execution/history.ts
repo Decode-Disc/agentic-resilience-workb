@@ -93,7 +93,10 @@ export const pinHistoryRead: AgentOperationDefinition["pin"] = async (
             throw executionError("history_receipt_invalid");
         return { kind: "available", pin: retained };
     }
-    if ("reference" in input && input.reference !== undefined) {
+    if (
+        input.kind === "consult_mission_state" &&
+        input.reference !== undefined
+    ) {
         if (
             source !== "mission" ||
             ("cursor" in input && input.cursor !== undefined)

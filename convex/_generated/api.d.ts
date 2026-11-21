@@ -29,6 +29,7 @@ import type * as domain_conversationValidationContracts from "../domain/conversa
 import type * as domain_conversationValidationOperations from "../domain/conversationValidationOperations.js";
 import type * as domain_coverImageUrl from "../domain/coverImageUrl.js";
 import type * as domain_documentDates from "../domain/documentDates.js";
+import type * as domain_documentaryAccess from "../domain/documentaryAccess.js";
 import type * as domain_evidenceArtifacts from "../domain/evidenceArtifacts.js";
 import type * as domain_evidenceAuthority from "../domain/evidenceAuthority.js";
 import type * as domain_evidenceAvailabilityPolicy from "../domain/evidenceAvailabilityPolicy.js";
@@ -137,6 +138,7 @@ import type * as fixtures_browserModelMetadata from "../fixtures/browserModelMet
 import type * as fixtures_cccShowcase from "../fixtures/cccShowcase.js";
 import type * as fixtures_researchState from "../fixtures/researchState.js";
 import type * as framing from "../framing.js";
+import type * as framingCitationPolicy from "../framingCitationPolicy.js";
 import type * as http from "../http.js";
 import type * as integrations_agentBackends from "../integrations/agentBackends.js";
 import type * as integrations_agentSkillReader from "../integrations/agentSkillReader.js";
@@ -256,6 +258,7 @@ declare const fullApi: ApiFromModules<{
   "domain/conversationValidationOperations": typeof domain_conversationValidationOperations;
   "domain/coverImageUrl": typeof domain_coverImageUrl;
   "domain/documentDates": typeof domain_documentDates;
+  "domain/documentaryAccess": typeof domain_documentaryAccess;
   "domain/evidenceArtifacts": typeof domain_evidenceArtifacts;
   "domain/evidenceAuthority": typeof domain_evidenceAuthority;
   "domain/evidenceAvailabilityPolicy": typeof domain_evidenceAvailabilityPolicy;
@@ -364,6 +367,7 @@ declare const fullApi: ApiFromModules<{
   "fixtures/cccShowcase": typeof fixtures_cccShowcase;
   "fixtures/researchState": typeof fixtures_researchState;
   framing: typeof framing;
+  framingCitationPolicy: typeof framingCitationPolicy;
   http: typeof http;
   "integrations/agentBackends": typeof integrations_agentBackends;
   "integrations/agentSkillReader": typeof integrations_agentSkillReader;

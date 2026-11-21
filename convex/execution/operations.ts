@@ -19,7 +19,7 @@ import { workflow } from "@convex/workflow";
 import type { EventId, WorkflowId } from "@convex-dev/workflow";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
-import { getAgentDefinition, getRegisteredOperation } from "./agentCatalog";
+import { getAgentDefinition, getNativeOperation } from "./agentCatalog";
 import type { AgentProgress } from "./agentDefinition";
 import {
     agentDefinitionIdValidator,
@@ -71,12 +71,36 @@ import { adoptProgress, agentProgressValidator } from "./progress";
 import { pauseResearchAtBoundary } from "./researchControl";
 
 import {
+    deleteOperationObservationBatch,
     stageOperationObservation,
     textFragmentValidator,
 } from "./retainedText";
 
 type Outcome = Infer<typeof operationOutcomeValidator>;
 type Input = Infer<typeof requestInputValidator>;
+
+/** Remove dossier-owned observations before the request that names them. */
+export async function purgeDossierOperationBatch(
+    ctx: MutationCtx,
+    runId: Id<"researchRuns">,
+    limit: number,
+) {
+    const requests = await ctx.db
+        .query("agentOperationRequests")
+        .withIndex("by_run_and_status", (q) => q.eq("runId", runId))
+        .take(limit);
+    for (const request of requests) {
+        const drained = await deleteOperationObservationBatch(
+            ctx,
+            request._id,
+            limit,
+        );
+        if (drained === false) return true;
+        await ctx.db.delete(request._id);
+        if (drained) return true;
+    }
+    return requests.length === limit;
+}
 
 /** Runs in the scheduled action itself; no parent action remains open to await another worker. */
 export async function executeScheduledOperation(
@@ -152,19 +176,17 @@ export async function registerOperationWaitEvent(
     return eventId;
 }
 
-function operationFor(
-    input: Input,
-    mission?: Doc<"agentMissions">,
-): AgentOperationDefinition {
-    const operation =
-        input.kind === "invalid"
-            ? undefined
-            : mission
-              ? getAgentDefinition(
-                    mission.definitionId,
-                    mission.definitionVersion,
-                ).operations[input.kind]
-              : getRegisteredOperation(input.kind);
+function declaredOperation(input: Input, mission?: Doc<"agentMissions">) {
+    return input.kind === "invalid"
+        ? undefined
+        : mission
+          ? getAgentDefinition(mission.definitionId, mission.definitionVersion)
+                .operations[input.kind]
+          : getNativeOperation(input.kind);
+}
+
+function operationFor(input: Input, mission?: Doc<"agentMissions">) {
+    const operation = declaredOperation(input, mission);
     if (!operation) throw executionError("operation_not_allowed");
     return operation;
 }
@@ -363,7 +385,7 @@ export async function retainOperationEffect(
     const valueJson = JSON.stringify(
         validateOperationValue(operation.resultValidator, value, ctx.db),
     );
-    const outcome = operation.validateOutcome(
+    const outcome = await operation.validateOutcome(
         request,
         { kind: "success", valueJson },
         ctx,
@@ -615,7 +637,7 @@ export const enqueueNative = internalMutation({
     },
     returns: v.id("agentOperationRequests"),
     handler: async (ctx, args) => {
-        const operation = getRegisteredOperation(args.input.kind);
+        const operation = getNativeOperation(args.input.kind);
         const { run } =
             operation?.nativeAuthority === "research"
                 ? await requireRunAuthority(
@@ -762,7 +784,7 @@ export const claim = internalMutation({
             };
         }
         if (request.status === "running" || request.status === "unknown") {
-            const unavailable = unknownObservationOutcome(request);
+            const unavailable = unknownObservationOutcome(state.operation);
             if (unavailable) {
                 await markOperationUnknown(ctx, request);
                 return { kind: "outcome" as const, outcome: unavailable };
@@ -966,7 +988,7 @@ export const recordResult = internalMutation({
                     JSON.parse(outcome.valueJson),
                     ctx.db,
                 );
-                const validated = operation.validateOutcome(
+                const validated = await operation.validateOutcome(
                     request,
                     outcome,
                     ctx,
@@ -1314,9 +1336,7 @@ export const dispatch = internalAction({
     },
 });
 
-function unknownObservationOutcome(request: Doc<"agentOperationRequests">) {
-    if (request.input.kind === "invalid") return undefined;
-    const operation = getRegisteredOperation(request.input.kind);
+function unknownObservationOutcome(operation?: AgentOperationDefinition) {
     return operation?.effectKind === "durable_effect"
         ? operation.unknownOutcome
         : undefined;
@@ -1326,7 +1346,12 @@ async function markOperationUnknown(
     ctx: MutationCtx,
     request: Doc<"agentOperationRequests">,
 ) {
-    const unavailable = unknownObservationOutcome(request);
+    const mission = request.missionId
+        ? await ctx.db.get(request.missionId)
+        : null;
+    const unavailable = unknownObservationOutcome(
+        declaredOperation(request.input, mission ?? undefined),
+    );
     if (request.status === "unknown" && !unavailable) return;
     await ctx.db.patch(
         request._id,
@@ -1338,9 +1363,6 @@ async function markOperationUnknown(
               }
             : { status: "unknown" },
     );
-    const mission = request.missionId
-        ? await ctx.db.get(request.missionId)
-        : null;
     if (
         !unavailable &&
         mission &&

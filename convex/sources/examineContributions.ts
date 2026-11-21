@@ -83,6 +83,11 @@ export async function examineContributions(
                 runId: preparation.runId,
                 expectedGeneration: args.expectedGeneration,
                 sourceId: capture.sourceId,
+                exactCapture: {
+                    preparationId: preparation._id,
+                    captureId,
+                    contentHash: capture.contentHash,
+                },
                 request: {
                     kind: "contexts",
                     passageOrders: [...references.keys()],

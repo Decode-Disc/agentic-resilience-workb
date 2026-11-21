@@ -10,10 +10,7 @@ import {
     type SourceComparisonPrimaryCandidate,
     sourceFindingNeedsComparison,
 } from "@convex/domain/sourceComparison";
-import {
-    extractPassagesFromNormalizedText,
-    sha256Hex,
-} from "@convex/domain/sourcePassages";
+import { extractPassagesFromNormalizedText } from "@convex/domain/sourcePassages";
 import {
     preparationFailureCode,
     sourcePreparationError,
@@ -23,6 +20,7 @@ import {
 import {
     prepareQualificationInput,
     qualificationExecutionVersion,
+    SOURCE_QUALIFICATION_INPUT_POLICY,
 } from "@convex/domain/sourceQualification";
 import {
     SOURCE_RETRIEVAL_VERSION,
@@ -34,7 +32,10 @@ import {
     compareSourceContributions,
     qualifySourceDocument,
 } from "@convex/integrations/sourceQualification";
-import { SOURCE_COMPARISON_MAX_PRIMARY_CAPTURES } from "@convex/resourcePolicy";
+import {
+    MAX_NORMALIZED_ARTIFACT_BYTES,
+    SOURCE_COMPARISON_MAX_PRIMARY_CAPTURES,
+} from "@convex/resourcePolicy";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -59,6 +60,7 @@ import {
 } from "./sourceDiscoveryActions";
 import {
     ensureSourceCaptureIndex,
+    readVerifiedCaptureText,
     retrieveSourcePassages,
 } from "./sourceRetrievalActions";
 import { executePreparationModel } from "./sources/preparationModel";
@@ -359,14 +361,10 @@ async function qualifyCapturedSource(
                 internal.sourcePreparation.getQualificationInput,
                 { ...args, now: Date.now() },
             );
-        if (!capture.storageId)
-            throw sourcePreparationError("capture_unavailable");
-        const blob = await ctx.storage.get(capture.storageId);
-        if (!blob || blob.size > 16 * 1024 * 1024)
-            throw sourcePreparationError("capture_unavailable");
-        const text = await blob.text();
-        if (sha256Hex(text) !== capture.contentHash)
-            throw sourcePreparationError("capture_corrupt");
+        const stored = await readVerifiedCaptureText(ctx, capture);
+        if (stored.status === "unavailable")
+            throw sourcePreparationError(stored.reason);
+        const { text } = stored;
         const preparation = await ctx.runQuery(
             internal.sourcePreparation.getForExecution,
             {
@@ -386,9 +384,19 @@ async function qualifyCapturedSource(
             researchAngle,
             text,
             retrievalCompleteness: capture.readingCompleteness,
-            selectionPolicy: capture.qualificationInputPolicy,
+            representationCompleteness:
+                capture.protocol === "documentary_v1"
+                    ? capture.representationCompleteness
+                    : undefined,
+            selectionPolicy:
+                capture.protocol === "documentary_v1"
+                    ? preparation.executionPlanVersion &&
+                      preparation.retrievalVersion
+                        ? SOURCE_QUALIFICATION_INPUT_POLICY
+                        : undefined
+                    : capture.qualificationInputPolicy,
         };
-        const wholeDocument = capture.qualificationInputPolicy
+        const wholeDocument = qualificationInput.selectionPolicy
             ? prepareQualificationInput(qualificationInput)
             : undefined;
         let retrieval: Parameters<
@@ -555,27 +563,20 @@ export const compareSource = internalAction({
             );
             comparisonContextHash = input.comparisonContextHash;
             const modelBudgetExhausted = input.modelBudgetBlocked;
-            if (!input.targetCapture.storageId)
-                throw sourcePreparationError("capture_unavailable");
-            const targetBlob = await ctx.storage.get(
-                input.targetCapture.storageId,
+            const targetCapture = await readVerifiedCaptureText(
+                ctx,
+                input.targetCapture,
             );
-            if (
-                !targetBlob ||
-                targetBlob.size > 16 * 1024 * 1024 ||
-                !input.targetCapture.contentHash
-            )
-                throw sourcePreparationError("capture_unavailable");
-            const targetText = await targetBlob.text();
-            if (sha256Hex(targetText) !== input.targetCapture.contentHash)
-                throw sourcePreparationError("capture_corrupt");
+            if (targetCapture.status === "unavailable")
+                throw sourcePreparationError(targetCapture.reason);
+            const targetText = targetCapture.text;
 
             const target = {
                 runId: String(input.run._id),
                 corpusRevisionId: String(input.revision._id),
                 sourceId: String(input.targetSource._id),
                 captureId: String(input.targetCapture._id),
-                contentHash: input.targetCapture.contentHash,
+                contentHash: targetCapture.contentHash,
                 qualificationTaskId: String(input.qualificationTask._id),
                 qualificationVersion: input.qualificationTask.schemaVersion,
                 title: input.targetSource.title,
@@ -610,7 +611,7 @@ export const compareSource = internalAction({
                         input.preparation.retrievalMode)
             ) {
                 const checked = new Set<string>();
-                let readBytes = targetBlob.size;
+                let readBytes = targetCapture.byteCount;
                 for (const finding of retained.output.findings) {
                     for (const passage of finding.targetPassages)
                         if (
@@ -634,23 +635,22 @@ export const compareSource = internalAction({
                             );
                         if (checked.has(passage.captureId)) continue;
                         checked.add(passage.captureId);
-                        const blob = await ctx.storage.get(
-                            candidate.capture.storageId,
-                        );
                         if (
-                            !blob ||
-                            blob.size !== candidate.capture.byteCount ||
-                            blob.size > 16 * 1024 * 1024
+                            !candidate.capture.byteCount ||
+                            readBytes + candidate.capture.byteCount >
+                                32 * 1024 * 1024
                         )
-                            throw sourcePreparationError("capture_unavailable");
-                        readBytes += blob.size;
-                        if (readBytes > 32 * 1024 * 1024)
                             throw sourcePreparationError(
                                 "retrieval_read_limit",
                             );
-                        const text = await blob.text();
-                        if (sha256Hex(text) !== passage.contentHash)
-                            throw sourcePreparationError("capture_corrupt");
+                        const stored = await readVerifiedCaptureText(
+                            ctx,
+                            candidate.capture,
+                        );
+                        if (stored.status === "unavailable")
+                            throw sourcePreparationError(stored.reason);
+                        readBytes += stored.byteCount;
+                        const { text } = stored;
                         for (const check of retained.output.findings
                             .flatMap((f) => f.primaryPassages)
                             .filter((p) => p.captureId === passage.captureId))
@@ -771,7 +771,7 @@ export const compareSource = internalAction({
                                   allowProviderCalls: !modelBudgetExhausted,
                                   maxReadBytes:
                                       32 * 1024 * 1024 -
-                                      targetBlob.size -
+                                      targetCapture.byteCount -
                                       indexReadBytes,
                               });
                         indexReadBytes += indexed.readBytes;
@@ -853,7 +853,7 @@ export const compareSource = internalAction({
                 0,
                 SOURCE_COMPARISON_MAX_PRIMARY_CAPTURES,
             );
-            let supportingBytes = targetBlob.size + indexReadBytes;
+            let supportingBytes = targetCapture.byteCount + indexReadBytes;
             let omittedPrimaryCaptureCount = Math.max(
                 rankedMetadata.length - selectedMetadata.length,
                 0,
@@ -873,23 +873,22 @@ export const compareSource = internalAction({
                 if (
                     !candidate?.capture.storageId ||
                     !declaredBytes ||
-                    declaredBytes > 16 * 1024 * 1024 ||
+                    declaredBytes > MAX_NORMALIZED_ARTIFACT_BYTES ||
                     supportingBytes + declaredBytes > 32 * 1024 * 1024
                 ) {
                     omittedPrimaryCaptureCount += 1;
                     continue;
                 }
-                const blob = await ctx.storage.get(candidate.capture.storageId);
-                if (!blob || blob.size !== declaredBytes) {
+                supportingBytes += declaredBytes;
+                const stored = await readVerifiedCaptureText(
+                    ctx,
+                    candidate.capture,
+                );
+                if (stored.status === "unavailable") {
                     omittedPrimaryCaptureCount += 1;
                     continue;
                 }
-                supportingBytes += blob.size;
-                const text = await blob.text();
-                if (sha256Hex(text) !== candidate.capture.contentHash) {
-                    omittedPrimaryCaptureCount += 1;
-                    continue;
-                }
+                const { text } = stored;
                 const passages = extractPassagesFromNormalizedText({
                     text,
                     canonicalUrl: selected.canonicalUrl,

@@ -1,11 +1,15 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import { conversationValidationDefinition } from "@convex/domain/conversationValidation";
 import { executionValidationDefinition } from "@convex/domain/executionValidationAgent";
-import { savedMaterialInspectionDefinition } from "@convex/domain/savedMaterialInspection";
+import {
+    documentaryInspectionDefinition,
+    savedMaterialInspectionDefinition,
+} from "@convex/domain/savedMaterialInspection";
 import {
     sourcesMethodControlDefinition,
     sourcesV4Definition,
     sourcesV5Definition,
+    sourcesV7Definition,
 } from "@convex/domain/sourcesAgent";
 import {
     directedWorkbenchDefinition,
@@ -14,6 +18,8 @@ import {
     workbenchV6Definition,
     workbenchV7Definition,
     workbenchV9Definition,
+    workbenchV10Definition,
+    workbenchV11Definition,
 } from "@convex/domain/workbenchAgent";
 import { getFunctionName } from "convex/server";
 import {
@@ -30,12 +36,11 @@ import { operationResultSchema } from "./operationResults";
 // Defer imported definition reads until module initialization has completed.
 function definitions() {
     return {
-        [sourcesV5Definition.id]: sourcesV5Definition,
-        [workbenchV9Definition.id]: workbenchV9Definition,
+        [sourcesV7Definition.id]: sourcesV7Definition,
+        [workbenchV11Definition.id]: workbenchV11Definition,
         [conversationValidationDefinition.id]: conversationValidationDefinition,
         [executionValidationDefinition.id]: executionValidationDefinition,
-        [savedMaterialInspectionDefinition.id]:
-            savedMaterialInspectionDefinition,
+        [documentaryInspectionDefinition.id]: documentaryInspectionDefinition,
     } satisfies Record<Doc<"agentMissions">["definitionId"], AgentDefinition>;
 }
 
@@ -140,7 +145,11 @@ function supportedDefinitions(): readonly AgentDefinition[] {
         directedWorkbenchDefinition,
         workbenchV6Definition,
         workbenchV7Definition,
+        workbenchV9Definition,
+        workbenchV10Definition,
         sourcesV4Definition,
+        sourcesV5Definition,
+        savedMaterialInspectionDefinition,
         workbenchMethodControlDefinition,
         sourcesMethodControlDefinition,
     ];
@@ -151,30 +160,32 @@ export function registeredAgentDefinitions(): readonly AgentDefinition[] {
     return supportedDefinitions().map(bindAgentDefinition);
 }
 
-let operations: Map<string, AgentOperationDefinition> | undefined;
-function registeredOperations() {
-    if (operations) return operations;
-    const entries = new Map<string, AgentOperationDefinition>(
-        Object.entries(commonOperations),
-    );
-    for (const definition of supportedDefinitions()) {
-        for (const [name, operation] of Object.entries(
-            definitionOperations(definition),
-        )) {
-            assertOperationContract(name, operation);
-            const existing = entries.get(name);
-            if (existing && existing !== operation)
-                throw executionError("operation_definition_conflict");
-            entries.set(name, operation);
-        }
+let nativeOperations: Map<string, AgentOperationDefinition> | undefined;
+
+function registeredNativeOperations() {
+    if (nativeOperations) return nativeOperations;
+    const entries = new Map<string, AgentOperationDefinition>();
+    const declarations = [
+        ...Object.entries(commonOperations),
+        ...supportedDefinitions().flatMap((definition) =>
+            Object.entries(definitionOperations(definition)),
+        ),
+    ];
+    for (const [name, operation] of declarations) {
+        if (!operation.nativeAuthority) continue;
+        assertOperationContract(name, operation);
+        const existing = entries.get(name);
+        if (existing && existing !== operation)
+            throw executionError("operation_definition_conflict");
+        entries.set(name, operation);
     }
-    operations = entries;
+    nativeOperations = entries;
     return entries;
 }
 
-/** Operation lookup derives from the same static definitions used by agent bindings. */
-export function getRegisteredOperation(name: string) {
-    return registeredOperations().get(name);
+/** Only missionless operations use the native catalogue. Missions resolve their pinned definition. */
+export function getNativeOperation(name: string) {
+    return registeredNativeOperations().get(name);
 }
 
 /** Resolves the static domain binding; routing and execution mechanics remain separate owners. */

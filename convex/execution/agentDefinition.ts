@@ -44,6 +44,12 @@ type WithoutAccounting<T> = T extends unknown
     : never;
 export type AgentProgressMission = WithoutAccounting<Doc<"agentMissions">>;
 
+type AgentToolProjection = Pick<
+    AgentOperationDefinition,
+    "description" | "inputValidator"
+> &
+    Partial<Pick<AgentOperationDefinition, "resultValidator">>;
+
 /** Definitions supply business rules; only the executor can change lifecycle or accounting. */
 export type AgentDefinition = {
     skills?: import("./agentSkillContracts").AgentSkillBinding;
@@ -59,7 +65,7 @@ export type AgentDefinition = {
     contextRendering?: "separated_v1";
     nativeToolSets?(
         operations: AgentDefinition["operations"],
-    ): AgentGenerationInput["operations"][];
+    ): Record<string, AgentToolProjection>[];
     textCompletion?(text: string): AgentCompletion;
     modelOperation?(
         name: string,
@@ -68,7 +74,7 @@ export type AgentDefinition = {
             "description" | "inputValidator"
         >,
         snapshot: unknown,
-    ): Pick<AgentOperationDefinition, "description" | "inputValidator"> | null;
+    ): AgentToolProjection | null;
     normalizeOperationInput?(
         name: string,
         input: Record<string, unknown>,
@@ -150,7 +156,7 @@ export type AgentDefinition = {
 export function agentToolSchemas(
     definition: Pick<AgentDefinition, "operations" | "modelOperation">,
     snapshot?: unknown,
-    variant?: AgentGenerationInput["operations"],
+    variant?: Record<string, AgentToolProjection>,
 ): AgentGenerationInput["operations"] {
     return Object.fromEntries(
         Object.entries(definition.operations).flatMap(([name, operation]) => {
@@ -168,9 +174,11 @@ export function agentToolSchemas(
                       [
                           name,
                           {
-                              ...projected,
+                              description: projected.description,
+                              inputValidator: projected.inputValidator,
                               resultContractKey: operationResultKey(
-                                  operation.resultValidator,
+                                  projected.resultValidator ??
+                                      operation.resultValidator,
                               ),
                           },
                       ],

@@ -988,9 +988,13 @@ export const authorizeWorkbenchQualification = internalMutation({
                     ? retainedMethodVersion("sources_v1")
                     : undefined,
             );
-            for (const operations of definition.nativeToolSets?.(
-                definition.operations,
-            ) ?? [agentToolSchemas(definition)]) {
+            const variants = definition.nativeToolSets?.(definition.operations);
+            for (const variant of variants ?? [undefined]) {
+                const operations = agentToolSchemas(
+                    definition,
+                    undefined,
+                    variant,
+                );
                 await agentInputByteLength(
                     {
                         instructions: definition.instructions,
@@ -2599,7 +2603,7 @@ export const prepareSkillReadFixture = internalMutation({
                         kind: "read",
                         path:
                             args.path ??
-                            "/agent-skills/research-methods-v1/source-preparation/SKILL.md",
+                            `/agent-skills/${getAgentDefinition("sources_v1").skills?.packageId}/source-preparation/SKILL.md`,
                     },
                 },
             );
@@ -2636,7 +2640,7 @@ export const prepareSkillReadFixture = internalMutation({
                     kind: "read",
                     path:
                         args.path ??
-                        "/agent-skills/research-methods-v1/workbench-framing/SKILL.md",
+                        `/agent-skills/${getAgentDefinition(mission.definitionId, mission.definitionVersion).skills?.packageId}/workbench-framing/SKILL.md`,
                 },
             },
         );

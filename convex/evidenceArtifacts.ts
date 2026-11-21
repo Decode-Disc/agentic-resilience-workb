@@ -1,4 +1,5 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import { activeDocumentaryCaptureOwner } from "@convex/domain/documentaryAccess";
 import { readPreparationSourceDecision } from "@convex/domain/sourcePreparationAuthority";
 import { SOURCE_RETRIEVAL_VERSION } from "@convex/domain/sourceRetrievalPolicy";
 import {
@@ -1027,6 +1028,17 @@ async function hasRetainedArtifactReference(
             })
             .first();
         if (capture) return true;
+        if (status === "committed") continue;
+        const expired = ctx.db
+            .query("sourceCaptures")
+            .withIndex("by_storage_id_and_status_and_updated_at", (q) =>
+                q
+                    .eq("storageId", storageId)
+                    .eq("status", status)
+                    .lte("updatedAt", cutoff),
+            );
+        for await (const owner of expired)
+            if (await activeDocumentaryCaptureOwner(ctx, owner)) return true;
     }
     const lease = await ctx.db
         .query("artifactUploadLeases")
@@ -1171,6 +1183,11 @@ async function reconcileArtifactStorageCore(
             if (lease.updatedAt > cutoff) {
                 continue;
             }
+            if (
+                "captureKey" in lease &&
+                (await activeDocumentaryCaptureOwner(ctx, lease))
+            )
+                continue;
             let objectConfirmedAbsent = !lease.storageId;
             if (lease.storageId) {
                 const referenced = await hasRetainedArtifactReference(
@@ -1204,9 +1221,8 @@ async function reconcileArtifactStorageCore(
     }
 
     // ---- _storage orphan phase (single paginated query) ----
-    // Committed SourceVersion rows own referenced artifact identity. Only an
-    // active (reserved/uploaded) lease still inside its safety window protects
-    // its object; reconciled and expired orphaned leases do not protect forever.
+    // Current operation owners and attachments inside the upload grace window
+    // protect their objects alongside committed capture and version references.
     const storageResult = await ctx.db.system
         .query("_storage")
         .withIndex("by_creation_time", (index) =>

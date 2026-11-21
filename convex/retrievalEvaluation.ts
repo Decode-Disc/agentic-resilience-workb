@@ -1,5 +1,6 @@
 import {
     SOURCE_RETRIEVAL_VERSION,
+    findCaptureIndex,
     sourceEmbeddingScopeKey,
 } from "@convex/domain/sourceRetrievalPolicy";
 /** Local, internal fixture operations for the frozen retrieval experiment. Never exposes test endpoints. */
@@ -292,17 +293,7 @@ export const importVectors = internalMutation({
             args.items.length > 32
         )
             throw new Error("Invalid evaluation profile");
-        const state = await ctx.db
-            .query("sourceSearchCaptures")
-            .withIndex("by_scope_and_capture", (q) =>
-                q
-                    .eq(
-                        "scopeKey",
-                        `${p.runId}:${p.corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`,
-                    )
-                    .eq("captureId", args.captureId),
-            )
-            .unique();
+        const state = await findCaptureIndex(ctx.db, p, args.captureId);
         if (!state) throw new Error("Missing evaluation index");
         let count = state.embeddedCount ?? 0;
         for (const item of args.items) {

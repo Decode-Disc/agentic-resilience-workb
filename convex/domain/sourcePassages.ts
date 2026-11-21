@@ -11,6 +11,18 @@ import { SOURCE_RETRIEVAL_VERSION } from "./sourceRetrievalPolicy";
 export const LOCATOR_VERSION = "web-v1";
 export const PDF_LOCATOR_VERSION = "pdf-v1";
 
+/** Move an exclusive UTF-16 boundary left when it cuts a surrogate pair. */
+export function completeCharacterBoundary(text: string, offset: number) {
+    const before = text.charCodeAt(offset - 1);
+    const after = text.charCodeAt(offset);
+    return before >= 0xd800 &&
+        before <= 0xdbff &&
+        after >= 0xdc00 &&
+        after <= 0xdfff
+        ? offset - 1
+        : offset;
+}
+
 export const webLocatorValidator = v.object({
     kind: v.literal("web"),
     canonicalUrl: v.string(),

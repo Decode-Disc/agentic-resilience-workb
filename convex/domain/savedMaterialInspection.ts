@@ -8,59 +8,29 @@ import type {
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import type { operationOutcomeValidator } from "@convex/execution/executionProtocol";
 import {
-    missionScope,
     missionState,
     operationProgressKeys,
 } from "@convex/execution/missionData";
 import { MAX_INSPECTED_CAPTURES } from "@convex/resourcePolicy";
 import type { Infer } from "convex/values";
+import { requireSavedMaterialScope } from "./documentaryAccess";
 import { readResearchContext } from "./researchContext";
+import { documentaryInventory } from "./savedMaterial";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
 import {
+    REFERENCED_INSPECTION_VERSION,
     SAVED_MATERIAL_DEFINITION_ID,
     SAVED_MATERIAL_DEFINITION_VERSION,
+    savedMaterialBinding,
     savedMaterialCompletionValidator,
     savedMaterialResultValidator,
     savedMaterialScopeValidator,
     savedMaterialStateValidator,
+    savedMaterialWireContract,
 } from "./savedMaterialOperations";
 import { savedMaterialSimulation } from "./savedMaterialSimulation";
 import { readPreparationSourceDecision } from "./sourcePreparationAuthority";
 import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
-
-/** The approved-corpus prerequisite belongs to inspection, never to every kind of agent. */
-export async function requireSavedMaterialScope(
-    ctx: QueryCtx,
-    mission: Doc<"agentMissions">,
-    run?: Doc<"researchRuns">,
-) {
-    const scope = missionScope(mission);
-    if (
-        scope.kind !== "saved_material_inspection_v1" &&
-        scope.kind !== "workbench_v1" &&
-        scope.kind !== "sources_v1"
-    )
-        throw executionError("operation_not_allowed");
-    const owner = run ?? (await ctx.db.get(mission.runId));
-    const corpusRevisionId =
-        scope.kind === "saved_material_inspection_v1"
-            ? scope.corpusRevisionId
-            : owner?.activeCorpusRevisionId;
-    const revision = corpusRevisionId
-        ? await ctx.db.get(corpusRevisionId)
-        : null;
-    if (
-        revision?.runId !== mission.runId ||
-        (revision.status !== "approved" &&
-            !(
-                owner?.sourcesProtocol === "sources_mission_v1" &&
-                scope.kind !== "saved_material_inspection_v1"
-            )) ||
-        owner?.activeCorpusRevisionId !== revision._id
-    )
-        throw executionError("corpus_not_approved");
-    return revision;
-}
 
 export const savedMaterialInspectionDefinition: AgentDefinition & {
     id: "saved_material_inspection_v1";
@@ -88,6 +58,15 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
     },
     simulate: savedMaterialSimulation,
     operations: savedMaterialOperations,
+    modelOperation(name, operation) {
+        const wire = savedMaterialWireContract(
+            name,
+            savedMaterialBinding(this.id, this.version),
+        );
+        return wire
+            ? { description: operation.description, ...wire }
+            : operation;
+    },
     initialState(scope) {
         if (scope.kind !== "saved_material_inspection_v1")
             throw executionError("mission_contract_invalid");
@@ -110,14 +89,18 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
         const state = missionState(mission);
         if (state.kind !== "saved_material_inspection_v1")
             throw executionError("mission_contract_invalid");
-        const heads = await ctx.db
-            .query("sourceReviewItems")
-            .withIndex("by_revision_decision_and_order", (q) =>
-                q
-                    .eq("corpusRevisionId", revision._id)
-                    .eq("decision", "accepted"),
-            )
-            .take(MAX_INSPECTED_CAPTURES + 1);
+        const referenced =
+            savedMaterialBinding(this.id, this.version) === "referenced";
+        const heads = referenced
+            ? []
+            : await ctx.db
+                  .query("sourceReviewItems")
+                  .withIndex("by_revision_decision_and_order", (q) =>
+                      q
+                          .eq("corpusRevisionId", revision._id)
+                          .eq("decision", "accepted"),
+                  )
+                  .take(MAX_INSPECTED_CAPTURES + 1);
         if (heads.length > MAX_INSPECTED_CAPTURES)
             return { kind: "blocked" as const, code: "context_capacity" };
         const availableMaterials = [];
@@ -146,7 +129,9 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
         return {
             kind: "ready" as const,
             context: {
-                availableMaterials,
+                availableMaterials: referenced
+                    ? (await documentaryInventory(ctx, mission)).materials
+                    : availableMaterials,
                 humanInstructions: {
                     researchAngle:
                         (await readResearchContext(ctx, run)).researchAngle ??
@@ -262,4 +247,11 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
             },
         };
     },
+};
+
+export const documentaryInspectionDefinition: AgentDefinition & {
+    id: "saved_material_inspection_v1";
+} = {
+    ...savedMaterialInspectionDefinition,
+    version: REFERENCED_INSPECTION_VERSION,
 };

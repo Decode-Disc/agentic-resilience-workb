@@ -671,10 +671,17 @@ export function admittedDocumentaryReading(
         read.status !== "completed" ||
         read.adoptedAt === undefined ||
         read.adoptionRefusalCode !== undefined ||
-        read.outcome?.kind !== "success" ||
-        read.pin?.kind !== "saved_material_inspection_v1" ||
-        !read.pin.expectedCaptureId ||
-        !data.captureIds.includes(read.pin.expectedCaptureId)
+        read.outcome?.kind !== "success"
+    )
+        return null;
+    const pin = read.pin;
+    if (
+        pin?.kind !== "saved_material_inspection_v1" &&
+        !(
+            pin?.kind === "documentary_v1" &&
+            pin.scope.kind === "sources" &&
+            pin.target.kind !== "acquisition"
+        )
     )
         return null;
     let value: unknown;
@@ -689,14 +696,24 @@ export function admittedDocumentaryReading(
             : read.input.kind === "read_in_context"
               ? readInContextResult.safeParse(value)
               : null;
-    if (
-        !parsed?.success ||
-        parsed.data.sourceId !==
-            ("sourceId" in read.input ? read.input.sourceId : undefined) ||
-        parsed.data.captureId !== read.pin.expectedCaptureId ||
-        parsed.data.contentHash !== read.pin.expectedContentHash
-    )
-        throw executionError("documentary_quote_invalid");
+    if (!parsed?.success) throw executionError("documentary_quote_invalid");
+    const result = parsed.data;
+    const matchesPin =
+        pin.kind === "saved_material_inspection_v1"
+            ? "sourceId" in read.input &&
+              read.input.sourceId === result.sourceId &&
+              pin.expectedCaptureId === result.captureId &&
+              pin.expectedContentHash === result.contentHash
+            : pin.target.kind === "capture"
+              ? pin.target.sourceId === result.sourceId &&
+                pin.target.captureId === result.captureId &&
+                pin.target.contentHash === result.contentHash
+              : pin.target.kind === "retained_document" &&
+                "canonicalUrl" in result &&
+                pin.target.canonicalUrl === result.canonicalUrl &&
+                pin.target.contentHash === result.contentHash;
+    if (!data.captureIds.includes(result.captureId)) return null;
+    if (!matchesPin) throw executionError("documentary_quote_invalid");
     return {
         kind: parsed.data.kind,
         sourceId: parsed.data.sourceId,
@@ -705,7 +722,11 @@ export function admittedDocumentaryReading(
         passages:
             parsed.data.kind === "search_available_material"
                 ? parsed.data.passages
-                : [parsed.data.passage],
+                : "passage" in parsed.data
+                  ? [parsed.data.passage]
+                  : parsed.data.indexedPassage
+                    ? [parsed.data.indexedPassage]
+                    : [],
     };
 }
 

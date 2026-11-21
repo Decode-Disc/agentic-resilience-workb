@@ -2,12 +2,13 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import {
     advanceSha256,
+    completeCharacterBoundary,
     sha256CheckpointHex,
     sha256Hex,
 } from "@convex/domain/sourcePassages";
 import { TEXT_FRAGMENT_CHARACTERS } from "@convex/resourcePolicy";
 import type { PaginationOptions } from "convex/server";
-import { type Infer, v } from "convex/values";
+import { getDocumentSize, type Infer, v } from "convex/values";
 import { executionError } from "./errors";
 export const textManifestValidator = v.object({
     contentHash: v.string(),
@@ -157,9 +158,10 @@ export async function sealRetainedText(
 export function retainedTextParts(content: string) {
     const parts: string[] = [];
     for (let offset = 0; offset < content.length; ) {
-        let end = Math.min(offset + TEXT_FRAGMENT_CHARACTERS, content.length);
-        const last = content.charCodeAt(end - 1);
-        if (end < content.length && last >= 0xd800 && last <= 0xdbff) end--;
+        const end = completeCharacterBoundary(
+            content,
+            Math.min(offset + TEXT_FRAGMENT_CHARACTERS, content.length),
+        );
         parts.push(content.slice(offset, end));
         offset = end;
     }
@@ -450,6 +452,27 @@ function operationObservationKey(requestId: Id<"agentOperationRequests">) {
     return `operation:${requestId}:observation`;
 }
 
+function operationObservation(
+    ctx: QueryCtx,
+    requestId: Id<"agentOperationRequests">,
+) {
+    return ctx.db
+        .query("retainedTexts")
+        .withIndex("by_key", (q) =>
+            q.eq("key", operationObservationKey(requestId)),
+        )
+        .unique();
+}
+
+/** Resolve the immutable retained representation without loading its fragments. */
+export async function operationObservationManifest(
+    ctx: QueryCtx,
+    requestId: Id<"agentOperationRequests">,
+) {
+    const stored = await operationObservation(ctx, requestId);
+    return stored ? completeRetainedText(ctx, stored._id) : null;
+}
+
 /** The operation executor supplies writer authority; this owner retains its immutable observation representation. */
 export async function stageOperationObservation(
     ctx: MutationCtx,
@@ -467,14 +490,8 @@ export async function operationObservationRange(
     length: number,
     expectedHash?: string,
 ) {
-    const stored = await ctx.db
-        .query("retainedTexts")
-        .withIndex("by_key", (q) =>
-            q.eq("key", operationObservationKey(requestId)),
-        )
-        .unique();
-    if (!stored) return null;
-    const text = await completeRetainedText(ctx, stored._id);
+    const text = await operationObservationManifest(ctx, requestId);
+    if (!text) return null;
     if (expectedHash !== undefined && expectedHash !== text.contentHash)
         throw executionError("retained_text_invalid");
     return {
@@ -482,6 +499,25 @@ export async function operationObservationRange(
         characters: text.characters,
         content: await retainedTextRange(ctx, text, start, length),
     };
+}
+
+/** Exposes a single verified observation fragment, preserving its original UTF-16 boundaries. */
+export async function operationObservationFragment(
+    ctx: QueryCtx,
+    requestId: Id<"agentOperationRequests">,
+    index: number,
+    expectedHash: string,
+) {
+    const manifest = await operationObservationManifest(ctx, requestId);
+    if (
+        !manifest ||
+        manifest.contentHash !== expectedHash ||
+        !Number.isSafeInteger(index) ||
+        index < 0 ||
+        index >= manifest.fragmentHashes.length
+    )
+        throw executionError("retained_text_invalid");
+    return retainedTextFragment(ctx, manifest, index);
 }
 
 async function diagnosticFragment(
@@ -499,6 +535,16 @@ async function diagnosticFragment(
     return fragment.content;
 }
 
+// A UTF-16 unit needs at most three UTF-8 bytes, including when paired.
+// Include the row and index keys in the worst-case cost at the storage boundary.
+const retainedFragmentLimitBytes = getDocumentSize({
+    _id: "x".repeat(32),
+    _creationTime: 0,
+    textId: "x".repeat(32),
+    index: 0,
+    content: "界".repeat(TEXT_FRAGMENT_CHARACTERS),
+});
+
 /** Deletes exclusively owned text children first, keeping each purge transaction bounded. */
 export async function deleteRetainedTextBatch(
     ctx: MutationCtx,
@@ -509,12 +555,45 @@ export async function deleteRetainedTextBatch(
     const text = await ctx.db.get(textId);
     if (!text) return true;
     if (text.key !== key) throw executionError("retained_text_conflict");
+    const capacity = await ctx.meta.getTransactionMetrics();
+    // Deleting a row also reads it. Reserve room for both that read and the parent.
+    const batch = Math.min(
+        batchSize,
+        Math.floor(
+            (capacity.bytesRead.remaining - retainedFragmentLimitBytes) /
+                (2 * retainedFragmentLimitBytes),
+        ),
+        Math.floor(
+            (capacity.bytesWritten.remaining - retainedFragmentLimitBytes) /
+                retainedFragmentLimitBytes,
+        ),
+        Math.floor((capacity.documentsRead.remaining - 1) / 2),
+        capacity.documentsWritten.remaining - 1,
+    );
+    if (batch < 1) return false;
     const fragments = await ctx.db
         .query("retainedTextFragments")
         .withIndex("by_text_and_index", (q) => q.eq("textId", textId))
-        .take(batchSize);
+        .take(batch);
     for (const fragment of fragments) await ctx.db.delete(fragment._id);
     if (fragments.length) return false;
     await ctx.db.delete(textId);
     return true;
+}
+
+/** Report whether the request had text and whether its final fragment batch was drained. */
+export async function deleteOperationObservationBatch(
+    ctx: MutationCtx,
+    requestId: Id<"agentOperationRequests">,
+    batchSize: number,
+) {
+    const text = await operationObservation(ctx, requestId);
+    return text
+        ? deleteRetainedTextBatch(
+              ctx,
+              text._id,
+              operationObservationKey(requestId),
+              batchSize,
+          )
+        : undefined;
 }

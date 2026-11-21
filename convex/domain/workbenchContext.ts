@@ -1,15 +1,19 @@
 import { internal } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import type { AgentDefinition } from "@convex/execution/agentDefinition";
 import { executionFailureCode } from "@convex/execution/errors";
+import { turnFramingCitationPolicy } from "@convex/framingCitationPolicy";
+import { requireSavedMaterialScope } from "./documentaryAccess";
 import { researchQuestionCapacity } from "./framingEditAuthority";
 import {
     framingConditionalReferences,
     framingPublicReferences,
+    savedFramingReceipt,
 } from "./framingProvenance";
 import { formatResearchSummary, readResearchState } from "./researchState";
-import { requireSavedMaterialScope } from "./savedMaterialInspection";
+import { documentaryInventory as documentaryInventoryForMission } from "./savedMaterial";
+import { savedMaterialBinding } from "./savedMaterialOperations";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
 import {
@@ -19,6 +23,7 @@ import {
     readSourcesCoverage,
     summarizeSourcesPreparation,
 } from "./sources";
+import { supportsFramingWriteReceipt } from "./workbenchContracts";
 import {
     projectWorkbenchInstructions,
     readWorkbenchInstructions,
@@ -32,10 +37,23 @@ export async function readWorkbenchFacts(
     const framing = run.currentFramingRevisionId
         ? await ctx.db.get(run.currentFramingRevisionId)
         : null;
-    const sources = await ctx.db
-        .query("sources")
-        .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
-        .take(61);
+    const documentaryInventory =
+        mission &&
+        savedMaterialBinding(
+            mission.definitionId,
+            mission.definitionVersion,
+        ) === "referenced"
+            ? await documentaryInventoryForMission(ctx, mission)
+            : null;
+    const framingCitationPolicy = mission
+        ? await turnFramingCitationPolicy(ctx, mission)
+        : undefined;
+    const sources = documentaryInventory
+        ? []
+        : await ctx.db
+              .query("sources")
+              .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
+              .take(61);
     if (sources.length > 60)
         return { kind: "blocked", code: "context_capacity" };
     let availableMaterials = sources.map((s) => ({
@@ -50,7 +68,7 @@ export async function readWorkbenchFacts(
             >
         >
     > = [];
-    if (mission) {
+    if (mission && !documentaryInventory) {
         try {
             await requireSavedMaterialScope(ctx, mission, run);
             captureMetadata = await ctx.runQuery(
@@ -91,16 +109,42 @@ export async function readWorkbenchFacts(
         eventBasis?.kind === "open"
             ? await framingConditionalReferences(ctx, eventBasis)
             : undefined;
+    function documentaryState(
+        sourceId: Id<"sources">,
+        capture: {
+            captureId: Id<"sourceCaptures">;
+            contentHash: string | null;
+        } | null,
+    ) {
+        if (!preparation?.sourcesMission) return null;
+        return projectSourceDocumentState({
+            preparationId: preparation._id,
+            sourceId,
+            capture,
+            result: preparation.sourcesMission.result,
+            decision:
+                controlled.find((item) => item.sourceId === sourceId)
+                    ?.sourceDecision ?? null,
+            qualifications: controlled,
+        });
+    }
     const context = {
         company: run.companySnapshot ?? null,
         originalRequest: run.researchAngle ?? null,
         coveragePreset: run.coveragePreset ?? null,
         coverageGuidance: coveragePresetGuidance(run.coveragePreset),
+        ...(framingCitationPolicy ? { framingCitationPolicy } : {}),
         modernSources: run.sourcesProtocol === "sources_mission_v1",
         framing: framing
             ? {
                   revision: framing.revision,
                   ...framing.content,
+                  ...(supportsFramingWriteReceipt(mission?.definitionVersion)
+                      ? {
+                            publicCitations:
+                                savedFramingReceipt(framing).publicCitations,
+                        }
+                      : {}),
                   ...(eventBasis ? { eventBasis } : {}),
                   ...(eventReferences ? { eventReferences } : {}),
                   ...(conditionReferences ? { conditionReferences } : {}),
@@ -110,34 +154,45 @@ export async function readWorkbenchFacts(
               }
             : null,
         research: { ...research, summary: formatResearchSummary(research) },
-        availableMaterials: availableMaterials.map((material) => {
-            const capture =
-                captureMetadata.find(
-                    (item) => item.sourceId === material.sourceId,
-                ) ?? null;
-            return {
+        ...(documentaryInventory
+            ? { analystDocumentReferences: documentaryInventory.analystUrls }
+            : {}),
+        ...(documentaryInventory?.unavailableMaterials.length
+            ? {
+                  unavailableDocumentaryMaterials:
+                      documentaryInventory.unavailableMaterials,
+              }
+            : {}),
+        availableMaterials:
+            documentaryInventory?.materials.map((material) => ({
                 ...material,
-                capture,
-                documentaryState: preparation?.sourcesMission
-                    ? projectSourceDocumentState({
-                          preparationId: preparation._id,
-                          sourceId: material.sourceId,
-                          capture: capture
-                              ? {
-                                    captureId: capture.captureId,
-                                    contentHash: capture.contentHash ?? null,
-                                }
-                              : null,
-                          result: preparation.sourcesMission.result,
-                          decision:
-                              controlled.find(
-                                  (item) => item.sourceId === material.sourceId,
-                              )?.sourceDecision ?? null,
-                          qualifications: controlled,
-                      })
-                    : null,
-            };
-        }),
+                documentaryState:
+                    material.captureId && material.sourceId
+                        ? documentaryState(material.sourceId, {
+                              captureId: material.captureId,
+                              contentHash: material.contentHash,
+                          })
+                        : null,
+            })) ??
+            availableMaterials.map((material) => {
+                const capture =
+                    captureMetadata.find(
+                        (item) => item.sourceId === material.sourceId,
+                    ) ?? null;
+                return {
+                    ...material,
+                    capture,
+                    documentaryState: documentaryState(
+                        material.sourceId,
+                        capture
+                            ? {
+                                  captureId: capture.captureId,
+                                  contentHash: capture.contentHash ?? null,
+                              }
+                            : null,
+                    ),
+                };
+            }),
         analystRequests: await projectWorkbenchInstructions(ctx, instructions),
         ...(preparation?.sourcesMission
             ? {
@@ -166,6 +221,12 @@ export async function readWorkbenchFacts(
                     framing: context.framing,
                     research: context.research,
                     materials: context.availableMaterials,
+                    ...(context.unavailableDocumentaryMaterials
+                        ? {
+                              unavailableDocumentaryMaterials:
+                                  context.unavailableDocumentaryMaterials,
+                          }
+                        : {}),
                     preparation: context.documentaryPreparation ?? null,
                     corpusRevisionId: run.activeCorpusRevisionId ?? null,
                     captureIds: preparation?.sourcesMission?.captureIds ?? [],

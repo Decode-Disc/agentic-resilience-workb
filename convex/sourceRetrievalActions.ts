@@ -1,6 +1,12 @@
 "use node";
 
+import { createHash } from "node:crypto";
 import {
+    documentaryRange,
+    referencedContextResult,
+} from "@convex/domain/savedMaterialOperations";
+import {
+    completeCharacterBoundary,
     extractPassagesFromNormalizedText,
     sha256Hex,
 } from "@convex/domain/sourcePassages";
@@ -19,19 +25,27 @@ import {
     sourceDocumentMetadataValidator,
     sourceEmbeddingScopeKey,
 } from "@convex/domain/sourceRetrievalPolicy";
+import { retainedPublicReadPage } from "@convex/domain/workbenchContracts";
+import { executionError } from "@convex/execution/errors";
 import {
     embedSourceTexts,
     SOURCE_EMBEDDING_PROFILE,
 } from "@convex/integrations/sourceEmbeddings";
-import type { FunctionReturnType } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
-import { MAX_NORMALIZED_ARTIFACT_BYTES } from "./resourcePolicy";
+import {
+    MAX_NORMALIZED_ARTIFACT_BYTES,
+    MAX_OPERATION_RESULT_BYTES,
+    SOURCE_CONTEXT_NEIGHBOR_CHARACTERS,
+    SOURCE_CONTEXT_PAGE_CHARACTERS,
+} from "./resourcePolicy";
 import {
     approvedSourceScope,
     type MissionApprovedCapture,
+    missionApprovedSourceScope,
 } from "./sourceRetrieval";
 
 const PROFILE = SOURCE_EMBEDDING_PROFILE.id;
@@ -166,35 +180,30 @@ export async function ensureSourceCaptureIndex(
     const readAllowance = args.maxReadBytes ?? MAX_NORMALIZED_ARTIFACT_BYTES;
     if (!Number.isSafeInteger(readAllowance) || readAllowance < 0)
         throw sourcePreparationError("retrieval_read_limit");
-    const state = await ctx.runQuery(internal.sourceRetrieval.getIndexState, {
-        preparationId: args.preparationId,
-        captureId: args.captureId,
-    });
+    const existing = await ctx.runQuery(
+        internal.sourceRetrieval.getIndexState,
+        {
+            preparationId: args.preparationId,
+            captureId: args.captureId,
+        },
+    );
     if (
-        state &&
-        (args.mode === "lexical" || state.embeddingProfile === PROFILE)
+        existing &&
+        (args.mode === "lexical" || existing.embeddingProfile === PROFILE)
     )
         return {
-            candidateCount: state.candidateCount,
+            candidateCount: existing.candidateCount,
             readBytes: 0,
-            embeddingComplete: state.embeddingProfile === PROFILE,
+            embeddingComplete: existing.embeddingProfile === PROFILE,
         };
     if (capture.byteCount === undefined)
         throw sourcePreparationError("capture_unavailable");
     if (capture.byteCount > readAllowance)
         throw sourcePreparationError("retrieval_read_limit");
-    const blob = capture.storageId
-        ? await ctx.storage.get(capture.storageId)
-        : null;
-    if (
-        !blob ||
-        blob.size > MAX_NORMALIZED_ARTIFACT_BYTES ||
-        blob.size !== capture.byteCount
-    )
-        throw sourcePreparationError("capture_unavailable");
-    const text = await blob.text();
-    if (sha256Hex(text) !== capture.contentHash)
-        throw sourcePreparationError("capture_corrupt");
+    const stored = await readVerifiedCaptureText(ctx, capture);
+    if (stored.status === "unavailable")
+        throw sourcePreparationError(stored.reason);
+    const { text } = stored;
     let candidates: ReturnType<typeof extractPassagesFromNormalizedText>;
     try {
         candidates = extractPassagesFromNormalizedText({
@@ -211,7 +220,7 @@ export async function ensureSourceCaptureIndex(
             throw sourcePreparationError("retrieval_candidate_limit");
         throw error;
     }
-    if (!state)
+    if (!existing)
         for (let start = 0; start < candidates.length; start += 64) {
             const passages = candidates.slice(start, start + 64).map((p) => ({
                 order: p.order,
@@ -278,7 +287,7 @@ export async function ensureSourceCaptureIndex(
         });
     return {
         candidateCount: candidates.length,
-        readBytes: blob.size,
+        readBytes: stored.byteCount,
         embeddingComplete,
         ...(reason ? { degradationReason: reason } : {}),
     };
@@ -336,6 +345,7 @@ export async function retrieveSourcePassages(
         { preparationId: args.preparationId, now: Date.now() },
     );
     const captureUrls = new Map<string, string>();
+    const vectorScopes = new Map<Id<"sourceCaptures">, string>();
     let totalCandidates = 0;
     let reason: string | undefined;
     for (let offset = 0; offset < args.captureIds.length; offset += 8) {
@@ -354,6 +364,10 @@ export async function retrieveSourcePassages(
             if (!state)
                 throw sourcePreparationError("retrieval_index_incomplete");
             totalCandidates += state.candidateCount;
+            vectorScopes.set(
+                capture._id,
+                sourceEmbeddingScopeKey(state.scopeKey, PROFILE, capture._id),
+            );
             if (args.mode === "hybrid" && state.embeddingProfile !== PROFILE)
                 reason =
                     state.embeddingDegradationReason ??
@@ -464,15 +478,8 @@ export async function retrieveSourcePassages(
                     limit: 256,
                     filter: (q) =>
                         q.or(
-                            ...[...new Set(args.captureIds)].map((captureId) =>
-                                q.eq(
-                                    "embeddingScopeKey",
-                                    sourceEmbeddingScopeKey(
-                                        `${preparation.runId}:${preparation.corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`,
-                                        PROFILE,
-                                        captureId,
-                                    ),
-                                ),
+                            ...[...vectorScopes.values()].map((scope) =>
+                                q.eq("embeddingScopeKey", scope),
                             ),
                         ),
                 },
@@ -552,13 +559,6 @@ type ApprovedIndexPassage = {
     endOffset: number;
     quotation: string;
     headingPath: string[];
-};
-
-const missionApprovedSourceScope = {
-    missionId: v.optional(v.id("agentMissions")),
-    runId: v.optional(v.id("researchRuns")),
-    expectedGeneration: v.number(),
-    sourceId: v.id("sources"),
 };
 
 const approvedPassageResult = v.object({
@@ -645,33 +645,48 @@ type AvailableApprovedCapture = Extract<
     { status: "available" }
 >["capture"];
 
-async function readVerifiedCaptureText(
+export async function readVerifiedCaptureText(
     ctx: ActionCtx,
-    capture: AvailableApprovedCapture,
+    capture: Pick<
+        Doc<"sourceCaptures">,
+        "storageId" | "byteCount" | "contentHash" | "retainedImport"
+    >,
 ): Promise<
-    | { status: "available"; text: string }
+    | {
+          status: "available";
+          text: string;
+          byteCount: number;
+          contentHash: string;
+      }
     | { status: "unavailable"; reason: string }
 > {
     const blob = capture.storageId
         ? await ctx.storage.get(capture.storageId)
         : null;
-    if (
-        !blob ||
-        blob.size > MAX_NORMALIZED_ARTIFACT_BYTES ||
-        blob.size !== capture.byteCount
-    )
+    if (!blob || blob.size > MAX_NORMALIZED_ARTIFACT_BYTES)
         return { status: "unavailable", reason: "capture_unavailable" };
-    const text = await blob.text();
-    if (sha256Hex(text) !== capture.contentHash)
+    const text = capture.retainedImport
+        ? new TextDecoder("utf-8", { ignoreBOM: true }).decode(
+              await blob.arrayBuffer(),
+          )
+        : await blob.text();
+    const contentHash = createHash("sha256").update(text).digest("hex");
+    if (contentHash !== capture.contentHash)
         return { status: "unavailable", reason: "capture_corrupt" };
-    return { status: "available", text };
+    if (capture.byteCount !== undefined && blob.size !== capture.byteCount)
+        return { status: "unavailable", reason: "capture_unavailable" };
+    return { status: "available", text, byteCount: blob.size, contentHash };
 }
 
 async function ensureApprovedIndex(
     ctx: ActionCtx,
-    allowed: FunctionReturnType<
-        typeof internal.sourceRetrieval.getApprovedCapture
-    >,
+    allowed:
+        | {
+              status: "available";
+              capture: AvailableApprovedCapture;
+              state: Doc<"sourceSearchCaptures"> | null;
+          }
+        | { status: "unavailable"; reason: string },
     persistBatch: (
         identity: ApprovedIndexIdentity,
         passages: ApprovedIndexPassage[],
@@ -736,12 +751,9 @@ async function ensureApprovedIndex(
 
 async function ensureMissionApprovedIndex(
     ctx: ActionCtx,
-    args: {
-        missionId?: Id<"agentMissions">;
-        runId?: Id<"researchRuns">;
-        expectedGeneration: number;
-        sourceId: Id<"sources">;
-    },
+    args: FunctionArgs<
+        typeof internal.sourceRetrieval.approvedCaptureForMission
+    >,
     allowed: MissionApprovedCapture,
     suppliedText?: string,
 ): Promise<ApprovedIndexResult> {
@@ -761,6 +773,233 @@ async function ensureMissionApprovedIndex(
         suppliedText,
     );
 }
+
+function quoteIsInCapture(
+    text: string,
+    passage: { startOffset: number; endOffset: number; quotation: string },
+) {
+    return (
+        text.slice(passage.startOffset, passage.endOffset) === passage.quotation
+    );
+}
+
+function capturePage(
+    text: string,
+    startOffset: number,
+    extentEnd: number,
+    pageCharacters = SOURCE_CONTEXT_PAGE_CHARACTERS,
+) {
+    const endOffset = completeCharacterBoundary(
+        text,
+        Math.min(extentEnd, startOffset + pageCharacters),
+    );
+    return {
+        range: { startOffset, endOffset },
+        text: text.slice(startOffset, endOffset),
+    };
+}
+
+/** Keeps historical read IDs and page widths over the same verified capture reader. */
+const retainedPublicContextPageResult = v.union(
+    v.object({ status: v.literal("unavailable"), reason: v.string() }),
+    v.object({ status: v.literal("ready"), page: retainedPublicReadPage }),
+);
+
+export const readRetainedPublicContextPage = internalAction({
+    args: {
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+    },
+    returns: retainedPublicContextPageResult,
+    async handler(
+        ctx,
+        args,
+    ): Promise<Infer<typeof retainedPublicContextPageResult>> {
+        const imported = await ctx.runAction(
+            internal.sourceCaptureActions.importRetainedDocument,
+            args,
+        );
+        if (imported.status === "unavailable") return imported;
+        const { capture, rootId, start, characters } = await ctx.runQuery(
+            internal.sourceCaptures.retainedContinuationCapture,
+            { ...args, captureId: imported.captureId },
+        );
+        const stored = await readVerifiedCaptureText(ctx, capture);
+        if (stored.status === "unavailable") return stored;
+        if (
+            stored.text.length !== characters ||
+            start < 0 ||
+            start >= characters
+        )
+            throw executionError("source_continuation_invalid");
+        const page = capturePage(
+            stored.text,
+            start,
+            characters,
+            Math.floor(MAX_OPERATION_RESULT_BYTES / 8),
+        );
+        return {
+            status: "ready",
+            page: {
+                readId: rootId,
+                contentHash: capture.contentHash,
+                characters,
+                start,
+                end: page.range.endOffset,
+                excerpt: page.text,
+            },
+        };
+    },
+});
+
+const documentaryMaterialReadResult = v.union(
+    v.object({ status: v.literal("unavailable"), reason: v.string() }),
+    v.object({
+        status: v.literal("ready"),
+        kind: v.literal("search"),
+        passages: v.array(approvedPassageResult),
+        continueCursor: v.union(v.string(), v.null()),
+    }),
+    v.object({
+        status: v.literal("ready"),
+        kind: v.literal("context"),
+        readKind: referencedContextResult.fields.readKind,
+        range: documentaryRange,
+        captureCharacters: v.number(),
+        text: v.string(),
+        indexedPassage: referencedContextResult.fields.indexedPassage,
+    }),
+);
+
+/** Reads the exact capture admitted by the referring operation, sharing the retained index and page reader. */
+export const readDocumentaryForOperation = internalAction({
+    args: {
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+        cursor: v.optional(v.string()),
+    },
+    returns: documentaryMaterialReadResult,
+    async handler(
+        ctx,
+        { cursor, ...authority },
+    ): Promise<Infer<typeof documentaryMaterialReadResult>> {
+        const allowed = await ctx.runQuery(
+            internal.sourceRetrieval.documentaryCaptureForOperation,
+            authority,
+        );
+        const stored = await readVerifiedCaptureText(ctx, allowed.capture);
+        if (stored.status !== "available") return stored;
+        const { text } = stored;
+        if (allowed.input.kind === "search_available_material") {
+            const index = await ensureApprovedIndex(
+                ctx,
+                { ...allowed, status: "available" },
+                (_identity, passages) =>
+                    ctx.runMutation(
+                        internal.sourceRetrieval.putDocumentaryBatch,
+                        { ...authority, passages },
+                    ),
+                (_identity, candidateCount) =>
+                    ctx.runMutation(
+                        internal.sourceRetrieval.publishDocumentaryIndex,
+                        { ...authority, candidateCount },
+                    ),
+                text,
+            );
+            if (index.status !== "ready") return index;
+            const matches = await ctx.runQuery(
+                internal.sourceRetrieval.searchDocumentaryCapture,
+                { ...authority, cursor },
+            );
+            if (matches.status !== "ready")
+                return {
+                    status: "unavailable",
+                    reason:
+                        matches.status === "not_indexed"
+                            ? "source_index_unavailable"
+                            : matches.reason,
+                };
+            if (
+                matches.captureId !== allowed.capture._id ||
+                matches.contentHash !== allowed.capture.contentHash ||
+                matches.passages.some((p) => !quoteIsInCapture(text, p))
+            )
+                return { status: "unavailable", reason: "capture_corrupt" };
+            return {
+                status: "ready",
+                kind: "search",
+                passages: matches.passages,
+                continueCursor: matches.continueCursor,
+            };
+        }
+        const extent = allowed.extent;
+        let offset = 0;
+        let readKind: "beginning" | "context" = "beginning";
+        if (extent.kind === "focal") {
+            if (
+                !quoteIsInCapture(text, {
+                    ...extent.range,
+                    quotation: extent.quotation,
+                })
+            )
+                return { status: "unavailable", reason: "capture_corrupt" };
+            offset = Math.max(
+                0,
+                extent.range.startOffset - SOURCE_CONTEXT_NEIGHBOR_CHARACTERS,
+            );
+            // The neighbor start can fall on the second code unit of a character.
+            offset = completeCharacterBoundary(text, offset);
+            readKind = "context";
+        } else if (extent.kind === "next") {
+            offset = extent.offset;
+            readKind = extent.readKind;
+            if (
+                !Number.isSafeInteger(offset) ||
+                offset < 0 ||
+                extent.endOffset !== text.length ||
+                completeCharacterBoundary(text, offset) !== offset
+            )
+                return {
+                    status: "unavailable",
+                    reason: "material_continuation_invalid",
+                };
+        }
+        if (offset >= text.length)
+            return {
+                status: "unavailable",
+                reason: "material_continuation_invalid",
+            };
+        const page = capturePage(text, offset, text.length);
+        if (
+            extent.kind === "focal" &&
+            page.range.endOffset < extent.range.endOffset
+        )
+            return {
+                status: "unavailable",
+                reason: "retrieval_passage_invalid",
+            };
+        // Recheck after reading to avoid presenting content once the admitted scope has changed.
+        await ctx.runQuery(
+            internal.sourceRetrieval.documentaryCaptureForOperation,
+            authority,
+        );
+        return {
+            ...page,
+            status: "ready",
+            kind: "context",
+            readKind,
+            captureCharacters: text.length,
+            ...(extent.kind === "focal"
+                ? {
+                      indexedPassage: {
+                          passageOrder: extent.passageOrder,
+                          exactQuote: extent.quotation,
+                      },
+                  }
+                : {}),
+        };
+    },
+});
 
 /** Reads approved search results or passage context while reusing the capture bytes used for a cold index. */
 export const readApprovedMaterialForMission = internalAction({
@@ -787,6 +1026,7 @@ export const readApprovedMaterialForMission = internalAction({
             runId: args.runId,
             expectedGeneration: args.expectedGeneration,
             sourceId: args.sourceId,
+            exactCapture: args.exactCapture,
         };
         const allowed: MissionApprovedCapture = await ctx.runQuery(
             internal.sourceRetrieval.approvedCaptureForMission,
@@ -830,6 +1070,9 @@ export const readApprovedMaterialForMission = internalAction({
                 reason: "capture_unavailable",
             };
 
+        const document =
+            current.capture.document ??
+            capturedDocumentMetadata(current.document, stored.text);
         if (args.request.kind === "search") {
             const result: FunctionReturnType<
                 typeof internal.sourceRetrieval.searchApprovedSourceForMission
@@ -853,11 +1096,7 @@ export const readApprovedMaterialForMission = internalAction({
                 result.captureId !== allowed.capture._id ||
                 result.contentHash !== allowed.capture.contentHash ||
                 result.passages.some(
-                    (passage) =>
-                        stored.text.slice(
-                            passage.startOffset,
-                            passage.endOffset,
-                        ) !== passage.quotation,
+                    (passage) => !quoteIsInCapture(stored.text, passage),
                 )
             )
                 return {
@@ -867,10 +1106,7 @@ export const readApprovedMaterialForMission = internalAction({
             return {
                 status: "ready",
                 kind: "search",
-                document: capturedDocumentMetadata(
-                    current.document,
-                    stored.text,
-                ),
+                document,
                 captureId: result.captureId,
                 contentHash: result.contentHash,
                 canonicalUrl: result.canonicalUrl,
@@ -930,10 +1166,7 @@ export const readApprovedMaterialForMission = internalAction({
                 result.capture.contentHash !== allowed.capture.contentHash ||
                 result.passage.quotationHash !==
                     sha256Hex(result.passage.quotation) ||
-                stored.text.slice(
-                    result.passage.startOffset,
-                    result.passage.endOffset,
-                ) !== result.passage.quotation
+                !quoteIsInCapture(stored.text, result.passage)
             )
                 return { status: "unavailable", reason: "capture_corrupt" };
             const requested =
@@ -941,10 +1174,15 @@ export const readApprovedMaterialForMission = internalAction({
                     ? args.request.range
                     : undefined;
             const range = requested ?? {
-                startOffset: Math.max(0, result.passage.startOffset - 512),
+                startOffset: Math.max(
+                    0,
+                    result.passage.startOffset -
+                        SOURCE_CONTEXT_NEIGHBOR_CHARACTERS,
+                ),
                 endOffset: Math.min(
                     stored.text.length,
-                    result.passage.endOffset + 512,
+                    result.passage.endOffset +
+                        SOURCE_CONTEXT_NEIGHBOR_CHARACTERS,
                 ),
             };
             const offset =
@@ -966,31 +1204,20 @@ export const readApprovedMaterialForMission = internalAction({
                     status: "unavailable",
                     reason: "material_continuation_invalid",
                 };
-            let contextEndOffset = Math.min(range.endOffset, offset + 6000);
-            if (
-                contextEndOffset < stored.text.length &&
-                /[\uD800-\uDBFF]/.test(stored.text[contextEndOffset - 1] ?? "")
-            )
-                contextEndOffset--;
+            const page = capturePage(stored.text, offset, range.endOffset);
             return {
                 status: "ready",
                 kind: "context",
-                document: capturedDocumentMetadata(
-                    current.document,
-                    stored.text,
-                ),
+                document,
                 captureId: result.capture.captureId,
                 contentHash: result.capture.contentHash,
                 captureOmittedPassageCount:
                     allowed.capture.omittedPassageCount ?? null,
                 passage: {
                     ...result.passage,
-                    surroundingText: stored.text.slice(
-                        offset,
-                        contextEndOffset,
-                    ),
+                    surroundingText: page.text,
                     contextStartOffset: offset,
-                    contextEndOffset,
+                    contextEndOffset: page.range.endOffset,
                     contextRange: range,
                     captureCharacters: stored.text.length,
                 },

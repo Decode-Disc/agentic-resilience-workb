@@ -18,7 +18,9 @@ import {
     readPreparationLimits,
 } from "@convex/domain/sourcePreparationAuthority";
 import { preparedNeedInspectionValidator } from "@convex/domain/sourcesContracts";
+import { framingTurnReceipt } from "@convex/domain/workbenchAgentOperations";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
+import { supportsFramingWriteReceipt } from "@convex/domain/workbenchContracts";
 import {
     coherenceDecision,
     coherenceRequest,
@@ -95,14 +97,19 @@ function admittedPolicy(input: unknown): ResponseControlPolicy {
         : { ...DEFAULT_RESPONSE_CONTROL_POLICY };
 }
 
+type TurnOperationFacts = {
+    requests: readonly Doc<"agentOperationRequests">[];
+    framingReceipt: Awaited<ReturnType<typeof framingTurnReceipt>>;
+};
+
 async function readResponseFacts(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
     run: Doc<"researchRuns">,
-    requests?: readonly Doc<"agentOperationRequests">[],
+    completedTurn?: TurnOperationFacts,
 ) {
     const retained =
-        requests ??
+        completedTurn?.requests ??
         (await ctx.db
             .query("agentOperationRequests")
             .withIndex("by_mission", (q) => q.eq("missionId", mission._id))
@@ -160,8 +167,19 @@ async function readResponseFacts(
     if (typeof factsRevisionHash !== "string")
         return { kind: "blocked" as const, code: "context_capacity" };
     const instructions = await conversationInstructions(ctx, mission);
+    const framingWrite = supportsFramingWriteReceipt(mission.definitionVersion)
+        ? completedTurn
+            ? completedTurn.framingReceipt
+            : await framingTurnReceipt(
+                  ctx,
+                  operations,
+                  run,
+                  mission.definitionVersion,
+              )
+        : undefined;
     const factsJson = stableStringify({
         ...context,
+        ...(framingWrite ? { framingWrite } : {}),
         activeAnalystMessages: instructions?.messages ?? [],
         operations: observedOperations,
         ...(consultedPreparedMaterial.length
@@ -182,14 +200,14 @@ export async function completeResponseControl(
         input,
         confirmationOnly,
         requests,
+        framingReceipt,
     }: {
         run: Doc<"researchRuns">;
         invocation: Doc<"agentInvocations">;
         draft: string;
         input: unknown;
         confirmationOnly: boolean;
-        requests: readonly Doc<"agentOperationRequests">[];
-    },
+    } & TurnOperationFacts,
 ): Promise<
     | { kind: "completed" }
     | { kind: "continue" }
@@ -289,7 +307,10 @@ export async function completeResponseControl(
         return { kind: "continue" };
     };
     if (conflict && !state.correction) return requestCorrection();
-    const facts = await readResponseFacts(ctx, mission, run, requests);
+    const facts = await readResponseFacts(ctx, mission, run, {
+        requests,
+        framingReceipt,
+    });
     if (facts.kind !== "ready") {
         state.finalInvocationId = invocation._id;
         state.publicationReason = conflict

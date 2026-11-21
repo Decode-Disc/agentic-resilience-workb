@@ -12,7 +12,10 @@ import {
     sourceCaptureAvailabilityValidator as readingValidator,
     sourceCaptureState,
 } from "@convex/domain/sourceCaptureState";
-import { SOURCE_RETRIEVAL_VERSION } from "@convex/domain/sourceRetrievalPolicy";
+import {
+    findCaptureIndex,
+    sourceCaptureScopeKey,
+} from "@convex/domain/sourceRetrievalPolicy";
 import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
 import {
     classifySourceCandidate,
@@ -109,6 +112,7 @@ const overviewValidator = v.object({
         captured: v.number(),
         full: v.number(),
         partial: v.number(),
+        unknown: v.number(),
         unavailable: v.number(),
         capturing: v.number(),
         /** Candidates that were never captured: open leads, not judged irrelevant. */
@@ -484,12 +488,10 @@ export const overview = query({
                 acquisitions: data.acquisitions,
             },
             reading: {
-                captured: count(
-                    (row) =>
-                        row.reading === "full" || row.reading === "partial",
-                ),
+                captured: count((row) => row.capture !== null),
                 full: count((row) => row.reading === "full"),
                 partial: count((row) => row.reading === "partial"),
+                unknown: count((row) => row.reading === "unknown"),
                 unavailable: count((row) => row.reading === "unavailable"),
                 capturing: count((row) => row.reading === "capturing"),
                 notCaptured: count((row) => row.reading === "not_captured"),
@@ -507,13 +509,12 @@ export const overview = query({
                 notRetainedCaptured: count(
                     (row) =>
                         row.membership === "not_retained" &&
-                        (row.reading === "full" || row.reading === "partial"),
+                        row.capture !== null,
                 ),
                 notRetainedWithoutAvailableCapture: count(
                     (row) =>
                         row.membership === "not_retained" &&
-                        row.reading !== "full" &&
-                        row.reading !== "partial",
+                        row.capture === null,
                 ),
                 excluded: count((row) => row.membership === "excluded"),
                 restricted: data.restrictedContributions.length,
@@ -552,7 +553,12 @@ export const getSource = query({
             (qualification
                 ? await ctx.db.get(qualification.captureId)
                 : state.committed) ?? null;
-        const scopeKey = `${run._id}:${preparation.corpusRevisionId}:${SOURCE_RETRIEVAL_VERSION}`;
+        const index = capture
+            ? await findCaptureIndex(ctx.db, preparation, capture._id)
+            : null;
+        if (index && index.contentHash !== capture?.contentHash)
+            throw executionError("capture_identity_conflict");
+        const scopeKey = index?.scopeKey ?? sourceCaptureScopeKey(run._id);
         const cited = new Set(
             qualification?.contributions.flatMap((contribution) =>
                 contribution.evidence.map((evidence) => evidence.passageOrder),

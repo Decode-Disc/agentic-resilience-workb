@@ -3,11 +3,24 @@ import type { QueryCtx } from "@convex/_generated/server";
 import { conversationInstructions } from "@convex/execution/conversations";
 import { executionError } from "@convex/execution/errors";
 import type { Infer } from "convex/values";
+import { validate } from "convex-helpers/validators";
+import { unambiguousDocumentTime } from "./documentDates";
 import type {
+    framingCitationPolicy,
     framingContentValidator,
+    framingWriteReceipt,
+    supportedProvisionalOpenEvent,
+} from "./framingContracts";
+import {
+    adoptedDocumentaryBasis,
+    framingWriteState,
     provisionalOpenEvent,
 } from "./framingContracts";
-import { framingWriteState } from "./framingContracts";
+import {
+    displayedDocumentaryPassage,
+    resolveDocumentaryPinCapture,
+} from "./savedMaterial";
+import { containsDocumentaryReference } from "./savedMaterialOperations";
 import { stableStringify } from "./sourcePassages";
 import {
     framingObservationRefusal,
@@ -16,26 +29,205 @@ import {
     supportsDirectedFraming,
 } from "./workbenchContracts";
 
+/** Public references belong to the saved basis, outside analyst-facing framing text. */
+export function requireFramingDocumentaryFields(
+    content: Infer<typeof framingContentValidator>,
+) {
+    const fields = [
+        { path: "content.scope", text: content.scope },
+        ...content.questions.flatMap(
+            ({ text, shortLabel, rationale }, index) => [
+                { path: `content.questions[${index}].text`, text },
+                {
+                    path: `content.questions[${index}].shortLabel`,
+                    text: shortLabel,
+                },
+                {
+                    path: `content.questions[${index}].rationale`,
+                    text: rationale,
+                },
+            ],
+        ),
+    ];
+    const copied = fields.find(({ text }) =>
+        containsDocumentaryReference(text),
+    );
+    if (copied)
+        throw executionError("framing_documentary_reference_in_text", [
+            {
+                path: copied.path,
+                expected:
+                    "Keep documentary reference tokens in the structured event or question basis. Use readable wording here.",
+            },
+        ]);
+}
+
 type PublicBasis = Extract<
     NonNullable<Doc<"framingRevisions">["eventBasis"]>,
     { kind: "public" }
 >;
 
+/** Records the associations themselves, even if a retained passage later becomes unavailable. */
+export function savedFramingReceipt(
+    revision: Pick<Doc<"framingRevisions">, "eventBasis" | "revision">,
+): Infer<typeof framingWriteReceipt> {
+    const basis = revision.eventBasis;
+    const references = (
+        citation:
+            | ReadingAssociation
+            | Pick<Infer<typeof adoptedDocumentaryBasis>, "references">,
+    ) => {
+        if ("references" in citation) return [...new Set(citation.references)];
+        if ("readIds" in citation) return [...new Set(citation.readIds)];
+        return [...new Set(citation.referenceIndexes)].map((index) => ({
+            lookupRequestId: citation.lookupRequestId,
+            index,
+        }));
+    };
+    return {
+        revision: revision.revision,
+        eventBasis: basis?.kind ?? "unspecified",
+        publicCitations: {
+            event: basis?.kind === "public" ? references(basis) : [],
+            conditions:
+                basis?.kind === "open"
+                    ? (basis.conditions ?? []).flatMap(
+                          ({ questionId, basis }) =>
+                              basis.kind === "public"
+                                  ? [
+                                        {
+                                            questionId,
+                                            references: references(basis),
+                                        },
+                                    ]
+                                  : [],
+                      )
+                    : [],
+        },
+    };
+}
+
+type LegacyPublicBasis = Exclude<PublicBasis, { references: unknown }>;
 type ReadingAssociation =
     | Pick<Extract<PublicBasis, { readIds: unknown }>, "readIds">
     | Pick<
-          Exclude<PublicBasis, { readIds: unknown }>,
+          Exclude<LegacyPublicBasis, { readIds: unknown }>,
           "lookupRequestId" | "referenceIndexes"
       >;
 type FramingWriteAuthority = {
     current: Doc<"framingRevisions">;
     mission: Doc<"agentMissions">;
     request: Doc<"agentOperationRequests">;
+    citationPolicy?: Infer<typeof framingCitationPolicy>;
     messageId: Extract<
         Doc<"agentOperationRequests">["input"],
         { kind: "adjust_framing" }
     >["messageId"];
 };
+
+type DisplayedPassage = NonNullable<
+    Awaited<ReturnType<typeof displayedDocumentaryPassage>>
+>;
+
+function documentaryAssociation(reference: string, passage: DisplayedPassage) {
+    const { value, issuer, excerpt, range } = passage;
+    return {
+        reference,
+        readId: issuer._id,
+        sourceId: value.sourceId,
+        captureId: value.captureId,
+        contentHash: value.contentHash,
+        url: value.canonicalUrl,
+        publisher: new URL(value.canonicalUrl).hostname,
+        excerpt,
+        range,
+        dates: value.document.dates,
+        publishedAt: value.document.publishedAt ?? undefined,
+        eventAt: value.document.dates
+            ? unambiguousDocumentTime(value.document.dates.event)
+            : undefined,
+    };
+}
+
+async function requireFreshDocumentaryReferences(
+    ctx: QueryCtx,
+    args: FramingWriteAuthority,
+    references: string[],
+    path: string,
+) {
+    if (
+        !args.citationPolicy ||
+        !references.length ||
+        references.length !== new Set(references).size
+    )
+        throw executionError("framing_event_basis_invalid", [
+            {
+                path,
+                expected:
+                    "Select distinct displayed references from adopted documentary passages.",
+            },
+        ]);
+    const associations = [];
+    for (const [index, reference] of references.entries()) {
+        const passage = await displayedDocumentaryPassage(ctx, reference);
+        const refusal = framingObservationRefusal(passage?.issuer ?? null, {
+            ...args.request,
+            messageId: args.messageId,
+        });
+        const pin = passage?.issuer.pin;
+        if (
+            !passage ||
+            refusal ||
+            pin?.kind !== "documentary_v1" ||
+            (passage.issuer.adoptionGeneration ??
+                passage.issuer.expectedGeneration) !==
+                args.mission.generation ||
+            !passage.excerpt.trim()
+        )
+            throw executionError(
+                refusal === "framing_observation_stale"
+                    ? refusal
+                    : "framing_public_lookup_invalid",
+                [
+                    {
+                        path: `${path}[${index}]`,
+                        expected:
+                            "Use a displayed passage adopted for the current analyst message and instruction.",
+                    },
+                ],
+            );
+        const capture = await resolveDocumentaryPinCapture(ctx, pin.target);
+        if (
+            capture?.runId !== args.current.runId ||
+            capture?.status !== "committed" ||
+            capture._id !== passage.value.captureId ||
+            capture.sourceId !== passage.value.sourceId ||
+            capture.contentHash !== passage.value.contentHash ||
+            stableStringify(capture.document) !==
+                stableStringify(passage.value.document)
+        )
+            throw executionError("framing_public_lookup_invalid", [
+                {
+                    path: `${path}[${index}]`,
+                    expected:
+                        "Use an adopted passage from an available capture of this dossier.",
+                },
+            ]);
+        if (
+            args.citationPolicy.requireContextRead &&
+            passage.issuer.input.kind !== "read_in_context"
+        )
+            throw executionError("framing_public_context_required", [
+                {
+                    path: `${path}[${index}]`,
+                    expected:
+                        "Read the document with read_in_context and cite the displayed passage reference returned by that reading.",
+                },
+            ]);
+        associations.push(documentaryAssociation(reference, passage));
+    }
+    return associations;
+}
 
 async function publicBasisReadings(ctx: QueryCtx, basis: ReadingAssociation) {
     if ("readIds" in basis) {
@@ -74,6 +266,20 @@ export async function framingPublicReferences(
     ctx: QueryCtx,
     basis: PublicBasis,
 ) {
+    if ("references" in basis) {
+        const passages = await Promise.all(
+            basis.references.map(async (reference) => {
+                const passage = await displayedDocumentaryPassage(
+                    ctx,
+                    reference,
+                );
+                return passage
+                    ? documentaryAssociation(reference, passage)
+                    : null;
+            }),
+        );
+        return passages.filter((passage) => passage !== null);
+    }
     const readings = await publicBasisReadings(ctx, basis);
     return readings.references.flatMap((reference) =>
         reference ? [reference] : [],
@@ -148,13 +354,46 @@ export async function validateFramingPublicBasis(
     args: FramingWriteAuthority & { basis: PublicBasis; scope: string },
 ) {
     const { basis, current, scope, mission } = args;
-    const directed = "readIds" in basis;
-    if (directed && !supportsDirectedFraming(mission.definitionVersion))
-        throw executionError("framing_event_basis_invalid");
     const inherited =
         current.content.scope === scope &&
         stableStringify(current.eventBasis) === stableStringify(basis);
     if (inherited) return basis;
+    if ("references" in basis) {
+        if (!basis.label.trim())
+            throw executionError("framing_event_basis_invalid");
+        const associations = await requireFreshDocumentaryReferences(
+            ctx,
+            args,
+            basis.references,
+            "eventBasis.references",
+        );
+        if (
+            !associations.some(({ publishedAt, eventAt }) =>
+                [publishedAt, eventAt].some(
+                    (value) => value !== undefined && Number.isFinite(value),
+                ),
+            )
+        )
+            throw executionError("framing_public_reference_undated", [
+                {
+                    path: "eventBasis.references",
+                    expected:
+                        "Include an applicable dated passage, or preserve an open event basis.",
+                },
+            ]);
+        return basis;
+    }
+    if (args.citationPolicy)
+        throw executionError("framing_event_basis_invalid", [
+            {
+                path: "eventBasis.references",
+                expected:
+                    "Use references returned for adopted documentary passages in this turn.",
+            },
+        ]);
+    const directed = "readIds" in basis;
+    if (directed && !supportsDirectedFraming(mission.definitionVersion))
+        throw executionError("framing_event_basis_invalid");
     if (!directed && supportsDirectedFraming(mission.definitionVersion))
         throw executionError("framing_event_basis_invalid");
     const readings = await requireFreshReadings(ctx, args, basis);
@@ -220,7 +459,7 @@ export function companyProvisionalProgram(company: string) {
 export async function prepareProvisionalFraming(
     ctx: QueryCtx,
     args: FramingWriteAuthority & {
-        basis: Infer<typeof provisionalOpenEvent>;
+        basis: Infer<typeof supportedProvisionalOpenEvent>;
         content: Infer<typeof framingContentValidator>;
     },
 ) {
@@ -371,8 +610,25 @@ export async function prepareProvisionalFraming(
                                 "Use a nonblank exact excerpt from the active analyst message; do not attribute an invented hypothesis to the analyst.",
                         },
                     ]);
-            } else {
+            } else if (validate(adoptedDocumentaryBasis, condition.basis)) {
+                await requireFreshDocumentaryReferences(
+                    ctx,
+                    args,
+                    condition.basis.references,
+                    `eventBasis.conditions[${index}].basis.references`,
+                );
+            } else if ("readIds" in condition.basis) {
+                if (args.citationPolicy)
+                    throw executionError("framing_event_basis_invalid", [
+                        {
+                            path: `eventBasis.conditions[${index}].basis.references`,
+                            expected:
+                                "Use references returned for adopted documentary passages in this turn.",
+                        },
+                    ]);
                 await requireFreshReadings(ctx, args, condition.basis);
+            } else {
+                throw executionError("framing_event_basis_invalid");
             }
         }
         question.text = canonicalText;
@@ -389,41 +645,56 @@ export async function framingConditionalReferences(
     const readIds = [
         ...new Set(
             (basis.conditions ?? []).flatMap((condition) =>
-                condition.basis.kind === "public"
+                condition.basis.kind === "public" &&
+                "readIds" in condition.basis
                     ? condition.basis.readIds
                     : [],
             ),
         ),
     ];
     const readings = await publicBasisReadings(ctx, { readIds });
-    return readIds.flatMap((readId, index) => {
+    const retained = readIds.flatMap((readId, index) => {
         const reference = readings.references[index];
         return reference ? [{ readId, ...reference }] : [];
     });
+    const references = [
+        ...new Set(
+            (basis.conditions ?? []).flatMap((condition) =>
+                validate(adoptedDocumentaryBasis, condition.basis)
+                    ? condition.basis.references
+                    : [],
+            ),
+        ),
+    ];
+    const displayed = await Promise.all(
+        references.map(async (reference) => {
+            const passage = await displayedDocumentaryPassage(ctx, reference);
+            return passage ? documentaryAssociation(reference, passage) : null;
+        }),
+    );
+    return [...retained, ...displayed.filter((passage) => passage !== null)];
 }
 
 /** A direct edit retains only evidence associations whose scope and question text are unchanged. */
 export function framingBasisAfterEdit(
     previous: Doc<"framingRevisions">,
     content: Infer<typeof framingContentValidator>,
-) {
+): Doc<"framingRevisions">["eventBasis"] {
     if (previous.content.scope !== content.scope) return undefined;
     const basis = previous.eventBasis;
     if (basis?.kind !== "open" || !basis.conditions) return basis;
-    return {
-        ...basis,
-        conditions: basis.conditions.filter((condition) => {
-            const oldQuestion = previous.content.questions.find(
-                (question) => question.id === condition.questionId,
-            );
-            const newQuestion = content.questions.find(
-                (question) => question.id === condition.questionId,
-            );
-            return (
-                oldQuestion &&
-                newQuestion &&
-                oldQuestion.text === newQuestion.text
-            );
-        }),
+    const unchanged = ({ questionId }: { questionId: string }) => {
+        const oldQuestion = previous.content.questions.find(
+            (question) => question.id === questionId,
+        );
+        const newQuestion = content.questions.find(
+            (question) => question.id === questionId,
+        );
+        return (
+            oldQuestion && newQuestion && oldQuestion.text === newQuestion.text
+        );
     };
+    if (validate(provisionalOpenEvent, basis))
+        return { ...basis, conditions: basis.conditions?.filter(unchanged) };
+    return { ...basis, conditions: basis.conditions.filter(unchanged) };
 }

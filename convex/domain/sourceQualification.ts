@@ -343,6 +343,7 @@ export type QualificationInput = {
     text: string;
     researchAngle?: string;
     retrievalCompleteness?: "complete" | "partial";
+    representationCompleteness?: "complete" | "partial" | "unknown";
     selectionPolicy?: typeof SOURCE_QUALIFICATION_INPUT_POLICY;
     retrieval?: {
         metadata: Infer<typeof retrievalMetadataValidator>;
@@ -431,6 +432,12 @@ export function prepareQualificationInput(input: QualificationInput) {
             passages: [] as typeof allPassages,
             readingCompleteness: "complete" as "complete" | "partial",
             omittedPassageCount: allPassages.length + 1,
+            ...(input.representationCompleteness
+                ? {
+                      representationCompleteness:
+                          input.representationCompleteness,
+                  }
+                : {}),
             ...(input.selectionPolicy
                 ? {
                       selectionStrategy: "retrieved_passages" as
@@ -517,7 +524,9 @@ export function prepareQualificationInput(input: QualificationInput) {
     const omittedPassageCount =
         allPassages.length -
         request.document.passages.length +
-        (hasUninspectedContent || input.retrievalCompleteness === "partial"
+        (hasUninspectedContent ||
+        input.retrievalCompleteness === "partial" ||
+        input.representationCompleteness === "partial"
             ? 1
             : 0);
     const readingCompleteness: "partial" | "complete" =

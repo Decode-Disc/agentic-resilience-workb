@@ -1,9 +1,7 @@
 "use node";
 
-import { lookup } from "node:dns/promises";
-import { addAbortListener } from "node:events";
 import { internal } from "@convex/_generated/api";
-import { type ActionCtx, internalAction } from "@convex/_generated/server";
+import { internalAction } from "@convex/_generated/server";
 import {
     type DateEvidence,
     type DocumentDates,
@@ -11,53 +9,40 @@ import {
     recordedDocumentDate,
     unambiguousDocumentTime,
 } from "@convex/domain/documentDates";
-import { ManualSourceIntakeError } from "@convex/domain/manualSourceIntake";
 import {
-    PublicSourceUrlError,
-    validatePublicSourceUrl,
-} from "@convex/domain/publicSourceUrl";
-import { DiscoveryRequestError } from "@convex/domain/sourceDiscoveryRecovery";
+    documentaryReference,
+    savedMaterialBinding,
+} from "@convex/domain/savedMaterialOperations";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
-import type { ObserveProviderDispatch } from "@convex/domain/sourcePreparationAuthority";
 import type {
     publicContextResultValidator,
     publicReadResultValidator,
 } from "@convex/domain/workbenchContracts";
 import {
-    executionError as executionFailure,
     executionFailureCode,
     executionFailureValidation,
 } from "@convex/execution/errors";
 import { operationOutcomeValidator } from "@convex/execution/executionProtocol";
 import { retainedTextParts } from "@convex/execution/retainedText";
-import {
-    extractHtmlPublicationEvidence,
-    normalizeSecHtml,
-} from "@convex/integrations/evidenceNormalization";
-import { ExaContentsError } from "@convex/integrations/exa";
 import { validateExaCandidates } from "@convex/integrations/exaCandidateValidation";
 import { configuredExaContentsClient } from "@convex/integrations/exaContentsClient";
 import { configuredExaHttpDiscovery } from "@convex/integrations/exaSearchClient";
-import { secFilingPublicationTime } from "@convex/integrations/sec";
-import {
-    resolveDirectFilingUrl,
-    retrieveAndNormalizeSecFiling,
-} from "@convex/integrations/secEvidence";
+import { resolveDirectFilingUrl } from "@convex/integrations/secEvidence";
 import {
     DEFAULT_EXA_CONTENTS_TIMEOUT_MS,
-    DEFAULT_SEC_TIMEOUT_MS,
     EXA_DISCOVERY_TIMEOUT_MS,
-    MANUAL_SOURCE_METADATA_TIMEOUT_MS,
-    MAX_APPROVED_SOURCE_BYTES,
     MAX_EXA_TEXT_CHARACTERS,
     MAX_OPERATION_RESULT_BYTES,
-    MAX_REDIRECTS,
     nodeActionGenerationDeadline,
     SOURCE_PUBLIC_ADDRESS_TIMEOUT_MS,
     SOURCES_MAX_EVIDENCE_REFERENCES,
 } from "@convex/resourcePolicy";
-import { requestPinnedPublicSource } from "@convex/sourceActions";
-import { framingSecReadInput } from "@convex/workbenchPublicContext";
+import {
+    acquireWorkbenchPublicDocument,
+    acquireWorkbenchSuppliedReference,
+    observeWorkbenchDocumentaryProvider,
+    resolvePublicDocumentAddresses,
+} from "@convex/sourceCaptureActions";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 
@@ -66,12 +51,6 @@ type Request = FunctionArgs<
 >;
 type PublicContext = Infer<typeof publicContextResultValidator>;
 type Readings = PublicContext["references"];
-type SuppliedReference = NonNullable<
-    FunctionReturnType<
-        typeof internal.workbenchPublicContext.forExecution
-    >["suppliedReference"]
->;
-
 /** Only explicit document labels and retained metadata establish documentary dates. */
 function framingReading(
     url: string,
@@ -194,327 +173,32 @@ function publicSearchOutcome(
     candidates: Infer<
         typeof import("@convex/domain/workbenchContracts").publicSearchResultValidator
     >["candidates"],
+    definitionVersion: number,
     replayCorpusHash?: string,
 ) {
     return {
         kind: "success" as const,
         valueJson: JSON.stringify({
             searchId,
-            candidates,
+            candidates:
+                savedMaterialBinding("workbench_v1", definitionVersion) ===
+                "referenced"
+                    ? candidates.map((candidate, index) => ({
+                          ...candidate,
+                          reference: documentaryReference({
+                              issuer: "operation",
+                              operationId: searchId,
+                              item: "candidate",
+                              index,
+                          }),
+                      }))
+                    : candidates,
             ...(replayCorpusHash ? { replayCorpusHash } : {}),
         }),
         progressKeys: candidates.map((lead) =>
             sha256Hex(stableStringify({ kind: "public_lead", ...lead })),
         ),
     };
-}
-
-async function observeProvider<T>(
-    ctx: ActionCtx,
-    request: Request,
-    operation: "framing_context_search" | "framing_context_read",
-    input: unknown,
-    deadlineAt: number,
-    timeout: number,
-    dispatch: (
-        signal: AbortSignal,
-        observeDispatch: ObserveProviderDispatch,
-    ) => Promise<{ value: T; cost?: number }>,
-    service: "exa" | "sec" | "url_metadata" = "exa",
-    stepKey: string = operation,
-) {
-    const authority = await ctx.runQuery(
-        internal.workbenchPublicContext.forExecution,
-        request,
-    );
-    const attempt = {
-        missionId: authority.missionId,
-        runId: authority.runId,
-        corpusRevisionId: authority.corpusRevisionId,
-        workflowVersion: authority.workflowVersion,
-        executionGeneration: request.expectedGeneration,
-        operationRequestId: request.requestId,
-        service,
-        operation,
-        stepKey,
-        attempt: 1,
-        inputHash: sha256Hex(stableStringify(input)),
-        ...(operation === "framing_context_search"
-            ? { searchQuery: authority.query }
-            : {}),
-        operationKey: `workbench:${request.requestId}:${stepKey}`,
-    };
-    const admitted = await ctx.runMutation(
-        internal.providerCalls.recordAttempt,
-        { ...attempt, status: "started" },
-    );
-    if (!admitted.shouldExecute)
-        return {
-            kind: "unavailable" as const,
-            code: "operation_outcome_unknown",
-        };
-    const startedAt = Date.now();
-    const available = Math.min(deadlineAt, authority.deadlineAt) - startedAt;
-    if (available <= 0) {
-        await ctx.runMutation(internal.providerCalls.recordAttempt, {
-            ...attempt,
-            status: "failed",
-            errorCode: "execution_deadline",
-            retryable: false,
-            dispatchOutcome: "not_dispatched",
-        });
-        return { kind: "unavailable" as const, code: "execution_deadline" };
-    }
-    const attemptObservation: {
-        outcome: "not_dispatched" | "unknown" | "response_received";
-    } = { outcome: "not_dispatched" };
-    let observation: { value: T; cost?: number };
-    try {
-        observation = await dispatch(
-            AbortSignal.timeout(Math.min(available, timeout)),
-            (outcome) => {
-                attemptObservation.outcome = outcome;
-            },
-        );
-    } catch (error) {
-        const code =
-            error instanceof PublicSourceUrlError
-                ? error.data.code === "dns_failed"
-                    ? "source_url_unavailable"
-                    : "source_url_not_public"
-                : error instanceof DiscoveryRequestError
-                  ? error.code
-                  : error instanceof ExaContentsError
-                    ? error.errorCode
-                    : error instanceof ManualSourceIntakeError
-                      ? error.data.code
-                      : (executionFailureCode(error) ??
-                        "framing_provider_failed");
-        await ctx.runMutation(internal.providerCalls.recordAttempt, {
-            ...attempt,
-            status: "failed",
-            errorCode: code,
-            retryable: false,
-            dispatchOutcome: attemptObservation.outcome,
-            latencyMs: Date.now() - startedAt,
-        });
-        return {
-            kind: "unavailable" as const,
-            code,
-        };
-    }
-    await ctx.runMutation(internal.providerCalls.recordAttempt, {
-        ...attempt,
-        status: "succeeded",
-        reportedCost: observation.cost,
-        dispatchOutcome: "response_received",
-        latencyMs: Date.now() - startedAt,
-    });
-    return { kind: "observed" as const, value: observation.value };
-}
-
-async function resolveAddresses(hostname: string) {
-    return (await lookup(hostname, { all: true, verbatim: true })).map(
-        ({ address }) => address,
-    );
-}
-
-async function readPinnedPublisher(
-    ctx: ActionCtx,
-    args: Request,
-    url: string,
-    confirmedSec: boolean,
-    signal: AbortSignal,
-    observeDispatch: ObserveProviderDispatch,
-    media: "document" | "json" = "document",
-) {
-    let current = url;
-    for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
-        await ctx.runQuery(internal.workbenchPublicContext.forExecution, args);
-        signal.throwIfAborted();
-        let abort: ReturnType<typeof addAbortListener> | undefined;
-        const destination = await Promise.race([
-            validatePublicSourceUrl(current, resolveAddresses),
-            new Promise<never>((_, reject) => {
-                abort = addAbortListener(signal, () => reject(signal.reason));
-            }),
-        ]).finally(() => abort?.[Symbol.dispose]());
-        const address = destination.addresses[0];
-        if (!address) throw executionFailure("source_url_not_public");
-        await ctx.runQuery(internal.workbenchPublicContext.forExecution, args);
-        signal.throwIfAborted();
-        if (confirmedSec) {
-            const { retryAfter } = await ctx.runMutation(
-                internal.providerCalls.reserveSecRateLimit,
-                {},
-            );
-            if (retryAfter) throw executionFailure("sec_rate_limit");
-            await ctx.runQuery(
-                internal.workbenchPublicContext.forExecution,
-                args,
-            );
-            signal.throwIfAborted();
-        }
-        const response = await requestPinnedPublicSource(
-            destination.canonicalUrl,
-            address,
-            {
-                signal,
-                observeDispatch,
-                maxBytes: MAX_APPROVED_SOURCE_BYTES,
-                ...(confirmedSec
-                    ? {
-                          headers: {
-                              ...(media === "json"
-                                  ? { Accept: "application/json" }
-                                  : {}),
-                              "User-Agent":
-                                  process.env.SEC_USER_AGENT?.trim() ||
-                                  "Evidence Workbench research@evidence-workbench.org",
-                          },
-                      }
-                    : {}),
-            },
-        );
-        if ([301, 302, 303, 307, 308].includes(response.status)) {
-            const location = response.headers.get("location");
-            await response.body?.cancel();
-            if (confirmedSec)
-                throw executionFailure("sec_filing_identity_changed");
-            if (!location)
-                throw executionFailure("source_redirect_unavailable");
-            current = new URL(location, destination.canonicalUrl).toString();
-            continue;
-        }
-        const mediaType = response.headers
-            .get("content-type")
-            ?.split(";")[0]
-            ?.trim();
-        if (
-            !response.ok ||
-            !(
-                media === "json"
-                    ? ["application/json"]
-                    : ["text/html", "application/xhtml+xml", "text/plain"]
-            ).includes(mediaType ?? "")
-        ) {
-            await response.body?.cancel();
-            throw executionFailure("source_read_unavailable");
-        }
-        return {
-            url: destination.canonicalUrl,
-            text: await response.text(),
-            mediaType,
-        };
-    }
-    throw executionFailure("source_redirect_unavailable");
-}
-
-async function readSuppliedReference(
-    ctx: ActionCtx,
-    args: Request,
-    supplied: SuppliedReference,
-    deadlineAt: number,
-) {
-    const filingInput = framingSecReadInput(supplied, "sec_filing");
-    if (filingInput) {
-        let publishedAt = supplied.publishedAt;
-        const submissions = framingSecReadInput(supplied, "sec_submissions");
-        if (submissions) {
-            const metadata = await observeProvider(
-                ctx,
-                args,
-                "framing_context_read",
-                submissions,
-                deadlineAt,
-                DEFAULT_SEC_TIMEOUT_MS,
-                async (signal, observeDispatch) => {
-                    const page = await readPinnedPublisher(
-                        ctx,
-                        args,
-                        submissions.url,
-                        true,
-                        signal,
-                        observeDispatch,
-                        "json",
-                    );
-                    return {
-                        value: secFilingPublicationTime(
-                            JSON.parse(page.text),
-                            submissions,
-                        ),
-                    };
-                },
-                "sec",
-                "sec_submissions",
-            );
-            if (metadata.kind === "unavailable") return metadata;
-            publishedAt = metadata.value;
-        }
-        return observeProvider(
-            ctx,
-            args,
-            "framing_context_read",
-            filingInput,
-            deadlineAt,
-            DEFAULT_SEC_TIMEOUT_MS,
-            async (signal, observeDispatch) => {
-                const page = await readPinnedPublisher(
-                    ctx,
-                    args,
-                    filingInput.url,
-                    true,
-                    signal,
-                    observeDispatch,
-                );
-                const filing = await retrieveAndNormalizeSecFiling(
-                    { retrieveDocumentHtml: async () => page.text },
-                    { canonicalUrl: filingInput.url, origin: "sec" },
-                );
-                if (filing.status !== "succeeded" || !filing.normalizedText)
-                    throw executionFailure("sec_filing_unavailable");
-                return {
-                    value: {
-                        url: filing.canonicalUrl,
-                        text: filing.normalizedText,
-                        dateEvidence: [] as DateEvidence[],
-                        publishedAt,
-                    },
-                };
-            },
-            "sec",
-            "sec_filing",
-        );
-    }
-    return observeProvider(
-        ctx,
-        args,
-        "framing_context_read",
-        supplied,
-        deadlineAt,
-        MANUAL_SOURCE_METADATA_TIMEOUT_MS,
-        async (signal, observeDispatch) => {
-            const page = await readPinnedPublisher(
-                ctx,
-                args,
-                supplied.url,
-                false,
-                signal,
-                observeDispatch,
-            );
-            const knownPublishedAt =
-                page.url === supplied.url ? supplied.publishedAt : undefined;
-            return {
-                value: {
-                    url: page.url,
-                    text: normalizeSecHtml(page.text).normalizedText,
-                    dateEvidence: extractHtmlPublicationEvidence(page.text),
-                    publishedAt: knownPublishedAt,
-                },
-            };
-        },
-        "url_metadata",
-    );
 }
 
 export const execute = internalAction({
@@ -556,11 +240,11 @@ export const execute = internalAction({
                             ? { publishedAt: doc.publishedAt }
                             : {}),
                     })),
+                    authority.workflowVersion,
                     authority.replay.materialHash,
                 );
             }
             const search = configuredExaHttpDiscovery();
-            const read = configuredExaContentsClient();
             const deadlineAt = Math.min(authority.deadlineAt, hostDeadline);
             const limit = SOURCES_MAX_EVIDENCE_REFERENCES;
             // Reserve room for JSON escaping and reference metadata in the shared result limit.
@@ -575,10 +259,14 @@ export const execute = internalAction({
                         code: "source_reference_not_observed",
                     };
                 if (authority.retainedRead) {
-                    const page = await ctx.runQuery(
-                        internal.workbenchPublicContext.readingPage,
+                    const continued = await ctx.runAction(
+                        internal.sourceRetrievalActions
+                            .readRetainedPublicContextPage,
                         args,
                     );
+                    if (continued.status === "unavailable")
+                        return { kind: "unavailable", code: continued.reason };
+                    const { page } = continued;
                     const previous = authority.retainedRead;
                     if (!previous.reference || !previous.document)
                         return {
@@ -624,83 +312,16 @@ export const execute = internalAction({
                         authority.replay?.materialHash,
                     );
                 }
-                let text: string;
-                let dateEvidence: DateEvidence[] = [];
-                let publishedAt = reference.publishedAt;
-                let url = reference.url;
-                if (authority.replay) {
-                    const doc = authority.replay.documents.find(
-                        (doc) => doc.url === url,
-                    );
-                    if (!doc)
-                        return {
-                            kind: "unavailable",
-                            code: "source_reference_not_observed",
-                        };
-                    text = reference.confirmedSec
-                        ? normalizeSecHtml(doc.text).normalizedText
-                        : doc.text;
-                    publishedAt =
-                        doc.publishedAt === undefined
-                            ? undefined
-                            : Date.parse(doc.publishedAt);
-                } else if (
-                    authority.selectedCandidate &&
-                    !reference.confirmedSec
-                ) {
-                    if (!read)
-                        return {
-                            kind: "unavailable",
-                            code: "missing_configuration",
-                        };
-                    const options = {
-                        text: { maxCharacters: MAX_EXA_TEXT_CHARACTERS },
-                    };
-                    const result = await observeProvider(
-                        ctx,
-                        args,
-                        "framing_context_read",
-                        { urls: [url], options },
-                        deadlineAt,
-                        DEFAULT_EXA_CONTENTS_TIMEOUT_MS,
-                        async (signal, observeDispatch) => {
-                            await validatePublicSourceUrl(
-                                url,
-                                resolveAddresses,
-                            );
-                            await ctx.runQuery(
-                                internal.workbenchPublicContext.forExecution,
-                                args,
-                            );
-                            signal.throwIfAborted();
-                            const contents = await read.getContents(
-                                [url],
-                                options,
-                                { signal, observeDispatch },
-                            );
-                            return {
-                                value: contents.results,
-                                cost: contents.costDollars?.total,
-                            };
-                        },
-                    );
-                    if (result.kind === "unavailable") return result;
-                    const matching = result.value.filter(
-                        (item) => item.url === url,
-                    );
-                    text =
-                        matching.length === 1 ? (matching[0]?.text ?? "") : "";
-                } else {
-                    const result = await readSuppliedReference(
-                        ctx,
-                        args,
-                        reference,
-                        deadlineAt,
-                    );
-                    if (result.kind === "unavailable") return result;
-                    ({ text, url, publishedAt } = result.value);
-                    dateEvidence = result.value.dateEvidence;
-                }
+                const acquisition = await acquireWorkbenchPublicDocument(
+                    ctx,
+                    args,
+                    authority,
+                    reference,
+                    deadlineAt,
+                );
+                if (acquisition.kind === "unavailable") return acquisition;
+                const { text, url, publishedAt, dateEvidence } =
+                    acquisition.value;
                 const retained = retainedTextParts(text);
                 for (const [index, content] of retained.parts.entries())
                     await ctx.runMutation(
@@ -739,7 +360,7 @@ export const execute = internalAction({
             }
             const supplied = authority.suppliedReference;
             if (supplied) {
-                const result = await readSuppliedReference(
+                const result = await acquireWorkbenchSuppliedReference(
                     ctx,
                     args,
                     supplied,
@@ -764,12 +385,13 @@ export const execute = internalAction({
                         : [],
                 );
             }
+            const read = configuredExaContentsClient();
             if (
                 !search ||
                 (authority.operation === "verify_public_context" && !read)
             )
                 return { kind: "unavailable", code: "missing_configuration" };
-            const found = await observeProvider(
+            const found = await observeWorkbenchDocumentaryProvider(
                 ctx,
                 args,
                 "framing_context_search",
@@ -800,7 +422,7 @@ export const execute = internalAction({
                 return { kind: "unavailable", code: "execution_deadline" };
             const { candidates } = await validateExaCandidates(
                 found.value.slice(0, limit),
-                resolveAddresses,
+                resolvePublicDocumentAddresses,
                 AbortSignal.timeout(
                     Math.min(remaining, SOURCE_PUBLIC_ADDRESS_TIMEOUT_MS),
                 ),
@@ -820,6 +442,7 @@ export const execute = internalAction({
                                   ).toISOString(),
                               }),
                     })),
+                    authority.workflowVersion,
                 );
             }
             const references: Readings = [];
@@ -830,7 +453,7 @@ export const execute = internalAction({
                     ),
                 ];
                 const options = { text: { maxCharacters } };
-                const contents = await observeProvider(
+                const contents = await observeWorkbenchDocumentaryProvider(
                     ctx,
                     args,
                     "framing_context_read",

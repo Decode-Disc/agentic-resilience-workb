@@ -1,6 +1,10 @@
 import { internal } from "@convex/_generated/api";
+import type { Doc } from "@convex/_generated/dataModel";
+import type { QueryCtx } from "@convex/_generated/server";
 import type { OperationOutcome } from "@convex/execution/agentDefinition";
+import { readOperationCause } from "@convex/execution/authority";
 import {
+    executionError,
     executionFailureCode,
     executionFailureValidation,
 } from "@convex/execution/errors";
@@ -9,9 +13,19 @@ import { operationReuseIdentity } from "@convex/execution/missionData";
 import {
     observeOperationOutcome,
     operationResultValidator,
+    validateOperationValue,
 } from "@convex/execution/operationResults";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
+import {
+    FRAMING_RECEIPT_OPERATION_VERSION,
+    framingRevisionResult,
+    framingWriteReceipt,
+} from "./framingContracts";
+import {
+    framingConditionalReferences,
+    framingPublicReferences,
+} from "./framingProvenance";
 import { savedMaterialOperations } from "./savedMaterialAgentOperations";
 import { readPreparedNeed } from "./sources";
 import { preparedNeedInspectionValidator } from "./sourcesContracts";
@@ -27,10 +41,12 @@ import {
     publicReadInput,
     publicReadResultValidator,
     publicSearchInput,
-    publicSearchResultValidator,
+    publicSearchOutcomeValidator,
+    publicSearchWireResult,
     requestApprovalInput,
     requestApprovalResultValidator,
     sourceRequestInput,
+    supportsFramingWriteReceipt,
     workbenchInstructionTransmissionStatus,
 } from "./workbenchContracts";
 import {
@@ -54,6 +70,9 @@ function recoverableWorkbenchRefusal(
             "framing_public_lookup_invalid",
             "framing_observation_stale",
             "framing_public_reference_undated",
+            "framing_public_context_required",
+            "framing_documentary_reference_in_text",
+            "framing_citation_policy_unavailable",
             "framing_read_only",
             "framing_analyst_conflict",
             "framing_authority_unavailable",
@@ -83,9 +102,7 @@ const adjustFraming: Extract<
     description:
         "Update the proposed activity and research questions before Start research. Read and preserve explicit analyst adjustments. Supply the currently observed revision; stale edits are refused.",
     inputValidator: adjustFramingInput,
-    resultValidator: operationResultValidator(
-        v.object({ revision: v.number() }),
-    ),
+    resultValidator: operationResultValidator(framingRevisionResult),
     identity: operationReuseIdentity,
     async pin(ctx, mission, input, _runId, effectPin) {
         if (!mission || input.kind !== "adjust_framing")
@@ -111,18 +128,22 @@ const adjustFraming: Extract<
                 outcome: { kind: "refused", code: "request_unavailable" },
             };
         try {
-            const revision = await ctx.runMutation(
+            const result = await ctx.runMutation(
                 internal.framing.applyFromWorkbench,
                 {
                     requestId: args.requestId,
                     expectedGeneration: args.expectedGeneration,
                 },
             );
+            if (typeof result === "number")
+                return {
+                    outcome: { kind: "success", value: { revision: result } },
+                };
             return {
-                outcome: {
+                outcome: observeOperationOutcome({
                     kind: "success",
-                    value: { revision },
-                },
+                    valueJson: result,
+                }),
             };
         } catch (error) {
             const refusal = recoverableWorkbenchRefusal(error);
@@ -446,23 +467,33 @@ const publicContextOperation: Extract<
     },
 };
 
+const nativeAdjustFraming = {
+    ...adjustFraming,
+    version: 2,
+    inputValidator: nativeAdjustFramingInput,
+} satisfies AgentOperationDefinition;
+
 export const nativeWorkbenchOperations: Record<
     string,
     AgentOperationDefinition
 > = {
     ...workbenchOperations,
     verify_public_context: publicContextOperation,
-    adjust_framing: {
-        ...adjustFraming,
-        version: 2,
-        inputValidator: nativeAdjustFramingInput,
-    },
+    adjust_framing: nativeAdjustFraming,
     transmit_source_request: {
         ...transmitSourceRequest,
         version: 2,
         inputValidator: nativeSourceRequestInput,
         description: `${transmitSourceRequest.description} Choose the matching coverageRole explicitly, or null if no supported role matches; never omit this choice. Public commercial terms use official_commercial_terms.`,
     },
+};
+
+export const adjustFramingWithReceipt: AgentOperationDefinition = {
+    ...nativeAdjustFraming,
+    version: FRAMING_RECEIPT_OPERATION_VERSION,
+    resultValidator: operationResultValidator(framingWriteReceipt),
+    description:
+        "Save the proposed activity and research questions before Start. The result reports the saved event basis and public citations for the event and individual questions.",
 };
 
 /** v5 separates discovery from reading; retained v4 keeps its combined operation object. */
@@ -488,6 +519,140 @@ export const directedWorkbenchOperations: Record<
         description:
             "Discover public leads about the confirmed company without reading publications. Inspect dates and titles, reformulate if useful, and select a publication separately. Candidates are not evidence.",
         inputValidator: publicSearchInput,
-        resultValidator: operationResultValidator(publicSearchResultValidator),
+        resultValidator: operationResultValidator(publicSearchOutcomeValidator),
+        async validateOutcome(request, outcome, ctx) {
+            if (outcome.kind !== "success") return outcome;
+            const mission = request.missionId
+                ? await ctx.db.get(request.missionId)
+                : null;
+            if (!mission)
+                return { kind: "refused", code: "operation_contract_invalid" };
+            validateOperationValue(
+                publicSearchWireResult(mission.definitionVersion),
+                JSON.parse(outcome.valueJson),
+                ctx.db,
+            );
+            return outcome;
+        },
     },
 };
+
+/** Retained effect and admission order distinguish the latest attempt from the last committed write. */
+export async function framingTurnReceipt(
+    ctx: QueryCtx,
+    requests: readonly Doc<"agentOperationRequests">[],
+    run: Doc<"researchRuns">,
+    definitionVersion: number,
+) {
+    let latest:
+        | { request: Doc<"agentOperationRequests">; sequence: number }
+        | undefined;
+    let committed: typeof latest;
+    for (const request of requests) {
+        if (
+            request.status !== "completed" ||
+            (request.input.kind !== "adjust_framing" &&
+                !(
+                    request.input.kind === "invalid" &&
+                    request.input.name === "adjust_framing"
+                ))
+        )
+            continue;
+        const cause = await readOperationCause(
+            ctx,
+            request,
+            request.admissionEventId,
+        );
+        if (cause?.sequence === undefined)
+            throw executionError("framing_receipt_unavailable");
+        const attempt = { request, sequence: cause.sequence };
+        if (!latest || attempt.sequence > latest.sequence) latest = attempt;
+        if (
+            request.effect?.outcome.kind === "success" &&
+            (!committed || attempt.sequence > committed.sequence)
+        )
+            committed = attempt;
+    }
+    if (!latest) return;
+    const last = latest.request;
+    const failed =
+        last.effect?.outcome.kind !== "success" &&
+        (last.outcome?.kind !== "success" || !!last.adoptionRefusalCode);
+    if (
+        failed &&
+        last.outcome?.kind !== "refused" &&
+        last.outcome?.kind !== "unavailable" &&
+        !last.adoptionRefusalCode
+    )
+        throw executionError("framing_receipt_unavailable");
+    const refusal =
+        "The proposed framing change was not saved. No framing change from this response is waiting to run.";
+    if (!supportsFramingWriteReceipt(definitionVersion))
+        return failed ? { confirmation: refusal } : undefined;
+    if (!committed) {
+        if (!failed) throw executionError("framing_receipt_unavailable");
+        return { confirmation: refusal, latestAttempt: "refused" as const };
+    }
+
+    const effect = committed.request.effect;
+    if (
+        effect?.outcome.kind !== "success" ||
+        effect.pin.kind !== "framing_revision"
+    )
+        throw executionError("framing_receipt_unavailable");
+    const saved: unknown = JSON.parse(effect.outcome.valueJson);
+    const revision = await ctx.db.get(effect.pin.revisionId);
+    if (
+        !validate(framingWriteReceipt, saved) ||
+        revision?.runId !== run._id ||
+        revision.revision !== saved.revision
+    )
+        throw executionError("framing_receipt_unavailable");
+    const current = revision._id === run.currentFramingRevisionId;
+    const { event, conditions } = saved.publicCitations;
+    const conditionReferences = new Set(
+        conditions.flatMap(({ references }) => references),
+    );
+    const hasPublicCitations = event.length > 0 || conditionReferences.size > 0;
+    const basis = revision.eventBasis;
+    const citationsUnavailable =
+        basis?.kind === "public"
+            ? (await framingPublicReferences(ctx, basis)).length < event.length
+            : basis?.kind === "open" &&
+              conditionReferences.size > 0 &&
+              (await framingConditionalReferences(ctx, basis)).length <
+                  conditionReferences.size;
+    const confirmation = [
+        failed
+            ? "The latest proposed framing change was not saved. An earlier change was saved."
+            : "Framing saved.",
+        ...(saved.eventBasis === "open"
+            ? [
+                  current
+                      ? "The event remains open."
+                      : "The event was left open in that revision.",
+              ]
+            : []),
+        ...(hasPublicCitations
+            ? [
+                  ...(event.length
+                      ? ["Public citation recorded for the event."]
+                      : []),
+                  ...(conditionReferences.size
+                      ? ["Public citation recorded for conditional questions."]
+                      : []),
+                  ...(citationsUnavailable
+                      ? ["Some recorded passages are currently unavailable."]
+                      : []),
+              ]
+            : ["No public citation was recorded."]),
+        ...(!current ? ["The saved revision has since been superseded."] : []),
+    ].join(" ");
+    return {
+        confirmation,
+        latestAttempt: failed ? ("refused" as const) : ("saved" as const),
+        saved,
+        current,
+        citationsUnavailable,
+    };
+}

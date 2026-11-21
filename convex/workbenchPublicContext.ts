@@ -1,6 +1,13 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
-import { stableStringify } from "@convex/domain/sourcePassages";
+import {
+    canonicalFramingUrl,
+    confirmedFramingFiling,
+    messageSuppliesFramingUrl,
+    observedFramingCandidate,
+    requireFramingAcquisitionRequest,
+} from "@convex/domain/documentaryAccess";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { authorizeDocumentaryDiscovery } from "@convex/domain/sources";
 import {
     explicitFramingPreservation,
@@ -8,7 +15,7 @@ import {
     framingObservationRefusal,
     publicContextAllowanceValidator,
     publicReadResultValidator,
-    publicSearchResultValidator,
+    retainedPublicReadPage,
     supportsDirectedFraming,
     supportsFramingContractCorrections,
 } from "@convex/domain/workbenchContracts";
@@ -57,6 +64,20 @@ export function framingSecReadInput(
     return undefined;
 }
 
+/** Retained receipts keep their original input identity. Canonical acquisition also binds the admitted target. */
+export function framingProviderInputHash(
+    input: unknown,
+    acquisitionInputHash?: string,
+) {
+    return sha256Hex(
+        stableStringify(
+            acquisitionInputHash === undefined
+                ? input
+                : { acquisitionInputHash, input },
+        ),
+    );
+}
+
 /** Pin an explicitly configured cumulative framing allowance on new dossiers only. */
 export function configuredPublicContextAllowance() {
     let value: unknown;
@@ -85,20 +106,31 @@ export async function requirePublicContextRequest(
     expectedGeneration: number,
 ) {
     const request = await ctx.db.get(requestId);
+    const acquisition =
+        request?.input.kind === "acquire_document"
+            ? await requireFramingAcquisitionRequest(
+                  ctx,
+                  requestId,
+                  expectedGeneration,
+              )
+            : undefined;
     if (
         !request?.missionId ||
-        (request.input.kind !== "verify_public_context" &&
-            request.input.kind !== "search_public_context" &&
-            request.input.kind !== "read_public_context") ||
-        request.status !== "running" ||
-        request.expectedGeneration !== expectedGeneration
+        (!acquisition &&
+            ((request.input.kind !== "verify_public_context" &&
+                request.input.kind !== "search_public_context" &&
+                request.input.kind !== "read_public_context") ||
+                request.status !== "running" ||
+                request.expectedGeneration !== expectedGeneration))
     )
         throw executionError("request_unavailable");
-    const { run, mission } = await requireMissionAuthority(
-        ctx,
-        request.missionId,
-        expectedGeneration,
-    );
+    const { run, mission } =
+        acquisition ??
+        (await requireMissionAuthority(
+            ctx,
+            request.missionId,
+            expectedGeneration,
+        ));
     await requireInstructionVersion(ctx, mission, request.instructionVersion);
     if (
         (request.input.kind === "search_public_context" ||
@@ -124,21 +156,27 @@ export async function requirePublicContextRequest(
         run.researchStartedAt !== undefined ||
         request.runId !== run._id ||
         !run.currentFramingRevisionId ||
-        request.pin?.kind !== "framing_revision" ||
-        request.pin.revisionId !== run.currentFramingRevisionId
+        (!acquisition &&
+            (request.pin?.kind !== "framing_revision" ||
+                request.pin.revisionId !== run.currentFramingRevisionId))
     )
         throw executionError("framing_version_conflict");
-    const { messageId } = request.input;
-    const instructions = await conversationInstructions(ctx, mission);
+    const messageId =
+        acquisition?.pin.scope.cause.messageId ??
+        ("messageId" in request.input ? request.input.messageId : undefined);
+    const instructions = acquisition
+        ? undefined
+        : await conversationInstructions(ctx, mission);
     if (
-        !instructions?.messages.some(
+        !acquisition &&
+        (!instructions?.messages.some(
             (message) =>
                 message.messageId === messageId &&
                 !explicitResearchCommand(message.text),
         ) ||
-        instructions.messages.some((message) =>
-            explicitFramingPreservation(message.text),
-        )
+            instructions.messages.some((message) =>
+                explicitFramingPreservation(message.text),
+            ))
     )
         throw executionError("instruction_not_authorized");
     let selectedCandidate: { url: string; publishedAt?: string } | undefined;
@@ -147,30 +185,15 @@ export async function requirePublicContextRequest(
         request.input.target.kind === "candidate"
     ) {
         const { searchId, index } = request.input.target;
-        const search = await ctx.db.get(searchId);
-        const refusal = framingObservationRefusal(search, {
-            ...request,
-            messageId,
-        });
-        if (refusal) throw executionError(refusal);
-        if (
-            search?.input.kind !== "search_public_context" ||
-            search.outcome?.kind !== "success"
-        )
-            throw executionError("source_reference_not_observed");
-        const result: unknown = JSON.parse(search.outcome.valueJson);
-        if (
-            !validate(publicSearchResultValidator, result) ||
-            result.searchId !== search._id
-        )
-            throw executionError("source_reference_not_observed");
-        if (
-            !Number.isSafeInteger(index) ||
-            index < 0 ||
-            !result.candidates[index]
-        )
-            throw executionError("source_candidate_invalid");
-        selectedCandidate = result.candidates[index];
+        selectedCandidate = await observedFramingCandidate(
+            ctx,
+            searchId,
+            index,
+            {
+                ...request,
+                messageId,
+            },
+        );
     }
     if (
         request.input.kind === "search_public_context" &&
@@ -178,19 +201,23 @@ export async function requirePublicContextRequest(
         request.input.focus !== undefined
     )
         throw executionError("operation_not_allowed");
-    const query =
-        request.input.kind === "search_public_context" &&
-        supportsFramingContractCorrections(mission.definitionVersion)
-            ? authorizeDocumentaryDiscovery(run.coveragePreset, request.input)
-                  .query
-            : request.input.kind === "read_public_context"
-              ? request.input.target.kind === "supplied"
-                  ? request.input.target.url
-                  : (selectedCandidate?.url ?? "")
-              : request.input.query.trim();
+    const query = acquisition
+        ? acquisition.reference.url
+        : request.input.kind === "search_public_context" &&
+            supportsFramingContractCorrections(mission.definitionVersion)
+          ? authorizeDocumentaryDiscovery(run.coveragePreset, request.input)
+                .query
+          : request.input.kind === "read_public_context"
+            ? request.input.target.kind === "supplied"
+                ? request.input.target.url
+                : (selectedCandidate?.url ?? "")
+            : "query" in request.input
+              ? request.input.query.trim()
+              : "";
     if (
         !query ||
-        (request.input.kind !== "read_public_context" &&
+        (!acquisition &&
+            request.input.kind !== "read_public_context" &&
             query.length > DOCUMENTARY_SEARCH_QUERY_MAX_CHARS)
     )
         throw executionError("discovery_query_invalid");
@@ -250,26 +277,15 @@ export async function requirePublicContextRequest(
     }
     if (!allowance)
         throw executionError("public_context_allowance_unavailable");
-    let suppliedReference: SuppliedReference | undefined;
+    let suppliedReference: SuppliedReference | undefined =
+        acquisition?.reference;
     if (
+        !acquisition &&
         request.input.kind !== "search_public_context" &&
         /^https?:\/\//iu.test(query)
     ) {
-        let url: URL;
-        try {
-            url = new URL(query);
-        } catch {
-            throw executionError("source_url_not_public");
-        }
-        if (
-            url.protocol !== "https:" ||
-            url.username ||
-            url.password ||
-            (url.port && url.port !== "443")
-        )
-            throw executionError("source_url_not_public");
-        url.hash = "";
-        const canonicalUrl = url.toString();
+        const canonicalUrl = canonicalFramingUrl(query);
+        if (!canonicalUrl) throw executionError("source_url_not_public");
         const source = await ctx.db
             .query("sources")
             .withIndex("by_run_and_url", (q) =>
@@ -277,44 +293,21 @@ export async function requirePublicContextRequest(
             )
             .first();
         const original =
-            instructions.messages.find(
+            instructions?.messages.find(
                 (message) => message.messageId === messageId,
             )?.text ?? "";
-        const suppliedByAnalyst = original
-            .match(/https:\/\/[^\s<>()[\]{}"']+/giu)
-            ?.some((link) => {
-                try {
-                    const parsed = new URL(link.replace(/[.,;!?]+$/u, ""));
-                    parsed.hash = "";
-                    return parsed.toString() === canonicalUrl;
-                } catch {
-                    return false;
-                }
-            });
         if (
             !selectedCandidate &&
-            !suppliedByAnalyst &&
+            !messageSuppliesFramingUrl(original, canonicalUrl) &&
             source?.origin !== "analyst_url"
         )
             throw executionError("source_reference_not_observed");
-        const cleanCik = company.cik.replace(/^0+/u, "");
-        const filing =
-            /^\/Archives\/edgar\/data\/(\d+)\/(\d{18})\/[^/]+\.(?:htm|html|txt)$/u.exec(
-                url.pathname,
-            );
-        const confirmedSec =
-            url.hostname === "www.sec.gov" &&
-            filing?.[1] === cleanCik &&
-            filing[2] &&
-            !url.search
-                ? { cik: cleanCik, accession: filing[2] }
-                : undefined;
         suppliedReference = {
             url: canonicalUrl,
             publishedAt: selectedCandidate?.publishedAt
                 ? Date.parse(selectedCandidate.publishedAt)
                 : source?.publishedAt,
-            confirmedSec,
+            confirmedSec: confirmedFramingFiling(canonicalUrl, company.cik),
         };
     }
     let retainedRead: Infer<typeof publicReadResultValidator> | undefined;
@@ -357,7 +350,9 @@ export async function requirePublicContextRequest(
         qualificationDeadline,
         query: `${company.legalName}: ${query}`,
         suppliedReference,
-        selectedCandidate: !!selectedCandidate,
+        selectedCandidate:
+            acquisition?.selectedCandidate ?? !!selectedCandidate,
+        acquisitionInputHash: acquisition?.pin.target.requestInputHash,
         retainedRead,
         replay,
     };
@@ -378,8 +373,10 @@ export const forExecution = internalQuery({
             v.literal("verify_public_context"),
             v.literal("search_public_context"),
             v.literal("read_public_context"),
+            v.literal("acquire_document"),
         ),
         deadlineAt: v.number(),
+        acquisitionInputHash: v.optional(v.string()),
         query: v.string(),
         selectedCandidate: v.boolean(),
         retainedRead: v.optional(publicReadResultValidator),
@@ -402,6 +399,7 @@ export const forExecution = internalQuery({
             retainedRead,
             query,
             suppliedReference,
+            acquisitionInputHash,
             qualificationDeadline,
             replay,
         } = await requirePublicContextRequest(
@@ -415,7 +413,11 @@ export const forExecution = internalQuery({
             runId: run._id,
             corpusRevisionId: run.activeCorpusRevisionId,
             workflowVersion: mission.definitionVersion,
-            operation,
+            operation: operation as
+                | "verify_public_context"
+                | "search_public_context"
+                | "read_public_context"
+                | "acquire_document",
             selectedCandidate,
             ...(retainedRead ? { retainedRead } : {}),
             deadlineAt: Math.min(
@@ -423,6 +425,7 @@ export const forExecution = internalQuery({
                 qualificationDeadline ?? Infinity,
             ),
             query,
+            acquisitionInputHash,
             ...(suppliedReference ? { suppliedReference } : {}),
         };
     },
@@ -434,14 +437,7 @@ export const readingPage = internalQuery({
         requestId: v.id("agentOperationRequests"),
         expectedGeneration: v.number(),
     },
-    returns: v.object({
-        readId: v.id("agentOperationRequests"),
-        contentHash: v.string(),
-        characters: v.number(),
-        start: v.number(),
-        end: v.number(),
-        excerpt: v.string(),
-    }),
+    returns: retainedPublicReadPage,
     handler: async (ctx, args) => {
         const authority = await requirePublicContextRequest(
             ctx,
@@ -450,15 +446,16 @@ export const readingPage = internalQuery({
         );
         if (authority.operation !== "read_public_context")
             throw executionError("request_unavailable");
-        const root = authority.retainedRead?.document?.readId ?? args.requestId;
-        const start = authority.retainedRead?.range?.end ?? 0;
+        if (authority.retainedRead)
+            throw executionError("source_continuation_invalid");
+        const root = args.requestId;
+        const start = 0;
         const limit = Math.floor(MAX_OPERATION_RESULT_BYTES / 8);
         const text = await operationObservationRange(
             ctx,
             root,
             start,
             limit + 1,
-            authority.retainedRead?.document?.contentHash,
         );
         if (!text) throw executionError("source_read_unavailable");
         const fragment =

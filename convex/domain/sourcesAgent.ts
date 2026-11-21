@@ -1,4 +1,5 @@
 import { internal } from "@convex/_generated/api";
+import type { Doc } from "@convex/_generated/dataModel";
 import {
     type AgentDefinition,
     domainSnapshot,
@@ -23,7 +24,17 @@ import { sourcesSimulationEnabled } from "@convex/sourcesSimulation";
 import { ConvexError, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { readResearchContext } from "./researchContext";
-import { savedMaterialOperations } from "./savedMaterialAgentOperations";
+import { documentaryInventory } from "./savedMaterial";
+import {
+    acquireDocumentOperation,
+    savedMaterialOperations,
+} from "./savedMaterialAgentOperations";
+import {
+    documentaryReference,
+    REFERENCED_SOURCES_VERSION,
+    savedMaterialBinding,
+    savedMaterialWireContract,
+} from "./savedMaterialOperations";
 import { preparationFailureCode } from "./sourcePreparationAuthority";
 import {
     sourceDocumentMetadata,
@@ -227,6 +238,11 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
         },
     },
     modelOperation(name, operation, snapshot) {
+        const wire = savedMaterialWireContract(
+            name,
+            savedMaterialBinding(this.id, this.version),
+        );
+        if (wire) return { description: operation.description, ...wire };
         return {
             description: operation.description,
             inputValidator:
@@ -333,10 +349,17 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
             ctx,
             mission.scope.preparationId,
         );
-        const candidates = await ctx.db
+        const candidateQuery = ctx.db
             .query("sources")
-            .withIndex("by_run_and_url", (q) => q.eq("runId", run._id))
-            .take(61);
+            .withIndex("by_run_and_url", (q) => q.eq("runId", run._id));
+        const referenced =
+            savedMaterialBinding(this.id, this.version) === "referenced";
+        const candidates: Doc<"sources">[] = [];
+        if (referenced) {
+            for await (const source of candidateQuery) candidates.push(source);
+        } else {
+            candidates.push(...(await candidateQuery.take(61)));
+        }
         const requests = await readWorkbenchInstructions(ctx, run._id);
         const research = await readResearchContext(ctx, run);
         const company =
@@ -380,6 +403,13 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
                     needs: state.data.needs,
                     work: state.data.work,
                     captureIds: state.data.captureIds,
+                    ...(referenced
+                        ? {
+                              captures: (
+                                  await documentaryInventory(ctx, mission)
+                              ).materials,
+                          }
+                        : {}),
                     qualificationReferences: state.data.qualifications,
                     ...(await sourcesTaskObservations(ctx, state.preparation)),
                     ...(await sourcesReadingReferences(
@@ -395,6 +425,14 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
                         canonicalUrl: candidate.canonicalUrl,
                         family: candidate.origin,
                         category: candidate.category,
+                        ...(referenced
+                            ? {
+                                  acquisitionReference: documentaryReference({
+                                      issuer: "source",
+                                      sourceId: candidate._id,
+                                  }),
+                              }
+                            : {}),
                     })),
                 },
             },
@@ -595,8 +633,25 @@ export const sourcesV5Definition: AgentDefinition & { id: "sources_v1" } = {
     ].join("\n"),
 };
 
+export const sourcesV7Definition: AgentDefinition & { id: "sources_v1" } = {
+    ...sourcesV5Definition,
+    version: REFERENCED_SOURCES_VERSION,
+    skills: {
+        packageId: "research-methods-v2",
+        skillName: "source-preparation",
+    },
+    operations: {
+        ...Object.fromEntries(
+            Object.entries(sourcesV5Definition.operations).filter(
+                ([name]) => name !== "make_source_consultable",
+            ),
+        ),
+        acquire_document: acquireDocumentOperation,
+    },
+};
+
 /** Current Sources binding for callers that do not pin a historical definition. */
-export const sourcesDefinition = sourcesV5Definition;
+export const sourcesDefinition = sourcesV7Definition;
 
 /** Qualification-only control retains the inline method with current operations and completion. */
 export const sourcesMethodControlDefinition: AgentDefinition & {

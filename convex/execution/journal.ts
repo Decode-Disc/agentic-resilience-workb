@@ -4,7 +4,11 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
-import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import {
+    completeCharacterBoundary,
+    sha256Hex,
+    stableStringify,
+} from "@convex/domain/sourcePassages";
 import {
     HISTORY_PAGE_SIZE,
     MAX_OBSERVABLE_OUTPUT_BYTES,
@@ -364,12 +368,8 @@ export function historyTextFragment(
     if (!Number.isSafeInteger(offset) || offset < 0 || offset >= text.length)
         throw executionError("history_receipt_invalid");
     let start = 0;
-    const endAt = (at: number) => {
-        let end = Math.min(text.length, at + limit);
-        if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1] ?? ""))
-            end--;
-        return end;
-    };
+    const endAt = (at: number) =>
+        completeCharacterBoundary(text, Math.min(text.length, at + limit));
     while (start < offset) start = endAt(start);
     if (start !== offset) throw executionError("history_receipt_invalid");
     const end = endAt(offset);

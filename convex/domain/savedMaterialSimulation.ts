@@ -3,6 +3,7 @@ import {
     domainSnapshot,
 } from "@convex/execution/agentDefinition";
 import { validate } from "convex-helpers/validators";
+import { z } from "zod";
 import { savedMaterialCompletionValidator } from "./savedMaterialOperations";
 
 export const savedMaterialSimulation: NonNullable<
@@ -27,6 +28,11 @@ export const savedMaterialSimulation: NonNullable<
     )
         return { kind: "blocked", code: "simulation_material_unavailable" };
     const requests = input.triggeringRequestsAndResults;
+    const reference = z
+        .object({
+            readingReferences: z.array(z.object({ reference: z.string() })),
+        })
+        .safeParse(source).data?.readingReferences[0]?.reference;
     const latest: unknown = requests.at(-1);
     const operation: unknown =
         latest && typeof latest === "object" && "input" in latest
@@ -51,14 +57,19 @@ export const savedMaterialSimulation: NonNullable<
     if (!previousKind) return request("consult_mission_state", {});
     if (previousKind === "consult_mission_state")
         return request("search_available_material", {
-            sourceId: source.sourceId,
+            ...(reference ? { reference } : { sourceId: source.sourceId }),
             query: "workflow",
         });
     if (previousKind === "search_available_material")
-        return request("read_in_context", {
-            sourceId: source.sourceId,
-            passageOrder: 0,
-        });
+        return request(
+            "read_in_context",
+            reference
+                ? { reference }
+                : {
+                      sourceId: source.sourceId,
+                      passageOrder: 0,
+                  },
+        );
     if (
         previousKind === "read_in_context" &&
         latest &&

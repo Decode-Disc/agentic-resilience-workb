@@ -40,6 +40,7 @@ export async function sourceCaptureState(
 export const sourceCaptureAvailabilityValidator = v.union(
     v.literal("full"),
     v.literal("partial"),
+    v.literal("unknown"),
     v.literal("capturing"),
     v.literal("unavailable"),
     v.literal("not_captured"),
@@ -53,11 +54,13 @@ export type SourceCaptureAvailability = Infer<
 export function captureAvailability(
     state: Awaited<ReturnType<typeof sourceCaptureState>>,
 ): SourceCaptureAvailability {
-    if (state.committed)
-        return state.committed.readingCompleteness === "partial" ||
-            state.committed.representationCompleteness === "partial"
-            ? "partial"
-            : "full";
+    if (state.committed) {
+        const completeness =
+            state.committed.representationCompleteness ??
+            state.committed.readingCompleteness ??
+            "unknown";
+        return completeness === "complete" ? "full" : completeness;
+    }
     return state.capturing
         ? "capturing"
         : state.unavailable

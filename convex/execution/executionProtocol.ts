@@ -70,7 +70,9 @@ type AgentOperationContract = {
         request: Doc<"agentOperationRequests">,
         outcome: Infer<typeof operationOutcomeValidator>,
         context: Pick<QueryCtx, "db">,
-    ): Infer<typeof operationOutcomeValidator>;
+    ):
+        | Infer<typeof operationOutcomeValidator>
+        | Promise<Infer<typeof operationOutcomeValidator>>;
     resultValidator: z.ZodType;
     version: number;
     description: string;

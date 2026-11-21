@@ -21,6 +21,7 @@ import {
 import { getConvexSize, getDocumentSize, type Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { agentName } from "./agentIdentities";
+import { reusableFramingCaptureIds } from "./documentaryAccess";
 import { readResearchContext } from "./researchContext";
 import {
     type CoveragePreset,
@@ -382,7 +383,11 @@ export async function initializeSources(
         acquisitions: 0,
         controls: 0,
         restrictedContributions: [],
-        captureIds: [],
+        captureIds: await reusableFramingCaptureIds(
+            ctx,
+            run,
+            preparation.corpusRevisionId,
+        ),
         qualifications: [],
         work: [],
     };
@@ -1514,14 +1519,22 @@ export async function completeSources(
         for (const requestId of outcome.workRequestIds) {
             const request = await reads.request(requestId);
             if (!work.some((w) => w.requestId === requestId)) {
+                const pin = request?.pin;
+                const readingBelongsToPreparation =
+                    pin?.kind === "saved_material_inspection_v1"
+                        ? !!pin.expectedCaptureId &&
+                          data.captureIds.includes(pin.expectedCaptureId)
+                        : pin?.kind === "documentary_v1" &&
+                          pin.scope.kind === "sources" &&
+                          pin.scope.preparationId === preparationId &&
+                          !!request?.missionId &&
+                          !!admittedDocumentaryReading(request, request, data);
                 if (
                     !request ||
                     !["search_available_material", "read_in_context"].includes(
                         request.input.kind,
                     ) ||
-                    request.pin?.kind !== "saved_material_inspection_v1" ||
-                    !request.pin.expectedCaptureId ||
-                    !data.captureIds.includes(request.pin.expectedCaptureId)
+                    !readingBelongsToPreparation
                 )
                     invalid(
                         outcome,

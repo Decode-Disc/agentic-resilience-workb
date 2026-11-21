@@ -1,3 +1,4 @@
+import { framingCitationPolicy } from "@convex/domain/framingContracts";
 import { savedMaterialMissionFields } from "@convex/domain/savedMaterialOperations";
 import { preparationModelLimitsValidator } from "@convex/domain/sourcePreparationAuthority";
 import { auditActorValidator } from "@convex/domain/validators";
@@ -227,6 +228,7 @@ export const executionTables = {
     }).index("by_run", ["runId"]),
     agentConversationTurns: defineTable({
         responseControl: v.optional(responseControlState),
+        framingCitationPolicy: v.optional(framingCitationPolicy),
         preview: v.optional(
             v.object({
                 invocationId: v.id("agentInvocations"),
@@ -454,11 +456,21 @@ export const executionTables = {
         .index("by_run_and_logical_key", ["runId", "logicalKey"])
         .index("by_run_and_status", ["runId", "status"])
         .index("by_preparation_and_status", ["pin.preparationId", "status"])
+        .index("by_documentary_preparation_and_status", [
+            "pin.scope.preparationId",
+            "pin.scope.kind",
+            "status",
+        ])
         .index("by_mission", ["missionId"])
         .index("by_mission_and_logical_key", ["missionId", "logicalKey"])
         .index("by_mission_and_actor", ["missionId", "actor"])
         .index("by_mission_and_status", ["missionId", "status"])
         .index("by_mission_and_input_kind", ["missionId", "input.kind"])
+        .index("by_run_and_input_kind", [
+            "runId",
+            "input.kind",
+            "input.continuation",
+        ])
         .index("by_invocation", ["invocationId"]),
     agentExecutionEvents: defineTable({
         nativeInputSequence: v.optional(v.number()),

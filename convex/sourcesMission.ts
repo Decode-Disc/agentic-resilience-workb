@@ -7,6 +7,12 @@ import {
     type QueryCtx,
     query,
 } from "@convex/_generated/server";
+import {
+    requireSourcesAcquisitionRequest,
+    sourcesObservedDestination,
+} from "@convex/domain/documentaryAccess";
+import { requireDocumentaryMaterialRequest } from "@convex/domain/savedMaterial";
+import { acquireDocumentRequest } from "@convex/domain/savedMaterialOperations";
 import { readSourceCandidateCapacity } from "@convex/domain/sourceCandidateCapacity";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
@@ -150,6 +156,19 @@ async function workContext(
     observation = false,
 ) {
     const request = await ctx.db.get(args.requestId);
+    if (request?.input.kind === "acquire_document") {
+        const target = await requireSourcesAcquisitionRequest(
+            ctx,
+            request,
+            args.expectedGeneration,
+        );
+        return {
+            ...target,
+            request,
+            input: request.input,
+            acquisition: target,
+        };
+    }
     if (
         !request ||
         !operationHasStarted(request) ||
@@ -182,13 +201,18 @@ async function workContext(
         request.pin.needsRevision > state.data.needsRevision
     )
         throw executionError("sources_version_conflict");
-    return { ...state, request, input: request.input as SourcesOperation };
+    return {
+        ...state,
+        request,
+        input: request.input as SourcesOperation,
+        acquisition: undefined,
+    };
 }
 
 const proposalReturn = v.object({
     needContext: v.array(documentaryNeedValidator),
     preparation: schema.doc("sourceSelectionProposalRebuilds"),
-    input: sourcesOperationValidator,
+    input: v.union(sourcesOperationValidator, acquireDocumentRequest),
     contributions: v.array(documentaryContributionValidator),
     inputHash: v.string(),
     sourceId: v.optional(v.id("sources")),
@@ -202,10 +226,15 @@ export const reserve = internalMutation({
         ctx,
         args,
     ): Promise<import("convex/values").Infer<typeof proposalReturn>> => {
-        const { preparation, run, data, input, request } = await workContext(
-            ctx,
-            args,
-        );
+        const {
+            preparation,
+            run,
+            revision,
+            data,
+            input,
+            request,
+            acquisition,
+        } = await workContext(ctx, args);
         if (data.result) throw executionError("preparation_completed");
         const reads = new SourceReviewReads(
             ctx.db,
@@ -219,7 +248,9 @@ export const reserve = internalMutation({
                           input.changes.flatMap((c) => c.contribution.needIds),
                       ),
                   ]
-                : [input.needId];
+                : input.kind === "acquire_document"
+                  ? []
+                  : [input.needId];
         if (needIds.some((id) => !data.needs.some((n) => n.id === id)))
             throw executionError("documentary_need_unknown");
         if (data.work.some((w) => w.requestId === request._id))
@@ -231,10 +262,17 @@ export const reserve = internalMutation({
             if (await hasEngagedSourcesControl(reads, data))
                 throw executionError("documentary_control_in_progress");
         }
-        if (input.kind === "make_source_consultable") {
+        const acquires =
+            input.kind === "make_source_consultable" ||
+            input.kind === "acquire_document";
+        if (acquires) {
             const acquisitions = await Promise.all(
                 data.work
-                    .filter((w) => w.kind === "make_source_consultable")
+                    .filter(
+                        (w) =>
+                            w.kind === "make_source_consultable" ||
+                            w.kind === "acquire_document",
+                    )
                     .map((w) => ctx.db.get(w.requestId)),
             );
             if (
@@ -249,7 +287,7 @@ export const reserve = internalMutation({
         const field =
             input.kind === "discover_sources_for_need"
                 ? "searches"
-                : input.kind === "make_source_consultable"
+                : acquires
                   ? "acquisitions"
                   : "controls";
         const resources = sourcesResourceStatus(data);
@@ -274,7 +312,10 @@ export const reserve = internalMutation({
                 : null;
         if (capacity?.remaining === 0)
             throw executionError("source_candidate_limit");
-        let sourceId = "sourceId" in input ? input.sourceId : undefined;
+        let sourceId =
+            acquisition?.source?._id ??
+            ("sourceId" in input ? input.sourceId : undefined);
+        let observed = acquisition?.observed;
         if (input.kind === "make_source_consultable") {
             if (
                 input.sourceId &&
@@ -282,48 +323,39 @@ export const reserve = internalMutation({
                     input.observedLinkIndex !== undefined)
             )
                 throw executionError("acquisition_target_invalid");
-            if (!input.sourceId) {
-                if (
-                    !input.observedCaptureId ||
-                    !data.captureIds.includes(input.observedCaptureId) ||
-                    !Number.isSafeInteger(input.observedLinkIndex) ||
-                    (input.observedLinkIndex ?? -1) < 0
-                )
-                    throw executionError("observed_destination_unavailable");
-                const origin = await ctx.db.get(input.observedCaptureId);
-                const observed =
-                    origin?.observedDestinations?.[
-                        input.observedLinkIndex ?? -1
-                    ];
-                if (!observed || origin?.runId !== run._id)
-                    throw executionError("observed_destination_unavailable");
-                await ctx.runMutation(
-                    internal.sourceDiscovery.persistCandidates,
-                    {
-                        runId: run._id,
-                        corpusRevisionId: preparation.corpusRevisionId,
-                        executionGeneration: args.expectedGeneration,
-                        operationKey: `observed:${request._id}`,
-                        candidates: [
-                            {
-                                canonicalUrl: observed.url,
-                                title: observed.url,
-                                origin: "exa",
-                                category: "observed_destination",
-                                providerReference: `capture:${origin._id}:link:${input.observedLinkIndex}`,
-                            },
-                        ],
-                    },
+            if (!input.sourceId)
+                observed = await sourcesObservedDestination(
+                    ctx,
+                    { run, revision, preparation, data },
+                    input.observedCaptureId,
+                    input.observedLinkIndex,
                 );
-                const candidate = await ctx.db
-                    .query("sources")
-                    .withIndex("by_run_and_url", (q) =>
-                        q.eq("runId", run._id).eq("canonicalUrl", observed.url),
-                    )
-                    .unique();
-                if (!candidate) throw executionError("source_candidate_limit");
-                sourceId = candidate._id;
-            }
+        }
+        if (!sourceId && observed) {
+            const { url, providerReference } = observed;
+            await ctx.runMutation(internal.sourceDiscovery.persistCandidates, {
+                runId: run._id,
+                corpusRevisionId: preparation.corpusRevisionId,
+                executionGeneration: args.expectedGeneration,
+                operationKey: `observed:${request._id}`,
+                candidates: [
+                    {
+                        canonicalUrl: url,
+                        title: url,
+                        origin: "exa",
+                        category: "observed_destination",
+                        providerReference,
+                    },
+                ],
+            });
+            const candidate = await ctx.db
+                .query("sources")
+                .withIndex("by_run_and_url", (q) =>
+                    q.eq("runId", run._id).eq("canonicalUrl", url),
+                )
+                .unique();
+            if (!candidate) throw executionError("source_candidate_limit");
+            sourceId = candidate._id;
         }
         if (
             sourceId &&
@@ -509,24 +541,26 @@ export const reserve = internalMutation({
             request._id,
             restrictionBytes,
         );
-        const inputHash = sha256Hex(
-            stableStringify({
-                protocol: data.protocol,
-                preparationId: preparation._id,
-                purpose: input.kind,
-                ...([
-                    "discover_sources_for_need",
-                    "make_source_consultable",
-                ].includes(input.kind)
-                    ? { input }
-                    : {}),
-                ...(discovery?.focus ? { discovery } : {}),
-                contributions,
-                needs: data.needs.filter((n) =>
-                    contributions.some((c) => c.needIds.includes(n.id)),
-                ),
-            }),
-        );
+        const inputHash =
+            acquisition?.pin.target.requestInputHash ??
+            sha256Hex(
+                stableStringify({
+                    protocol: data.protocol,
+                    preparationId: preparation._id,
+                    purpose: input.kind,
+                    ...([
+                        "discover_sources_for_need",
+                        "make_source_consultable",
+                    ].includes(input.kind)
+                        ? { input }
+                        : {}),
+                    ...(discovery?.focus ? { discovery } : {}),
+                    contributions,
+                    needs: data.needs.filter((n) =>
+                        contributions.some((c) => c.needIds.includes(n.id)),
+                    ),
+                }),
+            );
         await ctx.db.patch(preparation._id, {
             sourcesMission: nextData,
         });
@@ -873,29 +907,73 @@ export const retainControl = internalMutation({
     },
 });
 
+async function appendAvailableCapture(
+    ctx: MutationCtx,
+    preparation: Doc<"sourceSelectionProposalRebuilds">,
+    data: NonNullable<Doc<"sourceSelectionProposalRebuilds">["sourcesMission"]>,
+    captureId: Id<"sourceCaptures">,
+) {
+    if (!data.captureIds.includes(captureId))
+        await ctx.db.patch(preparation._id, {
+            sourcesMission: {
+                ...data,
+                captureIds: [...data.captureIds, captureId],
+            },
+        });
+}
+
 export const retainCapture = internalMutation({
     args: { ...workArgs, captureId: v.id("sourceCaptures") },
     returns: v.null(),
     handler: async (ctx, args): Promise<null> => {
-        const { preparation, data, run, input } = await workContext(ctx, args);
+        const { preparation, data, run, input, acquisition } =
+            await workContext(ctx, args);
         const capture = await ctx.db.get(args.captureId);
         if (
             !capture ||
-            input.kind !== "make_source_consultable" ||
+            (input.kind !== "make_source_consultable" &&
+                input.kind !== "acquire_document") ||
             capture.sourceId !==
                 data.work.find((w) => w.requestId === args.requestId)
                     ?.sourceId ||
             capture.runId !== run._id ||
-            capture.status !== "committed"
+            capture.status !== "committed" ||
+            (acquisition &&
+                capture.requestInputHash !==
+                    acquisition.pin.target.requestInputHash)
         )
             throw executionError("capture_identity_conflict");
-        if (!data.captureIds.includes(capture._id))
-            await ctx.db.patch(preparation._id, {
-                sourcesMission: {
-                    ...data,
-                    captureIds: [...data.captureIds, capture._id],
-                },
-            });
+        await appendAvailableCapture(ctx, preparation, data, capture._id);
+        return null;
+    },
+});
+
+export const retainImportedCapture = internalMutation({
+    args: {
+        requestId: v.id("agentOperationRequests"),
+        expectedGeneration: v.number(),
+        captureId: v.id("sourceCaptures"),
+    },
+    returns: v.null(),
+    async handler(ctx, args): Promise<null> {
+        const request = await ctx.db.get(args.requestId);
+        if (
+            request?.pin?.kind !== "documentary_v1" ||
+            request.pin.scope.kind !== "sources"
+        )
+            return null;
+        const material = await requireDocumentaryMaterialRequest(ctx, args);
+        if (
+            !("retained" in material) ||
+            material.capture?._id !== args.captureId
+        )
+            throw executionError("capture_identity_conflict");
+        if (material.pin.scope.kind !== "sources") return null;
+        const { preparation, data } = await requireSourcesPreparation(
+            ctx,
+            material.pin.scope.preparationId,
+        );
+        await appendAvailableCapture(ctx, preparation, data, args.captureId);
         return null;
     },
 });
@@ -1278,7 +1356,10 @@ export const materialStatus = internalQuery({
                 contentHash: capture.contentHash ?? "",
                 readingCompleteness: capture.readingCompleteness,
                 captureOmittedPassageCount: capture.omittedPassageCount ?? null,
-                representationCompleteness: capture.representationCompleteness,
+                representationCompleteness:
+                    capture.representationCompleteness === "unknown"
+                        ? undefined
+                        : capture.representationCompleteness,
                 observedDestinationCount:
                     capture.observedDestinations?.length ?? 0,
             },

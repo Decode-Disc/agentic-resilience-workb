@@ -7,7 +7,31 @@ import { z } from "zod";
 const snapshot = z.object({
     activeWork: z.object({
         needs: z.array(z.object({ id: z.string() })).min(1),
-        candidates: z.array(z.object({ sourceId: z.string() })),
+        candidates: z.array(
+            z.object({
+                sourceId: z.string(),
+                acquisitionReference: z.string().optional(),
+            }),
+        ),
+        captures: z
+            .array(
+                z.object({
+                    captureId: z.string().optional(),
+                    sourceId: z.string().optional(),
+                    readingReferences: z.array(
+                        z.object({ reference: z.string() }),
+                    ),
+                }),
+            )
+            .optional(),
+        readingReferences: z
+            .array(
+                z.object({
+                    readRequestId: z.string(),
+                    passageOrders: z.array(z.number()),
+                }),
+            )
+            .optional(),
     }),
     triggeringRequestsAndResults: z.array(
         z.object({
@@ -54,21 +78,52 @@ export const sourcesSimulation: NonNullable<AgentDefinition["simulate"]> = (
     if (!source)
         return { kind: "blocked", code: "simulation_material_unavailable" };
     if (latest.input.kind === "discover_sources_for_need")
-        return request("make_source_consultable", {
-            needId,
-            sourceId: source.sourceId,
-        });
+        return source.acquisitionReference
+            ? request("acquire_document", {
+                  reference: source.acquisitionReference,
+              })
+            : request("make_source_consultable", {
+                  needId,
+                  sourceId: source.sourceId,
+              });
     if (latest.input.kind === "make_source_consultable")
         return request("search_available_material", {
             sourceId: source.sourceId,
             query: "workflow",
         });
-    if (latest.input.kind === "search_available_material")
+    if (latest.input.kind === "acquire_document") {
+        const capture = activeWork.captures?.find(
+            (c) => c.captureId === latest.outcome?.captureId,
+        );
+        const reference = capture?.readingReferences[0]?.reference;
+        return reference
+            ? request("search_available_material", {
+                  reference,
+                  query: "workflow",
+              })
+            : { kind: "blocked", code: "simulation_material_unavailable" };
+    }
+    if (
+        latest.input.kind === "search_available_material" &&
+        !source.acquisitionReference
+    )
         return request("read_in_context", {
             sourceId: source.sourceId,
             passageOrder: 0,
         });
-    if (latest.input.kind === "read_in_context" && latest.outcome?.captureId)
+    if (
+        (latest.input.kind === "read_in_context" ||
+            (source.acquisitionReference &&
+                latest.input.kind === "search_available_material")) &&
+        latest.outcome?.captureId
+    ) {
+        const passageOrder = source.acquisitionReference
+            ? activeWork.readingReferences?.find(
+                  (read) => read.readRequestId === latest.requestId,
+              )?.passageOrders[0]
+            : 0;
+        if (passageOrder === undefined)
+            return { kind: "blocked", code: "simulation_material_unavailable" };
         return request("submit_documentary_qualification", {
             sourceId: source.sourceId,
             captureId: latest.outcome.captureId,
@@ -85,13 +140,14 @@ export const sourcesSimulation: NonNullable<AgentDefinition["simulate"]> = (
                         evidence: [
                             {
                                 readRequestId: latest.requestId,
-                                passageOrder: 0,
+                                passageOrder,
                             },
                         ],
                     },
                 },
             ],
         });
+    }
     if (latest.input.kind === "submit_documentary_qualification")
         return {
             kind: "complete",

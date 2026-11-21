@@ -5,6 +5,8 @@ import {
     type MutationCtx,
 } from "@convex/_generated/server";
 import { cancelRunExecution } from "@convex/domain/runCancellation";
+import { cancelAgentMissionsForRun } from "@convex/execution/cancellation";
+import { purgeDossierOperationBatch } from "@convex/execution/operations";
 import { deleteRetainedTextBatch } from "@convex/execution/retainedText";
 import { DOSSIER_PURGE_BATCH } from "@convex/resourcePolicy";
 import { v } from "convex/values";
@@ -334,14 +336,8 @@ const steps: Record<
                 .withIndex("by_run", (q) => q.eq("runId", runId))
                 .take(DOSSIER_PURGE_BATCH),
         ),
-    agentOperationRequests: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("agentOperationRequests")
-                .withIndex("by_run_and_status", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
+    agentOperationRequests: (ctx, runId) =>
+        purgeDossierOperationBatch(ctx, runId, DOSSIER_PURGE_BATCH),
     agentInvocations: async (ctx, runId) => {
         const invocations = await ctx.db
             .query("agentInvocations")
@@ -469,14 +465,38 @@ export const beginPurge = internalMutation({
         if (!run) return null;
         if (run.purpose !== "research")
             throw new Error("Only analyst research dossiers can be purged");
+        const started = await ctx.db
+            .query("auditEvents")
+            .withIndex("by_target", (q) =>
+                q.eq("targetType", "research_run").eq("targetId", run._id),
+            )
+            .filter((q) => q.eq(q.field("action"), "dossier_purged"))
+            .first();
+        if (started && run.withdrawnAt !== undefined) return null;
+        const now = Date.now();
         if (
-            run.executionStatus === "running" ||
-            run.executionStatus === "paused"
+            run.executionStatus !== "cancelled" &&
+            run.executionStatus !== "completed"
         )
             await cancelRunExecution(ctx, run);
+        else if (
+            run.executionStatus === "completed" &&
+            run.withdrawnAt === undefined
+        )
+            await cancelAgentMissionsForRun(
+                ctx,
+                run._id,
+                now,
+                run.executionGeneration,
+            );
+        await ctx.db.patch(run._id, {
+            withdrawnAt: run.withdrawnAt ?? now,
+            updatedAt: now,
+        });
         if (
+            !started &&
             run.reservationStatus === "consumed" &&
-            !run.withdrawnAt &&
+            run.withdrawnAt === undefined &&
             run.ownerVisitorId
         ) {
             const owner = await ctx.db.get(run.ownerVisitorId);
@@ -485,14 +505,15 @@ export const beginPurge = internalMutation({
                     analysesReserved: owner.analysesReserved - 1,
                 });
         }
-        await ctx.db.insert("auditEvents", {
-            actor: { type: "system" },
-            action: "dossier_purged",
-            targetType: "research_run",
-            targetId: run._id,
-            reason: args.reason.trim(),
-            occurredAt: Date.now(),
-        });
+        if (!started)
+            await ctx.db.insert("auditEvents", {
+                actor: { type: "system" },
+                action: "dossier_purged",
+                targetType: "research_run",
+                targetId: run._id,
+                reason: args.reason.trim(),
+                occurredAt: Date.now(),
+            });
         return null;
     },
 });

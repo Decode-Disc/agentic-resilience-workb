@@ -27,7 +27,7 @@ import { researchResumed, workflow } from "@convex/workflow";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { getAgentDefinition, getRegisteredOperation } from "./agentCatalog";
+import { getAgentDefinition, getNativeOperation } from "./agentCatalog";
 import { raiseSystemApproval } from "./approvals";
 import {
     executionFailureCode,
@@ -152,7 +152,7 @@ export async function pauseResearchAtBoundary(
                   ).executionScope
                 : request.input.kind === "invalid"
                   ? undefined
-                  : getRegisteredOperation(request.input.kind)?.nativeAuthority;
+                  : getNativeOperation(request.input.kind)?.nativeAuthority;
             if (scope === "research") return true;
         }
     }

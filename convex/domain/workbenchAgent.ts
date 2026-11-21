@@ -1,11 +1,8 @@
-import type { Doc } from "@convex/_generated/dataModel";
-import type { QueryCtx } from "@convex/_generated/server";
 import {
     type AgentDefinition,
     agentToolSchemas,
     domainSnapshot,
 } from "@convex/execution/agentDefinition";
-import { readOperationCause } from "@convex/execution/authority";
 import { conversationInstructions } from "@convex/execution/conversations";
 import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
@@ -20,71 +17,47 @@ import {
     completeResponseControl,
     responseControlContext,
 } from "@convex/responseControl";
-import { framingWriteState, hasFramingProgram } from "./framingContracts";
+import {
+    framingWriteState,
+    hasFramingProgram,
+    WORKBENCH_FRAMING_RECEIPT_VERSION,
+} from "./framingContracts";
 import { readResearchState } from "./researchState";
-import { savedMaterialOperations } from "./savedMaterialAgentOperations";
+import {
+    acquireDocumentOperation,
+    savedMaterialOperations,
+} from "./savedMaterialAgentOperations";
+import {
+    savedMaterialBinding,
+    savedMaterialWireContract,
+    WORKBENCH_DOCUMENTARY_DEFINITION_VERSION,
+} from "./savedMaterialOperations";
 import { sha256Hex } from "./sourcePassages";
 import {
+    adjustFramingWithReceipt,
     directedWorkbenchOperations,
+    framingTurnReceipt,
     nativeWorkbenchOperations,
 } from "./workbenchAgentOperations";
 import { readWorkbenchFacts } from "./workbenchContext";
 import {
     directedNativeAdjustFramingInput,
+    documentaryNativeAdjustFramingInput,
     explicitFramingPreservation,
     explicitResearchCommand,
     INITIAL_FRAMING_MESSAGE_KEY,
+    initialDocumentaryNativeAdjustFramingInput,
     initialNativeAdjustFramingInput,
     legacyNativeAdjustFramingInput,
     modernSourceRequestInput,
     publicContextInput,
+    publicSearchWireResult,
     requestApprovalResult,
     workbenchSchemas as schemas,
     supportsDirectedFraming,
     supportsFramingContractCorrections,
     supportsStatefulFramingSchema,
 } from "./workbenchContracts";
-
-async function framingFailureReceipt(
-    ctx: QueryCtx,
-    requests: readonly Doc<"agentOperationRequests">[],
-) {
-    let latest:
-        | { request: Doc<"agentOperationRequests">; sequence: number }
-        | undefined;
-    for (const request of requests) {
-        if (
-            request.input.kind !== "adjust_framing" &&
-            !(
-                request.input.kind === "invalid" &&
-                request.input.name === "adjust_framing"
-            )
-        )
-            continue;
-        const cause = await readOperationCause(
-            ctx,
-            request,
-            request.admissionEventId,
-        );
-        if (cause?.sequence === undefined)
-            throw executionError("framing_receipt_unavailable");
-        if (!latest || cause.sequence > latest.sequence)
-            latest = { request, sequence: cause.sequence };
-    }
-    if (
-        !latest ||
-        latest.request.effect?.outcome.kind === "success" ||
-        (latest.request.outcome?.kind === "success" &&
-            !latest.request.adoptionRefusalCode)
-    )
-        return;
-    if (
-        latest.request.outcome?.kind !== "refused" &&
-        latest.request.outcome?.kind !== "unavailable"
-    )
-        throw executionError("framing_receipt_unavailable");
-    return "The proposed framing change was not saved. No framing change from this response is waiting to run.";
-}
 
 const framingProposalInstruction =
     "Before research starts, propose one relevant activity or workflow and a useful research program through adjust_framing. Company knowledge before acquisition is tentative, never established evidence.";
@@ -192,12 +165,21 @@ function nativeWorkbenchOperation(
     version = 4,
     framingState: WorkbenchToolAvailability["framing"] = "established",
 ) {
+    const binding = savedMaterialBinding("workbench_v1", version);
+    const materialWire = savedMaterialWireContract(name, binding);
+    if (materialWire)
+        return { description: operation.description, ...materialWire };
     const framingInput =
-        supportsStatefulFramingSchema(version) && framingState === "initial"
-            ? initialNativeAdjustFramingInput
-            : supportsDirectedFraming(version)
-              ? directedNativeAdjustFramingInput
-              : legacyNativeAdjustFramingInput;
+        binding === "referenced"
+            ? framingState === "initial"
+                ? initialDocumentaryNativeAdjustFramingInput
+                : documentaryNativeAdjustFramingInput
+            : supportsStatefulFramingSchema(version) &&
+                framingState === "initial"
+              ? initialNativeAdjustFramingInput
+              : supportsDirectedFraming(version)
+                ? directedNativeAdjustFramingInput
+                : legacyNativeAdjustFramingInput;
     if (name === "transmit_source_request" && modernSources)
         return {
             description:
@@ -206,13 +188,21 @@ function nativeWorkbenchOperation(
                 ? modernSourceRequestInput.omit("messageId")
                 : modernSourceRequestInput,
         };
-    if (name === "search_public_context" && version === 5)
+    if (name === "search_public_context") {
+        const inputValidator =
+            version === 5
+                ? single
+                    ? publicContextInput.omit("messageId")
+                    : publicContextInput
+                : single
+                  ? operation.inputValidator.omit("messageId")
+                  : operation.inputValidator;
         return {
-            ...operation,
-            inputValidator: single
-                ? publicContextInput.omit("messageId")
-                : publicContextInput,
+            description: operation.description,
+            inputValidator,
+            resultValidator: publicSearchWireResult(version),
         };
+    }
     if (name === "adjust_framing")
         return {
             ...operation,
@@ -228,7 +218,6 @@ function nativeWorkbenchOperation(
         (name === "request_approval" ||
             name === "transmit_source_request" ||
             name === "verify_public_context" ||
-            name === "search_public_context" ||
             name === "read_public_context" ||
             name === "read") &&
         single
@@ -265,6 +254,7 @@ function projectWorkbenchOperation(
         operation.systemOnly ||
         name === "control_research" ||
         ((name === "adjust_framing" ||
+            name === "acquire_document" ||
             name === "verify_public_context" ||
             name === "search_public_context" ||
             name === "read_public_context" ||
@@ -300,13 +290,16 @@ const workbenchResponseGuidance = [
     "Use domain.research.status, retained Sources outcome, executionStop and action applicability as current authority; domain.research.summary is readable guidance. Preparation completion is not completion of the economic investigation. Current structured stop facts override historical explanations; an earlier window may separately have expired. Distinguish retained documents from consultable captures. Never infer membership or a stop cause from older prose. A fresh observation is a current snapshot, not a new execution event. Handoff time is not the onset time of a recorded stop; missing dates remain unknown. Unavailable today does not establish permanent impossibility. Qualifications and effective uses belong to their identified preparation, capture and version and cannot transfer to another consultable capture. Do not promise monitoring or notifications without a recorded mechanism.",
 ];
 
+const legacySavedMaterialInstruction =
+    "Search saved material with search_available_material before choosing a passageOrder for read_in_context. Use only a locator returned by the tools. After an unavailable passage, search instead of guessing another index. Explain the evidence or a specific reading limitation; never copy a tool diagnostic into the analyst's answer.";
+
 const workbenchConversationInstructions = [
     "Act as the analyst's conversational teammate: gather the relevant dossier context, explain relationships and limitations, and coordinate permitted requests through their responsible missions. Use consult_prepared_material for a need's full gap and unfinished reasons when its preview cannot support the answer. Never infer a missing result from a truncated preview. Research progression remains system-owned; consult current action readiness before recommending a next action.",
     "Finish with your natural-language response in Markdown. The application constructs the completion envelope. Text accompanying tool calls is not a completed response.",
     "The harness supplies observed revision numbers and a unique active message reference. When several active analyst messages are present, select their supplied reference explicitly. Never invent a reference or a documentary passage.",
     "For a company-only request, propose one concrete transaction or activity with named participant roles, rather than using the company name as the activity. Explain why control or substitution in that workflow could affect value capture. Mark the proposal as tentative before documentary research; do not present industry assumptions as evidence.",
     "A targeted refinement must retain the original economic relationship and direction of the question. For example, a question about constraints on a participant switching providers must remain about switching providers, not become a generic question about relationships. Preserve the other questions and the supplied scope.",
-    "Search saved material with search_available_material before choosing a passageOrder for read_in_context. Use only a locator returned by the tools. After an unavailable passage, search instead of guessing another index. Explain the evidence or a specific reading limitation; never copy a tool diagnostic into the analyst's answer.",
+    legacySavedMaterialInstruction,
     "A refused control did not change research state. Continue independent authorized work, such as recording a documentary request, and ask a concise clarification for ambiguous intent. The application supplies control confirmations; keep your explanation focused on the analyst's question and never announce anticipated research execution.",
     ...workbenchResponseGuidance,
 ] as const;
@@ -433,6 +426,31 @@ export const workbenchDefinition: AgentDefinition & {
     },
     textCompletion: (text) => ({ kind: "complete", text }),
     operationDiagnostic(code) {
+        if (savedMaterialBinding(this.id, this.version) === "referenced") {
+            if (
+                code === "passage_unavailable" ||
+                code === "retrieval_passage_invalid"
+            )
+                return "Use search_available_material on an issued document reference, then open a returned match reference with read_in_context. If nothing matches, explain the reading limitation.";
+            if (
+                code === "retained_text_invalid" ||
+                code === "retained_text_incomplete"
+            )
+                return "The historical text for this document is unavailable. Explain that limit and continue with other authorized material.";
+            if (code === "framing_public_context_required")
+                return "Read the document with read_in_context and cite the displayed passage reference returned by that reading.";
+            if (code === "framing_public_lookup_invalid")
+                return "Cite exact passage references from results adopted for this analyst message. Acquisition and continuation references contain no displayed evidence.";
+            if (code === "framing_public_reference_undated")
+                return "Cite a displayed passage with applicable date evidence, or leave the event open.";
+            if (code === "invalid_operation_input")
+                return "Use the reported validation path and expected input. Keep valid public passage references when repairing the proposal.";
+            if (
+                code === "framing_event_basis_required" ||
+                code === "framing_event_basis_invalid"
+            )
+                return "Choose none for ordinary framing, open for an unresolved event, an exact analyst excerpt, or a public label with displayed passage references.";
+        }
         if (code === "source_reference_not_observed")
             return "Use a reference from an adopted observation in this mission. No document was read by this refused operation.";
         if (code === "framing_observation_stale")
@@ -604,8 +622,13 @@ export const workbenchDefinition: AgentDefinition & {
                   );
               })
             : [];
-        const framingReceipt = await framingFailureReceipt(ctx, requests);
-        if (framingReceipt) confirmations.push(framingReceipt);
+        const framingReceipt = await framingTurnReceipt(
+            ctx,
+            requests,
+            run,
+            this.version,
+        );
+        if (framingReceipt) confirmations.push(framingReceipt.confirmation);
         for (const request of requests) {
             if (
                 request.input.kind !== "transmit_source_request" ||
@@ -628,6 +651,7 @@ export const workbenchDefinition: AgentDefinition & {
             input: admittedInput,
             confirmationOnly: commands.length === instructions.messages.length,
             requests,
+            framingReceipt,
         });
         if (review.kind !== "completed") return review;
         const explanation = completion.result.text;
@@ -844,11 +868,14 @@ export const directedWorkbenchDefinition = {
     },
 } satisfies AgentDefinition & { id: "workbench_v1" };
 
-function framingContractCorrections(conditionalExample: string) {
+function framingContractCorrections(
+    conditionalExample: string,
+    citedReadings = "readIds",
+) {
     return [
         "The initial reply requires a saved program with a nonblank scope and research questions. If an event remains unresolved, save an open provisional program before clarifying it. Preserve explicit analyst instructions and edits.",
         "An activityExcerpt must be copied verbatim from the active analyst request and appear verbatim in content.scope. On an initial open write, supply that verbatim activityExcerpt rather than omitting the anchor. Use the refusal's field and expected correction; do not replace the analyst's words with a paraphrase when satisfying that anchor.",
-        `A conditional question distinguishes a possible event or interpretation of the request from the economic effect to investigate. ${conditionalExample}Do not make the hypothesized condition the answer to the question itself. Use an analyst basis only for an event explicitly named in that verbatim excerpt, never for an event found only in search results. A condition hypothesis citing readIds may state only actors, dates and mechanisms present in those adopted passages. Keep questions common to all plausible events unconditional; attach conditions only to event-specific inquiries. An authentic passage identifier proves provenance, not relevance.`,
+        `A conditional question distinguishes a possible event or interpretation of the request from the economic effect to investigate. ${conditionalExample}Do not make the hypothesized condition the answer to the question itself. Use an analyst basis only for an event explicitly named in that verbatim excerpt, never for an event found only in search results. A condition hypothesis citing ${citedReadings} may state only actors, dates and mechanisms present in those adopted passages. Keep questions common to all plausible events unconditional; attach conditions only to event-specific inquiries. An authentic passage identifier proves provenance, not relevance.`,
         "Preserve the original message date and distinguish event dates from publication dates. Never substitute the latest dated announcement merely because clarification is absent, and never describe an announcement as the latest found in content.scope when search leads show newer dated announcements. Keep unresolved intent open and ask a focused clarification when its answer would change the program.",
         "Public search applies the dossier coverage priority by default. Use the optional focus only for a specific documentary purpose, such as an official filing under independent scrutiny, and explain that purpose. A query orientation does not establish source independence or documentary support.",
     ];
@@ -892,6 +919,49 @@ export const workbenchV9Definition: AgentDefinition & { id: "workbench_v1" } = {
     ...workbenchV7Definition,
     version: 9,
 };
+
+export const workbenchV10Definition: AgentDefinition & { id: "workbench_v1" } =
+    {
+        ...workbenchV9Definition,
+        version: WORKBENCH_DOCUMENTARY_DEFINITION_VERSION,
+        instructions: workbenchV9Definition.instructions.replace(
+            legacySavedMaterialInstruction,
+            "Use an issued reference with read_in_context to open a saved document, a search match, or its next page. Use search_available_material to find exact matches. Explain specific reading limitations without treating an empty search as documentary absence.",
+        ),
+        skills: {
+            packageId: "research-methods-v2",
+            skillName: "workbench-framing",
+        },
+        method(run) {
+            if (run.fixedFramingRevisionId)
+                return directedWorkbenchDefinition.method(run);
+            return [
+                "Consult workbench-framing for the documentary method. Interpret each analyst message as of receivedAt and follow domain.coverageGuidance. The current turn's citation contract is in domain.framingCitationPolicy. Start research requires the analyst's explicit decision.",
+                ...framingContractCorrections(
+                    "",
+                    "displayed passage references",
+                ),
+            ].join("\n");
+        },
+        operations: {
+            ...Object.fromEntries(
+                Object.entries(workbenchV9Definition.operations).filter(
+                    ([name]) => name !== "read_public_context",
+                ),
+            ),
+            acquire_document: acquireDocumentOperation,
+        },
+    };
+
+export const workbenchV11Definition: AgentDefinition & { id: "workbench_v1" } =
+    {
+        ...workbenchV10Definition,
+        version: WORKBENCH_FRAMING_RECEIPT_VERSION,
+        operations: {
+            ...workbenchV10Definition.operations,
+            adjust_framing: adjustFramingWithReceipt,
+        },
+    };
 
 /** Qualification-only control: current mechanics and resource access, retained inline method. */
 export const workbenchMethodControlDefinition: AgentDefinition & {

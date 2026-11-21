@@ -3,7 +3,10 @@ import {
     sourceCandidateLimit,
     sourceDossierCandidateLimit,
 } from "@convex/resourceLimits";
-import { MAX_INITIAL_SOURCE_CANDIDATES } from "@convex/resourcePolicy";
+import {
+    MAX_HISTORICAL_SOURCE_CANDIDATES,
+    MAX_INITIAL_SOURCE_CANDIDATES,
+} from "@convex/resourcePolicy";
 import type { GenericDatabaseReader } from "convex/server";
 
 export type SourceCandidateCapacity = {
@@ -15,12 +18,13 @@ export type SourceCandidateCapacity = {
 export async function readSourceCandidateCapacity(
     db: GenericDatabaseReader<DataModel>,
     runId: Id<"researchRuns">,
-    scope: "dossier" | "initial_discovery" = "dossier",
+    scope: "dossier" | "initial_discovery" | "before_sources" = "dossier",
 ): Promise<SourceCandidateCapacity> {
     const run = await db.get(runId);
-    const historicalLimit = sourceDossierCandidateLimit(
-        run?.sourcePreparationId,
-    );
+    const historicalLimit =
+        scope === "before_sources"
+            ? MAX_HISTORICAL_SOURCE_CANDIDATES
+            : sourceDossierCandidateLimit(run?.sourcePreparationId);
     const limit =
         scope === "initial_discovery"
             ? Math.min(
@@ -33,7 +37,7 @@ export async function readSourceCandidateCapacity(
         .query("sources")
         .withIndex("by_run_and_url", (query) => query.eq("runId", runId))
         .take(historicalLimit + 1);
-    if (sources.length > historicalLimit) {
+    if (sources.length > historicalLimit && scope !== "before_sources") {
         throw new Error("Research dossier exceeds its source candidate limit");
     }
     return {

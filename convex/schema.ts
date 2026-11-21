@@ -1,11 +1,14 @@
 import {
+    framingCitationPolicy,
     framingContentValidator,
     framingEventBasis,
 } from "@convex/domain/framingContracts";
+import { captureRepresentationCompleteness } from "@convex/domain/savedMaterialOperations";
 import { coverageRoleValidator } from "@convex/domain/sourceDiscoveryRecovery";
 import {
     retrievalMetadataValidator,
     SOURCE_RETRIEVAL_RANKING_POLICY,
+    sourceDocumentMetadataValidator,
 } from "@convex/domain/sourceRetrievalPolicy";
 import {
     documentaryControlOutput,
@@ -111,6 +114,11 @@ export default defineSchema({
     ...authTables,
     ...executionTables,
     ...modelConfigurationTables,
+    framingCitationSettings: defineTable({
+        ...framingCitationPolicy.fields,
+        key: v.literal("global"),
+        updatedAt: v.number(),
+    }).index("by_key", ["key"]),
     invitations: defineTable({
         slotKey: v.string(),
         role: visitorRoleValidator,
@@ -499,6 +507,7 @@ export default defineSchema({
         captureId: v.id("sourceCaptures"),
         contentHash: v.string(),
         candidateCount: v.number(),
+        building: v.optional(v.literal(true)),
         embeddedCount: v.optional(v.number()),
         embeddingDegradationReason: v.optional(v.string()),
         embeddingProfile: v.optional(v.string()),
@@ -538,7 +547,16 @@ export default defineSchema({
     sourceCaptures: defineTable({
         observedDestinations: v.optional(v.array(observedDestinationValidator)),
         representationCompleteness: v.optional(
-            v.union(v.literal("complete"), v.literal("partial")),
+            captureRepresentationCompleteness,
+        ),
+        document: v.optional(sourceDocumentMetadataValidator),
+        protocol: v.optional(v.literal("documentary_v1")),
+        operationRequestId: v.optional(v.id("agentOperationRequests")),
+        retainedImport: v.optional(
+            v.object({
+                rootOperationId: v.id("agentOperationRequests"),
+                attemptRevision: v.number(),
+            }),
         ),
         qualificationInputPolicy: v.optional(
             v.literal(SOURCE_QUALIFICATION_INPUT_POLICY),
@@ -546,7 +564,7 @@ export default defineSchema({
         runId: v.id("researchRuns"),
         corpusRevisionId: v.id("corpusRevisions"),
         sourceId: v.id("sources"),
-        preparationId: v.id("sourceSelectionProposalRebuilds"),
+        preparationId: v.optional(v.id("sourceSelectionProposalRebuilds")),
         executionGeneration: v.number(),
         captureKey: v.string(),
         requestInputHash: v.string(),
@@ -577,6 +595,7 @@ export default defineSchema({
         updatedAt: v.number(),
     })
         .index("by_capture_key", ["captureKey"])
+        .index("by_run_and_status", ["runId", "status"])
         .index("by_source_and_input_hash_and_status", [
             "sourceId",
             "requestInputHash",
