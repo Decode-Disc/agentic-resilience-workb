@@ -6,6 +6,8 @@ Observations: on May 12, 2026, an analyst asks about routing decisions in Harbor
 
 Selection: the May 2 release speaks directly to routing authority. The May 10 article supplies integration context, but its publication date cannot make the January event the analyst's intended announcement. Neither passage establishes displacement of human dispatchers.
 
+Use `acquire_document` with the observed reference to the May 2 release. Search its returned reading reference for dispatch approval with `search_available_material`, then open the match reference with `read_in_context`. Use the displayed passage reference to support the event. If the surrounding discussion continues after a provisional save, use the issued continuation to read the next extent of the same capture.
+
 Resulting program: examine who receives routing intent, owns operational context and authorizes execution; investigate substitution and value capture. Add a conditional question about cross-platform routing if the analyst means the integration. Ask: “Do you mean the dispatcher assistant or the January integration?” Explain that the proposed common program remains useful under either interpretation.
 
 Limits: the assistant's commercial adoption and cross-platform execution rights remain research questions. The event remains open until supported or clarified.

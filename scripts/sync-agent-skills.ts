@@ -25,7 +25,7 @@ const root = resolve(argument("--root", "agent-skills"));
 const output = resolve(
     argument("--output", "convex/integrations/agentSkillPackages.json"),
 );
-const id = argument("--package-id", "research-methods-v1");
+const id = argument("--package-id", "research-methods-v2");
 if (!/^[a-z0-9-]+$/.test(id)) throw new Error("Invalid package identity");
 const virtualRoot = `/agent-skills/${id}/`;
 const digest = (text: string) =>

@@ -51,7 +51,8 @@ test("native skill packaging is deterministic and excludes developer resources",
             "workbench-framing",
         ]);
         assert.ok(!bytes.includes(".agents/skills"));
-        assert.ok(bytes.includes("/agent-skills/research-methods-v1/"));
+        assert.equal(data.packages[0].id, "research-methods-v2");
+        assert.ok(bytes.includes("/agent-skills/research-methods-v2/"));
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

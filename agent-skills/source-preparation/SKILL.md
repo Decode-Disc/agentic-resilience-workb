@@ -9,6 +9,8 @@ Consult this method when choosing readings, qualifying contributions or deciding
 
 Start from an existing documentary need: what information would help investigate the framed question? Select a document for an expected contribution and inspect the relevant retained representation. Acquisition alone does not satisfy a need.
 
+Start with available captures, including documents consulted during framing that the program did not cite. Use `search_available_material` or `read_in_context` with an issued reference. Acquire an observed candidate through `acquire_document` when the necessary representation is missing. Use the operation request and passage order for exact indexed passages returned by search or contextual reading. A page read from the beginning can orient the investigation, but its free text does not identify an indexed passage.
+
 Identify the exact passage, its producer, period, scope and limitations. State what it supports, which uses remain restricted and what it leaves unresolved. Submit useful contributions through the established qualification controls. Do not decide the economic answer.
 
 Seek material that can confront an account, including useful counter-evidence. Compare definitions, periods and coverage before treating observations as contradictory. Several syndicated copies of one issuer statement remain one underlying assertion, while independently reported observations may add a different contribution.

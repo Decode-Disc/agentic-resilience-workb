@@ -16,6 +16,8 @@ Need: identify dependency and switching constraints. Observations: a filing desc
 
 Selection: qualify the filing's stated dependency and the guide's export capability separately. The export path is useful counter-evidence to an unrestricted lock-in claim, but says nothing about transition cost or data rights after termination.
 
+If the filing and guide were captured during framing, search their available material references with `search_available_material` and open the relevant match references with `read_in_context`. Submit the displayed indexed passages for qualification against the corresponding need. Request another acquisition only for an observed document whose existing capture cannot support the check.
+
 Prepared artifact: two need-linked contributions with exact capture references, attributed terms and restricted uses. Record the renewal-term check as technically unfinished. Hand back the retained material with that limitation if authorized capacity cannot admit continuation.
 
 Limits: do not report “no renewal restrictions found” or treat interrupted retrieval as an exhausted search. Investigation must assess the economic consequence; preparation has not decided resilience.
