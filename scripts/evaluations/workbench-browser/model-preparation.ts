@@ -10,7 +10,7 @@ type ModelChoice = Pick<
     "model" | "provider"
 >;
 
-/** Repairs only stale input profiles through their authenticated owner, preserving the selected model and revision. */
+/** Ensures current and retained native profiles through their owner, preserving the selected model and revision. */
 export async function prepareQualificationModel(
     client: Pick<ConvexHttpClient, "query" | "action">,
     selection: "workbench" | "sources" | ModelChoice = "workbench",
@@ -32,33 +32,32 @@ export async function prepareQualificationModel(
         "Selected qualification model is not available",
     );
     let pages = 0;
-    let complete = selected.compatible;
-    if (!selected.compatible) {
-        // Descending history is bounded by the initial catalogue revision, plus a possible empty terminal page.
-        const maximumPages = selected.revision + 1;
-        assert(
-            Number.isSafeInteger(maximumPages) && maximumPages >= 2,
-            "Profile refresh revision bound unavailable",
-        );
-        let cursor: string | null = null;
-        for (; pages < maximumPages; ) {
-            const refreshed: FunctionReturnType<
-                typeof api.modelConfigurationActions.refreshProfiles
-            > = await client.action(
-                api.modelConfigurationActions.refreshProfiles,
-                { catalogId: selected._id, cursor },
-            );
-            pages++;
-            if (refreshed.isDone) {
-                complete = true;
-                break;
-            }
-            assert(
-                refreshed.continueCursor && refreshed.continueCursor !== cursor,
-                "Profile refresh did not advance",
-            );
-            cursor = refreshed.continueCursor;
+    let complete = false;
+    // Catalogue compatibility can survive added bindings; ensure their exact keys too.
+    // Descending history is bounded by the initial catalogue revision, plus a possible empty terminal page.
+    const maximumPages = selected.revision + 1;
+    assert(
+        Number.isSafeInteger(maximumPages) && maximumPages >= 2,
+        "Profile refresh revision bound unavailable",
+    );
+    let cursor: string | null = null;
+    for (; pages < maximumPages; ) {
+        const refreshed: FunctionReturnType<
+            typeof api.modelConfigurationActions.refreshProfiles
+        > = await client.action(api.modelConfigurationActions.refreshProfiles, {
+            catalogId: selected._id,
+            cursor,
+        });
+        pages++;
+        if (refreshed.isDone) {
+            complete = true;
+            break;
         }
+        assert(
+            refreshed.continueCursor && refreshed.continueCursor !== cursor,
+            "Profile refresh did not advance",
+        );
+        cursor = refreshed.continueCursor;
     }
     assert(complete, "Profile refresh continuation bound exceeded");
     const after = await client.query(api.modelConfiguration.list, {});

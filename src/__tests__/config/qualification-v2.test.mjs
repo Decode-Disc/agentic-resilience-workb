@@ -766,9 +766,7 @@ test("the selected shared-model profile changes one catalogue default and restor
             return { revision: model.revision };
         },
         action: async () => {
-            throw new Error(
-                "No profile refresh expected for this prepared fixture",
-            );
+            return { isDone: true, continueCursor: null };
         },
     };
     await configureCampaign(client, m, root, "second");

@@ -72,6 +72,10 @@ Use small deterministic fixtures to isolate policy rules. For analytical regress
 
 Match semantic evaluation to the submitted object and intended use. Useful source preparation does not establish correct assertion use, a defensible appraisal or supported synthesis relationships. For those outputs, inspect the argument and its objections, unknowns, permitted evidence and revisions; check diagram-to-note coherence where applicable. Separate human adoption from automated control outcomes. Use the current product requirements to select relevant cases rather than inferring analytical quality from retrieval scores.
 
+## OpenRouter Routing
+
+By default, keep workflow qualifications representative of application routing: select the model and supported reasoning settings through the application catalogue and let OpenRouter select and load-balance upstream inference providers. Preserve the existing canonical `max_price` ceilings and account guardrails, and recall those protections when describing the proposed run. Specify an upstream provider when the user requests it or the evaluation has a demonstrated need, such as isolating a provider-specific failure or comparing endpoints. Explain that reason and the scope of the override in the configuration and authorization wording; keep the existing guardrails effective. A catalogue endpoint label or historical explicit pin alone does not justify an override. Record the provider actually used as diagnostic evidence and preserve historical execution identities. Keep the independent Pi reviewer's native provider and authentication selection separate from OpenRouter's upstream routing.
+
 ## Separate Harness Reliability from Model Quality
 
 A weak model can expose defects that a stronger model avoids by chance. Judge the system's handling of an imperfect response separately from the response's economic usefulness, so model selection cannot hide a broken execution boundary.

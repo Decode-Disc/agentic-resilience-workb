@@ -52,6 +52,7 @@ test.each([
     "SEC_USER_AGENT",
     "EXA_API_KEY",
     "OPENROUTER_API_KEY",
+    "SOURCES_PREPARATION_WINDOW_MINUTES",
     "configured",
 ])("live research preflight checks configuration before admission: %s", async (missing) => {
     const root = mkdtempSync(join(tmpdir(), "campaign-sec-preflight-"));
@@ -94,9 +95,17 @@ test.each([
         status: args.includes("env") && args.includes("set") ? 1 : 0,
         stdout:
             args.includes("env") && args.includes("list")
-                ? ["OPENROUTER_API_KEY", "EXA_API_KEY", "SEC_USER_AGENT"]
+                ? [
+                      "OPENROUTER_API_KEY",
+                      "EXA_API_KEY",
+                      "SEC_USER_AGENT",
+                      "SOURCES_PREPARATION_WINDOW_MINUTES",
+                  ]
                       .filter((name) => name !== missing)
-                      .map((name) => `${name}=fixture-only`)
+                      .map(
+                          (name) =>
+                              `${name}=${name === "SOURCES_PREPARATION_WINDOW_MINUTES" ? "30" : "fixture-only"}`,
+                      )
                       .join("\n")
                 : "",
         stderr: "",

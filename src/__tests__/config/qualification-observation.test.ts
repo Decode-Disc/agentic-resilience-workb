@@ -22,6 +22,7 @@ async function observe(options: {
     blockedAt?: number;
     sourcesDeadlineAt?: number;
     blockedWriter?: boolean;
+    admissionFailure?: string;
 }) {
     const start = Date.now();
     const base = configurableCampaign();
@@ -68,8 +69,19 @@ async function observe(options: {
             const blocked = elapsed >= (options.blockedAt ?? Infinity);
             value = {
                 contextExpiresAt: start + options.expiresAt,
-                nativeSettled: true,
-                conversation: { activeTurnId: null, queuedCount: 0 },
+                nativeSettled: !options.admissionFailure,
+                conversation: {
+                    activeTurnId: null,
+                    queuedCount: options.admissionFailure ? 1 : 0,
+                    ...(options.admissionFailure
+                        ? {
+                              queuePaused: true,
+                              admissionFailure: {
+                                  code: options.admissionFailure,
+                              },
+                          }
+                        : {}),
+                },
                 run: {
                     executionStatus: complete
                         ? "idle"
@@ -188,6 +200,39 @@ test("live observation stops at the original context expiry without dispatching 
     ).toMatchObject({
         step: "handoff",
         reason: "Qualification observation authority expired before sources_prepared",
+    });
+    expect(readFileSync(join(f.root, "progress.jsonl"), "utf8")).toContain(
+        '"executionIntegrity":"failed"',
+    );
+});
+
+test("live observation records a pre-turn admission refusal instead of waiting for expiry", async () => {
+    vi.useFakeTimers({
+        toFake: ["Date", "setTimeout", "clearTimeout", "hrtime", "performance"],
+    });
+    const f = await observe({
+        completeAt: 950_000,
+        expiresAt: 2_000,
+        admissionFailure: "model_input_profile_unavailable",
+    });
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(await f.outcome).toBeInstanceOf(Error);
+    expect(
+        JSON.parse(readFileSync(join(f.root, "claims/failure.json"), "utf8")),
+    ).toMatchObject({
+        step: "initialize",
+        reason: "Conversation admission blocked before conversation_settled: model_input_profile_unavailable",
+    });
+    expect(
+        JSON.parse(
+            readFileSync(join(f.root, "claims/latest-snapshot.json"), "utf8"),
+        ),
+    ).toMatchObject({
+        conversation: {
+            queuedCount: 1,
+            queuePaused: true,
+            admissionFailure: { code: "model_input_profile_unavailable" },
+        },
     });
     expect(readFileSync(join(f.root, "progress.jsonl"), "utf8")).toContain(
         '"executionIntegrity":"failed"',

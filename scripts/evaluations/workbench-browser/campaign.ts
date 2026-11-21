@@ -1958,7 +1958,13 @@ async function executeCampaign(
                   );
         const required = [
             "OPENROUTER_API_KEY",
-            ...(startsResearch ? ["SEC_USER_AGENT", "EXA_API_KEY"] : []),
+            ...(startsResearch
+                ? [
+                      "SEC_USER_AGENT",
+                      "EXA_API_KEY",
+                      "SOURCES_PREPARATION_WINDOW_MINUTES",
+                  ]
+                : []),
         ];
         const missing = required.filter(
             (name) => !previousFlags.get(name)?.trim(),

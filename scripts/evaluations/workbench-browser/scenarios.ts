@@ -510,6 +510,16 @@ export async function runCampaignScenarios(
                     if (
                         (state === "conversation_settled" ||
                             state === "sources_prepared") &&
+                        s.conversation?.queuePaused &&
+                        s.conversation.admissionFailure &&
+                        !s.conversation.activeTurnId
+                    )
+                        throw new Error(
+                            `Conversation admission blocked before ${state}: ${s.conversation.admissionFailure.code}`,
+                        );
+                    if (
+                        (state === "conversation_settled" ||
+                            state === "sources_prepared") &&
                         s.conversation?.activeTurnId &&
                         s.mission?.status === "blocked" &&
                         !s.mission.piActiveWriter

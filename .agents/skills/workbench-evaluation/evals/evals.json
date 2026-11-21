@@ -458,6 +458,54 @@
         "Does not claim the native tools/stream/schema combination is proven compatible without verification or technically impossible because it is not wired today.",
         "Does not implement the deferred change, add a parallel loop or claim schema validity would establish documentary or analytical truth."
       ]
+    },
+    {
+      "id": 31,
+      "name": "openrouter-upstream-label-is-not-a-selection",
+      "prompt": "Prepare only the authorization wording and configuration for a new single-dossier NVIDIA quality qualification with the agreed GLM model and budget. The application catalogue has a model-level entry without a provider pin; endpoint metadata mentions relace/fp4 as currently available. OpenRouter account guardrails and application max_price ceilings are already configured. Do not dispatch or edit application code.",
+      "expected_output": "Selects the agreed model and capability-aware reasoning through the application catalogue, leaves the upstream provider unset and describes OpenRouter routing without proposing relace/fp4 as a choice or an authorization condition.",
+      "files": [
+        "SKILL.md",
+        "references/campaigns.md"
+      ],
+      "expectations": [
+        "Does not copy an endpoint label into the configuration provider field or request provider.only/order restrictions.",
+        "Does not include a selected upstream endpoint or quantization label in the approval wording.",
+        "Recalls the existing price and account guardrails while leaving upstream selection to OpenRouter for this ordinary qualification.",
+        "Does not dispatch providers or alter code, account settings or historical evidence."
+      ]
+    },
+    {
+      "id": 32,
+      "name": "historical-openrouter-pin-and-native-reviewer-are-distinct",
+      "prompt": "Prepare a new qualification, without dispatch. A historical campaign pinned an upstream OpenRouter provider, but the current application model-level route has no pin. Independent review uses Pi with an existing openai API route. Must the new workflow configuration copy the historical pin or the reviewer provider to be reproducible?",
+      "expected_output": "Uses the current model-level OpenRouter route without an upstream pin, preserves the old campaign unchanged and keeps the independent Pi reviewer provider in its own accounting and authentication scope.",
+      "files": [
+        "SKILL.md",
+        "references/campaigns.md"
+      ],
+      "expectations": [
+        "Does not treat a historical explicit pin as a default or authority for a new campaign.",
+        "Distinguishes OpenRouter upstream inference-provider selection from the separate Pi review service and credentials.",
+        "Freezes the new model/settings and retains actual upstream-provider telemetry without claiming upstream identity is fixed.",
+        "Does not rewrite historical mandates or silently alter an already engaged execution."
+      ]
+    },
+    {
+      "id": 33,
+      "name": "justified-openrouter-provider-override",
+      "prompt": "Prepare only a comparison of two explicitly requested upstream OpenRouter providers for the same agreed model. The purpose is to isolate a structured-output failure observed on one provider. Keep the existing account guardrails, canonical max_price ceilings and agreed budget; do not dispatch or change application code.",
+      "expected_output": "Allows the requested provider-specific configurations, explains the diagnostic reason and bounded scope, and retains the existing guardrails while identifying OpenRouter-managed routing as the ordinary default.",
+      "files": [
+        "SKILL.md",
+        "references/campaigns.md"
+      ],
+      "expectations": [
+        "Does not refuse an explicitly justified upstream provider selection as categorically forbidden.",
+        "States the diagnostic purpose and limits each override to its comparison configuration.",
+        "Preserves account guardrails, canonical price ceilings and the agreed budget without silent expansion.",
+        "Does not turn the comparison providers into application defaults or dispatch any provider calls."
+      ]
     }
   ]
 }

@@ -44,13 +44,6 @@ test("stale profiles are refreshed via the existing bounded continuation without
     assert.equal(result.refreshed, true);
     assert.equal(result.revisionId, "revision");
 });
-test("current profiles never trigger preparation or another model operation", async () => {
-    const result = await prepareQualificationModel({
-        query: async () => catalogue(true),
-        action: async () => assert.fail("No preparation expected"),
-    });
-    assert.equal(result.refreshed, false);
-});
 test("disabled selection remains blocked rather than enabled by qualification", async () => {
     const disabled = catalogue(false);
     disabled.models[0].enabled = false;
@@ -79,7 +72,7 @@ test("incomplete refresh and concurrent revision changes stop before inference a
                 if (calls++) c.models[0].currentRevisionId = "other";
                 return c;
             },
-            action: async () => assert.fail(),
+            action: async () => ({ isDone: true, continueCursor: null }),
         }),
         /revision changed/,
     );
@@ -165,8 +158,9 @@ test("campaign configuration prepares an unassigned model before assignment", as
     const client = {
         query: async () => structuredClone(state),
         action: async (_ref, args) => {
-            assert.equal(args.catalogId, "selected-catalogue");
-            selected.compatible = true;
+            const model = state.models.find((m) => m._id === args.catalogId);
+            assert(model);
+            model.compatible = true;
             return { isDone: true, continueCursor: null };
         },
         mutation: async (_ref, args) => {
