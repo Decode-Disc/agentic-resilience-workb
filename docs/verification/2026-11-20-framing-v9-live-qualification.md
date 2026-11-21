@@ -1,5 +1,7 @@
 # Workbench 9 and Sources 5 live qualification
 
+**Version scope, November 20, 2026.** This assessment records Workbench 9 and Sources 5. The [shared documentary operations](../../context/TECH.md#shared-documentary-operations) describe the subsequent bindings. This result does not qualify them.
+
 Verified November 20, 2026. The single authorized lot is closed with an independently assessed **failed** verdict. Eight scenarios reached their expected execution endpoint, one stopped at the shared admission ceiling, and three were unrun. These are execution counts, not eight semantic passes. The structural corrections remain delivered; this lot does not establish general framing quality, complete Sources usefulness, or live post-save documentary continuity.
 
 ## Scope and retained evidence

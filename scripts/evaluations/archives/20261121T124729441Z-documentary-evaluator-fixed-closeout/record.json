@@ -1,0 +1,213 @@
+{
+    "schemaVersion": 1,
+    "id": "20261121T124729441Z-documentary-evaluator-fixed-closeout",
+    "createdAt": "2026-11-21T12:47:29.441Z",
+    "git": {
+        "head": "2816370980accf0155c09d62054ca83511ca43d3",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/docs/verification/2026-11-21-documentary-evaluator-rerun.md",
+            "archivePath": "repository/docs/verification/2026-11-21-documentary-evaluator-rerun.md"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/scripts/evaluations/workbench-browser/campaign.ts",
+            "archivePath": "repository/scripts/evaluations/workbench-browser/campaign.ts"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/scripts/evaluations/workbench-browser/model-preparation.ts",
+            "archivePath": "repository/scripts/evaluations/workbench-browser/model-preparation.ts"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/scripts/evaluations/workbench-browser/scenarios.ts",
+            "archivePath": "repository/scripts/evaluations/workbench-browser/scenarios.ts"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/src/__tests__/config/qualification-local-target.test.ts",
+            "archivePath": "repository/src/__tests__/config/qualification-local-target.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/src/__tests__/config/qualification-observation.test.ts",
+            "archivePath": "repository/src/__tests__/config/qualification-observation.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/src/__tests__/config/qualification-v2.test.mjs",
+            "archivePath": "repository/src/__tests__/config/qualification-v2.test.mjs"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/src/__tests__/config/workbench-model-preparation.test.mjs",
+            "archivePath": "repository/src/__tests__/config/workbench-model-preparation.test.mjs"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/src/__tests__/convex/execution/profile-recovery.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/profile-recovery.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/.herdr/worktrees/agentic-resilience-workbench-proto/refactor-documentary-engine/src/__tests__/convex/execution/qualification-v2.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/qualification-v2.test.ts"
+        },
+        {
+            "origin": "/tmp/workbench-documentary-evaluator-fixed-20261121-42w769yw/closeout",
+            "archivePath": "external/closeout"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/closeout/assessment.log",
+            "bytes": 584,
+            "sha256": "628712a9085d23aaad0db95488cbd5f3717e184a8b9c4763be1bafb18c98ef0e"
+        },
+        {
+            "path": "external/closeout/close.log",
+            "bytes": 179,
+            "sha256": "8b6caa9d01a1d3e69f2e332cc636ae929d6b165d12fa1ade4ea13e9269998f35"
+        },
+        {
+            "path": "external/closeout/context-post-cleanup.json",
+            "bytes": 1424,
+            "sha256": "a3c4a0a3f60aa052d954fac7597ada2266974775a38939455876e4f0eb80fd90"
+        },
+        {
+            "path": "external/closeout/environment-restoration.json",
+            "bytes": 163,
+            "sha256": "c2c4840f382057087ff9f2bbb7f4ce88f7af12a75fed81625b842e168347f5c2"
+        },
+        {
+            "path": "external/closeout/evaluator-admission-red.log",
+            "bytes": 1568,
+            "sha256": "afe480c1ee1adf57ed0a0abbf3fe4c7e522c0e27c6b5de855b5d4bfbb3cc5686"
+        },
+        {
+            "path": "external/closeout/evaluator-all-final.log",
+            "bytes": 285,
+            "sha256": "45f7689698284e117c9c8123d386591f4f42b33962cfa7951467c698d1e024cd"
+        },
+        {
+            "path": "external/closeout/evaluator-format-final.log",
+            "bytes": 40,
+            "sha256": "1fbdaac7a756739296b146918b7630d7139fe26b43c098983b656db020c572cd"
+        },
+        {
+            "path": "external/closeout/evaluator-imports-final.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "external/closeout/evaluator-profile-green.log",
+            "bytes": 293,
+            "sha256": "5689215bdc145a6973782f6d7d578611f1f9f97294025ca43db3a6becf409e37"
+        },
+        {
+            "path": "external/closeout/evaluator-profile-red.log",
+            "bytes": 2711,
+            "sha256": "000f3f129040883b01cf2dde5b9a1686d0da369e63c8c17d847f906c6a171409"
+        },
+        {
+            "path": "external/closeout/evaluator-protocol-window-final.log",
+            "bytes": 4669,
+            "sha256": "637cce3c8f9b708f9474ac6c52c38dc7d49e030d2a1eba33bdc45386e40ff691"
+        },
+        {
+            "path": "external/closeout/evaluator-types-window-final.log",
+            "bytes": 55,
+            "sha256": "275cd6edeed412bf468510b7ae1fa591679d39ee8104c8765c681630946cded0"
+        },
+        {
+            "path": "external/closeout/evaluator-window-cause.log",
+            "bytes": 295,
+            "sha256": "bf7e16d5790c0aa93cd6d023d7a2929cb811c259fa34cc3bf75fb616d088b6d4"
+        },
+        {
+            "path": "external/closeout/evaluator-window-red.log",
+            "bytes": 1432,
+            "sha256": "561ee70f9965d001d75ef5ac931f75d5d753e7dce13df90eef1c35e3bf2e1768"
+        },
+        {
+            "path": "external/closeout/manual-evidence-summary.json",
+            "bytes": 4920,
+            "sha256": "d7a4f6539a84d767d52ef13694337f3fd79ed9277bbbef49fd40c55ab438cf04"
+        },
+        {
+            "path": "external/closeout/review.json",
+            "bytes": 3616,
+            "sha256": "761079d6171b8de419e414e79360ecabf1c7e5ec7c32d398828ee4d1e624b6ea"
+        },
+        {
+            "path": "external/closeout/runtime-final.json",
+            "bytes": 3664,
+            "sha256": "a6eaeb906f32615d145f4c4d7594fb2115dfa3a25cefa23dd5445b5d5f8231fb"
+        },
+        {
+            "path": "external/closeout/sources-start-configuration.json",
+            "bytes": 123,
+            "sha256": "cbb4e04f432d1e14f7fb9b0da14005d415465ee0af2b1c25eb6043b9051c74de"
+        },
+        {
+            "path": "external/closeout/status-final.log",
+            "bytes": 765086,
+            "sha256": "1de78013af67ab6a6028a0883772bdba3f59e1e1b9701c81b7a36a7bcaa424af"
+        },
+        {
+            "path": "external/closeout/teardown.json",
+            "bytes": 107,
+            "sha256": "885582c56b6abc158c4a00d0828554bffe90e9c746ac43fac6051637a31d5ca7"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-documentary-evaluator-rerun.md",
+            "bytes": 9374,
+            "sha256": "c70c203c4cea308c055cc32c4d5594dc33b903d39d09370669d3b9b832cb5047"
+        },
+        {
+            "path": "repository/scripts/evaluations/workbench-browser/campaign.ts",
+            "bytes": 106224,
+            "sha256": "34ff33d72e93b90aeb25cfccb4c9dd77ead61042483e71fa1bc6b73afb4802db"
+        },
+        {
+            "path": "repository/scripts/evaluations/workbench-browser/model-preparation.ts",
+            "bytes": 8919,
+            "sha256": "83b70ff4a59edced960f7b651481503050ccf3cc4651f301ceec3a1c3a107055"
+        },
+        {
+            "path": "repository/scripts/evaluations/workbench-browser/scenarios.ts",
+            "bytes": 55058,
+            "sha256": "c7ab50deec8f320a401f748aa56a0a84a5fe61a239a8b3bd1bfafcb914f503a0"
+        },
+        {
+            "path": "repository/src/__tests__/config/qualification-local-target.test.ts",
+            "bytes": 15695,
+            "sha256": "5e10e2715c1b5e3deb6d0ddcd16cd8b946266833de330f04f57ccd2e94f10a01"
+        },
+        {
+            "path": "repository/src/__tests__/config/qualification-observation.test.ts",
+            "bytes": 8714,
+            "sha256": "d515d83a103b81453957305592ebc381e4bc9b36a96fab4068fba99320510f9b"
+        },
+        {
+            "path": "repository/src/__tests__/config/qualification-v2.test.mjs",
+            "bytes": 62583,
+            "sha256": "cff1f18ecbbe214737cae055c15a64296f62c2a4282dc8c5f6db91d42785b239"
+        },
+        {
+            "path": "repository/src/__tests__/config/workbench-model-preparation.test.mjs",
+            "bytes": 10107,
+            "sha256": "cfa1ac5b1b0bb398057ce5c4c0bc40e375b189372d9fe24c281fec7f00c46b7e"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/profile-recovery.test.ts",
+            "bytes": 15100,
+            "sha256": "5610ea024f173911c61a8820ca05fb23b4b0dd20848e9f979abda1d77aac8343"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/qualification-v2.test.ts",
+            "bytes": 56554,
+            "sha256": "b58c9fa053f3539ec4b898653c4c259f71a85d2b5afd44869b2f1fa26517a939"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261121T124729441Z-documentary-evaluator-fixed-closeout.tar.gz",
+        "bytes": 283652,
+        "sha256": "ecb14e3cdfb881870dd90678ca0145ebbdc3fedefc5aaa30ac79e955ea00c4bf"
+    },
+    "verification": "restored_and_verified"
+}

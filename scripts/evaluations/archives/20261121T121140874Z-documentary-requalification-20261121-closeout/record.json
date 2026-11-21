@@ -1,0 +1,93 @@
+{
+    "schemaVersion": 1,
+    "id": "20261121T121140874Z-documentary-requalification-20261121-closeout",
+    "createdAt": "2026-11-21T12:11:40.874Z",
+    "git": {
+        "head": "2816370980accf0155c09d62054ca83511ca43d3",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/tmp/workbench-documentary-requalification-20261121-hm5pbklc/diagnosis-evidence",
+            "archivePath": "external/diagnosis"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/diagnosis/admission-failure.json",
+            "bytes": 436,
+            "sha256": "e064ef6e168d97d7136b8ceabdaeb2497b9013d2605c0659fa8dbc2956675b7e"
+        },
+        {
+            "path": "external/diagnosis/closed-campaign-status.json",
+            "bytes": 764744,
+            "sha256": "8ced779fb46f0cfef8714728ffd259471c4aab07d0b6f561c9f27b130f941c94"
+        },
+        {
+            "path": "external/diagnosis/environment-restoration.json",
+            "bytes": 163,
+            "sha256": "c2c4840f382057087ff9f2bbb7f4ce88f7af12a75fed81625b842e168347f5c2"
+        },
+        {
+            "path": "external/diagnosis/forced-profile-refresh.json",
+            "bytes": 546,
+            "sha256": "9c12e9e5cc96bd6ffdfce4a0bb3879fd889a6aabeaa4dc42f4d7e5d7c9c4e614"
+        },
+        {
+            "path": "external/diagnosis/live-nvidia-documentary-operations.json",
+            "bytes": 3632,
+            "sha256": "3ba9ea83ee89ce63f21ee71b774eda5b5670d49d6e6e8ab2191505d7d4e9bc82"
+        },
+        {
+            "path": "external/diagnosis/live-nvidia-sources-capture-handoff.json",
+            "bytes": 2036,
+            "sha256": "229bc92c4f2d7a40995441ea22acf4c1cd617363092a403123187a99a14049ec"
+        },
+        {
+            "path": "external/diagnosis/model-readiness.json",
+            "bytes": 850,
+            "sha256": "920eff90015aa29efe06005601c2e0c3b83bf0528e62b8914356355f2b9f781f"
+        },
+        {
+            "path": "external/diagnosis/original-prepared-campaign.json",
+            "bytes": 1269943,
+            "sha256": "cdadf03bdd671905dd9b9ab6919d6ea169ed74570b15f55c50808524eea20f37"
+        },
+        {
+            "path": "external/diagnosis/preflight-size-proof.json",
+            "bytes": 230,
+            "sha256": "3ee069236b3e12d182760435c12d39fdcdbc7fb5cd55459a6664cfd74a5911c5"
+        },
+        {
+            "path": "external/diagnosis/profile-refresh-observation.json",
+            "bytes": 9867,
+            "sha256": "54eff4cc5098075265f1f57c4d06647c2ea8f41c7a95918a26583fcfccb6a769"
+        },
+        {
+            "path": "external/diagnosis/proposed-scope.json",
+            "bytes": 1070,
+            "sha256": "dfb87b1787d2daedaddb6ac8eb126feea82ab54fb7e7ff46d6f290f9ff9e09f2"
+        },
+        {
+            "path": "external/diagnosis/review.json",
+            "bytes": 3232,
+            "sha256": "d987824ea19c5a5eb0587b5b6aaade057c64957f4b142e279adefe1253164b22"
+        },
+        {
+            "path": "external/diagnosis/teardown.json",
+            "bytes": 449,
+            "sha256": "0b2994450af645002d3146754b1b3af3a8143e2f9880f21671014a2e403e9187"
+        },
+        {
+            "path": "external/diagnosis/zero-usage-reconciliation.json",
+            "bytes": 115,
+            "sha256": "765c1e8fb9dca9a0aa209af37049fe1302b8c2a33218d08c69e24d6786fd8aed"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261121T121140874Z-documentary-requalification-20261121-closeout.tar.gz",
+        "bytes": 579007,
+        "sha256": "e8788377757a0ddeea6226ccf270c52a52f7dbbfab08e041f41ff96f819e71bb"
+    },
+    "verification": "restored_and_verified"
+}
