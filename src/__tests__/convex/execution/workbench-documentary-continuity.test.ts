@@ -42,7 +42,7 @@ afterEach(() => {
 });
 
 async function documentaryTurn(
-    definitionVersion: 7 | 10 | 11 = 7,
+    definitionVersion: 7 | 10 | 11 | 12 = 7,
     excerpt = "Investigate insurer estimate review after the latest announcement.",
     requireContextRead = false,
 ) {
@@ -169,7 +169,9 @@ test.each([
     { basis: "event", requireContextRead: false, definitionVersion: 10 },
     { basis: "condition", requireContextRead: true, definitionVersion: 11 },
     { basis: "condition", requireContextRead: false, definitionVersion: 10 },
-] as const)("a $basis citation follows the frozen context requirement $requireContextRead", async ({
+    { basis: "event", requireContextRead: true, definitionVersion: 12 },
+    { basis: "condition", requireContextRead: false, definitionVersion: 12 },
+] as const)("Workbench $definitionVersion $basis citation follows the frozen context requirement $requireContextRead", async ({
     basis,
     requireContextRead,
     definitionVersion,
@@ -336,7 +338,7 @@ test.each([
               };
     expect(JSON.parse(receipt.valueJson)).toEqual({
         revision: revision + 1,
-        ...(definitionVersion === 11
+        ...(definitionVersion === 11 || definitionVersion === 12
             ? {
                   eventBasis: basis === "event" ? "public" : "open",
                   publicCitations,

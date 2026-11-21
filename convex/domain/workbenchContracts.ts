@@ -12,6 +12,7 @@ import {
     initialDirectedFramingEventBasisInput,
     initialDocumentaryFramingEventBasisInput,
     legacyFramingEventBasisInput,
+    WORKBENCH_FRAMING_METHOD_VERSION,
     WORKBENCH_FRAMING_RECEIPT_VERSION,
 } from "./framingContracts";
 import { savedMaterialBinding } from "./savedMaterialOperations";
@@ -518,5 +519,8 @@ export function supportsStatefulFramingSchema(version: number): boolean {
 export function supportsFramingWriteReceipt(
     version: number | undefined,
 ): boolean {
-    return version === WORKBENCH_FRAMING_RECEIPT_VERSION;
+    return (
+        version === WORKBENCH_FRAMING_RECEIPT_VERSION ||
+        version === WORKBENCH_FRAMING_METHOD_VERSION
+    );
 }

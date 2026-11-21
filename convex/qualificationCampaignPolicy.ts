@@ -223,6 +223,24 @@ export const qualificationEnvelopeSchema = z
         controls: z.number().int().min(1).max(SOURCES_ENVELOPE_MAX_COUNT),
     })
     .strict();
+export const framingReplayDocumentsSchema = z.array(
+    z
+        .object({
+            url: z.url().startsWith("https://"),
+            title: z.string().min(1),
+            text: z.string(),
+            publishedAt: z.iso.datetime().optional(),
+        })
+        .strict(),
+);
+
+/** Stable bytes shared by preparation and server admission after database key reordering. */
+export function framingReplayDocumentsContent(
+    documents: z.infer<typeof framingReplayDocumentsSchema>,
+) {
+    return JSON.stringify(framingReplayDocumentsSchema.parse(documents));
+}
+
 export const framingReplaySchema = z
     .object({
         materialHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -234,16 +252,14 @@ export const framingReplaySchema = z
             "heldout",
         ]),
         unavailable: z.boolean(),
-        documents: z.array(
-            z
-                .object({
-                    url: z.url().startsWith("https://"),
-                    title: z.string().min(1),
-                    text: z.string(),
-                    publishedAt: z.iso.datetime().optional(),
-                })
-                .strict(),
-        ),
+        documents: framingReplayDocumentsSchema,
+    })
+    .strict();
+
+const referencedFramingReplaySchema = framingReplaySchema
+    .omit({ documents: true })
+    .extend({
+        documentsRef: z.string().regex(/^[a-f0-9]{64}$/),
     })
     .strict();
 
@@ -323,7 +339,9 @@ export const qualificationScenarioSchema = z
             .strict()
             .optional(),
         framingPublicContext: z.literal(true).optional(),
-        framingReplay: framingReplaySchema.optional(),
+        framingReplay: z
+            .union([framingReplaySchema, referencedFramingReplaySchema])
+            .optional(),
         sourcesReplay: sourcesReplaySchema.optional(),
         coveragePreset: z
             .enum(coveragePresetValidator.members.map((value) => value.value))
@@ -378,6 +396,12 @@ const v2 = z
             .min(1),
         configurations: z.array(qualificationConfigurationSchema).min(1),
         scenarios: z.array(qualificationScenarioSchema).min(1),
+        sharedFramingDocuments: z
+            .record(
+                z.string().regex(/^[a-f0-9]{64}$/),
+                framingReplayDocumentsSchema,
+            )
+            .optional(),
         maximumLots: z.number().int().positive().safe(),
         repetitionsPerCandidate: z.number().int().positive().safe(),
     })
@@ -451,6 +475,14 @@ export const configurableCampaignManifestSchema = v2.superRefine((m, ctx) => {
             "Browser interaction steps require the browser execution surface",
         );
     for (const s of m.scenarios) {
+        if (
+            s.framingReplay &&
+            "documentsRef" in s.framingReplay &&
+            !m.sharedFramingDocuments?.[s.framingReplay.documentsRef]
+        )
+            issue(
+                "Frozen framing documents reference is missing from the mandate",
+            );
         if (s.framingReplay && (!s.framingRequest || !s.framingPublicContext))
             issue(
                 "Frozen retrieval requires a fresh dated framing request and public-context scope",
@@ -978,6 +1010,27 @@ export type ConfigurableCampaignManifest =
     | z.infer<typeof configurableCampaignManifestSchema>
     | z.infer<typeof automatedCampaignManifestSchema>;
 export type QualificationScenario = z.infer<typeof qualificationScenarioSchema>;
+
+/** Hydrates one scenario only; stored historical inline material keeps its original contract. */
+export function resolveFramingReplay(
+    manifest: CampaignManifest,
+    scenario: QualificationScenario,
+) {
+    const replay = scenario.framingReplay;
+    if (!replay || "documents" in replay) return replay;
+    const documents =
+        manifest.version !== 1
+            ? manifest.sharedFramingDocuments?.[replay.documentsRef]
+            : undefined;
+    if (!documents)
+        throw new Error("Frozen framing documents reference is unavailable");
+    return framingReplaySchema.parse({
+        materialHash: replay.materialHash,
+        case: replay.case,
+        unavailable: replay.unavailable,
+        documents,
+    });
+}
 export type QualificationStep = z.infer<typeof qualificationStepSchema>;
 export type QualificationConfiguration = z.infer<
     typeof qualificationConfigurationSchema

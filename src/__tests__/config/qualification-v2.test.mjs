@@ -7,6 +7,72 @@ import { runCampaign } from "../../../scripts/evaluations/workbench-browser/camp
 
 import { configurableCampaign } from "../setup/qualification-v2.ts";
 
+test("preparation stores one complete filing for four independent scenarios", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qualification-shared-filing-"));
+    const text = readFileSync(
+        "scripts/evaluations/workbench-browser/fixtures/documentary-operations-20261121/nvidia-annual-report.txt",
+        "utf8",
+    );
+    const draft = configurableCampaign();
+    draft.configurations = draft.configurations.slice(0, 1);
+    draft.scenarios = Array.from({ length: 4 }, (_, index) => ({
+        ...draft.scenarios[0],
+        id: `shared-filing-${index}`,
+        framingRequest: {
+            text: "Investigate the supplied filing.",
+            receivedAt: "2026-11-21T16:00:00.000Z",
+        },
+        framingPublicContext: true,
+        framingReplay: {
+            materialHash: "a".repeat(64),
+            case: "heldout",
+            unavailable: false,
+            documents: [
+                {
+                    url: "https://example.com/filing",
+                    title: "Retained complete filing",
+                    text,
+                },
+            ],
+        },
+        steps: [
+            {
+                id: "settled",
+                action: "wait_for",
+                state: "conversation_settled",
+            },
+        ],
+    }));
+    draft.expectations = draft.scenarios.map((s) => ({
+        id: s.id,
+        checks: ["complete-independent-reading"],
+    }));
+    const input = join(root, "input.json");
+    writeFileSync(input, JSON.stringify(draft));
+    await runCampaign("prepare", root, { manifest: input });
+    const prepared = JSON.parse(
+        readFileSync(join(root, "campaign.json"), "utf8"),
+    );
+    assert(
+        Buffer.byteLength(JSON.stringify(prepared.manifest)) < 1024 * 1024,
+        "The prepared four-dossier mandate must fit the observed Convex value boundary",
+    );
+    assert.equal(
+        Object.keys(prepared.manifest.sharedFramingDocuments).length,
+        1,
+    );
+    const { resolveFramingReplay } = await import(
+        "../../../convex/qualificationCampaignPolicy.ts"
+    );
+    for (const scenario of prepared.manifest.scenarios) {
+        assert.equal(scenario.framingReplay.documents, undefined);
+        assert.equal(
+            resolveFramingReplay(prepared.manifest, scenario).documents[0].text,
+            text,
+        );
+    }
+});
+
 test("preparation pins the accounting policy before mandate authorization", async () => {
     const root = mkdtempSync(join(tmpdir(), "qualification-accounting-pin-"));
     const input = join(root, "input.json");

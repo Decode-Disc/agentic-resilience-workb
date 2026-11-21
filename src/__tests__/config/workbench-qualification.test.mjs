@@ -620,15 +620,19 @@ test("campaign preparation freezes retrieval material for a future real-model ma
         );
         assert.equal(prepared.boundary, "prepared_without_authorization");
         const scenarios = prepared.manifest.scenarios;
+        const { resolveFramingReplay } = await import(
+            "../../../convex/qualificationCampaignPolicy.ts"
+        );
         assert.equal(
             scenarios[0].framingRequest.text,
             "will it survive after the recent crisis ?",
         );
         assert(!scenarios[0].framingRequest.text.includes("Huang"));
         assert(
-            scenarios[0].framingReplay.documents.some((doc) =>
-                doc.url.includes("20261111"),
-            ),
+            resolveFramingReplay(
+                prepared.manifest,
+                scenarios[0],
+            ).documents.some((doc) => doc.url.includes("20261111")),
         );
         const ccc = scenarios.filter((s) => s.id.startsWith("ccc-"));
         assert.equal(
@@ -641,9 +645,10 @@ test("campaign preparation freezes retrieval material for a future real-model ma
             true,
         );
         assert(
-            scenarios
-                .find((s) => s.id === "insufficient-dated-support")
-                .framingReplay.documents.every((doc) => !doc.publishedAt),
+            resolveFramingReplay(
+                prepared.manifest,
+                scenarios.find((s) => s.id === "insufficient-dated-support"),
+            ).documents.every((doc) => !doc.publishedAt),
         );
         assert(
             scenarios.every(

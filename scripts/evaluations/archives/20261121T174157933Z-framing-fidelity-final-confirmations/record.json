@@ -1,0 +1,118 @@
+{
+    "schemaVersion": 1,
+    "id": "20261121T174157933Z-framing-fidelity-final-confirmations",
+    "createdAt": "2026-11-21T17:41:57.933Z",
+    "git": {
+        "head": "1c5f69e63fef702992e44b0f2a708c0b855d5f2c",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-21-framing-fidelity-live-qualification.md",
+            "archivePath": "repository/docs/verification/2026-11-21-framing-fidelity-live-qualification.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/openrouter-active-control-after-timeout.json",
+            "archivePath": "external/provider/openrouter-active-control-after-timeout.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/control-timeout-measurement.json",
+            "archivePath": "external/measurement/control-timeout-measurement.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/native-review-adoption.log",
+            "archivePath": "external/adoption/native-review-adoption.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/native-cleanup-recovery.log",
+            "archivePath": "external/cleanup/native-cleanup-recovery.log"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-fidelity-method-v3-20261121/shared-material-prepared/lots/lot-1/automated-review-assessment.json",
+            "archivePath": "external/receipt/automated-review-assessment.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/shared-status-final.log",
+            "archivePath": "external/status/shared-status-final.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/progress.md",
+            "archivePath": "external/ledger/progress.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/shared-manifest-red.log",
+            "archivePath": "external/red/shared-manifest-red.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/shared-hash-mutation.log",
+            "archivePath": "external/hashMutation/shared-hash-mutation.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/shared-reference-mutation.log",
+            "archivePath": "external/referenceMutation/shared-reference-mutation.log"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/adoption/native-review-adoption.log",
+            "bytes": 577,
+            "sha256": "62570f062a1082f28552c4e083d0ecabe793ac542fe73d381d12fd87d108c9f2"
+        },
+        {
+            "path": "external/cleanup/native-cleanup-recovery.log",
+            "bytes": 350,
+            "sha256": "140c741e6827b6cdc9d76cf4d331ebd08a41db6094b5bba36b55b9e546dd2f55"
+        },
+        {
+            "path": "external/hashMutation/shared-hash-mutation.log",
+            "bytes": 1318,
+            "sha256": "632d926cec3d4509fe7e8900099670f700923124c92a6d3d3d0c7218546fd4eb"
+        },
+        {
+            "path": "external/ledger/progress.md",
+            "bytes": 11936,
+            "sha256": "fb7abe2094ba5c13798bd61a77d8b7cf8bb96da57d01b04cd35641efa8a20ef4"
+        },
+        {
+            "path": "external/measurement/control-timeout-measurement.json",
+            "bytes": 374,
+            "sha256": "4a18c85129e7326f2c758e67a39dae51b7abbb01514ce2582ab0a1a3efccabd4"
+        },
+        {
+            "path": "external/provider/openrouter-active-control-after-timeout.json",
+            "bytes": 2049,
+            "sha256": "be3b3d185bd9039894f5bcc818434f4df5930d857f66a564de91accfc22dad96"
+        },
+        {
+            "path": "external/receipt/automated-review-assessment.json",
+            "bytes": 105,
+            "sha256": "7fbaaeef976935f9ef5c404f07b90d20521a475fb47dc69b52c335e9ed1b990f"
+        },
+        {
+            "path": "external/red/shared-manifest-red.log",
+            "bytes": 948,
+            "sha256": "d4b698895b6dec0d7562d151031acad60f866c68b316169d88bf5d364a7dd1fe"
+        },
+        {
+            "path": "external/referenceMutation/shared-reference-mutation.log",
+            "bytes": 1310,
+            "sha256": "0331a9b2816feb4104d711cebf3d0f191d4a8f6d1ee0c1770908d029b8a4a1c9"
+        },
+        {
+            "path": "external/status/shared-status-final.log",
+            "bytes": 394916,
+            "sha256": "d55bd935990afaf46f3028f1cfaa5366ba609492996bf5b8b12b3a2bec54784c"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-framing-fidelity-live-qualification.md",
+            "bytes": 11137,
+            "sha256": "73d86ee566c1548f9b5d2e258f43bd7d4306e1a5563154045d97d7fce3b82def"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261121T174157933Z-framing-fidelity-final-confirmations.tar.gz",
+        "bytes": 119309,
+        "sha256": "f83ecff66b76b6137a61a0d4195a9cb7844a8646515a0f4e8587a8344a930bb0"
+    },
+    "verification": "restored_and_verified"
+}

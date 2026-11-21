@@ -1,0 +1,224 @@
+{
+    "schemaVersion": 1,
+    "id": "20261121T181628626Z-framing-systematic-local-correction",
+    "createdAt": "2026-11-21T18:16:28.626Z",
+    "git": {
+        "head": "2da55bde864959fb7cd09c23fa99e6a6a63fe0cb",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-21-framing-fidelity-live-qualification.md",
+            "archivePath": "repository/docs/verification/2026-11-21-framing-fidelity-live-qualification.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/workbench-browser/campaign.ts",
+            "archivePath": "repository/scripts/evaluations/workbench-browser/campaign.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/evaluations/workbench-browser/qualification.ts",
+            "archivePath": "repository/scripts/evaluations/workbench-browser/qualification.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/config/qualification-campaign.test.mjs",
+            "archivePath": "repository/src/__tests__/config/qualification-campaign.test.mjs"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/deep-diagnosis",
+            "archivePath": "external/diagnosis"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/diagnosis/arize-controls.json",
+            "bytes": 298291,
+            "sha256": "8d5e7a6fd7ede168d34e01260ea304182b4d842790d699a93c554b7666aa3ecd"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/fixture.json",
+            "bytes": 136736,
+            "sha256": "c748854a29e46fddb930c951241f7e3c76d4edb6532013c8a1d3f298b02f2195"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/mandate.json",
+            "bytes": 1465,
+            "sha256": "08a89db25246a6c9cfbdd659e0e8dff2d5004406f2da4af6b806911d94bc47dd"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline.log",
+            "bytes": 268,
+            "sha256": "6b33622934cb330d820e6a44c678782be68b5f4e49ad7cdf64f919d446ea38a0"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/baseline-observations.json",
+            "bytes": 33,
+            "sha256": "a0eacb8c42a2404ba64c2622c73adf2751228d2ff8aca6d66dbbaa44044703c1"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/baseline-request.json",
+            "bytes": 135170,
+            "sha256": "91f71b73f4ca0f8429061a80b78bbc31561c99df675769a80ba850f274158d3b"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/baseline-result.json",
+            "bytes": 24414,
+            "sha256": "196ee430002f77fec4e408495dfd4252b53ee58166a11dcd6a9fa9ff22c7cd91"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/baseline-seal.json",
+            "bytes": 42,
+            "sha256": "6e8bbfb343f93241d69ab3309884f35ed60e8af611e83ee4377e526978c10731"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/baseline-visible.txt",
+            "bytes": 11220,
+            "sha256": "bd3851fe7362338630a66faf398200ccd5181cd0b0a3b08ea7cf602294b0daa5"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/boolean-first-observations.json",
+            "bytes": 33,
+            "sha256": "a0eacb8c42a2404ba64c2622c73adf2751228d2ff8aca6d66dbbaa44044703c1"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/boolean-first-request.json",
+            "bytes": 135170,
+            "sha256": "b5cfbad4d503a81552b7aa8d163e7682724cfd6fd8c28800e4cf8844dd0a16b8"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/boolean-first-result.json",
+            "bytes": 24414,
+            "sha256": "4d8980ec8908398d0c104a7237cdedaf6ea33d374fb2d78e1a6d75eda2502451"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/boolean-first-seal.json",
+            "bytes": 42,
+            "sha256": "6e8bbfb343f93241d69ab3309884f35ed60e8af611e83ee4377e526978c10731"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/boolean-first-visible.txt",
+            "bytes": 11220,
+            "sha256": "bd3851fe7362338630a66faf398200ccd5181cd0b0a3b08ea7cf602294b0daa5"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/calls.jsonl",
+            "bytes": 482,
+            "sha256": "cf9d7cbc72365c3c9aa0faa3f387569ffd58701b3507576b4504d4aa08c1cd4f"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/offline/summary.json",
+            "bytes": 221,
+            "sha256": "b16889fe1d95b006798804894f1c7bd1fe05a3c820994b79657cc62e99cc3d7d"
+        },
+        {
+            "path": "external/diagnosis/boolean-order-probe/probe.test.ts",
+            "bytes": 5437,
+            "sha256": "299b607caec53cea6557f85455b0920db33e61748392a4b0d4522af4e86056d7"
+        },
+        {
+            "path": "external/diagnosis/closure-green-final.log",
+            "bytes": 5325,
+            "sha256": "7116a52bb48fd0b7f9e2db9ded474f4578cf9b49d1094f010876f9c1afc864c3"
+        },
+        {
+            "path": "external/diagnosis/closure-green.log",
+            "bytes": 4678,
+            "sha256": "727386b756cbc1386b752c5f541c0b181fa4c1d96f3696796dafa983639de078"
+        },
+        {
+            "path": "external/diagnosis/closure-red-confirmed.log",
+            "bytes": 5969,
+            "sha256": "4b064b3a9f7aed7d8ba907a64c9ccf934eb0dcda430fd20f9766ca5621983ebe"
+        },
+        {
+            "path": "external/diagnosis/closure-red.log",
+            "bytes": 2771,
+            "sha256": "ff91d84959e986f3576bf035abfa5fb09c7ca77a1d8310030f6970f44afee660"
+        },
+        {
+            "path": "external/diagnosis/closure-suite.log",
+            "bytes": 35972,
+            "sha256": "4d90bf75e46e3cb69c5408db9167146478e89732504b07ac83923af428777eca"
+        },
+        {
+            "path": "external/diagnosis/closure-typecheck-confirmed.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "external/diagnosis/closure-typecheck-final.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "external/diagnosis/closure-typecheck.log",
+            "bytes": 529,
+            "sha256": "97a7f8719fc0bde2e4a74ba0c81139d32e3d2190a5facc75c3c23ca2e71ff9e9"
+        },
+        {
+            "path": "external/diagnosis/comparison.json",
+            "bytes": 4421,
+            "sha256": "82f35307a2716a81fd34cfb2d1f8e7ef3a5865992b219844c2fde9494c441666"
+        },
+        {
+            "path": "external/diagnosis/current-endpoints.json",
+            "bytes": 43819,
+            "sha256": "848ad8c1da766866a04bc990302ba0c45c9c58210d45c3aeed00d287162794ad"
+        },
+        {
+            "path": "external/diagnosis/docs-check.log",
+            "bytes": 440,
+            "sha256": "5226f43d92d432b4c2205f68c0e076178b1585d3dfd960791cc9f35976646a14"
+        },
+        {
+            "path": "external/diagnosis/native-close-replay.log",
+            "bytes": 1534,
+            "sha256": "3d0179c584d70c697586cc3a583d7a19606631130b686e64232d1c8c15bf7d5b"
+        },
+        {
+            "path": "external/diagnosis/replay-confirmed.log",
+            "bytes": 268,
+            "sha256": "6622a8d08db258b058e3f8d2f554dddd3ac815d6f4b16201f2da24d142e35de4"
+        },
+        {
+            "path": "external/diagnosis/replay.log",
+            "bytes": 2482,
+            "sha256": "0b1171aa349f23026b4f7bab4d71bed29ef2724ecf534fa5399f86d42aedd5a0"
+        },
+        {
+            "path": "external/diagnosis/reproduce-native-close.mjs",
+            "bytes": 2462,
+            "sha256": "fcced1a9af30982c133bc4393680cc58df52fc68aae30a868acdad4b5020671a"
+        },
+        {
+            "path": "external/diagnosis/retained-control-diagnosis.test.ts",
+            "bytes": 4597,
+            "sha256": "5f83625ace7d10f5e1022d5d495376858c827ccdffdb801ebfc55474b323a11f"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-framing-fidelity-live-qualification.md",
+            "bytes": 23162,
+            "sha256": "e57d7158601c80bdd8b41d6a3feb5176ce23905f74a72ed1454f3d98509624b9"
+        },
+        {
+            "path": "repository/scripts/evaluations/workbench-browser/campaign.ts",
+            "bytes": 108053,
+            "sha256": "04e7e30270d1591fbf94e5aced380030595441382e633e7afd216fda4947662c"
+        },
+        {
+            "path": "repository/scripts/evaluations/workbench-browser/qualification.ts",
+            "bytes": 5358,
+            "sha256": "dfcb56274123566cf513f466e7c22a1af507d1b60b00821a4c70631ea098b83d"
+        },
+        {
+            "path": "repository/src/__tests__/config/qualification-campaign.test.mjs",
+            "bytes": 173340,
+            "sha256": "3298ed45326bd61a8ec90ae907565747a59f10caf7a7d75cc7b3971556813984"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261121T181628626Z-framing-systematic-local-correction.tar.gz",
+        "bytes": 202189,
+        "sha256": "ef446e6563fec8b7a1456a6f76ce6da3faefad96fc09c5af2bbe7deebcd04807"
+    },
+    "verification": "restored_and_verified"
+}

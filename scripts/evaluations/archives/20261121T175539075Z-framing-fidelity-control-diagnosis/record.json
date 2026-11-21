@@ -1,0 +1,84 @@
+{
+    "schemaVersion": 1,
+    "id": "20261121T175539075Z-framing-fidelity-control-diagnosis",
+    "createdAt": "2026-11-21T17:55:39.075Z",
+    "git": {
+        "head": "2da55bde864959fb7cd09c23fa99e6a6a63fe0cb",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/deep-diagnosis",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/deep-diagnosis"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-21-framing-fidelity-live-qualification.md",
+            "archivePath": "repository/docs/verification/2026-11-21-framing-fidelity-live-qualification.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/modelTransport.ts",
+            "archivePath": "repository/convex/integrations/modelTransport.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/documentaryControl.ts",
+            "archivePath": "repository/convex/integrations/documentaryControl.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/sources/preparationModel.ts",
+            "archivePath": "repository/convex/sources/preparationModel.ts"
+        }
+    ],
+    "files": [
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/deep-diagnosis/arize-controls.json",
+            "bytes": 298291,
+            "sha256": "8d5e7a6fd7ede168d34e01260ea304182b4d842790d699a93c554b7666aa3ecd"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/deep-diagnosis/comparison.json",
+            "bytes": 4421,
+            "sha256": "82f35307a2716a81fd34cfb2d1f8e7ef3a5865992b219844c2fde9494c441666"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/deep-diagnosis/replay-confirmed.log",
+            "bytes": 268,
+            "sha256": "6622a8d08db258b058e3f8d2f554dddd3ac815d6f4b16201f2da24d142e35de4"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/deep-diagnosis/replay.log",
+            "bytes": 2482,
+            "sha256": "0b1171aa349f23026b4f7bab4d71bed29ef2724ecf534fa5399f86d42aedd5a0"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/deep-diagnosis/retained-control-diagnosis.test.ts",
+            "bytes": 4597,
+            "sha256": "5f83625ace7d10f5e1022d5d495376858c827ccdffdb801ebfc55474b323a11f"
+        },
+        {
+            "path": "repository/convex/integrations/documentaryControl.ts",
+            "bytes": 6301,
+            "sha256": "d690098271609741784f3d0c0ea57a4e06588d9ed9f42459812abd1391c5afc0"
+        },
+        {
+            "path": "repository/convex/integrations/modelTransport.ts",
+            "bytes": 44821,
+            "sha256": "b897de718440f4b426ac153c2bc9dd5e28e12d91c145d3ee8f7a0edfaf537237"
+        },
+        {
+            "path": "repository/convex/sources/preparationModel.ts",
+            "bytes": 12751,
+            "sha256": "c6db71c37d9c61e3d879fd3cae85f48d36964ff017021b0c2a71e91d227b0118"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-framing-fidelity-live-qualification.md",
+            "bytes": 18151,
+            "sha256": "881899b9c12aafa28ec1874b1c91326d773fecb0af75856fa07ca5d6d4422e11"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261121T175539075Z-framing-fidelity-control-diagnosis.tar.gz",
+        "bytes": 72347,
+        "sha256": "ba29c88393ff9b32667f18e76f9fb8c379ecdb1626f1fb209a11a22de453b2e1"
+    },
+    "verification": "restored_and_verified"
+}

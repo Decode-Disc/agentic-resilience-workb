@@ -29,7 +29,10 @@ import { historyTextFragment } from "@convex/execution/journal";
 import { missionScope } from "@convex/execution/missionData";
 import { operationObservationRange } from "@convex/execution/retainedText";
 import { secSubmissionsUrl } from "@convex/integrations/sec";
-import { framingReplaySchema } from "@convex/qualificationCampaignPolicy";
+import {
+    framingReplaySchema,
+    resolveFramingReplay,
+} from "@convex/qualificationCampaignPolicy";
 import { requireCampaignLot } from "@convex/qualificationCampaigns";
 import {
     DOCUMENTARY_SEARCH_QUERY_MAX_CHARS,
@@ -254,7 +257,7 @@ export async function requirePublicContextRequest(
                 !supportsDirectedFraming(mission.definitionVersion)
             )
                 throw executionError("instruction_not_authorized");
-            replay = scenario.framingReplay;
+            replay = resolveFramingReplay(campaign.manifest, scenario);
             qualificationDeadline = Math.min(
                 context.expiresAt,
                 campaign.manifest.expiresAt,

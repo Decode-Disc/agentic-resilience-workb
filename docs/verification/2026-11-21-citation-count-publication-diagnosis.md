@@ -87,3 +87,7 @@ The decisive sequence is:
 The framing skill was actually consulted and its returned text is present in the provider-visible conversation. There is no demonstrated instruction-delivery failure for this case. The comparison excludes lost citation detail and transport-side rewriting as explanations for the captured discrepancy; it does not establish why the model generalized four associations into an all-five claim. It also does not demonstrate that a different prompt or an enabled coherence reviewer would prevent it.
 
 The [verified provider-trace correlation archive](../../scripts/evaluations/archives/20261121T150920815Z-citation-provider-trace-correlation/record.json) retains the correlation script, visible trace extracts, eight-generation comparison and selected OpenRouter metadata (10 files, 174,769 bytes).
+
+## Subsequent method delivery and controller-path replay
+
+The [method delivery and capacity replay](2026-11-21-framing-fidelity-method.md) records Workbench 12 native skill delivery and a real enabled-controller capacity refusal over retained NVIDIA content. It does not retroactively correct the original response or change its failed assessment; semantic improvement remains unqualified.

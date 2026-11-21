@@ -1529,3 +1529,96 @@ test("a lost one-shot terminal acknowledgement keeps the journal and receipt wit
         dispatches: 1,
     });
 });
+
+test("a lost billing-scheduling acknowledgement cannot erase a known failed model result", async () => {
+    const { t, preparationId, sourceCaptureId } = await capturedCandidate();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const request = vi.fn<typeof fetch>(async () =>
+        providerFixtureResponse(
+            {
+                id: "gen-known-incomplete-qualification",
+                model: "test-model",
+                choices: [
+                    {
+                        index: 0,
+                        message: {
+                            role: "assistant",
+                            content: '{"coherence": ',
+                        },
+                        finish_reason: "length",
+                    },
+                ],
+                usage: {
+                    prompt_tokens: 100,
+                    completion_tokens: 50,
+                    total_tokens: 150,
+                },
+            },
+            {
+                headers: {
+                    "x-generation-id": "gen-known-incomplete-qualification",
+                },
+            },
+        ),
+    );
+    vi.stubGlobal("fetch", request);
+    let lostAcknowledgement = false;
+    await expect(
+        t.action(async (ctx) => {
+            const runMutation: typeof ctx.runMutation = async (
+                ref,
+                ...args
+            ) => {
+                const result = await ctx.runMutation(ref, ...args);
+                const calls = await t.run((context) =>
+                    context.db.query("providerCalls").collect(),
+                );
+                const call = calls.find(
+                    (item) =>
+                        item.providerObservation?.generationId ===
+                        "gen-known-incomplete-qualification",
+                );
+                // Lose the external RPC acknowledgement after its real billing effect commits.
+                if (
+                    !lostAcknowledgement &&
+                    call?.billing?.state === "pending"
+                ) {
+                    lostAcknowledgement = true;
+                    throw new Error("Lost billing scheduling acknowledgement");
+                }
+                return result;
+            };
+            return qualificationHandler._handler(
+                { ...ctx, runMutation },
+                { preparationId, sourceCaptureId },
+            );
+        }),
+    ).rejects.toThrow("Lost billing scheduling acknowledgement");
+    const state = await t.run(async (ctx) => ({
+        invocation: await ctx.db.query("agentInvocations").unique(),
+        call: (await ctx.db.query("providerCalls").collect()).find(
+            (item) =>
+                item.providerObservation?.generationId ===
+                "gen-known-incomplete-qualification",
+        ),
+        tasks: await ctx.db.query("aiTaskResults").collect(),
+    }));
+    expect(lostAcknowledgement).toBe(true);
+    expect(state.invocation).toMatchObject({ status: "returned" });
+    expect(JSON.parse(state.invocation?.outputJson ?? "null")).toMatchObject({
+        status: "failed",
+        errorCode: "invalid_output",
+    });
+    expect(state.call).toMatchObject({
+        status: "failed",
+        errorCode: "invalid_output",
+        dispatchOutcome: "response_received",
+        billing: { state: "pending", attempt: 0 },
+        providerObservation: {
+            generationId: "gen-known-incomplete-qualification",
+        },
+    });
+    expect(state.call?.reportedCost).toBeUndefined();
+    expect(state.tasks).toEqual([]);
+    expect(request).toHaveBeenCalledOnce();
+});

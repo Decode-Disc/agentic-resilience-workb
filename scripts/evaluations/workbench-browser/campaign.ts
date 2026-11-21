@@ -60,6 +60,7 @@ import {
 import {
     browserBatteryPath,
     candidateHash,
+    compactFramingReplayDocuments,
     prepareFramingReplay,
     prepareSourcesReplay,
     preserveQualificationCandidate,
@@ -69,6 +70,7 @@ import {
     verifyQualificationCandidate,
 } from "./protocol.ts";
 import { createQualificationRelay } from "./relay.mjs";
+import { qualificationDiagnostic, type Diagnostic } from "./qualification.ts";
 import {
     inspectCampaignScenarios,
     prepareCampaignScenarios,
@@ -1425,7 +1427,11 @@ async function executeCampaign(
                 batteryHash: sha256(JSON.stringify(values.scenarios)),
             };
         }
-        const manifest = campaignPreparationSchema.parse(resolvedInput);
+        const manifest = campaignPreparationSchema.parse(
+            compactFramingReplayDocuments(
+                campaignPreparationSchema.parse(resolvedInput),
+            ),
+        );
         if (manifest.version === 3) {
             const { prepareCampaignReviewer } = await import(
                 "./campaign-review.ts"
@@ -1687,15 +1693,23 @@ async function executeCampaign(
             if (inputsHash) save(lotRoot, receiptName, { inputsHash });
         };
         let assessmentArchived = false;
+        let step = "review";
+        const diagnostics: Diagnostic[] = [];
+        const failures: unknown[] = [];
+        let result:
+            | Awaited<ReturnType<typeof runCampaignReviewStage>>
+            | undefined;
         try {
-            return await runCampaignReviewStage({
+            result = await runCampaignReviewStage({
                 root: lotRoot,
                 evidenceHash: revision,
                 reconciled,
                 review,
                 assess: async (assessment) => {
+                    step = "archive-assessment";
                     archiveReview("assessment");
                     assessmentArchived = true;
+                    step = "submit-assessment";
                     await client.mutation(
                         ref(internal.qualificationCampaigns.assess),
                         {
@@ -1704,20 +1718,56 @@ async function executeCampaign(
                             verdict: assessment.verdict,
                         },
                     );
+                    step = "retain-assessment";
                 },
             });
-        } finally {
+        } catch (error) {
+            failures.push(error);
+            diagnostics.push(qualificationDiagnostic(step, error));
+        }
+        try {
+            step = "read-review-report";
             const report = campaignReviewReport(lotRoot);
             if (report) {
                 console.log(
                     JSON.stringify({
                         status: "diagnostic_available",
-                        report: { ...report, path: join(lotRoot, report.path) },
+                        report: {
+                            ...report,
+                            path: join(lotRoot, report.path),
+                        },
                     }),
                 );
-                if (!assessmentArchived) archiveReview("diagnostic");
+                if (!assessmentArchived) {
+                    step = "archive-diagnostic";
+                    archiveReview("diagnostic");
+                }
+            }
+        } catch (error) {
+            diagnostics.push(qualificationDiagnostic(step, error));
+            failures.push(error);
+        }
+        if (diagnostics.length) {
+            const name = `campaign-diagnostic-${randomUUID()}`;
+            console.error(
+                JSON.stringify({
+                    status: "campaign_failed",
+                    diagnostics,
+                    path: join(lotRoot, `${name}.json`),
+                }),
+            );
+            try {
+                save(lotRoot, name, { diagnostics });
+            } catch (error) {
+                throw new AggregateError(
+                    [...failures, error],
+                    "Campaign failure diagnostics could not be retained",
+                );
             }
         }
+        if (failures.length) throw failures[0];
+        assert(result, "Review outcome missing");
+        return result;
     };
     const verifyBattery = () =>
         assert.equal(

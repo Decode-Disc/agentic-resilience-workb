@@ -224,11 +224,7 @@ export async function executePreparationModel<
                 },
             });
         } finally {
-            if (
-                providerIdentityObserved &&
-                result?.status !== "succeeded" &&
-                result?.reportedCost === undefined
-            )
+            if (providerIdentityObserved && result === undefined)
                 await ctx.runMutation(internal.providerCalls.requestBilling, {
                     invocationId,
                 });

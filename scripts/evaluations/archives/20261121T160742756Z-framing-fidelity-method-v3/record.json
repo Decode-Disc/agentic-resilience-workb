@@ -1,0 +1,460 @@
+{
+    "schemaVersion": 1,
+    "id": "20261121T160742756Z-framing-fidelity-method-v3",
+    "createdAt": "2026-11-21T16:07:42.756Z",
+    "git": {
+        "head": "1c5f69e63fef702992e44b0f2a708c0b855d5f2c",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/agent-skills/workbench-framing/SKILL.md",
+            "archivePath": "repository/agent-skills/workbench-framing/SKILL.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/agent-skills/workbench-framing/examples/worked-cases.md",
+            "archivePath": "repository/agent-skills/workbench-framing/examples/worked-cases.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/context/TECH.md",
+            "archivePath": "repository/context/TECH.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/framingContracts.ts",
+            "archivePath": "repository/convex/domain/framingContracts.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/savedMaterialOperations.ts",
+            "archivePath": "repository/convex/domain/savedMaterialOperations.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/workbenchAgent.ts",
+            "archivePath": "repository/convex/domain/workbenchAgent.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/workbenchContracts.ts",
+            "archivePath": "repository/convex/domain/workbenchContracts.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/agentCatalog.ts",
+            "archivePath": "repository/convex/execution/agentCatalog.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/agentSkillPackages.json",
+            "archivePath": "repository/convex/integrations/agentSkillPackages.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/piInputProfiles.json",
+            "archivePath": "repository/convex/integrations/piInputProfiles.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/ROADMAP.md",
+            "archivePath": "repository/docs/ROADMAP.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-21-citation-count-publication-diagnosis.md",
+            "archivePath": "repository/docs/verification/2026-11-21-citation-count-publication-diagnosis.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/scripts/sync-agent-skills.ts",
+            "archivePath": "repository/scripts/sync-agent-skills.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/config/agent-skill-packaging.test.mjs",
+            "archivePath": "repository/src/__tests__/config/agent-skill-packaging.test.mjs"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/agent-skills.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/agent-skills.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/qualification-method-comparison.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/qualification-method-comparison.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/separated-agent-context.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/separated-agent-context.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/workbench-documentary-continuity.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/workbench-documentary-continuity.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/workbench-framing-projection.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/workbench-framing-projection.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/setup/workbench.ts",
+            "archivePath": "repository/src/__tests__/setup/workbench.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-21-framing-fidelity-method.md",
+            "archivePath": "repository/docs/verification/2026-11-21-framing-fidelity-method.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/response-control-retained-framing.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/response-control-retained-framing.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/setup/fixtures/nvidia-citation-review.json",
+            "archivePath": "repository/src/__tests__/setup/fixtures/nvidia-citation-review.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/responseControl.ts",
+            "archivePath": "repository/convex/responseControl.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/integrations/responseCoherence.ts",
+            "archivePath": "repository/convex/integrations/responseCoherence.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/workbenchResponseControlContracts.ts",
+            "archivePath": "repository/convex/domain/workbenchResponseControlContracts.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/domain/workbenchContext.ts",
+            "archivePath": "repository/convex/domain/workbenchContext.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/journal.ts",
+            "archivePath": "repository/convex/execution/journal.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/package.json",
+            "archivePath": "repository/package.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/pnpm-lock.yaml",
+            "archivePath": "repository/pnpm-lock.yaml"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/method-delivery-red.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/method-delivery-red.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/method-delivery-green.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/method-delivery-green.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/final-behavior.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/final-behavior.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/final-protocol.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/final-protocol.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/documentary-v12.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/documentary-v12.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/capacity-characterization.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/capacity-characterization.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/capacity-false.json",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/capacity-false.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/capacity-true.json",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/capacity-true.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/profiles.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/profiles.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/final-types.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/final-types.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/final-frontend-types.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/final-frontend-types.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/final-lint.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/final-lint.log"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/decisions-capacity-metadata.json",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/decisions-capacity-metadata.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/workflow-model-metadata.json",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/workflow-model-metadata.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/reviewer-metadata.json",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/reviewer-metadata.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/local-profile-verification.json",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/local-profile-verification.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/start-setting-check.json",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/start-setting-check.json"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/final-campaign-prepare.log",
+            "archivePath": "repository/.implementation-plans/framing-fidelity-progress/final-campaign-prepare.log"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/framing-fidelity-method-v3-20261121/final-prepared",
+            "archivePath": "external/mandate"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/mandate/campaign.json",
+            "bytes": 1652839,
+            "sha256": "ae2d01af8798f48f78462729e69077624538c9d3b5b2493543fc5c2e5e34492b"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/capacity-characterization.log",
+            "bytes": 268,
+            "sha256": "c718712373c7fde0784f289bcf2267644878a4bafaeb973f4845923161b5f61c"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/capacity-false.json",
+            "bytes": 229,
+            "sha256": "c8225eaa31bd8d104807c4f8278876bf7c565474acd22607cad441697c215470"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/capacity-true.json",
+            "bytes": 392,
+            "sha256": "4195322d5442c4d346c5ead6277298f931697ec6cae0c076b3a6c15a84f05add"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/decisions-capacity-metadata.json",
+            "bytes": 1859,
+            "sha256": "1a96af7bdce0422c75701eda775de735abc632dce1671f4863175c1744ea4af9"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/documentary-v12.log",
+            "bytes": 271,
+            "sha256": "4b3d7f00bed1976455bd5705b1e19655adac6da737a06456ae354a1059e4560b"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/final-behavior.log",
+            "bytes": 279,
+            "sha256": "96a6429b590c879ff87c7622888b45084a5b7bc020173e4bcd9385fdd99fba19"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/final-campaign-prepare.log",
+            "bytes": 307,
+            "sha256": "96ad0b8ce53b27ddebef8575094a4cdbdb41680c502b9fba01b26f517004b65f"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/final-frontend-types.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/final-lint.log",
+            "bytes": 45,
+            "sha256": "a80625a8338dbe83a5b3099cb66847845aeab9a909b98e850f842b5a5eb33c1e"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/final-protocol.log",
+            "bytes": 4484,
+            "sha256": "2d10c95527f5b57f8e592f2e5af95b74c0bed15d238d7dd086a78dcc37579474"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/final-types.log",
+            "bytes": 55,
+            "sha256": "275cd6edeed412bf468510b7ae1fa591679d39ee8104c8765c681630946cded0"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/local-profile-verification.json",
+            "bytes": 228,
+            "sha256": "b4f1a5b46451a653c0cd7f3b1ee712f423d32ee55314dad95fd69717976fd940"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/method-delivery-green.log",
+            "bytes": 282,
+            "sha256": "91af3409fcff56211ebf0fcb32455c8b49758036833f37e05d4c9c87bcf7f023"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/method-delivery-red.log",
+            "bytes": 1325,
+            "sha256": "2d764ee6ba55bf71d88295ca71a0b92e321afbeae54c7b8ed2d63d2632201db7"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/profiles.log",
+            "bytes": 279,
+            "sha256": "3e4ec0b37d126cff47c8a45e80b8197b3d450e84c1364e6209d54eca526abe32"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/reviewer-metadata.json",
+            "bytes": 414,
+            "sha256": "19bfd21ccea73dae5f6c790da90f9bece90b1b3d004d0d7e54973cd4861748bf"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/start-setting-check.json",
+            "bytes": 43,
+            "sha256": "9ca5806c7ded880f79b021046e1cda9212b5e3cf8b74e479af1b69ea045aada0"
+        },
+        {
+            "path": "repository/.implementation-plans/framing-fidelity-progress/workflow-model-metadata.json",
+            "bytes": 4156,
+            "sha256": "c464e66f79f4e5110118ec54a1a3b2c234d44c94b506d90f40a112e6fdb64159"
+        },
+        {
+            "path": "repository/agent-skills/workbench-framing/examples/worked-cases.md",
+            "bytes": 5838,
+            "sha256": "ea671ac9f2688b5693514350ca8a7ad7a4cc33ceb4fa2283f5c9180a617feec8"
+        },
+        {
+            "path": "repository/agent-skills/workbench-framing/SKILL.md",
+            "bytes": 3083,
+            "sha256": "3f2819a0adfb31452a85c608ea98d7c87bba156f815b449c6c35e22aa0d005c4"
+        },
+        {
+            "path": "repository/context/TECH.md",
+            "bytes": 66967,
+            "sha256": "49395d133b17d0345801cd73a0f819a89f9decd35569049deccb6e8b58d53256"
+        },
+        {
+            "path": "repository/convex/domain/framingContracts.ts",
+            "bytes": 5140,
+            "sha256": "d48a639404661f2937e204b4abfa9966271003a13ec3aa7606e67dd0a0eff05b"
+        },
+        {
+            "path": "repository/convex/domain/savedMaterialOperations.ts",
+            "bytes": 15438,
+            "sha256": "b126e0047ba81cfae3891bd3062e3f7a1aa1b616017be09de0c8a017209a11b1"
+        },
+        {
+            "path": "repository/convex/domain/workbenchAgent.ts",
+            "bytes": 56516,
+            "sha256": "4862340e5ffcc1cdbec742e44f46a0dfb5dc6e2ebed76b559b9cb446dbb965ab"
+        },
+        {
+            "path": "repository/convex/domain/workbenchContext.ts",
+            "bytes": 9817,
+            "sha256": "836649466a6868b1ae7e6f58a1c62be7a02d652ac927c3854b6d4c612a0b283f"
+        },
+        {
+            "path": "repository/convex/domain/workbenchContracts.ts",
+            "bytes": 18235,
+            "sha256": "379b15c4e5f23c4856914b59a10173a08af4e61780a38c2d90d85b7b66d2b972"
+        },
+        {
+            "path": "repository/convex/domain/workbenchResponseControlContracts.ts",
+            "bytes": 8101,
+            "sha256": "e616e28879f02e587d88a116c804df53e00559162ae59627c77f479d4abc09a0"
+        },
+        {
+            "path": "repository/convex/execution/agentCatalog.ts",
+            "bytes": 8060,
+            "sha256": "374054d44bb9116e16a69cb99ec805f9e45369aa9fda776ca61b2dc68b0f9b79"
+        },
+        {
+            "path": "repository/convex/execution/journal.ts",
+            "bytes": 28647,
+            "sha256": "44219bc05a89a566fc645cefa731d49275bf19cd238cae6e6a1b96bfd215277c"
+        },
+        {
+            "path": "repository/convex/integrations/agentSkillPackages.json",
+            "bytes": 47035,
+            "sha256": "1ef0760918b01a6557ca8991b7a2e3503aeedb3db6be8f3ca77fea864d22b3a3"
+        },
+        {
+            "path": "repository/convex/integrations/piInputProfiles.json",
+            "bytes": 113404,
+            "sha256": "26fe6a240513da070b6f3980dd659f8682e627c0055eeb502cca19f72215df75"
+        },
+        {
+            "path": "repository/convex/integrations/responseCoherence.ts",
+            "bytes": 8046,
+            "sha256": "f76d7a376f8a6b3807f1fc3f133bfd36581307ff39b9271e7d4fd97435223f24"
+        },
+        {
+            "path": "repository/convex/responseControl.ts",
+            "bytes": 23546,
+            "sha256": "b943c629ed442bedcfacb3cd60e2f72bb2dc100148d503ffcd2b0dd0edc17255"
+        },
+        {
+            "path": "repository/docs/ROADMAP.md",
+            "bytes": 25024,
+            "sha256": "c224835feab705c1f1145cf5ca6d02cf1921d999375848511df258b3ad18e719"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-citation-count-publication-diagnosis.md",
+            "bytes": 12457,
+            "sha256": "a05910075d48fa956e5887f95f6515b023758a0a07c6a607fc9c6a486356d1c1"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-framing-fidelity-method.md",
+            "bytes": 8508,
+            "sha256": "8f42d6a2e525db367e83faa4c8c525fd5c3764446591363efca3bd33af951347"
+        },
+        {
+            "path": "repository/package.json",
+            "bytes": 6629,
+            "sha256": "4ce204c8ebc4e22c6826cd3afd07237cede949597b0a2b5ea6a6bff4ce70ff1b"
+        },
+        {
+            "path": "repository/pnpm-lock.yaml",
+            "bytes": 424087,
+            "sha256": "33ea01fe2bd098542eee2ca0ecfd44a1387383e29b167405a637eed27117c1d2"
+        },
+        {
+            "path": "repository/scripts/sync-agent-skills.ts",
+            "bytes": 5262,
+            "sha256": "0af1476f184580566927dcbc01d8b0056f8b71f4173f430f25a241684df5e117"
+        },
+        {
+            "path": "repository/src/__tests__/config/agent-skill-packaging.test.mjs",
+            "bytes": 5040,
+            "sha256": "9327652656c2126060c545661e3f0056c709d42695211efe3c087713bdc83a37"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/agent-skills.test.ts",
+            "bytes": 36814,
+            "sha256": "43e44175cf20189ad6f07a7f6a39940fd10f9c6d21e4f79371ac75f9325c3cb3"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/qualification-method-comparison.test.ts",
+            "bytes": 7200,
+            "sha256": "866b25aec1aea3f4c967dfdf6b41e85090be0277ce4b1f8cc9f61f2855c4df97"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/response-control-retained-framing.test.ts",
+            "bytes": 13199,
+            "sha256": "91c295adbc1c146a67709aa4458d5e720e5ce53efaa0bbe10ea8f0785ed3193c"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/separated-agent-context.test.ts",
+            "bytes": 18663,
+            "sha256": "52eb912b06e4feee01e7c69bdc75260dbcaaa4bff00002a6841646f3fbfa7bbd"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/workbench-documentary-continuity.test.ts",
+            "bytes": 66344,
+            "sha256": "525d5eec3a10f006802bc4e4c7f96a5ee48a99951a0f8e32216c7512e1ef62a3"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/workbench-framing-projection.test.ts",
+            "bytes": 6414,
+            "sha256": "1498ffc7506bad8eb442e05a743eb9721e0a391d21dfd58da93716f79d1adda7"
+        },
+        {
+            "path": "repository/src/__tests__/setup/fixtures/nvidia-citation-review.json",
+            "bytes": 87334,
+            "sha256": "40d2e1d7561e4609b89eed3da2baa197c9eff5239d1d062c1f7889631d762741"
+        },
+        {
+            "path": "repository/src/__tests__/setup/workbench.ts",
+            "bytes": 5061,
+            "sha256": "1d6d899dd37e0034e5ac2eedcea5e64e1244f886e0b014fd2bdb73a6a0556490"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261121T160742756Z-framing-fidelity-method-v3.tar.gz",
+        "bytes": 788300,
+        "sha256": "26ab28ee2ed728aa8d430e8701218b4528a8279c6b1e3ad80f9469f5a40c3ced"
+    },
+    "verification": "restored_and_verified"
+}

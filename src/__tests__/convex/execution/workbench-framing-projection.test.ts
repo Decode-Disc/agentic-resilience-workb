@@ -136,7 +136,7 @@ test("new conversations expose initial requirements and refresh the schema after
             .withIndex("by_run", (q) => q.eq("runId", runId))
             .unique(),
     );
-    expect(conversation?.definitionVersion).toBe(11);
+    expect(conversation?.definitionVersion).toBe(12);
 }, 30000);
 
 test.each([

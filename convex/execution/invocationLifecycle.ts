@@ -1009,6 +1009,9 @@ export const finishOneShot = internalMutation({
             status: "returned",
             completedAt: Date.now(),
         });
+        await ctx.runMutation(internal.providerCalls.requestBilling, {
+            invocationId: invocation._id,
+        });
         return null;
     },
 });

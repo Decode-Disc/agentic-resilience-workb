@@ -17,7 +17,10 @@ import {
     initialFixtureIds,
 } from "@convex/qualificationInitialFixtures";
 import directedMaterial from "@evaluations/workbench-browser/fixtures/directed-framing-20261118/material.json";
-import { prepareFramingReplay } from "@evaluations/workbench-browser/protocol";
+import {
+    compactFramingReplayDocuments,
+    prepareFramingReplay,
+} from "@evaluations/workbench-browser/protocol";
 import { prepareCampaignScenarios } from "@evaluations/workbench-browser/scenarios";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
@@ -144,21 +147,23 @@ async function fixture(
                     state: "conversation_settled",
                 },
             ];
-    const manifest = campaignManifestSchema.parse({
-        ...raw,
-        mode: "deterministic",
-        configurations: taskMethods
-            ? raw.configurations
-            : raw.configurations.slice(0, 1),
-        scenarios,
-        expectations: scenarios.map((scenario) => ({
-            id: scenario.id,
-            checks: ["documentary-handoff"],
-        })),
-        batteryHash: "a".repeat(64),
-        perLot: emptyCampaignLimits(),
-        total: emptyCampaignLimits(),
-    });
+    const manifest = compactFramingReplayDocuments(
+        campaignManifestSchema.parse({
+            ...raw,
+            mode: "deterministic",
+            configurations: taskMethods
+                ? raw.configurations
+                : raw.configurations.slice(0, 1),
+            scenarios,
+            expectations: scenarios.map((scenario) => ({
+                id: scenario.id,
+                checks: ["documentary-handoff"],
+            })),
+            batteryHash: "a".repeat(64),
+            perLot: emptyCampaignLimits(),
+            total: emptyCampaignLimits(),
+        }),
+    );
     const campaignId = await f.t.mutation(
         internal.qualificationCampaigns.authorize,
         { manifest },
@@ -917,9 +922,15 @@ test.each(
             case: replayCase,
         }),
     );
+    const sharedCase =
+        replayCase === "nvidia" &&
+        preset === "balanced" &&
+        methods === "native_skills";
     const f = await fixture(
         "sources_correction",
-        [preset],
+        sharedCase
+            ? ["balanced", "first_party_depth", "independent_scrutiny"]
+            : [preset],
         {
             text:
                 replayCase === "nvidia"
@@ -930,6 +941,18 @@ test.each(
         replay,
         methods,
     );
+    if (sharedCase) {
+        const stored = await f.t.run((ctx) => ctx.db.get(f.campaignId));
+        assert(stored?.manifest.version !== 1 && stored);
+        expect(
+            Object.keys(stored.manifest.sharedFramingDocuments ?? {}),
+        ).toHaveLength(1);
+        expect(
+            stored.manifest.scenarios.every(
+                (s) => s.framingReplay && "documentsRef" in s.framingReplay,
+            ),
+        ).toBe(true);
+    }
     await f.t.mutation(internal.execution.fixtures.activateWorkbench, {
         runId: f.runId,
         fixtureKey: f.args.fixtureKey,
@@ -1180,6 +1203,8 @@ for (const scenario of frozenMethodCases.scenarios.filter(
         "native_skills",
     ] as const)(`${scenario.id}: %s receives the frozen historical or held-out observations`, async (method) => {
         assert(scenario.framingReplay && scenario.framingRequest);
+        assert("documents" in scenario.framingReplay);
+        const documents = scenario.framingReplay.documents;
         const f = await fixture(
             "sources_correction",
             [scenario.coveragePreset],
@@ -1241,11 +1266,8 @@ for (const scenario of frozenMethodCases.scenarios.filter(
                 JSON.parse(searched.valueJson).candidates.map(
                     (c: { url: string }) => c.url,
                 ),
-            ).toEqual(scenario.framingReplay.documents.map((d) => d.url));
-            for (const [
-                index,
-                doc,
-            ] of scenario.framingReplay.documents.entries()) {
+            ).toEqual(documents.map((d) => d.url));
+            for (const [index, doc] of documents.entries()) {
                 const requestId = await f.t.mutation(
                     internal.execution.operations.enqueue,
                     {

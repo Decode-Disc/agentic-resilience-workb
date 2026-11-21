@@ -152,6 +152,7 @@ export const framingWriteReceipt = framingRevisionResult.extend({
 
 export const FRAMING_RECEIPT_OPERATION_VERSION = 3;
 export const WORKBENCH_FRAMING_RECEIPT_VERSION = 11;
+export const WORKBENCH_FRAMING_METHOD_VERSION = 12;
 
 export const framingQuestionValidator = v.object({
     id: v.string(),

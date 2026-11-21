@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
@@ -5,7 +6,9 @@ import { retainInvocationPayload } from "@convex/execution/journal";
 import {
     campaignManifestSchema,
     emptyCampaignLimits,
+    resolveFramingReplay,
 } from "@convex/qualificationCampaignPolicy";
+import { compactFramingReplayDocuments } from "@evaluations/workbench-browser/protocol";
 import { makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
@@ -37,6 +40,97 @@ const manifest = () =>
         maximumLots: 8,
         batteryHash: "a".repeat(64),
     });
+
+test("four dossiers authorize one complete shared filing and reject changed or missing material", async () => {
+    const f = await seedWorkbench(true);
+    const raw = manifest();
+    assert(raw.version !== 1);
+    const text = readFileSync(
+        "scripts/evaluations/workbench-browser/fixtures/documentary-operations-20261121/nvidia-annual-report.txt",
+        "utf8",
+    );
+    const baseline = raw.scenarios[0];
+    assert(baseline);
+    const scenarios = Array.from({ length: 4 }, (_, index) => ({
+        ...baseline,
+        id: `complete-${index}`,
+        framingPublicContext: true,
+        framingRequest: {
+            text: "Investigate this complete filing.",
+            receivedAt: "2026-11-21T16:00:00.000Z",
+        },
+        framingReplay: {
+            materialHash: "a".repeat(64),
+            case: "heldout",
+            unavailable: false,
+            documents: [
+                {
+                    url: "https://example.com/filing",
+                    title: "Complete filing",
+                    text,
+                },
+            ],
+        },
+        steps: [
+            {
+                id: "settled",
+                action: "wait_for",
+                state: "conversation_settled",
+            },
+        ],
+    }));
+    const compact = compactFramingReplayDocuments(
+        campaignManifestSchema.parse({
+            ...raw,
+            scenarios,
+            expectations: scenarios.map((s) => ({
+                id: s.id,
+                checks: ["complete-filing"],
+            })),
+        }),
+    );
+    assert(compact.version !== 1 && compact.sharedFramingDocuments);
+    const sharedKey = Object.keys(compact.sharedFramingDocuments)[0];
+    assert(sharedKey);
+    const changed = structuredClone(compact);
+    const document = changed.sharedFramingDocuments?.[sharedKey]?.[0];
+    assert(document);
+    document.text = "Changed after preparation";
+    await expect(
+        f.t.mutation(internal.qualificationCampaigns.authorize, {
+            manifest: changed,
+        }),
+    ).rejects.toThrow("Frozen framing documents hash changed");
+    const missing = structuredClone(compact);
+    delete missing.sharedFramingDocuments?.[sharedKey];
+    await expect(
+        f.t.mutation(internal.qualificationCampaigns.authorize, {
+            manifest: missing,
+        }),
+    ).rejects.toThrow("Frozen framing documents reference is missing");
+    expect(
+        await f.t.run((ctx) => ctx.db.query("qualificationCampaigns").take(1)),
+    ).toEqual([]);
+    const id = await f.t.mutation(internal.qualificationCampaigns.authorize, {
+        manifest: compact,
+    });
+    const saved = await f.t.run((ctx) => ctx.db.get(id));
+    assert(saved?.manifest.version !== 1 && saved);
+    expect(
+        Object.keys(saved.manifest.sharedFramingDocuments ?? {}),
+    ).toHaveLength(1);
+    expect(
+        new TextEncoder().encode(JSON.stringify(saved.manifest)).length,
+    ).toBeLessThan(1024 * 1024);
+    expect(saved.manifest.scenarios).toHaveLength(4);
+    for (const scenario of saved.manifest.scenarios)
+        expect(
+            resolveFramingReplay(saved.manifest, scenario)?.documents[0]?.text,
+        ).toBe(text);
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").take(1)),
+    ).toEqual([]);
+});
 test("a passed profile does not finish a matrix and a correction requires both profiles on the new candidate", async () => {
     const { t } = await seedWorkbench(true);
     const campaignId = await t.mutation(

@@ -1,0 +1,176 @@
+{
+    "schemaVersion": 1,
+    "id": "20261121T191031310Z-one-shot-atomic-billing",
+    "createdAt": "2026-11-21T19:10:31.310Z",
+    "git": {
+        "head": "2da55bde864959fb7cd09c23fa99e6a6a63fe0cb",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/execution/invocationLifecycle.ts",
+            "archivePath": "repository/convex/execution/invocationLifecycle.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/providerCalls.ts",
+            "archivePath": "repository/convex/providerCalls.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/convex/sources/preparationModel.ts",
+            "archivePath": "repository/convex/sources/preparationModel.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/journal.test.ts",
+            "archivePath": "repository/src/__tests__/convex/execution/journal.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/sources/source-qualification-action.test.ts",
+            "archivePath": "repository/src/__tests__/convex/sources/source-qualification-action.test.ts"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/context/TECH.md",
+            "archivePath": "repository/context/TECH.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/docs/verification/2026-11-21-one-shot-billing-settlement.md",
+            "archivePath": "repository/docs/verification/2026-11-21-one-shot-billing-settlement.md"
+        },
+        {
+            "origin": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.implementation-plans/framing-fidelity-progress/harness-settlement",
+            "archivePath": "external/verification"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/verification/backend-types.log",
+            "bytes": 39,
+            "sha256": "3bf7cac6952e7262d8e81851cc788253b3d9aea2e709cd0f89efa3f7d7369e1f"
+        },
+        {
+            "path": "external/verification/control-settlement-confirmed.log",
+            "bytes": 282,
+            "sha256": "5c14cc4e101083e15006fe6e893b717f14d447b77642c2fd162444ce8113eb63"
+        },
+        {
+            "path": "external/verification/control-settlement.log",
+            "bytes": 4034,
+            "sha256": "96a59d5116ef1dfaf2d7587c1350ad22c74a91f08f08adbd00ff16afedfd10ed"
+        },
+        {
+            "path": "external/verification/docs-check.log",
+            "bytes": 440,
+            "sha256": "9d5f679b706d7836665dbe6d988939e01ca1289be7ee599dd402870e991a3137"
+        },
+        {
+            "path": "external/verification/docs-final-confirmed.log",
+            "bytes": 440,
+            "sha256": "88e102473f4b775a83a5b549ca74bd5d53f844fd6fa0be51b6625ae88f2901c4"
+        },
+        {
+            "path": "external/verification/docs-final.log",
+            "bytes": 608,
+            "sha256": "5c9f57445025e3d181b01b491d8b6640041d90667e911a2a46e10e37498f2ef9"
+        },
+        {
+            "path": "external/verification/green.log",
+            "bytes": 282,
+            "sha256": "2727dc1ff3c89435eff2d61caf43f404290a2d09ba5f2ba48feb384f35b325ba"
+        },
+        {
+            "path": "external/verification/imports.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "external/verification/local-publication.log",
+            "bytes": 894,
+            "sha256": "6bd1b142c80fb36c776de5421554227dccb2e0acded18d5713843a47256fec79"
+        },
+        {
+            "path": "external/verification/ownership.log",
+            "bytes": 35,
+            "sha256": "e1b5d3738a16db11e8af45ef62ad93afe0fd55e4a10e2b99cc5fca694db746b5"
+        },
+        {
+            "path": "external/verification/red-boundary.log",
+            "bytes": 1444,
+            "sha256": "d0bcbc184302ee0e416b942cdbd06e673a0fbabe32ce665ef6d8c916bf6ca60b"
+        },
+        {
+            "path": "external/verification/red-confirmed.log",
+            "bytes": 1446,
+            "sha256": "1afd2fcb60d751ee76aa5ef583796a7cff7559f0c99ef178fdafa501eddbe04b"
+        },
+        {
+            "path": "external/verification/red-generation-id.log",
+            "bytes": 1446,
+            "sha256": "92c1f2835ba9ff373245e807443ce3fbb0401409a996d08d32b4ba2a28a4c0c4"
+        },
+        {
+            "path": "external/verification/red.log",
+            "bytes": 1579,
+            "sha256": "1b8924565f04eb7abbc84b501b143176ca1bf1a2dab942de64d84a466a8456df"
+        },
+        {
+            "path": "external/verification/regressions.log",
+            "bytes": 274,
+            "sha256": "0ef0b6d12d4e66b95d5276976c97f07a55aa032827bac464ce43617d8f27c31d"
+        },
+        {
+            "path": "external/verification/test-types.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "path": "external/verification/without-atomic-billing.log",
+            "bytes": 1500,
+            "sha256": "5e1f9a741ca291d7ac85c7c1a58bec82775d1f5fd6f924db8d62aa795b719ac9"
+        },
+        {
+            "path": "external/verification/without-billing-idempotency.log",
+            "bytes": 1942,
+            "sha256": "69c81756a0058d8bcc84e229c24fafb4ac15757481410c1e24a446d43d7b26a6"
+        },
+        {
+            "path": "repository/context/TECH.md",
+            "bytes": 67828,
+            "sha256": "5469a3f27be3edbb220a453be3d4317883cb15512ea2208f336b6f33b9917c87"
+        },
+        {
+            "path": "repository/convex/execution/invocationLifecycle.ts",
+            "bytes": 59029,
+            "sha256": "e0bce1b50998d0488b60456c45cebee79d2ae3ef17bfd5f2dc168d2a061a3034"
+        },
+        {
+            "path": "repository/convex/providerCalls.ts",
+            "bytes": 80091,
+            "sha256": "40d4ab4c051094909e80f00640367c333b427b57dc1f2a426d211ccd8809c277"
+        },
+        {
+            "path": "repository/convex/sources/preparationModel.ts",
+            "bytes": 12641,
+            "sha256": "4dcb0f86138ca3fc450a622c1a5302f6a2b2a6437b5355848b5664df3746abb3"
+        },
+        {
+            "path": "repository/docs/verification/2026-11-21-one-shot-billing-settlement.md",
+            "bytes": 4698,
+            "sha256": "a3fea93d4dced4727fc65d5aa7a55fa63aa21bfd343fcd01bc69c604376376a2"
+        },
+        {
+            "path": "repository/src/__tests__/convex/execution/journal.test.ts",
+            "bytes": 36649,
+            "sha256": "cdc911697143210ec495a4c306572032024477436cfe49ef2629b493be897afa"
+        },
+        {
+            "path": "repository/src/__tests__/convex/sources/source-qualification-action.test.ts",
+            "bytes": 56858,
+            "sha256": "e4961cc903774f54a71bc4086fec4f39709e4a241683c771a1350624c02a3bf7"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261121T191031310Z-one-shot-atomic-billing.tar.gz",
+        "bytes": 71803,
+        "sha256": "342ba12e793e716c2883152bf3c1945a6981e43e8a66c291cdac1972e332cebc"
+    },
+    "verification": "restored_and_verified"
+}

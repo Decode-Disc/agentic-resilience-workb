@@ -30,36 +30,42 @@ export function qualificationDiagnostic(
         "ETIMEDOUT",
         "ERR_ASSERTION",
     ]);
-    const domainData =
-        error &&
-        typeof error === "object" &&
-        "data" in error &&
-        typeof error.data === "object" &&
-        error.data
-            ? error.data
-            : null;
-    const typedCode =
-        domainData &&
-        "code" in domainData &&
-        typeof domainData.code === "string" &&
-        known.has(domainData.code)
-            ? domainData.code
-            : undefined;
-    const code =
-        typedCode ??
-        (error &&
-        typeof error === "object" &&
-        "code" in error &&
-        typeof error.code === "string" &&
-        known.has(error.code)
-            ? error.code
-            : undefined);
+    const seen = new Set<object>();
+    let current = error;
+    let code: string | undefined;
+    let timeout = false;
+    while (current && typeof current === "object" && !seen.has(current)) {
+        seen.add(current);
+        timeout ||= current instanceof Error && current.name === "TimeoutError";
+        const domainData =
+            "data" in current &&
+            typeof current.data === "object" &&
+            current.data
+                ? current.data
+                : null;
+        const typedCode =
+            domainData &&
+            "code" in domainData &&
+            typeof domainData.code === "string" &&
+            known.has(domainData.code)
+                ? domainData.code
+                : undefined;
+        code =
+            typedCode ??
+            ("code" in current &&
+            typeof current.code === "string" &&
+            known.has(current.code)
+                ? current.code
+                : undefined);
+        if (code) break;
+        current = "cause" in current ? current.cause : undefined;
+    }
     return {
         step,
         category:
             code === "ERR_ASSERTION"
                 ? "assertion_failed"
-                : error instanceof Error && error.name === "TimeoutError"
+                : timeout
                   ? "timeout"
                   : "operation_failed",
         ...(code ? { code } : {}),

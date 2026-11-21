@@ -27,6 +27,7 @@ import {
     campaignLimitsSchema,
     campaignManifestSchema,
     emptyCampaignLimits,
+    framingReplayDocumentsContent,
     newCampaignManifestSchema,
 } from "./qualificationCampaignPolicy";
 import {
@@ -67,6 +68,15 @@ export const authorize = internalMutation({
     returns: v.id("qualificationCampaigns"),
     handler: async (ctx, { manifest: input }) => {
         const manifest = campaignManifestSchema.parse(input);
+        if (manifest.version !== 1)
+            for (const [digest, documents] of Object.entries(
+                manifest.sharedFramingDocuments ?? {},
+            ))
+                if (
+                    sha256Hex(framingReplayDocumentsContent(documents)) !==
+                    digest
+                )
+                    throw new Error("Frozen framing documents hash changed");
         const owner = await requireBrowserTestOwner(ctx, BROWSER_TEST_SLOT);
         const previous = await ctx.db
             .query("qualificationCampaigns")

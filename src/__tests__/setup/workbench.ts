@@ -22,7 +22,7 @@ export async function seedWorkbench(
     contextDurationMs = 60000,
     researchAngle?: string,
     company?: Parameters<typeof createAdmittedPreflight>[1],
-    definitionVersion: 4 | 5 | 6 | 7 | 10 | 11 | null = 5,
+    definitionVersion: 4 | 5 | 6 | 7 | 10 | 11 | 12 | null = 5,
     coveragePreset:
         | "balanced"
         | "first_party_depth"

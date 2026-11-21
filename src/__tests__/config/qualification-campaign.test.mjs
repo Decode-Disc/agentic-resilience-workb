@@ -379,6 +379,9 @@ test("retained automated review survives cleanup updating current evidence", asy
 
 for (const fault of [
     "retained",
+    "retained-assessment-failure",
+    "retained-archive-failure",
+    "retained-archive-and-diagnostic-failure",
     "none",
     "settlement",
     "settlement-expired",
@@ -410,7 +413,7 @@ for (const fault of [
     "invalid-verdict",
 ])
     test(`campaign command review handles ${fault}`, async () => {
-        const retained = fault === "retained";
+        const retained = fault.startsWith("retained");
         const subscription =
             fault.startsWith("auth-subscription") ||
             fault === "settlement-expired-subscription";
@@ -425,9 +428,10 @@ for (const fault of [
         const { mkdirSync } = await import("node:fs");
         const { ConvexHttpClient } = await import("convex/browser");
         const { getFunctionName } = await import("convex/server");
-        const { runCampaignReviewStage } = await import(
-            "../../../scripts/evaluations/workbench-browser/campaign.ts"
-        );
+        const { runCampaignReviewStage, retainCampaignReviewReport } =
+            await import(
+                "../../../scripts/evaluations/workbench-browser/campaign.ts"
+            );
         const base = makeManifest();
         const { models, ...shared } = base;
         const manifest = campaignManifestSchema.parse({
@@ -516,7 +520,13 @@ for (const fault of [
             join(lotRoot, "review-template.json"),
             JSON.stringify(campaignReviewTemplate(lotRoot)),
         );
-        if (retained)
+        if (retained) {
+            retainCampaignReviewReport(
+                lotRoot,
+                review,
+                qualificationReviewReport(review),
+                1,
+            );
             await runCampaignReviewStage({
                 root: lotRoot,
                 evidenceHash: review.evidenceHash,
@@ -524,6 +534,7 @@ for (const fault of [
                 review: async () => ({ status: "completed", review }),
                 assess: async () => assert.fail("not reconciled"),
             });
+        }
         const frozen = readFileSync(
             join(lotRoot, "campaign-result.json"),
             "utf8",
@@ -625,6 +636,15 @@ for (const fault of [
                 else settled.set(args.attemptKey, structuredClone(args));
             }
             if (name.endsWith(":assess")) {
+                if (fault.includes("assessment-") && !interrupted) {
+                    interrupted = true;
+                    throw new Error("fetch failed secret-token", {
+                        cause: Object.assign(
+                            new Error("private endpoint secret-token"),
+                            { code: "ECONNRESET" },
+                        ),
+                    });
+                }
                 assert.equal(args.verdict, "passed");
                 lot.status = "finished";
                 snapshot.campaign.activeLotId = undefined;
@@ -650,8 +670,25 @@ for (const fault of [
                     site: "http://127.0.0.1:3211",
                 },
             }),
-            archive: () => {
+            archive: (_root, name) => {
                 archives++;
+                if (
+                    (fault === "retained-archive-failure" && archives === 1) ||
+                    (fault === "retained-archive-and-diagnostic-failure" &&
+                        archives <= 2)
+                )
+                    throw Object.assign(
+                        new Error(
+                            name.endsWith("-diagnostic")
+                                ? "secondary diagnostic secret-token"
+                                : "private archive path secret-token",
+                        ),
+                        {
+                            code: name.endsWith("-diagnostic")
+                                ? "EACCES"
+                                : "ENOSPC",
+                        },
+                    );
             },
             reviewTransport: {
                 kind: "mock-openai",
@@ -779,6 +816,75 @@ for (const fault of [
                     async () => assert.fail("no scenario replay"),
                     boundaries,
                 );
+            if (fault.startsWith("retained-") && fault.endsWith("failure")) {
+                await assert.rejects(
+                    run(),
+                    fault.startsWith("retained-archive")
+                        ? /private archive path/
+                        : /fetch failed/,
+                );
+                const { readdirSync } = await import("node:fs");
+                const files = readdirSync(lotRoot).filter((name) =>
+                    name.startsWith("campaign-diagnostic-"),
+                );
+                assert.equal(
+                    files.length,
+                    1,
+                    "native failure must retain its diagnostic",
+                );
+                const record = JSON.parse(
+                    readFileSync(join(lotRoot, files[0]), "utf8"),
+                );
+                assert.deepEqual(record.diagnostics[0], {
+                    step: fault.startsWith("retained-archive")
+                        ? "archive-assessment"
+                        : "submit-assessment",
+                    category: "operation_failed",
+                    code: fault.startsWith("retained-archive")
+                        ? "ENOSPC"
+                        : "ECONNRESET",
+                });
+                if (fault === "retained-archive-and-diagnostic-failure")
+                    assert.deepEqual(record.diagnostics[1], {
+                        step: "archive-diagnostic",
+                        category: "operation_failed",
+                        code: "EACCES",
+                    });
+                assert.equal(
+                    JSON.stringify(record).includes("secret-token"),
+                    false,
+                );
+                assert.equal(lot.status, "review");
+                assert.equal(
+                    existsSync(
+                        join(lotRoot, "automated-review-assessment.json"),
+                    ),
+                    false,
+                );
+                assert.equal(dispatches, 0);
+                const failureBytes = readFileSync(
+                    join(lotRoot, files[0]),
+                    "utf8",
+                );
+                await run();
+                assert.equal(lot.status, "finished");
+                assert.equal(
+                    existsSync(
+                        join(lotRoot, "automated-review-assessment.json"),
+                    ),
+                    true,
+                );
+                assert.equal(
+                    readFileSync(join(lotRoot, files[0]), "utf8"),
+                    failureBytes,
+                );
+                assert.equal(
+                    dispatches,
+                    0,
+                    "recovery must reuse the completed reviewer result",
+                );
+                return;
+            }
             if (fault === "foreign-candidate") {
                 await assert.rejects(run(), /candidate/i);
                 assert.equal(dispatches, 0);

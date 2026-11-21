@@ -20,6 +20,7 @@ import {
     workbenchV9Definition,
     workbenchV10Definition,
     workbenchV11Definition,
+    workbenchV12Definition,
 } from "@convex/domain/workbenchAgent";
 import { getFunctionName } from "convex/server";
 import {
@@ -37,7 +38,7 @@ import { operationResultSchema } from "./operationResults";
 function definitions() {
     return {
         [sourcesV7Definition.id]: sourcesV7Definition,
-        [workbenchV11Definition.id]: workbenchV11Definition,
+        [workbenchV12Definition.id]: workbenchV12Definition,
         [conversationValidationDefinition.id]: conversationValidationDefinition,
         [executionValidationDefinition.id]: executionValidationDefinition,
         [documentaryInspectionDefinition.id]: documentaryInspectionDefinition,
@@ -147,6 +148,7 @@ function supportedDefinitions(): readonly AgentDefinition[] {
         workbenchV7Definition,
         workbenchV9Definition,
         workbenchV10Definition,
+        workbenchV11Definition,
         sourcesV4Definition,
         sourcesV5Definition,
         savedMaterialInspectionDefinition,

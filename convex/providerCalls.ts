@@ -320,14 +320,15 @@ export const requestBilling = internalMutation({
     handler: async (ctx, args) => {
         const invocation = await ctx.db.get(args.invocationId);
         if (!invocation?.providerCallId) return null;
-        const call = await invocationCall(ctx, args.invocationId);
+        const call = await ctx.db.get(invocation.providerCallId);
         if (
-            !call.providerObservation?.generationId ||
+            !call?.providerObservation?.generationId ||
             call.billing ||
             call.reportedCost !== undefined ||
             call.status === "succeeded"
         )
             return null;
+        await invocationCall(ctx, args.invocationId);
         await patchQualificationReceipt(ctx, call, {
             billing: {
                 state: "pending",

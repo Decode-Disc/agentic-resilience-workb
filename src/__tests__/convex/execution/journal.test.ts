@@ -421,7 +421,10 @@ test("new invocations identify their journal version without expanding continuat
     expect(begun.inputJson).not.toContain("requestSnapshot");
 });
 
-async function oneShotFixture(logicalInputHash?: string) {
+async function oneShotFixture(
+    logicalInputHash?: string,
+    operation = "source_qualification",
+) {
     const fixture = await seedSourcePreparation({ models: true });
     const { t, runId, corpusRevisionId, sourceId } = fixture;
     await t.mutation(internal.researchPlanning.createForRun, {
@@ -455,7 +458,7 @@ async function oneShotFixture(logicalInputHash?: string) {
         workflowVersion: preparation.workflowVersion,
         stepKey: "source_preparation",
         service: "model" as const,
-        operation: "source_qualification",
+        operation,
         operationKey: `${preparation.operationKey}:step:source_preparation:input:${inputHash}:attempt:1`,
         attempt: 1,
     };
@@ -510,6 +513,84 @@ test("one-shot settlement commits the original reply, receipt and normalized res
     expect(JSON.parse(payload?.json ?? "null")).toEqual(
         JSON.parse(observableReplyJson),
     );
+});
+
+test.each([
+    undefined,
+    0.0002137,
+])("native documentary-control settlement requests billing only for missing cost (%s) and remains idempotent", async (reportedCost) => {
+    const { t, invocationId, attempt, providerCallId, runId } =
+        await oneShotFixture(undefined, "source_documentary_control");
+    await t.mutation(internal.execution.invocations.retainRequest, {
+        invocationId,
+        expectedGeneration: 3,
+        requestJson: '{"model":"fixture"}',
+    });
+    await t.mutation(internal.providerCalls.observeGeneration, {
+        invocationId,
+        generationId: "gen-controlled-incomplete",
+        httpStatus: 200,
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(runId, {
+            executionGeneration: 4,
+            executionStatus: "cancelled",
+        }),
+    );
+    const terminal = {
+        invocationId,
+        outputJson: JSON.stringify({
+            status: "failed",
+            errorCode: "invalid_output",
+        }),
+        observableReplyJson: JSON.stringify({
+            version: 1,
+            content: [{ type: "text", text: '{"coherence": ' }],
+        }),
+        attempt: {
+            ...attempt,
+            status: "failed" as const,
+            dispatchOutcome: "response_received" as const,
+            errorCode: "invalid_output",
+            reportedCost,
+        },
+    };
+    await t.mutation(internal.execution.invocations.finishOneShot, terminal);
+    const first = await t.run(async (ctx) => ({
+        invocation: await ctx.db.get(invocationId),
+        call: await ctx.db.get(providerCallId),
+        jobs: await ctx.db.system.query("_scheduled_functions").collect(),
+        run: await ctx.db.get(runId),
+    }));
+    expect(first.invocation).toMatchObject({
+        status: "returned",
+        outputJson: terminal.outputJson,
+    });
+    expect(first.call).toMatchObject({
+        status: "failed",
+        errorCode: "invalid_output",
+        dispatchOutcome: "response_received",
+    });
+    expect(first.call?.reportedCost).toBe(reportedCost);
+    if (reportedCost === undefined)
+        expect(first.call?.billing).toMatchObject({
+            state: "pending",
+            attempt: 0,
+        });
+    else expect(first.call?.billing).toBeUndefined();
+    expect(first.run).toMatchObject({
+        executionGeneration: 4,
+        executionStatus: "cancelled",
+    });
+    await t.mutation(internal.execution.invocations.finishOneShot, terminal);
+    expect(
+        await t.run((ctx) =>
+            ctx.db.system.query("_scheduled_functions").collect(),
+        ),
+    ).toEqual(first.jobs);
+    expect(
+        await t.run((ctx) => ctx.db.query("aiTaskResults").collect()),
+    ).toEqual([]);
 });
 
 test("one-shot admission is inspectable before a request can be dispatched", async () => {

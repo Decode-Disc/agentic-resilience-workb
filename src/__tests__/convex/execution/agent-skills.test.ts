@@ -1,4 +1,4 @@
-import { internal } from "@convex/_generated/api";
+import { api, internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { skillResource } from "@convex/execution/agentSkills";
@@ -28,7 +28,7 @@ afterEach(() => {
 
 test("current bindings expose only their native mission catalogue and preserve retained bindings", () => {
     for (const [id, version, retainedVersion, name] of [
-        ["workbench_v1", 11, 6, "workbench-framing"],
+        ["workbench_v1", 12, 6, "workbench-framing"],
         ["sources_v1", 7, 4, "source-preparation"],
     ] as const) {
         const current = getAgentDefinition(id);
@@ -69,7 +69,7 @@ test("native read runs through scheduled settlement and retains its exact packag
             cause: "consult-method",
             input: {
                 kind: "read",
-                path: "/agent-skills/research-methods-v2/workbench-framing/SKILL.md",
+                path: "/agent-skills/research-methods-v3/workbench-framing/SKILL.md",
             },
         },
     );
@@ -86,8 +86,8 @@ test("native read runs through scheduled settlement and retains its exact packag
     assert(request?.outcome?.kind === "success", JSON.stringify(request));
     const value = JSON.parse(request.outcome.valueJson);
     expect(value).toMatchObject({
-        packageId: "research-methods-v2",
-        path: "/agent-skills/research-methods-v2/workbench-framing/SKILL.md",
+        packageId: "research-methods-v3",
+        path: "/agent-skills/research-methods-v3/workbench-framing/SKILL.md",
         text: expect.stringContaining("# Framing an economic inquiry"),
     });
     expect(value.resourceHash).toMatch(/^[a-f0-9]{64}$/);
@@ -119,7 +119,7 @@ test("native read runs through scheduled settlement and retains its exact packag
     const page = await f.t.run((ctx) => ctx.db.get(pageId));
     assert(page?.outcome?.kind === "success", JSON.stringify(page));
     expect(JSON.parse(page.outcome.valueJson).text).toContain(
-        "A new article describes an old event",
+        "An identified event leaves economic consequences open",
     );
     expect(JSON.parse(page.outcome.valueJson).text).toContain("offset=5");
     const { createReadTool } = await import("@earendil-works/pi-coding-agent");
@@ -127,7 +127,7 @@ test("native read runs through scheduled settlement and retains its exact packag
     const binding = getAgentDefinition("workbench_v1").skills;
     assert(binding);
     const native = createReadTool(
-        "/agent-skills/research-methods-v2/workbench-framing/",
+        "/agent-skills/research-methods-v3/workbench-framing/",
         {
             operations: {
                 access: async (path) => {
@@ -156,7 +156,7 @@ test("native read runs through scheduled settlement and retains its exact packag
         "/etc/passwd",
         "../source-preparation/SKILL.md",
         "../../../../etc/passwd",
-        "/agent-skills/research-methods-v2/source-preparation/SKILL.md",
+        "/agent-skills/research-methods-v3/source-preparation/SKILL.md",
     ]) {
         const deniedId = await f.t.mutation(
             internal.execution.operations.enqueue,
@@ -185,7 +185,7 @@ test("native read runs through scheduled settlement and retains its exact packag
             cause: "invalid-native-offset",
             input: {
                 kind: "read",
-                path: "/agent-skills/research-methods-v2/workbench-framing/SKILL.md",
+                path: "/agent-skills/research-methods-v3/workbench-framing/SKILL.md",
                 offset: 0,
             },
         },
@@ -308,6 +308,127 @@ test("native provider requests retain consulted method and annex text", async ()
         "# Preparing useful documentary material",
     );
     expect(requests[2]).not.toContain(".agents/skills");
+});
+
+test.each([
+    {
+        selected: null,
+        version: 12,
+        packageId: "research-methods-v3",
+        candidate: true,
+    },
+    {
+        selected: 11 as const,
+        version: 11,
+        packageId: "research-methods-v2",
+        candidate: false,
+    },
+])("native framing method and receipt remain pinned to Workbench $version", async ({
+    selected,
+    version,
+    packageId,
+    candidate,
+}) => {
+    const definition = getAgentDefinition(
+        "workbench_v1",
+        selected ?? undefined,
+    );
+    expect(definition.version).toBe(version);
+    const activity = "Investigate authorization in industrial ordering.";
+    const f = await seedWorkbench(
+        false,
+        nativePiFixtureRoute,
+        undefined,
+        activity,
+        undefined,
+        selected,
+    );
+    vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
+    const requests: string[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url, init) => {
+            requests.push(String(init?.body));
+            if (requests.length === 1)
+                return nativeToolReply("read", {
+                    path: `/agent-skills/${packageId}/workbench-framing/SKILL.md`,
+                });
+            if (requests.length === 2)
+                return nativeToolReply("read", {
+                    path: "examples/worked-cases.md",
+                });
+            if (requests.length === 3)
+                return nativeToolReply("adjust_framing", {
+                    eventBasis: { kind: "open", activityExcerpt: activity },
+                    content: {
+                        scope: activity,
+                        questions: [
+                            {
+                                id: "authority",
+                                shortLabel: "Authority",
+                                text: "Who approves orders?",
+                                rationale: "Identify execution authority.",
+                            },
+                        ],
+                    },
+                });
+            if (requests.length === 4)
+                return nativeTextReply("The provisional program is saved.");
+            throw new Error("Unexpected native generation");
+        }),
+    );
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        120,
+    );
+    expect(requests).toHaveLength(4);
+    expect(requests[0]).toContain(
+        `/agent-skills/${packageId}/workbench-framing/SKILL.md`,
+    );
+    const tools = (index: number) => {
+        const request = requests[index];
+        assert(request);
+        return JSON.parse(request)
+            .messages.filter(
+                (message: { role: string }) => message.role === "tool",
+            )
+            .map((message: { content: string }) => JSON.parse(message.content));
+    };
+    expect(tools(1)[0].value).toMatchObject({
+        packageId,
+        text: expect.stringContaining("# Framing an economic inquiry"),
+    });
+    const annex = tools(2).at(-1).value;
+    expect(annex.packageId).toBe(packageId);
+    expect(
+        annex.text.includes(
+            "An identified event leaves economic consequences open",
+        ),
+    ).toBe(candidate);
+    expect(tools(3).at(-1).value).toMatchObject({
+        revision: 2,
+        eventBasis: "open",
+        publicCitations: { event: [], conditions: [] },
+    });
+    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
+    assert(run?.currentFramingRevisionId);
+    const revisionId = run.currentFramingRevisionId;
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(revisionId)))?.content.questions.map(
+            (q) => q.id,
+        ),
+    ).toEqual(["authority"]);
+    const messages = await f.client.query(
+        api.execution.conversations.listMessages,
+        {
+            runId: f.runId,
+            paginationOpts: { cursor: null, numItems: 20 },
+        },
+    );
+    expect(messages.page.filter((m) => m.role === "assistant")).toHaveLength(1);
+    expect(messages.page.find((m) => m.role === "assistant")?.text).toContain(
+        "The provisional program is saved.",
+    );
 });
 
 test("Sources native reads preserve documentary state and reject stale scheduled input", async () => {

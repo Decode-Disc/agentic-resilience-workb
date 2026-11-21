@@ -20,6 +20,7 @@ import {
 import {
     framingWriteState,
     hasFramingProgram,
+    WORKBENCH_FRAMING_METHOD_VERSION,
     WORKBENCH_FRAMING_RECEIPT_VERSION,
 } from "./framingContracts";
 import { readResearchState } from "./researchState";
@@ -960,6 +961,17 @@ export const workbenchV11Definition: AgentDefinition & { id: "workbench_v1" } =
         operations: {
             ...workbenchV10Definition.operations,
             adjust_framing: adjustFramingWithReceipt,
+        },
+    };
+
+/** New method package; retained conversations keep their original method and tool contracts. */
+export const workbenchV12Definition: AgentDefinition & { id: "workbench_v1" } =
+    {
+        ...workbenchV11Definition,
+        version: WORKBENCH_FRAMING_METHOD_VERSION,
+        skills: {
+            packageId: "research-methods-v3",
+            skillName: "workbench-framing",
         },
     };
 

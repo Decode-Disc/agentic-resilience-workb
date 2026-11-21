@@ -6,9 +6,12 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { reasoningPreferenceValues } from "../../../convex/modelConfigurationValues.ts";
 import {
+    type CampaignManifest,
+    framingReplayDocumentsContent,
     sourcesReplayContent,
     sourcesReplaySchema,
 } from "../../../convex/qualificationCampaignPolicy.ts";
+
 import { QUALIFICATION_TOOLING_POLICY as TOOLING_POLICY } from "../../../convex/resourcePolicy.ts";
 import { qualificationDecision } from "./qualification.ts";
 
@@ -652,6 +655,43 @@ export function assessQualification(root: string, input: unknown) {
         { flag: "wx", mode: 0o600 },
     );
     return { file: join(root, name), ...assessment };
+}
+
+/** Keeps repeated full replay documents once in the immutable mandate, without changing scenario identity. */
+export function compactFramingReplayDocuments(
+    manifest: CampaignManifest,
+): CampaignManifest {
+    if (manifest.version === 1) return manifest;
+    const shared = { ...manifest.sharedFramingDocuments };
+    for (const [key, documents] of Object.entries(shared))
+        assert.equal(
+            sha256(framingReplayDocumentsContent(documents)),
+            key,
+            "Frozen framing documents hash changed",
+        );
+    const counts = new Map<string, number>();
+    for (const scenario of manifest.scenarios) {
+        const replay = scenario.framingReplay;
+        if (!replay || !("documents" in replay) || !replay.documents.length)
+            continue;
+        const key = sha256(framingReplayDocumentsContent(replay.documents));
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const scenarios = manifest.scenarios.map((scenario) => {
+        const replay = scenario.framingReplay;
+        if (!replay || !("documents" in replay)) return scenario;
+        const key = sha256(framingReplayDocumentsContent(replay.documents));
+        if ((counts.get(key) ?? 0) < 2) return scenario;
+        shared[key] = replay.documents;
+        const { documents: _documents, ...metadata } = replay;
+        return {
+            ...scenario,
+            framingReplay: { ...metadata, documentsRef: key },
+        };
+    });
+    return Object.keys(shared).length
+        ? { ...manifest, scenarios, sharedFramingDocuments: shared }
+        : manifest;
 }
 
 /** Resolves and hash-checks replay bytes before the immutable mandate is prepared; assessor judgments never enter model context. */

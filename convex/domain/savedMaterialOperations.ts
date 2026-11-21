@@ -1,7 +1,10 @@
 import { operationResultValidator } from "@convex/execution/operationResults";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
-import { WORKBENCH_FRAMING_RECEIPT_VERSION } from "./framingContracts";
+import {
+    WORKBENCH_FRAMING_METHOD_VERSION,
+    WORKBENCH_FRAMING_RECEIPT_VERSION,
+} from "./framingContracts";
 import {
     sourceDocumentMetadataValidator,
     sourceMaterialReferenceValidator,
@@ -428,7 +431,8 @@ export function savedMaterialBinding(
     if (
         (definitionId === "workbench_v1" &&
             (version === WORKBENCH_DOCUMENTARY_DEFINITION_VERSION ||
-                version === WORKBENCH_FRAMING_RECEIPT_VERSION)) ||
+                version === WORKBENCH_FRAMING_RECEIPT_VERSION ||
+                version === WORKBENCH_FRAMING_METHOD_VERSION)) ||
         (definitionId === "sources_v1" &&
             version === REFERENCED_SOURCES_VERSION) ||
         (definitionId === SAVED_MATERIAL_DEFINITION_ID &&
