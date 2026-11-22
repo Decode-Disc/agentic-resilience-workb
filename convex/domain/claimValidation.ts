@@ -174,26 +174,3 @@ export function validateClaimStructure(
 
     return { status: "valid" };
 }
-
-/**
- * Derives question coverage from structurally valid claims.
- * Returns a map of questionId -> count of valid claims referencing it.
- * Does not mutate question rows.
- */
-export function deriveQuestionCoverage(
-    claims: Array<{
-        classification: ClaimClassification;
-        researchPlanQuestionId?: Id<"researchPlanQuestions">;
-    }>,
-): Map<Id<"researchPlanQuestions">, number> {
-    const coverage = new Map<Id<"researchPlanQuestions">, number>();
-
-    for (const claim of claims) {
-        if (claim.researchPlanQuestionId) {
-            const current = coverage.get(claim.researchPlanQuestionId) ?? 0;
-            coverage.set(claim.researchPlanQuestionId, current + 1);
-        }
-    }
-
-    return coverage;
-}

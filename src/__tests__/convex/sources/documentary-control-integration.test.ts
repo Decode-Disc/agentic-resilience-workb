@@ -23,7 +23,10 @@ import {
 import type { Infer } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { providerFixtureResponse } from "@/__tests__/setup/model-stream";
+import {
+    documentaryReply,
+    providerFixtureResponse,
+} from "@/__tests__/setup/model-stream";
 import {
     dispatchSourcesOperation,
     seedCapturedSources,
@@ -41,46 +44,6 @@ afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
 });
-
-function documentaryReply(init?: RequestInit) {
-    const wire = JSON.parse(String(init?.body));
-    const ids: string[] =
-        wire.response_format.json_schema.schema.properties.findings.required;
-    return providerFixtureResponse({
-        id: "offline-valid",
-        model: "z-ai/glm-5.3-flash",
-        choices: [
-            {
-                index: 0,
-                message: {
-                    role: "assistant",
-                    content: JSON.stringify({
-                        coherence: true,
-                        limitations: ["Publisher description."],
-                        findings: Object.fromEntries(
-                            ids.map((id) => [
-                                id,
-                                {
-                                    conclusion: "supported",
-                                    permittedUse: "context_only",
-                                    diagnostic:
-                                        "The exact quotation supports this context.",
-                                },
-                            ]),
-                        ),
-                    }),
-                },
-                finish_reason: "stop",
-            },
-        ],
-        usage: {
-            prompt_tokens: 10,
-            completion_tokens: 10,
-            total_tokens: 20,
-            cost: 0.00001,
-        },
-    });
-}
 
 test("Sources returns a durable wait before documentary I/O and retains its eventual result", async () => {
     vi.useFakeTimers();

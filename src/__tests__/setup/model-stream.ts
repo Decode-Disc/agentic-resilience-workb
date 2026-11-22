@@ -57,3 +57,44 @@ export function streamingModelFetch(fetchFixture: typeof fetch): typeof fetch {
         });
     };
 }
+
+/** Supplies supported context findings at the external documentary-model boundary. */
+export function documentaryReply(init?: RequestInit) {
+    const wire = JSON.parse(String(init?.body));
+    const ids: string[] =
+        wire.response_format.json_schema.schema.properties.findings.required;
+    return providerFixtureResponse({
+        id: "offline-valid",
+        model: "z-ai/glm-5.3-flash",
+        choices: [
+            {
+                index: 0,
+                message: {
+                    role: "assistant",
+                    content: JSON.stringify({
+                        coherence: true,
+                        limitations: ["Publisher description."],
+                        findings: Object.fromEntries(
+                            ids.map((id) => [
+                                id,
+                                {
+                                    conclusion: "supported",
+                                    permittedUse: "context_only",
+                                    diagnostic:
+                                        "The exact quotation supports this context.",
+                                },
+                            ]),
+                        ),
+                    }),
+                },
+                finish_reason: "stop",
+            },
+        ],
+        usage: {
+            prompt_tokens: 10,
+            completion_tokens: 10,
+            total_tokens: 20,
+            cost: 0.00001,
+        },
+    });
+}

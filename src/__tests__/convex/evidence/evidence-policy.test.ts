@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
+import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import {
     type ClaimStructuralInput,
-    deriveQuestionCoverage,
     STRUCTURAL_RULE_IDS,
     validateClaimStructure,
 } from "@convex/domain/claimValidation";
@@ -333,7 +333,7 @@ async function createPolicyScenario(
             startOffset += text.length + 1;
         }
 
-        return { runId, corpusRevisionId, visitorId };
+        return { runId, corpusRevisionId, visitorId, userId };
     });
 }
 
@@ -584,31 +584,6 @@ describe("Deterministic Policy Evaluation", () => {
         expect(evaluateEvidencePolicy(basePolicyInputs).policyVersion).toBe(
             POLICY_VERSION,
         );
-    });
-});
-
-describe("Question Coverage Derivation", () => {
-    test("derives coverage from claims with questionIds", () => {
-        const claims = [
-            {
-                classification: "Fact" as const,
-                researchPlanQuestionId: "q1" as Id<"researchPlanQuestions">,
-            },
-            {
-                classification: "Fact" as const,
-                researchPlanQuestionId: "q1" as Id<"researchPlanQuestions">,
-            },
-            {
-                classification: "Inference" as const,
-                researchPlanQuestionId: "q2" as Id<"researchPlanQuestions">,
-            },
-            { classification: "Hypothesis" as const },
-        ];
-
-        const coverage = deriveQuestionCoverage(claims);
-        expect(coverage.get("q1" as Id<"researchPlanQuestions">)).toBe(2);
-        expect(coverage.get("q2" as Id<"researchPlanQuestions">)).toBe(1);
-        expect(coverage.size).toBe(2);
     });
 });
 
@@ -1936,11 +1911,6 @@ describe("E2E: Claim Generation with Structural Validation + Policy", () => {
                         claim.classification === "Inference",
                 ),
             ).toBe(true);
-            // Coverage is derived from claims, never persisted: no claim
-            // references a question, so derived coverage is empty and the
-            // question rows carry no coverage mutation.
-            const coverage = deriveQuestionCoverage(allClaims);
-            expect(coverage.size).toBe(0);
             const questionsAfter = await ctx.db
                 .query("researchPlanQuestions")
                 .withIndex("by_run", (query) =>
@@ -1958,6 +1928,15 @@ describe("E2E: Claim Generation with Structural Validation + Policy", () => {
             expect(
                 questionsAfter.every((question) => !("coverage" in question)),
             ).toBe(true);
+        });
+        const summary = await t
+            .withIdentity({ subject: scenario.userId })
+            .query(api.evidenceMatrix.getSummary, { runId: scenario.runId });
+        expect(summary.claimCount).toBe(2);
+        expect(summary.questionCoverage).toEqual({
+            total: questionsBefore.length,
+            covered: 0,
+            buckets: [],
         });
     });
 });

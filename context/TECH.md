@@ -191,7 +191,7 @@ Reuse controls only on identical artifacts/evidences/rules/restrictions (no mode
 
 ### Analytical Control and Question Outcome Contracts
 
-Unimplemented target per [ADR-026](../docs/decisions/026-use-typed-analytical-controls-and-materialized-question-outcomes.md): Appraisal and Synthesis submissions expose one artifact-family operation each (deterministic checks → closed model findings → deterministic `admissible`/`revision_required` initial disposition; later `restricted` narrows affected uses and flags dependents). Investigation will maintain a materialized question-outcome projection separately from `deriveQuestionCoverage` (`Unknown` evidence presence never constitutes an answer), gating grouped review and Synthesis (≥1 retained substantive appraisal required; `justified_insufficiency` completes inquiry without answering).
+Unimplemented target per [ADR-026](../docs/decisions/026-use-typed-analytical-controls-and-materialized-question-outcomes.md): Appraisal and Synthesis submissions expose one artifact-family operation each (deterministic checks → closed model findings → deterministic `admissible`/`revision_required` initial disposition; later `restricted` narrows affected uses and flags dependents). Investigation will maintain a materialized question-outcome projection separately from the Evidence Matrix `getSummary.questionCoverage` evidence-presence projection (`Unknown` evidence presence never constitutes an answer), gating grouped review and Synthesis (≥1 retained substantive appraisal required; `justified_insufficiency` completes inquiry without answering).
 
 ## Context, Recovery and Resource Accounting
 

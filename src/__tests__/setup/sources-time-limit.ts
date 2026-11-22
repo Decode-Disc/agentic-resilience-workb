@@ -5,9 +5,11 @@ import { vi } from "vitest";
 import { seedCapturedSources } from "./sources-mission";
 
 /** A framed Sources run whose mission reached its preparation deadline. */
-export async function seedExpiredPreparation() {
+export async function seedExpiredPreparation(
+    prepared?: Awaited<ReturnType<typeof seedCapturedSources>>,
+) {
     vi.useFakeTimers();
-    const f = await seedCapturedSources();
+    const f = prepared ?? (await seedCapturedSources());
     await f.t.run(async (ctx) => {
         const frameId = await ctx.db.insert("framingRevisions", {
             runId: f.runId,

@@ -333,6 +333,8 @@ If the overall reading depends on the contested premise, delivery waits for the 
 
 Observation confirmed on 2026-10-30: [claimValidation.ts](../../../convex/domain/claimValidation.ts) counts question-linked claims, including `Unknown`, in `deriveQuestionCoverage`; the [matrix query](../../../convex/evidenceMatrix.ts) separately counts valid claims linked to current questions. These remain evidence-presence projections. The accepted materialized outcome projection is defined by the [product contract](../../../PRODUCT.md#evidence-matrix-and-analytical-review), [TECH](../../../context/TECH.md#analytical-control-and-question-outcome-contracts) and [ADR-026](../../decisions/026-use-typed-analytical-controls-and-materialized-question-outcomes.md); [the roadmap](../../ROADMAP.md#phase-8--investigation-and-grouped-appraisal-review) owns its undelivered implementation. Claim coverage alone does not implement that projection.
 
+Implementation note (2026-11-22): the test-only `deriveQuestionCoverage` helper was removed after transferring its assertions to the matrix query. Evidence-presence behavior and the undelivered analytical target remain as described in [TECH](../../../context/TECH.md#analytical-control-and-question-outcome-contracts).
+
 The analyst remains the final authority over analytical judgment. Source selection follows the target launch mandate described above; exact provenance, inspectable proposals, and preserved decisions remain essential.
 
 ## Economic Data Boundary

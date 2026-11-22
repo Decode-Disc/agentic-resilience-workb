@@ -471,9 +471,6 @@ test("returns no current proposal for an authorized legacy approved revision", a
     const t = convexTest(schema, modules);
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
-        const otherUserId = await ctx.db.insert("users", {
-            isAnonymous: true,
-        });
         const invitationId = await ctx.db.insert("invitations", {
             slotKey: "legacy-approved-owner",
             role: "analyst",
@@ -509,7 +506,7 @@ test("returns no current proposal for an authorized legacy approved revision", a
             createdAt: 1,
         });
         await ctx.db.patch(runId, { activeCorpusRevisionId: corpusRevisionId });
-        return { userId, otherUserId, runId, corpusRevisionId };
+        return { userId, runId, corpusRevisionId };
     });
     const owner = t.withIdentity({
         subject: `${fixture.userId}|legacy-approved-session`,
@@ -521,9 +518,53 @@ test("returns no current proposal for an authorized legacy approved revision", a
             corpusRevisionId: fixture.corpusRevisionId,
         }),
     ).resolves.toBeNull();
-    const otherUser = t.withIdentity({
-        subject: `${fixture.otherUserId}|legacy-approved-other-session`,
+    const foreign = await t.run(async (ctx) => {
+        const userId = await ctx.db.insert("users", { isAnonymous: true });
+        const invitationId = await ctx.db.insert("invitations", {
+            slotKey: "legacy-approved-foreign",
+            role: "analyst",
+            codeDigest: "legacy-approved-foreign-digest",
+            status: "claimed",
+            createdAt: 1,
+        });
+        const visitorId = await ctx.db.insert("visitors", {
+            authUserId: userId,
+            invitationId,
+            role: "analyst",
+            status: "active",
+            analysesReserved: 0,
+            admittedAt: 1,
+        });
+        await ctx.db.patch(invitationId, { claimedByVisitorId: visitorId });
+        const runId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
+            ownerVisitorId: visitorId,
+            coveragePreset: "balanced",
+            lifecycleState: "corpus_approved",
+            executionStatus: "idle",
+            executionGeneration: 2,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const corpusRevisionId = await ctx.db.insert("corpusRevisions", {
+            runId,
+            revision: 1,
+            status: "approved",
+            approvedByVisitorId: visitorId,
+            approvedAt: 2,
+            createdAt: 1,
+        });
+        await ctx.db.patch(runId, { activeCorpusRevisionId: corpusRevisionId });
+        return { userId, runId, corpusRevisionId };
     });
+    const otherUser = t.withIdentity({ subject: foreign.userId });
+    await expect(
+        otherUser.query(getCurrent, {
+            runId: foreign.runId,
+            corpusRevisionId: foreign.corpusRevisionId,
+        }),
+    ).resolves.toBeNull();
     await expect(
         otherUser.query(getCurrent, {
             runId: fixture.runId,

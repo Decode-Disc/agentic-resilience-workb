@@ -7,8 +7,14 @@ import {
 import { sourcesSettlementNote } from "@convex/domain/sources";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { executionFailureCode } from "@convex/execution/errors";
+import { pinMissionModel } from "@convex/modelConfiguration";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
+import { installModel } from "@/__tests__/setup/model-configuration";
+import { documentaryReply } from "@/__tests__/setup/model-stream";
+import {
+    dispatchSourcesOperation,
+    seedCapturedSources,
+} from "@/__tests__/setup/sources-mission";
 import {
     client,
     reachTimeLimit,
@@ -16,58 +22,110 @@ import {
     seedTimeLimitConversation,
 } from "@/__tests__/setup/sources-time-limit";
 
+vi.mock("node:dns/promises", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("node:dns/promises")>();
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]);
+    return { ...actual, default: { ...actual, lookup }, lookup };
+});
+
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
 });
 
-test("the system hands off retained material after the preparation deadline", async () => {
-    const f = await seedExpiredPreparation();
-    await f.t.run((ctx) =>
-        ctx.db.patch(f.missionId, {
-            status: "blocked",
-            blockCode: "execution_deadline",
-        }),
+test.each([
+    "deadline",
+    "budget",
+] as const)("system settlement preserves qualified material and consumption after the %s limit", async (limit) => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "offline-only");
+    vi.stubGlobal("fetch", async (_url: unknown, init?: RequestInit) =>
+        documentaryReply(init),
     );
-    expect(
-        await f.t.mutation(internal.sourcesMission.finish, {
-            preparationId: f.preparationId,
+    const f = await seedCapturedSources();
+    await installModel(f.t, { model: "z-ai/glm-5.3-flash" }, "sources");
+    await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        await pinMissionModel(ctx, mission);
+        await ctx.db.patch(f.preparationId, {
+            executionPlanVersion: "source_actions_v4",
+        });
+    });
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
             missionId: f.missionId,
             expectedGeneration: 4,
-        }),
-    ).toBeNull();
-    const run = await f.t.run((ctx) => ctx.db.get(f.runId));
-    expect(run).toMatchObject({
-        lifecycleState: "sources_prepared",
-        executionStatus: "idle",
-    });
-    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
-    expect(preparation?.sourcesMission?.result?.outcome).toBeDefined();
+            cause: "qualify-before-limit",
+            input: {
+                kind: "submit_documentary_qualification",
+                sourceId: f.sourceId,
+                captureId: f.captureId,
+                expectedTaskId: null,
+                changes: [
+                    {
+                        contribution: {
+                            needIds: ["common-context"],
+                            statement:
+                                "The source describes workflow software.",
+                            period: "undated",
+                            modality: "description",
+                            attribution: "Publisher",
+                            kind: "context",
+                            evidence: [
+                                {
+                                    readRequestId: f.readRequestId,
+                                    passageOrder: f.passage.order,
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        },
+    );
     expect(
-        preparation?.sourcesMission?.result?.needs.every(
-            (need) => need.unfinished.length > 0 || need.contributions.length,
-        ),
-    ).toBe(true);
-});
-
-test("the system hands off retained material after the preparation budget is exhausted", async () => {
-    vi.useFakeTimers();
-    const f = await seedCapturedSources();
+        await dispatchSourcesOperation(f.t, {
+            requestId,
+            expectedGeneration: 4,
+        }),
+    ).toMatchObject({ kind: "success" });
+    const qualification = await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        const taskId = preparation?.sourcesMission?.qualifications[0];
+        assert(taskId);
+        const task = await ctx.db.get(taskId);
+        assert(task?.output.kind === "documentary_qualification");
+        return { taskId, output: task.output };
+    });
+    expect(qualification.output.contributions).toHaveLength(1);
+    if (limit === "deadline") await seedExpiredPreparation(f);
     await f.t.run(async (ctx) => {
         await ctx.db.patch(f.missionId, {
             status: "blocked",
-            blockCode: "work_budget_exhausted",
+            blockCode:
+                limit === "deadline"
+                    ? "execution_deadline"
+                    : "work_budget_exhausted",
         });
-        await ctx.db.patch(f.runId, {
-            sourcePreparationBudget: {
-                version: 1,
-                work: 1_000_000,
-                incidents: 0,
-                reserved: 0,
-                dispatches: 0,
-            },
-        });
+        if (limit === "budget")
+            await ctx.db.patch(f.runId, {
+                sourcePreparationBudget: {
+                    version: 1,
+                    work: 1_000_000,
+                    incidents: 0,
+                    reserved: 0,
+                    dispatches: 1,
+                },
+            });
     });
+    const before = await f.t.run(async (ctx) => ({
+        run: await ctx.db.get(f.runId),
+        preparation: await ctx.db.get(f.preparationId),
+        calls: await ctx.db.query("providerCalls").collect(),
+    }));
     expect(
         await f.t.mutation(internal.sourcesMission.finish, {
             preparationId: f.preparationId,
@@ -75,9 +133,69 @@ test("the system hands off retained material after the preparation budget is exh
             expectedGeneration: 4,
         }),
     ).toBeNull();
-    expect((await f.t.run((ctx) => ctx.db.get(f.runId)))?.lifecycleState).toBe(
-        "sources_prepared",
+    const after = await f.t.run(async (ctx) => ({
+        run: await ctx.db.get(f.runId),
+        preparation: await ctx.db.get(f.preparationId),
+        calls: await ctx.db.query("providerCalls").collect(),
+    }));
+    expect(after.run).toMatchObject({
+        lifecycleState: "sources_prepared",
+        executionStatus: "idle",
+    });
+    expect(after.run?.sourcePreparationBudget).toEqual(
+        before.run?.sourcePreparationBudget,
     );
+    expect(after.calls).toEqual(before.calls);
+    expect(after.preparation?.sourcesMission?.controls).toBe(
+        before.preparation?.sourcesMission?.controls,
+    );
+    expect(after.preparation?.sourcesMission?.qualifications).toEqual([
+        qualification.taskId,
+    ]);
+    const contribution = qualification.output.contributions[0];
+    assert(contribution);
+    expect(after.preparation?.sourcesMission?.result).toMatchObject({
+        outcome: "partial",
+        documents: [
+            {
+                sourceId: f.sourceId,
+                captureId: f.captureId,
+                contentHash: qualification.output.contentHash,
+                qualificationTaskId: qualification.taskId,
+                qualificationVersion: 1,
+                contributions: [{ id: contribution.id, version: 1 }],
+            },
+        ],
+        needs: [
+            expect.objectContaining({
+                needId: "common-context",
+                contributions: [
+                    {
+                        qualificationTaskId: qualification.taskId,
+                        contributionId: contribution.id,
+                        version: 1,
+                    },
+                ],
+                unfinished: expect.arrayContaining([expect.any(String)]),
+            }),
+        ],
+    });
+    const overview = await client(f).query(api.sourcesWorkspace.overview, {
+        runId: f.runId,
+    });
+    expect(overview).toMatchObject({
+        materialOutcome: "partial",
+        organize: { retained: 1, contextOnly: 1 },
+        needs: [
+            expect.objectContaining({
+                id: "common-context",
+                outcome: "unfinished",
+                documents: 1,
+                contributions: 1,
+                sourceIds: [f.sourceId],
+            }),
+        ],
+    });
 });
 
 test("settlement still refuses a cancelled run after the deadline", async () => {

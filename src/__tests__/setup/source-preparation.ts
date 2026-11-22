@@ -12,7 +12,7 @@ import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
 import { defineSchema, type FunctionArgs } from "convex/server";
-import { convexTest } from "convex-test";
+import { convexTest, type TestConvex } from "convex-test";
 import { vi } from "vitest";
 import { installModel } from "./model-configuration";
 import { SOURCES_TEST_WINDOW_MINUTES } from "./sources-mission";
@@ -22,21 +22,26 @@ const modules = import.meta.glob("/convex/**/*.ts");
 /** Creates owned public candidates without corpus approval or analytical artifacts. */
 export async function seedSourcePreparation(
     options: { legacyRunPurposes?: boolean; models?: boolean } = {},
+    existing?: TestConvex<typeof schema>,
 ) {
     vi.stubEnv(
         "SOURCES_PREPARATION_WINDOW_MINUTES",
         String(SOURCES_TEST_WINDOW_MINUTES),
     );
-    const t = convexTest(
-        options.legacyRunPurposes
-            ? defineSchema(schema.tables, { schemaValidation: false })
-            : schema,
-        modules,
-    );
+    const t =
+        existing ??
+        convexTest(
+            options.legacyRunPurposes
+                ? defineSchema(schema.tables, { schemaValidation: false })
+                : schema,
+            modules,
+        );
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
         const invitationId = await ctx.db.insert("invitations", {
-            slotKey: "source-preparation-test",
+            slotKey: existing
+                ? `source-preparation-test:${userId}`
+                : "source-preparation-test",
             role: "analyst",
             codeDigest: "source-preparation-test-digest",
             status: "claimed",
@@ -134,8 +139,9 @@ export async function seedInspectedEvidence(
         text?: string;
         comparison?: boolean;
     } = {},
+    existing?: TestConvex<typeof schema>,
 ) {
-    const fixture = await seedSourcePreparation();
+    const fixture = await seedSourcePreparation({}, existing);
     agentTest.register(fixture.t);
     const { t, runId, corpusRevisionId, sourceId, userId } = fixture;
     await t.mutation(internal.researchPlanning.createForRun, {

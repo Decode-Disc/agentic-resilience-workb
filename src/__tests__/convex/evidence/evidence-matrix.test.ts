@@ -497,7 +497,7 @@ describe("Evidence matrix projection", () => {
         expect(summary.pauseReason).toBe("claim_generation_unavailable");
     });
 
-    test("question coverage is derived from claims per question", async () => {
+    test("question coverage counts linked evidence, including Unknown, without treating unlinked claims as coverage", async () => {
         const t = convexTest(schema, modules);
         const fixture = await createFixture(t, {
             sourceStatuses: ["succeeded", "partial", "failed"],
@@ -523,6 +523,28 @@ describe("Evidence matrix projection", () => {
                     dimensionKeys: ["data_defensibility"],
                     relations: ["supporting"],
                 },
+                {
+                    statement: "Second fact for the same question.",
+                    classification: "Fact",
+                    questionIndex: 0,
+                    dimensionKeys: [],
+                    relations: ["supporting"],
+                },
+                {
+                    statement:
+                        "An unresolved question with contextual evidence.",
+                    classification: "Unknown",
+                    questionIndex: 1,
+                    dimensionKeys: [],
+                    relations: ["context"],
+                },
+                {
+                    statement: "Unlinked hypothesis.",
+                    classification: "Hypothesis",
+                    questionIndex: -1,
+                    dimensionKeys: [],
+                    relations: ["context"],
+                },
             ],
         });
         const owner = t.withIdentity({
@@ -531,9 +553,16 @@ describe("Evidence matrix projection", () => {
         const summary = await owner.query(summaryReference, {
             runId: fixture.runId,
         });
-        expect(summary.claimCount).toBe(3);
-        expect(summary.questionCoverage.covered).toBe(3);
-        expect(summary.questionCoverage.buckets).toHaveLength(3);
+        expect(summary.claimCount).toBe(6);
+        expect(summary.questionCoverage).toEqual({
+            total: 3,
+            covered: 3,
+            buckets: [
+                { questionId: fixture.questionIds[0], claimCount: 2 },
+                { questionId: fixture.questionIds[1], claimCount: 2 },
+                { questionId: fixture.questionIds[2], claimCount: 1 },
+            ],
+        });
     });
 
     test("pagination filters by classification, dimension, counter, policy and processing", async () => {

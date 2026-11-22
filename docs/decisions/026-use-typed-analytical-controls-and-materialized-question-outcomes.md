@@ -14,6 +14,8 @@ Investigation must judge reasoning from evidence through assumptions and mechani
 
 The current `deriveQuestionCoverage` and Evidence Matrix `questionCoverage` count structurally valid claims linked to current questions, including `Unknown`. These counts establish evidence presence only. They cannot establish that Investigation produced a defensible answer, that required control completed, that the analyst retained a reviewed appraisal or that Synthesis may use it.
 
+Implementation note (2026-11-22): the test-only `deriveQuestionCoverage` helper was removed after its assertions moved to the Evidence Matrix query boundary. The evidence-presence projection remains in `evidenceMatrix.getSummary`; the analytical distinction and target in [TECH](../../context/TECH.md#analytical-control-and-question-outcome-contracts) are unchanged.
+
 The product therefore needs two related contracts: controlled analytical submission whose model work remains subordinate to deterministic domain authority, and one question projection that preserves the difference between evidence presence, completed preparation, a proposed answer and a retained answer.
 
 ## Decision

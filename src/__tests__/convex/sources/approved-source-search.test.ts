@@ -240,14 +240,50 @@ test("approved search refuses unauthenticated, foreign, unapproved and revoked a
             query: "workflow",
         }),
     ).rejects.toThrow("not_authenticated");
+    const foreign = await seedInspectedEvidence({}, t);
+    const other = t.withIdentity({ subject: foreign.userId });
+    const foreignScope = {
+        runId: foreign.args.runId,
+        corpusRevisionId: foreign.args.corpusRevisionId,
+        sourceId: foreign.args.sourceId,
+    };
     await expect(
-        t
-            .withIdentity({ subject: "foreign-user" })
-            .action(
-                api.sourceRetrievalActions.ensureApprovedSourceIndex,
-                scope,
-            ),
+        other.action(
+            api.sourceRetrievalActions.ensureApprovedSourceIndex,
+            foreignScope,
+        ),
+    ).resolves.toEqual({ status: "ready" });
+    expect(
+        await other.query(api.sourceRetrieval.searchApprovedSource, {
+            ...foreignScope,
+            query: "workflow",
+        }),
+    ).toMatchObject({
+        status: "ready",
+        passages: [
+            expect.objectContaining({
+                quotation: expect.stringContaining("workflow"),
+            }),
+        ],
+    });
+    const indexesBefore = await t.run((ctx) =>
+        ctx.db.query("sourceSearchPassages").collect(),
+    );
+    await expect(
+        other.action(
+            api.sourceRetrievalActions.ensureApprovedSourceIndex,
+            scope,
+        ),
     ).rejects.toThrow("not_authorized");
+    await expect(
+        other.query(api.sourceRetrieval.searchApprovedSource, {
+            ...scope,
+            query: "workflow",
+        }),
+    ).rejects.toThrow("not_authorized");
+    expect(
+        await t.run((ctx) => ctx.db.query("sourceSearchPassages").collect()),
+    ).toEqual(indexesBefore);
     const owned = t.withIdentity({ subject: userId });
     await t.run((ctx) =>
         ctx.db.patch(args.corpusRevisionId, { status: "draft" }),

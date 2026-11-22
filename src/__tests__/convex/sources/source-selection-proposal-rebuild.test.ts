@@ -4,7 +4,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { SOURCE_SELECTION_POLICY_VERSION } from "@convex/domain/sourceSelectionPolicy";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
-import { convexTest } from "convex-test";
+import { convexTest, type TestConvex } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
@@ -99,13 +99,13 @@ afterEach(() => {
     else process.env.EXA_API_KEY = originalExaKey;
 });
 
-async function seedDraft() {
-    const t = convexTest(schema, modules);
-    rateLimiterTest.register(t);
+async function seedDraft(existing?: TestConvex<typeof schema>) {
+    const t = existing ?? convexTest(schema, modules);
+    if (!existing) rateLimiterTest.register(t);
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
         const invitationId = await ctx.db.insert("invitations", {
-            slotKey: "rebuild-owner",
+            slotKey: `rebuild-owner:${userId}`,
             role: "analyst",
             codeDigest: "rebuild-digest",
             status: "claimed",
@@ -252,8 +252,8 @@ test("coverage follows effective source decisions without rewriting the proposal
     ).not.toContain("regulatory_annual");
 });
 
-async function seedRecoverableDraft() {
-    const { t, fixture } = await seedDraft();
+async function seedRecoverableDraft(existing?: TestConvex<typeof schema>) {
+    const { t, fixture } = await seedDraft(existing);
     const owner = t.withIdentity({
         subject: `${fixture.userId}|recovery-session`,
     });
@@ -1099,8 +1099,34 @@ test("refreshing a proposal preserves unresolved discovery warnings", async () =
 
 test("recovery authorizes before any external call", async () => {
     process.env.EXA_API_KEY = "fixture-key";
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(
+            async () => new Response(JSON.stringify({ results: [] })),
+        );
     const { t, fixture } = await seedRecoverableDraft();
+    const foreign = await seedRecoverableDraft(t);
+    const ownResult = await foreign.owner.action(recoverDiscovery, {
+        runId: foreign.fixture.runId,
+        corpusRevisionId: foreign.fixture.corpusRevisionId,
+        expectedProposalId: foreign.fixture.proposalId,
+        requestId: "own-recovery",
+        target: { kind: "failed_discovery" },
+    });
+    expect(ownResult).toMatchObject({
+        outcome: "complete",
+        failedDiscoveryFamilies: [],
+    });
+    expect(fetchSpy).toHaveBeenCalled();
+    fetchSpy.mockClear();
+    const before = await t.run(async (ctx) => ({
+        run: await ctx.db.get(fixture.runId),
+        proposals: await ctx.db.query("sourceSelectionProposals").collect(),
+        attempts: await ctx.db
+            .query("sourceSelectionProposalRebuilds")
+            .collect(),
+        sources: await ctx.db.query("sources").collect(),
+    }));
     const args = {
         runId: fixture.runId,
         corpusRevisionId: fixture.corpusRevisionId,
@@ -1111,15 +1137,20 @@ test("recovery authorizes before any external call", async () => {
     await expect(t.action(recoverDiscovery, args)).rejects.toThrow(
         "Not authenticated",
     );
-    const foreignUser = await t.run((ctx) =>
-        ctx.db.insert("users", { isAnonymous: true }),
+    await expect(foreign.owner.action(recoverDiscovery, args)).rejects.toThrow(
+        "Unauthorized",
     );
-    await expect(
-        t
-            .withIdentity({ subject: `${foreignUser}|foreign-session` })
-            .action(recoverDiscovery, args),
-    ).rejects.toThrow("Unauthorized");
     expect(fetchSpy).not.toHaveBeenCalled();
+    expect(
+        await t.run(async (ctx) => ({
+            run: await ctx.db.get(fixture.runId),
+            proposals: await ctx.db.query("sourceSelectionProposals").collect(),
+            attempts: await ctx.db
+                .query("sourceSelectionProposalRebuilds")
+                .collect(),
+            sources: await ctx.db.query("sources").collect(),
+        })),
+    ).toEqual(before);
 });
 
 test("capacity exhaustion blocks recovery before external work", async () => {

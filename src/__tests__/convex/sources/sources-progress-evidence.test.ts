@@ -64,14 +64,10 @@ test("a fresh contextual read advances Sources once and repeats only increment t
 });
 
 test.each([
-    "prefix",
-    "interior",
     "full",
-    "altered",
-    "joined",
-    "empty",
+    "unsupported-quotation-field",
     "corrupt-hash",
-] as const)("observed selection or attempted quotation %s preserves evidence admission and handoff integrity", async (variant) => {
+] as const)("documentary evidence admission: %s", async (variant) => {
     vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");
     const f = await seedCapturedSources();
     await installModel(
@@ -101,25 +97,12 @@ test.each([
             },
         };
     });
-    const full = f.passage.quotation;
     if (variant === "corrupt-hash")
         await f.t.run((ctx) =>
             ctx.db.patch(f.passage._id, {
                 quotationHash: "corrupted-fixture-hash",
             }),
         );
-    const quotation =
-        variant === "full" || variant === "corrupt-hash"
-            ? full
-            : variant === "interior"
-              ? full.slice(15, 35)
-              : variant === "prefix"
-                ? full.slice(0, 20)
-                : variant === "empty"
-                  ? ""
-                  : variant === "joined"
-                    ? `${full.slice(0, 10)}...${full.slice(-10)}`
-                    : `${full.slice(0, 20)}[altered]`;
     const pending = f.t.mutation(internal.execution.operations.enqueue, {
         missionId: f.missionId,
         expectedGeneration: 4,
@@ -142,10 +125,11 @@ test.each([
                             {
                                 readRequestId: f.readRequestId,
                                 passageOrder: f.passage.order,
-                                ...(variant === "full" ||
-                                variant === "corrupt-hash"
-                                    ? {}
-                                    : { quotation }),
+                                ...(variant === "unsupported-quotation-field"
+                                    ? {
+                                          quotation: `${f.passage.quotation.slice(0, 20)}[altered]`,
+                                      }
+                                    : {}),
                             },
                         ],
                     },
@@ -153,7 +137,7 @@ test.each([
             ],
         },
     });
-    if (variant !== "full" && variant !== "corrupt-hash") {
+    if (variant === "unsupported-quotation-field") {
         await expect(pending).rejects.toThrow("Validator error");
         expect(examiner).not.toHaveBeenCalled();
         expect(
