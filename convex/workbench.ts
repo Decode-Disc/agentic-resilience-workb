@@ -13,7 +13,7 @@ import {
     readResearchState,
 } from "@convex/domain/researchState";
 import { researchStateValidator } from "@convex/domain/researchStateContracts";
-import { sourceCaptureState } from "@convex/domain/sourceCaptureState";
+import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
     readSourcesMission,
@@ -78,6 +78,7 @@ import { sourceDossierCandidateLimit } from "@convex/resourceLimits";
 import {
     MAX_WORKBENCH_TURN_OPERATIONS,
     WORKBENCH_OPERATION_PREVIEW_SIZE,
+    SOURCES_HANDOFF_READ_CAPACITY,
 } from "@convex/resourcePolicy";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
@@ -351,6 +352,7 @@ export const command = mutation({
                             "research_control_not_supported",
                             "stale_execution",
                             "human_prerequisite_required",
+                            "action_not_applicable",
                             "execution_slot_unavailable",
                         ].includes(code)
                     )
@@ -647,9 +649,23 @@ export const snapshot = query({
             .take(limit + 1);
         if (records.length > limit)
             throw new Error("Source projection exceeds dossier capacity");
+        const preparation = run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+        const sourcesMission = preparation
+            ? await readSourcesMission(ctx, run)
+            : null;
+        const reads = preparation?.sourcesMission
+            ? new SourceReviewReads(
+                  ctx.db,
+                  run._id,
+                  SOURCES_HANDOFF_READ_CAPACITY,
+              )
+            : undefined;
+        const captureReads = reads ?? new SourceReviewReads(ctx.db, run._id);
         const sources = await Promise.all(
             records.map(async (source) => {
-                const capture = await sourceCaptureState(ctx, source._id);
+                const capture = await captureReads.captureState(source._id);
                 const mediaType = capture.committed?.mediaType
                     ?.split(";")[0]
                     ?.trim()
@@ -684,13 +700,12 @@ export const snapshot = query({
             status: request.status,
             outcome: request.outcome,
         }));
-        const preparation = run.sourcePreparationId
-            ? await ctx.db.get(run.sourcePreparationId)
-            : null;
-        const sourcesMission = preparation
-            ? await readSourcesMission(ctx, run)
-            : null;
-        const research = await readResearchState(ctx, run);
+        const research = await readResearchState(ctx, run, {
+            framing,
+            preparation,
+            mission: sourcesMission,
+            reads,
+        });
         const sourcesPhase =
             research.sources?.phase ??
             sourcesPreparationPhase(run, preparation, sourcesMission);

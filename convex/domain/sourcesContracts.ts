@@ -4,7 +4,9 @@ import { type Infer, v } from "convex/values";
 import { sourceMaterialReferenceValidator } from "./sourceRetrievalPolicy";
 import {
     coveragePresetValidator,
+    documentaryEffectiveUsesValidator,
     preparedMaterialOutcomeValidator,
+    sourcesPreparationProgressValidator,
 } from "./validators";
 
 export const observedDestinationValidator = v.object({
@@ -545,18 +547,17 @@ export const documentaryContributionTallyValidator = v.object({
     notEstablished: v.number(),
     unchecked: v.number(),
     restricted: v.number(),
-    effectiveUses: v.object({
-        documentary: v.number(),
-        attributed_argument_only: v.number(),
-        context_only: v.number(),
-        blocked: v.number(),
-    }),
+    effectiveUses: documentaryEffectiveUsesValidator,
     inspectionOnly: v.number(),
 });
 
 export type SourceMembership = Infer<typeof sourceMembershipValidator>;
 export type DocumentaryContributionTally = Infer<
     typeof documentaryContributionTallyValidator
+>;
+export { sourcesPreparationProgressValidator };
+export type SourcesPreparationProgress = Infer<
+    typeof sourcesPreparationProgressValidator
 >;
 
 export const sourceCaptureIdentityValidator = v.object({

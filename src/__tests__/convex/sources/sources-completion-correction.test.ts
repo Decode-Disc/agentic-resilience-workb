@@ -281,3 +281,274 @@ test.each([
     expect(requests.map((request) => request._id)).toEqual([f.readRequestId]);
     expect(network).not.toHaveBeenCalled();
 });
+
+test("Sources v8 native_tool completion allows >3 refused proposals within authority, handles mission_context_changed, and settles cleanly", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const { installModel } = await import(
+        "@/__tests__/setup/model-configuration"
+    );
+    const { nativePiFixtureRoute } = await import(
+        "@/__tests__/setup/pi-native"
+    );
+    const f = await seedCapturedSources();
+    await installModel(f.t, nativePiFixtureRoute, "sources");
+    await f.t.run((ctx) => ctx.db.patch(f.missionId, { definitionVersion: 8 }));
+    const initialContext = await f.t.query(internal.execution.context.build, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+    });
+    assert(initialContext.kind === "ready");
+    const parsedInitial = JSON.parse(initialContext.inputJson);
+    expect(parsedInitial.constraints.completion).toEqual({
+        format: "tool",
+        tool: "submit_completion",
+    });
+    const needs = parsedInitial.activeWork.needs as { id: string }[];
+    assert(needs.length >= 1);
+
+    let turn = 0;
+    const network = vi.fn(async () => {
+        turn++;
+        // Turns 1..4: domain-refused completion proposals (missing needs -> 4 refusals > 3).
+        if (turn <= 4) {
+            return new Response(
+                [
+                    `data: ${JSON.stringify({
+                        id: `src-v8-refuse-${turn}`,
+                        choices: [
+                            {
+                                index: 0,
+                                delta: {
+                                    role: "assistant",
+                                    tool_calls: [
+                                        {
+                                            index: 0,
+                                            id: `src_refuse_${turn}`,
+                                            type: "function",
+                                            function: {
+                                                name: "submit_completion",
+                                                arguments: JSON.stringify({
+                                                    kind: "complete",
+                                                    needs: [],
+                                                }),
+                                            },
+                                        },
+                                    ],
+                                },
+                                finish_reason: null,
+                            },
+                        ],
+                    })}`,
+                    `data: ${JSON.stringify({
+                        id: `src-v8-refuse-${turn}`,
+                        choices: [
+                            {
+                                index: 0,
+                                delta: {},
+                                finish_reason: "tool_calls",
+                            },
+                        ],
+                        usage: { prompt_tokens: 10, completion_tokens: 5 },
+                    })}`,
+                    "data: [DONE]",
+                    "",
+                ].join("\n\n"),
+                { headers: { "content-type": "text/event-stream" } },
+            );
+        }
+        // Turn 5: valid sole completion covering all current needs.
+        if (turn === 5) {
+            // A queued consultation does not change the engaged documentary work.
+            await f.t.mutation(internal.execution.operations.enqueue, {
+                missionId: f.missionId,
+                expectedGeneration: 4,
+                cause: "late-engaged-read",
+                input: {
+                    kind: "consult_mission_state",
+                },
+            });
+        }
+        return new Response(
+            [
+                `data: ${JSON.stringify({
+                    id: `src-v8-valid-${turn}`,
+                    choices: [
+                        {
+                            index: 0,
+                            delta: {
+                                role: "assistant",
+                                tool_calls: [
+                                    {
+                                        index: 0,
+                                        id: `src_valid_${turn}`,
+                                        type: "function",
+                                        function: {
+                                            name: "submit_completion",
+                                            arguments: JSON.stringify({
+                                                kind: "complete",
+                                                needs: needs.map((need) => ({
+                                                    needId: need.id,
+                                                    unfinished: [
+                                                        "Not yet examined",
+                                                    ],
+                                                })),
+                                            }),
+                                        },
+                                    },
+                                ],
+                            },
+                            finish_reason: null,
+                        },
+                    ],
+                })}`,
+                `data: ${JSON.stringify({
+                    id: `src-v8-valid-${turn}`,
+                    choices: [
+                        { index: 0, delta: {}, finish_reason: "tool_calls" },
+                    ],
+                    usage: { prompt_tokens: 10, completion_tokens: 5 },
+                })}`,
+                "data: [DONE]",
+                "",
+            ].join("\n\n"),
+            { headers: { "content-type": "text/event-stream" } },
+        );
+    });
+    vi.stubGlobal("fetch", network);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(100),
+        1000,
+    );
+    // The consultation does not prevent the valid completion from being adopted.
+    expect(network).toHaveBeenCalledTimes(5);
+    const after = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(f.missionId),
+        session: await ctx.db
+            .query("piSessions")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .unique(),
+        invocations: await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .collect(),
+        calls: await ctx.db.query("providerCalls").collect(),
+    }));
+    expect(after.mission?.status).toBe("completed");
+    expect(after.session?.settledSequence).toBe(after.session?.sequence);
+    expect(after.calls).toHaveLength(5);
+    expect(after.calls.every((call) => call.status === "succeeded")).toBe(true);
+    expect(
+        after.invocations.filter(
+            (inv) => inv.blockCode === "completion_correction_required",
+        ),
+    ).toHaveLength(4);
+}, 30000);
+
+test("invalid long need identifiers receive a bounded actionable summary", async () => {
+    const f = await seedCapturedSources();
+    const { completeSources } = await import("@convex/domain/sources");
+    const { ConvexError } = await import("convex/values");
+    const response = {
+        kind: "complete" as const,
+        needsRevision: 1,
+        needs: Array.from({ length: 1 }, (_, i) => ({
+            needId: `${i}:${"x".repeat(60000)}`,
+            unfinished: ["Not examined"],
+            workRequestIds: [],
+        })),
+    };
+    const error = await f.t
+        .run((ctx) => completeSources(ctx, f.preparationId, response))
+        .catch((error) => error);
+    expect(error).toBeInstanceOf(ConvexError);
+    const summary = error.data.issues.find(
+        (issue: { path: string; expected: string }) =>
+            issue.path === "needs" &&
+            issue.expected.startsWith("Outcome indexes"),
+    );
+    expect(summary).toBeDefined();
+    expect(
+        new TextEncoder().encode(summary.expected).length,
+    ).toBeLessThanOrEqual(2048);
+});
+
+test("native completion refuses feedback that only fits before its tool wrapper", async () => {
+    const f = await seedCapturedSources();
+    const count = 1480;
+    // A nondefault admitted envelope exercises feedback capacity independently of normal preparation size.
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        await ctx.db.patch(preparation._id, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                envelope: {
+                    ...preparation.sourcesMission.envelope,
+                    maxNeeds: count,
+                },
+            },
+        });
+        await ctx.db.patch(f.missionId, { definitionVersion: 8 });
+    });
+    const needs = Array.from({ length: count }, () => ({
+        needId: "",
+        unfinished: [],
+    }));
+    const { completeSources } = await import("@convex/domain/sources");
+    const diagnostic: unknown = await f.t
+        .run((ctx) =>
+            completeSources(ctx, f.preparationId, {
+                kind: "complete",
+                needsRevision: 1,
+                needs: needs.map((need) => ({ ...need, workRequestIds: [] })),
+            }),
+        )
+        .catch((error: unknown) => error);
+    const { ConvexError } = await import("convex/values");
+    const { validate } = await import("convex-helpers/validators");
+    const { completionFeedbackValidator } = await import(
+        "@convex/execution/operationContracts"
+    );
+    assert(diagnostic instanceof ConvexError);
+    const feedback: unknown = diagnostic.data;
+    assert(validate(completionFeedbackValidator, feedback));
+    expect(
+        new TextEncoder().encode(JSON.stringify(feedback)).length,
+    ).toBeLessThanOrEqual(MAX_OPERATION_RESULT_BYTES);
+    const { renderCompletionToolRefusal } = await import(
+        "@convex/execution/agentDefinition"
+    );
+    expect(() =>
+        renderCompletionToolRefusal("completion_correction_required", feedback),
+    ).toThrow("operation_result_capacity");
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "refusal-wrapper-capacity",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    const response = {
+        kind: "complete" as const,
+        needs,
+        workingNotes: "Refused notes must not survive.",
+    };
+    expect(
+        new TextEncoder().encode(JSON.stringify(response)).length,
+    ).toBeLessThanOrEqual(65536);
+    const result = await f.t.mutation(internal.execution.invocations.finish, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 4,
+        response,
+    });
+    expect(result).toMatchObject({ code: "operation_result_capacity" });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.workingNotes,
+    ).toBe("");
+});

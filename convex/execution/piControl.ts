@@ -13,8 +13,10 @@ import {
     PI_SESSION_LEASE_MS,
 } from "@convex/resourcePolicy";
 import schema from "@convex/schema";
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
+import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
+import { SUBMIT_COMPLETION_TOOL } from "./agentDefinition";
 import {
     executionError,
     executionFailureCode,
@@ -23,12 +25,20 @@ import {
     requireMissionAuthority,
 } from "./authority";
 import { readTurnInstructions } from "./conversations";
+import { invocationResponseValidator } from "./executionProtocol";
 import {
     admittedInputJson,
     contextObservationSequence,
     invocationRawOutputJson,
 } from "./journal";
-import { needsNativeSettlement, sessionForMission } from "./piStore";
+import { completionFeedbackValidator } from "./operationContracts";
+import {
+    needsNativeSettlement,
+    piLeaseValidator,
+    requirePiWriter,
+    sessionForMission,
+    tracksNativeSettlement,
+} from "./piStore";
 import { suspendInterruptedResearch } from "./researchControl";
 import { nativeInputsValidator } from "./schema";
 
@@ -206,7 +216,8 @@ export const nativeInvocation = internalQuery({
             !mission ||
             session?.missionId !== mission._id ||
             session.generation !== args.expectedGeneration ||
-            mission.generation !== args.expectedGeneration
+            mission.generation !== args.expectedGeneration ||
+            (mission.status === "cancelled" && !session.conversationId)
         )
             throw executionError("pi_writer_fenced");
         await requireDossierAuthority(ctx, mission.runId);
@@ -362,6 +373,29 @@ async function unchangedScheduledWait(
     return job?.state.kind === "pending" || job?.state.kind === "inProgress";
 }
 
+async function blockNativeSettlement(
+    ctx: MutationCtx,
+    mission: Doc<"agentMissions">,
+    session: Doc<"piSessions">,
+    failure: string,
+) {
+    await ctx.db.patch(session._id, { settlementFailureCode: failure });
+    if (session.conversationId)
+        await ctx.db.patch(session.conversationId, {
+            queuePaused: true,
+            admissionFailure: { code: "native_settlement_incomplete" },
+        });
+    await recordMissionEvent(ctx, mission, {
+        kind: "native_settlement_blocked",
+        cause: "pi_worker",
+        code: failure,
+    });
+    if (mission.parentRequestId || mission.completionEventId)
+        await ctx.runMutation(internal.execution.handoffs.finishChild, {
+            missionId: mission._id,
+        });
+}
+
 export const prepare = internalMutation({
     args: {
         missionId: v.id("agentMissions"),
@@ -436,6 +470,30 @@ export const prepare = internalMutation({
                     Date.now() + PI_OPERATION_WAIT_POLL_MS,
                 );
                 return false;
+            }
+            if (
+                settling &&
+                session &&
+                mission.piActiveWriter !== undefined &&
+                session.settlementEpoch !== session.epoch
+            ) {
+                const attempts = (session.settlementAttempts ?? 0) + 1;
+                await ctx.db.patch(session._id, {
+                    settlementAttempts: attempts,
+                    settlementEpoch: session.epoch,
+                });
+                if (attempts >= NATIVE_WORKER_POLICY.settlementMaxAttempts) {
+                    await ctx.db.patch(mission._id, {
+                        piActiveWriter: undefined,
+                    });
+                    await blockNativeSettlement(
+                        ctx,
+                        mission,
+                        session,
+                        "native_settlement_incomplete",
+                    );
+                    return false;
+                }
             }
             await ctx.runMutation(internal.execution.piStore.claim, {
                 missionId: mission._id,
@@ -534,6 +592,136 @@ export const operation = internalQuery({
     },
 });
 
+const completionDispositionValidator = v.union(
+    v.object({ kind: v.literal("accepted") }),
+    v.object({
+        kind: v.literal("operation"),
+        requestId: v.id("agentOperationRequests"),
+    }),
+    v.object({ kind: v.literal("pending") }),
+    v.object({
+        kind: v.literal("refused"),
+        code: v.string(),
+        correction: v.optional(completionFeedbackValidator),
+    }),
+);
+
+async function loadVerifiedNativeCompletionInvocation(
+    ctx: QueryCtx,
+    lease: Infer<typeof piLeaseValidator>,
+    options: { requireCompleted?: boolean; requireNoBlock?: boolean } = {},
+) {
+    const session = await requirePiWriter(ctx, lease, Date.now());
+    const invalid = (code: string) => {
+        if (options.requireCompleted) return null;
+        throw executionError(code);
+    };
+    const mission = await ctx.db.get(lease.missionId);
+    if (!mission) return invalid("mission_unavailable");
+    if (options.requireCompleted && mission.status !== "completed") return null;
+    if (
+        getAgentDefinition(mission.definitionId, mission.definitionVersion)
+            .completionTransport !== "native_tool"
+    )
+        return invalid("completion_correlation_invalid");
+    const invocation = mission.lastInvocationId
+        ? await ctx.db.get(mission.lastInvocationId)
+        : null;
+    if (
+        !invocation ||
+        invocation.missionId !== mission._id ||
+        (invocation.adoptionGeneration ?? invocation.generation) !==
+            lease.generation ||
+        !invocation.taskKey.startsWith(`${session._id}:`) ||
+        invocation.status !== "returned" ||
+        !invocation.outputJson ||
+        (invocation.receivedOutputJson !== undefined &&
+            invocation.receivedOutputJson !== invocation.outputJson) ||
+        (options.requireNoBlock && invocation.blockCode !== undefined)
+    )
+        return invalid("completion_correlation_invalid");
+    const response: unknown = JSON.parse(invocation.outputJson);
+    if (!validate(invocationResponseValidator, response, { db: ctx.db }))
+        return invalid("retained_response_invalid");
+    return { session, mission, invocation, response };
+}
+
+/** Resolves the retained disposition of a submit_completion tool call without re-running domain completion. */
+export const completionDisposition = internalQuery({
+    args: {
+        ...piLeaseValidator.fields,
+        callId: v.string(),
+    },
+    returns: completionDispositionValidator,
+    handler: async (ctx, args) => {
+        const { callId, ...lease } = args;
+        const verified = await loadVerifiedNativeCompletionInvocation(
+            ctx,
+            lease,
+        );
+        if (!verified) throw executionError("completion_correlation_invalid");
+        const { mission, invocation, response } = verified;
+        if (response.kind === "operations") {
+            await requireMissionAuthority(ctx, mission._id, lease.generation);
+            const index = response.requests.findIndex(
+                (request) =>
+                    request.callId === callId &&
+                    request.name === SUBMIT_COMPLETION_TOOL,
+            );
+            const requestId =
+                index >= 0 ? invocation.requestIds?.[index] : undefined;
+            const request = requestId ? await ctx.db.get(requestId) : null;
+            if (!request || request.missionId !== mission._id)
+                throw executionError("completion_correlation_invalid");
+            return { kind: "operation" as const, requestId: request._id };
+        }
+        if (
+            response.kind !== "completion_submission" ||
+            response.call === null ||
+            response.call.callId !== callId
+        )
+            throw executionError("completion_correlation_invalid");
+        if (mission.status === "completed" && !invocation.blockCode)
+            return { kind: "accepted" as const };
+        if (invocation.blockCode === "pending_operations")
+            return { kind: "pending" as const };
+        await requireMissionAuthority(ctx, mission._id, lease.generation);
+        if (
+            invocation.blockCode === "completion_correction_required" ||
+            invocation.blockCode === "mission_context_changed" ||
+            invocation.blockCode === "stale_instructions"
+        )
+            return {
+                kind: "refused" as const,
+                code: invocation.blockCode,
+                ...(invocation.correction
+                    ? { correction: invocation.correction }
+                    : {}),
+            };
+        throw executionError(
+            invocation.blockCode ?? "completion_correlation_invalid",
+        );
+    },
+});
+
+/** Confirms an accepted sole native completion from retained state for afterTools tail settlement. */
+export const terminalCompletionAccepted = internalQuery({
+    args: piLeaseValidator.fields,
+    returns: v.boolean(),
+    handler: async (ctx, lease) => {
+        const verified = await loadVerifiedNativeCompletionInvocation(
+            ctx,
+            lease,
+            { requireCompleted: true, requireNoBlock: true },
+        );
+        return Boolean(
+            verified &&
+                verified.response.kind === "completion_submission" &&
+                verified.response.call !== null,
+        );
+    },
+});
+
 export const finishAuxiliary = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
@@ -594,10 +782,16 @@ export const closeWorker = internalMutation({
             session?.settlementEpoch !== undefined
         )
             return null;
+        const settlesSession = tracksNativeSettlement(mission, session);
+        const settledSuccess =
+            settlesSession &&
+            args.nativeSettled &&
+            !args.error &&
+            (session?.conversationId ? true : mission.status === "completed");
         if (session)
             await ctx.db.patch(session._id, {
                 leaseUntil: Date.now(),
-                ...(session.conversationId && args.nativeSettled && !args.error
+                ...(settledSuccess
                     ? {
                           settledSequence: session.sequence,
                           settlementAttempts: undefined,
@@ -634,9 +828,7 @@ export const closeWorker = internalMutation({
         });
         const nextAt = mission.piResultWakePending ? Date.now() : args.at;
         const settlingTerminal =
-            session?.conversationId &&
-            !args.nativeSettled &&
-            ["completed", "cancelled"].includes(mission.status);
+            !args.nativeSettled && needsNativeSettlement(mission, session);
         if (!settlingTerminal && !args.error && nextAt !== undefined)
             await schedulePiMission(
                 ctx,
@@ -644,7 +836,7 @@ export const closeWorker = internalMutation({
                 args.expectedGeneration,
                 Math.min(nextAt, mission.piWakeAt ?? nextAt),
             );
-        if (settlingTerminal && session?.conversationId) {
+        if (settlingTerminal && session) {
             const attempts = (session.settlementAttempts ?? 0) + 1;
             const permanent =
                 code &&
@@ -656,6 +848,8 @@ export const closeWorker = internalMutation({
                         "pi_log_sequence_conflict",
                         "pi_terminal_dispatch_forbidden",
                         "retained_response_invalid",
+                        "completion_correlation_invalid",
+                        "not_authorized",
                     ].includes(code));
             const failure = permanent
                 ? code
@@ -668,15 +862,7 @@ export const closeWorker = internalMutation({
                 ...(failure ? { settlementFailureCode: failure } : {}),
             });
             if (failure) {
-                await ctx.db.patch(session.conversationId, {
-                    queuePaused: true,
-                    admissionFailure: { code: "native_settlement_incomplete" },
-                });
-                await recordMissionEvent(ctx, mission, {
-                    kind: "native_settlement_blocked",
-                    cause: "pi_worker",
-                    code: failure,
-                });
+                await blockNativeSettlement(ctx, mission, session, failure);
             } else
                 await schedulePiMission(
                     ctx,
@@ -687,7 +873,10 @@ export const closeWorker = internalMutation({
                             2 ** (attempts - 1),
                 );
         }
-        if (mission.parentRequestId || mission.completionEventId)
+        if (
+            !settlingTerminal &&
+            (mission.parentRequestId || mission.completionEventId)
+        )
             await ctx.runMutation(internal.execution.handoffs.finishChild, {
                 missionId: mission._id,
             });

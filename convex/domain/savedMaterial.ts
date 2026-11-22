@@ -31,6 +31,7 @@ import {
     readCaptureIndexState,
     sourceDocumentMetadata,
 } from "@convex/domain/sourceRetrievalPolicy";
+import type { SourceReviewReads } from "@convex/domain/sourceReviewReads";
 import {
     adoptedPublicRead,
     explicitResearchCommand,
@@ -223,6 +224,7 @@ export async function resolveDocumentaryPinCapture(
 export async function documentaryInventory(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
+    reads?: SourceReviewReads,
 ) {
     let frame: Awaited<ReturnType<typeof documentaryMaterialContext>>;
     try {
@@ -243,18 +245,49 @@ export async function documentaryInventory(
         instructions?.messages.filter(
             (message) => !explicitResearchCommand(message.text),
         ) ?? [];
+    const committedCaptures: Doc<"sourceCaptures">[] = [];
+    if (
+        reads &&
+        frame.scope.kind === "sources" &&
+        frame.preparation?.sourcesMission
+    ) {
+        const loaded = await Promise.all(
+            frame.preparation.sourcesMission.captureIds.map((captureId) =>
+                reads.capture(captureId),
+            ),
+        );
+        for (const capture of loaded) {
+            if (
+                capture &&
+                capture.runId === frame.run._id &&
+                capture.status === "committed"
+            )
+                committedCaptures.push(capture);
+        }
+        committedCaptures.sort(
+            (a, b) =>
+                a._creationTime - b._creationTime || a._id.localeCompare(b._id),
+        );
+    } else {
+        for await (const capture of ctx.db
+            .query("sourceCaptures")
+            .withIndex("by_run_and_status", (q) =>
+                q.eq("runId", frame.run._id).eq("status", "committed"),
+            )) {
+            reads?.rememberCapture(capture);
+            committedCaptures.push(capture);
+        }
+    }
     const materials = [];
-    for await (const capture of ctx.db
-        .query("sourceCaptures")
-        .withIndex("by_run_and_status", (q) =>
-            q.eq("runId", frame.run._id).eq("status", "committed"),
-        )) {
+    for (const capture of committedCaptures) {
         if (
             !capture.contentHash ||
             !(await documentaryCaptureAvailable(ctx, frame, capture))
         )
             continue;
-        const source = await ctx.db.get(capture.sourceId);
+        const source = reads
+            ? await reads.source(capture.sourceId)
+            : await ctx.db.get(capture.sourceId);
         if (source?.runId !== capture.runId) continue;
         const state = await readCaptureIndexState(
             ctx.db,

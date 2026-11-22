@@ -7,13 +7,13 @@ import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 test("Sources is a research binding using canonical shared reading operations", () => {
     const sources = getAgentDefinition("sources_v1");
-    expect(sources.version).toBe(7);
-    expect(getAgentDefinition("workbench_v1").version).toBe(11);
+    expect(sources.version).toBe(8);
+    expect(getAgentDefinition("workbench_v1").version).toBe(12);
     expect(sources).toBeDefined();
     expect(sources?.executionScope).toBe("research");
     expect(sources?.nativeConversation).toBeUndefined();
     const inspection = getAgentDefinition("saved_material_inspection_v1");
-    expect(inspection.version).toBe(3);
+    expect(inspection.version).toBe(4);
     expect(sources?.operations.read_in_context).toBe(
         inspection?.operations.read_in_context,
     );

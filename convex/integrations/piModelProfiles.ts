@@ -29,9 +29,9 @@ import {
 import type { Infer } from "convex/values";
 import {
     PI_MISSION_EXTENSION,
-    PI_MISSION_INPUT,
     PI_STATE_SECTION,
     piInputProfileKey,
+    piMissionInput,
     piMissionStateText,
     piToolMetadata,
     preparePiModelPayload,
@@ -135,7 +135,11 @@ async function profileTranscript(
         const root = await harness.root(BACKGROUND_CONTEXT, { agent });
         await root.configure(agent, BACKGROUND_CONTEXT);
         const submitted = await root.submit(
-            { type: "input", content: PI_MISSION_INPUT, requestId: "profile" },
+            {
+                type: "input",
+                content: piMissionInput(definition.completionTransport),
+                requestId: "profile",
+            },
             BACKGROUND_CONTEXT,
         );
         await submitted.wait(BACKGROUND_CONTEXT);
@@ -194,6 +198,7 @@ export async function prepareNativeProfiles(
                         definitionVersion: definition.version,
                         nativeConversation: definition.nativeConversation,
                         contextRendering: definition.contextRendering,
+                        completionTransport: definition.completionTransport,
                         nativeRoute,
                     });
                     return { key, nativeRoute };
@@ -209,9 +214,10 @@ export async function prepareNativeProfiles(
     ];
     signal?.throwIfAborted();
     if (readProfiles) {
+        const keySet = new Set(keys);
         for (const profile of await readProfiles(keys)) {
             if (
-                !keys.includes(profile.key) ||
+                !keySet.has(profile.key) ||
                 !Number.isSafeInteger(profile.bytes) ||
                 profile.bytes < 1
             )

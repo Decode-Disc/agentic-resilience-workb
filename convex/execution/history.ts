@@ -4,18 +4,23 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
-import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import {
+    completeCharacterBoundary,
+    sha256Hex,
+    stableStringify,
+} from "@convex/domain/sourcePassages";
 import { readConversationMessages } from "@convex/integrations/agentStorage";
 import {
     HISTORY_PAGE_SIZE,
     MAX_CONVERSATION_SCAN,
-    MAX_HISTORY_RESULT_BYTES,
+    MAX_CONVERSATION_SCAN_BYTES,
+    MAX_OPERATION_RESULT_BYTES,
 } from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { requireMissionAuthority } from "./authority";
 import { requireInstructionVersion } from "./conversations";
-import { executionError } from "./errors";
+import { executionError, executionFailureCode } from "./errors";
 import {
     type AgentOperationDefinition,
     historyReadResultValidator,
@@ -123,8 +128,36 @@ export const pinHistoryRead: AgentOperationDefinition["pin"] = async (
             },
         };
     }
-    if ("cursor" in input && input.cursor !== undefined)
+    if ("cursor" in input && input.cursor !== undefined) {
+        const turn = mission.conversationTurnId
+            ? await ctx.db.get(mission.conversationTurnId)
+            : null;
+        try {
+            const resolved = await resolveCursorChain(ctx, {
+                mission,
+                source,
+                cursor: input.cursor,
+                generation: mission.generation,
+                instructionVersion: turn?.instructionVersion,
+            });
+            if (resolved)
+                return {
+                    kind: "available",
+                    pin: {
+                        kind: "history_read",
+                        source,
+                        frontier: resolved.frontier,
+                        ...(resolved.reference
+                            ? { reference: resolved.reference }
+                            : {}),
+                    },
+                };
+        } catch (error) {
+            if (executionFailureCode(error) !== "history_receipt_invalid")
+                throw error;
+        }
         return { kind: "available", pin: { kind: "history_read", source } };
+    }
     let frontier: Frontier;
     if (source === "mission") {
         if (!mission.historyProjection?.ready)
@@ -171,8 +204,200 @@ export const pinHistoryRead: AgentOperationDefinition["pin"] = async (
     };
 };
 
+async function resolveCursorChain(
+    ctx: QueryCtx,
+    args: {
+        mission: Doc<"agentMissions">;
+        source: HistoryPin["source"];
+        cursor: string;
+        generation: number;
+        instructionVersion: number | undefined;
+        currentRequestId?: Id<"agentOperationRequests">;
+    },
+): Promise<{
+    frontier: Frontier;
+    position: Position;
+    reference?: Id<"agentExecutionEvents">;
+} | null> {
+    const { mission, source, cursor, generation, instructionVersion } = args;
+    if (!cursor.startsWith(CURSOR_PREFIX) || cursor.length > 160) return null;
+    const immediateId = ctx.db.normalizeId(
+        "agentOperationRequests",
+        cursor.slice(CURSOR_PREFIX.length),
+    );
+    if (!immediateId) return null;
+
+    const visited = new Set<Id<"agentOperationRequests">>();
+    if (args.currentRequestId) visited.add(args.currentRequestId);
+    let currentId: Id<"agentOperationRequests"> | null = immediateId;
+    let expectedFrontier: Frontier | undefined;
+    let immediateNext: Position | undefined;
+    let resolvedPin:
+        | { frontier: Frontier; reference?: Id<"agentExecutionEvents"> }
+        | undefined;
+    const legacySteps: {
+        request: Doc<"agentOperationRequests">;
+        receipt: HistoryReadReceipt;
+        valueJson: string;
+    }[] = [];
+
+    while (currentId) {
+        if (visited.has(currentId))
+            throw executionError("history_receipt_invalid");
+        visited.add(currentId);
+        const prev: Doc<"agentOperationRequests"> | null =
+            await ctx.db.get(currentId);
+        const isImmediate = currentId === immediateId;
+        if (
+            prev?.status !== "completed" ||
+            prev.outcome?.kind !== "success" ||
+            prev.adoptedAt === undefined ||
+            prev.operationVersion < 2 ||
+            historySourceFor(prev.input.kind) !== source ||
+            prev.missionId !== mission._id ||
+            prev.runId !== mission.runId
+        ) {
+            if (isImmediate) return null;
+            throw executionError("history_receipt_invalid");
+        }
+        const receipt = prev.historyRead;
+        if (
+            !receipt ||
+            !validate(historyReadReceiptValidator, receipt, { db: ctx.db }) ||
+            receipt.source !== source ||
+            receipt.frontier.source !== source ||
+            receipt.runId !== prev.runId ||
+            receipt.missionId !== prev.missionId
+        )
+            throw executionError("history_receipt_invalid");
+        verifyHistoryReadReceipt(
+            prev,
+            receipt,
+            receipt.generation,
+            prev.outcome.valueJson,
+        );
+        if (
+            receipt.generation !== generation ||
+            receipt.instructionVersion !== instructionVersion ||
+            !receipt.next
+        ) {
+            if (isImmediate) return null;
+            throw executionError("history_receipt_invalid");
+        }
+        if (!validPosition(receipt.next, source))
+            throw executionError("history_receipt_invalid");
+        if (expectedFrontier === undefined) {
+            expectedFrontier = receipt.frontier;
+            immediateNext = receipt.next;
+        } else if (
+            stableStringify(receipt.frontier) !==
+            stableStringify(expectedFrontier)
+        ) {
+            throw executionError("history_receipt_invalid");
+        }
+        if (prev.pin?.kind !== "history_read" || prev.pin.source !== source)
+            throw executionError("history_receipt_invalid");
+        if (prev.pin.frontier !== undefined) {
+            resolvedPin = {
+                frontier: prev.pin.frontier,
+                ...(prev.pin.reference
+                    ? { reference: prev.pin.reference }
+                    : {}),
+            };
+            break;
+        }
+        // Legacy intermediate pin omits frontier/reference; follow its predecessor cursor.
+        const prevCursor: string | undefined =
+            "cursor" in prev.input ? prev.input.cursor : undefined;
+        if (!prevCursor?.startsWith(CURSOR_PREFIX) || prevCursor.length > 160)
+            throw executionError("history_receipt_invalid");
+        const ancestorId: Id<"agentOperationRequests"> | null =
+            ctx.db.normalizeId(
+                "agentOperationRequests",
+                prevCursor.slice(CURSOR_PREFIX.length),
+            );
+        if (!ancestorId) throw executionError("history_receipt_invalid");
+        legacySteps.push({
+            request: prev,
+            receipt,
+            valueJson: prev.outcome.valueJson,
+        });
+        currentId = ancestorId;
+    }
+
+    if (!resolvedPin || !immediateNext)
+        throw executionError("history_receipt_invalid");
+
+    // Verify legacy intermediate targeted fragments against the resolved event to detect an already-diverged chain.
+    if (
+        legacySteps.length > 0 &&
+        source === "mission" &&
+        resolvedPin.reference &&
+        resolvedPin.frontier.source === "mission"
+    ) {
+        const targetEvent = await ctx.db.get(resolvedPin.reference);
+        if (
+            !targetEvent ||
+            (targetEvent.missionId !== mission._id &&
+                !isContextObservation(targetEvent)) ||
+            targetEvent.runId !== mission.runId ||
+            targetEvent.sequence !== resolvedPin.frontier.sequence
+        )
+            throw executionError("history_receipt_invalid");
+        for (const step of legacySteps) {
+            const parsed = JSON.parse(step.valueJson) as {
+                history: {
+                    entries: {
+                        sequence: number;
+                        offset: number;
+                        totalCharacters: number;
+                        content: string;
+                    }[];
+                };
+            };
+            if (
+                parsed.history.entries.length !==
+                step.receipt.fragmentIds.length
+            )
+                throw executionError("history_receipt_invalid");
+            for (const [idx, entry] of parsed.history.entries.entries()) {
+                if (
+                    entry.sequence !== targetEvent.sequence ||
+                    entry.content.length < 1
+                )
+                    throw executionError("history_receipt_invalid");
+                const chunk = await readMissionHistoryEventFragment(
+                    ctx,
+                    targetEvent,
+                    entry.offset,
+                    entry.content.length,
+                );
+                if (
+                    chunk.content !== entry.content ||
+                    chunk.totalCharacters !== entry.totalCharacters ||
+                    fragmentIdentity(
+                        "mission",
+                        targetEvent._id,
+                        chunk.contentHash,
+                        entry.offset,
+                        chunk.end,
+                    ) !== step.receipt.fragmentIds[idx]
+                )
+                    throw executionError("history_receipt_invalid");
+            }
+        }
+    }
+
+    return {
+        frontier: resolvedPin.frontier,
+        position: immediateNext,
+        ...(resolvedPin.reference ? { reference: resolvedPin.reference } : {}),
+    };
+}
+
 async function resolvePosition(
     ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
     request: Doc<"agentOperationRequests">,
     pin: HistoryPin,
     generation: number,
@@ -205,53 +430,22 @@ async function resolvePosition(
                       },
         };
     }
-    if (!cursor.startsWith(CURSOR_PREFIX) || cursor.length > 160) return null;
-    const id = ctx.db.normalizeId(
-        "agentOperationRequests",
-        cursor.slice(CURSOR_PREFIX.length),
-    );
-    const previous = id ? await ctx.db.get(id) : null;
+    const resolved = await resolveCursorChain(ctx, {
+        mission,
+        source: pin.source,
+        cursor,
+        generation,
+        instructionVersion: request.instructionVersion,
+        currentRequestId: request._id,
+    });
+    if (!resolved) return null;
     if (
-        previous?.status !== "completed" ||
-        previous.outcome?.kind !== "success" ||
-        previous.adoptedAt === undefined ||
-        previous.operationVersion < 2 ||
-        historySourceFor(previous.input.kind) !== pin.source ||
-        previous.missionId !== request.missionId ||
-        previous.runId !== request.runId
-    )
-        return null;
-    const receipt = previous.historyRead;
-    if (
-        !receipt ||
-        !validate(historyReadReceiptValidator, receipt, { db: ctx.db }) ||
-        receipt.source !== pin.source ||
-        receipt.frontier.source !== pin.source ||
-        receipt.runId !== previous.runId ||
-        receipt.missionId !== previous.missionId
+        pin.frontier &&
+        (stableStringify(pin.frontier) !== stableStringify(resolved.frontier) ||
+            pin.reference !== resolved.reference)
     )
         throw executionError("history_receipt_invalid");
-    verifyHistoryReadReceipt(
-        previous,
-        receipt,
-        receipt.generation,
-        previous.outcome.valueJson,
-    );
-    if (
-        receipt.generation !== generation ||
-        receipt.instructionVersion !== request.instructionVersion ||
-        !receipt.next
-    )
-        return null;
-    if (!validPosition(receipt.next, pin.source))
-        throw executionError("history_receipt_invalid");
-    return {
-        frontier: receipt.frontier,
-        position: receipt.next,
-        ...(previous.pin?.kind === "history_read" && previous.pin.reference
-            ? { reference: previous.pin.reference }
-            : {}),
-    };
+    return resolved;
 }
 
 function fragmentIdentity(
@@ -262,6 +456,94 @@ function fragmentIdentity(
     end: number,
 ) {
     return sha256Hex(stableStringify({ source, id, textHash, offset, end }));
+}
+
+const utf8Encoder = new TextEncoder();
+
+function utf8Bytes(text: string) {
+    return utf8Encoder.encode(text).length;
+}
+
+/** Fit the complete candidate first (preserving terminal cursor overhead), otherwise the largest Unicode-safe prefix. */
+function fitHistoryContent(args: {
+    candidate: string;
+    offset: number;
+    totalCharacters: number;
+    completeNext: Position | null;
+    partialNext: (end: number) => Position;
+    measure: (content: string, next: Position | null) => number;
+    maxBytes: number;
+}):
+    | {
+          kind: "fit";
+          content: string;
+          end: number;
+          next: Position | null;
+          completedItem: boolean;
+      }
+    | { kind: "none" } {
+    const {
+        candidate,
+        offset,
+        totalCharacters,
+        completeNext,
+        partialNext,
+        measure,
+        maxBytes,
+    } = args;
+    const reachesEnd = offset + candidate.length === totalCharacters;
+    if (reachesEnd && measure(candidate, completeNext) <= maxBytes) {
+        return {
+            kind: "fit",
+            content: candidate,
+            end: totalCharacters,
+            next: completeNext,
+            completedItem: true,
+        };
+    }
+    const maxLen = completeCharacterBoundary(
+        candidate,
+        reachesEnd ? Math.max(0, candidate.length - 1) : candidate.length,
+    );
+    if (maxLen === 0) return { kind: "none" };
+    if (
+        measure(candidate.slice(0, maxLen), partialNext(offset + maxLen)) <=
+        maxBytes
+    ) {
+        return {
+            kind: "fit",
+            content: candidate.slice(0, maxLen),
+            end: offset + maxLen,
+            next: partialNext(offset + maxLen),
+            completedItem: false,
+        };
+    }
+    let lo = 0;
+    let hi = maxLen;
+    while (lo + 1 < hi) {
+        const midRaw = Math.floor((lo + hi) / 2);
+        let mid = completeCharacterBoundary(candidate, midRaw);
+        if (mid <= lo) {
+            mid = Math.min(hi, midRaw + 1);
+            if (mid >= hi) break;
+        }
+        if (
+            measure(candidate.slice(0, mid), partialNext(offset + mid)) <=
+            maxBytes
+        ) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo === 0) return { kind: "none" };
+    return {
+        kind: "fit",
+        content: candidate.slice(0, lo),
+        end: offset + lo,
+        next: partialNext(offset + lo),
+        completedItem: false,
+    };
 }
 
 async function conversationFragment(
@@ -304,7 +586,7 @@ async function conversationFragment(
             numItems: 1,
             cursor: position.cursor,
             maximumRowsRead: MAX_CONVERSATION_SCAN,
-            maximumBytesRead: 512 * 1024,
+            maximumBytesRead: MAX_CONVERSATION_SCAN_BYTES,
         });
     const message = page.page[0];
     if (!message) {
@@ -319,25 +601,15 @@ async function conversationFragment(
         [message.storageMessageRef],
     );
     if (!text) throw executionError("conversation_message_unavailable");
-    const chunk = fragment(text, position.offset, 8192);
-    const next: Position | null =
-        chunk.end < text.length
-            ? {
-                  source: "conversation",
-                  cursor: position.cursor,
-                  offset: chunk.end,
-              }
-            : message._id === frontier.throughMessageId
-              ? null
-              : {
-                    source: "conversation",
-                    cursor: page.continueCursor,
-                    offset: 0,
-                };
+    const candidate = fragment(
+        text,
+        position.offset,
+        MAX_OPERATION_RESULT_BYTES,
+    );
     const mission = request.missionId
         ? await ctx.db.get(request.missionId)
         : null;
-    const entry = {
+    const buildEntry = (content: string) => ({
         messageId: message._id,
         ...(message.role === "user" &&
         mission?.definitionId === "workbench_v1" &&
@@ -346,19 +618,49 @@ async function conversationFragment(
             : {}),
         turnId: message.turnId,
         role: message.role,
-        offset: chunk.offset,
-        totalCharacters: chunk.totalCharacters,
-        content: chunk.content,
-    };
+        offset: candidate.offset,
+        totalCharacters: candidate.totalCharacters,
+        content,
+    });
+    const completeNext: Position | null =
+        message._id === frontier.throughMessageId
+            ? null
+            : {
+                  source: "conversation",
+                  cursor: page.continueCursor,
+                  offset: 0,
+              };
+    const fitted = fitHistoryContent({
+        candidate: candidate.content,
+        offset: candidate.offset,
+        totalCharacters: candidate.totalCharacters,
+        completeNext,
+        partialNext: (end) => ({
+            source: "conversation",
+            cursor: position.cursor,
+            offset: end,
+        }),
+        measure: (content, next) =>
+            utf8Bytes(
+                pageJson(
+                    "conversation",
+                    [buildEntry(content)],
+                    next,
+                    request._id,
+                ),
+            ),
+        maxBytes: MAX_OPERATION_RESULT_BYTES,
+    });
+    if (fitted.kind === "none") return { resultCapacity: true as const };
     return {
-        entry,
-        next,
+        entry: buildEntry(fitted.content),
+        next: fitted.next,
         fragmentId: fragmentIdentity(
             "conversation",
             message._id,
             sha256Hex(text),
-            chunk.offset,
-            chunk.end,
+            candidate.offset,
+            fitted.end,
         ),
     };
 }
@@ -411,6 +713,7 @@ export async function readHistoryPage(
         throw executionError("history_receipt_invalid");
     const resolved = await resolvePosition(
         ctx,
+        mission,
         request,
         pin,
         args.expectedGeneration,
@@ -431,7 +734,7 @@ export async function readHistoryPage(
                 missionId: mission._id,
                 expectedGeneration: args.expectedGeneration,
             },
-            MAX_HISTORY_RESULT_BYTES / 2,
+            MAX_OPERATION_RESULT_BYTES / 2,
         );
         if (current.kind !== "ready") return { outcome: current };
         state = current.state;
@@ -466,6 +769,15 @@ export async function readHistoryPage(
                             .gte("historySourceSequence", position.sequence)
                             .lte("historySourceSequence", frontier.sequence),
                     );
+        const baseBytesWithNext = utf8Bytes(
+            pageJson(pin.source, [], position, request._id, state),
+        );
+        const baseBytesTerminal = utf8Bytes(
+            pageJson(pin.source, [], null, request._id, state),
+        );
+        const baseBytesFor = (next: Position | null) =>
+            next ? baseBytesWithNext : baseBytesTerminal;
+        let entriesBytes = 0;
         let offset = position.offset;
         let sourcesRead = 0;
         for await (const event of events) {
@@ -477,70 +789,95 @@ export async function readHistoryPage(
                 event.runId !== mission.runId
             )
                 throw executionError("mission_history_invalid");
-            const chunk = await readMissionHistoryEventFragment(
+            const remainingBytes =
+                MAX_OPERATION_RESULT_BYTES -
+                baseBytesWithNext -
+                entriesBytes -
+                (entries.length ? 1 : 0);
+            const candidate = await readMissionHistoryEventFragment(
                 ctx,
                 event,
                 offset,
-                4000,
+                Math.max(1, remainingBytes),
             );
-            const entry = {
-                sequence: event.sequence,
+            const buildEntry = (content: string) => ({
+                sequence: event.sequence as number,
                 offset,
-                totalCharacters: chunk.totalCharacters,
-                content: chunk.content,
-            };
-            const continuation: Position | null =
-                chunk.end < chunk.totalCharacters
+                totalCharacters: candidate.totalCharacters,
+                content,
+            });
+            const completeNext: Position | null =
+                !reference && event.sequence < frontier.sequence
                     ? {
                           source: "mission",
-                          sequence: event.sequence,
-                          offset: chunk.end,
+                          sequence: event.sequence + 1,
+                          offset: 0,
                       }
-                    : event.sequence < frontier.sequence
-                      ? {
-                            source: "mission",
-                            sequence: event.sequence + 1,
-                            offset: 0,
-                        }
-                      : null;
-            if (
-                new TextEncoder().encode(
-                    pageJson(
-                        pin.source,
-                        [...entries, entry],
-                        continuation,
-                        request._id,
-                        state,
+                    : null;
+            const reachesEnd =
+                offset + candidate.content.length === candidate.totalCharacters;
+            const entry = buildEntry(candidate.content);
+            const entryBytes =
+                utf8Bytes(JSON.stringify(entry)) + (entries.length ? 1 : 0);
+            const fullFits =
+                reachesEnd &&
+                baseBytesFor(completeNext) + entriesBytes + entryBytes <=
+                    MAX_OPERATION_RESULT_BYTES;
+            if (fullFits) {
+                entries.push(entry);
+                entriesBytes += entryBytes;
+                fragmentIds.push(
+                    fragmentIdentity(
+                        "mission",
+                        event._id,
+                        candidate.contentHash,
+                        offset,
+                        candidate.end,
                     ),
-                ).length > MAX_HISTORY_RESULT_BYTES
-            ) {
-                if (!entries.length)
-                    return {
-                        outcome: {
-                            kind: "unavailable",
-                            code: "history_result_capacity",
-                        },
-                    };
+                );
+                next = completeNext;
+                if (sourcesRead >= HISTORY_PAGE_SIZE) break;
+                offset = 0;
+                continue;
+            }
+            if (entries.length > 0) {
                 next = { source: "mission", sequence: event.sequence, offset };
                 break;
             }
-            entries.push(entry);
+            const fitted = fitHistoryContent({
+                candidate: candidate.content,
+                offset,
+                totalCharacters: candidate.totalCharacters,
+                completeNext,
+                partialNext: (end) => ({
+                    source: "mission",
+                    sequence: event.sequence as number,
+                    offset: end,
+                }),
+                measure: (content, candidateNext) =>
+                    baseBytesFor(candidateNext) +
+                    utf8Bytes(JSON.stringify(buildEntry(content))),
+                maxBytes: MAX_OPERATION_RESULT_BYTES,
+            });
+            if (fitted.kind === "none")
+                return {
+                    outcome: {
+                        kind: "unavailable",
+                        code: "history_result_capacity",
+                    },
+                };
+            entries.push(buildEntry(fitted.content));
             fragmentIds.push(
                 fragmentIdentity(
                     "mission",
                     event._id,
-                    chunk.contentHash,
+                    candidate.contentHash,
                     offset,
-                    chunk.end,
+                    fitted.end,
                 ),
             );
-            next = continuation;
-            if (
-                chunk.end < chunk.totalCharacters ||
-                sourcesRead >= HISTORY_PAGE_SIZE
-            )
-                break;
-            offset = 0;
+            next = fitted.next;
+            break;
         }
         if (!sourcesRead && position.sequence <= frontier.sequence)
             throw executionError("mission_history_unavailable");
@@ -558,6 +895,13 @@ export async function readHistoryPage(
             return {
                 outcome: { kind: "unavailable", code: "history_scan_capacity" },
             };
+        if (result && "resultCapacity" in result)
+            return {
+                outcome: {
+                    kind: "unavailable",
+                    code: "history_result_capacity",
+                },
+            };
         if (result) {
             entries.push(result.entry);
             fragmentIds.push(result.fragmentId);
@@ -565,7 +909,7 @@ export async function readHistoryPage(
         }
     } else throw executionError("history_receipt_invalid");
     const valueJson = pageJson(pin.source, entries, next, request._id, state);
-    if (new TextEncoder().encode(valueJson).length > MAX_HISTORY_RESULT_BYTES)
+    if (utf8Bytes(valueJson) > MAX_OPERATION_RESULT_BYTES)
         return {
             outcome: { kind: "unavailable", code: "history_result_capacity" },
         };
@@ -626,6 +970,68 @@ export function verifyHistoryReadReceipt(
             (receipt.next ? `${CURSOR_PREFIX}${request._id}` : null)
     )
         throw executionError("history_receipt_invalid");
+    for (const [index, entry] of page.entries.entries()) {
+        if (
+            !Number.isSafeInteger(entry.offset) ||
+            entry.offset < 0 ||
+            !Number.isSafeInteger(entry.totalCharacters) ||
+            entry.totalCharacters < 0 ||
+            entry.offset + entry.content.length > entry.totalCharacters ||
+            (entry.totalCharacters > 0 && entry.content.length === 0)
+        )
+            throw executionError("history_receipt_invalid");
+        if (index < page.entries.length - 1) {
+            if (entry.offset + entry.content.length !== entry.totalCharacters)
+                throw executionError("history_receipt_invalid");
+            const nextEntry = page.entries[index + 1];
+            if (
+                source === "mission" &&
+                "sequence" in entry &&
+                nextEntry &&
+                "sequence" in nextEntry &&
+                nextEntry.sequence <= entry.sequence
+            )
+                throw executionError("history_receipt_invalid");
+        }
+    }
+    const last = page.entries.at(-1);
+    if (last) {
+        const lastEnd = last.offset + last.content.length;
+        const partial = lastEnd < last.totalCharacters;
+        if (source === "mission" && "sequence" in last) {
+            if (partial) {
+                if (
+                    receipt.next?.source !== "mission" ||
+                    receipt.next.sequence !== last.sequence ||
+                    receipt.next.offset !== lastEnd
+                )
+                    throw executionError("history_receipt_invalid");
+            } else if (
+                receipt.next &&
+                (receipt.next.source !== "mission" ||
+                    receipt.next.offset !== 0 ||
+                    receipt.next.sequence <= last.sequence ||
+                    (receipt.frontier.source === "mission" &&
+                        receipt.next.sequence > receipt.frontier.sequence))
+            ) {
+                throw executionError("history_receipt_invalid");
+            }
+        } else if (source === "conversation") {
+            if (partial) {
+                if (
+                    receipt.next?.source !== "conversation" ||
+                    receipt.next.offset !== lastEnd
+                )
+                    throw executionError("history_receipt_invalid");
+            } else if (
+                receipt.next &&
+                (receipt.next.source !== "conversation" ||
+                    receipt.next.offset !== 0)
+            ) {
+                throw executionError("history_receipt_invalid");
+            }
+        }
+    }
 }
 
 export const read = internalQuery({

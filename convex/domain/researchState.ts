@@ -4,27 +4,45 @@ import { approvalCatalog } from "@convex/execution/approvalCatalog";
 import { readApprovalFacts } from "@convex/execution/approvals";
 import { executionError } from "@convex/execution/errors";
 import { generationInterruption } from "@convex/execution/missionData";
+import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { agentName } from "./agentIdentities";
 import { researchStartBlock } from "./framingEditAuthority";
 import { type ResearchState, researchStatus } from "./researchStateContracts";
+import { SourceReviewReads } from "./sourceReviewReads";
 import {
+    type controlledSourcesContributions,
     projectPreparedMaterial,
+    projectSourcesPreparationProgress,
     readSourcesMission,
     sourcesInstructionTreatment,
     sourcesPreparationPhase,
 } from "./sources";
+import type { SourcesPreparationProgress } from "./sourcesContracts";
 import { supportsResearchControl } from "./transitions";
 
 export { researchStatus } from "./researchStateContracts";
+
+export type LoadedResearchStateFacts = {
+    framing?: Doc<"framingRevisions"> | null;
+    preparation?: Doc<"sourceSelectionProposalRebuilds"> | null;
+    mission?: Doc<"agentMissions"> | null;
+    reads?: SourceReviewReads;
+    controlled?: Awaited<ReturnType<typeof controlledSourcesContributions>>;
+    readings?: SourcesPreparationProgress["readings"];
+};
 
 /** Compact current dossier facts; reads never advance execution or hydrate passages. */
 export async function readResearchState(
     ctx: QueryCtx,
     run: Doc<"researchRuns">,
+    loaded?: LoadedResearchStateFacts,
 ): Promise<ResearchState> {
-    const framing = run.currentFramingRevisionId
-        ? await ctx.db.get(run.currentFramingRevisionId)
-        : null;
+    const framing =
+        loaded && "framing" in loaded
+            ? (loaded.framing ?? null)
+            : run.currentFramingRevisionId
+              ? await ctx.db.get(run.currentFramingRevisionId)
+              : null;
     const visitor = run.ownerVisitorId
         ? await ctx.db.get(run.ownerVisitorId)
         : null;
@@ -35,12 +53,29 @@ export async function readResearchState(
             | "analyst_or_authorized_workbench" = "analyst_or_authorized_workbench",
     ) => ({ actor, applicable: reason === null, reason });
     const preparation =
-        run.sourcesProtocol === "sources_mission_v1" && run.sourcePreparationId
-            ? await ctx.db.get(run.sourcePreparationId)
-            : null;
+        loaded && "preparation" in loaded
+            ? (loaded.preparation ?? null)
+            : run.sourcesProtocol === "sources_mission_v1" &&
+                run.sourcePreparationId
+              ? await ctx.db.get(run.sourcePreparationId)
+              : null;
     if (preparation && preparation.runId !== run._id)
         throw executionError("not_authorized");
-    const mission = preparation ? await readSourcesMission(ctx, run) : null;
+    const mission =
+        loaded && "mission" in loaded
+            ? (loaded.mission ?? null)
+            : preparation
+              ? await readSourcesMission(ctx, run)
+              : null;
+    const reads =
+        loaded?.reads ??
+        (preparation?.sourcesMission
+            ? new SourceReviewReads(
+                  ctx.db,
+                  run._id,
+                  SOURCES_HANDOFF_READ_CAPACITY,
+              )
+            : undefined);
     const retainedStop =
         mission?.status === "cancelled"
             ? await ctx.db
@@ -70,7 +105,9 @@ export async function readResearchState(
     const retainedDocuments = [];
     for (const document of preparation?.sourcesMission?.result?.documents ??
         []) {
-        const source = await ctx.db.get(document.sourceId);
+        const source = reads
+            ? await reads.source(document.sourceId)
+            : await ctx.db.get(document.sourceId);
         if (source && source.runId !== run._id)
             throw executionError("not_authorized");
         retainedDocuments.push({
@@ -78,6 +115,15 @@ export async function readResearchState(
             title: source?.title ?? null,
         });
     }
+    const progress = preparation?.sourcesMission
+        ? await projectSourcesPreparationProgress(ctx, {
+              preparation,
+              mission,
+              reads,
+              controlled: loaded?.controlled,
+              readings: loaded?.readings,
+          })
+        : undefined;
     return {
         phase: run.lifecycleState,
         status: run.executionStatus,
@@ -127,6 +173,7 @@ export async function readResearchState(
                   retainedDocuments,
                   instructionTreatment:
                       sourcesInstructionTreatment(preparation),
+                  ...(progress ? { progress } : {}),
               }
             : null,
         nextCapability: preparation?.sourcesMission?.result

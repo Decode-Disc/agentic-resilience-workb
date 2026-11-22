@@ -1,12 +1,18 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
-import type { QueryCtx } from "@convex/_generated/server";
+import type { DataModel, Doc, Id } from "@convex/_generated/dataModel";
+import type { GenericDatabaseReader } from "convex/server";
 import { type Infer, v } from "convex/values";
 
 /** The latest committed capture wins; otherwise capture progress and unavailability stay distinct. */
 export async function sourceCaptureState(
-    ctx: QueryCtx,
+    ctx: { db: GenericDatabaseReader<DataModel> },
     sourceId: Id<"sources">,
+    options?: {
+        admittedCaptureIds?: ReadonlySet<Id<"sourceCaptures">>;
+        onQuery?: () => void;
+        onDoc?: (doc: Doc<"sourceCaptures"> | null) => void;
+    },
 ) {
+    options?.onQuery?.();
     const latest = await ctx.db
         .query("sourceCaptures")
         .withIndex("by_source_and_updated_at", (q) =>
@@ -14,19 +20,29 @@ export async function sourceCaptureState(
         )
         .order("desc")
         .first();
+    options?.onDoc?.(latest);
     if (!latest)
         return { committed: null, capturing: false, unavailable: false };
-    const byStatus = (status: Doc<"sourceCaptures">["status"]) =>
-        ctx.db
+    const byStatus = async (status: Doc<"sourceCaptures">["status"]) => {
+        options?.onQuery?.();
+        const row = await ctx.db
             .query("sourceCaptures")
             .withIndex("by_source_and_status_and_updated_at", (q) =>
                 q.eq("sourceId", sourceId).eq("status", status),
             )
             .order("desc")
             .first();
+        options?.onDoc?.(row);
+        return row;
+    };
     const committed =
         latest.status === "committed" ? latest : await byStatus("committed");
-    if (committed) return { committed, capturing: false, unavailable: false };
+    if (
+        committed &&
+        (!options?.admittedCaptureIds ||
+            options.admittedCaptureIds.has(committed._id))
+    )
+        return { committed, capturing: false, unavailable: false };
     const capturing =
         latest.status === "reserved" ||
         latest.status === "uploaded" ||

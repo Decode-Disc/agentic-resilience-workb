@@ -32,6 +32,8 @@ const BLOCK_COPY: Record<string, string> = {
         "A preparation decision is required before research can continue.",
     human_prerequisite_required:
         "This dossier is waiting for a decision before it can continue.",
+    action_not_applicable:
+        "This action does not apply to the dossier's current state.",
     research_control_not_supported:
         "This research step cannot be controlled from this request.",
     stale_execution:
@@ -48,6 +50,19 @@ export function approvalBlockCopy(code: string): string {
         BLOCK_COPY[code] ??
         "This action cannot be applied right now. Review the current dossier before trying again."
     );
+}
+
+/** Explains a failed decision using the same availability copy as the approval card. */
+export function approvalDecisionFeedback(code: string | null): string {
+    if (
+        code === "approval_already_decided" ||
+        code === "stale_execution" ||
+        code === "human_prerequisite_required"
+    )
+        return APPROVAL_STALE_COPY;
+    return code
+        ? approvalBlockCopy(code)
+        : "This decision could not be recorded right now. Try again.";
 }
 
 function cardStateForRequest(

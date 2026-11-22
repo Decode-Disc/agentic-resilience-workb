@@ -17,7 +17,7 @@ import {
 } from "./executionValidationContracts";
 import { validationOperations } from "./executionValidationOperations";
 
-export const executionValidationDefinition: AgentDefinition & {
+export const executionValidationV2Definition: AgentDefinition & {
     id: "execution_validation_v1";
 } = {
     id: "execution_validation_v1",
@@ -157,3 +157,15 @@ export const executionValidationDefinition: AgentDefinition & {
         };
     },
 };
+
+export const executionValidationV3Definition: AgentDefinition & {
+    id: "execution_validation_v1";
+} = {
+    ...executionValidationV2Definition,
+    version: 3,
+    completionTransport: "native_tool",
+    instructions:
+        "Simulation only. Check each supplied fixture value, then call submit_completion alone with their total.",
+};
+
+export const executionValidationDefinition = executionValidationV3Definition;

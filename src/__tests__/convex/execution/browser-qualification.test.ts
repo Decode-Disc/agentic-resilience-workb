@@ -869,6 +869,7 @@ test.each([
             definitionVersion: definition.version,
             nativeConversation: definition.nativeConversation,
             contextRendering: definition.contextRendering,
+            completionTransport: definition.completionTransport,
             nativeRoute: revisionRoute(model),
         });
         const row = await ctx.db

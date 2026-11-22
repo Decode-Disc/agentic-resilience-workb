@@ -26,6 +26,7 @@ const ALL_BLOCKS = [
     "sources_capacity_exhausted",
     "sources_time_limit_decision",
     "human_prerequisite_required",
+    "action_not_applicable",
     "research_control_not_supported",
     "stale_execution",
     "not_authorized",
@@ -34,7 +35,7 @@ const ALL_BLOCKS = [
 ] as const;
 
 const RAW_PATTERN =
-    /pause_research|resume_research|continue_sources_preparation|settle_sources_preparation|execution_slot_unavailable|paid_work_disabled|sources_settlement_requested|sources_configuration_unavailable|sources_capacity_exhausted|sources_time_limit_decision|human_prerequisite_required|research_control_not_supported|stale_execution|not_authorized|approval_|sources_time_limit/;
+    /pause_research|resume_research|continue_sources_preparation|settle_sources_preparation|execution_slot_unavailable|paid_work_disabled|sources_settlement_requested|sources_configuration_unavailable|sources_capacity_exhausted|sources_time_limit_decision|human_prerequisite_required|action_not_applicable|research_control_not_supported|stale_execution|not_authorized|approval_|sources_time_limit/;
 
 function makeView(
     overrides: Partial<ApprovalRequestView> = {},
@@ -127,4 +128,29 @@ test("approval copy never shows raw codes", () => {
             }
         }
     }
+});
+
+test("decision feedback distinguishes an inapplicable action from a stale decision", async () => {
+    const { approvalDecisionFeedback } = await import(
+        "@/lib/presentation/approvals"
+    );
+    expect(approvalDecisionFeedback("action_not_applicable")).toBe(
+        approvalBlockCopy("action_not_applicable"),
+    );
+    expect(approvalDecisionFeedback("action_not_applicable")).not.toBe(
+        APPROVAL_STALE_COPY,
+    );
+    for (const code of [
+        "approval_already_decided",
+        "stale_execution",
+        "human_prerequisite_required",
+    ])
+        expect(approvalDecisionFeedback(code)).toBe(APPROVAL_STALE_COPY);
+    expect(approvalDecisionFeedback(null)).not.toMatch(RAW_PATTERN);
+    expect(approvalDecisionFeedback(null)).toBe(
+        "This decision could not be recorded right now. Try again.",
+    );
+    expect(approvalDecisionFeedback("execution_slot_unavailable")).toBe(
+        approvalBlockCopy("execution_slot_unavailable"),
+    );
 });

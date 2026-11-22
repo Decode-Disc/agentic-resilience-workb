@@ -6,6 +6,7 @@ import type {
     SystemDataModel,
 } from "convex/server";
 import { getDocumentSize, type Value } from "convex/values";
+import { sourceCaptureState } from "./sourceCaptureState";
 import {
     readPreparationSourceDecision,
     sourcePreparationError,
@@ -44,6 +45,10 @@ export class SourceReviewReads {
     private readonly captureRows = new Map<
         Id<"sources">,
         Promise<Doc<"sourceCaptures">[]>
+    >();
+    private readonly captureStates = new Map<
+        string,
+        ReturnType<typeof sourceCaptureState>
     >();
     private readonly artifacts = new Map<
         Id<"_storage">,
@@ -302,14 +307,25 @@ export class SourceReviewReads {
         }
         return value;
     }
-    decision(corpusRevisionId: Id<"corpusRevisions">, sourceId: Id<"sources">) {
-        const key = `${corpusRevisionId}:${sourceId}`;
+    decision(
+        corpusRevisionId: Id<"corpusRevisions">,
+        sourceId: Id<"sources">,
+        allowMissingSourceMetadata = false,
+    ) {
+        if (allowMissingSourceMetadata) {
+            const strict = this.decisions.get(
+                `${corpusRevisionId}:${sourceId}:strict`,
+            );
+            if (strict) return strict;
+        }
+        const key = `${corpusRevisionId}:${sourceId}:${allowMissingSourceMetadata ? "allow_missing" : "strict"}`;
         let value = this.decisions.get(key);
         if (!value) {
             value = readPreparationSourceDecision(this.db, {
                 runId: this.runId,
                 corpusRevisionId,
                 sourceId,
+                allowMissingSourceMetadata,
             });
             this.decisions.set(key, value);
         }
@@ -406,6 +422,67 @@ export class SourceReviewReads {
                     return rows;
                 });
             this.captureRows.set(sourceId, value);
+        }
+        return value;
+    }
+    rememberCapture(capture: Doc<"sourceCaptures">) {
+        if (!this.captures.has(capture._id)) {
+            this.observe(capture);
+            this.captures.set(capture._id, Promise.resolve(capture));
+        }
+    }
+    private readonly readingWindows = new Map<
+        string,
+        Promise<Doc<"agentOperationRequests">[][]>
+    >();
+    readingRequests(missionId: Id<"agentMissions">, limit: number) {
+        const key = `${missionId}:${limit}`;
+        let value = this.readingWindows.get(key);
+        if (!value) {
+            value = Promise.all(
+                (["search_available_material", "read_in_context"] as const).map(
+                    async (kind) => {
+                        this.range();
+                        const rows = await this.db
+                            .query("agentOperationRequests")
+                            .withIndex("by_mission_and_input_kind", (q) =>
+                                q
+                                    .eq("missionId", missionId)
+                                    .eq("input.kind", kind),
+                            )
+                            .order("desc")
+                            .take(limit + 1);
+                        for (const row of rows) this.observe(row);
+                        return rows;
+                    },
+                ),
+            );
+            this.readingWindows.set(key, value);
+        }
+        return value;
+    }
+    captureState(
+        sourceId: Id<"sources">,
+        admittedCaptureIds?: ReadonlySet<Id<"sourceCaptures">>,
+    ) {
+        const key = `${sourceId}:${admittedCaptureIds ? [...admittedCaptureIds].sort().join(",") : "any"}`;
+        let value = this.captureStates.get(key);
+        if (!value) {
+            value = sourceCaptureState({ db: this.db }, sourceId, {
+                admittedCaptureIds,
+                onQuery: () => this.range(),
+                onDoc: (row) => {
+                    if (row) this.observe(row);
+                },
+            }).then((state) => {
+                if (state.committed)
+                    this.captures.set(
+                        state.committed._id,
+                        Promise.resolve(state.committed),
+                    );
+                return state;
+            });
+            this.captureStates.set(key, value);
         }
         return value;
     }

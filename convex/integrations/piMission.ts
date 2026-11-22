@@ -8,6 +8,9 @@ import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import {
     agentToolSchemas,
     modelOperationOutcome,
+    renderCompletionToolOutcome,
+    renderCompletionToolRefusal,
+    SUBMIT_COMPLETION_TOOL,
 } from "@convex/execution/agentDefinition";
 import {
     executionError,
@@ -65,8 +68,8 @@ import {
 import {
     modelToolSetKey,
     PI_MISSION_EXTENSION,
-    PI_MISSION_INPUT,
     PI_STATE_SECTION,
+    piMissionInput,
     piMissionMessages,
     piMissionStateText,
     piRequiredContextTokens,
@@ -310,7 +313,7 @@ export async function runPiMission(
     async function buildTools(snapshot?: unknown) {
         const projected = agentToolSchemas(definition, snapshot);
         const all = agentToolSchemas(definition);
-        return Promise.all(
+        const operationTools = await Promise.all(
             Object.entries(definition.operations).map(
                 async ([name, operation]) =>
                     defineTool({
@@ -382,6 +385,76 @@ export async function runPiMission(
                     }),
             ),
         );
+        if (definition.completionTransport !== "native_tool")
+            return operationTools;
+        const completionSchema =
+            projected[SUBMIT_COMPLETION_TOOL] ?? all[SUBMIT_COMPLETION_TOOL];
+        if (!completionSchema)
+            throw executionError("definition_contract_invalid");
+        const completionTool = defineTool({
+            ...(await piToolMetadata(SUBMIT_COMPLETION_TOOL, completionSchema)),
+            async execute(_input, api) {
+                try {
+                    if (!storage.lease)
+                        throw executionError("pi_writer_fenced");
+                    await storage.renewLease();
+                    const disposition = await ctx.runQuery(
+                        internal.execution.piControl.completionDisposition,
+                        {
+                            ...storage.lease,
+                            callId: api.callId,
+                        },
+                    );
+                    if (disposition.kind === "operation") {
+                        const outcome = await dispatchRetainedOperation(
+                            disposition.requestId,
+                        );
+                        return {
+                            output: [
+                                {
+                                    type: "text" as const,
+                                    text: modelOperationOutcome(
+                                        definition,
+                                        outcome,
+                                    ),
+                                },
+                            ],
+                        };
+                    }
+                    if (disposition.kind === "accepted") {
+                        return {
+                            output: [
+                                {
+                                    type: "text" as const,
+                                    text: renderCompletionToolOutcome({
+                                        kind: "accepted",
+                                    }),
+                                },
+                            ],
+                            control: { terminate: true },
+                        };
+                    }
+                    if (disposition.kind === "pending")
+                        throw executionError("pi_slice_complete");
+                    return {
+                        isError: true,
+                        output: [
+                            {
+                                type: "text" as const,
+                                text: renderCompletionToolRefusal(
+                                    disposition.code,
+                                    disposition.correction,
+                                ),
+                            },
+                        ],
+                    };
+                } catch (error) {
+                    stop(error);
+                    throw error;
+                }
+            },
+        });
+        return [...operationTools, completionTool];
     }
     let tools = await buildTools();
     function installTools() {
@@ -439,6 +512,17 @@ export async function runPiMission(
                 hooks: [
                     hook(GenerationTask, {
                         async afterTools() {
+                            if (
+                                definition.completionTransport ===
+                                    "native_tool" &&
+                                storage.lease &&
+                                (await ctx.runQuery(
+                                    internal.execution.piControl
+                                        .terminalCompletionAccepted,
+                                    storage.lease,
+                                ))
+                            )
+                                return;
                             await settleRetainedOperations();
                             await syncInputs();
                             await refreshTools();
@@ -565,7 +649,10 @@ export async function runPiMission(
                 : 1;
         const taskKey = `pi:${task.record.id}:${attempt}:${checkpoint && typeof checkpoint === "object" && "cutoff" in checkpoint ? checkpoint.cutoff : "summary"}`;
         const original =
-            definition.nativeConversation && storage.sessionId
+            terminal &&
+            (definition.nativeConversation ||
+                definition.completionTransport === "native_tool") &&
+            storage.sessionId
                 ? await ctx.runQuery(
                       internal.execution.piControl.nativeInvocation,
                       { ...args, sessionId: storage.sessionId, taskKey },
@@ -655,7 +742,11 @@ export async function runPiMission(
                                 }
                               : {}),
                       }
-                    : {}),
+                    : definition.completionTransport === "native_tool"
+                      ? {
+                            piSessionId: storage.sessionId,
+                        }
+                      : {}),
                 provenance: simulated ? "simulation" : "live",
                 ...(auxiliary ? { purpose: "compaction" as const } : {}),
             },
@@ -820,18 +911,34 @@ export async function runPiMission(
                                       ),
                                       { stopReason: "toolUse" },
                                   )
-                                : fauxAssistantMessage(
-                                      fauxText(
-                                          auxiliary
-                                              ? "Working summary only. Retrieve exact prior entries; required state is supplied separately."
-                                              : definition.textCompletion &&
-                                                  response?.kind ===
-                                                      "complete" &&
-                                                  "text" in response
-                                                ? response.text
-                                                : JSON.stringify(response),
-                                      ),
-                                  ),
+                                : !auxiliary &&
+                                    definition.completionTransport ===
+                                        "native_tool" &&
+                                    response?.kind === "complete"
+                                  ? fauxAssistantMessage(
+                                        [
+                                            fauxToolCall(
+                                                SUBMIT_COMPLETION_TOOL,
+                                                response,
+                                                {
+                                                    id: `sim-complete:${retained._id}`,
+                                                },
+                                            ),
+                                        ],
+                                        { stopReason: "toolUse" },
+                                    )
+                                  : fauxAssistantMessage(
+                                        fauxText(
+                                            auxiliary
+                                                ? "Working summary only. Retrieve exact prior entries; required state is supplied separately."
+                                                : definition.textCompletion &&
+                                                    response?.kind ===
+                                                        "complete" &&
+                                                    "text" in response
+                                                  ? response.text
+                                                  : JSON.stringify(response),
+                                        ),
+                                    ),
                         ]);
                     }
                     let preparationCode: string | undefined;
@@ -1286,6 +1393,18 @@ export async function runPiMission(
             if (adopted.kind === "blocked") {
                 if (adopted.code === "pending_operations")
                     throw executionError("pi_slice_complete");
+                const isToolCompletion =
+                    currentResponse.kind === "completion_submission" &&
+                    currentResponse.call !== null;
+                if (
+                    isToolCompletion &&
+                    [
+                        "completion_correction_required",
+                        "mission_context_changed",
+                        "stale_instructions",
+                    ].includes(adopted.code ?? "")
+                )
+                    return message;
                 if (
                     adopted.code === "completion_correction_required" &&
                     "correction" in adopted &&
@@ -1494,13 +1613,13 @@ export async function runPiMission(
             return;
         }
         if (!terminal) await refreshTools();
-        await syncInputs();
+        if (!terminal || definition.nativeConversation) await syncInputs();
         const submission = definition.nativeConversation
             ? undefined
             : await root.submit(
                   {
                       type: "input",
-                      content: PI_MISSION_INPUT,
+                      content: piMissionInput(definition.completionTransport),
                       requestId: `mission:${mission._id}`,
                   },
                   context,

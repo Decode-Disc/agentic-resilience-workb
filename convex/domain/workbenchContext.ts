@@ -2,8 +2,9 @@ import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import type { AgentDefinition } from "@convex/execution/agentDefinition";
-import { executionFailureCode } from "@convex/execution/errors";
+import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { turnFramingCitationPolicy } from "@convex/framingCitationPolicy";
+import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { requireSavedMaterialScope } from "./documentaryAccess";
 import { researchQuestionCapacity } from "./framingEditAuthority";
 import {
@@ -16,6 +17,7 @@ import { documentaryInventory as documentaryInventoryForMission } from "./savedM
 import { savedMaterialBinding } from "./savedMaterialOperations";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import { sourceDocumentMetadata } from "./sourceRetrievalPolicy";
+import { SourceReviewReads } from "./sourceReviewReads";
 import {
     controlledSourcesContributions,
     coveragePresetGuidance,
@@ -37,13 +39,22 @@ export async function readWorkbenchFacts(
     const framing = run.currentFramingRevisionId
         ? await ctx.db.get(run.currentFramingRevisionId)
         : null;
+    const preparation =
+        run.sourcesProtocol === "sources_mission_v1" && run.sourcePreparationId
+            ? await ctx.db.get(run.sourcePreparationId)
+            : null;
+    if (preparation && preparation.runId !== run._id)
+        throw executionError("not_authorized");
+    const reads = preparation?.sourcesMission
+        ? new SourceReviewReads(ctx.db, run._id, SOURCES_HANDOFF_READ_CAPACITY)
+        : undefined;
     const documentaryInventory =
         mission &&
         savedMaterialBinding(
             mission.definitionId,
             mission.definitionVersion,
         ) === "referenced"
-            ? await documentaryInventoryForMission(ctx, mission)
+            ? await documentaryInventoryForMission(ctx, mission, reads)
             : null;
     const framingCitationPolicy = mission
         ? await turnFramingCitationPolicy(ctx, mission)
@@ -91,15 +102,17 @@ export async function readWorkbenchFacts(
             availableMaterials = [];
         }
     }
-    const research = await readResearchState(ctx, run);
     const instructions = await readWorkbenchInstructions(ctx, run._id);
-    const preparation =
-        run.sourcesProtocol === "sources_mission_v1" && run.sourcePreparationId
-            ? await ctx.db.get(run.sourcePreparationId)
-            : null;
-    const controlled = preparation?.sourcesMission
-        ? await controlledSourcesContributions(ctx, preparation)
-        : [];
+    const controlled =
+        preparation?.sourcesMission && reads
+            ? await controlledSourcesContributions(ctx, preparation, reads)
+            : [];
+    const research = await readResearchState(ctx, run, {
+        framing,
+        preparation,
+        reads,
+        controlled,
+    });
     const eventBasis = framing?.eventBasis;
     const eventReferences =
         eventBasis?.kind === "public"
@@ -201,7 +214,11 @@ export async function readWorkbenchFacts(
                           preparation,
                           research.sources,
                       ),
-                      coverage: await readSourcesCoverage(ctx, preparation),
+                      coverage: await readSourcesCoverage(
+                          ctx,
+                          preparation,
+                          reads,
+                      ),
                       controlledContributions: controlled,
                   },
               }

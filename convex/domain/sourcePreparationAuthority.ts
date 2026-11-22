@@ -408,17 +408,21 @@ export async function readPreparationSourceDecision(
         runId: Id<"researchRuns">;
         corpusRevisionId: Id<"corpusRevisions">;
         sourceId: Id<"sources">;
+        allowMissingSourceMetadata?: boolean;
     },
 ) {
     const source = await db.get(args.sourceId);
-    if (!source || source.runId !== args.runId)
+    if (
+        (source && source.runId !== args.runId) ||
+        (!source && !args.allowMissingSourceMetadata)
+    )
         throw sourcePreparationError("source_not_owned");
     const head = await db
         .query("sourceReviewItems")
         .withIndex("by_revision_and_source", (q) =>
             q
                 .eq("corpusRevisionId", args.corpusRevisionId)
-                .eq("sourceId", source._id),
+                .eq("sourceId", args.sourceId),
         )
         .unique();
     const decision = head
@@ -428,7 +432,7 @@ export async function readPreparationSourceDecision(
               .withIndex("by_revision_source_and_occurred_at", (q) =>
                   q
                       .eq("corpusRevisionId", args.corpusRevisionId)
-                      .eq("sourceId", source._id),
+                      .eq("sourceId", args.sourceId),
               )
               .order("desc")
               .first();
@@ -437,7 +441,7 @@ export async function readPreparationSourceDecision(
         (!decision ||
             head.runId !== args.runId ||
             decision.runId !== args.runId ||
-            decision.sourceId !== source._id ||
+            decision.sourceId !== args.sourceId ||
             decision.corpusRevisionId !== args.corpusRevisionId ||
             decision.decision !== head.decision)
     ) {

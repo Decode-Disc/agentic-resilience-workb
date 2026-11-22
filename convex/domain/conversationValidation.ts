@@ -11,7 +11,7 @@ import {
     requireFixtureScope,
 } from "./conversationValidationOperations";
 
-export const conversationValidationDefinition: AgentDefinition & {
+export const conversationValidationV2Definition: AgentDefinition & {
     id: "conversation_validation_v1";
 } = {
     id: "conversation_validation_v1",
@@ -63,6 +63,19 @@ export const conversationValidationDefinition: AgentDefinition & {
         };
     },
 };
+
+export const conversationValidationV3Definition: AgentDefinition & {
+    id: "conversation_validation_v1";
+} = {
+    ...conversationValidationV2Definition,
+    version: 3,
+    completionTransport: "native_tool",
+    instructions:
+        "Simulation only. Reply to the explicitly supplied active messages by calling submit_completion alone; queued messages are excluded.",
+};
+
+export const conversationValidationDefinition =
+    conversationValidationV3Definition;
 
 export const completeDeferred = internalMutation({
     args: {

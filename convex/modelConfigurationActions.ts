@@ -12,6 +12,7 @@ import {
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
     MODEL_METADATA_REQUEST_TIMEOUT_MS,
     NATIVE_PROFILE_PREPARATION_TIMEOUT_MS,
+    NATIVE_PROFILE_BATCH_SIZE,
 } from "@convex/resourcePolicy";
 import type { FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
@@ -26,6 +27,7 @@ import {
 import { prepareNativeProfiles } from "./integrations/piModelProfiles";
 import { modelPrepared, revisionRoute } from "./modelConfiguration";
 import {
+    type nativeProfile,
     modelPreparationInput,
     reasoningEffortValues,
 } from "./modelConfigurationSchema";
@@ -78,6 +80,48 @@ function object(value: unknown): Record<string, unknown> {
     if (!value || typeof value !== "object" || Array.isArray(value))
         throw new Error("catalog_invalid");
     return value as Record<string, unknown>;
+}
+
+async function readProfileBatches(
+    ctx: ActionCtx,
+    keys: string[],
+): Promise<Infer<typeof nativeProfile>[]> {
+    const profiles: Infer<typeof nativeProfile>[] = [];
+    for (
+        let offset = 0;
+        offset < keys.length;
+        offset += NATIVE_PROFILE_BATCH_SIZE
+    ) {
+        profiles.push(
+            ...(await ctx.runQuery(internal.modelConfiguration.profiles, {
+                keys: keys.slice(offset, offset + NATIVE_PROFILE_BATCH_SIZE),
+            })),
+        );
+    }
+    return profiles;
+}
+async function stageProfilePrefixBatches(
+    ctx: ActionCtx,
+    profiles: Infer<typeof nativeProfile>[],
+): Promise<Infer<typeof nativeProfile>[]> {
+    let offset = 0;
+    for (
+        ;
+        offset + NATIVE_PROFILE_BATCH_SIZE < profiles.length;
+        offset += NATIVE_PROFILE_BATCH_SIZE
+    ) {
+        await ctx.runMutation(
+            internal.modelConfiguration.retainNativeProfileBatch,
+            {
+                profileCatalog: NATIVE_PROFILE_CATALOG,
+                profiles: profiles.slice(
+                    offset,
+                    offset + NATIVE_PROFILE_BATCH_SIZE,
+                ),
+            },
+        );
+    }
+    return profiles.slice(offset);
 }
 
 async function prepareModel(
@@ -218,8 +262,7 @@ async function prepareModel(
             },
             descriptor,
             signal,
-            (keys) =>
-                ctx.runQuery(internal.modelConfiguration.profiles, { keys }),
+            (keys) => readProfileBatches(ctx, keys),
         );
         return await ctx.runMutation(
             internal.modelConfiguration.finishPreparation,
@@ -227,7 +270,7 @@ async function prepareModel(
                 catalogId: pending.catalogId,
                 revision: pending.revision,
                 descriptor,
-                profiles,
+                profiles: await stageProfilePrefixBatches(ctx, profiles),
                 profileCatalog: NATIVE_PROFILE_CATALOG,
             },
         );
@@ -288,12 +331,12 @@ async function refreshRevision(
         revisionRoute(revision),
         revision.descriptor,
         AbortSignal.timeout(NATIVE_PROFILE_PREPARATION_TIMEOUT_MS),
-        (keys) => ctx.runQuery(internal.modelConfiguration.profiles, { keys }),
+        (keys) => readProfileBatches(ctx, keys),
     );
     await ctx.runMutation(internal.modelConfiguration.retainRefreshedProfiles, {
         revisionId: revision._id,
         profileCatalog: NATIVE_PROFILE_CATALOG,
-        profiles,
+        profiles: await stageProfilePrefixBatches(ctx, profiles),
     });
 }
 

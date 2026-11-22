@@ -648,7 +648,7 @@ test("exact history pagination reconstructs large observable records without gap
     });
     if (begun.kind !== "ready") throw new Error("Expected invocation");
     const rawOutputJson = JSON.stringify({
-        text: "Quoted evidence 😀".repeat(1200),
+        text: "Quoted evidence 😀".repeat(4000),
     });
     await t.mutation(internal.execution.invocations.finish, {
         invocationId: begun.invocationId,

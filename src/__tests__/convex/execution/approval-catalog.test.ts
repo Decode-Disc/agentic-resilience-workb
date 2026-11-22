@@ -43,7 +43,7 @@ test("only continue and settle are available at a Sources time limit with remain
         assert(run);
         expect(
             await approvalCatalog.pause_research.availability(ctx, run),
-        ).toBe("human_prerequisite_required");
+        ).toBe("action_not_applicable");
         expect(
             await approvalCatalog.resume_research.availability(ctx, run),
         ).toBe("sources_time_limit_decision");
@@ -102,13 +102,13 @@ test("pause and resume apply through the catalogue in normal execution", async (
         ).toBeNull();
         expect(
             await approvalCatalog.resume_research.availability(ctx, run),
-        ).toBe("human_prerequisite_required");
+        ).toBe("action_not_applicable");
         expect(
             await approvalCatalog.continue_sources_preparation.availability(
                 ctx,
                 run,
             ),
-        ).toBe("human_prerequisite_required");
+        ).toBe("action_not_applicable");
         expect(
             await approvalCatalog.settle_sources_preparation.availability(
                 ctx,
@@ -139,7 +139,7 @@ test("pause and resume apply through the catalogue in normal execution", async (
                 ctx,
                 pausedRun,
             ),
-        ).toBe("human_prerequisite_required");
+        ).toBe("action_not_applicable");
         expect(
             await approvalCatalog.settle_sources_preparation.availability(
                 ctx,
@@ -242,11 +242,41 @@ test("invalid window refuses continue while settle remains available and applies
                 ctx,
                 run,
             ),
-        ).toBe("human_prerequisite_required");
+        ).toBe("sources_settlement_requested");
     });
 
     const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     expect(preparation?.settlementRequestedAt).toBeTypeOf("number");
     const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
     expect(mission?.blockCode).toBe("execution_time_limit");
+});
+
+test("analyst pause makes Sources continuation inapplicable while another dossier holds the slot", async () => {
+    const f = await seedCapturedSources();
+    await f.t.run(async (ctx) => {
+        const original = await ctx.db.get(f.runId);
+        assert(original);
+        const { _id, _creationTime, ...fields } = original;
+        await ctx.db.patch(_id, {
+            agentExecutionVersion: 3,
+            executionStatus: "paused",
+            pauseReason: "analyst",
+            researchPauseRequested: false,
+        });
+        await ctx.db.insert("researchRuns", {
+            ...fields,
+            executionStatus: "running",
+        });
+        const run = await ctx.db.get(_id);
+        assert(run);
+        expect(
+            await approvalCatalog.resume_research.availability(ctx, run),
+        ).toBe("execution_slot_unavailable");
+        expect(
+            await approvalCatalog.continue_sources_preparation.availability(
+                ctx,
+                run,
+            ),
+        ).toBe("action_not_applicable");
+    });
 });

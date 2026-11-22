@@ -1,9 +1,14 @@
+import { writeFileSync } from "node:fs";
 import { api, internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { readResearchState } from "@convex/domain/researchState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { commonOperations } from "@convex/execution/commonOperations";
 import { operationReuseIdentity } from "@convex/execution/missionData";
+import { currentRunStateResultValidator } from "@convex/execution/operationContracts";
+import { getDocumentSize, type Value } from "convex/values";
+import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedResearchStateScenario } from "@/__tests__/setup/research-state";
@@ -1024,5 +1029,970 @@ test("a settled inquiry with no retained documents reports no usable material", 
         summary: expect.stringContaining(
             "Sources preparation ended without usable material.",
         ),
+    });
+});
+
+function measureDbReads<T extends object>(db: T) {
+    const totals = { rows: 0, bytes: 0, gets: 0, queries: 0 };
+    const recordRow = (row: unknown) => {
+        if (!row || typeof row !== "object") return;
+        totals.rows++;
+        totals.bytes += getDocumentSize(row as Record<string, Value>);
+    };
+    const wrapQuery = <Q extends object>(query: Q): Q =>
+        new Proxy(query, {
+            get(target, key, receiver) {
+                const value = Reflect.get(target, key, receiver);
+                if (typeof value !== "function") return value;
+                if (key === Symbol.asyncIterator)
+                    return async function* () {
+                        for await (const row of target as Q &
+                            AsyncIterable<unknown>) {
+                            recordRow(row);
+                            yield row;
+                        }
+                    };
+                return (...params: unknown[]) => {
+                    const result = Reflect.apply(value, target, params);
+                    if (key === "first" || key === "unique")
+                        return Promise.resolve(result).then((row) => {
+                            recordRow(row);
+                            return row;
+                        });
+                    if (key === "take" || key === "collect")
+                        return Promise.resolve(result).then(
+                            (rows: unknown[]) => {
+                                for (const row of rows) recordRow(row);
+                                return rows;
+                            },
+                        );
+                    if (key === "paginate")
+                        return Promise.resolve(result).then(
+                            (page: { page: unknown[] }) => {
+                                for (const row of page.page) recordRow(row);
+                                return page;
+                            },
+                        );
+                    return result &&
+                        typeof result === "object" &&
+                        !(result instanceof Promise)
+                        ? wrapQuery(result)
+                        : result;
+                };
+            },
+        });
+    const proxy = new Proxy(db, {
+        get(target, key, receiver) {
+            const value = Reflect.get(target, key, receiver);
+            if (key === "system" && value && typeof value === "object")
+                return wrapQuery(value);
+            if (typeof value !== "function") return value;
+            return (...params: unknown[]) => {
+                const result = Reflect.apply(value, target, params);
+                if (key === "get") {
+                    totals.gets++;
+                    return Promise.resolve(result).then((row) => {
+                        recordRow(row);
+                        return row;
+                    });
+                }
+                if (key === "query") {
+                    totals.queries++;
+                    return result && typeof result === "object"
+                        ? wrapQuery(result)
+                        : result;
+                }
+                return result;
+            };
+        },
+    });
+    return { db: proxy, totals };
+}
+
+test("measures logical database reads across Sources context, Workbench context and standalone consultation", async () => {
+    const f = await seedResearchStateScenario({
+        outcome: "partial",
+        blockCode: "invalid_output",
+        historicalTimeLimitNote: true,
+        retainedDocumentCount: 4,
+        capturedDocumentCount: 5,
+        uncapturedDocumentCount: 2,
+    });
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+        });
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        await ctx.db.patch(f.preparationId, {
+            status: "started",
+            completedAt: undefined,
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                result: undefined,
+            },
+        });
+        await ctx.db.patch(f.missionId, {
+            status: "running",
+            blockCode: undefined,
+        });
+    });
+
+    const measurements = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        const sourcesMission = await ctx.db.get(f.missionId);
+        const workbenchMission = await ctx.db.get(f.workbenchMissionId);
+        assert(run && sourcesMission && workbenchMission);
+
+        const sourcesProbe = measureDbReads(ctx.db);
+        const sourcesContext = await getAgentDefinition("sources_v1").context(
+            { ...ctx, db: sourcesProbe.db },
+            sourcesMission,
+            run,
+        );
+        assert(sourcesContext.kind === "ready");
+
+        const workbenchProbe = measureDbReads(ctx.db);
+        const workbenchContext = await getAgentDefinition(
+            "workbench_v1",
+        ).context({ ...ctx, db: workbenchProbe.db }, workbenchMission, run);
+        assert(workbenchContext.kind === "ready");
+
+        const consultationProbe = measureDbReads(ctx.db);
+        const consultation = await readResearchState(
+            { ...ctx, db: consultationProbe.db },
+            run,
+        );
+        expect(consultation.sources?.preparationId).toBe(f.preparationId);
+
+        return {
+            sourcesContext: sourcesProbe.totals,
+            workbenchContext: workbenchProbe.totals,
+            standaloneConsultation: consultationProbe.totals,
+        };
+    });
+
+    if (process.env.PROJECTION_PERF_OUTPUT)
+        writeFileSync(
+            process.env.PROJECTION_PERF_OUTPUT,
+            JSON.stringify(
+                {
+                    boundary:
+                        "Logical rows and serialized Convex document bytes read by real query handlers across all db.get/db.query calls (including outside SourceReviewReads); does not measure physical Convex billing or deployed latency.",
+                    measurements,
+                },
+                null,
+                2,
+            ),
+        );
+    expect(measurements.sourcesContext.rows).toBeGreaterThan(0);
+    expect(measurements.workbenchContext.rows).toBeGreaterThan(0);
+    expect(measurements.standaloneConsultation.rows).toBeGreaterThan(0);
+});
+
+test("running preparation exposes compact progress across Sources, Workbench and consult_run_state v3 without conflating handoff or human pauses", async () => {
+    const f = await seedResearchStateScenario({
+        outcome: "partial",
+        retainedDocumentCount: 1,
+        capturedDocumentCount: 3,
+        uncapturedDocumentCount: 3,
+    });
+    const seeded = await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        const baseCapture = await ctx.db.get(f.captureId);
+        const sourcesMission = await ctx.db.get(f.missionId);
+        assert(preparation?.sourcesMission && baseCapture && sourcesMission);
+        const captureIds = [...preparation.sourcesMission.captureIds];
+        assert(captureIds.length === 3);
+        const [capFullId, capPartialId, capUnknownId] = captureIds;
+        assert(capFullId && capPartialId && capUnknownId);
+        const capFull = await ctx.db.get(capFullId);
+        const capPartial = await ctx.db.get(capPartialId);
+        const capUnknown = await ctx.db.get(capUnknownId);
+        assert(capFull && capPartial && capUnknown);
+
+        // Distinct capture availability states on the 3 committed captures
+        await ctx.db.patch(capFullId, {
+            representationCompleteness: "complete",
+        });
+        await ctx.db.patch(capPartialId, {
+            representationCompleteness: "partial",
+        });
+        await ctx.db.patch(capUnknownId, {
+            representationCompleteness: undefined,
+            readingCompleteness: undefined,
+        });
+
+        // Add capturing, unavailable, and not-captured preparation work sources
+        const [capturingSourceId, unavailableSourceId, notCapturedSourceId] =
+            f.uncapturedSourceIds;
+        assert(capturingSourceId && unavailableSourceId && notCapturedSourceId);
+        const { _id: _cid, _creationTime: _ct, ...capFields } = baseCapture;
+        await ctx.db.insert("sourceCaptures", {
+            ...capFields,
+            sourceId: capturingSourceId,
+            captureKey: "progress-capturing",
+            status: "reserved",
+            contentHash: undefined,
+        });
+        await ctx.db.insert("sourceCaptures", {
+            ...capFields,
+            sourceId: unavailableSourceId,
+            captureKey: "progress-unavailable",
+            status: "unavailable",
+            contentHash: undefined,
+        });
+
+        // Create a newer capture for capUnknown's source so an obsolete qualification is ignored
+        const newerCaptureId = await ctx.db.insert("sourceCaptures", {
+            ...capFields,
+            sourceId: capUnknown.sourceId,
+            captureKey: "progress-newer-unqualified",
+            contentHash: "newer-unqualified-hash",
+            representationCompleteness: undefined,
+            readingCompleteness: undefined,
+            updatedAt: capUnknown.updatedAt + 10,
+        });
+
+        // Qualification 1 on capFull with 4 contributions covering all 4 effectiveUses categories
+        const control1Id = await ctx.db.insert("aiTaskResults", {
+            runId: f.runId,
+            corpusRevisionId: f.corpusRevisionId,
+            sourceId: capFull.sourceId,
+            sourceCaptureId: capFullId,
+            taskType: "documentary_control",
+            executionMode: "live",
+            schemaVersion: "sources_mission_v1",
+            adapterVersion: "fixture",
+            inputHash: "ctrl-1",
+            createdAt: 10,
+            output: {
+                kind: "documentary_control",
+                preparationId: f.preparationId,
+                evidence: [],
+                inputHash: "ctrl-1",
+                control: {
+                    coherence: true,
+                    limitations: [],
+                    findings: [
+                        {
+                            contributionId: "c-doc",
+                            conclusion: "supported",
+                            permittedUse: "documentary",
+                            diagnostic: "ok",
+                        },
+                        {
+                            contributionId: "c-attr",
+                            conclusion: "supported",
+                            permittedUse: "attributed_argument_only",
+                            diagnostic: "attributed",
+                        },
+                        {
+                            contributionId: "c-ctx",
+                            conclusion: "supported",
+                            permittedUse: "context_only",
+                            diagnostic: "context",
+                        },
+                        {
+                            contributionId: "c-blk",
+                            conclusion: "not_established",
+                            permittedUse: "blocked",
+                            diagnostic: "blocked",
+                        },
+                    ],
+                },
+            },
+        });
+        const evidenceQuote = {
+            captureId: capFullId,
+            passageOrder: 0,
+            quotation: "Quoted fact",
+        };
+        const qual1Id = await ctx.db.insert("aiTaskResults", {
+            runId: f.runId,
+            corpusRevisionId: f.corpusRevisionId,
+            sourceId: capFull.sourceId,
+            sourceCaptureId: capFullId,
+            taskType: "documentary_qualification",
+            executionMode: "live",
+            schemaVersion: "sources_mission_v1",
+            adapterVersion: "fixture",
+            inputHash: "qual-1",
+            createdAt: 10,
+            output: {
+                kind: "documentary_qualification",
+                preparationId: f.preparationId,
+                captureId: capFullId,
+                contentHash: capFull.contentHash ?? "",
+                version: 1,
+                controlTaskId: control1Id,
+                contributions: [
+                    {
+                        id: "c-doc",
+                        version: 1,
+                        needIds: ["common-context"],
+                        statement: "Fact",
+                        period: "2026",
+                        modality: "reported",
+                        attribution: "10-K",
+                        kind: "asserted_fact",
+                        evidence: [evidenceQuote],
+                    },
+                    {
+                        id: "c-attr",
+                        version: 1,
+                        needIds: ["common-context"],
+                        statement: "Management argument",
+                        period: "2026",
+                        modality: "asserted",
+                        attribution: "CEO",
+                        kind: "attributed_argument",
+                        evidence: [evidenceQuote],
+                    },
+                    {
+                        id: "c-ctx",
+                        version: 1,
+                        needIds: ["common-context"],
+                        statement: "Industry backdrop",
+                        period: "2026",
+                        modality: "background",
+                        attribution: "10-K",
+                        kind: "context",
+                        evidence: [evidenceQuote],
+                    },
+                    {
+                        id: "c-blk",
+                        version: 1,
+                        needIds: ["common-context"],
+                        statement: "Unverified claim",
+                        period: "2026",
+                        modality: "claimed",
+                        attribution: "Press",
+                        kind: "asserted_fact",
+                        evidence: [evidenceQuote],
+                    },
+                ],
+            },
+        });
+
+        // Obsolete qualification on old capUnknown (superseded by newerCaptureId)
+        const controlObsId = await ctx.db.insert("aiTaskResults", {
+            runId: f.runId,
+            corpusRevisionId: f.corpusRevisionId,
+            sourceId: capUnknown.sourceId,
+            sourceCaptureId: capUnknownId,
+            taskType: "documentary_control",
+            executionMode: "live",
+            schemaVersion: "sources_mission_v1",
+            adapterVersion: "fixture",
+            inputHash: "ctrl-obs",
+            createdAt: 9,
+            output: {
+                kind: "documentary_control",
+                preparationId: f.preparationId,
+                evidence: [],
+                inputHash: "ctrl-obs",
+                control: {
+                    coherence: true,
+                    limitations: [],
+                    findings: [
+                        {
+                            contributionId: "c-obs",
+                            conclusion: "supported",
+                            permittedUse: "documentary",
+                            diagnostic: "ok",
+                        },
+                    ],
+                },
+            },
+        });
+        const qualObsId = await ctx.db.insert("aiTaskResults", {
+            runId: f.runId,
+            corpusRevisionId: f.corpusRevisionId,
+            sourceId: capUnknown.sourceId,
+            sourceCaptureId: capUnknownId,
+            taskType: "documentary_qualification",
+            executionMode: "live",
+            schemaVersion: "sources_mission_v1",
+            adapterVersion: "fixture",
+            inputHash: "qual-obs",
+            createdAt: 9,
+            output: {
+                kind: "documentary_qualification",
+                preparationId: f.preparationId,
+                captureId: capUnknownId,
+                contentHash: capUnknown.contentHash ?? "",
+                version: 1,
+                controlTaskId: controlObsId,
+                contributions: [
+                    {
+                        id: "c-obs",
+                        version: 1,
+                        needIds: ["common-context"],
+                        statement: "Stale capture fact",
+                        period: "2026",
+                        modality: "reported",
+                        attribution: "Old",
+                        kind: "asserted_fact",
+                        evidence: [
+                            {
+                                captureId: capUnknownId,
+                                passageOrder: 0,
+                                quotation: "Old quote",
+                            },
+                        ],
+                    },
+                ],
+            },
+        });
+
+        // Insert 33 admitted search_available_material readings to exercise incomplete window (> 32)
+        const dummyWorkRequestIds: Id<"agentOperationRequests">[] = [];
+        for (const sourceId of [
+            capturingSourceId,
+            unavailableSourceId,
+            notCapturedSourceId,
+        ]) {
+            const reqId = await ctx.db.insert("agentOperationRequests", {
+                runId: f.runId,
+                missionId: f.missionId,
+                logicalKey: `work-${sourceId}`,
+                operationVersion: 2,
+                actor: "agent",
+                cause: "acquire",
+                expectedGeneration: 1,
+                input: {
+                    kind: "make_source_consultable",
+                    needId: "common-context",
+                    sourceId,
+                },
+                status: "running",
+                createdAt: 1,
+            });
+            dummyWorkRequestIds.push(reqId);
+        }
+        for (let i = 0; i < 33; i++) {
+            await ctx.db.insert("agentOperationRequests", {
+                runId: f.runId,
+                missionId: f.missionId,
+                logicalKey: `read-window-${i}`,
+                operationVersion: 1,
+                actor: "agent",
+                cause: `read-${i}`,
+                expectedGeneration: 1,
+                pin: {
+                    kind: "saved_material_inspection_v1",
+                    expectedCaptureId: capFullId,
+                    expectedContentHash: capFull.contentHash ?? "",
+                },
+                input: {
+                    kind: "search_available_material",
+                    sourceId: capFull.sourceId,
+                    query: `q-${i}`,
+                },
+                status: "completed",
+                adoptedAt: 10 + i,
+                outcome: {
+                    kind: "success",
+                    valueJson: JSON.stringify({
+                        kind: "search_available_material",
+                        sourceId: capFull.sourceId,
+                        captureId: capFullId,
+                        contentHash: capFull.contentHash ?? "",
+                        canonicalUrl: "https://example.com/workflow/1",
+                        retrievedAt: 1,
+                        passages: [
+                            {
+                                passageOrder: i,
+                                exactQuote: `Match ${i}`,
+                                headingPath: [],
+                            },
+                        ],
+                        omittedPassageCount: 0,
+                        limitReached: false,
+                    }),
+                },
+                createdAt: 10 + i,
+                completedAt: 10 + i,
+            });
+        }
+
+        const [capturingWorkId, unavailableWorkId, notCapturedWorkId] =
+            dummyWorkRequestIds;
+        assert(capturingWorkId && unavailableWorkId && notCapturedWorkId);
+
+        await ctx.db.patch(f.preparationId, {
+            status: "started",
+            completedAt: undefined,
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                captureIds: [...captureIds, newerCaptureId],
+                qualifications: [qual1Id, qualObsId],
+                restrictedContributions: [],
+                work: [
+                    {
+                        requestId: capturingWorkId,
+                        sourceId: capturingSourceId,
+                        kind: "make_source_consultable",
+                        needIds: ["common-context"],
+                    },
+                    {
+                        requestId: unavailableWorkId,
+                        sourceId: unavailableSourceId,
+                        kind: "make_source_consultable",
+                        needIds: ["common-context"],
+                    },
+                    {
+                        requestId: notCapturedWorkId,
+                        sourceId: notCapturedSourceId,
+                        kind: "make_source_consultable",
+                        needIds: ["common-context"],
+                    },
+                ],
+                result: undefined,
+            },
+        });
+        await ctx.db.patch(f.runId, {
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+            pauseReason: undefined,
+            researchPauseRequested: false,
+        });
+        await ctx.db.patch(f.missionId, {
+            status: "running",
+            blockCode: undefined,
+        });
+        return { qual1Id, control1Id };
+    });
+
+    const expectedProgress = {
+        version: 1,
+        handoff: "pending",
+        captures: {
+            full: 1,
+            partial: 1,
+            unknown: 1,
+            capturing: 1,
+            unavailable: 1,
+            notCaptured: 1,
+        },
+        qualifications: {
+            recordedSources: 1,
+            effectiveUses: {
+                documentary: 1,
+                attributed_argument_only: 1,
+                context_only: 1,
+                blocked: 1,
+            },
+        },
+        readings: {
+            visibleReferenceCount: 32,
+            referencesComplete: false,
+        },
+    };
+
+    // 1. Standalone consult_run_state v3
+    const consulted = await dispatchState(f, "running-progress");
+    const consultedRequest = await f.t.run((ctx) =>
+        ctx.db.get(consulted.requestId),
+    );
+    expect(consultedRequest?.operationVersion).toBe(3);
+    expect(consulted.value.research).toMatchObject({
+        status: "running",
+        actions: {
+            pause: { applicable: true, reason: null },
+            resume: { applicable: false, reason: "action_not_applicable" },
+            continuePreparation: {
+                applicable: false,
+                reason: "action_not_applicable",
+            },
+        },
+        sources: {
+            outcome: null,
+            retainedDocuments: [],
+            executionStop: null,
+            progress: expectedProgress,
+        },
+    });
+
+    // 2. Workbench context agrees on progress and action applicability
+    const wb = await facts(f);
+    expect(wb.research).toMatchObject({
+        sources: {
+            retainedDocuments: [],
+            progress: expectedProgress,
+        },
+        actions: {
+            resume: { applicable: false, reason: "action_not_applicable" },
+            continuePreparation: {
+                applicable: false,
+                reason: "action_not_applicable",
+            },
+        },
+    });
+
+    // 3. Sources context exposes the same progress inside activeWork
+    const sourcesContext = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        const mission = await ctx.db.get(f.missionId);
+        assert(run && mission);
+        const result = await getAgentDefinition("sources_v1").context(
+            ctx,
+            mission,
+            run,
+        );
+        assert(result.kind === "ready");
+        return result.context;
+    });
+    expect(sourcesContext.activeWork).toMatchObject({
+        progress: expectedProgress,
+    });
+
+    // 4. Adding an analyst restriction changes effectiveUses category and invalidates consultation pin
+    const pinBefore = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.workbenchMissionId);
+        assert(mission);
+        return commonOperations.consult_run_state.pin(ctx, mission, {
+            kind: "consult_run_state",
+        });
+    });
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        await ctx.db.patch(f.preparationId, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                restrictedContributions: [
+                    {
+                        qualificationTaskId: seeded.qual1Id,
+                        contributionId: "c-doc",
+                        version: 1,
+                        controlTaskId: seeded.control1Id,
+                        permittedUse: "context_only",
+                    },
+                ],
+            },
+        });
+    });
+    const pinAfter = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.workbenchMissionId);
+        assert(mission);
+        return commonOperations.consult_run_state.pin(ctx, mission, {
+            kind: "consult_run_state",
+        });
+    });
+    expect(pinAfter).not.toEqual(pinBefore);
+    const afterRestriction = await dispatchState(f, "after-restriction");
+    expect(afterRestriction.value.research.sources.progress).toMatchObject({
+        qualifications: {
+            recordedSources: 1,
+            effectiveUses: {
+                documentary: 0,
+                attributed_argument_only: 1,
+                context_only: 2,
+                blocked: 1,
+            },
+        },
+    });
+
+    // 5. True human review pause preserves human_prerequisite_required (distinct from running action_not_applicable)
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, {
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+        }),
+    );
+    const pausedHuman = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        return readResearchState(ctx, run);
+    });
+    expect(pausedHuman.actions).toMatchObject({
+        pause: { applicable: false, reason: "action_not_applicable" },
+        resume: { applicable: false, reason: "human_prerequisite_required" },
+        continuePreparation: {
+            applicable: false,
+            reason: "human_prerequisite_required",
+        },
+    });
+});
+
+test("completed version-two consultation replays byte-identically, pending version-two refuses, and revoked authority is rejected", async () => {
+    const f = await scenario();
+    const { requestId, value } = await dispatchState(f, "v2-baseline");
+    const v2Research = {
+        ...value.research,
+        sources: {
+            ...value.research.sources,
+            progress: undefined,
+        },
+    };
+    delete v2Research.sources.progress;
+    const legacyV2Outcome = {
+        kind: "success" as const,
+        valueJson: JSON.stringify({
+            lifecycleState: value.lifecycleState,
+            executionStatus: value.executionStatus,
+            executionGeneration: value.executionGeneration,
+            research: v2Research,
+        }),
+    };
+    // Historical result without progress still satisfies current validator without fabricating zero work
+    expect(
+        validate(
+            currentRunStateResultValidator,
+            JSON.parse(legacyV2Outcome.valueJson),
+            { db: undefined },
+        ),
+    ).toBe(true);
+    expect(
+        JSON.parse(legacyV2Outcome.valueJson).research.sources.progress,
+    ).toBeUndefined();
+
+    // Seed completed v2 receipt with its historical (pre-progress) pin and v2 logical key
+    await f.t.run(async (ctx) => {
+        const request = await ctx.db.get(requestId);
+        const mission = await ctx.db.get(f.workbenchMissionId);
+        assert(request && mission);
+        const historicalPin = {
+            kind: "run_state" as const,
+            stateHash: "historical-v2-hash",
+        };
+        const logicalKey = sha256Hex(
+            stableStringify(
+                operationReuseIdentity({
+                    mission,
+                    runId: f.runId,
+                    version: 2,
+                    input: request.input,
+                    pin: historicalPin,
+                }),
+            ),
+        );
+        await ctx.db.patch(requestId, {
+            operationVersion: 2,
+            pin: historicalPin,
+            logicalKey,
+            outcome: legacyV2Outcome,
+        });
+    });
+    const before = await f.t.run((ctx) => ctx.db.get(requestId));
+    const business = await businessSnapshot(f);
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toEqual(legacyV2Outcome);
+    expect(await f.t.run((ctx) => ctx.db.get(requestId))).toEqual(before);
+    expect(await businessSnapshot(f)).toEqual(business);
+
+    // Revoked authority still rejects replay of completed v2 receipt
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 99,
+        }),
+    ).toEqual({ kind: "refused", code: "stale_execution" });
+
+    // Pending v2 request returns operation_version_conflict without rewriting its version
+    const pendingV2Id = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: f.workbenchMissionId,
+            expectedGeneration: 1,
+            cause: "pending-v2",
+            input: { kind: "consult_run_state" },
+        },
+    );
+    await f.t.run(async (ctx) => {
+        const request = await ctx.db.get(pendingV2Id);
+        const mission = await ctx.db.get(f.workbenchMissionId);
+        assert(request && mission);
+        const logicalKey = sha256Hex(
+            stableStringify(
+                operationReuseIdentity({
+                    mission,
+                    runId: f.runId,
+                    version: 2,
+                    input: request.input,
+                    pin: { kind: "run_state", stateHash: "historical-v2-hash" },
+                }),
+            ),
+        );
+        await ctx.db.patch(pendingV2Id, {
+            operationVersion: 2,
+            pin: { kind: "run_state", stateHash: "historical-v2-hash" },
+            logicalKey,
+        });
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: pendingV2Id,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "refused", code: "operation_version_conflict" });
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(pendingV2Id)))?.operationVersion,
+    ).toBe(2);
+
+    // Fresh v3 admission succeeds with settled handoff progress
+    const fresh = await dispatchState(f, "fresh-v3");
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(fresh.requestId)))?.operationVersion,
+    ).toBe(3);
+    expect(fresh.value.research.sources.progress).toMatchObject({
+        version: 1,
+        handoff: "settled",
+        captures: { full: 5 },
+        qualifications: { recordedSources: 4 },
+    });
+});
+
+test("progress projection surfaces explicit read-capacity refusal and missing capture failure rather than zero work", async () => {
+    const { SourceReviewReads } = await import(
+        "@convex/domain/sourceReviewReads"
+    );
+    const f = await scenario();
+    await expect(
+        f.t.run(async (ctx) => {
+            const run = await ctx.db.get(f.runId);
+            assert(run);
+            return readResearchState(ctx, run, {
+                reads: new SourceReviewReads(ctx.db, f.runId, {
+                    bytes: 1,
+                    ranges: 1,
+                }),
+            });
+        }),
+    ).rejects.toMatchObject({ data: { code: "source_review_capacity" } });
+
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        const fifthCaptureId = preparation.sourcesMission.captureIds[4];
+        assert(fifthCaptureId);
+        await ctx.db.delete(fifthCaptureId);
+    });
+    await expect(
+        f.t.run(async (ctx) => {
+            const run = await ctx.db.get(f.runId);
+            assert(run);
+            return readResearchState(ctx, run);
+        }),
+    ).rejects.toMatchObject({ data: { code: "capture_unavailable" } });
+});
+
+test.each([
+    false,
+    true,
+])("reading reference window skips empty capture sets and shares transaction reads (empty=%s)", async (empty) => {
+    const { SourceReviewReads } = await import(
+        "@convex/domain/sourceReviewReads"
+    );
+    const { sourcesReadingReferenceWindow } = await import(
+        "@convex/domain/sources"
+    );
+    const f = await scenario();
+    await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(mission && preparation?.sourcesMission);
+        const data = {
+            ...preparation.sourcesMission,
+            captureIds: empty ? [] : preparation.sourcesMission.captureIds,
+        };
+        const probe = measureDbReads(ctx.db);
+        const reads = new SourceReviewReads(probe.db, f.runId, {
+            bytes: 1000000,
+            ranges: 2,
+        });
+        const first = await sourcesReadingReferenceWindow(
+            { ...ctx, db: probe.db },
+            mission,
+            data,
+            reads,
+        );
+        const before = { ...probe.totals };
+        expect(before.queries).toBe(empty ? 0 : 2);
+        expect(
+            await sourcesReadingReferenceWindow(
+                { ...ctx, db: probe.db },
+                mission,
+                data,
+                reads,
+            ),
+        ).toEqual(first);
+        expect(probe.totals).toEqual(before);
+        if (empty)
+            expect(first).toEqual({ references: [], referencesComplete: true });
+    });
+});
+
+test.each([
+    "reserved",
+    "unavailable",
+] as const)("unadmitted committed captures do not hide %s preparation state", async (status) => {
+    const { projectSourcesPreparationProgress } = await import(
+        "@convex/domain/sources"
+    );
+    const f = await scenario();
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        const captureId = preparation.sourcesMission.captureIds[0];
+        assert(captureId);
+        const capture = await ctx.db.get(captureId);
+        assert(capture);
+        const { _id, _creationTime, ...fields } = capture;
+        await ctx.db.insert("sourceCaptures", {
+            ...fields,
+            captureKey: `unadmitted:${status}`,
+            updatedAt: capture.updatedAt + 1,
+        });
+        await ctx.db.patch(_id, { status });
+        const progress = await projectSourcesPreparationProgress(ctx, {
+            preparation,
+            mission: null,
+            controlled: [],
+        });
+        expect(
+            progress.captures[
+                status === "reserved" ? "capturing" : "unavailable"
+            ],
+        ).toBe(1);
+        expect(progress.captures.notCaptured).toBe(0);
+    });
+});
+
+test("permissive source decisions reuse verified strict reads in one transaction", async () => {
+    const { SourceReviewReads } = await import(
+        "@convex/domain/sourceReviewReads"
+    );
+    const f = await scenario();
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        const captureId = preparation.sourcesMission.captureIds[0];
+        assert(captureId);
+        const capture = await ctx.db.get(captureId);
+        assert(capture);
+        const probe = measureDbReads(ctx.db);
+        const reads = new SourceReviewReads(probe.db, f.runId);
+        const strict = await reads.decision(
+            preparation.corpusRevisionId,
+            capture.sourceId,
+        );
+        const before = { ...probe.totals };
+        expect(
+            await reads.decision(
+                preparation.corpusRevisionId,
+                capture.sourceId,
+                true,
+            ),
+        ).toEqual(strict);
+        expect(probe.totals).toEqual(before);
     });
 });

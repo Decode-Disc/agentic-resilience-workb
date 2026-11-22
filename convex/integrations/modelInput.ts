@@ -1,4 +1,8 @@
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import {
+    type CompletionTransport,
+    MAX_MODEL_OPERATION_OUTPUT_BYTES,
+} from "@convex/execution/agentDefinition";
 import { executionError } from "@convex/execution/errors";
 import type { AgentOperationDefinition } from "@convex/execution/executionProtocol";
 import { operationResultKey } from "@convex/execution/operationResults";
@@ -17,6 +21,14 @@ import inputProfiles from "./piInputProfiles.json";
 export const PI_MISSION_EXTENSION = "workbench";
 export const PI_MISSION_INPUT =
     "Continue the authorized mission using its current required state. Return its domain completion JSON when its work is complete.";
+export const PI_NATIVE_COMPLETION_MISSION_INPUT =
+    "Continue the authorized mission using its current required state. Call submit_completion alone when its work is complete.";
+
+export function piMissionInput(completionTransport?: CompletionTransport) {
+    return completionTransport === "native_tool"
+        ? PI_NATIVE_COMPLETION_MISSION_INPUT
+        : PI_MISSION_INPUT;
+}
 
 /** Native execution and offline calibration use the same tool metadata. */
 export async function piToolMetadata(
@@ -28,6 +40,9 @@ export async function piToolMetadata(
         description: operation.description,
         replay: "safe" as const,
         executionMode: "sequential" as const,
+        outputLimits: {
+            maxBytes: MAX_MODEL_OPERATION_OUTPUT_BYTES,
+        },
         parameters: Type.Unsafe<Record<string, unknown>>(
             await asSchema(agentOperationInputSchema(operation)).jsonSchema,
         ),
@@ -376,6 +391,7 @@ type AgentInput = {
     definitionVersion?: number;
     nativeConversation?: boolean;
     contextRendering?: "separated_v1";
+    completionTransport?: CompletionTransport;
 };
 
 /** Fingerprints every application-owned part of the required native request. SDK versions are checked by calibration. */
@@ -391,6 +407,9 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
                 : {}),
             ...(args.nativeConversation
                 ? { nativeInstructions: args.instructions }
+                : {}),
+            ...(args.completionTransport
+                ? { completionTransport: args.completionTransport }
                 : {}),
             requiredMessage: piMissionMessages(
                 args.instructions,
@@ -413,7 +432,7 @@ export async function piInputProfileKey(args: AgentInput): Promise<string> {
                     ]),
             ),
             resultRendering: 2,
-            continuation: PI_MISSION_INPUT,
+            continuation: piMissionInput(args.completionTransport),
             extension: PI_MISSION_EXTENSION,
             route: args.nativeRoute
                 ? {
@@ -471,7 +490,12 @@ export async function agentInputByteLength(
         const key = await piInputProfileKey(args);
         const overhead = args.nativeRoute.profileKey
             ? await lookupProfile?.(key)
-            : profiles[key];
+            : (profiles[key] ??
+              (
+                  inputProfiles.retainedProfiles as
+                      | Record<string, number>
+                      | undefined
+              )?.[key]);
         if (overhead === undefined)
             throw executionError("model_input_profile_unavailable");
         return (
@@ -482,8 +506,9 @@ export async function agentInputByteLength(
                 ? new TextEncoder().encode(
                       JSON.stringify(requiredAnalystInput(args.prompt)),
                   ).length -
-                  new TextEncoder().encode(JSON.stringify(PI_MISSION_INPUT))
-                      .length
+                  new TextEncoder().encode(
+                      JSON.stringify(piMissionInput(args.completionTransport)),
+                  ).length
                 : 0)
         );
     }

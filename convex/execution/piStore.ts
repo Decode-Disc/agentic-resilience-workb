@@ -58,15 +58,27 @@ export async function sessionForMission(
         : null;
 }
 
+export function tracksNativeSettlement(
+    mission: Doc<"agentMissions">,
+    session: Doc<"piSessions"> | null,
+) {
+    if (!session || session.missionId !== mission._id) return false;
+    if (session.conversationId) return true;
+    return (
+        getAgentDefinition(mission.definitionId, mission.definitionVersion)
+            .completionTransport === "native_tool"
+    );
+}
+
 export function needsNativeSettlement(
     mission: Doc<"agentMissions">,
     session: Doc<"piSessions"> | null,
 ) {
-    return (
-        !!session?.conversationId &&
-        session.missionId === mission._id &&
-        session.settledSequence !== session.sequence
-    );
+    if (!session || !tracksNativeSettlement(mission, session)) return false;
+    if (session.settledSequence === session.sequence) return false;
+    return session.conversationId
+        ? ["completed", "cancelled"].includes(mission.status)
+        : mission.status === "completed";
 }
 
 const claimArgs = {
@@ -74,13 +86,14 @@ const claimArgs = {
     expectedGeneration: v.number(),
     writer: v.string(),
 };
-const leaseValidator = v.object({
+export const piLeaseValidator = v.object({
     missionId: v.id("agentMissions"),
     sessionId: v.id("piSessions"),
     epoch: v.number(),
     writer: v.string(),
     generation: v.number(),
 });
+const leaseValidator = piLeaseValidator;
 export const claim = internalMutation({
     args: claimArgs,
     returns: leaseValidator,
@@ -129,12 +142,14 @@ export const claim = internalMutation({
                   ? 1
                   : 0)
             : 1;
+        const definition = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
+        );
         const fields = {
             missionId: args.missionId,
-            ...(getAgentDefinition(
-                mission.definitionId,
-                mission.definitionVersion,
-            ).nativeConversation
+            ...(definition.nativeConversation ||
+            definition.completionTransport === "native_tool"
                 ? { settledSequence: undefined }
                 : {}),
             writer: args.writer,
@@ -143,8 +158,7 @@ export const claim = internalMutation({
             leaseUntil: now + LEASE_MS,
         };
         const turn =
-            getAgentDefinition(mission.definitionId, mission.definitionVersion)
-                .nativeConversation && mission.conversationTurnId
+            definition.nativeConversation && mission.conversationTurnId
                 ? await ctx.db.get(mission.conversationTurnId)
                 : null;
         const sessionId = current
@@ -190,6 +204,14 @@ export const claim = internalMutation({
         };
     },
 });
+
+export async function requirePiWriter(
+    ctx: QueryCtx,
+    lease: Infer<typeof leaseValidator>,
+    now?: number,
+) {
+    return writer(ctx, lease, now);
+}
 
 async function writer(
     ctx: QueryCtx,
@@ -342,11 +364,7 @@ export const renew = internalMutation({
     handler: async (ctx, lease) => {
         const session = await writer(ctx, lease, Date.now());
         const mission = await ctx.db.get(session.missionId);
-        if (
-            !session.conversationId ||
-            !mission ||
-            !["completed", "cancelled"].includes(mission.status)
-        )
+        if (!mission || !needsNativeSettlement(mission, session))
             await requireMissionAuthority(
                 ctx,
                 session.missionId,

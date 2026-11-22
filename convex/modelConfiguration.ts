@@ -5,6 +5,7 @@ import {
     validResponseControlConfiguration,
 } from "@convex/domain/workbenchResponseControlContracts";
 import {
+    NATIVE_PROFILE_BATCH_SIZE,
     MODEL_MAX_INPUT_PRICE_PER_MILLION,
     MODEL_MAX_OUTPUT_PRICE_PER_MILLION,
 } from "@convex/resourcePolicy";
@@ -336,7 +337,8 @@ async function retainNativeProfiles(
     ctx: MutationCtx,
     profiles: Infer<typeof nativeProfile>[],
 ) {
-    if (!profiles.length) throw executionError("model_not_compatible");
+    if (!profiles.length || profiles.length > NATIVE_PROFILE_BATCH_SIZE)
+        throw executionError("model_not_compatible");
     for (const profile of profiles) {
         if (
             !profile.key ||
@@ -382,6 +384,8 @@ export const profiles = internalQuery({
     returns: v.array(nativeProfile),
     handler: async (ctx, args) => {
         await requireAdmin(ctx);
+        if (args.keys.length > NATIVE_PROFILE_BATCH_SIZE)
+            throw executionError("model_not_compatible");
         const rows = await Promise.all(
             args.keys.map((key) =>
                 ctx.db
@@ -393,6 +397,17 @@ export const profiles = internalQuery({
         return rows.flatMap((row) =>
             row ? [{ key: row.key, bytes: row.bytes }] : [],
         );
+    },
+});
+export const retainNativeProfileBatch = internalMutation({
+    args: { profileCatalog: v.string(), profiles: v.array(nativeProfile) },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        await requireAdmin(ctx);
+        if (args.profileCatalog !== NATIVE_PROFILE_CATALOG)
+            throw executionError("model_profile_version_conflict");
+        await retainNativeProfiles(ctx, args.profiles);
+        return null;
     },
 });
 export const retainRefreshedProfiles = internalMutation({

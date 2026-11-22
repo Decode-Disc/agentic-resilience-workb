@@ -1003,6 +1003,7 @@ export const authorizeWorkbenchQualification = internalMutation({
                         definitionVersion: definition.version,
                         nativeConversation: definition.nativeConversation,
                         contextRendering: definition.contextRendering,
+                        completionTransport: definition.completionTransport,
                         nativeRoute: revisionRoute(sourcesModel),
                     },
                     async (key) =>

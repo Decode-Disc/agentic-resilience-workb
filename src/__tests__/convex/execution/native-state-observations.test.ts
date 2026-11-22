@@ -2364,7 +2364,7 @@ test("native Workbench consultation preserves captured and retained sets through
     );
     expect(
         operations.find((item) => item.input.kind === "consult_run_state"),
-    ).toMatchObject({ operationVersion: 2, status: "completed" });
+    ).toMatchObject({ operationVersion: 3, status: "completed" });
     const after = await f.t.run(async (ctx) => ({
         preparation: await ctx.db.get(f.preparationId),
         run: await ctx.db.get(f.runId),

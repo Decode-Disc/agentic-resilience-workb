@@ -591,19 +591,23 @@ test.each([
                 );
                 if (state.definition.id === "sources_v1") {
                     sourceRequests.push(section.content);
-                    return nativeTextReply(
-                        JSON.stringify({
-                            kind: "complete",
-                            needs: state.activeWork.needs.map(
-                                (need: { id: string }) => ({
-                                    needId: need.id,
-                                    unfinished: [
-                                        "Offline fixture ends before documentary collection.",
-                                    ],
-                                }),
-                            ),
-                        }),
-                    );
+                    const completionPayload = {
+                        kind: "complete",
+                        needs: state.activeWork.needs.map(
+                            (need: { id: string }) => ({
+                                needId: need.id,
+                                unfinished: [
+                                    "Offline fixture ends before documentary collection.",
+                                ],
+                            }),
+                        ),
+                    };
+                    return state.constraints?.completion?.format === "tool"
+                        ? nativeToolReply(
+                              "submit_completion",
+                              completionPayload,
+                          )
+                        : nativeTextReply(JSON.stringify(completionPayload));
                 }
                 if (generation++ === 0) {
                     expect(state.domain.coveragePreset).toBe(preset);

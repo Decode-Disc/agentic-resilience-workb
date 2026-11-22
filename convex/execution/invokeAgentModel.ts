@@ -20,7 +20,11 @@ import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
-import { type AgentDefinition, agentToolSchemas } from "./agentDefinition";
+import {
+    type AgentDefinition,
+    agentToolSchemas,
+    SUBMIT_COMPLETION_TOOL,
+} from "./agentDefinition";
 import { executionError, executionFailureCode } from "./authority";
 import {
     type AgentGenerationBackend,
@@ -39,7 +43,10 @@ function decodeReceivedReply(
     result: Extract<AgentGenerationResult, { status: "succeeded" }>,
     pi = false,
     auxiliary = false,
-    textCompletion?: AgentDefinition["textCompletion"],
+    definition?: Pick<
+        AgentDefinition,
+        "textCompletion" | "completionTransport"
+    >,
 ): {
     reply: Infer<typeof invocationReplyValidator>;
     errorCode?: string;
@@ -72,10 +79,25 @@ function decodeReceivedReply(
     let decoded: unknown;
     if (auxiliary) {
         decoded = { kind: "operations", requests: [] };
+    } else if (pi && definition?.completionTransport === "native_tool") {
+        if (result.requests.length === 0) {
+            decoded = { kind: "completion_submission", call: null };
+        } else if (
+            result.requests.length === 1 &&
+            result.requests[0]?.name === SUBMIT_COMPLETION_TOOL
+        ) {
+            const [call] = result.requests;
+            decoded = {
+                kind: "completion_submission",
+                call: { callId: call.callId, inputJson: call.inputJson },
+            };
+        } else {
+            decoded = { kind: "operations", requests: result.requests };
+        }
     } else if (result.requests.length) {
         decoded = { kind: "operations", requests: result.requests };
-    } else if (textCompletion) {
-        decoded = textCompletion(result.assistantOutput);
+    } else if (definition?.textCompletion) {
+        decoded = definition.textCompletion(result.assistantOutput);
     } else {
         try {
             decoded = JSON.parse(result.assistantOutput);
@@ -214,6 +236,7 @@ export async function invokeControlledGeneration(
             operations: tools,
             nativeConversation: definition.nativeConversation,
             contextRendering: definition.contextRendering,
+            completionTransport: definition.completionTransport,
             definitionVersion: definition.version,
             nativeRoute:
                 mission.executionRuntime === "pi-durable"
@@ -344,7 +367,7 @@ export async function invokeControlledGeneration(
                       result,
                       backend.id === "pi-durable",
                       invocation.purpose === "compaction",
-                      definition.textCompletion,
+                      definition,
                   )
                 : {
                       reply: {

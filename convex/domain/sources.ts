@@ -28,6 +28,7 @@ import {
     MAX_RESEARCH_PLAN_QUESTIONS,
 } from "./researchPlan";
 import type { ResearchState } from "./researchStateContracts";
+import { captureAvailability } from "./sourceCaptureState";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import {
     assertPreparationExecutionFence,
@@ -50,6 +51,7 @@ import {
     type SourceCaptureIdentity,
     type SourceDocumentState,
     type SourcesPreparation,
+    type SourcesPreparationProgress,
     type sourcesCompletionValidator,
     type sourcesCoverage,
     sourcesEnvelopeValidator,
@@ -713,6 +715,11 @@ async function observeCoverageSearch(
 export async function readSourcesCoverage(
     ctx: QueryCtx,
     preparation: Doc<"sourceSelectionProposalRebuilds">,
+    reads = new SourceReviewReads(
+        ctx.db,
+        preparation.runId,
+        SOURCES_HANDOFF_READ_CAPACITY,
+    ),
 ): Promise<Infer<typeof sourcesCoverage> | undefined> {
     const data = preparation.sourcesMission;
     const policy = data?.result
@@ -720,11 +727,6 @@ export async function readSourcesCoverage(
         : data?.coveragePolicy;
     if (!data || !policy) return undefined;
     const searches = new Map(data.work.map((work) => [work.requestId, work]));
-    const reads = new SourceReviewReads(
-        ctx.db,
-        preparation.runId,
-        SOURCES_HANDOFF_READ_CAPACITY,
-    );
     const observations = data.result
         ? (data.result.coverageSearches ?? [])
         : await Promise.all(
@@ -904,14 +906,14 @@ export async function readEngagedSourcesWork(
 export async function sourcesTaskObservations(
     ctx: QueryCtx,
     preparation: Doc<"sourceSelectionProposalRebuilds">,
-) {
-    const { runId, sourcesMission: data } = preparation;
-    if (!data) throw executionError("sources_mission_unavailable");
-    const reads = new SourceReviewReads(
+    reads = new SourceReviewReads(
         ctx.db,
-        runId,
+        preparation.runId,
         SOURCES_HANDOFF_READ_CAPACITY,
-    );
+    ),
+) {
+    const { sourcesMission: data } = preparation;
+    if (!data) throw executionError("sources_mission_unavailable");
     const workOutcomes = await Promise.all(
         data.work.map(async (work) => {
             const request = await reads.request(work.requestId);
@@ -981,6 +983,7 @@ export async function controlledSourcesContributions(
             const sourceDecision = await reads.decision(
                 preparation.corpusRevisionId,
                 capture.sourceId,
+                true,
             );
             return {
                 taskId,
@@ -1040,25 +1043,34 @@ export async function controlledSourcesContributions(
     );
 }
 
-/** Current evidence handles remain available when Pi compacts its conversation history. */
-export async function sourcesReadingReferences(
+export const SOURCES_READING_REFERENCE_LIMIT = 32;
+
+/** Reads the bounded admitted reading window once for both detailed handles and compact counts. */
+export async function sourcesReadingReferenceWindow(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
     data: SourcesPreparation,
+    reads?: SourceReviewReads,
 ) {
-    const limit = 32;
-    const pages = await Promise.all(
-        (["search_available_material", "read_in_context"] as const).map(
-            (kind) =>
-                ctx.db
-                    .query("agentOperationRequests")
-                    .withIndex("by_mission_and_input_kind", (q) =>
-                        q.eq("missionId", mission._id).eq("input.kind", kind),
-                    )
-                    .order("desc")
-                    .take(limit + 1),
-        ),
-    );
+    if (!data.captureIds.length)
+        return { references: [], referencesComplete: true };
+    const limit = SOURCES_READING_REFERENCE_LIMIT;
+    const pages = reads
+        ? await reads.readingRequests(mission._id, limit)
+        : await Promise.all(
+              (["search_available_material", "read_in_context"] as const).map(
+                  (kind) =>
+                      ctx.db
+                          .query("agentOperationRequests")
+                          .withIndex("by_mission_and_input_kind", (q) =>
+                              q
+                                  .eq("missionId", mission._id)
+                                  .eq("input.kind", kind),
+                          )
+                          .order("desc")
+                          .take(limit + 1),
+              ),
+          );
     const references = pages
         .flat()
         .sort(
@@ -1087,8 +1099,25 @@ export async function sourcesReadingReferences(
                 : [];
         });
     return {
+        references: references.slice(0, limit),
+        referencesComplete:
+            references.length <= limit &&
+            pages.every((page) => page.length <= limit),
+    };
+}
+
+/** Current evidence handles remain available when Pi compacts its conversation history. */
+export async function sourcesReadingReferences(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+    data: SourcesPreparation,
+    reads?: SourceReviewReads,
+) {
+    const { references, referencesComplete } =
+        await sourcesReadingReferenceWindow(ctx, mission, data, reads);
+    return {
         readingReferences: await Promise.all(
-            references.slice(0, limit).map(async (reference) => ({
+            references.map(async (reference) => ({
                 ...reference,
                 historyReference: await operationHistoryReference(
                     ctx,
@@ -1096,9 +1125,7 @@ export async function sourcesReadingReferences(
                 ),
             })),
         ),
-        readingReferencesComplete:
-            references.length <= limit &&
-            pages.every((page) => page.length <= limit),
+        readingReferencesComplete: referencesComplete,
     };
 }
 
@@ -1658,7 +1685,7 @@ export async function completeSources(
             })),
             {
                 path: "needs",
-                expected: `Outcome indexes identify these need IDs: ${JSON.stringify(response.needs.map((outcome) => outcome.needId))}`,
+                expected: `Outcome indexes identify these need IDs: ${JSON.stringify(response.needs.slice(0, 8).map((outcome) => outcome.needId.slice(0, 32)))}${response.needs.length > 8 ? ` ... (+${response.needs.length - 8} more)` : ""}`,
             },
         ]);
     }
@@ -1842,5 +1869,175 @@ export function projectSourceDocumentState(input: {
             ? tallyDocumentaryContributions(qualification.contributions)
             : null,
         limitations: qualification?.limitations ?? [],
+    };
+}
+
+/** Compact ongoing preparation progress derived from current capture, qualification and reading owners without hydrating passages. */
+export async function projectSourcesPreparationProgress(
+    ctx: QueryCtx,
+    args: {
+        preparation: Doc<"sourceSelectionProposalRebuilds">;
+        mission: Doc<"agentMissions"> | null;
+        reads?: SourceReviewReads;
+        controlled?: ControlledSourceQualification[];
+        readings?: SourcesPreparationProgress["readings"];
+    },
+): Promise<SourcesPreparationProgress> {
+    const { preparation, mission } = args;
+    const data = preparation.sourcesMission;
+    if (!data) throw executionError("sources_mission_unavailable");
+    const reads =
+        args.reads ??
+        new SourceReviewReads(
+            ctx.db,
+            preparation.runId,
+            SOURCES_HANDOFF_READ_CAPACITY,
+        );
+    const controlled =
+        args.controlled ??
+        (await controlledSourcesContributions(ctx, preparation, reads));
+
+    const admittedCaptureIds = new Set(data.captureIds);
+    const admittedCaptures = await Promise.all(
+        data.captureIds.map(async (captureId) => {
+            const capture = await reads.capture(captureId);
+            if (!capture || capture.runId !== preparation.runId)
+                throw executionError("capture_unavailable");
+            return capture;
+        }),
+    );
+
+    const latestCommittedBySource = new Map<
+        Id<"sources">,
+        Doc<"sourceCaptures">
+    >();
+    const sourceIds = new Set<Id<"sources">>();
+    for (const capture of admittedCaptures) {
+        sourceIds.add(capture.sourceId);
+        if (capture.status !== "committed") continue;
+        const previous = latestCommittedBySource.get(capture.sourceId);
+        if (
+            !previous ||
+            capture.updatedAt > previous.updatedAt ||
+            (capture.updatedAt === previous.updatedAt &&
+                (capture._creationTime > previous._creationTime ||
+                    (capture._creationTime === previous._creationTime &&
+                        capture._id > previous._id)))
+        )
+            latestCommittedBySource.set(capture.sourceId, capture);
+    }
+    for (const work of data.work)
+        if (work.sourceId) sourceIds.add(work.sourceId);
+    for (const qualification of controlled)
+        sourceIds.add(qualification.sourceId);
+    for (const document of data.result?.documents ?? [])
+        sourceIds.add(document.sourceId);
+
+    const captures: SourcesPreparationProgress["captures"] = {
+        full: 0,
+        partial: 0,
+        unknown: 0,
+        capturing: 0,
+        unavailable: 0,
+        notCaptured: 0,
+    };
+    const effectiveUses: SourcesPreparationProgress["qualifications"]["effectiveUses"] =
+        {
+            documentary: 0,
+            attributed_argument_only: 0,
+            context_only: 0,
+            blocked: 0,
+        };
+    let recordedSources = 0;
+
+    const pendingCaptureStates = new Map(
+        await Promise.all(
+            [...sourceIds]
+                .filter((id) => !latestCommittedBySource.has(id))
+                .map(
+                    async (id) =>
+                        [
+                            id,
+                            await reads.captureState(id, admittedCaptureIds),
+                        ] as const,
+                ),
+        ),
+    );
+    for (const sourceId of sourceIds) {
+        const committed = latestCommittedBySource.get(sourceId) ?? null;
+        let state: {
+            committed: Doc<"sourceCaptures"> | null;
+            capturing: boolean;
+            unavailable: boolean;
+        };
+        if (committed) {
+            state = { committed, capturing: false, unavailable: false };
+        } else {
+            const observed = pendingCaptureStates.get(sourceId);
+            if (!observed) throw executionError("capture_unavailable");
+            state = observed;
+        }
+        const availability = captureAvailability(state);
+        if (availability === "not_captured") captures.notCaptured++;
+        else captures[availability]++;
+
+        const docState = projectSourceDocumentState({
+            preparationId: preparation._id,
+            sourceId,
+            capture: state.committed
+                ? {
+                      captureId: state.committed._id,
+                      contentHash: state.committed.contentHash ?? null,
+                  }
+                : null,
+            result: data.result,
+            decision:
+                controlled.find((item) => item.sourceId === sourceId)
+                    ?.sourceDecision ?? null,
+            qualifications: controlled,
+        });
+        if (
+            docState.qualification.status === "recorded" &&
+            docState.contributions
+        ) {
+            recordedSources++;
+            effectiveUses.documentary +=
+                docState.contributions.effectiveUses.documentary;
+            effectiveUses.attributed_argument_only +=
+                docState.contributions.effectiveUses.attributed_argument_only;
+            effectiveUses.context_only +=
+                docState.contributions.effectiveUses.context_only;
+            effectiveUses.blocked +=
+                docState.contributions.effectiveUses.blocked;
+        }
+    }
+
+    let readings: SourcesPreparationProgress["readings"];
+    if (args.readings) {
+        readings = args.readings;
+    } else if (mission) {
+        const window = await sourcesReadingReferenceWindow(
+            ctx,
+            mission,
+            data,
+            reads,
+        );
+        readings = {
+            visibleReferenceCount: window.references.length,
+            referencesComplete: window.referencesComplete,
+        };
+    } else {
+        readings = { visibleReferenceCount: 0, referencesComplete: true };
+    }
+
+    return {
+        version: 1,
+        handoff: data.result ? "settled" : "pending",
+        captures,
+        qualifications: {
+            recordedSources,
+            effectiveUses,
+        },
+        readings,
     };
 }

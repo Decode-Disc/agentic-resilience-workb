@@ -286,6 +286,16 @@ export const invocationResponseValidator = v.union(
         ),
         workingNotes: v.optional(v.string()),
     }),
+    v.object({
+        kind: v.literal("completion_submission"),
+        call: v.union(
+            v.null(),
+            v.object({
+                callId: v.string(),
+                inputJson: v.string(),
+            }),
+        ),
+    }),
     agentCompletionValidator,
     v.object({ kind: v.literal("blocked"), code: v.string() }),
 );
@@ -300,6 +310,15 @@ export function invocationStructureError(
     response: Infer<typeof invocationResponseValidator>,
     pi = false,
 ) {
+    if (response.kind === "completion_submission") {
+        if (
+            response.call !== null &&
+            (response.call.callId.length < 1 ||
+                response.call.callId.length > 160)
+        )
+            return "invalid_tool_correlation";
+        return undefined;
+    }
     if (response.kind !== "operations") return undefined;
     if (!pi && response.requests.length > MAX_BATCH_REQUESTS)
         return "operation_batch_limit";

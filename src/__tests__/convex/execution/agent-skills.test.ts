@@ -29,7 +29,7 @@ afterEach(() => {
 test("current bindings expose only their native mission catalogue and preserve retained bindings", () => {
     for (const [id, version, retainedVersion, name] of [
         ["workbench_v1", 12, 6, "workbench-framing"],
-        ["sources_v1", 7, 4, "source-preparation"],
+        ["sources_v1", 8, 4, "source-preparation"],
     ] as const) {
         const current = getAgentDefinition(id);
         expect(current.version).toBe(version);

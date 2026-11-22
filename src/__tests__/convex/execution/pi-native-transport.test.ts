@@ -1976,7 +1976,7 @@ test("a fresh native turn preserves the real stop over a historical time-limit e
         (request) => request.input.kind === "consult_run_state",
     );
     expect(consultation).toMatchObject({
-        operationVersion: 2,
+        operationVersion: 3,
         status: "completed",
         outcome: { kind: "success" },
     });
@@ -2010,4 +2010,1268 @@ test("a fresh native turn preserves the real stop over a historical time-limit e
     expect(
         after.messages.filter((message) => message.role === "assistant"),
     ).toHaveLength(1);
+});
+
+test("native Pi tool execution delivers >50 KiB and exact 64 KiB + wrapper history outcomes intact for both history tools without truncation", async () => {
+    const { getAgentDefinition } = await import(
+        "@convex/execution/agentCatalog"
+    );
+    const { modelOperationOutcome } = await import(
+        "@convex/execution/agentDefinition"
+    );
+    const { PI_MISSION_EXTENSION, piToolMetadata } = await import(
+        "@convex/integrations/modelInput"
+    );
+    const { MAX_OPERATION_RESULT_BYTES } = await import(
+        "@convex/resourcePolicy"
+    );
+    const { BACKGROUND_CONTEXT } = await import(
+        "@earendil-works/chord/context"
+    );
+    const { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } =
+        await import("@earendil-works/pi-ai");
+    const {
+        createRegistry,
+        defineExtension,
+        defineTool,
+        Harness,
+        MemoryStorage,
+    } = await import("@earendil-works/pi-durable");
+
+    const definition = getAgentDefinition("workbench_v1");
+
+    const runNativeToolOutcome = async (
+        toolName: "consult_mission_state" | "consult_conversation",
+        outcome: import("@convex/execution/agentDefinition").OperationOutcome,
+    ) => {
+        const operation = definition.operations[toolName];
+        assert(operation);
+        const faux = fauxProvider({
+            models: [
+                {
+                    id: "native-output-check",
+                    contextWindow: 128000,
+                    maxTokens: 4096,
+                },
+            ],
+        });
+        let seenToolResultText: string | undefined;
+        let seenToolResultError: boolean | undefined;
+        faux.setResponses([
+            () =>
+                fauxAssistantMessage([fauxToolCall(toolName, {})], {
+                    stopReason: "toolUse",
+                }),
+            (context) => {
+                const toolMsg = context.messages.find(
+                    (message) => message.role === "toolResult",
+                );
+                if (toolMsg && toolMsg.role === "toolResult") {
+                    seenToolResultError = toolMsg.isError;
+                    const first = toolMsg.content[0];
+                    if (first && first.type === "text")
+                        seenToolResultText = first.text;
+                }
+                return fauxAssistantMessage("Observed intact tool result.");
+            },
+        ]);
+        const registry = createRegistry();
+        registry.install(
+            defineExtension({
+                name: PI_MISSION_EXTENSION,
+                tools: [
+                    defineTool({
+                        ...(await piToolMetadata(toolName, operation)),
+                        async execute() {
+                            const text = modelOperationOutcome(
+                                definition,
+                                outcome,
+                            );
+                            return {
+                                output: [{ type: "text" as const, text }],
+                                isError: outcome.kind !== "success",
+                            };
+                        },
+                    }),
+                ],
+            }),
+        );
+        const models = createModels();
+        models.setProvider(faux.provider);
+        const harness = await Harness.open(
+            new MemoryStorage(),
+            { models, registry },
+            BACKGROUND_CONTEXT,
+        );
+        try {
+            const agent = {
+                model: {
+                    provider: faux.provider.id,
+                    modelId: faux.getModel().id,
+                },
+                thinkingLevel: "off" as const,
+                instructions: "Observe tool output.",
+            };
+            const root = await harness.root(BACKGROUND_CONTEXT, { agent });
+            await root.configure(agent, BACKGROUND_CONTEXT);
+            const submitted = await root.submit(
+                {
+                    type: "input",
+                    content: "Check history",
+                    requestId: toolName,
+                },
+                BACKGROUND_CONTEXT,
+            );
+            await submitted.wait(BACKGROUND_CONTEXT);
+        } finally {
+            await harness.close(BACKGROUND_CONTEXT);
+        }
+        return { text: seenToolResultText, isError: seenToolResultError };
+    };
+
+    for (const toolName of [
+        "consult_mission_state",
+        "consult_conversation",
+    ] as const) {
+        // Build an exact MAX_OPERATION_RESULT_BYTES (65,536 byte) canonical JSON payload with multiline content & continueCursor
+        const cursor = "history:req_exact_boundary_12345";
+        const baseObj =
+            toolName === "consult_mission_state"
+                ? {
+                      kind: "consult_mission_state",
+                      state: { version: 2 },
+                      history: {
+                          entries: [
+                              {
+                                  sequence: 1,
+                                  offset: 0,
+                                  totalCharacters: 90000,
+                                  content: "",
+                              },
+                          ],
+                          continueCursor: cursor,
+                      },
+                  }
+                : {
+                      entries: [
+                          {
+                              messageId: "msg_1",
+                              role: "user",
+                              offset: 0,
+                              totalCharacters: 90000,
+                              content: "",
+                          },
+                      ],
+                      continueCursor: cursor,
+                  };
+        const baseBytes = Buffer.byteLength(JSON.stringify(baseObj));
+        const multilinePrefix = "line1\nline2\n";
+        const multilinePrefixEscapedBytes =
+            Buffer.byteLength(JSON.stringify(multilinePrefix)) - 2;
+        const padLen =
+            MAX_OPERATION_RESULT_BYTES -
+            baseBytes -
+            multilinePrefixEscapedBytes;
+        const exactContent = `${multilinePrefix}${"x".repeat(padLen)}`;
+        const targetEntry =
+            toolName === "consult_mission_state"
+                ? (baseObj as { history: { entries: { content: string }[] } })
+                      .history.entries[0]
+                : (baseObj as { entries: { content: string }[] }).entries[0];
+        assert(targetEntry);
+        targetEntry.content = exactContent;
+        const exactValueJson = JSON.stringify(baseObj);
+        expect(Buffer.byteLength(exactValueJson)).toBe(
+            MAX_OPERATION_RESULT_BYTES,
+        );
+
+        const expectedRendered = modelOperationOutcome(definition, {
+            kind: "success",
+            valueJson: exactValueJson,
+        });
+        expect(Buffer.byteLength(expectedRendered)).toBe(
+            MAX_OPERATION_RESULT_BYTES + 27,
+        );
+
+        const delivered = await runNativeToolOutcome(toolName, {
+            kind: "success",
+            valueJson: exactValueJson,
+        });
+        expect(delivered.isError).toBe(false);
+        expect(delivered.text).toBe(expectedRendered);
+        const reparsed = JSON.parse(delivered.text ?? "");
+        expect(reparsed).toEqual({ kind: "success", value: baseObj });
+
+        // Noncanonical historical JSON (extra whitespace) is normalized to canonical JSON and delivered intact
+        const noncanonical = `  ${exactValueJson.replace('"continueCursor":', '"continueCursor":   ')}  `;
+        expect(Buffer.byteLength(noncanonical)).toBeGreaterThan(
+            MAX_OPERATION_RESULT_BYTES,
+        );
+        const deliveredNoncanonical = await runNativeToolOutcome(toolName, {
+            kind: "success",
+            valueJson: noncanonical,
+        });
+        expect(deliveredNoncanonical.text).toBe(expectedRendered);
+
+        // Refusal feedback renders cleanly through the same native tool boundary
+        const refusalOutcome = {
+            kind: "refused" as const,
+            code: "history_cursor_invalid",
+        };
+        const deliveredRefusal = await runNativeToolOutcome(
+            toolName,
+            refusalOutcome,
+        );
+        expect(deliveredRefusal.isError).toBe(true);
+        expect(deliveredRefusal.text).toBe(
+            modelOperationOutcome(definition, refusalOutcome),
+        );
+    }
+
+    // Oversized value that still exceeds capacity after canonical normalization is rejected explicitly
+    expect(() =>
+        modelOperationOutcome(definition, {
+            kind: "success",
+            valueJson: JSON.stringify({
+                oversized: "z".repeat(MAX_OPERATION_RESULT_BYTES),
+            }),
+        }),
+    ).toThrow(/operation_result_capacity/);
+});
+
+test("native_tool completion exposes submit_completion, accepts sole call with surrounding prose once, and settles session", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const f = await seedInspectedEvidence();
+    await installModel(f.t, nativePiFixtureRoute, "saved_material_inspection");
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "native-completion-sole-prose",
+        expectedGeneration: 4,
+    });
+    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
+    const initialContext = await f.t.query(internal.execution.context.build, {
+        missionId,
+        expectedGeneration: 4,
+    });
+    assert(initialContext.kind === "ready");
+    const parsedInitial = JSON.parse(initialContext.inputJson);
+    expect(parsedInitial.constraints.completion).toEqual({
+        format: "tool",
+        tool: "submit_completion",
+    });
+    const captureId: string =
+        parsedInitial.domain.availableMaterials[0].captureId;
+    const readingReference: string =
+        parsedInitial.domain.availableMaterials[0].readingReferences[0]
+            .reference;
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId,
+            expectedGeneration: 4,
+            cause: "pre-read",
+            input: {
+                kind: "read_in_context",
+                reference: readingReference,
+            },
+        },
+    );
+    expect(
+        (
+            await f.t.action(internal.execution.operations.dispatch, {
+                requestId,
+                expectedGeneration: 4,
+            })
+        ).kind,
+    ).toBe("success");
+    const seenBodies: Record<string, unknown>[] = [];
+    const network = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+            seenBodies.push(JSON.parse(String(init?.body ?? "{}")));
+            return new Response(
+                [
+                    `data: ${JSON.stringify({
+                        id: "native-complete-1",
+                        choices: [
+                            {
+                                index: 0,
+                                delta: {
+                                    role: "assistant",
+                                    content:
+                                        "I verified the capture and am submitting completion now.",
+                                    tool_calls: [
+                                        {
+                                            index: 0,
+                                            id: "call_complete_1",
+                                            type: "function",
+                                            function: {
+                                                name: "submit_completion",
+                                                arguments: JSON.stringify({
+                                                    kind: "complete",
+                                                    captureIds: [captureId],
+                                                    workingNotes:
+                                                        "Verified capture via native tool.",
+                                                }),
+                                            },
+                                        },
+                                    ],
+                                },
+                                finish_reason: null,
+                            },
+                        ],
+                    })}`,
+                    `data: ${JSON.stringify({
+                        id: "native-complete-1",
+                        choices: [
+                            {
+                                index: 0,
+                                delta: {},
+                                finish_reason: "tool_calls",
+                            },
+                        ],
+                        usage: {
+                            prompt_tokens: 15,
+                            completion_tokens: 8,
+                            total_tokens: 23,
+                        },
+                    })}`,
+                    "data: [DONE]",
+                    "",
+                ].join("\n\n"),
+                { headers: { "content-type": "text/event-stream" } },
+            );
+        },
+    );
+    vi.stubGlobal("fetch", network);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    const state = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(missionId),
+        session: await ctx.db
+            .query("piSessions")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .unique(),
+        calls: await ctx.db.query("providerCalls").collect(),
+        invocations: await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .collect(),
+    }));
+    expect(network).toHaveBeenCalledOnce();
+    const offeredTools = (
+        seenBodies[0]?.tools as { function?: { name?: string } }[] | undefined
+    )?.map((t) => t.function?.name);
+    expect(offeredTools).toContain("submit_completion");
+    expect(state.mission).toMatchObject({
+        status: "completed",
+        result: {
+            kind: "saved_material_inspection_v1",
+            captureIds: [captureId],
+        },
+        workingNotes: "Verified capture via native tool.",
+    });
+    expect(state.session?.settledSequence).toBe(state.session?.sequence);
+    expect(state.calls).toHaveLength(1);
+    expect(state.calls[0]?.status).toBe("succeeded");
+    expect(state.invocations).toHaveLength(1);
+    expect(
+        JSON.parse(state.invocations[0]?.receivedOutputJson ?? "null"),
+    ).toMatchObject({
+        kind: "completion_submission",
+        call: { callId: "call_complete_1" },
+    });
+}, 30000);
+
+function sseToolCalls(
+    id: string,
+    calls: { callId: string; name: string; rawArgs: string }[],
+    content?: string,
+) {
+    return new Response(
+        [
+            `data: ${JSON.stringify({
+                id,
+                choices: [
+                    {
+                        index: 0,
+                        delta: {
+                            role: "assistant",
+                            ...(content !== undefined ? { content } : {}),
+                            tool_calls: calls.map((call, index) => ({
+                                index,
+                                id: call.callId,
+                                type: "function",
+                                function: {
+                                    name: call.name,
+                                    arguments: call.rawArgs,
+                                },
+                            })),
+                        },
+                        finish_reason: null,
+                    },
+                ],
+            })}`,
+            `data: ${JSON.stringify({
+                id,
+                choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+                usage: {
+                    prompt_tokens: 12,
+                    completion_tokens: 6,
+                    total_tokens: 18,
+                },
+            })}`,
+            "data: [DONE]",
+            "",
+        ].join("\n\n"),
+        { headers: { "content-type": "text/event-stream" } },
+    );
+}
+
+test("retained v3 does not expose submit_completion and refuses calling it without activating native_tool", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const f = await seedInspectedEvidence();
+    await installModel(f.t, nativePiFixtureRoute, "saved_material_inspection");
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "retained-v3-no-submit-completion",
+        expectedGeneration: 4,
+    });
+    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 3 }));
+    const initialContext = await f.t.query(internal.execution.context.build, {
+        missionId,
+        expectedGeneration: 4,
+    });
+    assert(initialContext.kind === "ready");
+    const parsedInitial = JSON.parse(initialContext.inputJson);
+    expect(parsedInitial.constraints.completion.format).toBe("json");
+    const captureId: string =
+        parsedInitial.domain.availableMaterials[0].captureId;
+    const readingReference: string =
+        parsedInitial.domain.availableMaterials[0].readingReferences[0]
+            .reference;
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId,
+            expectedGeneration: 4,
+            cause: "pre-read-v3",
+            input: { kind: "read_in_context", reference: readingReference },
+        },
+    );
+    expect(
+        (
+            await f.t.action(internal.execution.operations.dispatch, {
+                requestId,
+                expectedGeneration: 4,
+            })
+        ).kind,
+    ).toBe("success");
+    const seenBodies: Record<string, unknown>[] = [];
+    let turn = 0;
+    const network = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+            seenBodies.push(JSON.parse(String(init?.body ?? "{}")));
+            turn++;
+            if (turn === 1)
+                return sseToolCalls("retained-v3-call", [
+                    {
+                        callId: "unknown_submit",
+                        name: "submit_completion",
+                        rawArgs: JSON.stringify({
+                            kind: "complete",
+                            captureIds: [captureId],
+                        }),
+                    },
+                ]);
+            return reply({ kind: "complete", captureIds: [captureId] });
+        },
+    );
+    vi.stubGlobal("fetch", network);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(network).toHaveBeenCalledTimes(2);
+    const offeredTools = (
+        seenBodies[0]?.tools as { function?: { name?: string } }[] | undefined
+    )?.map((t) => t.function?.name);
+    expect(offeredTools).not.toContain("submit_completion");
+    const state = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(missionId),
+        requests: await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .collect(),
+        invocations: await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .collect(),
+    }));
+    expect(state.mission?.status).toBe("completed");
+    expect(
+        state.requests.find(
+            (r) =>
+                r.input.kind === "invalid" &&
+                r.input.name === "submit_completion",
+        ),
+    ).toMatchObject({
+        outcome: { kind: "refused", code: "invalid_operation_input" },
+    });
+    expect(
+        JSON.parse(state.invocations[0]?.receivedOutputJson ?? "null").kind,
+    ).toBe("operations");
+}, 30000);
+
+test("native_tool completion handles missing call, malformed original wire JSON, schema refusal, invalid callId, missing wire args, declaration conflicts and output bounds", async () => {
+    const { bindAgentDefinition, getAgentDefinition } = await import(
+        "@convex/execution/agentCatalog"
+    );
+    const {
+        MAX_MODEL_OPERATION_OUTPUT_BYTES,
+        renderCompletionToolOutcome,
+        SUBMIT_COMPLETION_TOOL,
+    } = await import("@convex/execution/agentDefinition");
+    const { invocationStructureError } = await import(
+        "@convex/execution/executionProtocol"
+    );
+    const { workbenchV12Definition } = await import(
+        "@convex/domain/workbenchAgent"
+    );
+    const { documentaryInspectionV4Definition } = await import(
+        "@convex/domain/savedMaterialInspection"
+    );
+
+    // Contradictory capability and reserved operation name collisions are rejected at binding time.
+    expect(() =>
+        bindAgentDefinition({
+            ...workbenchV12Definition,
+            completionTransport: "native_tool",
+        }),
+    ).toThrow(/definition_contract_invalid/);
+    const existingOp = Object.values(
+        documentaryInspectionV4Definition.operations,
+    )[0];
+    assert(existingOp);
+    expect(() =>
+        bindAgentDefinition({
+            ...documentaryInspectionV4Definition,
+            operations: {
+                ...documentaryInspectionV4Definition.operations,
+                [SUBMIT_COMPLETION_TOOL]: existingOp,
+            },
+        }),
+    ).toThrow(/operation_definition_conflict/);
+
+    // Invalid call identity is rejected by shared structure validation.
+    expect(
+        invocationStructureError(
+            {
+                kind: "completion_submission",
+                call: { callId: "", inputJson: "{}" },
+            },
+            true,
+        ),
+    ).toBe("invalid_tool_correlation");
+    expect(
+        invocationStructureError(
+            {
+                kind: "completion_submission",
+                call: { callId: "x".repeat(161), inputJson: "{}" },
+            },
+            true,
+        ),
+    ).toBe("invalid_tool_correlation");
+
+    // Shared output handling enforces MAX_MODEL_OPERATION_OUTPUT_BYTES on completion tool output.
+    expect(() =>
+        renderCompletionToolOutcome({
+            kind: "refused",
+            code: "completion_correction_required",
+            diagnostic: "x".repeat(MAX_MODEL_OPERATION_OUTPUT_BYTES),
+        }),
+    ).toThrow(/operation_result_capacity/);
+    expect(
+        JSON.parse(renderCompletionToolOutcome({ kind: "accepted" })),
+    ).toEqual({
+        kind: "accepted",
+    });
+
+    // End-to-end native_tool loop: text-only (missing call) -> malformed original wire JSON -> schema refusal -> valid sole call.
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const f = await seedInspectedEvidence();
+    await installModel(f.t, nativePiFixtureRoute, "saved_material_inspection");
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "native-completion-corrections",
+        expectedGeneration: 4,
+    });
+    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
+    const initialContext = await f.t.query(internal.execution.context.build, {
+        missionId,
+        expectedGeneration: 4,
+    });
+    assert(initialContext.kind === "ready");
+    const parsedInitial = JSON.parse(initialContext.inputJson);
+    const captureId: string =
+        parsedInitial.domain.availableMaterials[0].captureId;
+    const readingReference: string =
+        parsedInitial.domain.availableMaterials[0].readingReferences[0]
+            .reference;
+    const preRead = await f.t.mutation(internal.execution.operations.enqueue, {
+        missionId,
+        expectedGeneration: 4,
+        cause: "pre-read-v4",
+        input: { kind: "read_in_context", reference: readingReference },
+    });
+    expect(
+        (
+            await f.t.action(internal.execution.operations.dispatch, {
+                requestId: preRead,
+                expectedGeneration: 4,
+            })
+        ).kind,
+    ).toBe("success");
+
+    const malformedRaw = `{"kind":"complete","captureIds":["${captureId}"],"workingNotes":"line1\nline2"}`;
+    let turn = 0;
+    const network = vi.fn(async () => {
+        turn++;
+        if (turn === 1)
+            // Missing tool call (even though text looks like JSON, native_tool requires submit_completion).
+            return reply({ kind: "complete", captureIds: [captureId] });
+        if (turn === 2)
+            // Malformed original wire JSON (unescaped literal newline repaired by SDK, rejected by original JSON parse).
+            return sseToolCalls("native-malformed", [
+                {
+                    callId: "call_malformed",
+                    name: "submit_completion",
+                    rawArgs: malformedRaw,
+                },
+            ]);
+        if (turn === 3)
+            // Schema-invalid arguments (wrong field type).
+            return sseToolCalls("native-schema-bad", [
+                {
+                    callId: "call_schema_bad",
+                    name: "submit_completion",
+                    rawArgs: JSON.stringify({
+                        kind: "complete",
+                        captureIds: ["not-a-capture-id"],
+                    }),
+                },
+            ]);
+        return sseToolCalls("native-valid", [
+            {
+                callId: "call_valid",
+                name: "submit_completion",
+                rawArgs: JSON.stringify({
+                    kind: "complete",
+                    captureIds: [captureId],
+                }),
+            },
+        ]);
+    });
+    vi.stubGlobal("fetch", network);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(network).toHaveBeenCalledTimes(4);
+    const state = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(missionId),
+        invocations: await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .collect(),
+        calls: await ctx.db.query("providerCalls").collect(),
+    }));
+    expect(state.mission).toMatchObject({
+        status: "completed",
+        result: {
+            kind: "saved_material_inspection_v1",
+            captureIds: [captureId],
+        },
+    });
+    // Provider receipts remain status: "succeeded" independently of domain/schema refusals.
+    expect(state.calls).toHaveLength(4);
+    expect(state.calls.every((c) => c.status === "succeeded")).toBe(true);
+    expect(
+        JSON.parse(state.invocations[0]?.receivedOutputJson ?? "null"),
+    ).toEqual({ kind: "completion_submission", call: null });
+    expect(state.invocations[0]?.blockCode).toBe(
+        "completion_correction_required",
+    );
+    // Original malformed wire JSON is retained unchanged (never SDK-repaired JSON).
+    expect(
+        JSON.parse(state.invocations[1]?.receivedOutputJson ?? "null"),
+    ).toEqual({
+        kind: "completion_submission",
+        call: { callId: "call_malformed", inputJson: malformedRaw },
+    });
+    expect(state.invocations[1]?.blockCode).toBe(
+        "completion_correction_required",
+    );
+    expect(state.invocations[2]?.blockCode).toBe(
+        "completion_correction_required",
+    );
+    expect(state.invocations[3]?.blockCode).toBeUndefined();
+    expect(
+        getAgentDefinition("saved_material_inspection_v1", 4)
+            .completionTransport,
+    ).toBe("native_tool");
+}, 30000);
+
+test("native_tool completion handles mixed rounds (completion before and after operations) and duplicate completions while executing authorized work once", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const f = await seedInspectedEvidence();
+    await installModel(f.t, nativePiFixtureRoute, "saved_material_inspection");
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "native-completion-mixed-and-dup",
+        expectedGeneration: 4,
+    });
+    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
+    const initialContext = await f.t.query(internal.execution.context.build, {
+        missionId,
+        expectedGeneration: 4,
+    });
+    assert(initialContext.kind === "ready");
+    const parsedInitial = JSON.parse(initialContext.inputJson);
+    const captureId: string =
+        parsedInitial.domain.availableMaterials[0].captureId;
+    const readingReference: string =
+        parsedInitial.domain.availableMaterials[0].readingReferences[0]
+            .reference;
+
+    let turn = 0;
+    const network = vi.fn(async () => {
+        turn++;
+        if (turn === 1)
+            // Completion BEFORE authorized read_in_context.
+            return sseToolCalls("mixed-before", [
+                {
+                    callId: "comp_before",
+                    name: "submit_completion",
+                    rawArgs: JSON.stringify({
+                        kind: "complete",
+                        captureIds: [captureId],
+                    }),
+                },
+                {
+                    callId: "read_1",
+                    name: "read_in_context",
+                    rawArgs: JSON.stringify({ reference: readingReference }),
+                },
+            ]);
+        if (turn === 2)
+            // Authorized search_available_material BEFORE completion.
+            return sseToolCalls("mixed-after", [
+                {
+                    callId: "search_1",
+                    name: "search_available_material",
+                    rawArgs: JSON.stringify({
+                        reference: readingReference,
+                        query: "revenue",
+                    }),
+                },
+                {
+                    callId: "comp_after",
+                    name: "submit_completion",
+                    rawArgs: JSON.stringify({
+                        kind: "complete",
+                        captureIds: [captureId],
+                    }),
+                },
+            ]);
+        if (turn === 3)
+            // Duplicate submit_completion calls in the same turn.
+            return sseToolCalls("dup-comp", [
+                {
+                    callId: "dup_1",
+                    name: "submit_completion",
+                    rawArgs: JSON.stringify({
+                        kind: "complete",
+                        captureIds: [captureId],
+                    }),
+                },
+                {
+                    callId: "dup_2",
+                    name: "submit_completion",
+                    rawArgs: JSON.stringify({
+                        kind: "complete",
+                        captureIds: [captureId],
+                    }),
+                },
+            ]);
+        return sseToolCalls("sole-final", [
+            {
+                callId: "sole_final",
+                name: "submit_completion",
+                rawArgs: JSON.stringify({
+                    kind: "complete",
+                    captureIds: [captureId],
+                }),
+            },
+        ]);
+    });
+    vi.stubGlobal("fetch", network);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(network).toHaveBeenCalledTimes(4);
+    const state = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(missionId),
+        requests: await ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .collect(),
+        session: await ctx.db
+            .query("piSessions")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .unique(),
+    }));
+    expect(state.mission).toMatchObject({
+        status: "completed",
+        state: {
+            kind: "saved_material_inspection_v1",
+            inspectedCaptureIds: [captureId],
+        },
+        result: {
+            kind: "saved_material_inspection_v1",
+            captureIds: [captureId],
+        },
+    });
+    expect(state.session?.settledSequence).toBe(state.session?.sequence);
+    // Authorized read_in_context and search_available_material each executed once with real retained results.
+    const reads = state.requests.filter(
+        (r) => r.input.kind === "read_in_context",
+    );
+    expect(reads).toHaveLength(1);
+    expect(reads[0]?.outcome?.kind).toBe("success");
+    const searches = state.requests.filter(
+        (r) => r.input.kind === "search_available_material",
+    );
+    expect(searches).toHaveLength(1);
+    expect(searches[0]?.outcome?.kind).toBe("success");
+    // Mixed/duplicate submit_completion calls became ordinary retained invalid-request refusals.
+    const refusedCompletions = state.requests.filter(
+        (r) =>
+            r.input.kind === "invalid" && r.input.name === "submit_completion",
+    );
+    expect(refusedCompletions.length).toBeGreaterThanOrEqual(1);
+    expect(
+        refusedCompletions.every(
+            (r) =>
+                r.outcome?.kind === "refused" &&
+                r.outcome.code === "completion_must_be_sole_call",
+        ),
+    ).toBe(true);
+}, 30000);
+
+test("native_tool completion treats missing original wire arguments as a transport-integrity failure", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const f = await seedInspectedEvidence();
+    await installModel(f.t, nativePiFixtureRoute, "saved_material_inspection");
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "native-missing-wire-args",
+        expectedGeneration: 4,
+    });
+    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 4 }));
+    // Tool call arrives with empty arguments stream (missing original wire arguments) -> transport failure, never repaired.
+    const network = vi.fn(
+        async () =>
+            new Response(
+                [
+                    `data: ${JSON.stringify({
+                        id: "missing-wire",
+                        choices: [
+                            {
+                                index: 0,
+                                delta: {
+                                    role: "assistant",
+                                    tool_calls: [
+                                        {
+                                            index: 0,
+                                            id: "call_no_args",
+                                            type: "function",
+                                            function: {
+                                                name: "submit_completion",
+                                            },
+                                        },
+                                    ],
+                                },
+                                finish_reason: null,
+                            },
+                        ],
+                    })}`,
+                    `data: ${JSON.stringify({
+                        id: "missing-wire",
+                        choices: [
+                            {
+                                index: 0,
+                                delta: {},
+                                finish_reason: "tool_calls",
+                            },
+                        ],
+                        usage: { prompt_tokens: 10, completion_tokens: 4 },
+                    })}`,
+                    "data: [DONE]",
+                    "",
+                ].join("\n\n"),
+                { headers: { "content-type": "text/event-stream" } },
+            ),
+    );
+    vi.stubGlobal("fetch", network);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    expect(network).toHaveBeenCalledOnce();
+    const state = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(missionId),
+        calls: await ctx.db.query("providerCalls").collect(),
+    }));
+    expect(state.mission).toMatchObject({
+        status: "blocked",
+        blockCode: "invalid_output",
+    });
+    expect(state.calls[0]).toMatchObject({
+        status: "failed",
+        diagnostic: { reason: "tool_arguments_invalid" },
+    });
+}, 30000);
+
+test("completion refusal capacity includes its diagnostic wrapper", async () => {
+    const definition = await import("@convex/execution/agentDefinition");
+    const feedback = {
+        code: "invalid_completion",
+        issues: [{ path: "needs", expected: "" }],
+    };
+    assert(feedback.issues[0]);
+    feedback.issues[0].expected = "x".repeat(
+        65400 - new TextEncoder().encode(JSON.stringify(feedback)).length,
+    );
+    expect(new TextEncoder().encode(JSON.stringify(feedback)).length).toBe(
+        65400,
+    );
+    expect(() =>
+        definition.renderCompletionToolRefusal(
+            "completion_correction_required",
+            feedback,
+        ),
+    ).toThrow("operation_result_capacity");
+    expect(
+        JSON.parse(
+            definition.renderCompletionToolRefusal("stale_instructions"),
+        ),
+    ).toMatchObject({
+        kind: "refused",
+        code: "stale_instructions",
+        diagnostic: expect.stringContaining("analyst"),
+    });
+});
+
+test("nonterminal native tool turns avoid terminal invocation lookups", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const f = await seedInspectedEvidence();
+    await installModel(f.t, nativePiFixtureRoute, "saved_material_inspection");
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.runId,
+        corpusRevisionId: f.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "nonterminal-lookup",
+        expectedGeneration: 4,
+    });
+    const context = await f.t.query(internal.execution.context.build, {
+        missionId,
+        expectedGeneration: 4,
+    });
+    assert(context.kind === "ready");
+    const material = JSON.parse(context.inputJson).domain.availableMaterials[0];
+    let turn = 0;
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+            ++turn === 1
+                ? sseToolCalls("read", [
+                      {
+                          callId: "read",
+                          name: "read_in_context",
+                          rawArgs: JSON.stringify({
+                              reference:
+                                  material.readingReferences[0].reference,
+                          }),
+                      },
+                  ])
+                : sseToolCalls("complete", [
+                      {
+                          callId: "done",
+                          name: "submit_completion",
+                          rawArgs: JSON.stringify({
+                              kind: "complete",
+                              captureIds: [material.captureId],
+                          }),
+                      },
+                  ]),
+        ),
+    );
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    let nonterminalLookups = 0;
+    const { nodeActionGenerationDeadline } = await import(
+        "@convex/resourcePolicy"
+    );
+    await f.t.action((ctx) =>
+        runPiMission(
+            {
+                ...ctx,
+                runQuery: async (reference, ...args) => {
+                    if (
+                        getFunctionName(reference) ===
+                            "execution/piControl:nativeInvocation" &&
+                        (await f.t.run((dbCtx) => dbCtx.db.get(missionId)))
+                            ?.status !== "completed"
+                    )
+                        nonterminalLookups++;
+                    return ctx.runQuery(reference, ...args);
+                },
+            },
+            { missionId, expectedGeneration: 4 },
+            "lookup-worker",
+            nodeActionGenerationDeadline(Date.now()),
+        ),
+    );
+    expect((await f.t.run((ctx) => ctx.db.get(missionId)))?.status).toBe(
+        "completed",
+    );
+    expect(turn).toBe(2);
+    expect(nonterminalLookups).toBe(0);
+});
+
+test.each([
+    "stale_instructions",
+    "invalid_arguments",
+    "pending_operations",
+] as const)("native conversation completion recovers from %s through the real tool loop", async (scenario) => {
+    const { seedConversation } = await import(
+        "@/__tests__/setup/agent-harness"
+    );
+    const { nodeActionGenerationDeadline } = await import(
+        "@convex/resourcePolicy"
+    );
+    const { conversationValidationV3Definition } = await import(
+        "@convex/domain/conversationValidation"
+    );
+    vi.useFakeTimers();
+    const f = await seedConversation(true);
+    await f.client.mutation(api.execution.conversations.submit, {
+        runId: f.runId,
+        requestKey: "native-validation",
+        text: "Validate the active request",
+        delivery: "queue",
+    });
+    const turnId = await f.t.mutation(
+        internal.execution.conversations.claimTurn,
+        { runId: f.runId },
+    );
+    assert(turnId);
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.runId,
+        conversationTurnId: turnId,
+        definitionId: "conversation_validation_v1",
+        scope: { kind: "conversation_validation_v1" },
+        requestKey: `native-validation:${scenario}`,
+        expectedGeneration: 1,
+    });
+    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 3 }));
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 1,
+        simulation: true,
+    });
+    let turns = 0;
+    let waitingId:
+        | import("@convex/_generated/dataModel").Id<"agentOperationRequests">
+        | undefined;
+    const originalSimulation = conversationValidationV3Definition.simulate;
+    // This scripted model replaces only generation; domain completion and all effects remain real.
+    const observedInputs = new Map<string, number>();
+    conversationValidationV3Definition.simulate = (input) => {
+        const key = JSON.stringify(input);
+        let turn = observedInputs.get(key);
+        if (turn === undefined) {
+            turn = ++turns;
+            observedInputs.set(key, turn);
+        }
+        return {
+            kind: "operations",
+            requests: [
+                {
+                    callId: `complete:${turn}`,
+                    name: "submit_completion",
+                    inputJson: JSON.stringify({
+                        kind: "complete",
+                        text:
+                            scenario === "invalid_arguments" && turn === 1
+                                ? {}
+                                : "Validated active request.",
+                    }),
+                },
+            ],
+        };
+    };
+    let injected = false;
+    const run = () =>
+        f.t.action((ctx) =>
+            runPiMission(
+                {
+                    ...ctx,
+                    runMutation: async (reference, ...args) => {
+                        if (
+                            getFunctionName(reference) ===
+                                "execution/invocations:finish" &&
+                            !injected &&
+                            scenario !== "invalid_arguments"
+                        ) {
+                            injected = true;
+                            if (scenario === "stale_instructions")
+                                await f.client.mutation(
+                                    api.execution.conversations.submit,
+                                    {
+                                        runId: f.runId,
+                                        requestKey: "steer-native-validation",
+                                        text: "Use the updated request",
+                                        delivery: "steer",
+                                        turnId,
+                                    },
+                                );
+                            else {
+                                waitingId = await f.t.mutation(
+                                    internal.execution.operations.enqueue,
+                                    {
+                                        missionId,
+                                        expectedGeneration: 1,
+                                        cause: "deferred-validation",
+                                        input: {
+                                            kind: "wait_fixture_result",
+                                            value: 7,
+                                        },
+                                    },
+                                );
+                                expect(
+                                    await f.t.action(
+                                        internal.execution.operations.dispatch,
+                                        {
+                                            requestId: waitingId,
+                                            expectedGeneration: 1,
+                                        },
+                                    ),
+                                ).toMatchObject({ kind: "waiting" });
+                            }
+                        }
+                        return ctx.runMutation(reference, ...args);
+                    },
+                },
+                { missionId, expectedGeneration: 1 },
+                "validation-worker",
+                nodeActionGenerationDeadline(Date.now()),
+            ),
+        );
+    try {
+        await run();
+        if (scenario === "pending_operations") {
+            expect(
+                (await f.t.run((ctx) => ctx.db.get(missionId)))?.status,
+            ).not.toBe("completed");
+            const deferredId = waitingId;
+            assert(deferredId);
+            expect(
+                (await f.t.run((ctx) => ctx.db.get(deferredId)))?.status,
+            ).toBe("waiting");
+            await f.t.mutation(
+                internal.domain.conversationValidation.completeDeferred,
+                { requestId: deferredId, expectedGeneration: 1 },
+            );
+            await run();
+            expect(turns).toBe(1);
+            expect(
+                (await f.t.run((ctx) => ctx.db.get(deferredId)))?.outcome,
+            ).toEqual({ kind: "success", valueJson: '{"value":14}' });
+        } else expect(turns).toBe(2);
+        const state = await f.t.run(async (ctx) => ({
+            mission: await ctx.db.get(missionId),
+            events: await ctx.db
+                .query("agentExecutionEvents")
+                .withIndex("by_mission_and_sequence", (q) =>
+                    q.eq("missionId", missionId),
+                )
+                .collect(),
+            commits: await ctx.db.query("piCommits").collect(),
+        }));
+        expect(state.mission).toMatchObject({
+            status: "completed",
+            result: {
+                kind: "conversation_validation_v1",
+                text: "Validated active request.",
+            },
+        });
+        if (scenario !== "invalid_arguments")
+            expect(state.events.some((event) => event.code === scenario)).toBe(
+                true,
+            );
+        else
+            expect(
+                state.commits.map((commit) => commit.payload).join("\n"),
+            ).toContain("invalid_arguments");
+    } finally {
+        conversationValidationV3Definition.simulate = originalSimulation;
+    }
 });

@@ -1,8 +1,15 @@
 import type { Doc } from "@convex/_generated/dataModel";
-import { conversationValidationDefinition } from "@convex/domain/conversationValidation";
-import { executionValidationDefinition } from "@convex/domain/executionValidationAgent";
+import {
+    conversationValidationV2Definition,
+    conversationValidationV3Definition,
+} from "@convex/domain/conversationValidation";
+import {
+    executionValidationV2Definition,
+    executionValidationV3Definition,
+} from "@convex/domain/executionValidationAgent";
 import {
     documentaryInspectionDefinition,
+    documentaryInspectionV4Definition,
     savedMaterialInspectionDefinition,
 } from "@convex/domain/savedMaterialInspection";
 import {
@@ -10,6 +17,7 @@ import {
     sourcesV4Definition,
     sourcesV5Definition,
     sourcesV7Definition,
+    sourcesV8Definition,
 } from "@convex/domain/sourcesAgent";
 import {
     directedWorkbenchDefinition,
@@ -26,6 +34,7 @@ import { getFunctionName } from "convex/server";
 import {
     type AgentDefinition,
     agentMethodInstructions,
+    SUBMIT_COMPLETION_TOOL,
     separatedContextInstructions,
 } from "./agentDefinition";
 import { readSkillOperation, skillCatalogue } from "./agentSkills";
@@ -37,11 +46,13 @@ import { operationResultSchema } from "./operationResults";
 // Defer imported definition reads until module initialization has completed.
 function definitions() {
     return {
-        [sourcesV7Definition.id]: sourcesV7Definition,
+        [sourcesV8Definition.id]: sourcesV8Definition,
         [workbenchV12Definition.id]: workbenchV12Definition,
-        [conversationValidationDefinition.id]: conversationValidationDefinition,
-        [executionValidationDefinition.id]: executionValidationDefinition,
-        [documentaryInspectionDefinition.id]: documentaryInspectionDefinition,
+        [conversationValidationV3Definition.id]:
+            conversationValidationV3Definition,
+        [executionValidationV3Definition.id]: executionValidationV3Definition,
+        [documentaryInspectionV4Definition.id]:
+            documentaryInspectionV4Definition,
     } satisfies Record<Doc<"agentMissions">["definitionId"], AgentDefinition>;
 }
 
@@ -106,17 +117,24 @@ export function bindAgentDefinition(
         (definition.nativeConversation &&
             definition.executionScope !== "conversation") ||
         (definition.executionScope === "conversation" &&
-            !definition.conversationReply)
+            !definition.conversationReply) ||
+        (definition.completionTransport === "native_tool" &&
+            (!!definition.nativeConversation ||
+                !!definition.textCompletion ||
+                definition.completionValidator.kind !== "object"))
     )
         throw executionError("definition_contract_invalid");
     const admittedOperations = definitionOperations(definition);
     for (const [name, operation] of Object.entries(admittedOperations)) {
         assertOperationContract(name, operation);
-        if (name in commonOperations)
+        if (name in commonOperations || name === SUBMIT_COMPLETION_TOOL)
             throw executionError("operation_definition_conflict");
     }
-    for (const [name, operation] of Object.entries(commonOperations))
+    for (const [name, operation] of Object.entries(commonOperations)) {
         assertOperationContract(name, operation);
+        if (name === SUBMIT_COMPLETION_TOOL)
+            throw executionError("operation_definition_conflict");
+    }
     return {
         ...definition,
         instructions: [
@@ -151,10 +169,29 @@ function supportedDefinitions(): readonly AgentDefinition[] {
         workbenchV11Definition,
         sourcesV4Definition,
         sourcesV5Definition,
+        sourcesV7Definition,
         savedMaterialInspectionDefinition,
+        documentaryInspectionDefinition,
+        conversationValidationV2Definition,
+        executionValidationV2Definition,
         workbenchMethodControlDefinition,
         sourcesMethodControlDefinition,
     ];
+}
+
+/** Selects the latest compatible retained binding for backends without native completion tools. */
+export function defaultDefinitionVersionForBackend(
+    definitionId: AgentDefinition["id"],
+    backend: import("./executionProtocol").AgentBackendIdentity,
+): number {
+    const candidates = supportedDefinitions().filter(
+        (definition) =>
+            definition.id === definitionId &&
+            (backend.id === "pi-durable" ||
+                definition.completionTransport !== "native_tool"),
+    );
+    if (!candidates.length) throw executionError("definition_contract_invalid");
+    return Math.max(...candidates.map((definition) => definition.version));
 }
 
 /** Enumerates the exact versioned bindings accepted by runtime resolution. */

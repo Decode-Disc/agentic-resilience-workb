@@ -255,8 +255,19 @@ export async function projectMissionHistoryEvent(
     ctx: QueryCtx,
     event: Doc<"agentExecutionEvents">,
 ): Promise<{ json: string; contentHash: string }> {
-    const { metadata, part, invocationPayload, observation } =
-        await historyEventParts(ctx, event);
+    return projectMissionHistoryEventFromParts(
+        ctx,
+        event,
+        await historyEventParts(ctx, event),
+    );
+}
+
+async function projectMissionHistoryEventFromParts(
+    ctx: QueryCtx,
+    event: Doc<"agentExecutionEvents">,
+    parts: Awaited<ReturnType<typeof historyEventParts>>,
+): Promise<{ json: string; contentHash: string }> {
+    const { metadata, part, invocationPayload, observation } = parts;
     const json = stableStringify({
         version: 1,
         event: metadata,
@@ -285,17 +296,29 @@ export async function projectMissionHistoryEvent(
     return { json, contentHash: sha256Hex(json) };
 }
 
+function isHighSurrogate(code: number) {
+    return code >= 0xd800 && code <= 0xdbff;
+}
+
+function isLowSurrogate(code: number) {
+    return code >= 0xdc00 && code <= 0xdfff;
+}
+
 /** The caller's private history receipt owns continuation offsets; only intersecting immutable chunks are loaded. */
 export async function readMissionHistoryEventFragment(
     ctx: QueryCtx,
     event: Doc<"agentExecutionEvents">,
     offset: number,
-    limit: number,
+    limit = MAX_OPERATION_RESULT_BYTES,
 ) {
-    const { metadata, invocationPayload, observation } =
-        await historyEventParts(ctx, event);
+    const eventParts = await historyEventParts(ctx, event);
+    const { metadata, invocationPayload, observation } = eventParts;
     if (!invocationPayload?.textId) {
-        const source = await projectMissionHistoryEvent(ctx, event);
+        const source = await projectMissionHistoryEventFromParts(
+            ctx,
+            event,
+            eventParts,
+        );
         return {
             ...historyTextFragment(source.json, offset, limit),
             contentHash: source.contentHash,
@@ -318,30 +341,47 @@ export async function readMissionHistoryEventFragment(
     if (
         !Number.isSafeInteger(offset) ||
         offset < 0 ||
-        offset >= totalCharacters
+        offset >= totalCharacters ||
+        !Number.isSafeInteger(limit) ||
+        limit < 1
     )
         throw executionError("history_receipt_invalid");
+    const readStart = offset > 0 ? offset - 1 : 0;
     let end = Math.min(totalCharacters, offset + limit);
-    const parts = [prefix.slice(offset, end)];
-    if (end > prefix.length && offset < prefix.length + text.characters)
+    const parts = [prefix.slice(readStart, end)];
+    if (end > prefix.length && readStart < prefix.length + text.characters) {
+        const rangeStart = Math.max(0, readStart - prefix.length);
+        const rangeEnd = Math.min(end - prefix.length, text.characters);
         parts.push(
             await retainedTextRange(
                 ctx,
                 text,
-                Math.max(0, offset - prefix.length),
-                Math.min(end - prefix.length, text.characters) -
-                    Math.max(0, offset - prefix.length),
+                rangeStart,
+                rangeEnd - rangeStart,
             ),
         );
+    }
     if (end > prefix.length + text.characters)
         parts.push(
             suffix.slice(
-                Math.max(0, offset - prefix.length - text.characters),
+                Math.max(0, readStart - prefix.length - text.characters),
                 end - prefix.length - text.characters,
             ),
         );
-    let content = parts.join("");
-    if (end < totalCharacters && /[\uD800-\uDBFF]/.test(content.at(-1) ?? "")) {
+    const raw = parts.join("");
+    if (
+        offset > 0 &&
+        raw.length >= 2 &&
+        isHighSurrogate(raw.charCodeAt(0)) &&
+        isLowSurrogate(raw.charCodeAt(1))
+    )
+        throw executionError("history_receipt_invalid");
+    let content = offset > 0 ? raw.slice(1) : raw;
+    if (
+        end < totalCharacters &&
+        content.length > 0 &&
+        isHighSurrogate(content.charCodeAt(content.length - 1))
+    ) {
         content = content.slice(0, -1);
         end--;
     }
@@ -359,20 +399,27 @@ export async function readMissionHistoryEventFragment(
     };
 }
 
-/** Canonical boundaries make overlapping offsets unrepresentable without an issued server position. */
+/** Positions are authenticated by issued receipts; offsets must remain valid non-splitting UTF-16 boundaries. */
 export function historyTextFragment(
     text: string,
     offset: number,
     limit: number,
 ) {
-    if (!Number.isSafeInteger(offset) || offset < 0 || offset >= text.length)
+    if (
+        !Number.isSafeInteger(offset) ||
+        offset < 0 ||
+        offset >= text.length ||
+        !Number.isSafeInteger(limit) ||
+        limit < 1 ||
+        (offset > 0 &&
+            isHighSurrogate(text.charCodeAt(offset - 1)) &&
+            isLowSurrogate(text.charCodeAt(offset)))
+    )
         throw executionError("history_receipt_invalid");
-    let start = 0;
-    const endAt = (at: number) =>
-        completeCharacterBoundary(text, Math.min(text.length, at + limit));
-    while (start < offset) start = endAt(start);
-    if (start !== offset) throw executionError("history_receipt_invalid");
-    const end = endAt(offset);
+    const end = completeCharacterBoundary(
+        text,
+        Math.min(text.length, offset + limit),
+    );
     return {
         offset,
         totalCharacters: text.length,

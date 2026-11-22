@@ -29,7 +29,7 @@ export const consultMissionStateOperation: Extract<
     effectKind: "read",
     version: 3,
     description:
-        "Read current required mission state and immutable retained observations, including refused proposals. Supply reference to inspect one observed journal event, or omit reference to browse history. Omit cursor initially; continue only with this operation's continueCursor and omit reference on continuation.",
+        "Read immutable retained mission observations, including refused proposals. Current required state is supplied automatically in the prompt section; the returned state field identifies that supplied state rather than repeating the full working inventory. Supply reference to inspect one observed journal event, or omit reference to browse history chronologically. Omit cursor initially; continue only with this operation's continueCursor and omit reference on continuation.",
     inputValidator: consultMissionStateInputValidator,
     resultValidator: z.strictObject({
         kind: z.literal("consult_mission_state"),
@@ -74,7 +74,7 @@ export const consultRunStateOperation: Extract<
 > = {
     effectKind: "read",
     nativeAuthority: "dossier",
-    version: 2,
+    version: 3,
     description:
         "Consult the authorized dossier's persisted research progress, stops and available actions without starting work.",
     inputValidator: consultRunStateInputValidator,

@@ -154,8 +154,9 @@ export const MAX_WORKBENCH_TURN_OPERATIONS = 128;
 export const MAX_CONTEXT_BYTES = 128 * 1024;
 export const MAX_OBSERVABLE_OUTPUT_BYTES = 512 * 1024;
 export const MAX_WORKING_NOTES_BYTES = 16 * 1024;
-export const MAX_HISTORY_RESULT_BYTES = 48 * 1024;
 export const MAX_CONVERSATION_SCAN = 4096;
+/** Per-page Convex database read ceiling (bytes) while scanning processed conversation deliveries; refuses as history_scan_capacity rather than splitting message content. */
+export const MAX_CONVERSATION_SCAN_BYTES = 512 * 1024;
 export const RESPONSE_CONTROL_MAX_INPUT_BYTES = 32 * 1024;
 
 // Acquisition and metadata clocks/retries, not generation completion estimates.
@@ -439,6 +440,8 @@ export const MODEL_METADATA_REQUEST_TIMEOUT_MS = 15_000;
 export const MODEL_CATALOG_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 export const MODEL_CATALOG_MAX_ROWS = 8192;
 export const MODEL_CATALOG_MAX_ENDPOINTS = 256;
+/** Bounded Convex transaction chunk for native input profile reads and writes. */
+export const NATIVE_PROFILE_BATCH_SIZE = 256;
 /** CPU-only native request-profile preparation, not provider generation. */
 export const NATIVE_PROFILE_PREPARATION_TIMEOUT_MS = 60_000;
 export const MODEL_CATALOG_REFRESH_TIMEOUT_MS = 60_000;

@@ -41,8 +41,9 @@ async function continueSourcesPreparationAvailability(
     run: Doc<"researchRuns">,
 ): Promise<string | null> {
     const readiness = await readResearchControlReadiness(ctx, run, "resume");
-    if (readiness.transition !== "renew_window")
-        return "human_prerequisite_required";
+    if (readiness.transition === null && readiness.block)
+        return readiness.block;
+    if (readiness.transition !== "renew_window") return "action_not_applicable";
     if (readiness.block) return readiness.block;
     const preparation = run.sourcePreparationId
         ? await ctx.db.get(run.sourcePreparationId)

@@ -262,3 +262,129 @@ test.each([
             ?.result,
     ).toBeUndefined();
 });
+
+test("Sources v8 native_tool completion refuses stale work accounting with mission_context_changed via tool result and completes on refreshed state", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const { installModel } = await import(
+        "@/__tests__/setup/model-configuration"
+    );
+    const { nativePiFixtureRoute } = await import(
+        "@/__tests__/setup/pi-native"
+    );
+    const f = await seedObservedSources();
+    await installModel(f.t, nativePiFixtureRoute, "sources");
+    await f.t.run((ctx) => ctx.db.patch(f.missionId, { definitionVersion: 8 }));
+    let turn = 0;
+    const seenToolResults: string[] = [];
+    const network = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+            const body = JSON.parse(String(init?.body ?? "{}"));
+            for (const msg of body.messages ?? [])
+                if (msg.role === "tool" && typeof msg.content === "string")
+                    seenToolResults.push(msg.content);
+            turn++;
+            if (turn === 1) {
+                // Engage and settle new native check work AFTER turn 1's context was admitted -> mission_context_changed.
+                const lateRequest = await claimNativeCheck(
+                    f,
+                    "Late activity check",
+                );
+                await f.t.mutation(internal.sourcesMission.reserve, {
+                    requestId: lateRequest,
+                    expectedGeneration: 4,
+                });
+                await f.t.mutation(internal.execution.operations.recordResult, {
+                    requestId: lateRequest,
+                    expectedGeneration: 4,
+                    outcome: {
+                        kind: "unavailable",
+                        code: "missing_configuration",
+                    },
+                });
+            }
+            return new Response(
+                [
+                    `data: ${JSON.stringify({
+                        id: `src-v8-fresh-${turn}`,
+                        choices: [
+                            {
+                                index: 0,
+                                delta: {
+                                    role: "assistant",
+                                    tool_calls: [
+                                        {
+                                            index: 0,
+                                            id: `fresh_call_${turn}`,
+                                            type: "function",
+                                            function: {
+                                                name: "submit_completion",
+                                                arguments: JSON.stringify({
+                                                    kind: "complete",
+                                                    needs: [
+                                                        {
+                                                            needId: "common-context",
+                                                            unfinished: [
+                                                                "Documentary checking remains unfinished.",
+                                                            ],
+                                                        },
+                                                    ],
+                                                }),
+                                            },
+                                        },
+                                    ],
+                                },
+                                finish_reason: null,
+                            },
+                        ],
+                    })}`,
+                    `data: ${JSON.stringify({
+                        id: `src-v8-fresh-${turn}`,
+                        choices: [
+                            {
+                                index: 0,
+                                delta: {},
+                                finish_reason: "tool_calls",
+                            },
+                        ],
+                        usage: { prompt_tokens: 10, completion_tokens: 5 },
+                    })}`,
+                    "data: [DONE]",
+                    "",
+                ].join("\n\n"),
+                { headers: { "content-type": "text/event-stream" } },
+            );
+        },
+    );
+    vi.stubGlobal("fetch", network);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(100),
+        1000,
+    );
+    expect(network).toHaveBeenCalledTimes(2);
+    expect(
+        seenToolResults.some((text) =>
+            text.includes('"code":"mission_context_changed"'),
+        ),
+    ).toBe(true);
+    const after = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(f.missionId),
+        session: await ctx.db
+            .query("piSessions")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .unique(),
+        invocations: await ctx.db
+            .query("agentInvocations")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .collect(),
+    }));
+    expect(after.mission?.status).toBe("completed");
+    expect(after.session?.settledSequence).toBe(after.session?.sequence);
+    expect(after.invocations[0]?.blockCode).toBe("mission_context_changed");
+    expect(after.invocations[1]?.blockCode).toBeUndefined();
+}, 30000);

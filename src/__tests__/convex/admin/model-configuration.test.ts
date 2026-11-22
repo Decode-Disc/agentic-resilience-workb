@@ -949,3 +949,219 @@ test.each([
         vi.unstubAllEnvs();
     }
 });
+
+test.each([
+    { mode: "unchanged_additive_catalog" as const },
+    { mode: "changed_catalog_revision" as const },
+])("configured route refuses missing DB profile before refresh and succeeds after refresh without altering model, effort or admitted pins ($mode)", async ({
+    mode,
+}) => {
+    const { getAgentDefinition } = await import(
+        "@convex/execution/agentCatalog"
+    );
+    const { agentToolSchemas } = await import(
+        "@convex/execution/agentDefinition"
+    );
+    const { piInputProfileKey } = await import(
+        "@convex/integrations/modelInput"
+    );
+    const { revisionRoute } = await import("@convex/modelConfiguration");
+    const { seedInspectedEvidence } = await import(
+        "@/__tests__/setup/source-preparation"
+    );
+
+    const f = await seedInspectedEvidence();
+    const { admin, catalogId } = await installModel(
+        f.t,
+        { ...nativePiFixtureRoute, reasoningEffort: "low" },
+        "saved_material_inspection",
+        { reasoningEfforts: ["low", "medium"], reasoningDefault: "medium" },
+    );
+
+    const beforeCatalog = await f.t.run((ctx) => ctx.db.get(catalogId));
+    const revisionId = beforeCatalog?.currentRevisionId;
+    assert(revisionId);
+    const revisionBefore = await f.t.run((ctx) => ctx.db.get(revisionId));
+    assert(revisionBefore);
+    const route = revisionRoute(revisionBefore);
+
+    // Start an already-admitted historical v3 mission and a new default v4 mission.
+    const v3MissionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: `profile-refresh-v3-${mode}`,
+        expectedGeneration: 4,
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(v3MissionId, {
+            definitionVersion: 3,
+            objectiveKey: `saved-material-historical:${f.args.corpusRevisionId}`,
+            modelRevisionId: revisionBefore._id,
+            reasoningEffort: "low",
+        }),
+    );
+    const v4MissionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.args.runId,
+        corpusRevisionId: f.args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: `profile-refresh-v4-${mode}`,
+        expectedGeneration: 4,
+    });
+    expect(v4MissionId).not.toBe(v3MissionId);
+    await f.t.run((ctx) =>
+        ctx.db.patch(v4MissionId, {
+            modelRevisionId: revisionBefore._id,
+            reasoningEffort: "low",
+        }),
+    );
+
+    // Simulate a database provisioned before v4 existed: remove the v4 profile key from DB.
+    const v4Def = getAgentDefinition("saved_material_inspection_v1", 4);
+    const v4Key = await piInputProfileKey({
+        instructions: v4Def.instructions,
+        operations: agentToolSchemas(v4Def),
+        prompt: "",
+        definitionVersion: v4Def.version,
+        nativeConversation: v4Def.nativeConversation,
+        contextRendering: v4Def.contextRendering,
+        completionTransport: v4Def.completionTransport,
+        nativeRoute: { ...route, reasoningEffort: "low" },
+    });
+    await f.t.run(async (ctx) => {
+        const row = await ctx.db
+            .query("nativeInputProfiles")
+            .withIndex("by_key", (q) => q.eq("key", v4Key))
+            .unique();
+        if (row) await ctx.db.delete(row._id);
+        if (mode === "changed_catalog_revision") {
+            await ctx.db.patch(catalogId, {
+                preparedProfileCatalog: "stale-previous-catalog-revision",
+            });
+        }
+    });
+
+    const { modelPrepared } = await import("@convex/modelConfiguration");
+    const catalogBeforeRefresh = await f.t.run((ctx) => ctx.db.get(catalogId));
+    assert(catalogBeforeRefresh);
+    expect(modelPrepared(catalogBeforeRefresh)).toBe(
+        mode === "unchanged_additive_catalog",
+    );
+    expect(
+        (await admin.query(api.modelConfiguration.list, {})).models.find(
+            (model) => model._id === catalogId,
+        )?.compatible,
+    ).toBe(mode === "unchanged_additive_catalog");
+
+    // Historical v3 continues working with its retained DB profile, while v4 explicitly blocks before refresh.
+    const v3Before = await f.t.query(internal.execution.context.build, {
+        missionId: v3MissionId,
+        expectedGeneration: 4,
+    });
+    expect(v3Before.kind).toBe("ready");
+    await expect(
+        f.t.query(internal.execution.context.build, {
+            missionId: v4MissionId,
+            expectedGeneration: 4,
+        }),
+    ).rejects.toThrow("model_input_profile_unavailable");
+
+    // Explicit offline refresh supplies the missing DB profile without network I/O or changing model/effort/pins.
+    const external = vi.fn(() => {
+        throw new Error("External network forbidden during profile refresh");
+    });
+    vi.stubGlobal("fetch", external);
+    let cursor: string | null = null;
+    do {
+        const page: { isDone: boolean; continueCursor: string | null } =
+            await admin.action(api.modelConfigurationActions.refreshProfiles, {
+                catalogId,
+                cursor,
+            });
+        cursor = page.isDone ? null : page.continueCursor;
+    } while (cursor !== null);
+    expect(external).not.toHaveBeenCalled();
+
+    const afterCatalog = await f.t.run((ctx) => ctx.db.get(catalogId));
+    expect(afterCatalog?.currentRevisionId).toBe(
+        beforeCatalog.currentRevisionId,
+    );
+    expect(afterCatalog?.model).toBe(beforeCatalog.model);
+    expect(afterCatalog?.provider).toBe(beforeCatalog.provider);
+    assert(afterCatalog);
+    expect(modelPrepared(afterCatalog)).toBe(true);
+    const afterRevision = await f.t.run((ctx) => ctx.db.get(revisionId));
+    expect(afterRevision?.reasoningPreference).toBe(
+        revisionBefore.reasoningPreference,
+    );
+    expect(afterRevision?.reasoningEffort).toBe(revisionBefore.reasoningEffort);
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(v3MissionId)))?.modelRevisionId,
+    ).toBe(revisionBefore._id);
+
+    // After refresh, both v3 and v4 resolve their DB profiles cleanly.
+    const v3After = await f.t.query(internal.execution.context.build, {
+        missionId: v3MissionId,
+        expectedGeneration: 4,
+    });
+    const v4After = await f.t.query(internal.execution.context.build, {
+        missionId: v4MissionId,
+        expectedGeneration: 4,
+    });
+    expect(v3After.kind).toBe("ready");
+    expect(v4After.kind).toBe("ready");
+}, 30000);
+
+test("profile reads reject a transaction exceeding 256 keys", async () => {
+    const { admin } = await setup();
+    await expect(
+        admin.query(internal.modelConfiguration.profiles, {
+            keys: Array.from({ length: 257 }, (_, i) => `missing:${i}`),
+        }),
+    ).rejects.toThrow("model_not_compatible");
+});
+
+test("staged profile chunks do not publish preparation readiness before the final batch", async () => {
+    const { admin, t } = await setup();
+    const pending = await admin.mutation(
+        internal.modelConfiguration.beginPreparation,
+        {
+            model: "fixture/batched",
+            label: "Batched",
+            requestKey: "batched",
+        },
+    );
+    const profiles = Array.from({ length: 256 }, (_, i) => ({
+        key: `batch:${i}`,
+        bytes: 100,
+    }));
+    await admin.mutation(internal.modelConfiguration.retainNativeProfileBatch, {
+        profileCatalog: NATIVE_PROFILE_CATALOG,
+        profiles,
+    });
+    const staged = await t.run((ctx) => ctx.db.get(pending.catalogId));
+    expect(staged?.status).toBe("preparing");
+    expect(staged?.preparedProfileCatalog).toBeUndefined();
+    expect(
+        await admin.query(internal.modelConfiguration.profiles, {
+            keys: ["batch:0", "batch:255"],
+        }),
+    ).toEqual([profiles[0], profiles[255]]);
+    await expect(
+        admin.mutation(internal.modelConfiguration.retainNativeProfileBatch, {
+            profileCatalog: NATIVE_PROFILE_CATALOG,
+            profiles: [...profiles, { key: "overflow", bytes: 100 }],
+        }),
+    ).rejects.toThrow("model_not_compatible");
+    expect(
+        await admin.query(internal.modelConfiguration.profiles, {
+            keys: ["overflow"],
+        }),
+    ).toEqual([]);
+    await expect(
+        admin.mutation(internal.modelConfiguration.retainNativeProfileBatch, {
+            profileCatalog: "stale",
+            profiles: [{ key: "stale", bytes: 100 }],
+        }),
+    ).rejects.toThrow("model_profile_version_conflict");
+});

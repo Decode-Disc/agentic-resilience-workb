@@ -17,7 +17,10 @@ import type { WorkflowId } from "@convex-dev/workflow";
 import { vEventId } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
-import { getAgentDefinition } from "./agentCatalog";
+import {
+    defaultDefinitionVersionForBackend,
+    getAgentDefinition,
+} from "./agentCatalog";
 import { agentScopeValidator } from "./agentSchemas";
 import {
     canAdoptRetainedResponse,
@@ -55,9 +58,9 @@ export const start = internalMutation({
         const conversation = conversationTurn
             ? await ctx.db.get(conversationTurn.conversationId)
             : null;
+        const backend = args.generationBackend ?? DEFAULT_AGENT_BACKEND;
         const initialRun = await ctx.db.get(args.runId);
-        const definition = getAgentDefinition(
-            args.definitionId,
+        const explicitVersion =
             conversation?.definitionId === args.definitionId
                 ? (conversation.definitionVersion ?? 1)
                 : initialRun
@@ -66,8 +69,17 @@ export const start = internalMutation({
                         initialRun,
                         args.definitionId,
                     )
-                  : undefined,
+                  : undefined;
+        const definition = getAgentDefinition(
+            args.definitionId,
+            explicitVersion ??
+                defaultDefinitionVersionForBackend(args.definitionId, backend),
         );
+        if (
+            definition.completionTransport === "native_tool" &&
+            backend.id !== "pi-durable"
+        )
+            throw executionError("definition_contract_invalid");
         const executionScope = definition.executionScope;
         const { run, visitor } =
             executionScope === "conversation"
@@ -171,7 +183,7 @@ export const start = internalMutation({
             await ctx.db.patch(run._id, {
                 executionHarnessDeadlineAt: deadlineAt,
             });
-        const backend = args.generationBackend ?? DEFAULT_AGENT_BACKEND;
+
         if (backend.id === "pi-durable" && backend.version !== 1)
             throw executionError("generation_backend_unknown");
         const id = await ctx.db.insert("agentMissions", {

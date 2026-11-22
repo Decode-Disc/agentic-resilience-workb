@@ -9,7 +9,7 @@ import { MAX_CONTEXT_BYTES } from "@convex/resourcePolicy";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
-import { agentToolSchemas } from "./agentDefinition";
+import { agentToolSchemas, SUBMIT_COMPLETION_TOOL } from "./agentDefinition";
 import {
     executionError,
     executionFailureCode,
@@ -313,18 +313,20 @@ export async function buildMissionContext(
             authority: definition.authority,
             completion: definition.textCompletion
                 ? { format: "text" }
-                : {
-                      format: "json",
-                      schema: Object.fromEntries(
-                          Object.entries(
-                              operationResultSchema(
-                                  operationResultValidator(
-                                      definition.completionValidator,
-                                  ),
-                              ),
-                          ).filter(([key]) => key !== "convexValidator"),
-                      ),
-                  },
+                : definition.completionTransport === "native_tool"
+                  ? { format: "tool", tool: SUBMIT_COMPLETION_TOOL }
+                  : {
+                        format: "json",
+                        schema: Object.fromEntries(
+                            Object.entries(
+                                operationResultSchema(
+                                    operationResultValidator(
+                                        definition.completionValidator,
+                                    ),
+                                ),
+                            ).filter(([key]) => key !== "convexValidator"),
+                        ),
+                    },
         },
         conversationInstructions:
             definition.nativeConversation && activeInstructions
@@ -400,6 +402,7 @@ export async function buildMissionContext(
             operations,
             nativeConversation: definition.nativeConversation,
             contextRendering: definition.contextRendering,
+            completionTransport: definition.completionTransport,
             definitionVersion: definition.version,
             nativeRoute:
                 mission.executionRuntime === "pi-durable"

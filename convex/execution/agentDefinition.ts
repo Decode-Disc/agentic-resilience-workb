@@ -1,7 +1,15 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import type { AgentIdentityId } from "@convex/domain/agentIdentities";
-import type { Infer, Validator } from "convex/values";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
+import {
+    type GenericValidator,
+    type Infer,
+    type PropertyValidators,
+    type Validator,
+    type VObject,
+    v,
+} from "convex/values";
 import type {
     agentCompletionValidator,
     agentResultValidator,
@@ -9,6 +17,7 @@ import type {
     agentStateValidator,
     operationPinValidator,
 } from "./agentSchemas";
+import { executionError } from "./errors";
 import type {
     AgentGenerationInput,
     AgentOperationDefinition,
@@ -17,7 +26,18 @@ import type {
     requestInputValidator,
 } from "./executionProtocol";
 import type { completionFeedbackValidator } from "./operationContracts";
-import { operationResultKey } from "./operationResults";
+import {
+    operationResultKey,
+    operationResultValidator,
+} from "./operationResults";
+
+export const SUBMIT_COMPLETION_TOOL = "submit_completion";
+export type CompletionTransport = "native_tool";
+export const SUBMIT_COMPLETION_DESCRIPTION =
+    "Submit the mission's final structured completion proposal once all required work is finished. Call this tool alone (never combined with other tool calls or repeated in the same turn).";
+const submitCompletionResultValidator = operationResultValidator(
+    v.object({ kind: v.literal("accepted") }),
+);
 
 export type AgentScope = Infer<typeof agentScopeValidator>;
 export type AgentState = Infer<typeof agentStateValidator>;
@@ -63,6 +83,8 @@ export type AgentDefinition = {
     method?(run: Doc<"researchRuns">): string;
     /** Omitted on retained definitions whose historical envelopes must stay exact. */
     contextRendering?: "separated_v1";
+    /** Native tool transport for structured completions; omitted on retained definitions. */
+    completionTransport?: CompletionTransport;
     nativeToolSets?(
         operations: AgentDefinition["operations"],
     ): Record<string, AgentToolProjection>[];
@@ -153,12 +175,21 @@ export type AgentDefinition = {
 };
 
 /** Exposes model-visible schemas while keeping server execution callbacks out of SDK tools. */
+function isObjectCompletionValidator(
+    validator: GenericValidator | undefined,
+): validator is VObject<Record<string, unknown>, PropertyValidators> {
+    return validator?.kind === "object";
+}
+
 export function agentToolSchemas(
-    definition: Pick<AgentDefinition, "operations" | "modelOperation">,
+    definition: Pick<AgentDefinition, "operations" | "modelOperation"> &
+        Partial<
+            Pick<AgentDefinition, "completionTransport" | "completionValidator">
+        >,
     snapshot?: unknown,
     variant?: Record<string, AgentToolProjection>,
 ): AgentGenerationInput["operations"] {
-    return Object.fromEntries(
+    const tools: AgentGenerationInput["operations"] = Object.fromEntries(
         Object.entries(definition.operations).flatMap(([name, operation]) => {
             if (operation.systemOnly) return [];
             const projected = variant
@@ -186,6 +217,71 @@ export function agentToolSchemas(
                 : [];
         }),
     );
+    if (definition.completionTransport === "native_tool") {
+        const completionValidator = definition.completionValidator;
+        if (!isObjectCompletionValidator(completionValidator))
+            throw executionError("definition_contract_invalid");
+        tools[SUBMIT_COMPLETION_TOOL] = {
+            description: SUBMIT_COMPLETION_DESCRIPTION,
+            inputValidator: completionValidator,
+            resultContractKey: operationResultKey(
+                submitCompletionResultValidator,
+            ),
+        };
+    }
+    return tools;
+}
+
+const MODEL_OPERATION_SUCCESS_WRAPPER_OVERHEAD_BYTES =
+    new TextEncoder().encode(JSON.stringify({ kind: "success", value: null }))
+        .length - new TextEncoder().encode("null").length;
+
+/** Shared native tool-output allowance derived from canonical result capacity plus the success wrapper's exact byte overhead. */
+export const MAX_MODEL_OPERATION_OUTPUT_BYTES =
+    MAX_OPERATION_RESULT_BYTES + MODEL_OPERATION_SUCCESS_WRAPPER_OVERHEAD_BYTES;
+
+function assertModelToolOutputCapacity(rendered: string): string {
+    if (
+        new TextEncoder().encode(rendered).length >
+        MAX_MODEL_OPERATION_OUTPUT_BYTES
+    )
+        throw executionError("operation_result_capacity");
+    return rendered;
+}
+
+/** Shared output rendering for the executor-owned native completion tool. */
+export function renderCompletionToolOutcome(
+    outcome:
+        | { kind: "accepted" }
+        | {
+              kind: "refused";
+              code: string;
+              correction?: Infer<typeof completionFeedbackValidator>;
+              diagnostic: string;
+          },
+): string {
+    return assertModelToolOutputCapacity(JSON.stringify(outcome));
+}
+
+/** Renders the same bounded diagnostic for refused completion at adoption and native delivery. */
+export function renderCompletionToolRefusal(
+    code: string,
+    correction?: Infer<typeof completionFeedbackValidator>,
+): string {
+    const diagnostic =
+        code === "completion_correction_required"
+            ? "The completion proposal was refused. Review the correction issues and current required state, then call submit_completion alone with a corrected proposal."
+            : code === "mission_context_changed"
+              ? "The completion proposal was not adopted because required mission context changed. Inspect the current required state before completing."
+              : code === "stale_instructions"
+                ? "The completion proposal was not adopted because the analyst updated the active instructions. Review the active instructions before completing."
+                : "The completion proposal was refused. Review current required state before continuing.";
+    return renderCompletionToolOutcome({
+        kind: "refused",
+        code,
+        ...(correction ? { correction } : {}),
+        diagnostic,
+    });
 }
 
 /** Keep the canonical outcome intact in Convex while giving the native model readable result data. */
@@ -193,32 +289,41 @@ export function modelOperationOutcome(
     definition: AgentDefinition,
     outcome: OperationOutcome,
 ): string {
-    if (outcome.kind === "success")
-        return JSON.stringify({
-            kind: "success",
-            value: JSON.parse(outcome.valueJson),
-        });
-    return JSON.stringify({
-        ...outcome,
-        ...("code" in outcome
-            ? {
-                  diagnostic:
-                      outcome.code === "operation_adoption_failed" ||
-                      outcome.code === "operation_effect_receipt_missing"
-                          ? "The observed result was retained, but could not be adopted. Do not repeat the operation or infer non-execution; inspect confirmed effects and wait for authorized recovery."
-                          : outcome.code === "operation_outcome_unknown"
-                            ? "The operation outcome is unconfirmed. Do not repeat it or claim success or non-execution. Inspect retained state and wait for authorized recovery."
-                            : outcome.code === "history_cursor_invalid"
-                              ? "No history page was read. Omit cursor to start at the first page; for later pages copy only continueCursor returned by the same history operation. Use consult_conversation for prior analyst exchanges; consult_mission_state reads only the current mission."
-                              : "validation" in outcome && outcome.validation
-                                ? `Repair ${outcome.validation.path}: ${outcome.validation.expected}`
-                                : (definition.operationDiagnostic?.(
-                                      outcome.code,
-                                  ) ??
-                                  "This result cannot advance the mission. Inspect recorded state and the reported prerequisite before choosing another action."),
-              }
-            : {}),
-    });
+    const rendered =
+        outcome.kind === "success"
+            ? JSON.stringify({
+                  kind: "success",
+                  value: JSON.parse(outcome.valueJson),
+              })
+            : JSON.stringify({
+                  ...outcome,
+                  ...("code" in outcome
+                      ? {
+                            diagnostic:
+                                outcome.code === "operation_adoption_failed" ||
+                                outcome.code ===
+                                    "operation_effect_receipt_missing"
+                                    ? "The observed result was retained, but could not be adopted. Do not repeat the operation or infer non-execution; inspect confirmed effects and wait for authorized recovery."
+                                    : outcome.code ===
+                                        "operation_outcome_unknown"
+                                      ? "The operation outcome is unconfirmed. Do not repeat it or claim success or non-execution. Inspect retained state and wait for authorized recovery."
+                                      : outcome.code ===
+                                          "history_cursor_invalid"
+                                        ? "No history page was read. Omit cursor to start at the first page; for later pages copy only continueCursor returned by the same history operation. Use consult_conversation for prior analyst exchanges; consult_mission_state reads only the current mission."
+                                        : outcome.code ===
+                                            "completion_must_be_sole_call"
+                                          ? "Completion cannot be combined with other tool calls or submitted more than once in the same turn. Review the executed operation results and current required state, then call submit_completion alone when work is finished."
+                                          : "validation" in outcome &&
+                                              outcome.validation
+                                            ? `Repair ${outcome.validation.path}: ${outcome.validation.expected}`
+                                            : (definition.operationDiagnostic?.(
+                                                  outcome.code,
+                                              ) ??
+                                              "This result cannot advance the mission. Inspect recorded state and the reported prerequisite before choosing another action."),
+                        }
+                      : {}),
+              });
+    return assertModelToolOutputCapacity(rendered);
 }
 
 /** Reads versioned domain data without allowing it to replace executor-owned state. */

@@ -14,7 +14,7 @@ import chordPackage from "@earendil-works/chord/package.json";
 import { PI_AI_VERSION } from "@earendil-works/pi-ai/utils/version";
 import durablePackage from "@earendil-works/pi-durable/package.json";
 import type { Infer } from "convex/values";
-import inputProfiles from "./piInputProfiles.json";
+import profileCatalogMetadata from "./piInputProfileCatalog.json";
 
 export type ModelRoute = Readonly<{
     model: string;
@@ -46,13 +46,43 @@ export function nativeProfileCatalogueRevision(
         ),
     );
 }
-export const NATIVE_PROFILE_CATALOG =
-    "profileCatalog" in inputProfiles &&
-    typeof inputProfiles.profileCatalog === "string"
-        ? inputProfiles.profileCatalog
-        : sha256Hex(
-              stableStringify(Object.keys(inputProfiles.profiles).sort()),
-          );
+
+/** Retains unchanged baseline keys only under the exact installed SDK tuple; changed schemas keep newly measured keys. */
+export function mergeRetainedPiInputProfiles(args: {
+    baseline: {
+        versions: Record<string, string>;
+        profiles: Record<string, number>;
+    };
+    installedVersions: Record<string, string>;
+    measured: Record<string, number>;
+}): Record<string, number> {
+    const baselineKeys = Object.keys(args.baseline.versions).sort();
+    const installedKeys = Object.keys(args.installedVersions).sort();
+    if (
+        baselineKeys.length !== installedKeys.length ||
+        baselineKeys.some(
+            (key, index) =>
+                key !== installedKeys[index] ||
+                args.baseline.versions[key] !== args.installedVersions[key],
+        )
+    )
+        throw executionError("model_input_profile_sdk_mismatch");
+    const merged: Record<string, number> = {};
+    for (const [key, bytes] of Object.entries(args.baseline.profiles)) {
+        if (!Number.isSafeInteger(bytes) || bytes < 1)
+            throw executionError("model_input_profile_invalid");
+        merged[key] = bytes;
+    }
+    for (const [key, bytes] of Object.entries(args.measured)) {
+        if (!Number.isSafeInteger(bytes) || bytes < 1)
+            throw executionError("model_input_profile_invalid");
+        if (merged[key] !== undefined && merged[key] !== bytes)
+            throw executionError("model_input_profile_conflict");
+        merged[key] = bytes;
+    }
+    return merged;
+}
+export const NATIVE_PROFILE_CATALOG = profileCatalogMetadata.profileCatalog;
 export function modelConfigurationKey(descriptor: object) {
     return sha256Hex(
         stableStringify({ serializer: NATIVE_MODEL_SERIALIZER, descriptor }),

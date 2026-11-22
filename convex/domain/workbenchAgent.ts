@@ -504,6 +504,8 @@ export const workbenchDefinition: AgentDefinition & {
             return "The observed version changed. Inspect the current program, preserve the analyst's edits and reconsider the action.";
         if (code === "human_prerequisite_required")
             return "Research is waiting for a human decision. Inspect the pending review; resuming cannot bypass it.";
+        if (code === "action_not_applicable")
+            return "That control action does not apply to the dossier's current state. Inspect research state before choosing a next step.";
         if (code === "documentary_need_not_observed")
             return "No prepared need was read. Select an observed needId from documentaryPreparation.needReferences.";
         if (code === "instruction_not_observed")

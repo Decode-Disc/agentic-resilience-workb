@@ -3,7 +3,10 @@ import type { ModelRoute } from "@convex/integrations/modelRouting";
 import { NATIVE_PROFILE_CATALOG } from "@convex/integrations/modelRouting";
 import { prepareNativeProfiles } from "@convex/integrations/piModelProfiles";
 import type { modelDescriptor } from "@convex/modelConfigurationSchema";
-import { RESOURCE_POLICY_VERSION } from "@convex/resourcePolicy";
+import {
+    NATIVE_PROFILE_BATCH_SIZE,
+    RESOURCE_POLICY_VERSION,
+} from "@convex/resourcePolicy";
 import type schema from "@convex/schema";
 import type { Infer } from "convex/values";
 import type { TestConvex } from "convex-test";
@@ -101,6 +104,24 @@ export async function installModel(
             requestKey: `prepare:${route.model}`,
         },
     );
+    const allProfiles = await profiles;
+    let offset = 0;
+    for (
+        ;
+        offset + NATIVE_PROFILE_BATCH_SIZE < allProfiles.length;
+        offset += NATIVE_PROFILE_BATCH_SIZE
+    ) {
+        await admin.mutation(
+            internal.modelConfiguration.retainNativeProfileBatch,
+            {
+                profileCatalog: NATIVE_PROFILE_CATALOG,
+                profiles: allProfiles.slice(
+                    offset,
+                    offset + NATIVE_PROFILE_BATCH_SIZE,
+                ),
+            },
+        );
+    }
     const ready = await admin.mutation(
         internal.modelConfiguration.finishPreparation,
         {
@@ -108,7 +129,7 @@ export async function installModel(
             revision: pending.revision,
             descriptor,
             profileCatalog: NATIVE_PROFILE_CATALOG,
-            profiles: await profiles,
+            profiles: allProfiles.slice(offset),
         },
     );
     await admin.mutation(api.modelConfiguration.updateAvailability, {

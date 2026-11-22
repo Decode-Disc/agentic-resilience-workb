@@ -182,3 +182,31 @@ export const preparedMaterialOutcomeValidator = v.union(
     v.literal("partial"),
     v.literal("blocked"),
 );
+
+export const documentaryEffectiveUsesValidator = v.object({
+    documentary: v.number(),
+    attributed_argument_only: v.number(),
+    context_only: v.number(),
+    blocked: v.number(),
+});
+
+export const sourcesPreparationProgressValidator = v.object({
+    version: v.literal(1),
+    handoff: v.union(v.literal("pending"), v.literal("settled")),
+    captures: v.object({
+        full: v.number(),
+        partial: v.number(),
+        unknown: v.number(),
+        capturing: v.number(),
+        unavailable: v.number(),
+        notCaptured: v.number(),
+    }),
+    qualifications: v.object({
+        recordedSources: v.number(),
+        effectiveUses: documentaryEffectiveUsesValidator,
+    }),
+    readings: v.object({
+        visibleReferenceCount: v.number(),
+        referencesComplete: v.boolean(),
+    }),
+});

@@ -34,7 +34,12 @@ import schema from "@convex/schema";
 import { type Infer, v } from "convex/values";
 import { ValidationError, validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
-import { agentToolSchemas } from "./agentDefinition";
+import {
+    type AgentCompletion,
+    agentToolSchemas,
+    renderCompletionToolRefusal,
+    SUBMIT_COMPLETION_TOOL,
+} from "./agentDefinition";
 import {
     canAdoptRetainedResponse,
     executionError,
@@ -91,6 +96,16 @@ import {
 } from "./retainedText";
 
 /** Late diagnostic bytes may be retained, but never grant permission for more external work. */
+function resolveWorkingNotes(
+    existing: string,
+    addition?: string,
+): { ok: true; notes: string } | { ok: false } {
+    const notes = [existing, addition].filter(Boolean).join("\n\n");
+    return new TextEncoder().encode(notes).length > MAX_WORKING_NOTES_BYTES
+        ? { ok: false }
+        : { ok: true, notes };
+}
+
 export const appendVisibleOutput = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
@@ -1130,7 +1145,8 @@ export const finish = internalMutation({
             return {
                 kind: invocation.blockCode
                     ? ("blocked" as const)
-                    : args.response.kind === "complete"
+                    : args.response.kind === "complete" ||
+                        args.response.kind === "completion_submission"
                       ? ("completed" as const)
                       : ("waiting" as const),
                 requestIds: invocation.requestIds ?? [],
@@ -1191,21 +1207,45 @@ export const finish = internalMutation({
             });
             return { kind: "blocked" as const, requestIds: [], code };
         };
-        const correctCompletion = async (
-            feedback: Infer<typeof completionFeedbackValidator>,
-        ) => {
+        const definition = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
+        );
+        const rejectCompletionCorrection = async (code: string) => {
             await ctx.db.patch(mission._id, {
                 workingNotes: mission.workingNotes,
             });
+            return block(code, true);
+        };
+        const correctCompletion = async (
+            feedback: Infer<typeof completionFeedbackValidator>,
+        ) => {
             if (
                 new TextEncoder().encode(JSON.stringify(feedback)).length >
                 MAX_OPERATION_RESULT_BYTES
             )
-                return block("operation_result_capacity", true);
+                return rejectCompletionCorrection("operation_result_capacity");
             if (
                 !validate(completionFeedbackValidator, feedback, { db: ctx.db })
             )
-                return block("operation_contract_invalid", true);
+                return rejectCompletionCorrection("operation_contract_invalid");
+            if (definition.completionTransport === "native_tool") {
+                try {
+                    renderCompletionToolRefusal(
+                        "completion_correction_required",
+                        feedback,
+                    );
+                } catch (error) {
+                    if (
+                        executionFailureCode(error) !==
+                        "operation_result_capacity"
+                    )
+                        throw error;
+                    return rejectCompletionCorrection(
+                        "operation_result_capacity",
+                    );
+                }
+            }
             const { noProgressTurns, recoveryRead } =
                 invocationProgressSettlement(mission, invocation, [], true);
             await ctx.db.patch(invocation._id, {
@@ -1298,27 +1338,72 @@ export const finish = internalMutation({
             )
                 return block("provider_receipt_required", true);
         }
+        const isCompletion =
+            args.response.kind === "complete" ||
+            args.response.kind === "completion_submission";
+        if (args.response.kind === "completion_submission") {
+            if (definition.completionTransport !== "native_tool")
+                return block("invalid_output", true);
+            const structureError = invocationStructureError(
+                args.response,
+                mission.executionRuntime === "pi-durable",
+            );
+            if (structureError) return block(structureError, true);
+        }
         const awaitingOperations =
-            args.response.kind === "complete" &&
-            (await hasOutstandingOperations(ctx, mission._id));
-        const notes = [mission.workingNotes, args.response.workingNotes]
-            .filter(Boolean)
-            .join("\n\n");
-        if (new TextEncoder().encode(notes).length > MAX_WORKING_NOTES_BYTES)
-            return block("working_memory_capacity", true);
-        if (!awaitingOperations || mission.executionRuntime !== "pi-durable")
-            await ctx.db.patch(mission._id, { workingNotes: notes });
-        if (awaitingOperations) return block("pending_operations");
+            isCompletion && (await hasOutstandingOperations(ctx, mission._id));
         const snapshot: unknown = JSON.parse(
             await admittedInputJson(ctx, invocation),
         );
-        if (args.response.kind === "complete") {
-            const definition = getAgentDefinition(
-                mission.definitionId,
-                mission.definitionVersion,
-            );
+        if (
+            args.response.kind === "complete" ||
+            args.response.kind === "completion_submission"
+        ) {
+            if (args.response.kind === "complete") {
+                const resolvedNotes = resolveWorkingNotes(
+                    mission.workingNotes,
+                    args.response.workingNotes,
+                );
+                if (!resolvedNotes.ok)
+                    return block("working_memory_capacity", true);
+                const notes = resolvedNotes.notes;
+                if (
+                    !awaitingOperations ||
+                    mission.executionRuntime !== "pi-durable"
+                )
+                    await ctx.db.patch(mission._id, { workingNotes: notes });
+            }
+            if (awaitingOperations) return block("pending_operations");
+            let proposalValue: unknown;
+            if (args.response.kind === "completion_submission") {
+                if (args.response.call === null)
+                    return correctCompletion({
+                        code: "invalid_completion",
+                        issues: [
+                            {
+                                path: "",
+                                expected:
+                                    "Call submit_completion alone to submit the mission completion proposal.",
+                            },
+                        ],
+                    });
+                try {
+                    proposalValue = JSON.parse(args.response.call.inputJson);
+                } catch {
+                    return correctCompletion({
+                        code: "invalid_completion",
+                        issues: [
+                            {
+                                path: "",
+                                expected:
+                                    "A single valid JSON object matching the submit_completion schema.",
+                            },
+                        ],
+                    });
+                }
+            } else proposalValue = args.response;
             try {
-                validate(definition.completionValidator, args.response, {
+                validate(definition.completionValidator, proposalValue, {
                     db: ctx.db,
                     throw: true,
                 });
@@ -1330,16 +1415,30 @@ export const finish = internalMutation({
                         operationInputFeedback(
                             definition.completionValidator,
                             error,
-                            args.response,
+                            proposalValue,
                             ctx.db,
                         ),
                     ],
                 });
             }
-            const completion = await getAgentDefinition(
-                mission.definitionId,
-                mission.definitionVersion,
-            ).complete(ctx, mission, args.response, snapshot, invocation);
+            const proposal = proposalValue as AgentCompletion;
+            if (args.response.kind === "completion_submission") {
+                const resolvedNotes = resolveWorkingNotes(
+                    mission.workingNotes,
+                    proposal.workingNotes,
+                );
+                if (!resolvedNotes.ok)
+                    return block("working_memory_capacity", true);
+                const notes = resolvedNotes.notes;
+                await ctx.db.patch(mission._id, { workingNotes: notes });
+            }
+            const completion = await definition.complete(
+                ctx,
+                mission,
+                proposal,
+                snapshot,
+                invocation,
+            );
             if (completion.kind === "correct")
                 return correctCompletion(completion.feedback);
             if (completion.kind === "continue")
@@ -1379,20 +1478,42 @@ export const finish = internalMutation({
             });
             return { kind: "completed" as const, requestIds: [] };
         }
+        const resolvedNotes = resolveWorkingNotes(
+            mission.workingNotes,
+            args.response.workingNotes,
+        );
+        if (!resolvedNotes.ok) return block("working_memory_capacity", true);
+        const notes = resolvedNotes.notes;
+        await ctx.db.patch(mission._id, { workingNotes: notes });
         const structureError = invocationStructureError(
             args.response,
             mission.executionRuntime === "pi-durable",
         );
         if (structureError) return block(structureError, true);
         const requestIds = [];
-        const definition = getAgentDefinition(
-            mission.definitionId,
-            mission.definitionVersion,
-        );
         const modelOperations = agentToolSchemas(definition, snapshot);
         if (Object.keys(modelOperations).length === 0)
             return block("operation_not_allowed", true);
         for (const request of args.response.requests) {
+            if (
+                definition.completionTransport === "native_tool" &&
+                request.name === SUBMIT_COMPLETION_TOOL
+            ) {
+                requestIds.push(
+                    await persistOperationRequest(ctx, mission, {
+                        invocationId: invocation._id,
+                        actor: "agent",
+                        cause: request.callId,
+                        input: {
+                            kind: "invalid" as const,
+                            name: request.name,
+                            inputJson: request.inputJson,
+                            refusalCode: "completion_must_be_sole_call",
+                        },
+                    }),
+                );
+                continue;
+            }
             let decoded: unknown;
             try {
                 decoded = JSON.parse(request.inputJson);

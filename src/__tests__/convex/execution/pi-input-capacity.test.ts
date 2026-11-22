@@ -14,9 +14,9 @@ import {
 } from "@convex/execution/operationResults";
 import {
     PI_MISSION_EXTENSION,
-    PI_MISSION_INPUT,
     PI_STATE_SECTION,
     piInputProfileKey,
+    piMissionInput,
     piMissionMessages,
     piMissionStateText,
     preparePiModelPayload,
@@ -25,6 +25,7 @@ import {
 } from "@convex/integrations/modelInput";
 import {
     type ModelRoute,
+    mergeRetainedPiInputProfiles,
     nativeProfileCatalogueRevision,
     SIMULATION_MAX_OUTPUT_TOKENS,
     SIMULATION_MODEL_ROUTE,
@@ -181,7 +182,11 @@ async function minimalTranscript(
         const root = await harness.root(BACKGROUND_CONTEXT, { agent });
         await root.configure(agent, BACKGROUND_CONTEXT);
         const submitted = await root.submit(
-            { type: "input", content: PI_MISSION_INPUT, requestId: "profile" },
+            {
+                type: "input",
+                content: piMissionInput(definition.completionTransport),
+                requestId: "profile",
+            },
             BACKGROUND_CONTEXT,
         );
         await submitted.wait(BACKGROUND_CONTEXT);
@@ -425,6 +430,7 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
                     nativeRoute: route,
                     nativeConversation: canonical.nativeConversation,
                     contextRendering: canonical.contextRendering,
+                    completionTransport: canonical.completionTransport,
                 };
                 const overhead = await nativeBytes(
                     canonical,
@@ -462,6 +468,16 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
             }
         }
     }
+    const historicalBaseline = {
+        ...previousProfiles,
+        profiles:
+            previousProfiles.retainedProfiles ?? previousProfiles.profiles,
+    };
+    const mergedProfiles = mergeRetainedPiInputProfiles({
+        baseline: historicalBaseline,
+        installedVersions: versions,
+        measured: profiles,
+    });
     const expected = {
         profileCatalog: nativeProfileCatalogueRevision(
             previousProfiles,
@@ -471,12 +487,29 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
             "UPDATE_PI_INPUT_PROFILES=1 pnpm exec vitest run src/__tests__/convex/execution/pi-input-capacity.test.ts --maxWorkers=1",
         versions,
         profiles,
+        retainedProfiles: Object.fromEntries(
+            Object.entries(mergedProfiles).filter(
+                ([key]) => profiles[key] === undefined,
+            ),
+        ),
     };
     if (process.env.UPDATE_PI_INPUT_PROFILES === "1") {
         writeFileSync(path, `${JSON.stringify(expected, null, 4)}\n`);
+        writeFileSync(
+            "convex/integrations/piInputProfileCatalog.json",
+            `${JSON.stringify({ profileCatalog: expected.profileCatalog, generatedBy: expected.generatedBy }, null, 4)}\n`,
+        );
         Object.assign(inputProfilesArtifact, expected);
     }
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(expected);
+    expect(
+        JSON.parse(
+            readFileSync(
+                "convex/integrations/piInputProfileCatalog.json",
+                "utf8",
+            ),
+        ).profileCatalog,
+    ).toBe(expected.profileCatalog);
     const { agentInputByteLength } = await import(
         "@convex/integrations/modelInput"
     );
@@ -640,4 +673,138 @@ test.each([
     expect(preparePiSimulationRequest([])).toMatchObject({
         effectiveMaxOutputTokens: 6144,
     });
+});
+
+test("baseline profile carry-forward retains unchanged historical keys only under the exact SDK tuple and rejects mismatches", async () => {
+    const { agentInputByteLength } = await import(
+        "@convex/integrations/modelInput"
+    );
+    const versions = {
+        "pi-ai": "1.4.0",
+        "pi-durable": "1.4.0",
+        chord: "1.4.0",
+    };
+    const baseline = {
+        versions,
+        profiles: { "historical-unchanged-key": 12345 },
+    };
+    const merged = mergeRetainedPiInputProfiles({
+        baseline,
+        installedVersions: versions,
+        measured: { "new-schema-key": 12400 },
+    });
+    expect(merged).toEqual({
+        "historical-unchanged-key": 12345,
+        "new-schema-key": 12400,
+    });
+    expect(() =>
+        mergeRetainedPiInputProfiles({
+            baseline,
+            installedVersions: { ...versions, "pi-durable": "1.4.1" },
+            measured: { "new-schema-key": 12400 },
+        }),
+    ).toThrow(/model_input_profile_sdk_mismatch/);
+    expect(() =>
+        mergeRetainedPiInputProfiles({
+            baseline,
+            installedVersions: versions,
+            measured: { "historical-unchanged-key": 12346 },
+        }),
+    ).toThrow(/model_input_profile_conflict/);
+
+    // Consuming lookup boundary refuses an unmeasured changed schema instead of reusing an old key
+    const definition = getAgentDefinition("sources_v1", 7);
+    const operations = agentToolSchemas(definition);
+    const consultRunState = operations.consult_run_state;
+    assert(consultRunState);
+    const changedOperations = {
+        ...operations,
+        consult_run_state: {
+            ...consultRunState,
+            resultContractKey: "unmeasured-changed-schema-key",
+        },
+    };
+    await expect(
+        agentInputByteLength({
+            instructions: definition.instructions,
+            prompt: "{}",
+            operations: changedOperations,
+            definitionVersion: definition.version,
+            nativeRoute: SIMULATION_MODEL_ROUTE,
+            contextRendering: definition.contextRendering,
+        }),
+    ).rejects.toThrow("model_input_profile_unavailable");
+});
+
+test("V8 routing imports only catalogue metadata", () => {
+    const routing = readFileSync("convex/integrations/modelRouting.ts", "utf8");
+    expect(routing).toContain("./piInputProfileCatalog.json");
+    expect(routing).not.toContain("./piInputProfiles.json");
+});
+
+test("offline input sizing prefers active profiles and retains historical calibration fallback", async () => {
+    const { agentInputByteLength } = await import(
+        "@convex/integrations/modelInput"
+    );
+    const input = {
+        instructions: "offline-lookup-fixture",
+        operations: {},
+        prompt: "é",
+        nativeRoute: {
+            ...nativePiFixtureRoute,
+            model: "fixture/offline-lookup",
+        },
+    };
+    const key = await piInputProfileKey(input);
+    const active: Record<string, number> = inputProfilesArtifact.profiles;
+    const retained: Record<string, number> =
+        inputProfilesArtifact.retainedProfiles;
+    const oldActive = active[key],
+        oldRetained = retained[key];
+    try {
+        // Only the external calibration artifact is supplied; the consuming module stays real.
+        delete active[key];
+        retained[key] = 653;
+        expect(await agentInputByteLength(input)).toBe(655);
+        active[key] = 321;
+        expect(await agentInputByteLength(input)).toBe(323);
+        delete active[key];
+        delete retained[key];
+        await expect(agentInputByteLength(input)).rejects.toThrow(
+            "model_input_profile_unavailable",
+        );
+    } finally {
+        if (oldActive === undefined) delete active[key];
+        else active[key] = oldActive;
+        if (oldRetained === undefined) delete retained[key];
+        else retained[key] = oldRetained;
+    }
+});
+
+test("native analyst-input sizing subtracts the selected completion transport envelope", async () => {
+    const { agentInputByteLength } = await import(
+        "@convex/integrations/modelInput"
+    );
+    const prompt = JSON.stringify({
+        conversationInstructions: { messages: [{ text: "évidence" }] },
+    });
+    const input = {
+        instructions: "transport-envelope-fixture",
+        operations: {},
+        prompt,
+        nativeConversation: true,
+        completionTransport: "native_tool" as const,
+        nativeRoute: {
+            ...nativePiFixtureRoute,
+            profileKey: "fixture:transport",
+        },
+    };
+    const bytes = (value: string) => new TextEncoder().encode(value).length;
+    const expected =
+        1000 +
+        bytes(JSON.stringify(prompt)) -
+        2 +
+        bytes(JSON.stringify(requiredAnalystInput(prompt))) -
+        bytes(JSON.stringify(piMissionInput("native_tool")));
+    expect(await agentInputByteLength(input, async () => 1000)).toBe(expected);
 });

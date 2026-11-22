@@ -883,3 +883,464 @@ test("unqualified work retains storage headroom for unfinished explanations thro
         pauseReason: "execution_interrupted",
     });
 });
+
+test("combined real-owner end-to-end: Sources 8 prepares restricted material, Workbench observes pre-handoff progress, single-page targeted >45 KiB history, mixed refusal + sole completion + crash-recovered native settlement", async () => {
+    const { readResearchState } = await import("@convex/domain/researchState");
+    const { recordMissionEvent } = await import("@convex/execution/authority");
+    const { runPiMission } = await import("@convex/integrations/piMission");
+    const { nodeActionGenerationDeadline } = await import(
+        "@convex/resourcePolicy"
+    );
+    const { getFunctionName } = await import("convex/server");
+    const { nativePiFixtureRoute } = await import(
+        "@/__tests__/setup/pi-native"
+    );
+
+    vi.useFakeTimers();
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
+    const f = await seedObservedSources();
+    await installModel(f.t, nativePiFixtureRoute, "sources");
+
+    // Start a fresh default Sources mission directly through missions.start and confirm it pins v8.
+    await f.t.run(async (ctx) => {
+        const framingId = await ctx.db.insert("framingRevisions", {
+            runId: f.runId,
+            revision: 1,
+            content: { scope: "Workflow", questions: [] },
+            requestKey: "combined-phase5-framing",
+            contentHash: "fixture",
+            origin: "analyst",
+            createdAt: 1,
+        });
+        await ctx.db.patch(f.runId, {
+            startMode: "framed",
+            agentExecutionVersion: 3,
+            fixedFramingRevisionId: framingId,
+            executionStatus: "running",
+        });
+        await ctx.db.delete(f.missionId);
+    });
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.runId,
+        expectedGeneration: 4,
+        definitionId: "sources_v1",
+        scope: { kind: "sources_v1", preparationId: f.preparationId },
+        requestKey: "combined-phase5-sources-v8",
+    });
+    const initialMission = await f.t.run((ctx) => ctx.db.get(missionId));
+    expect(initialMission?.definitionVersion).toBe(8);
+    // Perform an admitted saved-material reading on the Sources 8 mission itself.
+    const readReqId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId,
+            expectedGeneration: 4,
+            cause: "combined-read",
+            input: {
+                kind: "read_in_context",
+                reference: documentaryReference({
+                    issuer: "capture",
+                    captureId: f.captureId,
+                }),
+            },
+        },
+    );
+    expect(
+        (
+            await f.t.action(internal.execution.operations.dispatch, {
+                requestId: readReqId,
+                expectedGeneration: 4,
+            })
+        ).kind,
+    ).toBe("success");
+
+    // 1. Sources prepares useful restricted material (attributed_argument_only) via documentary control.
+    examiner.mockImplementation(async (input, route) => ({
+        status: "succeeded",
+        model: route.model,
+        latencyMs: 1,
+        dispatchOutcome: "response_received",
+        output: {
+            coherence: true,
+            limitations: ["Management attribution only."],
+            findings: input.contributions.map((c: { id: string }) => ({
+                contributionId: c.id,
+                conclusion: "supported",
+                permittedUse: "attributed_argument_only",
+                diagnostic: "Retain only as an attributed management argument.",
+            })),
+        },
+    }));
+    const qualReqId = await f.t.mutation(
+        internal.execution.operations.enqueueNative,
+        {
+            runId: f.runId,
+            expectedGeneration: 4,
+            cause: "combined-qualify",
+            input: {
+                kind: "submit_documentary_qualification",
+                sourceId: f.sourceId,
+                captureId: f.captureId,
+                expectedTaskId: null,
+                changes: [
+                    {
+                        contribution: {
+                            needIds: ["common-context"],
+                            kind: "attributed_argument",
+                            statement:
+                                "Management states that architecture resilience underpins renewals.",
+                            attribution: "Management",
+                            period: "FY2025",
+                            modality: "reported",
+                            evidence: [
+                                {
+                                    readRequestId: f.nativeReadRequestId,
+                                    passageOrder: f.passage.order,
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        },
+    );
+    const qualOutcome = await dispatchSourcesOperation(f.t, {
+        requestId: qualReqId,
+        expectedGeneration: 4,
+    });
+    expect(qualOutcome.kind).toBe("success");
+
+    // 2. Before handoff, Workbench / readResearchState observes current progress and restrictions honestly.
+    const preHandoffState = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        return readResearchState(ctx, run);
+    });
+    expect(preHandoffState.sources?.retainedDocuments).toEqual([]);
+    expect(preHandoffState.sources?.progress).toMatchObject({
+        version: 1,
+        handoff: "pending",
+        captures: { full: 1 },
+        qualifications: {
+            recordedSources: 1,
+            effectiveUses: {
+                documentary: 0,
+                attributed_argument_only: 1,
+                context_only: 0,
+                blocked: 0,
+            },
+        },
+    });
+    expect(
+        preHandoffState.sources?.progress?.readings.visibleReferenceCount,
+    ).toBeGreaterThanOrEqual(1);
+    expect(preHandoffState.actions.resume).toMatchObject({
+        applicable: false,
+        reason: "action_not_applicable",
+    });
+
+    // 3. Seed a long (>45 KiB) targeted historical observation on the mission.
+    const longMarker = "TARGETED-LONG-OBSERVATION-PAYLOAD-";
+    const longBody = `${longMarker}${"Q".repeat(46_500)}-END`;
+    const longEventId = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(missionId);
+        assert(mission);
+        return recordMissionEvent(ctx, mission, {
+            kind: "retained_evidence",
+            cause: "combined-long-history",
+            historySource: "material",
+            observation: { text: longBody },
+        });
+    });
+
+    // 4. Drive real Sources 8 through Pi:
+    //    Turn 1: mixed round (premature submit_completion + targeted consult_mission_state on longEventId).
+    //    Turn 2: sole submit_completion passing domain checks, then injected crash before tool acknowledgement.
+    let turn = 0;
+    const seenToolMessages: { name?: string; content: string }[] = [];
+    const network = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+            const body = JSON.parse(String(init?.body ?? "{}"));
+            for (const msg of body.messages ?? [])
+                if (msg.role === "tool" && typeof msg.content === "string")
+                    seenToolMessages.push({ content: msg.content });
+            turn++;
+            if (turn === 1) {
+                return new Response(
+                    [
+                        `data: ${JSON.stringify({
+                            id: "combined-turn-1",
+                            choices: [
+                                {
+                                    index: 0,
+                                    delta: {
+                                        role: "assistant",
+                                        tool_calls: [
+                                            {
+                                                index: 0,
+                                                id: "mixed_complete_1",
+                                                type: "function",
+                                                function: {
+                                                    name: "submit_completion",
+                                                    arguments: JSON.stringify({
+                                                        kind: "complete",
+                                                        needs: [
+                                                            {
+                                                                needId: "common-context",
+                                                                unfinished: [],
+                                                            },
+                                                        ],
+                                                    }),
+                                                },
+                                            },
+                                            {
+                                                index: 1,
+                                                id: "read_long_history_1",
+                                                type: "function",
+                                                function: {
+                                                    name: "consult_mission_state",
+                                                    arguments: JSON.stringify({
+                                                        reference: longEventId,
+                                                    }),
+                                                },
+                                            },
+                                        ],
+                                    },
+                                    finish_reason: null,
+                                },
+                            ],
+                        })}`,
+                        `data: ${JSON.stringify({
+                            id: "combined-turn-1",
+                            choices: [
+                                {
+                                    index: 0,
+                                    delta: {},
+                                    finish_reason: "tool_calls",
+                                },
+                            ],
+                            usage: { prompt_tokens: 20, completion_tokens: 10 },
+                        })}`,
+                        "data: [DONE]",
+                        "",
+                    ].join("\n\n"),
+                    { headers: { "content-type": "text/event-stream" } },
+                );
+            }
+            return new Response(
+                [
+                    `data: ${JSON.stringify({
+                        id: "combined-turn-2",
+                        choices: [
+                            {
+                                index: 0,
+                                delta: {
+                                    role: "assistant",
+                                    content:
+                                        "Completed inspection of long history and submitting final handoff.",
+                                    tool_calls: [
+                                        {
+                                            index: 0,
+                                            id: "sole_complete_2",
+                                            type: "function",
+                                            function: {
+                                                name: "submit_completion",
+                                                arguments: JSON.stringify({
+                                                    kind: "complete",
+                                                    needs: [
+                                                        {
+                                                            needId: "common-context",
+                                                            unfinished: [],
+                                                        },
+                                                    ],
+                                                }),
+                                            },
+                                        },
+                                    ],
+                                },
+                                finish_reason: null,
+                            },
+                        ],
+                    })}`,
+                    `data: ${JSON.stringify({
+                        id: "combined-turn-2",
+                        choices: [
+                            {
+                                index: 0,
+                                delta: {},
+                                finish_reason: "tool_calls",
+                            },
+                        ],
+                        usage: { prompt_tokens: 30, completion_tokens: 12 },
+                    })}`,
+                    "data: [DONE]",
+                    "",
+                ].join("\n\n"),
+                { headers: { "content-type": "text/event-stream" } },
+            );
+        },
+    );
+    vi.stubGlobal("fetch", network);
+
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+        simulation: false,
+    });
+    const terminalAcceptedName = getFunctionName(
+        internal.execution.piControl.terminalCompletionAccepted,
+    );
+    let injectedCrash = false;
+    const writer1 = "combined-writer-1";
+    await f.t.mutation(internal.execution.piStore.claim, {
+        missionId,
+        expectedGeneration: 4,
+        writer: writer1,
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(missionId, { piActiveWriter: writer1 }),
+    );
+    await expect(
+        f.t.action(async (ctx) => {
+            const crashingCtx: typeof ctx = {
+                ...ctx,
+                runQuery: async (ref, ...rest) => {
+                    if (
+                        turn === 2 &&
+                        getFunctionName(ref) === terminalAcceptedName &&
+                        !injectedCrash
+                    ) {
+                        injectedCrash = true;
+                        throw new Error("combined_injected_settlement_crash");
+                    }
+                    return ctx.runQuery(ref, ...rest);
+                },
+            };
+            await runPiMission(
+                crashingCtx,
+                { missionId, expectedGeneration: 4 },
+                writer1,
+                nodeActionGenerationDeadline(Date.now()),
+            );
+        }),
+    ).rejects.toThrow("combined_injected_settlement_crash");
+    expect(injectedCrash).toBe(true);
+    expect(network).toHaveBeenCalledTimes(2);
+
+    // Verify Turn 2 saw the COMPLETE >45 KiB targeted history in ONE page AND the mixed completion refusal!
+    const historyToolMsg = seenToolMessages.find((m) =>
+        m.content.includes(longMarker),
+    );
+    assert(historyToolMsg);
+    const parsedHistoryTool = JSON.parse(historyToolMsg.content);
+    expect(parsedHistoryTool.kind).toBe("success");
+    expect(parsedHistoryTool.value.history.continueCursor).toBeNull();
+    expect(parsedHistoryTool.value.history.entries).toHaveLength(1);
+    expect(parsedHistoryTool.value.history.entries[0].content).toContain(
+        longBody,
+    );
+    expect(
+        seenToolMessages.some((m) =>
+            m.content.includes('"code":"completion_must_be_sole_call"'),
+        ),
+    ).toBe(true);
+
+    // 5. Reopen a recovery worker with provider network forbidden -> settles native tail without redispatch.
+    vi.advanceTimersByTime(91_000);
+    const forbidNetwork = vi.fn(() => {
+        throw new Error("provider_redispatch_forbidden");
+    });
+    vi.stubGlobal("fetch", forbidNetwork);
+    const writer2 = "combined-writer-2";
+    await f.t.mutation(internal.execution.piStore.claim, {
+        missionId,
+        expectedGeneration: 4,
+        writer: writer2,
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(missionId, { piActiveWriter: writer2 }),
+    );
+    await f.t.action((ctx) =>
+        runPiMission(
+            ctx,
+            { missionId, expectedGeneration: 4 },
+            writer2,
+            nodeActionGenerationDeadline(Date.now()),
+        ),
+    );
+    expect(forbidNetwork).not.toHaveBeenCalled();
+
+    // 6. Verify final membership, preserved restrictions, operation history, provider accounting & transcript.
+    const postHandoff = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        const session = await ctx.db
+            .query("piSessions")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .unique();
+        return {
+            research: await readResearchState(ctx, run),
+            mission: await ctx.db.get(missionId),
+            session,
+            requests: await ctx.db
+                .query("agentOperationRequests")
+                .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+                .collect(),
+            calls: await ctx.db.query("providerCalls").collect(),
+            commits: session
+                ? await ctx.db
+                      .query("piCommits")
+                      .withIndex("by_session_and_sequence", (q) =>
+                          q.eq("sessionId", session._id),
+                      )
+                      .collect()
+                : [],
+        };
+    });
+    expect(postHandoff.mission?.status).toBe("completed");
+    expect(postHandoff.session?.settledSequence).toBe(
+        postHandoff.session?.sequence,
+    );
+    expect(postHandoff.research.sources?.progress).toMatchObject({
+        version: 1,
+        handoff: "settled",
+        qualifications: {
+            recordedSources: 1,
+            effectiveUses: {
+                documentary: 0,
+                attributed_argument_only: 1,
+                context_only: 0,
+                blocked: 0,
+            },
+        },
+    });
+    expect(postHandoff.research.sources?.retainedDocuments).toHaveLength(1);
+    expect(postHandoff.research.sources?.retainedDocuments[0]?.sourceId).toBe(
+        f.sourceId,
+    );
+    // Exact operation history: 1 targeted history read (1 page) + 1 refused mixed submit_completion.
+    const missionHistoryReads = postHandoff.requests.filter(
+        (r) => r.input.kind === "consult_mission_state",
+    );
+    expect(missionHistoryReads).toHaveLength(1);
+    expect(
+        postHandoff.requests.filter(
+            (r) =>
+                r.input.kind === "invalid" &&
+                r.input.name === "submit_completion" &&
+                r.outcome?.kind === "refused" &&
+                r.outcome.code === "completion_must_be_sole_call",
+        ),
+    ).toHaveLength(1);
+    // Provider accounting: 2 model reasoning calls (both succeeded, 0 redispatch on crash recovery).
+    const modelCalls = postHandoff.calls.filter(
+        (c) => c.operation === "agent_reasoning",
+    );
+    expect(modelCalls).toHaveLength(2);
+    expect(modelCalls.every((c) => c.status === "succeeded")).toBe(true);
+    // Native transcript contains both the intact >45 KiB observation and the accepted completion acknowledgement.
+    const transcriptText = postHandoff.commits.map((c) => c.payload).join("\n");
+    expect(transcriptText).toContain(longMarker);
+    expect(transcriptText).toContain("sole_complete_2");
+    expect(transcriptText).toContain('{\\"kind\\":\\"accepted\\"}');
+}, 30000);

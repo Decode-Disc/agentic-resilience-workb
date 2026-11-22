@@ -7,7 +7,7 @@ import { useState } from "react";
 import { ApprovalCard } from "@/components/chat/approval-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-    APPROVAL_STALE_COPY,
+    approvalDecisionFeedback,
     approvalBlockCopy,
     approvalCardPresentation,
 } from "@/lib/presentation/approvals";
@@ -84,19 +84,7 @@ export function ConnectedApprovalCard({
             await decide({ requestId, choice });
         } catch (caught) {
             const code = refusalCode(caught);
-            if (
-                code === "approval_already_decided" ||
-                code === "stale_execution" ||
-                code === "human_prerequisite_required"
-            ) {
-                setFeedback(APPROVAL_STALE_COPY);
-            } else if (code) {
-                setFeedback(approvalBlockCopy(code));
-            } else {
-                setFeedback(
-                    "That decision could not be applied. Your saved dossier is unchanged. Try again.",
-                );
-            }
+            setFeedback(approvalDecisionFeedback(code ?? null));
         } finally {
             setPending(false);
         }

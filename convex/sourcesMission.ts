@@ -85,6 +85,7 @@ import {
     suspendInterruptedResearch,
 } from "@convex/execution/researchControl";
 import { requireQualificationResultDeadline } from "@convex/providerCalls";
+import { transitionResearchRun } from "@convex/researchRuns";
 import {
     SOURCES_HANDOFF_READ_CAPACITY,
     SOURCES_MAX_EVIDENCE_REFERENCES,
@@ -1163,7 +1164,7 @@ export const finish = internalMutation({
             preparation.settlementRequestedAt === undefined &&
             (await sourcesContinuationAvailable(ctx, run, preparation))
         ) {
-            if (await suspendInterruptedResearch(ctx, mission))
+            if (await suspendInterruptedResearch(ctx, mission, reads))
                 return { kind: "waiting" };
             throw executionError("sources_mission_incomplete");
         }
@@ -1223,13 +1224,17 @@ export const finish = internalMutation({
             status: material.outcome,
             completedAt: Date.now(),
         });
-        await ctx.runMutation(internal.researchRuns.transition, {
-            runId: run._id,
-            expectedExecutionGeneration: args.expectedGeneration,
-            lifecycleState: "sources_prepared",
-            executionStatus: "idle",
-            stepKey: "sources_prepared",
-        });
+        await transitionResearchRun(
+            ctx,
+            {
+                runId: run._id,
+                expectedExecutionGeneration: args.expectedGeneration,
+                lifecycleState: "sources_prepared",
+                executionStatus: "idle",
+                stepKey: "sources_prepared",
+            },
+            reads,
+        );
         await recordContextObservation(ctx, run._id, {
             key: `sources-handoff:${preparation._id}:${material.needsRevision}`,
             topic: "documentary",

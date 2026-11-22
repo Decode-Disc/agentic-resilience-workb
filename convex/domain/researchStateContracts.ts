@@ -7,6 +7,7 @@ import {
     researchRunLifecycleValidator,
     runPauseReasonValidator,
     sourcesPhaseValidator,
+    sourcesPreparationProgressValidator,
 } from "./validators";
 
 const action = v.object({
@@ -72,6 +73,7 @@ export const researchStateValidator = v.object({
                 ),
                 description: v.string(),
             }),
+            progress: v.optional(sourcesPreparationProgressValidator),
         }),
     ),
     nextCapability: v.union(v.literal("investigation_unavailable"), v.null()),

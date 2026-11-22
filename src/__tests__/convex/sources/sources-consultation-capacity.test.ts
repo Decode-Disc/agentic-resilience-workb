@@ -198,6 +198,7 @@ test.each([
         definitionVersion: definition.version,
         nativeRoute: SIMULATION_MODEL_ROUTE,
         contextRendering: definition.contextRendering,
+        completionTransport: definition.completionTransport,
     });
     expect(requestBytes).toBeGreaterThan(128 * 1024);
     expect(seeded.distinctPassages).toBe(count * 90);

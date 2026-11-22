@@ -84,6 +84,7 @@ function recoverableWorkbenchRefusal(
             "source_request_target_required",
             "version_conflict",
             "human_prerequisite_required",
+            "action_not_applicable",
         ].includes(code)
         ? {
               kind: "refused",

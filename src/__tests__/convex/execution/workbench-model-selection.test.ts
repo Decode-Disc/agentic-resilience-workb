@@ -276,12 +276,33 @@ test("a refreshed model cannot strand a response when the saved effort is no lon
     const { prepareNativeProfiles } = await import(
         "@convex/integrations/piModelProfiles"
     );
+    const profiles = await prepareNativeProfiles(route, descriptor);
+    const { NATIVE_PROFILE_BATCH_SIZE } = await import(
+        "@convex/resourcePolicy"
+    );
+    let offset = 0;
+    for (
+        ;
+        offset + NATIVE_PROFILE_BATCH_SIZE < profiles.length;
+        offset += NATIVE_PROFILE_BATCH_SIZE
+    ) {
+        await admin.mutation(
+            internal.modelConfiguration.retainNativeProfileBatch,
+            {
+                profileCatalog: NATIVE_PROFILE_CATALOG,
+                profiles: profiles.slice(
+                    offset,
+                    offset + NATIVE_PROFILE_BATCH_SIZE,
+                ),
+            },
+        );
+    }
     await admin.mutation(internal.modelConfiguration.finishPreparation, {
         catalogId,
         revision: pending.revision,
         descriptor,
         profileCatalog: NATIVE_PROFILE_CATALOG,
-        profiles: await prepareNativeProfiles(route, descriptor),
+        profiles: profiles.slice(offset),
     });
     await admin.mutation(api.modelConfiguration.updateAvailability, {
         catalogId,

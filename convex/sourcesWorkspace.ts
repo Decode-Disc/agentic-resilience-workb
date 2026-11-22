@@ -294,7 +294,7 @@ async function sourceRows(
     const qualifications = latestSourceQualifications(controlled);
     return Promise.all(
         records.map(async (source) => {
-            const capture = await sourceCaptureState(ctx, source._id);
+            const capture = await reads.captureState(source._id);
             const qualification = qualifications.get(source._id);
             const decision =
                 qualification?.sourceDecision ??
@@ -360,9 +360,14 @@ export const overview = query({
     handler: async (ctx, args) => {
         const context = await missionContext(ctx, args.runId);
         if (!context) return null;
-        const { run, preparation, data, controlled } = context;
-        const research = await readResearchState(ctx, run);
+        const { run, preparation, data, reads, controlled } = context;
         const mission = await readSourcesMission(ctx, run);
+        const research = await readResearchState(ctx, run, {
+            preparation,
+            mission,
+            reads,
+            controlled,
+        });
         const phase = sourcesPreparationPhase(run, preparation, mission);
         // Needs without a handed-off result are on hold only while research can still resume.
         const unsettledOutcome =
@@ -379,7 +384,7 @@ export const overview = query({
             (qualification) => qualification.contributions,
         );
         const result = data.result;
-        const coverage = await readSourcesCoverage(ctx, preparation);
+        const coverage = await readSourcesCoverage(ctx, preparation, reads);
         const retainedStates = (result?.documents ?? [])
             .map((document) => {
                 const qualification = controlled.find(

@@ -477,7 +477,7 @@ test("an unavailable action creates no request", async () => {
     assert(outcome.kind === "success");
     expect(JSON.parse(outcome.valueJson)).toEqual({
         status: "unavailable",
-        reason: "human_prerequisite_required",
+        reason: "action_not_applicable",
     });
 
     const facts = await t.run(async (ctx) => {

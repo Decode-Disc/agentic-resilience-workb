@@ -66,14 +66,16 @@ test("invalid_inner_cursor_is_a_recorded_refusal", async () => {
 });
 
 test("issued canonical conversation fragments preserve Unicode boundaries and cannot be re-offset", async () => {
-    const text = `${"a".repeat(8191)}😀${"b".repeat(32)}`;
-    const f = await seedHistoryMission(text);
-    const first = await dispatchHistory(f, { kind: "consult_conversation" });
+    // Raw message stays under the 64 KiB submission cap while JSON escaping pushes its serialized page across 64 KiB right in the emoji run.
+    const text = `${'"'.repeat(32_550)}${"😀".repeat(120)}${"b".repeat(32)}`;
+    const f2 = await seedHistoryMission(text);
+    const first = await dispatchHistory(f2, { kind: "consult_conversation" });
     assert(first.outcome.kind === "success");
     const page = JSON.parse(first.outcome.valueJson);
     expect(page.continueCursor).toMatch(/^history:/);
     expect(page.entries[0].content).not.toMatch(/[\uD800-\uDBFF]$/);
-    const second = await dispatchHistory(f, {
+    expect(page.entries[0].content.length).toBeLessThan(text.length);
+    const second = await dispatchHistory(f2, {
         kind: "consult_conversation",
         cursor: page.continueCursor,
     });
@@ -81,9 +83,9 @@ test("issued canonical conversation fragments preserve Unicode boundaries and ca
     const next = JSON.parse(second.outcome.valueJson);
     expect(next.entries[0].content).not.toMatch(/^[\uDC00-\uDFFF]/);
     expect(page.entries[0].content + next.entries[0].content).toBe(text);
-    const before = (await f.t.run((ctx) => ctx.db.get(f.missionId)))
+    const before = (await f2.t.run((ctx) => ctx.db.get(f2.missionId)))
         ?.progressKeys;
-    const rejected = await dispatchHistory(f, {
+    const rejected = await dispatchHistory(f2, {
         kind: "consult_conversation",
         cursor: JSON.stringify({ cursor: null, offset: 1 }),
     });
@@ -92,7 +94,7 @@ test("issued canonical conversation fragments preserve Unicode boundaries and ca
         code: "history_cursor_invalid",
     });
     expect(
-        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+        (await f2.t.run((ctx) => ctx.db.get(f2.missionId)))?.progressKeys,
     ).toEqual(before);
 });
 
@@ -701,4 +703,99 @@ test.each([
         cursor = page.continueCursor ?? undefined;
     } while (cursor);
     expect(reconstructed).toBe(text);
+});
+
+test("conversation history fills 64 KiB pages without the 8,192-unit split and preserves old 8,192-width cursors", async () => {
+    const longText = `Line1\n${"🧭".repeat(4_000)}${"c".repeat(42_000)}\nEnd`;
+    const f = await seedHistoryMission(longText);
+    const first = await dispatchHistory(f, { kind: "consult_conversation" });
+    assert(first.outcome.kind === "success", JSON.stringify(first.outcome));
+    const parsed = JSON.parse(first.outcome.valueJson) as {
+        entries: {
+            messageId: string;
+            offset: number;
+            totalCharacters: number;
+            content: string;
+        }[];
+        continueCursor: string | null;
+    };
+    // Fits the entire >50 KiB user message in a single page within 64 KiB
+    expect(parsed.entries).toHaveLength(1);
+    expect(parsed.entries[0]?.content).toBe(longText);
+    expect(Buffer.byteLength(first.outcome.valueJson)).toBeGreaterThan(
+        50 * 1024,
+    );
+    expect(Buffer.byteLength(first.outcome.valueJson)).toBeLessThanOrEqual(
+        64 * 1024,
+    );
+    // Second page returns the assistant reply and ends cleanly
+    assert(parsed.continueCursor);
+    const second = await dispatchHistory(f, {
+        kind: "consult_conversation",
+        cursor: parsed.continueCursor,
+    });
+    assert(second.outcome.kind === "success");
+    const secondParsed = JSON.parse(second.outcome.valueJson);
+    expect(secondParsed.entries[0]?.role).toBe("assistant");
+    expect(secondParsed.continueCursor).toBeNull();
+
+    // Old 8,192-width conversation cursor resumes cleanly under new 64 KiB sizing
+    const legacyCursorId = await f.t.run(async (ctx) => {
+        const req1 = await ctx.db.get(first.requestId);
+        assert(req1?.historyRead && req1.outcome?.kind === "success");
+        const firstEntry = parsed.entries[0];
+        assert(firstEntry);
+        const legacyPrefix = longText.slice(0, 8192);
+        const id = await ctx.db.insert("agentOperationRequests", {
+            runId: f.runId,
+            missionId: f.missionId,
+            logicalKey: "legacy-conv-8192",
+            operationVersion: 2,
+            actor: "agent",
+            cause: "legacy-conv",
+            expectedGeneration: 1,
+            instructionVersion: req1.instructionVersion,
+            input: { kind: "consult_conversation" },
+            pin: req1.pin,
+            status: "completed",
+            adoptedAt: 200,
+            createdAt: 200,
+            completedAt: 200,
+        });
+        await ctx.db.patch(id, {
+            outcome: {
+                kind: "success",
+                valueJson: JSON.stringify({
+                    entries: [
+                        {
+                            ...firstEntry,
+                            offset: 0,
+                            totalCharacters: longText.length,
+                            content: legacyPrefix,
+                        },
+                    ],
+                    continueCursor: `history:${id}`,
+                }),
+            },
+            historyRead: {
+                ...req1.historyRead,
+                next: {
+                    source: "conversation",
+                    cursor: null,
+                    offset: legacyPrefix.length,
+                },
+            },
+        });
+        return id;
+    });
+    const resumed = await dispatchHistory(f, {
+        kind: "consult_conversation",
+        cursor: `history:${legacyCursorId}`,
+    });
+    assert(resumed.outcome.kind === "success", JSON.stringify(resumed.outcome));
+    const resumedParsed = JSON.parse(resumed.outcome.valueJson);
+    expect(resumedParsed.entries[0]?.offset).toBe(8192);
+    expect(longText.slice(0, 8192) + resumedParsed.entries[0]?.content).toBe(
+        longText,
+    );
 });

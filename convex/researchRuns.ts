@@ -4,13 +4,14 @@ import {
     paginationOptsValidator,
     paginationResultValidator,
 } from "convex/server";
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import { stream } from "convex-helpers/server/stream";
-import type { DataModel, Doc } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import type { DataModel, Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
+import type { SourceReviewReads } from "./domain/sourceReviewReads";
 import {
     readSourcesMission,
     settledSourcesPhase,
@@ -146,111 +147,129 @@ export const failEvidenceExtraction = internalMutation({
     },
 });
 
-export const transition = internalMutation({
+const transitionArgs = {
+    runId: v.id("researchRuns"),
+    expectedExecutionGeneration: v.number(),
+    lifecycleState: researchRunLifecycleValidator,
+    executionStatus: executionStatusValidator,
+    stepKey: workflowStepKeyValidator,
+};
+
+export async function transitionResearchRun(
+    ctx: MutationCtx,
     args: {
-        runId: v.id("researchRuns"),
-        expectedExecutionGeneration: v.number(),
-        lifecycleState: researchRunLifecycleValidator,
-        executionStatus: executionStatusValidator,
-        stepKey: workflowStepKeyValidator,
+        runId: Id<"researchRuns">;
+        expectedExecutionGeneration: number;
+        lifecycleState: Infer<typeof researchRunLifecycleValidator>;
+        executionStatus: Infer<typeof executionStatusValidator>;
+        stepKey: Infer<typeof workflowStepKeyValidator>;
     },
-    returns: v.null(),
-    handler: async (ctx, args) => {
-        const run = await ctx.db.get(args.runId);
-        if (!run) {
-            throw new Error("Research run not found");
+    reads?: SourceReviewReads,
+): Promise<null> {
+    const run = await ctx.db.get(args.runId);
+    if (!run) {
+        throw new Error("Research run not found");
+    }
+    if (run.executionGeneration !== args.expectedExecutionGeneration) {
+        throw new Error("Stale research execution generation");
+    }
+    if (
+        run.executionStatus === "cancelled" ||
+        run.executionStatus === "failed"
+    ) {
+        throw new Error("Research run execution is terminal");
+    }
+    assertLifecycleTransition(
+        run.lifecycleState,
+        args.lifecycleState,
+        args.executionStatus,
+    );
+
+    const sourceReview =
+        args.lifecycleState === "awaiting_source_review" &&
+        args.executionStatus === "paused";
+    const settledRun = sourceReview
+        ? await applyRequestedResearchPause(ctx, run)
+        : run;
+
+    const now = Date.now();
+    const pauseReason =
+        args.lifecycleState === "awaiting_evidence_sufficiency_review"
+            ? ("evidence_sufficiency_review" as const)
+            : args.lifecycleState === "awaiting_source_review"
+              ? ("source_review" as const)
+              : args.lifecycleState === "awaiting_assessment_review"
+                ? ("assessment_review" as const)
+                : undefined;
+    await ctx.db.patch(args.runId, {
+        lifecycleState: args.lifecycleState,
+        executionStatus: args.executionStatus,
+        pauseReason:
+            sourceReview && settledRun.pauseReason === "analyst"
+                ? "analyst"
+                : pauseReason,
+        nextEventSequence: run.nextEventSequence + 1,
+        updatedAt: now,
+    });
+    const previousSteps = await ctx.db
+        .query("workflowSteps")
+        .withIndex("by_run_and_key", (query) => query.eq("runId", args.runId))
+        .collect();
+    for (const step of previousSteps) {
+        if (step.state === "running") {
+            await ctx.db.patch(step._id, {
+                state: "completed",
+                completedAt: now,
+                updatedAt: now,
+            });
         }
-        if (run.executionGeneration !== args.expectedExecutionGeneration) {
-            throw new Error("Stale research execution generation");
-        }
-        if (
-            run.executionStatus === "cancelled" ||
-            run.executionStatus === "failed"
-        ) {
-            throw new Error("Research run execution is terminal");
-        }
-        assertLifecycleTransition(
-            run.lifecycleState,
-            args.lifecycleState,
-            args.executionStatus,
+    }
+    await ctx.db.insert("workflowSteps", {
+        runId: args.runId,
+        key: args.stepKey,
+        state:
+            args.executionStatus === "paused"
+                ? "needs_review"
+                : args.executionStatus === "completed" ||
+                    args.executionStatus === "idle"
+                  ? "completed"
+                  : "running",
+        attempt: 1,
+        startedAt: now,
+        completedAt:
+            args.executionStatus === "completed" ||
+            args.executionStatus === "idle"
+                ? now
+                : undefined,
+        updatedAt: now,
+    });
+    await ctx.db.insert("runEvents", {
+        runId: args.runId,
+        sequence: run.nextEventSequence + 1,
+        type: "run_transitioned",
+        lifecycleState: args.lifecycleState,
+        executionStatus: args.executionStatus,
+        stepKey: args.stepKey,
+        occurredAt: now,
+    });
+    if (
+        run.lifecycleState !== args.lifecycleState ||
+        run.executionStatus !== args.executionStatus
+    )
+        await recordResearchObservation(
+            ctx,
+            run._id,
+            "phase_changed",
+            undefined,
+            reads,
         );
+    return null;
+}
 
-        const sourceReview =
-            args.lifecycleState === "awaiting_source_review" &&
-            args.executionStatus === "paused";
-        const settledRun = sourceReview
-            ? await applyRequestedResearchPause(ctx, run)
-            : run;
-
-        const now = Date.now();
-        const pauseReason =
-            args.lifecycleState === "awaiting_evidence_sufficiency_review"
-                ? ("evidence_sufficiency_review" as const)
-                : args.lifecycleState === "awaiting_source_review"
-                  ? ("source_review" as const)
-                  : args.lifecycleState === "awaiting_assessment_review"
-                    ? ("assessment_review" as const)
-                    : undefined;
-        await ctx.db.patch(args.runId, {
-            lifecycleState: args.lifecycleState,
-            executionStatus: args.executionStatus,
-            pauseReason:
-                sourceReview && settledRun.pauseReason === "analyst"
-                    ? "analyst"
-                    : pauseReason,
-            nextEventSequence: run.nextEventSequence + 1,
-            updatedAt: now,
-        });
-        const previousSteps = await ctx.db
-            .query("workflowSteps")
-            .withIndex("by_run_and_key", (query) =>
-                query.eq("runId", args.runId),
-            )
-            .collect();
-        for (const step of previousSteps) {
-            if (step.state === "running") {
-                await ctx.db.patch(step._id, {
-                    state: "completed",
-                    completedAt: now,
-                    updatedAt: now,
-                });
-            }
-        }
-        await ctx.db.insert("workflowSteps", {
-            runId: args.runId,
-            key: args.stepKey,
-            state:
-                args.executionStatus === "paused"
-                    ? "needs_review"
-                    : args.executionStatus === "completed" ||
-                        args.executionStatus === "idle"
-                      ? "completed"
-                      : "running",
-            attempt: 1,
-            startedAt: now,
-            completedAt:
-                args.executionStatus === "completed" ||
-                args.executionStatus === "idle"
-                    ? now
-                    : undefined,
-            updatedAt: now,
-        });
-        await ctx.db.insert("runEvents", {
-            runId: args.runId,
-            sequence: run.nextEventSequence + 1,
-            type: "run_transitioned",
-            lifecycleState: args.lifecycleState,
-            executionStatus: args.executionStatus,
-            stepKey: args.stepKey,
-            occurredAt: now,
-        });
-        if (
-            run.lifecycleState !== args.lifecycleState ||
-            run.executionStatus !== args.executionStatus
-        )
-            await recordResearchObservation(ctx, run._id, "phase_changed");
-        return null;
-    },
+export const transition = internalMutation({
+    args: transitionArgs,
+    returns: v.null(),
+    handler: (ctx, args) => transitionResearchRun(ctx, args),
 });
 
 export const get = internalQuery({

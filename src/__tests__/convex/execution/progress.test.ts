@@ -39,36 +39,45 @@ test("three_fresh_mission_pages_do_not_trigger_repetition and replayed content a
             kind: "retained_evidence",
             cause: "preserved",
             historySource: "material",
-            observation: { text: "Original evidence 😀".repeat(1500) },
+            observation: { text: "Original evidence 😀".repeat(8000) },
         });
         return mission.nextEventSequence;
     });
     let cursor: string | undefined;
-    let firstCursor: string | undefined;
+    let lastCursor: string | undefined;
     let previousCount = 0;
+    const offsets = new Map<number, number>();
+    let observedTargetPages = 0;
     for (let page = 0; page < 3; page++) {
+        lastCursor = cursor;
         const result = await runHistoryTurn(f, {
             kind: "consult_mission_state",
             cursor,
         });
         assert(result.outcome.kind === "success");
         const history = JSON.parse(result.outcome.valueJson).history;
-        const entry = history.entries.find(
-            (row: { sequence: number }) => row.sequence === sequence,
-        );
-        expect(entry.offset).toBe(page * 4000);
+        expect(history.entries.length).toBeGreaterThan(0);
+        for (const entry of history.entries as {
+            sequence: number;
+            offset: number;
+            content: string;
+        }[]) {
+            expect(entry.offset).toBe(offsets.get(entry.sequence) ?? 0);
+            offsets.set(entry.sequence, entry.offset + entry.content.length);
+            if (entry.sequence === sequence) observedTargetPages++;
+        }
         expect(result.settlement).toMatchObject({ kind: "ready" });
         cursor = history.continueCursor;
-        firstCursor ??= cursor;
         const current = await f.t.run((ctx) => ctx.db.get(f.missionId));
         assert(current);
         const count = current.progressKeys.length;
         expect(count).toBeGreaterThan(previousCount);
         previousCount = count;
     }
-    const reread = await dispatchHistory(f, {
+    expect(observedTargetPages).toBeGreaterThanOrEqual(2);
+    const reread = await runHistoryTurn(f, {
         kind: "consult_mission_state",
-        cursor: firstCursor,
+        cursor: lastCursor,
     });
     assert(reread.outcome.kind === "success");
     expect(

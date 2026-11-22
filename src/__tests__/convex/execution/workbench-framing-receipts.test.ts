@@ -12,6 +12,7 @@ import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     nativePiFixtureRoute,
     nativeTextReply,
+    nativeToolReply,
 } from "@/__tests__/setup/pi-native";
 import {
     seedWorkbench,
@@ -939,23 +940,28 @@ test.each([
                         .split("Required current mission state:\n")[1]
                         .split("\n")[0],
                 );
-                return state.definition.id === "sources_v1"
-                    ? nativeTextReply(
-                          JSON.stringify({
-                              kind: "complete",
-                              needs: state.activeWork.needs.map(
-                                  (need: { id: string }) => ({
-                                      needId: need.id,
-                                      unfinished: [
-                                          "Fixture ends before documentary collection.",
-                                      ],
-                                  }),
-                              ),
-                          }),
-                      )
-                    : nativeTextReply(
-                          "The saved program is available for review.",
-                      );
+                if (state.definition.id === "sources_v1") {
+                    const completionPayload = {
+                        kind: "complete",
+                        needs: state.activeWork.needs.map(
+                            (need: { id: string }) => ({
+                                needId: need.id,
+                                unfinished: [
+                                    "Fixture ends before documentary collection.",
+                                ],
+                            }),
+                        ),
+                    };
+                    return state.constraints?.completion?.format === "tool"
+                        ? nativeToolReply(
+                              "submit_completion",
+                              completionPayload,
+                          )
+                        : nativeTextReply(JSON.stringify(completionPayload));
+                }
+                return nativeTextReply(
+                    "The saved program is available for review.",
+                );
             }
             return Response.json({
                 cik: "1818201",

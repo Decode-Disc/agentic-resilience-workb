@@ -333,3 +333,180 @@ test("all current bindings install one autonomous recovery method and one render
         ).toHaveProperty("fields.reference");
     }
 });
+
+test("Phase 4 defaults activate native_tool versions while retaining historical definitions and documentary bindings", async () => {
+    const { getAgentDefinition } = await import(
+        "@convex/execution/agentCatalog"
+    );
+    const { SUBMIT_COMPLETION_TOOL, agentToolSchemas } = await import(
+        "@convex/execution/agentDefinition"
+    );
+    // Latest defaults use native_tool completion; Workbench remains textCompletion v12.
+    expect(getAgentDefinition("sources_v1")).toMatchObject({
+        version: 8,
+        completionTransport: "native_tool",
+    });
+    expect(getAgentDefinition("saved_material_inspection_v1")).toMatchObject({
+        version: 4,
+        completionTransport: "native_tool",
+    });
+    expect(getAgentDefinition("conversation_validation_v1")).toMatchObject({
+        version: 3,
+        completionTransport: "native_tool",
+    });
+    expect(getAgentDefinition("execution_validation_v1")).toMatchObject({
+        version: 3,
+        completionTransport: "native_tool",
+    });
+    const workbench = getAgentDefinition("workbench_v1");
+    expect(workbench.version).toBe(12);
+    expect(workbench.completionTransport).toBeUndefined();
+    expect(typeof workbench.textCompletion).toBe("function");
+
+    // Historical versions remain explicitly resolvable without native_tool completion.
+    for (const [id, version] of [
+        ["sources_v1", 7],
+        ["saved_material_inspection_v1", 3],
+        ["conversation_validation_v1", 2],
+        ["execution_validation_v1", 2],
+    ] as const) {
+        const historical = getAgentDefinition(id, version);
+        expect(historical.version).toBe(version);
+        expect(historical.completionTransport).toBeUndefined();
+        expect(agentToolSchemas(historical)).not.toHaveProperty(
+            SUBMIT_COMPLETION_TOOL,
+        );
+    }
+
+    // Documentary bindings grant referenced operations to new versions without broadening historical legacy versions.
+    expect(savedMaterialBinding("sources_v1", 8)).toBe("referenced");
+    expect(savedMaterialBinding("sources_v1", 7)).toBe("referenced");
+    expect(savedMaterialBinding("sources_v1", 5)).toBe("legacy");
+    expect(savedMaterialBinding("saved_material_inspection_v1", 4)).toBe(
+        "referenced",
+    );
+    expect(savedMaterialBinding("saved_material_inspection_v1", 3)).toBe(
+        "referenced",
+    );
+    expect(savedMaterialBinding("saved_material_inspection_v1", 2)).toBe(
+        "legacy",
+    );
+
+    // Reserved name collisions and contradictory capabilities are rejected without any allowlist bypass.
+    const latestInspection = getAgentDefinition("saved_material_inspection_v1");
+    expect(agentToolSchemas(latestInspection)).toHaveProperty(
+        SUBMIT_COMPLETION_TOOL,
+    );
+    expect(() =>
+        bindAgentDefinition({
+            ...workbench,
+            completionTransport: "native_tool",
+        }),
+    ).toThrow("definition_contract_invalid");
+    expect(() =>
+        bindAgentDefinition({
+            ...latestInspection,
+            operations: {
+                [SUBMIT_COMPLETION_TOOL]: commonOperations.consult_run_state,
+            },
+        }),
+    ).toThrow("operation_definition_conflict");
+});
+
+test("native completion cannot be bound to a native conversation", async () => {
+    const { getAgentDefinition } = await import(
+        "@convex/execution/agentCatalog"
+    );
+    expect(() =>
+        bindAgentDefinition({
+            ...getAgentDefinition("saved_material_inspection_v1"),
+            executionScope: "conversation",
+            conversationReply: () => "",
+            nativeConversation: true,
+        }),
+    ).toThrow("definition_contract_invalid");
+});
+
+test("non-Pi backends resolve retained inspection definitions", async () => {
+    const { defaultDefinitionVersionForBackend } = await import(
+        "@convex/execution/agentCatalog"
+    );
+    const {
+        HISTORICAL_AGENT_BACKEND,
+        LEGACY_AGENT_BACKEND,
+        DEFAULT_AGENT_BACKEND,
+    } = await import("@convex/execution/executionProtocol");
+    for (const backend of [HISTORICAL_AGENT_BACKEND, LEGACY_AGENT_BACKEND]) {
+        expect(
+            defaultDefinitionVersionForBackend(
+                "saved_material_inspection_v1",
+                backend,
+            ),
+        ).toBe(3);
+        const f = await seedInspectedEvidence();
+        const missionId = await f.t.mutation(
+            internal.execution.missions.start,
+            {
+                runId: f.args.runId,
+                corpusRevisionId: f.args.corpusRevisionId,
+                definitionId: "saved_material_inspection_v1",
+                expectedGeneration: 4,
+                requestKey: `retained:${backend.id}`,
+                generationBackend: backend,
+            },
+        );
+        expect(
+            (await f.t.run((ctx) => ctx.db.get(missionId)))?.definitionVersion,
+        ).toBe(3);
+    }
+    expect(
+        defaultDefinitionVersionForBackend(
+            "saved_material_inspection_v1",
+            DEFAULT_AGENT_BACKEND,
+        ),
+    ).toBe(4);
+});
+
+test("an explicitly pinned native-tool conversation refuses a historical backend", async () => {
+    const { seedConversation } = await import(
+        "@/__tests__/setup/agent-harness"
+    );
+    const { HISTORICAL_AGENT_BACKEND } = await import(
+        "@convex/execution/executionProtocol"
+    );
+    const f = await seedConversation(true);
+    await f.client.mutation(
+        (await import("@convex/_generated/api")).api.execution.conversations
+            .submit,
+        {
+            runId: f.runId,
+            requestKey: "pinned-native",
+            text: "Inspect the current request",
+            delivery: "queue",
+        },
+    );
+    const turnId = await f.t.mutation(
+        internal.execution.conversations.claimTurn,
+        { runId: f.runId },
+    );
+    assert(turnId);
+    await f.t.run(async (ctx) => {
+        const turn = await ctx.db.get(turnId);
+        assert(turn);
+        await ctx.db.patch(turn.conversationId, {
+            definitionId: "conversation_validation_v1",
+            definitionVersion: 3,
+        });
+    });
+    await expect(
+        f.t.mutation(internal.execution.missions.start, {
+            runId: f.runId,
+            conversationTurnId: turnId,
+            definitionId: "conversation_validation_v1",
+            scope: { kind: "conversation_validation_v1" },
+            requestKey: "pinned-native-historical",
+            expectedGeneration: 1,
+            generationBackend: HISTORICAL_AGENT_BACKEND,
+        }),
+    ).rejects.toThrow("definition_contract_invalid");
+});

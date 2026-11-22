@@ -15,7 +15,9 @@ export const SAVED_MATERIAL_DEFINITION_ID = "saved_material_inspection_v1";
 export const SAVED_MATERIAL_DEFINITION_VERSION = 2;
 export const WORKBENCH_DOCUMENTARY_DEFINITION_VERSION = 10;
 export const REFERENCED_INSPECTION_VERSION = 3;
+export const NATIVE_COMPLETION_INSPECTION_VERSION = 4;
 export const REFERENCED_SOURCES_VERSION = 7;
+export const NATIVE_COMPLETION_SOURCES_VERSION = 8;
 export const savedMaterialDefinitionId = v.literal(
     SAVED_MATERIAL_DEFINITION_ID,
 );
@@ -434,9 +436,11 @@ export function savedMaterialBinding(
                 version === WORKBENCH_FRAMING_RECEIPT_VERSION ||
                 version === WORKBENCH_FRAMING_METHOD_VERSION)) ||
         (definitionId === "sources_v1" &&
-            version === REFERENCED_SOURCES_VERSION) ||
+            (version === REFERENCED_SOURCES_VERSION ||
+                version === NATIVE_COMPLETION_SOURCES_VERSION)) ||
         (definitionId === SAVED_MATERIAL_DEFINITION_ID &&
-            version === REFERENCED_INSPECTION_VERSION)
+            (version === REFERENCED_INSPECTION_VERSION ||
+                version === NATIVE_COMPLETION_INSPECTION_VERSION))
     )
         return "referenced";
     return "legacy";
