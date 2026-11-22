@@ -1,12 +1,11 @@
 import { api, internal } from "@convex/_generated/api";
 import type { ActionCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
-import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { invoke as invokeModelAction } from "@convex/execution/modelActions";
 import { invokeDeferredAgentTurn } from "@convex/integrations/modelTransport";
 import type { WorkflowId } from "@convex-dev/workflow";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
@@ -205,14 +204,15 @@ test("the live mission journals its prepared request and original response throu
 test("an unretainable observation rolls back its receipt and budget settlement", async () => {
     const { t, args, missionId, invocation } =
         await liveInvocationFixture("atomic-observation");
+    const mission = await t.run((ctx) => ctx.db.get(missionId));
+    assert(mission);
     const attempt = {
         missionId,
         invocationId: invocation.invocationId,
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         executionGeneration: 4,
-        workflowVersion: getAgentDefinition("saved_material_inspection_v1")
-            .version,
+        workflowVersion: mission.definitionVersion,
         stepKey: "agent_reasoning",
         service: "model" as const,
         operation: "agent_reasoning",
