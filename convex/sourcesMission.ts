@@ -1164,7 +1164,7 @@ export const finish = internalMutation({
             preparation.settlementRequestedAt === undefined &&
             (await sourcesContinuationAvailable(ctx, run, preparation))
         ) {
-            if (await suspendInterruptedResearch(ctx, mission, reads))
+            if (await suspendInterruptedResearch(ctx, mission))
                 return { kind: "waiting" };
             throw executionError("sources_mission_incomplete");
         }
@@ -1224,17 +1224,13 @@ export const finish = internalMutation({
             status: material.outcome,
             completedAt: Date.now(),
         });
-        await transitionResearchRun(
-            ctx,
-            {
-                runId: run._id,
-                expectedExecutionGeneration: args.expectedGeneration,
-                lifecycleState: "sources_prepared",
-                executionStatus: "idle",
-                stepKey: "sources_prepared",
-            },
-            reads,
-        );
+        await transitionResearchRun(ctx, {
+            runId: run._id,
+            expectedExecutionGeneration: args.expectedGeneration,
+            lifecycleState: "sources_prepared",
+            executionStatus: "idle",
+            stepKey: "sources_prepared",
+        });
         await recordContextObservation(ctx, run._id, {
             key: `sources-handoff:${preparation._id}:${material.needsRevision}`,
             topic: "documentary",

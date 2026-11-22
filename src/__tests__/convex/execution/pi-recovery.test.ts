@@ -981,6 +981,7 @@ test.each([
     "crash",
     "close_exhausted",
     "close_success",
+    "admission_storage",
 ] as const)("structured settlement preserves child notification until settlement resolves (%s)", async (mode) => {
     const { workflow } = await import("@convex/workflow");
     const { default: workflowTest } = await import(
@@ -1018,9 +1019,14 @@ test.each([
             completionEventId: eventId,
             piActiveWriter: "initial",
         });
-        await ctx.db.patch(lease.sessionId, { sequence: 3 });
+        await ctx.db.patch(lease.sessionId, {
+            sequence: 3,
+            ...(mode === "admission_storage"
+                ? { retainedBytes: PI_SESSION_MAX_BYTES + 1 }
+                : {}),
+        });
     });
-    if (mode !== "crash") {
+    if (mode !== "crash" && mode !== "admission_storage") {
         await f.t.mutation(internal.execution.piControl.closeWorker, {
             missionId,
             expectedGeneration: 4,
@@ -1032,11 +1038,13 @@ test.each([
         ).not.toBe(true);
     }
     const remaining =
-        mode === "crash"
-            ? NATIVE_WORKER_POLICY.settlementMaxAttempts
-            : mode === "close_success"
-              ? 1
-              : NATIVE_WORKER_POLICY.settlementMaxAttempts - 1;
+        mode === "admission_storage"
+            ? 1
+            : mode === "crash"
+              ? NATIVE_WORKER_POLICY.settlementMaxAttempts
+              : mode === "close_success"
+                ? 1
+                : NATIVE_WORKER_POLICY.settlementMaxAttempts - 1;
     for (let i = 0; i < remaining; i++) {
         vi.advanceTimersByTime(91_000);
         const token = `settlement:${i}`;
@@ -1045,7 +1053,9 @@ test.each([
             internal.execution.piControl.prepare,
             { missionId, expectedGeneration: 4, token, writer: `writer:${i}` },
         );
-        if (mode === "crash") {
+        if (mode === "admission_storage") {
+            expect(admitted).toBe(false);
+        } else if (mode === "crash") {
             expect(admitted).toBe(i < remaining - 1);
         } else {
             expect(admitted).toBe(true);
@@ -1076,9 +1086,108 @@ test.each([
         expect(observed.session?.settledSequence).toBe(3);
     } else {
         expect(observed.session).toMatchObject({
-            settlementAttempts: NATIVE_WORKER_POLICY.settlementMaxAttempts,
-            settlementFailureCode: "native_settlement_incomplete",
+            settlementAttempts:
+                mode === "admission_storage"
+                    ? 1
+                    : NATIVE_WORKER_POLICY.settlementMaxAttempts,
+            settlementFailureCode:
+                mode === "admission_storage"
+                    ? "pi_storage_capacity"
+                    : "native_settlement_incomplete",
         });
         expect(observed.events).toHaveLength(1);
     }
+});
+
+test.each([
+    true,
+    false,
+])("storage exhaustion during admission preserves the terminal settlement contract (terminal=%s)", async (terminal) => {
+    const { t, runId, client } = await seedWorkbench(true);
+    const turn = await t.mutation(internal.execution.conversations.startTurn, {
+        runId,
+        definitionId: "workbench_v1",
+        scope: { kind: "workbench_v1" },
+        simulation: true,
+    });
+    assert(turn);
+    const lease = await t.mutation(internal.execution.piStore.claim, {
+        missionId: turn.missionId,
+        expectedGeneration: 1,
+        writer: "original",
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(turn.missionId, {
+            ...(terminal ? { status: "completed" as const } : {}),
+            piActiveWriter: undefined,
+            piWakeToken: "capacity-wake",
+        });
+        await ctx.db.patch(lease.sessionId, {
+            sequence: 1,
+            settledSequence: 0,
+            leaseUntil: Date.now() - 1,
+            retainedBytes: PI_SESSION_MAX_BYTES + 1,
+        });
+    });
+    expect(
+        await t.mutation(internal.execution.piControl.prepare, {
+            missionId: turn.missionId,
+            expectedGeneration: 1,
+            token: "capacity-wake",
+            writer: "next",
+        }),
+    ).toBe(false);
+    const observed = await t.run(async (ctx) => ({
+        mission: await ctx.db.get(turn.missionId),
+        session: await ctx.db.get(lease.sessionId),
+        events: await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_mission_and_kind", (q) =>
+                q
+                    .eq("missionId", turn.missionId)
+                    .eq("kind", "native_settlement_blocked"),
+            )
+            .collect(),
+        calls: await ctx.db.query("providerCalls").collect(),
+    }));
+    expect(observed.calls).toEqual([]);
+    expect(observed.mission?.status).toBe(terminal ? "completed" : "blocked");
+    expect(observed.events).toHaveLength(terminal ? 1 : 0);
+    if (terminal) {
+        expect(observed.session?.settlementFailureCode).toBe(
+            "pi_storage_capacity",
+        );
+        expect(
+            await client.query(api.execution.conversations.get, { runId }),
+        ).toMatchObject({
+            queuePaused: true,
+            admissionFailure: { code: "native_settlement_incomplete" },
+        });
+        await expect(
+            client.mutation(api.execution.conversations.resumeQueue, { runId }),
+        ).rejects.toThrow("native_settlement_incomplete");
+        await t.run((ctx) =>
+            ctx.db.patch(turn.missionId, { piWakeToken: "replay" }),
+        );
+        expect(
+            await t.mutation(internal.execution.piControl.prepare, {
+                missionId: turn.missionId,
+                expectedGeneration: 1,
+                token: "replay",
+                writer: "another",
+            }),
+        ).toBe(false);
+        expect(
+            await t.run((ctx) =>
+                ctx.db
+                    .query("agentExecutionEvents")
+                    .withIndex("by_mission_and_kind", (q) =>
+                        q
+                            .eq("missionId", turn.missionId)
+                            .eq("kind", "native_settlement_blocked"),
+                    )
+                    .collect(),
+            ),
+        ).toHaveLength(1);
+    } else expect(observed.session?.settlementFailureCode).toBeUndefined();
 });

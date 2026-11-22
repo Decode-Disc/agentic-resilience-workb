@@ -10,6 +10,7 @@ import { mergeRunCompanyMetadata } from "@convex/domain/companyMetadata";
 import { researchQuestionCapacity } from "@convex/domain/framingEditAuthority";
 import {
     formatResearchSummary,
+    readResearchControlState,
     readResearchState,
 } from "@convex/domain/researchState";
 import { researchStateValidator } from "@convex/domain/researchStateContracts";
@@ -372,7 +373,7 @@ export const command = mutation({
                     : researchControlConfirmation(
                           action,
                           outcome !== "refused",
-                          await readResearchState(ctx, current),
+                          await readResearchControlState(ctx, current),
                       );
         const exchange = await recordControlExchange(ctx, conversation, {
             nativeInputSequence,

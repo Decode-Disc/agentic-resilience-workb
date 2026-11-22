@@ -1,12 +1,14 @@
 import { writeFileSync } from "node:fs";
 import { api, internal } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import { readResearchState } from "@convex/domain/researchState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { commonOperations } from "@convex/execution/commonOperations";
 import { operationReuseIdentity } from "@convex/execution/missionData";
 import { currentRunStateResultValidator } from "@convex/execution/operationContracts";
+import type { QueryCtx } from "@convex/_generated/server";
+import type { FunctionReturnType } from "convex/server";
 import { getDocumentSize, type Value } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -1032,7 +1034,7 @@ test("a settled inquiry with no retained documents reports no usable material", 
     });
 });
 
-function measureDbReads<T extends object>(db: T) {
+function measureDbReads<T extends object>(db: T, table?: "sourceCaptures") {
     const totals = { rows: 0, bytes: 0, gets: 0, queries: 0 };
     const recordRow = (row: unknown) => {
         if (!row || typeof row !== "object") return;
@@ -1090,6 +1092,7 @@ function measureDbReads<T extends object>(db: T) {
             return (...params: unknown[]) => {
                 const result = Reflect.apply(value, target, params);
                 if (key === "get") {
+                    if (table) return result;
                     totals.gets++;
                     return Promise.resolve(result).then((row) => {
                         recordRow(row);
@@ -1097,6 +1100,7 @@ function measureDbReads<T extends object>(db: T) {
                     });
                 }
                 if (key === "query") {
+                    if (table && params[0] !== table) return result;
                     totals.queries++;
                     return result && typeof result === "object"
                         ? wrapQuery(result)
@@ -1995,4 +1999,309 @@ test("permissive source decisions reuse verified strict reads in one transaction
         ).toEqual(strict);
         expect(probe.totals).toEqual(before);
     });
+});
+
+test("legacy snapshot and standalone research facts preserve the same protocol boundary", async () => {
+    const f = await scenario();
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, { sourcesProtocol: undefined }),
+    );
+    const snapshot = await f.t
+        .withIdentity({ subject: f.userId })
+        .query(api.workbench.snapshot, { runId: f.runId });
+    const standalone = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        return readResearchState(ctx, run);
+    });
+    expect(standalone.sources).toBeNull();
+    expect(snapshot.research.sources).toBeNull();
+    expect(snapshot.research.nextCapability).toBe(standalone.nextCapability);
+});
+
+test.each([
+    "pause",
+    "command",
+    "interruption",
+    "capacity",
+    "worker_close",
+] as const)("research controls persist without optional evidence progress (%s)", async (route) => {
+    const f = await scenario();
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+            pauseReason: undefined,
+            researchPauseRequested: false,
+        });
+        await ctx.db.patch(f.missionId, {
+            status: "blocked",
+            blockCode: "execution_interrupted",
+        });
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        await ctx.db.patch(preparation._id, {
+            status: "started",
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                result: undefined,
+            },
+        });
+        if (route !== "capacity") {
+            const captureId = preparation.sourcesMission.captureIds[0];
+            assert(captureId);
+            await ctx.db.delete(captureId);
+        }
+    });
+    if (route === "pause")
+        await f.t
+            .withIdentity({ subject: f.userId })
+            .mutation(api.execution.researchControl.pause, {
+                runId: f.runId,
+                expectedGeneration: 4,
+            });
+    else if (route === "command") {
+        const result = await f.t
+            .withIdentity({ subject: f.userId })
+            .mutation(api.workbench.command, {
+                runId: f.runId,
+                expectedGeneration: 4,
+                requestKey: "pause-without-progress",
+                command: "/pause",
+            });
+        expect(result.outcome).toBe("applied");
+        expect(result.text).toContain("Pause requested");
+    } else if (route === "worker_close") {
+        await f.t.run((ctx) =>
+            ctx.db.patch(f.missionId, {
+                status: "running",
+                blockCode: undefined,
+            }),
+        );
+        await f.t.mutation(internal.execution.piStore.claim, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            writer: "interrupted-writer",
+        });
+        await f.t.run((ctx) =>
+            ctx.db.patch(f.missionId, { piActiveWriter: "interrupted-writer" }),
+        );
+        await f.t.mutation(internal.execution.piControl.closeWorker, {
+            missionId: f.missionId,
+            expectedGeneration: 4,
+            writer: "interrupted-writer",
+            error: "generation_backend_interrupted",
+        });
+    } else {
+        const { suspendInterruptedResearch } = await import(
+            "@convex/execution/researchControl"
+        );
+        const { SourceReviewReads } = await import(
+            "@convex/domain/sourceReviewReads"
+        );
+        await f.t.run(async (ctx) => {
+            const mission = await ctx.db.get(f.missionId);
+            assert(mission);
+            const reads =
+                route === "capacity"
+                    ? new SourceReviewReads(ctx.db, f.runId, {
+                          bytes: 1,
+                          ranges: 1,
+                      })
+                    : undefined;
+            if (reads) {
+                const run = await ctx.db.get(f.runId);
+                assert(run);
+                await expect(
+                    readResearchState(ctx, run, { reads }),
+                ).rejects.toMatchObject({
+                    data: { code: "source_review_capacity" },
+                });
+            }
+            expect(await suspendInterruptedResearch(ctx, mission)).toBe(true);
+        });
+    }
+    const observed = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        const event = await ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_run_and_native_input_sequence", (q) =>
+                q.eq("runId", f.runId),
+            )
+            .order("desc")
+            .first();
+        assert(event?.contextObservation);
+        const { readRetainedText } = await import(
+            "@convex/execution/retainedText"
+        );
+        return {
+            run,
+            observation: JSON.parse(
+                await readRetainedText(ctx, event.contextObservation.textId),
+            ),
+        };
+    });
+    const interrupted =
+        route === "interruption" ||
+        route === "capacity" ||
+        route === "worker_close";
+    expect(observed.run).toMatchObject(
+        interrupted
+            ? {
+                  executionStatus: "paused",
+                  executionGeneration: 5,
+                  pauseReason: "execution_interrupted",
+              }
+            : {
+                  executionStatus: "running",
+                  executionGeneration: 4,
+                  researchPauseRequested: true,
+              },
+    );
+    expect(observed.observation.sources?.progress).toBeUndefined();
+    expect(observed.observation.sourcesProgress).toEqual({
+        status: "not_loaded",
+        reason: "control_transition",
+    });
+    expect(observed.observation.summary).toContain(
+        interrupted ? "interrupted" : "Pause requested",
+    );
+});
+
+test.each(
+    [5, 60].flatMap((count) =>
+        (
+            ["reserved", "unavailable", "unadmitted_committed", "none"] as const
+        ).map((status) => ({ count, status })),
+    ),
+)("authenticated snapshot reuses raw capture reads across admission views ($count, $status)", async ({
+    count,
+    status,
+}) => {
+    const f = await scenario();
+    await f.t.run(async (ctx) => {
+        const preparation = await ctx.db.get(f.preparationId);
+        assert(preparation?.sourcesMission);
+        const templateCaptureId = preparation.sourcesMission.captureIds[0];
+        const templateSourceId = f.sourceIds[0];
+        assert(templateCaptureId && templateSourceId);
+        const templateCapture = await ctx.db.get(templateCaptureId);
+        const templateSource = await ctx.db.get(templateSourceId);
+        assert(templateCapture && templateSource);
+        const {
+            _id: _sourceId,
+            _creationTime: _sourceCreation,
+            ...sourceFields
+        } = templateSource;
+        const {
+            _id: _captureId,
+            _creationTime: _captureCreation,
+            ...captureFields
+        } = templateCapture;
+        for (const capture of await ctx.db.query("sourceCaptures").collect())
+            await ctx.db.delete(capture._id);
+        for (const source of await ctx.db.query("sources").collect())
+            await ctx.db.delete(source._id);
+        const captureIds: Id<"sourceCaptures">[] = [];
+        const work: NonNullable<
+            Doc<"sourceSelectionProposalRebuilds">["sourcesMission"]
+        >["work"] = [];
+        for (let i = 0; i < count; i++) {
+            const id = await ctx.db.insert("sources", {
+                ...sourceFields,
+                canonicalUrl: `https://example.com/measurement/${i}`,
+            });
+            if (status !== "none")
+                captureIds.push(
+                    await ctx.db.insert("sourceCaptures", {
+                        ...captureFields,
+                        sourceId: id,
+                        captureKey: `pending:${i}`,
+                        status:
+                            status === "unadmitted_committed"
+                                ? "reserved"
+                                : status,
+                    }),
+                );
+            if (status === "unadmitted_committed")
+                await ctx.db.insert("sourceCaptures", {
+                    ...captureFields,
+                    sourceId: id,
+                    captureKey: `unadmitted:${i}`,
+                    updatedAt: captureFields.updatedAt + 1,
+                });
+            // Work membership makes never-captured sources part of preparation progress.
+            work.push({
+                kind: "capture_source",
+                sourceId: id,
+                requestId: f.readRequestId,
+                needIds: [],
+            });
+        }
+        await ctx.db.patch(preparation._id, {
+            sourcesMission: {
+                ...preparation.sourcesMission,
+                captureIds,
+                qualifications: [],
+                work,
+                result: undefined,
+            },
+        });
+    });
+    const { snapshot } = await import("@convex/workbench");
+    const registered = snapshot as typeof snapshot & {
+        _handler: (
+            ctx: QueryCtx,
+            args: { runId: Id<"researchRuns"> },
+        ) => Promise<FunctionReturnType<typeof api.workbench.snapshot>>;
+    };
+    const original = registered._handler;
+    let measurement = { rows: 0, bytes: 0, gets: 0, queries: 0 };
+    const observer = vi
+        .spyOn(registered, "_handler")
+        .mockImplementation(async (ctx, args) => {
+            const probe = measureDbReads(ctx.db, "sourceCaptures");
+            const result = await original({ ...ctx, db: probe.db }, args);
+            measurement = { ...probe.totals };
+            return result;
+        });
+    try {
+        const snapshot = await f.t
+            .withIdentity({ subject: f.userId })
+            .query(api.workbench.snapshot, { runId: f.runId });
+        expect(snapshot.sources).toHaveLength(count);
+        expect(
+            snapshot.sources.every(
+                (source) =>
+                    source.state ===
+                    (status === "unadmitted_committed"
+                        ? "captured"
+                        : status === "reserved"
+                          ? "capturing"
+                          : "found"),
+            ),
+        ).toBe(true);
+        const captures = snapshot.research.sources?.progress?.captures;
+        expect(captures).toEqual({
+            full: 0,
+            partial: 0,
+            unknown: 0,
+            capturing:
+                status === "reserved" || status === "unadmitted_committed"
+                    ? count
+                    : 0,
+            unavailable: status === "unavailable" ? count : 0,
+            notCaptured: status === "none" ? count : 0,
+        });
+        if (process.env.CAPTURE_READ_PERF_OUTPUT)
+            writeFileSync(
+                `${process.env.CAPTURE_READ_PERF_OUTPUT}-${count}-${status}.json`,
+                JSON.stringify({ count, status, ...measurement }, null, 2),
+            );
+        expect(measurement.queries).toBe(
+            count * (status === "none" ? 1 : status === "unavailable" ? 4 : 3),
+        );
+    } finally {
+        observer.mockRestore();
+    }
 });

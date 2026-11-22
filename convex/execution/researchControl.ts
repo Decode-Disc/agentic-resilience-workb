@@ -8,10 +8,9 @@ import {
 } from "@convex/_generated/server";
 import {
     formatResearchSummary,
-    readResearchState,
+    readResearchControlState,
 } from "@convex/domain/researchState";
 import type { ResearchState } from "@convex/domain/researchStateContracts";
-import type { SourceReviewReads } from "@convex/domain/sourceReviewReads";
 import {
     readSourcesMission,
     sourcesContinuationAvailable,
@@ -75,15 +74,10 @@ export async function recordResearchObservation(
     actor: NonNullable<Doc<"agentExecutionEvents">["actor"]> = {
         type: "system",
     },
-    reads?: SourceReviewReads,
 ) {
     const current = await ctx.db.get(runId);
     if (!current) throw executionError("run_unavailable");
-    const state = await readResearchState(
-        ctx,
-        current,
-        reads ? { reads } : undefined,
-    );
+    const state = await readResearchControlState(ctx, current);
     await recordContextObservation(ctx, runId, {
         key: `research:${event}:${current.executionGeneration}:${current.researchControlRevision ?? 0}:${current.nextEventSequence}:${current.lifecycleState}:${current.executionStatus}`,
         topic: "research",
@@ -91,6 +85,10 @@ export async function recordResearchObservation(
         value: {
             event,
             ...state,
+            sourcesProgress: {
+                status: "not_loaded",
+                reason: "control_transition",
+            },
             summary: formatResearchSummary(state),
             framingRevisionId: current.fixedFramingRevisionId ?? null,
         },
@@ -182,7 +180,6 @@ export async function pauseResearchAtBoundary(
 export async function suspendInterruptedResearch(
     ctx: MutationCtx,
     mission: Doc<"agentMissions">,
-    reads?: SourceReviewReads,
 ) {
     const run = await ctx.db.get(mission.runId);
     const definition = getAgentDefinition(
@@ -240,13 +237,7 @@ export async function suspendInterruptedResearch(
         cause: "execution_interrupted",
         occurredAt: Date.now(),
     });
-    await recordResearchObservation(
-        ctx,
-        run._id,
-        "research_interrupted",
-        undefined,
-        reads,
-    );
+    await recordResearchObservation(ctx, run._id, "research_interrupted");
     if (!isRecoverableInterruption(mission, run)) {
         const paused = await ctx.db.get(run._id);
         if (!paused) throw executionError("run_unavailable");

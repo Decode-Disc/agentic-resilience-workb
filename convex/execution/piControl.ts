@@ -505,10 +505,8 @@ export const prepare = internalMutation({
             if (!code) throw error;
             await recordWorkerFailure(ctx, mission, code);
             if (settling && session && storageCapacityFailure(code))
-                await ctx.db.patch(session._id, {
-                    settlementFailureCode: code,
-                });
-            if (mission.parentRequestId || mission.completionEventId)
+                await blockNativeSettlement(ctx, mission, session, code);
+            else if (mission.parentRequestId || mission.completionEventId)
                 await ctx.runMutation(internal.execution.handoffs.finishChild, {
                     missionId: mission._id,
                 });

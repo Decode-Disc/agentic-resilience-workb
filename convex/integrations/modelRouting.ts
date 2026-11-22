@@ -52,6 +52,7 @@ export function mergeRetainedPiInputProfiles(args: {
     baseline: {
         versions: Record<string, string>;
         profiles: Record<string, number>;
+        retainedProfiles?: Record<string, number>;
     };
     installedVersions: Record<string, string>;
     measured: Record<string, number>;
@@ -68,17 +69,18 @@ export function mergeRetainedPiInputProfiles(args: {
     )
         throw executionError("model_input_profile_sdk_mismatch");
     const merged: Record<string, number> = {};
-    for (const [key, bytes] of Object.entries(args.baseline.profiles)) {
-        if (!Number.isSafeInteger(bytes) || bytes < 1)
-            throw executionError("model_input_profile_invalid");
-        merged[key] = bytes;
-    }
-    for (const [key, bytes] of Object.entries(args.measured)) {
-        if (!Number.isSafeInteger(bytes) || bytes < 1)
-            throw executionError("model_input_profile_invalid");
-        if (merged[key] !== undefined && merged[key] !== bytes)
-            throw executionError("model_input_profile_conflict");
-        merged[key] = bytes;
+    for (const profiles of [
+        args.baseline.retainedProfiles ?? {},
+        args.baseline.profiles,
+        args.measured,
+    ]) {
+        for (const [key, bytes] of Object.entries(profiles)) {
+            if (!Number.isSafeInteger(bytes) || bytes < 1)
+                throw executionError("model_input_profile_invalid");
+            if (merged[key] !== undefined && merged[key] !== bytes)
+                throw executionError("model_input_profile_conflict");
+            merged[key] = bytes;
+        }
     }
     return merged;
 }

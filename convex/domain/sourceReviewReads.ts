@@ -46,6 +46,10 @@ export class SourceReviewReads {
         Id<"sources">,
         Promise<Doc<"sourceCaptures">[]>
     >();
+    private readonly captureLookups = new Map<
+        string,
+        Promise<Doc<"sourceCaptures"> | null>
+    >();
     private readonly captureStates = new Map<
         string,
         ReturnType<typeof sourceCaptureState>
@@ -470,17 +474,25 @@ export class SourceReviewReads {
         if (!value) {
             value = sourceCaptureState({ db: this.db }, sourceId, {
                 admittedCaptureIds,
-                onQuery: () => this.range(),
-                onDoc: (row) => {
-                    if (row) this.observe(row);
+                read: (status, load) => {
+                    const key = `${sourceId}:${status}`;
+                    let lookup = this.captureLookups.get(key);
+                    if (!lookup) {
+                        this.range();
+                        lookup = load().then((row) => {
+                            if (row) {
+                                this.observe(row);
+                                this.captures.set(
+                                    row._id,
+                                    Promise.resolve(row),
+                                );
+                            }
+                            return row;
+                        });
+                        this.captureLookups.set(key, lookup);
+                    }
+                    return lookup;
                 },
-            }).then((state) => {
-                if (state.committed)
-                    this.captures.set(
-                        state.committed._id,
-                        Promise.resolve(state.committed),
-                    );
-                return state;
             });
             this.captureStates.set(key, value);
         }

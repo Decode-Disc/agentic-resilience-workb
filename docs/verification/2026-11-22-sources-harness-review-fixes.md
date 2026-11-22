@@ -4,6 +4,8 @@ Date: 2026-11-22. Branch: `sources-workflow-no-legacy`. Scope: remediation of th
 
 Status: implementation, behavioral regressions and final static checks passed.
 
+Follow-up, 2026-11-22: the subsequent independent review identified five remaining findings. Their corrections and validation are recorded in the [independent review follow-up](2026-11-22-independent-review-followup.md); the original evidence below remains scoped to the preceding implementation.
+
 ## Delivered behavior
 
 - Native model catalogue metadata is separate from offline profile measurements. Catalogue invalidation uses active measured keys; historical keys remain under the exact installed SDK tuple. Profile reads and writes use 256-row batches, with readiness/catalogue publication confined to the final transaction.

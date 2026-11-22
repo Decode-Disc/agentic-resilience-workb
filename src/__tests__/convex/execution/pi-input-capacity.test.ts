@@ -468,13 +468,8 @@ test("native required-input profiles match the installed SDK and escaped JSON wi
             }
         }
     }
-    const historicalBaseline = {
-        ...previousProfiles,
-        profiles:
-            previousProfiles.retainedProfiles ?? previousProfiles.profiles,
-    };
     const mergedProfiles = mergeRetainedPiInputProfiles({
-        baseline: historicalBaseline,
+        baseline: previousProfiles,
         installedVersions: versions,
         measured: profiles,
     });
@@ -807,4 +802,34 @@ test("native analyst-input sizing subtracts the selected completion transport en
         bytes(JSON.stringify(requiredAnalystInput(prompt))) -
         bytes(JSON.stringify(piMissionInput("native_tool")));
     expect(await agentInputByteLength(input, async () => 1000)).toBe(expected);
+});
+
+test("profile regeneration retains previously active keys beside older retained keys and rejects conflicting history", () => {
+    const versions = { "pi-ai": "1", "pi-durable": "1", chord: "1" };
+    const baseline = {
+        versions,
+        profiles: { "previously-active": 120 },
+        retainedProfiles: { "older-retained": 110 },
+    };
+    expect(
+        mergeRetainedPiInputProfiles({
+            baseline,
+            installedVersions: versions,
+            measured: { "new-active": 130 },
+        }),
+    ).toEqual({
+        "previously-active": 120,
+        "older-retained": 110,
+        "new-active": 130,
+    });
+    expect(() =>
+        mergeRetainedPiInputProfiles({
+            baseline: {
+                ...baseline,
+                retainedProfiles: { "previously-active": 121 },
+            },
+            installedVersions: versions,
+            measured: {},
+        }),
+    ).toThrow(/model_input_profile_conflict/);
 });

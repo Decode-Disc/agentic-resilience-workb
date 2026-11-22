@@ -31,10 +31,27 @@ export type LoadedResearchStateFacts = {
     readings?: SourcesPreparationProgress["readings"];
 };
 
-/** Compact current dossier facts; reads never advance execution or hydrate passages. */
+/** Control transitions read authority and lifecycle facts without depending on evidence availability. */
+export async function readResearchControlState(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+): Promise<ResearchState> {
+    return readState(ctx, run, "control");
+}
+
+/** Compact current dossier facts, including verified evidence progress; reads never advance execution. */
 export async function readResearchState(
     ctx: QueryCtx,
     run: Doc<"researchRuns">,
+    loaded?: LoadedResearchStateFacts,
+): Promise<ResearchState> {
+    return readState(ctx, run, "evidence", loaded);
+}
+
+async function readState(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+    purpose: "control" | "evidence",
     loaded?: LoadedResearchStateFacts,
 ): Promise<ResearchState> {
     const framing =
@@ -53,12 +70,13 @@ export async function readResearchState(
             | "analyst_or_authorized_workbench" = "analyst_or_authorized_workbench",
     ) => ({ actor, applicable: reason === null, reason });
     const preparation =
-        loaded && "preparation" in loaded
-            ? (loaded.preparation ?? null)
-            : run.sourcesProtocol === "sources_mission_v1" &&
-                run.sourcePreparationId
-              ? await ctx.db.get(run.sourcePreparationId)
-              : null;
+        run.sourcesProtocol !== "sources_mission_v1"
+            ? null
+            : loaded && "preparation" in loaded
+              ? (loaded.preparation ?? null)
+              : run.sourcePreparationId
+                ? await ctx.db.get(run.sourcePreparationId)
+                : null;
     if (preparation && preparation.runId !== run._id)
         throw executionError("not_authorized");
     const mission =
@@ -105,9 +123,12 @@ export async function readResearchState(
     const retainedDocuments = [];
     for (const document of preparation?.sourcesMission?.result?.documents ??
         []) {
-        const source = reads
-            ? await reads.source(document.sourceId)
-            : await ctx.db.get(document.sourceId);
+        const source =
+            purpose === "control"
+                ? null
+                : reads
+                  ? await reads.source(document.sourceId)
+                  : await ctx.db.get(document.sourceId);
         if (source && source.runId !== run._id)
             throw executionError("not_authorized");
         retainedDocuments.push({
@@ -115,15 +136,16 @@ export async function readResearchState(
             title: source?.title ?? null,
         });
     }
-    const progress = preparation?.sourcesMission
-        ? await projectSourcesPreparationProgress(ctx, {
-              preparation,
-              mission,
-              reads,
-              controlled: loaded?.controlled,
-              readings: loaded?.readings,
-          })
-        : undefined;
+    const progress =
+        purpose === "evidence" && preparation?.sourcesMission
+            ? await projectSourcesPreparationProgress(ctx, {
+                  preparation,
+                  mission,
+                  reads,
+                  controlled: loaded?.controlled,
+                  readings: loaded?.readings,
+              })
+            : undefined;
     return {
         phase: run.lifecycleState,
         status: run.executionStatus,

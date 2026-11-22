@@ -11,7 +11,6 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import { applyEvidenceExtractionFailed } from "./domain/evidenceFailure";
-import type { SourceReviewReads } from "./domain/sourceReviewReads";
 import {
     readSourcesMission,
     settledSourcesPhase,
@@ -164,7 +163,6 @@ export async function transitionResearchRun(
         executionStatus: Infer<typeof executionStatusValidator>;
         stepKey: Infer<typeof workflowStepKeyValidator>;
     },
-    reads?: SourceReviewReads,
 ): Promise<null> {
     const run = await ctx.db.get(args.runId);
     if (!run) {
@@ -256,13 +254,7 @@ export async function transitionResearchRun(
         run.lifecycleState !== args.lifecycleState ||
         run.executionStatus !== args.executionStatus
     )
-        await recordResearchObservation(
-            ctx,
-            run._id,
-            "phase_changed",
-            undefined,
-            reads,
-        );
+        await recordResearchObservation(ctx, run._id, "phase_changed");
     return null;
 }
 

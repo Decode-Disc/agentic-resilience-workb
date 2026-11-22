@@ -8,35 +8,35 @@ export async function sourceCaptureState(
     sourceId: Id<"sources">,
     options?: {
         admittedCaptureIds?: ReadonlySet<Id<"sourceCaptures">>;
-        onQuery?: () => void;
-        onDoc?: (doc: Doc<"sourceCaptures"> | null) => void;
+        /** A transaction-local reader can reuse raw lookups across different admission views. */
+        read?: (
+            status: "latest" | Doc<"sourceCaptures">["status"],
+            load: () => Promise<Doc<"sourceCaptures"> | null>,
+        ) => Promise<Doc<"sourceCaptures"> | null>;
     },
 ) {
-    options?.onQuery?.();
-    const latest = await ctx.db
-        .query("sourceCaptures")
-        .withIndex("by_source_and_updated_at", (q) =>
-            q.eq("sourceId", sourceId),
-        )
-        .order("desc")
-        .first();
-    options?.onDoc?.(latest);
+    const lookup = (status: "latest" | Doc<"sourceCaptures">["status"]) => {
+        const load = async () => {
+            const query = ctx.db.query("sourceCaptures");
+            const row = await (status === "latest"
+                ? query.withIndex("by_source_and_updated_at", (q) =>
+                      q.eq("sourceId", sourceId),
+                  )
+                : query.withIndex("by_source_and_status_and_updated_at", (q) =>
+                      q.eq("sourceId", sourceId).eq("status", status),
+                  )
+            )
+                .order("desc")
+                .first();
+            return row;
+        };
+        return options?.read ? options.read(status, load) : load();
+    };
+    const latest = await lookup("latest");
     if (!latest)
         return { committed: null, capturing: false, unavailable: false };
-    const byStatus = async (status: Doc<"sourceCaptures">["status"]) => {
-        options?.onQuery?.();
-        const row = await ctx.db
-            .query("sourceCaptures")
-            .withIndex("by_source_and_status_and_updated_at", (q) =>
-                q.eq("sourceId", sourceId).eq("status", status),
-            )
-            .order("desc")
-            .first();
-        options?.onDoc?.(row);
-        return row;
-    };
     const committed =
-        latest.status === "committed" ? latest : await byStatus("committed");
+        latest.status === "committed" ? latest : await lookup("committed");
     if (
         committed &&
         (!options?.admittedCaptureIds ||
@@ -46,10 +46,10 @@ export async function sourceCaptureState(
     const capturing =
         latest.status === "reserved" ||
         latest.status === "uploaded" ||
-        !!(await byStatus("reserved")) ||
-        !!(await byStatus("uploaded"));
+        !!(await lookup("reserved")) ||
+        !!(await lookup("uploaded"));
     const unavailable =
-        latest.status === "unavailable" || !!(await byStatus("unavailable"));
+        latest.status === "unavailable" || !!(await lookup("unavailable"));
     return { committed: null, capturing, unavailable };
 }
 
