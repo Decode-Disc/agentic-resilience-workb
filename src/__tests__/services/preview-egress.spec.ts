@@ -8,13 +8,21 @@ import type {
 } from "node:dns";
 import * as dns from "node:dns/promises";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import type { Server } from "node:http";
+import type { Server, ServerResponse } from "node:http";
 import { createServer } from "node:https";
 import * as net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrowserType } from "@playwright/test";
-import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+import type { Browser, BrowserType } from "@playwright/test";
+import {
+    afterAll,
+    afterEach,
+    beforeAll,
+    beforeEach,
+    expect,
+    test,
+    vi,
+} from "vitest";
 
 vi.mock("node:dns/promises", { spy: true });
 vi.mock("node:net", { spy: true });
@@ -26,6 +34,14 @@ let fixtureDir: string;
 const hits: string[] = [];
 const connections: string[] = [];
 const secret = "preview-test-only";
+const browsers: Browser[] = [];
+const heldOrigins = new Map<string, (response: ServerResponse) => void>();
+
+function holdOrigin(path: string) {
+    return new Promise<ServerResponse>((resolve) =>
+        heldOrigins.set(path, resolve),
+    );
+}
 
 function fixtureLookup(
     addressFor: (hostname: string) => string,
@@ -62,6 +78,7 @@ function fixtureLookup(
 
 beforeAll(async () => {
     vi.stubEnv("PREVIEW_SERVICE_SECRET", secret);
+    vi.stubEnv("MAX_CONCURRENT_RENDERS", "2");
     fixtureDir = mkdtempSync(join(tmpdir(), "preview-egress-"));
     execFileSync(
         "openssl",
@@ -89,7 +106,22 @@ beforeAll(async () => {
         },
         (req, res) => {
             hits.push(`${req.headers.host}${req.url}`);
-            if (req.url?.startsWith("/loop/")) {
+            const held = heldOrigins.get(req.url ?? "");
+            if (held) {
+                held(res);
+                return;
+            }
+            if (req.url === "/fingerprint") {
+                res.writeHead(200, { "content-type": "text/html" });
+                res.end(`<h1>Fingerprint fixture</h1><script>
+                    document.write('<script src="/observed?webdriver=' + navigator.webdriver + '&languages=' + encodeURIComponent(navigator.languages.join(',')) + '"></scr' + 'ipt>');
+                </script>`);
+            } else if (req.url?.startsWith("/observed?")) {
+                res.writeHead(200, {
+                    "content-type": "application/javascript",
+                });
+                res.end("");
+            } else if (req.url?.startsWith("/loop/")) {
                 const hop = Number(req.url.split("/").at(-1));
                 res.writeHead(302, {
                     location: `https://public.test/loop/${hop + 1}`,
@@ -144,8 +176,8 @@ beforeAll(async () => {
         "playwright",
     );
     const launch = chromium.launch.bind(chromium);
-    vi.spyOn(chromium, "launch").mockImplementation((options) =>
-        launch({
+    vi.spyOn(chromium, "launch").mockImplementation(async (options) => {
+        const browser = await launch({
             ...options,
             executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
             args: [
@@ -153,8 +185,10 @@ beforeAll(async () => {
                 "--ignore-certificate-errors",
                 `--host-resolver-rules=MAP public.test 127.0.0.1:${port}, MAP internal.test 127.0.0.1:${port}`,
             ],
-        }),
-    );
+        });
+        browsers.push(browser);
+        return browser;
+    });
     server = (await import("@preview/server")).__server;
     await new Promise<void>((resolve) =>
         server.listen(0, "127.0.0.1", resolve),
@@ -172,6 +206,10 @@ beforeEach(() => {
         ),
     );
 });
+afterEach(async () => {
+    heldOrigins.clear();
+    await Promise.all(browsers.splice(0).map((browser) => browser.close()));
+});
 afterAll(async () => {
     if (server)
         await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -182,8 +220,9 @@ afterAll(async () => {
     if (fixtureDir) rmSync(fixtureDir, { recursive: true, force: true });
 });
 
-function render(path: string) {
+function render(path: string, signal?: AbortSignal) {
     return fetch(`${base}/render`, {
+        signal,
         method: "POST",
         headers: {
             authorization: `Bearer ${secret}`,
@@ -271,17 +310,124 @@ test("a proxy authentication failure returns a safe error", async () => {
     expect(hits).toEqual([]);
 });
 
-test("renders a public HTTPS page but refuses a private-network redirect", async () => {
-    const good = await render("/");
+test("renders a fingerprint-hardened public HTTPS page but refuses a private-network redirect", async () => {
+    const good = await render("/fingerprint");
     expect(
         good.status,
         good.status === 200 ? undefined : await good.text(),
     ).toBe(200);
     expect(good.headers.get("content-type")).toBe("image/png");
-    expect((await good.arrayBuffer()).byteLength).toBeGreaterThan(100);
+    const png = Buffer.from(await good.arrayBuffer());
+    expect(png.byteLength).toBeGreaterThan(100);
+    expect(png.subarray(0, 8)).toEqual(
+        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
+    expect(hits).toContain("public.test/fingerprint");
+    expect(hits).toContain(
+        "public.test/observed?webdriver=undefined&languages=en-US%2Cen",
+    );
     const redirected = await render("/redirect");
     expect(redirected.status).toBe(422);
     expect(hits).not.toContain("internal.test/private");
+});
+
+test.each([
+    "success",
+    "failure",
+    "cancellation",
+] as const)("saturated renders recover capacity after %s without interrupting the other admitted render", async (outcome) => {
+    const firstArrival = holdOrigin("/held-first");
+    const secondArrival = holdOrigin("/held-second");
+    const controller = new AbortController();
+    const first = render("/held-first", controller.signal);
+    // Observe rejection immediately so client cancellation cannot become an unhandled rejection.
+    const firstOutcome = first.catch((error: unknown) => error);
+    let second: Promise<Response> | undefined;
+    let firstOrigin: ServerResponse | undefined;
+    let secondOrigin: ServerResponse | undefined;
+    try {
+        firstOrigin = await firstArrival;
+        const firstBrowser = browsers.at(-1);
+        if (!firstBrowser) throw new Error("Admitted render has no browser");
+        second = render("/held-second");
+        secondOrigin = await secondArrival;
+        const excess = await render("/excess");
+        expect(excess.status).toBe(422);
+        expect(await excess.json()).toMatchObject({ error: "rate_limited" });
+        expect(hits).not.toContain("public.test/excess");
+
+        if (outcome === "cancellation") {
+            controller.abort();
+            expect(await firstOutcome).toMatchObject({ name: "AbortError" });
+            await expect
+                .poll(() => firstBrowser.isConnected(), { timeout: 5000 })
+                .toBe(false);
+        } else {
+            if (outcome === "failure") {
+                firstOrigin.writeHead(302, {
+                    location: "https://internal.test/private",
+                });
+                firstOrigin.end();
+            } else {
+                firstOrigin.writeHead(200, { "content-type": "text/html" });
+                firstOrigin.end("<h1>First admitted render</h1>");
+            }
+            const response = await first;
+            if (outcome === "failure") {
+                expect(response.status).toBe(422);
+                expect(await response.json()).toMatchObject({
+                    error: "non_public_destination",
+                });
+                expect(hits).not.toContain("internal.test/private");
+            } else {
+                expect(response.status).toBe(200);
+                expect(response.headers.get("content-type")).toBe("image/png");
+                expect(
+                    (await response.arrayBuffer()).byteLength,
+                ).toBeGreaterThan(100);
+            }
+        }
+
+        // Browser disconnection precedes process cleanup; admission becomes available after cleanup.
+        const attempts: Response[] = [];
+        await expect
+            .poll(
+                async () => {
+                    const response = await render("/replacement");
+                    attempts.push(response);
+                    return response.status;
+                },
+                { timeout: 5000 },
+            )
+            .toBe(200);
+        for (const waiting of attempts.slice(0, -1)) {
+            expect(waiting.status).toBe(422);
+            expect(await waiting.json()).toMatchObject({
+                error: "rate_limited",
+            });
+        }
+        const replacement = attempts.at(-1);
+        if (!replacement) throw new Error("No replacement response");
+        expect(replacement.status).toBe(200);
+        expect(replacement.headers.get("content-type")).toBe("image/png");
+        expect((await replacement.arrayBuffer()).byteLength).toBeGreaterThan(
+            100,
+        );
+        expect(hits).toContain("public.test/replacement");
+        expect(secondOrigin.destroyed).toBe(false);
+        secondOrigin.writeHead(200, { "content-type": "text/html" });
+        secondOrigin.end("<h1>Second admitted render</h1>");
+        const remaining = await second;
+        expect(remaining.status).toBe(200);
+        expect(remaining.headers.get("content-type")).toBe("image/png");
+        expect((await remaining.arrayBuffer()).byteLength).toBeGreaterThan(100);
+    } finally {
+        controller.abort();
+        firstOrigin?.destroy();
+        secondOrigin?.destroy();
+        await Promise.all(browsers.map((browser) => browser.close()));
+        await Promise.allSettled([first, ...(second ? [second] : [])]);
+    }
 });
 
 test("public content still renders while private subresources are blocked", async () => {

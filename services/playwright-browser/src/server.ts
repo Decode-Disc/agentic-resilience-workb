@@ -16,7 +16,8 @@ import {
 const PORT = Number.parseInt(process.env["PORT"] ?? "3000", 10);
 const SHARED_SECRET = process.env["PREVIEW_SERVICE_SECRET"];
 const MAX_CONCURRENT_RENDERS = Number.parseInt(
-    process.env["MAX_CONCURRENT_RENDERS"] ?? String(policy.maxConcurrentRenders),
+    process.env["MAX_CONCURRENT_RENDERS"] ??
+        String(policy.maxConcurrentRenders),
     10,
 );
 const RENDER_TIMEOUT_MS = Number.parseInt(
@@ -320,7 +321,7 @@ async function createPublicEgress(timeoutMs: number) {
 
 // ─── Render ───────────────────────────────────────────────────────────────
 
-async function render(url: string): Promise<RenderResult> {
+async function render(url: string, signal: AbortSignal): Promise<RenderResult> {
     if (activeRenders >= MAX_CONCURRENT_RENDERS) {
         return {
             status: "error",
@@ -353,8 +354,24 @@ async function render(url: string): Promise<RenderResult> {
     let browser: Browser | null = null;
     let navigationError: RenderError | undefined;
     let egress: Awaited<ReturnType<typeof createPublicEgress>> | undefined;
+    let browserClosing: Promise<void> | undefined;
+    const closeBrowser = () => {
+        if (browser && !browserClosing) {
+            browserClosing = browser.close().catch(() => {
+                log("render_cleanup_failed", { hostname });
+            });
+        }
+        return browserClosing;
+    };
+    const cancel = () => {
+        egress?.close();
+        void closeBrowser();
+    };
+    signal.addEventListener("abort", cancel, { once: true });
     try {
+        signal.throwIfAborted();
         egress = await createPublicEgress(RENDER_TIMEOUT_MS);
+        signal.throwIfAborted();
         const launch = buildLaunchOptions();
         browser = await chromium.launch({
             ...launch,
@@ -367,6 +384,7 @@ async function render(url: string): Promise<RenderResult> {
                 "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
             ],
         });
+        signal.throwIfAborted();
         const context = await browser.newContext({
             ...buildBrowserContextOptions(VIEWPORT),
             serviceWorkers: "block",
@@ -537,14 +555,18 @@ async function render(url: string): Promise<RenderResult> {
         };
     } catch (err) {
         const durationMs = Date.now() - startTime;
-        const errorCode =
+        let errorCode =
             err instanceof RenderError
                 ? err.code
                 : (navigationError?.code ??
                   egress?.failure()?.code ??
                   "render_failed");
-        const errorMessage =
+        let errorMessage =
             err instanceof Error ? err.message : "Screenshot render failed";
+        if (signal.aborted) {
+            errorCode = "cancelled";
+            errorMessage = "Preview request cancelled";
+        }
         log("render_failed", { hostname, durationMs, errorCode });
         return {
             status: "error",
@@ -552,15 +574,10 @@ async function render(url: string): Promise<RenderResult> {
             message: errorMessage,
         };
     } finally {
-        activeRenders--;
+        signal.removeEventListener("abort", cancel);
         egress?.close();
-        if (browser) {
-            try {
-                await browser.close();
-            } catch {
-                // already closed
-            }
-        }
+        await closeBrowser();
+        activeRenders--;
     }
 }
 
@@ -571,13 +588,33 @@ async function readBody(
     maxBytes = policy.requestBodyBytes,
 ): Promise<string> {
     return new Promise((resolve, reject) => {
-        let data = "";
+        const chunks: Buffer[] = [];
+        let bytes = 0;
+        let settled = false;
+        const fail = (error: Error) => {
+            if (settled) return;
+            settled = true;
+            chunks.length = 0;
+            reject(error);
+        };
         req.on("data", (chunk: Buffer) => {
-            data += chunk.toString();
-            if (data.length > maxBytes) reject(new Error("too large"));
+            // Keep draining rejected requests without retaining their remaining body.
+            if (settled) return;
+            bytes += chunk.byteLength;
+            if (bytes > maxBytes) {
+                fail(new Error("too large"));
+                return;
+            }
+            chunks.push(chunk);
         });
-        req.on("end", () => resolve(data));
-        req.on("error", reject);
+        req.once("end", () => {
+            if (settled) return;
+            settled = true;
+            resolve(Buffer.concat(chunks, bytes).toString("utf8"));
+            chunks.length = 0;
+        });
+        req.once("aborted", () => fail(new Error("request aborted")));
+        req.once("error", fail);
     });
 }
 
@@ -605,12 +642,13 @@ async function handleRequest(
         try {
             body = await readBody(req);
         } catch {
+            if (req.destroyed && !req.complete) return;
             res.writeHead(413, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Request body too large" }));
             return;
         }
 
-        let parsed: { url?: string };
+        let parsed: unknown;
         try {
             parsed = JSON.parse(body);
         } catch {
@@ -619,7 +657,13 @@ async function handleRequest(
             return;
         }
 
-        if (!parsed.url || typeof parsed.url !== "string") {
+        if (
+            parsed === null ||
+            typeof parsed !== "object" ||
+            !("url" in parsed) ||
+            typeof parsed.url !== "string" ||
+            !parsed.url
+        ) {
             res.writeHead(400, { "Content-Type": "application/json" });
             res.end(
                 JSON.stringify({
@@ -629,7 +673,17 @@ async function handleRequest(
             return;
         }
 
-        const result = await render(parsed.url);
+        if (res.destroyed) return;
+        const cancellation = new AbortController();
+        const cancel = () => cancellation.abort();
+        res.once("close", cancel);
+        let result: RenderResult;
+        try {
+            result = await render(parsed.url, cancellation.signal);
+        } finally {
+            res.off("close", cancel);
+        }
+        if (res.destroyed) return;
         if (result.status === "ok") {
             res.writeHead(200, {
                 "Content-Type": result.contentType,

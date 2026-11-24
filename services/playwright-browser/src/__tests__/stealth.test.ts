@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -39,8 +40,15 @@ describe("STEALTH constants", () => {
         expect(STEALTH_USER_AGENT).not.toMatch(/HeadlessChrome/i);
     });
 
-    it("overrides navigator.webdriver in the init script", () => {
-        expect(STEALTH_INIT_SCRIPT).toContain("navigator");
-        expect(STEALTH_INIT_SCRIPT).toContain("webdriver");
+    it("applies the browser fingerprint before page scripts run", () => {
+        const globals = {
+            navigator: { webdriver: true, languages: ["fr"], plugins: [] },
+            window: {},
+        };
+        runInNewContext(STEALTH_INIT_SCRIPT, globals);
+        expect(globals.navigator.webdriver).toBeUndefined();
+        expect(globals.navigator.languages).toEqual(["en-US", "en"]);
+        expect(globals.navigator.plugins).toHaveLength(5);
+        expect(globals.window).toHaveProperty("chrome.runtime", {});
     });
 });

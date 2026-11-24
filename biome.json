@@ -11,6 +11,8 @@
             "src/**",
             "convex/**",
             "scripts/**",
+            "services/playwright-browser/src/**",
+            "services/playwright-browser/vitest.config.ts",
             "!scripts/evaluations/source-selection/runs",
             "!scripts/evaluations/source-selection/fixtures",
             "*.ts",
