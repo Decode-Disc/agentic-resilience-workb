@@ -1,10 +1,24 @@
 import { api, internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedConversation as fixture } from "@/__tests__/setup/agent-harness";
 
 afterEach(() => {
     vi.unstubAllEnvs();
 });
+
+async function observeSimulation(
+    t: Awaited<ReturnType<typeof fixture>>["t"],
+    invocationId: Id<"agentInvocations">,
+) {
+    const args = { invocationId, expectedGeneration: 1 };
+    const response = await t.query(internal.execution.simulation.invoke, args);
+    await t.mutation(internal.execution.invocationLifecycle.retainOutput, {
+        ...args,
+        responseJson: JSON.stringify(response),
+    });
+    return { response };
+}
 
 test("message reading returns application delivery data without component storage metadata", async () => {
     const f = await fixture();
@@ -173,8 +187,15 @@ test("a conversational mission survives research generation changes and publishe
         { runId: f.runId },
     );
     if (!turnId) throw new Error("Expected active turn");
+    await f.t.run(async (ctx) => {
+        const turn = await ctx.db.get(turnId);
+        if (!turn) throw new Error("Expected active turn");
+        await ctx.db.patch(turn.conversationId, {
+            definitionId: "conversation_validation_v1",
+            definitionVersion: 2,
+        });
+    });
     const missionId = await f.t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "conversation_validation_v1",
         scope: { kind: "conversation_validation_v1" },
@@ -202,10 +223,7 @@ test("a conversational mission survives research generation changes and publishe
             messages: [{ text: "Explain retained work" }],
         },
     });
-    const reply = await f.t.action(internal.execution.invokeAgentModel.invoke, {
-        invocationId: begun.invocationId,
-        expectedGeneration: 1,
-    });
+    const reply = await observeSimulation(f.t, begun.invocationId);
     for (let i = 0; i < 2; i++)
         expect(
             await f.t.mutation(internal.execution.invocations.finish, {
@@ -239,8 +257,15 @@ test("steering between observation and adoption prevents stale publication and r
         { runId: f.runId },
     );
     if (!turnId) throw new Error("Expected active turn");
+    await f.t.run(async (ctx) => {
+        const turn = await ctx.db.get(turnId);
+        if (!turn) throw new Error("Expected active turn");
+        await ctx.db.patch(turn.conversationId, {
+            definitionId: "conversation_validation_v1",
+            definitionVersion: 2,
+        });
+    });
     const missionId = await f.t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "conversation_validation_v1",
         scope: { kind: "conversation_validation_v1" },
@@ -255,10 +280,7 @@ test("steering between observation and adoption prevents stale publication and r
         provenance: "simulation",
     });
     if (begun.kind !== "ready") throw new Error("Expected invocation");
-    const reply = await f.t.action(internal.execution.invokeAgentModel.invoke, {
-        invocationId: begun.invocationId,
-        expectedGeneration: 1,
-    });
+    const reply = await observeSimulation(f.t, begun.invocationId);
     await f.client.mutation(api.execution.conversations.submit, {
         runId: f.runId,
         requestKey: "steer-now",
@@ -428,8 +450,15 @@ test("steering beyond one history page preserves every instruction and completes
         { runId: f.runId },
     );
     if (!turnId) throw new Error("Expected active turn");
+    await f.t.run(async (ctx) => {
+        const turn = await ctx.db.get(turnId);
+        if (!turn) throw new Error("Expected active turn");
+        await ctx.db.patch(turn.conversationId, {
+            definitionId: "conversation_validation_v1",
+            definitionVersion: 2,
+        });
+    });
     const missionId = await f.t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "conversation_validation_v1",
         scope: { kind: "conversation_validation_v1" },
@@ -467,10 +496,7 @@ test("steering beyond one history page preserves every instruction and completes
         text: "Next request",
         delivery: "queue",
     });
-    const reply = await f.t.action(internal.execution.invokeAgentModel.invoke, {
-        invocationId: begun.invocationId,
-        expectedGeneration: 1,
-    });
+    const reply = await observeSimulation(f.t, begun.invocationId);
     expect(
         await f.t.mutation(internal.execution.invocations.finish, {
             invocationId: begun.invocationId,
@@ -516,15 +542,6 @@ test("a steer exceeding the assembled context rolls back without stranding the a
         { runId: f.runId },
     );
     if (!turnId) throw new Error("Expected active turn");
-    const missionId = await f.t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
-        runId: f.runId,
-        definitionId: "conversation_validation_v1",
-        scope: { kind: "conversation_validation_v1" },
-        conversationTurnId: turnId,
-        requestKey: "byte-budget",
-        expectedGeneration: 1,
-    });
     const largeText = "x".repeat(64 * 1024 - 1);
     await f.client.mutation(api.execution.conversations.submit, {
         runId: f.runId,
@@ -576,6 +593,14 @@ test("a steer exceeding the assembled context rolls back without stranding the a
     await f.client.mutation(api.execution.conversations.submit, {
         ...tooLarge,
         text: "A smaller refinement",
+    });
+    const missionId = await f.t.mutation(internal.execution.missions.start, {
+        runId: f.runId,
+        definitionId: "conversation_validation_v1",
+        scope: { kind: "conversation_validation_v1" },
+        conversationTurnId: turnId,
+        requestKey: "byte-budget",
+        expectedGeneration: 1,
     });
     const begun = await f.t.mutation(internal.execution.invocations.begin, {
         missionId,

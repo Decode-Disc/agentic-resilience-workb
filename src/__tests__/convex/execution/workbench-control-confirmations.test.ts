@@ -41,7 +41,7 @@ test.each([
         expectedGeneration: 1,
     });
     await t.mutation(internal.execution.researchControl.checkpoint, { runId });
-    // Coverage routing remains the contract of historical dossiers prepared without the Sources mission.
+    // Historical dossiers retain the routing choice after preparation execution retires.
     await t.run((ctx) => ctx.db.patch(runId, { sourcesProtocol: undefined }));
     const active = await t.mutation(
         internal.execution.conversations.startTurn,
@@ -93,7 +93,7 @@ test.each([
     expect(
         await t.run((ctx) => ctx.db.query("workbenchInstructions").first()),
     ).toMatchObject({
-        status: coverageRole ? "waiting" : "limited",
+        status: "limited",
         ...(coverageRole ? { coverageRole } : {}),
     });
     expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
@@ -123,9 +123,7 @@ test.each([
     const text = page.page.find((item) => item.role === "assistant")?.text;
     expect(text).toContain("Switching restrictions deserve inspection.");
     expect(text).toContain(
-        coverageRole
-            ? "Your request is recorded. Transmission waits for the applicable documentary phase and remaining capacity."
-            : "This request is recorded, but it cannot be executed through the documentary operations currently available.",
+        "This request is recorded, but it cannot be executed through the documentary operations currently available.",
     );
     expect(text).not.toContain("transmit_source_request");
 });

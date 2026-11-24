@@ -29,7 +29,6 @@ export const conversationValidationV2Definition: AgentDefinition & {
     operations: conversationValidationOperations,
     initialState() {
         return {
-            objectiveKey: "conversation",
             state: { kind: "conversation_validation_v1" },
             obligations: [],
         };

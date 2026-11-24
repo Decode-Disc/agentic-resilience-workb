@@ -56,7 +56,7 @@ export async function createAdmittedPreflight(
 export async function seedHistoricalResearch(
     t: TestConvex<typeof schema>,
     args: Pick<
-        FunctionArgs<typeof api.researchLaunch.confirmAndStart>,
+        FunctionArgs<typeof api.framing.confirmCompany>,
         "preflightId" | "idempotencyKey" | "coveragePreset" | "researchAngle"
     >,
     prepareSources = false,
@@ -131,6 +131,7 @@ export async function seedHistoricalResearch(
             },
             {
                 onComplete: internal.researchWorkflow.onComplete,
+                startAsync: true,
                 context: { runId },
             },
         );

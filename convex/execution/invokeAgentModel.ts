@@ -1,23 +1,17 @@
 "use node";
 
 import { internal } from "@convex/_generated/api";
-import { type ActionCtx, internalAction } from "@convex/_generated/server";
+import type { ActionCtx } from "@convex/_generated/server";
 import { sha256Hex } from "@convex/domain/sourcePassages";
-import { resolveAgentGenerationBackend } from "@convex/integrations/agentBackends";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
-import {
-    agentInputByteLength,
-    rejectedOutputDiagnostic,
-} from "@convex/integrations/modelTransport";
+import { rejectedOutputDiagnostic } from "@convex/integrations/modelTransport";
 import { revisionRoute } from "@convex/modelConfiguration";
 import {
-    MAX_CONTEXT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
-    nodeActionGenerationDeadline,
     resolveGenerationAuthority,
 } from "@convex/resourcePolicy";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
-import { type Infer, v } from "convex/values";
+import type { Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
 import {
@@ -30,10 +24,9 @@ import {
     type AgentGenerationBackend,
     type AgentGenerationObservation,
     type AgentGenerationResult,
-    invocationReplyValidator,
+    type invocationReplyValidator,
     invocationResponseValidator,
     invocationStructureError,
-    LEGACY_AGENT_BACKEND,
 } from "./executionProtocol";
 
 import { retainedTextParts } from "./retainedText";
@@ -41,12 +34,8 @@ import { simulationFetch } from "./simulation";
 
 function decodeReceivedReply(
     result: Extract<AgentGenerationResult, { status: "succeeded" }>,
-    pi = false,
-    auxiliary = false,
-    definition?: Pick<
-        AgentDefinition,
-        "textCompletion" | "completionTransport"
-    >,
+    auxiliary: boolean,
+    definition: Pick<AgentDefinition, "textCompletion" | "completionTransport">,
 ): {
     reply: Infer<typeof invocationReplyValidator>;
     errorCode?: string;
@@ -70,16 +59,10 @@ function decodeReceivedReply(
             diagnostic,
         };
     };
-    if (
-        !pi &&
-        new TextEncoder().encode(rawOutputJson).length >
-            MAX_OPERATION_RESULT_BYTES
-    )
-        return invalid("response_capacity", rawOutputJson);
     let decoded: unknown;
     if (auxiliary) {
         decoded = { kind: "operations", requests: [] };
-    } else if (pi && definition?.completionTransport === "native_tool") {
+    } else if (definition.completionTransport === "native_tool") {
         if (result.requests.length === 0) {
             decoded = { kind: "completion_submission", call: null };
         } else if (
@@ -96,7 +79,7 @@ function decodeReceivedReply(
         }
     } else if (result.requests.length) {
         decoded = { kind: "operations", requests: result.requests };
-    } else if (definition?.textCompletion) {
+    } else if (definition.textCompletion) {
         decoded = definition.textCompletion(result.assistantOutput);
     } else {
         try {
@@ -108,12 +91,11 @@ function decodeReceivedReply(
     if (!validate(invocationResponseValidator, decoded))
         return invalid("invalid_output", result.assistantOutput);
     if (
-        pi &&
         new TextEncoder().encode(JSON.stringify(decoded)).length >
-            MAX_OPERATION_RESULT_BYTES
+        MAX_OPERATION_RESULT_BYTES
     )
         return invalid("response_capacity", rawOutputJson);
-    const structureError = invocationStructureError(decoded, pi);
+    const structureError = invocationStructureError(decoded, true);
     if (structureError) return invalid(structureError, rawOutputJson);
     return { reply: { response: decoded, rawOutputJson } };
 }
@@ -125,7 +107,7 @@ export async function invokeControlledGeneration(
         expectedGeneration: number;
     },
     executionDeadlineAt: number,
-    nativeBackend?: AgentGenerationBackend,
+    backend: AgentGenerationBackend,
 ): Promise<Infer<typeof invocationReplyValidator>> {
     const {
         invocation,
@@ -163,42 +145,7 @@ export async function invokeControlledGeneration(
         resourcePolicy: grantedAuthority.resourcePolicy,
         deadlineAt: execution.deadlineAt,
     };
-    if (
-        invocation.provenance === "simulation" &&
-        !invocation.generationBackend
-    ) {
-        const recorded = await ctx.runMutation(
-            internal.execution.invocationLifecycle.retainRequest,
-            {
-                ...args,
-                requestJson: JSON.stringify({
-                    version: 1,
-                    provenance: "simulation",
-                    input: JSON.parse(invocation.inputJson),
-                }),
-            },
-        );
-        if (recorded.kind === "blocked") throw executionError(recorded.code);
-        return retainReply({
-            response: await ctx.runQuery(
-                internal.execution.simulation.invoke,
-                args,
-            ),
-        });
-    }
     const simulated = invocation.provenance === "simulation";
-    const backend =
-        nativeBackend ??
-        resolveAgentGenerationBackend(
-            invocation.generationBackend ?? LEGACY_AGENT_BACKEND,
-        );
-    if (!backend)
-        return retainReply({
-            response: {
-                kind: "blocked",
-                code: "generation_backend_unknown",
-            },
-        });
     const configuredModel = simulated
         ? null
         : await ctx.runQuery(internal.modelConfiguration.forMission, {
@@ -229,31 +176,6 @@ export async function invokeControlledGeneration(
         definition,
         JSON.parse(invocation.inputJson),
     );
-    const inputBytes = await agentInputByteLength(
-        {
-            instructions: definition.instructions,
-            prompt: invocation.inputJson,
-            operations: tools,
-            nativeConversation: definition.nativeConversation,
-            contextRendering: definition.contextRendering,
-            completionTransport: definition.completionTransport,
-            definitionVersion: definition.version,
-            nativeRoute:
-                mission.executionRuntime === "pi-durable"
-                    ? simulated
-                        ? SIMULATION_MODEL_ROUTE
-                        : route
-                    : undefined,
-        },
-        async (key) =>
-            (await ctx.runQuery(internal.modelConfiguration.profile, {
-                key,
-            })) ?? undefined,
-    );
-    if (backend.id !== "pi-durable" && inputBytes > MAX_CONTEXT_BYTES)
-        return retainReply({
-            response: { kind: "blocked", code: "context_capacity" },
-        });
     const attempt = {
         missionId: mission._id,
         invocationId: invocation._id,
@@ -319,25 +241,6 @@ export async function invokeControlledGeneration(
     let admitted:
         | FunctionReturnType<typeof internal.providerCalls.recordAttempt>
         | undefined;
-    if (!simulated && backend.id !== "pi-durable") {
-        try {
-            admitted = await ctx.runMutation(
-                internal.providerCalls.recordAttempt,
-                { ...attempt, status: "started" },
-            );
-        } catch (error) {
-            const code = executionFailureCode(error);
-            if (!code) throw error;
-            return retainReply({ response: { kind: "blocked", code } });
-        }
-        if (!admitted.shouldExecute)
-            return retainReply({
-                response: {
-                    kind: "blocked",
-                    code: admitted.errorCode ?? "attempt_already_recorded",
-                },
-            });
-    }
     // Admission and call are separate transactions; recheck the generation immediately before I/O.
     try {
         await ctx.runQuery(
@@ -365,7 +268,6 @@ export async function invokeControlledGeneration(
             result.status === "succeeded"
                 ? decodeReceivedReply(
                       result,
-                      backend.id === "pi-durable",
                       invocation.purpose === "compaction",
                       definition,
                   )
@@ -393,11 +295,7 @@ export async function invokeControlledGeneration(
                       errorCode: result.errorCode,
                       diagnostic: result.outputDiagnostic,
                   };
-        if (
-            backend.id === "pi-durable" &&
-            result.status === "failed" &&
-            result.backendOutputJson
-        )
+        if (result.status === "failed" && result.backendOutputJson)
             received.reply.rawOutputJson = JSON.stringify({
                 ...(received.reply.rawOutputJson
                     ? { diagnostic: JSON.parse(received.reply.rawOutputJson) }
@@ -458,9 +356,8 @@ export async function invokeControlledGeneration(
                         const effectiveMaxOutputTokens =
                             metadata?.effectiveMaxOutputTokens;
                         if (
-                            backend.id === "pi-durable" &&
-                            (!Number.isSafeInteger(effectiveMaxOutputTokens) ||
-                                (effectiveMaxOutputTokens ?? 0) < 1)
+                            !Number.isSafeInteger(effectiveMaxOutputTokens) ||
+                            (effectiveMaxOutputTokens ?? 0) < 1
                         )
                             throw executionError("invalid_model_output_limit");
                         const json = simulated
@@ -473,8 +370,8 @@ export async function invokeControlledGeneration(
                             | import("@convex/_generated/dataModel").Id<"retainedTexts">
                             | undefined;
                         if (
-                            backend.id === "pi-durable" &&
-                            new TextEncoder().encode(json).length > 512 * 1024
+                            new TextEncoder().encode(json).length >
+                            512 * 1024
                         ) {
                             const { manifest, parts } = retainedTextParts(json);
                             for (const [index, content] of parts.entries())
@@ -506,7 +403,7 @@ export async function invokeControlledGeneration(
                         );
                         if (retained.kind === "blocked")
                             throw executionError(retained.code);
-                        if (!simulated && backend.id === "pi-durable") {
+                        if (!simulated) {
                             admitted = await ctx.runMutation(
                                 internal.providerCalls.recordAttempt,
                                 { ...attempt, status: "started" },
@@ -591,17 +488,3 @@ export async function invokeControlledGeneration(
     }
     return observedReply ?? recordObservation(result);
 }
-
-export const invoke = internalAction({
-    args: {
-        invocationId: v.id("agentInvocations"),
-        expectedGeneration: v.number(),
-    },
-    returns: invocationReplyValidator,
-    handler: (ctx, args) =>
-        invokeControlledGeneration(
-            ctx,
-            args,
-            nodeActionGenerationDeadline(Date.now()),
-        ),
-});

@@ -1,3 +1,4 @@
+import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
@@ -441,13 +442,15 @@ test("rejects duplicate and stale manual candidates without inserting source sta
     });
 });
 
-test("recomputes the source proposal after an analyst adds a source", async () => {
+test("adding a manual candidate preserves the proposal until the analyst requests recomputation", async () => {
     const t = convexTest(schema, modules);
     const fixture = await createSourceReviewFixture(t);
     const owner = t.withIdentity({
         subject: `${fixture.userId}|source-owner`,
     });
 
+    const previous = await t.run((ctx) => ctx.db.get(fixture.corpusRevisionId));
+    expect(previous?.sourceSelectionProposalId).toBeDefined();
     const manualSourceId = await owner.mutation(persistManualCandidate, {
         runId: fixture.runId,
         corpusRevisionId: fixture.corpusRevisionId,
@@ -455,6 +458,24 @@ test("recomputes the source proposal after an analyst adds a source", async () =
         providerReference: "url_metadata:manual-proposal",
         canonicalUrl: "https://example.com/manual-proposal",
         title: "Analyst supplied source",
+    });
+
+    expect(
+        await t.run((ctx) => ctx.db.get(fixture.corpusRevisionId)),
+    ).toMatchObject({
+        sourceSelectionProposalId: previous?.sourceSelectionProposalId,
+    });
+    expect(
+        await t.run((ctx) =>
+            ctx.db.query("sourceSelectionProposalRebuilds").collect(),
+        ),
+    ).toEqual([]);
+    if (!previous?.sourceSelectionProposalId)
+        throw new Error("Expected current proposal");
+    await owner.mutation(api.sourceSelectionProposals.recompute, {
+        runId: fixture.runId,
+        corpusRevisionId: fixture.corpusRevisionId,
+        expectedProposalId: previous.sourceSelectionProposalId,
     });
 
     const recomputed = await t.run(async (ctx) => {

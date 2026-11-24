@@ -80,8 +80,8 @@ export const confirmCompany = mutation({
     ): Promise<{ runId: Id<"researchRuns">; remainingAnalyses: number }> => {
         const { modelSelection, ...launchArgs } = args;
         const result = await ctx.runMutation(
-            internal.researchLaunch.confirmAndStartReserved,
-            { ...launchArgs, framingOnly: true },
+            internal.researchLaunch.createFramingDossier,
+            launchArgs,
         );
         await initializeFraming(ctx, result.runId, modelSelection);
         return result;

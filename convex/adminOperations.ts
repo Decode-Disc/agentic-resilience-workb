@@ -14,20 +14,14 @@ import {
 } from "convex/server";
 import { type Infer, v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
-import {
-    env,
-    internalMutation,
-    internalQuery,
-    mutation,
-    query,
-} from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { requireAdmin } from "./administrationAuthority";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
 import {
     ASSESSMENT_DIMENSION_KEYS,
     buildResearchPlanQuestions,
 } from "./domain/researchPlan";
-import { classifyRunPurpose, runPurposeValidator } from "./domain/runPurpose";
+import { runPurposeValidator } from "./domain/runPurpose";
 import { withdrawableRun } from "./domain/runWithdrawal";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
 import { settledSourcesPhase } from "./domain/sources";
@@ -540,88 +534,6 @@ export const backfillPhase5Authority = mutation({
             });
         }
         return { ...revisions, page };
-    },
-});
-
-function assertLocalPurposeMigration() {
-    const hostname = tryParseHostname(env.CONVEX_CLOUD_URL);
-    if (hostname === null || !["127.0.0.1", "localhost"].includes(hostname))
-        throw new Error("Run purpose migration requires the local deployment");
-}
-
-/** Treats an unparseable deployment URL as non-local instead of throwing. */
-function tryParseHostname(value: string): string | null {
-    try {
-        return new URL(value).hostname;
-    } catch {
-        return null;
-    }
-}
-
-/** Read-only preview; ambiguous legacy markers never silently acquire technical authority. */
-export const previewRunPurposes = internalQuery({
-    args: { paginationOpts: paginationOptsValidator },
-    returns: paginationResultValidator(
-        v.object({
-            runId: v.id("researchRuns"),
-            oldPurpose: v.optional(runPurposeValidator),
-            purpose: runPurposeValidator,
-            reason: v.string(),
-            requiresReview: v.boolean(),
-        }),
-    ),
-    handler: async (ctx, args) => {
-        assertLocalPurposeMigration();
-        const page = await ctx.db
-            .query("researchRuns")
-            .paginate(args.paginationOpts);
-        return {
-            ...page,
-            page: page.page.map((run) => {
-                const classified = classifyRunPurpose(run);
-                return {
-                    runId: run._id,
-                    oldPurpose: run.purpose,
-                    purpose: classified.purpose,
-                    reason: classified.reason,
-                    requiresReview: classified.requiresReview ?? false,
-                };
-            }),
-        };
-    },
-});
-
-/** Assigns metadata only, preserving business timestamps, ownership, evidence and accounting. */
-export const migrateRunPurposes = internalMutation({
-    args: { runIds: v.array(v.id("researchRuns")) },
-    returns: v.object({ changed: v.number() }),
-    handler: async (ctx, args) => {
-        assertLocalPurposeMigration();
-        if (
-            args.runIds.length > 50 ||
-            new Set(args.runIds).size !== args.runIds.length
-        )
-            throw new Error("Supply at most fifty distinct runs");
-        let changed = 0;
-        for (const id of args.runIds) {
-            const run = await ctx.db.get(id);
-            if (!run) throw new Error("Research run missing");
-            if (run.purpose) continue;
-            const classified = classifyRunPurpose(run);
-            if (classified.requiresReview)
-                throw new Error(`Run purpose requires review: ${id}`);
-            await ctx.db.patch(id, { purpose: classified.purpose });
-            await ctx.db.insert("auditEvents", {
-                actor: { type: "system" },
-                action: "run_purpose_classified",
-                targetType: "research_run",
-                targetId: id,
-                reason: `run-purpose-v1: ${classified.purpose}; ${classified.reason}`,
-                occurredAt: Date.now(),
-            });
-            changed++;
-        }
-        return { changed };
     },
 });
 

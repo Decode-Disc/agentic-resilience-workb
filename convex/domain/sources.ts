@@ -6,6 +6,7 @@ import {
 } from "@convex/execution/authority";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { operationHistoryReference } from "@convex/execution/journal";
+import { missionObjectiveKey } from "@convex/execution/missionData";
 import {
     DOCUMENTARY_SEARCH_QUERY_MAX_CHARS,
     MAX_OPERATION_RESULT_BYTES,
@@ -571,13 +572,6 @@ export function sourcesInstructionTreatment(
     };
 }
 
-/** The objective identity is shared by mission admission and lookup across resumes. */
-export function sourcesMissionKey(
-    preparationId: Id<"sourceSelectionProposalRebuilds">,
-) {
-    return `sources:${preparationId}`;
-}
-
 export async function readSourcesMission(
     ctx: QueryCtx,
     run: Doc<"researchRuns">,
@@ -590,7 +584,10 @@ export async function readSourcesMission(
         .withIndex("by_run_and_objective_key", (q) =>
             q
                 .eq("runId", run._id)
-                .eq("objectiveKey", sourcesMissionKey(preparationId)),
+                .eq(
+                    "objectiveKey",
+                    missionObjectiveKey({ kind: "sources_v1", preparationId }),
+                ),
         )
         .order("desc")
         .first();

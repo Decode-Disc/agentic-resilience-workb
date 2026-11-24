@@ -50,7 +50,6 @@ import {
     requireSourcesPreparation,
     sourcesCompletionAccounting,
     sourcesContinuationAvailable,
-    sourcesMissionKey,
     sourcesReadingReferences,
     sourcesResourceStatus,
     sourcesTaskObservations,
@@ -315,7 +314,6 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
         if (scope.kind !== "sources_v1")
             throw executionError("sources_scope_invalid");
         return {
-            objectiveKey: sourcesMissionKey(scope.preparationId),
             state: { kind: "sources_v1" },
             obligations: ["account_for_documentary_needs"],
         };

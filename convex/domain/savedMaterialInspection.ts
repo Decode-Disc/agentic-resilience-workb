@@ -71,9 +71,7 @@ export const savedMaterialInspectionDefinition: AgentDefinition & {
     initialState(scope) {
         if (scope.kind !== "saved_material_inspection_v1")
             throw executionError("mission_contract_invalid");
-        const { corpusRevisionId } = scope;
         return {
-            objectiveKey: `saved-material:${corpusRevisionId}`,
             state: {
                 kind: "saved_material_inspection_v1",
                 inspectedCaptureIds: [],

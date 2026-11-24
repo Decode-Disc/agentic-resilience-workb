@@ -24,23 +24,15 @@ import {
     sourceReadingStatusValidator,
 } from "./domain/sourcePreparationReview";
 import { upsertSourceReviewItem } from "./domain/sourceReviewProjection";
-import {
-    SOURCE_SELECTION_POLICY_VERSION,
-    sourceRoleAvailabilityValidator,
-} from "./domain/sourceSelectionPolicy";
+import { sourceRoleAvailabilityValidator } from "./domain/sourceSelectionPolicy";
 import {
     projectSourceQualificationForReview,
     sourceQualificationReviewValidator,
 } from "./domain/sourceUsage";
-import {
-    sourceDossierCandidateLimit,
-    sourcePreparationEnabled,
-} from "./resourceLimits";
+import { sourceDossierCandidateLimit } from "./resourceLimits";
 import { MAX_HISTORICAL_SOURCE_CANDIDATES } from "./resourcePolicy";
 import { requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
-import { startReviewPreparation } from "./sourcePreparation";
-import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 
 const sourceReviewDecisionValidator = v.union(
     v.literal("accepted"),
@@ -617,7 +609,7 @@ export const persistManualCandidate = internalMutation({
             );
         }
         const now = Date.now();
-        const sourceId = await insertPendingManualSource(ctx, {
+        return insertPendingManualSource(ctx, {
             runId: run._id,
             corpusRevisionId: revision._id,
             reviewerVisitorId: visitor._id,
@@ -626,48 +618,6 @@ export const persistManualCandidate = internalMutation({
             providerReference: args.providerReference,
             now,
         });
-        if (run.lifecycleState === "awaiting_source_review") {
-            let proposal = revision.sourceSelectionProposalId
-                ? await ctx.db.get(revision.sourceSelectionProposalId)
-                : null;
-            if (sourcePreparationEnabled()) {
-                if (!proposal) {
-                    const initial = await createSourceSelectionProposal(ctx, {
-                        run,
-                        revision,
-                    });
-                    proposal = await ctx.db.get(initial.proposalId);
-                }
-                if (!proposal)
-                    throw new Error("Missing source selection proposal");
-                const started = await startReviewPreparation(ctx, {
-                    run,
-                    revision: {
-                        ...revision,
-                        sourceSelectionProposalId: proposal._id,
-                    },
-                    proposal,
-                    visitor,
-                    requestId: `manual:${sourceId}`,
-                    manualSourceId: sourceId,
-                });
-                const currentRun = await ctx.db.get(run._id);
-                if (!currentRun) throw new Error("Missing research run");
-                const updated = await createSourceSelectionProposal(ctx, {
-                    run: currentRun,
-                    revision,
-                });
-                await ctx.db.patch(started.preparationId, {
-                    expectedProposalId: updated.proposalId,
-                });
-            } else if (
-                !proposal ||
-                proposal.policyVersion === SOURCE_SELECTION_POLICY_VERSION
-            ) {
-                await createSourceSelectionProposal(ctx, { run, revision });
-            }
-        }
-        return sourceId;
     },
 });
 

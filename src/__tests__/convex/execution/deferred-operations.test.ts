@@ -1,5 +1,4 @@
 import { api, internal } from "@convex/_generated/api";
-import type { WorkflowId } from "@convex-dev/workflow";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
 
@@ -26,7 +25,6 @@ async function mission() {
     );
     if (!turnId) throw new Error("Expected active turn");
     const missionId = await f.t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "conversation_validation_v1",
         scope: { kind: "conversation_validation_v1" },
@@ -351,109 +349,6 @@ test("a fresh instruction can admit known undispatched work once while retaining
     });
 }, 30_000);
 
-test("Steer during deferred work preserves the observation and reaches a fresh authorized reply", async () => {
-    const f = await mission();
-    const turn = await f.client.query(api.execution.conversations.get, {
-        runId: f.runId,
-    });
-    if (!turn.activeTurn) throw new Error("Expected active turn");
-    const requestId = await f.t.mutation(
-        internal.execution.operations.enqueue,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 1,
-            cause: "before-steer",
-            input: { kind: "wait_fixture_result", value: 7 },
-        },
-    );
-    await f.t.action(internal.execution.operations.dispatch, {
-        requestId,
-        expectedGeneration: 1,
-    });
-    await f.client.mutation(api.execution.conversations.submit, {
-        runId: f.runId,
-        requestKey: "steer-in-flight",
-        delivery: "steer",
-        turnId: turn.activeTurn._id,
-        text: "Use the retained result under this narrower scope",
-    });
-    const observed = {
-        requestId,
-        expectedGeneration: 1,
-        outcome: { kind: "success" as const, valueJson: '{"value":14}' },
-    };
-    expect(
-        await f.t.mutation(
-            internal.execution.operations.recordResult,
-            observed,
-        ),
-    ).toEqual({ kind: "refused", code: "stale_instructions" });
-    expect(
-        await f.t.mutation(internal.execution.missionWorkflow.next, {
-            missionId: f.missionId,
-            expectedGeneration: 1,
-        }),
-    ).toMatchObject({ kind: "begin" });
-    const eventsBefore = await f.t.run((ctx) =>
-        ctx.db
-            .query("agentExecutionEvents")
-            .withIndex("by_mission_and_sequence", (q) =>
-                q.eq("missionId", f.missionId),
-            )
-            .collect(),
-    );
-    await f.t.mutation(internal.execution.operations.recordResult, observed);
-    const eventsAfter = await f.t.run((ctx) =>
-        ctx.db
-            .query("agentExecutionEvents")
-            .withIndex("by_mission_and_sequence", (q) =>
-                q.eq("missionId", f.missionId),
-            )
-            .collect(),
-    );
-    expect(eventsAfter).toEqual(eventsBefore);
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
-        missionId: f.missionId,
-        expectedGeneration: 1,
-        taskKey: "fresh-steered-reply",
-        provenance: "simulation",
-    });
-    if (begun.kind !== "ready") throw new Error("Expected fresh continuation");
-    expect(JSON.parse(begun.inputJson)).toMatchObject({
-        conversationInstructions: {
-            instructionVersion: 2,
-            messages: expect.arrayContaining([
-                expect.objectContaining({
-                    text: "Use the retained result under this narrower scope",
-                }),
-            ]),
-        },
-        triggeringRequestsAndResults: [
-            expect.objectContaining({
-                requestId,
-                outcome: observed.outcome,
-                adoption: { kind: "refused", code: "stale_instructions" },
-            }),
-        ],
-    });
-    const reply = await f.t.action(internal.execution.invokeAgentModel.invoke, {
-        invocationId: begun.invocationId,
-        expectedGeneration: 1,
-    });
-    expect(
-        await f.t.mutation(internal.execution.invocations.finish, {
-            invocationId: begun.invocationId,
-            expectedGeneration: 1,
-            ...reply,
-        }),
-    ).toMatchObject({ kind: "completed" });
-    expect(
-        await f.client.query(api.execution.conversations.get, {
-            runId: f.runId,
-        }),
-    ).toMatchObject({ activeTurn: null });
-}, 30_000);
-
 test("deferred operations retain their outcome before continuation and duplicate completion adds no progress", async () => {
     const f = await mission();
     const requestId = await f.t.mutation(
@@ -520,111 +415,7 @@ test("deferred operations retain their outcome before continuation and duplicate
     ).rejects.toThrow("operation_result_conflict");
 });
 
-test("analyst resume adopts a confirmed pre-pause model response without regenerating it", async () => {
-    vi.useFakeTimers();
-    const f = await seedConversation(true);
-    const workflowTest = (
-        await import("@/__tests__/convex/workflows/workflow-test-register.js")
-    ).default;
-    workflowTest.register(f.t);
-    await f.t.run((ctx) =>
-        ctx.db.patch(f.runId, {
-            executionStatus: "running",
-            agentExecutionVersion: 3,
-        }),
-    );
-    const missionId = await f.t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
-        runId: f.runId,
-        definitionId: "execution_validation_v1",
-        scope: { kind: "execution_validation_v1", values: [7] },
-        requestKey: "paused-observation",
-        expectedGeneration: 3,
-    });
-    const before = await f.t.run((ctx) => ctx.db.get(missionId));
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
-        missionId,
-        expectedGeneration: 3,
-        taskKey: "retained-before-pause",
-        provenance: "simulation",
-    });
-    if (begun.kind !== "ready") throw new Error("Expected invocation");
-    const reply = await f.t.action(internal.execution.invokeAgentModel.invoke, {
-        invocationId: begun.invocationId,
-        expectedGeneration: 3,
-    });
-    await f.client.mutation(api.execution.researchControl.pause, {
-        runId: f.runId,
-        expectedGeneration: 3,
-    });
-    expect(
-        await f.t.mutation(internal.execution.invocations.finish, {
-            invocationId: begun.invocationId,
-            expectedGeneration: 3,
-            ...reply,
-        }),
-    ).toMatchObject({ kind: "blocked", code: "stale_execution" });
-    expect(
-        await f.t.run((ctx) => ctx.db.get(begun.invocationId)),
-    ).toMatchObject({ status: "started", receivedWhileAuthorized: true });
-    expect(
-        await f.t.mutation(internal.execution.missionWorkflow.next, {
-            missionId,
-            expectedGeneration: 3,
-        }),
-    ).toEqual({ kind: "stopped" });
-    await f.client.mutation(api.execution.researchControl.resume, {
-        runId: f.runId,
-        expectedGeneration: 4,
-    });
-    await f.t.mutation(internal.execution.researchControl.resumeMissions, {
-        runId: f.runId,
-        generation: 5,
-        paginationOpts: { numItems: 20, cursor: null },
-    });
-    expect(
-        await f.t.mutation(internal.execution.missionWorkflow.next, {
-            missionId,
-            expectedGeneration: 5,
-        }),
-    ).toMatchObject({
-        kind: "adopt",
-        invocationId: begun.invocationId,
-        response: reply.response,
-    });
-    await f.t.mutation(internal.execution.invocations.finish, {
-        invocationId: begun.invocationId,
-        expectedGeneration: 5,
-        ...reply,
-    });
-    expect(
-        await f.t.run((ctx) => ctx.db.get(begun.invocationId)),
-    ).toMatchObject({
-        generation: 3,
-        adoptionGeneration: 5,
-        status: "returned",
-    });
-    expect(
-        await f.t.run((ctx) =>
-            ctx.db
-                .query("agentInvocations")
-                .withIndex("by_mission", (q) => q.eq("missionId", missionId))
-                .collect(),
-        ),
-    ).toHaveLength(1);
-    await f.t.finishAllScheduledFunctions(
-        () => vi.advanceTimersByTime(10),
-        500,
-    );
-    expect(await f.t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
-        status: "completed",
-        result: { kind: "execution_validation_v1", total: 7 },
-        deadlineAt: before?.deadlineAt,
-        modelLimits: before?.modelLimits,
-    });
-}, 30_000);
-
-test("a business request starts a bounded child through the same Workflow and resumes with a result reference", async () => {
+test("a business request starts a bounded Pi child and resumes with a result reference", async () => {
     vi.useFakeTimers();
     const f = await mission();
     const workflowTest = (
@@ -634,6 +425,11 @@ test("a business request starts a bounded child through the same Workflow and re
     await f.t.run((ctx) =>
         ctx.db.patch(f.runId, { executionStatus: "running" }),
     );
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId: f.missionId,
+        expectedGeneration: 1,
+        simulation: true,
+    });
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
@@ -649,17 +445,21 @@ test("a business request starts a bounded child through the same Workflow and re
             expectedGeneration: 1,
         }),
     ).toMatchObject({ kind: "waiting" });
-    await f.t.finishAllScheduledFunctions(
-        () => vi.advanceTimersByTime(10),
-        500,
-    );
+    const waiting = await f.t.run((ctx) => ctx.db.get(requestId));
+    const childId = waiting?.childMissionId;
+    if (!childId) throw new Error("Expected child mission");
+    const childWake = await f.t.run((ctx) => ctx.db.get(childId));
+    if (!childWake?.piWakeToken) throw new Error("Expected child worker wake");
+    await f.t.action(internal.execution.piWorker.run, {
+        missionId: childId,
+        expectedGeneration: childWake.generation,
+        token: childWake.piWakeToken,
+    });
     const request = await f.t.run((ctx) => ctx.db.get(requestId));
     expect(request).toMatchObject({
         status: "completed",
         outcome: { kind: "success" },
     });
-    const childId = request?.childMissionId;
-    if (!childId) throw new Error("Expected child mission");
     const child = await f.t.run((ctx) => ctx.db.get(childId));
     expect(child).toMatchObject({
         status: "completed",
@@ -683,95 +483,6 @@ test("a business request starts a bounded child through the same Workflow and re
     });
 }, 30_000);
 
-test.each([
-    "pause",
-    "interruption",
-] as const)("a paused child stays pending and delivers its successful result after resume (%s)", async (stop) => {
-    vi.useFakeTimers();
-    const f = await mission();
-    const workflowTest = (
-        await import("@/__tests__/convex/workflows/workflow-test-register.js")
-    ).default;
-    workflowTest.register(f.t);
-    await f.t.run((ctx) =>
-        ctx.db.patch(f.runId, {
-            executionStatus: "running",
-            agentExecutionVersion: 3,
-        }),
-    );
-    const requestId = await f.t.mutation(
-        internal.execution.operations.enqueue,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 1,
-            cause: "pausable-child",
-            input: { kind: "request_fixture_validation", values: [7] },
-        },
-    );
-    await f.t.action(internal.execution.operations.dispatch, {
-        requestId,
-        expectedGeneration: 1,
-    });
-    const request = await f.t.run((ctx) => ctx.db.get(requestId));
-    const childId = request?.childMissionId;
-    if (!childId) throw new Error("Expected child mission");
-    const child = await f.t.run((ctx) => ctx.db.get(childId));
-    if (!child?.workflowId) throw new Error("Expected child Workflow");
-    await f.client.mutation(api.execution.researchControl.pause, {
-        runId: f.runId,
-        expectedGeneration: 3,
-    });
-    expect(
-        await f.t.mutation(internal.execution.missionWorkflow.next, {
-            missionId: child._id,
-            expectedGeneration: 3,
-        }),
-    ).toEqual({ kind: "stopped" });
-    await f.t.mutation(internal.execution.missionWorkflow.onComplete, {
-        workflowId: child.workflowId as WorkflowId,
-        context: { missionId: child._id },
-        result:
-            stop === "pause"
-                ? { kind: "success", returnValue: null }
-                : {
-                      kind: "failed",
-                      error: "Controlled interruption before dispatch",
-                  },
-    });
-    expect(await f.t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
-        status: "waiting",
-    });
-    expect(await f.t.run((ctx) => ctx.db.get(requestId))).not.toHaveProperty(
-        "outcome",
-    );
-    await f.client.mutation(api.execution.researchControl.resume, {
-        runId: f.runId,
-        expectedGeneration: 4,
-    });
-    await f.t.finishAllScheduledFunctions(
-        () => vi.advanceTimersByTime(10),
-        500,
-    );
-    expect(await f.t.run((ctx) => ctx.db.get(child._id))).toMatchObject({
-        status: "completed",
-        result: { kind: "execution_validation_v1", total: 7 },
-    });
-    const delivered = await f.t.run((ctx) => ctx.db.get(requestId));
-    expect(delivered).toMatchObject({
-        status: "completed",
-        outcome: { kind: "success" },
-    });
-    expect(
-        delivered?.outcome?.kind === "success"
-            ? JSON.parse(delivered.outcome.valueJson)
-            : null,
-    ).toEqual({ missionId: child._id, result: "retained_mission_result" });
-    await f.t.mutation(internal.execution.handoffs.finishChild, {
-        missionId: child._id,
-    });
-    expect(await f.t.run((ctx) => ctx.db.get(requestId))).toEqual(delivered);
-}, 30_000);
-
 test("an explicit research pause retains an engaged operation while the conversation stays authorized", async () => {
     const f = await mission();
     const { api } = await import("@convex/_generated/api");
@@ -782,7 +493,6 @@ test("an explicit research pause retains an engaged operation while the conversa
         }),
     );
     const researchId = await f.t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "execution_validation_v1",
         scope: { kind: "execution_validation_v1", values: [7] },
@@ -842,7 +552,7 @@ test("an explicit research pause retains an engaged operation while the conversa
 test.each([
     false,
     true,
-])("Workflow continuation consumes a retained deferred result (completed before wait: %s)", async (early) => {
+])("Pi continuation consumes a retained deferred result (completed before wait: %s)", async (early) => {
     vi.useFakeTimers();
     const f = await mission();
     const workflowTest = (
@@ -881,7 +591,6 @@ test.each([
     }
     expect(await f.t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
         status: "waiting",
-        waitEventId: expect.any(String),
     });
     await f.t.mutation(
         internal.domain.conversationValidation.completeDeferred,
@@ -966,7 +675,6 @@ test("explicit resume reclaims the research slot and adopts retained work withou
         }),
     );
     const researchId = await f.t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "execution_validation_v1",
         scope: { kind: "execution_validation_v1", values: [7] },
@@ -1078,7 +786,6 @@ test("delegation cannot take over an unfinished mission assigned to another busi
         ctx.db.patch(f.runId, { executionStatus: "running" }),
     );
     const existing = await f.t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: f.runId,
         definitionId: "execution_validation_v1",
         scope: { kind: "execution_validation_v1", values: [3, 7] },
@@ -1110,48 +817,6 @@ test("delegation cannot take over an unfinished mission assigned to another busi
         "parentRequestId",
     );
 }, 30_000);
-
-test("completion yields to business work registered after the model request was prepared", async () => {
-    const f = await mission();
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
-        missionId: f.missionId,
-        expectedGeneration: 1,
-        taskKey: "before-native-work",
-        provenance: "simulation",
-    });
-    if (begun.kind !== "ready") throw new Error("Expected invocation");
-    const reply = await f.t.action(internal.execution.invokeAgentModel.invoke, {
-        invocationId: begun.invocationId,
-        expectedGeneration: 1,
-    });
-    const requestId = await f.t.mutation(
-        internal.execution.operations.enqueue,
-        {
-            missionId: f.missionId,
-            expectedGeneration: 1,
-            cause: "arrived-during-generation",
-            input: { kind: "wait_fixture_result", value: 7 },
-        },
-    );
-    expect(
-        await f.t.mutation(internal.execution.invocations.finish, {
-            invocationId: begun.invocationId,
-            expectedGeneration: 1,
-            ...reply,
-        }),
-    ).toMatchObject({ kind: "blocked", code: "pending_operations" });
-    await f.t.action(internal.execution.operations.dispatch, {
-        requestId,
-        expectedGeneration: 1,
-    });
-    await f.t.mutation(
-        internal.domain.conversationValidation.completeDeferred,
-        { requestId, expectedGeneration: 1 },
-    );
-    expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).not.toMatchObject({
-        status: "completed",
-    });
-});
 
 test("continuation includes native results and original instructions even after a model tool batch", async () => {
     const f = await mission();

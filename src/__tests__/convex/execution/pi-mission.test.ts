@@ -247,9 +247,19 @@ test("a confirmed Pi completion refused for pending work can be adopted after th
             workingNotes: "Retained once",
         },
     };
+    await f.t.mutation(internal.execution.invocationLifecycle.retainOutput, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 4,
+        responseJson: JSON.stringify(finish.response),
+    });
     expect(
         await f.t.mutation(internal.execution.invocations.finish, finish),
     ).toMatchObject({ kind: "blocked", code: "pending_operations" });
+    expect(
+        await f.t.run((ctx) => ctx.db.get(begun.invocationId)),
+    ).toMatchObject({
+        receivedOutputJson: expect.stringContaining("Retained once"),
+    });
     await f.t.action(internal.execution.operations.dispatch, {
         requestId: late,
         expectedGeneration: 4,
@@ -260,54 +270,5 @@ test("a confirmed Pi completion refused for pending work can be adopted after th
     expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
         status: "completed",
         workingNotes: "Retained once",
-    });
-});
-
-test("retained Workflow missions keep working notes when completion waits for native work", async () => {
-    vi.useFakeTimers();
-    const { seedInspectedEvidence } = await import(
-        "@/__tests__/setup/source-preparation"
-    );
-    const f = await seedInspectedEvidence();
-    const missionId = await f.t.mutation(internal.execution.missions.start, {
-        runId: f.args.runId,
-        corpusRevisionId: f.args.corpusRevisionId,
-        expectedGeneration: 4,
-        definitionId: "saved_material_inspection_v1",
-        requestKey: "historical-notes",
-        generationBackend: { id: "convex-agent", version: 2 },
-    });
-    expect(await f.t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
-        generationBackend: { id: "convex-agent", version: 2 },
-    });
-    expect(await f.t.run((ctx) => ctx.db.get(missionId))).not.toHaveProperty(
-        "executionRuntime",
-    );
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
-        missionId,
-        expectedGeneration: 4,
-        taskKey: "historical-proposal",
-        provenance: "simulation",
-    });
-    if (begun.kind !== "ready") throw new Error("Expected invocation");
-    await f.t.mutation(internal.execution.operations.enqueue, {
-        missionId,
-        expectedGeneration: 4,
-        cause: "native-pending",
-        input: { kind: "consult_mission_state" },
-    });
-    expect(
-        await f.t.mutation(internal.execution.invocations.finish, {
-            invocationId: begun.invocationId,
-            expectedGeneration: 4,
-            response: {
-                kind: "complete",
-                captureIds: [],
-                workingNotes: "Retained historical working notes",
-            },
-        }),
-    ).toMatchObject({ kind: "blocked", code: "pending_operations" });
-    expect(await f.t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
-        workingNotes: "Retained historical working notes",
     });
 });

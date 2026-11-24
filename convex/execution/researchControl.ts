@@ -20,6 +20,7 @@ import {
     isSourcesSettlementPause,
     supportsResearchControl,
 } from "@convex/domain/transitions";
+import { requireSupportedMissionBackend } from "@convex/execution/executionProtocol";
 import { sourcePreparationWindowMs } from "@convex/resourceLimits";
 import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
@@ -402,14 +403,6 @@ export const resumeMissions = internalMutation({
                     !isRecoverableInterruption(mission, run))
             )
                 continue;
-            if (
-                mission.blockCode === "execution_time_limit" &&
-                run.executionHarnessDeadlineAt !== undefined &&
-                mission.deadlineAt < run.executionHarnessDeadlineAt
-            )
-                await ctx.db.patch(mission._id, {
-                    deadlineAt: run.executionHarnessDeadlineAt,
-                });
             try {
                 await ctx.runMutation(internal.execution.missions.resume, {
                     missionId: mission._id,
@@ -609,6 +602,15 @@ export async function readResearchControlReadiness(
         if (preparation.settlementRequestedAt !== undefined)
             return { block: "sources_settlement_requested", transition: null };
         const mission = await readSourcesMission(ctx, run);
+        if (mission) {
+            try {
+                requireSupportedMissionBackend(mission);
+            } catch (error) {
+                const code = executionFailureCode(error);
+                if (code !== "generation_backend_unknown") throw error;
+                return { block: code, transition: null };
+            }
+        }
         if (
             mission?.status === "blocked" &&
             !isRecoverableInterruption(mission, run) &&

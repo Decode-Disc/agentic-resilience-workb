@@ -30,11 +30,7 @@ const FUNCTION_OWNERS: Record<string, readonly string[]> = {
         "piStore",
         "invocationLifecycle",
     ],
-    "execution.operations.recordResult": [
-        "operations",
-        "handoffs",
-        "missionWorkflow",
-    ],
+    "execution.operations.recordResult": ["operations", "handoffs"],
     "execution.operations.persistOperationRequest": [
         "operations",
         "invocationLifecycle",

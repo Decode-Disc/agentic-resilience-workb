@@ -112,11 +112,7 @@ test("Workbench cannot start documentary preparation while qualification is disa
             .unique(),
     );
     if (!instruction) throw new Error("Expected retained instruction");
-    await expect(
-        t.mutation(internal.workbench.deliverSourceInstruction, {
-            instructionId: instruction._id,
-        }),
-    ).rejects.toThrow("preparation_disabled");
+    expect(instruction.status).toBe("limited");
     expect(await t.run((ctx) => ctx.db.get(runId))).toMatchObject({
         executionStatus: "paused",
         pauseReason: "source_review",

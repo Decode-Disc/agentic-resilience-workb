@@ -123,7 +123,6 @@ export type AgentDefinition = {
     completionValidator: Validator<AgentCompletion, "required", string>;
     operations: Record<string, AgentOperationDefinition>;
     initialState(scope: AgentScope): {
-        objectiveKey: string;
         state: AgentState;
         obligations: string[];
     };

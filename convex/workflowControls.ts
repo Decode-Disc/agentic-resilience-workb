@@ -2,77 +2,14 @@ import { recordContextObservation } from "@convex/execution/journal";
 import { recordResearchObservation } from "@convex/execution/researchControl";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
 import { internalMutation, mutation } from "./_generated/server";
 import { cancelRunExecution } from "./domain/runCancellation";
-import { sourcePreparationEnabled } from "./resourceLimits";
 import { requireWorkspaceRun } from "./runWorkspace";
 import {
     assessmentReviewApproved,
     sourceReviewApproved,
     workflow,
 } from "./workflow";
-
-export const startReserved = internalMutation({
-    args: { runId: v.id("researchRuns") },
-    returns: v.string(),
-    handler: async (ctx, args): Promise<string> => {
-        const run = await ctx.db.get(args.runId);
-        if (run?.withdrawnAt) {
-            throw new Error("A withdrawn dossier cannot be resumed");
-        }
-        if (run?.reservationStatus !== "consumed") {
-            throw new Error("Active analysis reservation not found");
-        }
-        if (
-            !run.companyId ||
-            !run.companyPreflightId ||
-            !run.activeCorpusRevisionId
-        ) {
-            throw new Error("A confirmed company reservation is required");
-        }
-        if (
-            run.lifecycleState !== "draft" ||
-            run.executionStatus !== "idle" ||
-            run.workflowId
-        ) {
-            throw new Error("Research run cannot be started");
-        }
-        const concurrent = await ctx.db
-            .query("researchRuns")
-            .withIndex("by_owner_and_execution_status", (query) =>
-                query
-                    .eq("ownerVisitorId", run.ownerVisitorId)
-                    .eq("executionStatus", "running"),
-            )
-            .first();
-        if (concurrent) {
-            throw new Error("A research workflow is already running");
-        }
-        const executionGeneration = run.executionGeneration + 1;
-        const workflowId = await workflow.start(
-            ctx,
-            internal.researchWorkflow.run,
-            {
-                runId: run._id,
-                executionGeneration,
-                prepareSources: sourcePreparationEnabled(),
-            },
-            {
-                onComplete: internal.researchWorkflow.onComplete,
-                context: { runId: run._id },
-            },
-        );
-        await ctx.db.patch(run._id, {
-            workflowId,
-            workflowVersion: 2,
-            executionStatus: "running",
-            executionGeneration,
-            updatedAt: Date.now(),
-        });
-        return workflowId;
-    },
-});
 
 export const approveCheckpoint = mutation({
     args: {

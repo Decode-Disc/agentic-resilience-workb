@@ -45,7 +45,6 @@ export const executionValidationV2Definition: AgentDefinition & {
         )
             throw executionError("validation_scope_invalid");
         return {
-            objectiveKey: `validation:${JSON.stringify(scope.values)}`,
             state: { kind: "execution_validation_v1", checkedIndices: [] },
             obligations: ["check_all_values"],
         };

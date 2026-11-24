@@ -1,4 +1,5 @@
 import { sourcesEnvelopeValidator } from "@convex/domain/sourcesContracts";
+import { executionError } from "@convex/execution/errors";
 import {
     awaitResearchControl,
     recordResearchObservation,
@@ -14,11 +15,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
-import {
-    corpusRevisionApproved,
-    evidenceSufficiencyDecided,
-    workflow,
-} from "./workflow";
+import { workflow } from "./workflow";
 
 async function awaitSourcesHandoff(
     step: WorkflowCtx,
@@ -92,6 +89,9 @@ export const run = workflow
                 checkpoint,
             });
         }
+        const envelope = args.sourcesEnvelope;
+        if (!envelope)
+            throw executionError("sources_configuration_unavailable");
         await checkpoint();
         const availability = await step.runAction(
             internal.companyResolution.revalidateRun,
@@ -108,199 +108,54 @@ export const run = workflow
             executionStatus: "running",
             stepKey: "check_public_evidence",
         });
-        if (args.sourcesEnvelope) {
-            await step.runMutation(internal.researchRuns.transition, {
-                runId: args.runId,
-                expectedExecutionGeneration: executionGeneration,
-                lifecycleState: "discovering_sources",
-                executionStatus: "running",
-                stepKey: "prepare_sources",
-            });
-            await step.runMutation(internal.researchPlanning.createForRun, {
-                runId: args.runId,
-                expectedExecutionGeneration: executionGeneration,
-            });
-            await checkpoint();
-            await step.runAction(
-                internal.sourceDiscoveryActions.discoverForRun,
-                {
-                    runId: args.runId,
-                    cik: availability.cik,
-                    filings: availability.filings,
-                    skipWeb: true,
-                },
-                { retry: false },
-            );
-            const run = await step.runQuery(internal.researchRuns.get, {
-                runId: args.runId,
-            });
-            if (!run?.activeCorpusRevisionId)
-                throw new Error("Draft corpus revision not found");
-            const preparationId = await step.runMutation(
-                internal.sourcesMission.claim,
-                {
-                    runId: args.runId,
-                    corpusRevisionId: run.activeCorpusRevisionId,
-                    expectedGeneration: executionGeneration,
-                    envelope: args.sourcesEnvelope,
-                },
-            );
-            await checkpoint();
-            const started = await step.runMutation(
-                internal.sourcesMission.start,
-                {
-                    preparationId,
-                    expectedGeneration: executionGeneration,
-                    workflowId: step.workflowId,
-                },
-            );
-            return awaitSourcesHandoff(step, {
-                preparationId,
-                eventId: started.eventId,
-                executionGeneration,
-                checkpoint,
-            });
-        }
-        while (true) {
-            await checkpoint();
-            const evaluation = await step.runMutation(
-                internal.evidenceSufficiency.evaluateForRun,
-                {
-                    runId: args.runId,
-                    expectedExecutionGeneration: executionGeneration,
-                    secFilingCount: availability.secFilingCount,
-                    investorRelationsPresent:
-                        availability.investorRelationsPresent,
-                },
-            );
-            if (evaluation.outcome === "sufficient") {
-                await step.runMutation(internal.researchRuns.transition, {
-                    runId: args.runId,
-                    expectedExecutionGeneration: executionGeneration,
-                    lifecycleState: "discovering_sources",
-                    executionStatus: "running",
-                    stepKey: "discover_sources",
-                });
-                await step.runMutation(internal.researchPlanning.createForRun, {
-                    runId: args.runId,
-                    expectedExecutionGeneration: executionGeneration,
-                });
-                await checkpoint();
-                await step.runAction(
-                    internal.sourceDiscoveryActions.discoverForRun,
-                    {
-                        runId: args.runId,
-                        cik: availability.cik,
-                        filings: availability.filings,
-                    },
-                    { retry: false },
-                );
-                break;
-            }
-            await step.runMutation(internal.researchRuns.transition, {
-                runId: args.runId,
-                expectedExecutionGeneration: executionGeneration,
-                lifecycleState: "awaiting_evidence_sufficiency_review",
-                executionStatus: "paused",
-                stepKey: "evidence_sufficiency_review",
-            });
-            const decision = await step.awaitEvent(evidenceSufficiencyDecided);
-            executionGeneration = decision.executionGeneration;
-            if (decision.kind === "complete_insufficient") {
-                await step.runMutation(
-                    internal.evidenceSufficiency.completeInsufficient,
-                    {
-                        runId: args.runId,
-                        expectedExecutionGeneration: executionGeneration,
-                    },
-                );
-                return null;
-            }
-            if (decision.kind === "force_continue") {
-                await step.runMutation(internal.researchRuns.transition, {
-                    runId: args.runId,
-                    expectedExecutionGeneration: executionGeneration,
-                    lifecycleState: "discovering_sources",
-                    executionStatus: "running",
-                    stepKey: "discover_sources",
-                });
-                await step.runMutation(internal.researchPlanning.createForRun, {
-                    runId: args.runId,
-                    expectedExecutionGeneration: executionGeneration,
-                });
-                await checkpoint();
-                await step.runAction(
-                    internal.sourceDiscoveryActions.discoverForRun,
-                    {
-                        runId: args.runId,
-                        cik: availability.cik,
-                        filings: availability.filings,
-                    },
-                    { retry: false },
-                );
-                break;
-            }
-            await step.runMutation(internal.researchRuns.transition, {
-                runId: args.runId,
-                expectedExecutionGeneration: executionGeneration,
-                lifecycleState: "checking_public_evidence",
-                executionStatus: "running",
-                stepKey: "check_public_evidence",
-            });
-        }
-        await checkpoint();
-        if (args.prepareSources) {
-            const run = await step.runQuery(internal.researchRuns.get, {
-                runId: args.runId,
-            });
-            if (!run?.activeCorpusRevisionId)
-                throw new Error("Draft corpus revision not found");
-            const preparationId = await step.runMutation(
-                internal.sourcePreparation.claimForDiscovery,
-                {
-                    runId: args.runId,
-                    corpusRevisionId: run.activeCorpusRevisionId,
-                    expectedExecutionGeneration: executionGeneration,
-                },
-            );
-            await checkpoint();
-            await step.runWorkflow(internal.sourcePreparationWorkflow.run, {
-                preparationId,
-                ...(args.controlled ? { controlRunId: args.runId } : {}),
-            });
-        } else {
-            await step.runMutation(
-                internal.sourceSelectionProposals.generateForRun,
-                {
-                    runId: args.runId,
-                    expectedExecutionGeneration: executionGeneration,
-                },
-            );
-        }
-        await checkpoint();
         await step.runMutation(internal.researchRuns.transition, {
             runId: args.runId,
             expectedExecutionGeneration: executionGeneration,
-            lifecycleState: "awaiting_source_review",
-            executionStatus: "paused",
-            stepKey: "source_review",
+            lifecycleState: "discovering_sources",
+            executionStatus: "running",
+            stepKey: "prepare_sources",
         });
-        if (args.controlled)
-            await step.runMutation(internal.workbench.processInstructions, {
-                runId: args.runId,
-            });
-        const approval = await step.awaitEvent(corpusRevisionApproved);
-        executionGeneration = approval.executionGeneration;
-        await step.runMutation(
-            internal.evidenceExecution.completeSourceReview,
+        await step.runMutation(internal.researchPlanning.createForRun, {
+            runId: args.runId,
+            expectedExecutionGeneration: executionGeneration,
+        });
+        await checkpoint();
+        await step.runAction(
+            internal.sourceDiscoveryActions.discoverForRun,
             {
                 runId: args.runId,
-                corpusRevisionId: approval.corpusRevisionId,
-                decisionId: approval.decisionId,
-                expectedExecutionGeneration: executionGeneration,
+                cik: availability.cik,
+                filings: availability.filings,
+                skipWeb: true,
+            },
+            { retry: false },
+        );
+        const run = await step.runQuery(internal.researchRuns.get, {
+            runId: args.runId,
+        });
+        if (!run?.activeCorpusRevisionId)
+            throw new Error("Draft corpus revision not found");
+        const preparationId = await step.runMutation(
+            internal.sourcesMission.claim,
+            {
+                runId: args.runId,
+                corpusRevisionId: run.activeCorpusRevisionId,
+                expectedGeneration: executionGeneration,
+                envelope,
             },
         );
-        return null;
+        await checkpoint();
+        const started = await step.runMutation(internal.sourcesMission.start, {
+            preparationId,
+            expectedGeneration: executionGeneration,
+            workflowId: step.workflowId,
+        });
+        return awaitSourcesHandoff(step, {
+            preparationId,
+            eventId: started.eventId,
+            executionGeneration,
+            checkpoint,
+        });
     });
 
 export const clearActiveWorkflowHandleOnSuccess = internalMutation({

@@ -10,7 +10,6 @@ import {
     initializeSources,
     readSourcesMission,
     reconstructQualification,
-    sourcesMissionKey,
 } from "@convex/domain/sources";
 import { materializeDocumentaryEvidence } from "@convex/domain/sourceUsage";
 import {
@@ -23,6 +22,7 @@ import {
     initialCampaignWorkbenchModel,
     requireLocalFixtureRun,
 } from "@convex/execution/fixtures";
+import { missionObjectiveKey } from "@convex/execution/missionData";
 import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -199,7 +199,10 @@ export const seed = internalMutation({
                 expectedGeneration: run.executionGeneration,
                 definitionId: "sources_v1",
                 scope: { kind: "sources_v1", preparationId },
-                requestKey: sourcesMissionKey(preparationId),
+                requestKey: missionObjectiveKey({
+                    kind: "sources_v1",
+                    preparationId,
+                }),
             },
         );
         const mission = await ctx.db.get(missionId);

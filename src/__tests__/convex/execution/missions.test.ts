@@ -1,10 +1,12 @@
 import { internal } from "@convex/_generated/api";
 import schema from "@convex/schema";
+import { workflow } from "@convex/workflow";
 import type { EventId } from "@convex-dev/workflow";
-import { anyApi, type ApiFromModules } from "convex/server";
+import { type ApiFromModules, anyApi } from "convex/server";
 import { v } from "convex/values";
 import { convexTest } from "convex-test";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 test("an active authorized run retains one mission for repeated start requests", async () => {
@@ -20,15 +22,140 @@ test("an active authorized run retains one mission for repeated start requests",
     expect(await t.mutation(internal.execution.missions.start, input)).toBe(id);
     expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject({
         ownerVisitorId: visitorId,
+        objectiveKey: `saved-material:${args.corpusRevisionId}`,
         resourcePolicy: "authority_native_v1",
         generation: 4,
         status: "ready",
         noProgressTurns: 0,
     });
+    const reuse = { ...input, requestKey: "reuse-inspected-evidence" };
+    await expect(
+        t.mutation(internal.execution.missions.start, reuse),
+    ).resolves.toBe(id);
+    await expect(
+        t.mutation(internal.execution.missions.start, {
+            ...reuse,
+            expectedGeneration: input.expectedGeneration - 1,
+        }),
+    ).rejects.toThrow("stale_execution");
+    await t.run((ctx) => ctx.db.patch(id, { status: "blocked" }));
+    await expect(
+        t.mutation(internal.execution.missions.start, reuse),
+    ).rejects.toThrow("mission_blocked");
+    expect(
+        await t.run((ctx) => ctx.db.query("agentMissions").collect()),
+    ).toEqual([
+        expect.objectContaining({
+            _id: id,
+            status: "blocked",
+            requestKey: input.requestKey,
+        }),
+    ]);
     await t.run((ctx) => ctx.db.patch(visitorId, { status: "revoked" }));
     await expect(
         t.mutation(internal.execution.missions.start, input),
     ).rejects.toThrow("not_authorized");
+});
+
+test("objective reuse refuses a different explicit generation backend", async () => {
+    const { t, args } = await seedInspectedEvidence();
+    const start = internal.execution.missions.start;
+    const input = {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1" as const,
+        requestKey: "inspect-material",
+        expectedGeneration: args.executionGeneration,
+    };
+    const missionId = await t.mutation(start, input);
+    const before = await t.run((ctx) => ctx.db.get(missionId));
+    await expect(
+        t.mutation(start, {
+            ...input,
+            requestKey: "same-material",
+            generationBackend: { id: "convex-agent", version: 2 },
+        }),
+    ).rejects.toThrow("mission_identity_conflict");
+    expect(
+        await t.run((ctx) => ctx.db.query("agentMissions").collect()),
+    ).toEqual([before]);
+});
+
+test("objective reuse cannot bypass an existing completion event owner", async () => {
+    vi.useFakeTimers();
+    const { t, args } = await seedInspectedEvidence();
+    workflowTest.register(t);
+    const completionEventId = await t.run(async (ctx) => {
+        const workflowId = await workflow.start(
+            ctx,
+            internal.researchWorkflow.run,
+            {
+                runId: args.runId,
+                executionGeneration: args.executionGeneration,
+            },
+            { startAsync: true },
+        );
+        return workflow.createEvent(ctx, {
+            name: "inspect-terminal",
+            workflowId,
+        });
+    });
+    const input = {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1" as const,
+        requestKey: "owned-inspection",
+        expectedGeneration: args.executionGeneration,
+    };
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        ...input,
+        completionEventId,
+    });
+    const before = await t.run((ctx) => ctx.db.get(missionId));
+    await expect(
+        t.mutation(internal.execution.missions.start, {
+            ...input,
+            requestKey: "unbound-inspection",
+        }),
+    ).rejects.toThrow("mission_identity_conflict");
+    expect(
+        await t.run((ctx) => ctx.db.query("agentMissions").collect()),
+    ).toEqual([before]);
+});
+
+test.each([
+    "request",
+    "objective",
+] as const)("%s replay refuses a retained mission without a runtime", async (replay) => {
+    const { t, args } = await seedInspectedEvidence();
+    const start = internal.execution.missions.start;
+    const input = {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1" as const,
+        requestKey: "inspect-without-runtime",
+        expectedGeneration: args.executionGeneration,
+    };
+    const missionId = await t.mutation(start, input);
+    await t.run((ctx) =>
+        ctx.db.patch(missionId, { executionRuntime: undefined }),
+    );
+    const snapshot = () =>
+        t.run(async (ctx) => ({
+            missions: await ctx.db.query("agentMissions").collect(),
+            run: await ctx.db.get(args.runId),
+            calls: await ctx.db.query("providerCalls").collect(),
+            scheduled: await ctx.db.system
+                .query("_scheduled_functions")
+                .collect(),
+        }));
+    const before = await snapshot();
+    const requestKey =
+        replay === "request" ? input.requestKey : "same-objective";
+    await expect(t.mutation(start, { ...input, requestKey })).rejects.toThrow(
+        "generation_backend_unknown",
+    );
+    expect(await snapshot()).toEqual(before);
 });
 
 test.each([
@@ -84,9 +211,6 @@ test("mission creation cannot cross an unapproved corpus or an inactive generati
         t.mutation(internal.execution.missions.start, input),
     ).rejects.toThrow("corpus_not_approved");
 });
-
-import { workflow } from "@convex/workflow";
-import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 
 afterEach(() => vi.useRealTimers());
 

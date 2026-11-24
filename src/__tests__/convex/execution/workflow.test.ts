@@ -24,7 +24,7 @@ async function simulatedMissionFixture() {
         internal.runWorkspace.openBrowserTestContext,
         {
             slotKey: "analyst-4",
-            contextKey: "harness-workflow",
+            contextKey: "harness-pi-recovery",
             durationMs: 2 * 60 * 60 * 1000,
         },
     );
@@ -41,7 +41,6 @@ async function simulatedMissionFixture() {
         }),
     );
     const missionId = await startRetainedInspection(t, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         requestKey: "workflow",
@@ -50,7 +49,7 @@ async function simulatedMissionFixture() {
     return { ...fixture, missionId };
 }
 
-test("the durable Workflow continues after retaining an invalid history cursor refusal", async () => {
+test("Pi continues after retaining an invalid history cursor refusal", async () => {
     const { t, missionId, captureId } = await simulatedMissionFixture();
     const requestId = await t.mutation(internal.execution.operations.enqueue, {
         missionId,
@@ -75,121 +74,6 @@ test("the durable Workflow continues after retaining an invalid history cursor r
             captureIds: [captureId],
         },
     });
-}, 30_000);
-
-test("the real Workflow recreates simulated invocations around persisted saved-material operations", async () => {
-    const { t, missionId, captureId } = await simulatedMissionFixture();
-    const workflowId = await t.mutation(internal.execution.missions.resume, {
-        missionId,
-        expectedGeneration: 4,
-        simulation: true,
-    });
-    expect(
-        await t.mutation(internal.execution.missions.resume, {
-            missionId,
-            expectedGeneration: 4,
-            simulation: true,
-        }),
-    ).toBe(workflowId);
-    try {
-        await t.finishAllScheduledFunctions(
-            () => vi.advanceTimersByTime(10),
-            500,
-        );
-    } catch (error) {
-        const state = await t.run(async (ctx) => ({
-            mission: await ctx.db.get(missionId),
-            events: (
-                await ctx.db
-                    .query("agentExecutionEvents")
-                    .withIndex("by_mission_and_sequence", (q) =>
-                        q.eq("missionId", missionId),
-                    )
-                    .order("desc")
-                    .take(5)
-            ).map((event) => ({ kind: event.kind, code: event.code })),
-            invocations: (
-                await ctx.db
-                    .query("agentInvocations")
-                    .withIndex("by_mission", (q) =>
-                        q.eq("missionId", missionId),
-                    )
-                    .collect()
-            ).map((invocation) => ({
-                status: invocation.status,
-                blockCode: invocation.blockCode,
-            })),
-        }));
-        throw new Error(
-            JSON.stringify({
-                status: state.mission?.status,
-                blockCode: state.mission?.blockCode,
-                events: state.events,
-                invocations: state.invocations,
-            }),
-            { cause: error },
-        );
-    }
-    expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
-        status: "completed",
-        result: {
-            kind: "saved_material_inspection_v1",
-            captureIds: [captureId],
-        },
-        obligations: [],
-    });
-    const invocations = await t.run((ctx) =>
-        ctx.db
-            .query("agentInvocations")
-            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
-            .collect(),
-    );
-    expect(invocations.length).toBeGreaterThan(1);
-    const snapshots = await t.run((ctx) =>
-        ctx.db.query("agentInvocationPayloads").collect(),
-    );
-    expect(snapshots).toHaveLength(invocations.length * 2);
-    expect(
-        snapshots.every(
-            (snapshot) =>
-                snapshot.state === "complete" &&
-                snapshot.json?.includes('"provenance":"simulation"'),
-        ),
-    ).toBe(true);
-    expect(
-        invocations.every(
-            (invocation) =>
-                invocation.provenance === "simulation" &&
-                invocation.status === "returned",
-        ),
-    ).toBe(true);
-    expect(
-        invocations.some((invocation) =>
-            invocation.inputJson.includes(
-                "ServiceNow provides workflow software",
-            ),
-        ),
-    ).toBe(false);
-    const observed = await t.run((ctx) =>
-        ctx.db
-            .query("agentExecutionEvents")
-            .withIndex("by_mission_and_sequence", (q) =>
-                q.eq("missionId", missionId),
-            )
-            .collect(),
-    );
-    const detailed = observed.filter((event) =>
-        event.payload?.json?.includes("ServiceNow provides workflow software"),
-    );
-    expect(detailed.length).toBeGreaterThan(0);
-    expect(
-        invocations.some((invocation) =>
-            detailed.some((event) => invocation.inputJson.includes(event._id)),
-        ),
-    ).toBe(true);
-    expect(
-        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
-    ).toEqual([]);
 }, 30_000);
 
 test.each([
@@ -280,23 +164,10 @@ test("an unconfigured live mission blocks explicitly without a fictitious provid
             .withIndex("by_mission", (q) => q.eq("missionId", missionId))
             .collect(),
     );
-    expect(invocations).toHaveLength(1);
-    expect(invocations[0]).toMatchObject({
-        status: "returned",
-        blockCode: "missing_authorized_route",
-    });
-    const snapshots = await t.run((ctx) =>
-        ctx.db.query("agentInvocationPayloads").collect(),
-    );
-    expect(snapshots).toHaveLength(2);
+    expect(invocations).toEqual([]);
     expect(
-        snapshots.every(
-            (snapshot) =>
-                snapshot.state === "incomplete" &&
-                snapshot.code === "not_dispatched" &&
-                snapshot.json === undefined,
-        ),
-    ).toBe(true);
+        await t.run((ctx) => ctx.db.query("agentInvocationPayloads").collect()),
+    ).toEqual([]);
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toEqual([]);
@@ -305,7 +176,6 @@ test("an unconfigured live mission blocks explicitly without a fictitious provid
 test("simulation is rejected outside the local reserved browser workspace", async () => {
     const { t, args } = await seedInspectedEvidence();
     const missionId = await t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",

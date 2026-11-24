@@ -47,7 +47,7 @@ import {
     paginationResultValidator,
 } from "convex/server";
 import { type Infer, v } from "convex/values";
-import { getAgentDefinition } from "./agentCatalog";
+import { getAgentDefinition, resolveAgentDefinition } from "./agentCatalog";
 import { agentToolSchemas } from "./agentDefinition";
 import {
     agentDefinitionIdValidator,
@@ -370,12 +370,15 @@ export async function ensureDossierConversation(
             ...((await ctx.db.get(run._id))?.startMode === "framed"
                 ? {
                       definitionId: "workbench_v1" as const,
-                      definitionVersion:
-                          (await taskMethodDefinitionVersion(
+                      definitionVersion: resolveAgentDefinition({
+                          kind: "new",
+                          definitionId: "workbench_v1",
+                          comparisonVersion: await taskMethodDefinitionVersion(
                               ctx,
                               run,
                               "workbench_v1",
-                          )) ?? getAgentDefinition("workbench_v1").version,
+                          ),
+                      }).version,
                   }
                 : {}),
             runId: run._id,
@@ -1009,14 +1012,25 @@ export const startTurn = internalMutation({
     returns: startTurnResult,
     handler: async (ctx, args): Promise<Infer<typeof startTurnResult>> => {
         const conversation = await conversationForRun(ctx, args.runId);
-        const currentDefinition = getAgentDefinition(args.definitionId);
-        const definition = getAgentDefinition(
+        const { run } = await requireDossierAuthority(ctx, args.runId);
+        const comparisonVersion = await taskMethodDefinitionVersion(
+            ctx,
+            run,
             args.definitionId,
-            conversation?.definitionId === args.definitionId
-                ? (conversation.definitionVersion ?? 1)
-                : currentDefinition.nativeConversation && conversation
-                  ? 1
-                  : currentDefinition.version,
+        );
+        const definition = resolveAgentDefinition(
+            conversation
+                ? {
+                      kind: "conversation",
+                      conversation,
+                      definitionId: args.definitionId,
+                      comparisonVersion,
+                  }
+                : {
+                      kind: "new",
+                      definitionId: args.definitionId,
+                      comparisonVersion,
+                  },
         );
         if (
             definition.executionScope !== "conversation" ||
@@ -1289,11 +1303,16 @@ export const pumpWorkbench = internalMutation({
             return null;
         try {
             if (
-                conversation.definitionId &&
-                getAgentDefinition(
-                    conversation.definitionId,
-                    conversation.definitionVersion ?? 1,
-                ).nativeConversation
+                resolveAgentDefinition({
+                    kind: "conversation",
+                    conversation,
+                    definitionId: "workbench_v1",
+                    comparisonVersion: await taskMethodDefinitionVersion(
+                        ctx,
+                        run,
+                        "workbench_v1",
+                    ),
+                }).nativeConversation
             ) {
                 const session = await ctx.db
                     .query("piSessions")

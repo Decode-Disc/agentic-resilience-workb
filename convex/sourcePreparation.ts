@@ -17,10 +17,7 @@ import {
     SOURCE_RETRIEVAL_VERSION,
 } from "@convex/domain/sourceRetrievalPolicy";
 import { applyRequestedResearchPause } from "@convex/execution/researchControl";
-import {
-    sourcePreparationEnabled,
-    sourcePreparationWindowMs,
-} from "@convex/resourceLimits";
+import { sourcePreparationWindowMs } from "@convex/resourceLimits";
 import {
     MAX_HISTORICAL_SOURCE_CANDIDATES,
     MAX_SUPPLEMENT_SEARCHES,
@@ -28,24 +25,13 @@ import {
     SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
 } from "@convex/resourcePolicy";
 import { readCampaignResearchDeadline } from "@convex/runWorkspace";
-import { getAuthUserId } from "@convex-dev/auth/server";
-import type { WorkflowId } from "@convex-dev/workflow";
 import { type Infer, v } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
-import {
-    env,
-    internalMutation,
-    internalQuery,
-    mutation,
-} from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import { env, internalMutation, internalQuery } from "./_generated/server";
 import { mergeRunCompanyMetadata } from "./domain/companyMetadata";
-import {
-    claimPausedRunExecution,
-    ExecutionSlotUnavailableError,
-} from "./domain/executionClaim";
 import { readSourceCandidateCapacity } from "./domain/sourceCandidateCapacity";
 import {
     comparisonContextForTarget,
@@ -53,10 +39,8 @@ import {
     sourceComparisonWork,
 } from "./domain/sourceComparisonContext";
 import {
-    type RecoveryTarget,
     readSupplementalSearchAttempts,
     recoverySearchPlan,
-    recoveryTargetValidator,
     supplementalSearchInputHash,
     supplementalSearchOperationKey,
 } from "./domain/sourceDiscoveryRecovery";
@@ -78,7 +62,6 @@ import {
     sourcePreparationPhaseValidator,
     sourcePreparationStopCodeValidator,
 } from "./domain/sourcePreparationAuthority";
-import { readPreparationRecovery } from "./domain/sourcePreparationReview";
 import {
     qualificationSelectionStrategyValidator,
     sourceQualificationValidator,
@@ -89,13 +72,8 @@ import {
     readPinnedSourceQualification,
 } from "./domain/sourceUsage";
 import { companySnapshotValidator } from "./domain/validators";
-import { requireWorkspaceRun } from "./runWorkspace";
 import schema from "./schema";
-import {
-    createSourceSelectionProposal,
-    readCurrentSourceSelection,
-} from "./sourceSelectionProposals";
-import { workflow } from "./workflow";
+import { createSourceSelectionProposal } from "./sourceSelectionProposals";
 
 const sourceComparisonOutputValidator = zodToConvex(
     sourceComparisonOutputSchema,
@@ -122,404 +100,6 @@ async function scopeSupplementQueries(
         ...(framing ? { dimensionKeys: [] } : {}),
     }));
 }
-
-/** Starts or resumes the review preparation while preserving the main approval workflow. Callers validate ownership and the current draft before entering. */
-export async function startReviewPreparation(
-    ctx: MutationCtx,
-    args: {
-        run: Doc<"researchRuns">;
-        revision: Doc<"corpusRevisions">;
-        proposal: Doc<"sourceSelectionProposals">;
-        visitor: Doc<"visitors">;
-        requestId: string;
-        manualSourceId?: Id<"sources">;
-        target?: RecoveryTarget;
-        documentaryNeed?: string;
-    },
-) {
-    let { run } = args;
-    const { revision, proposal, visitor } = args;
-    const invitation = await ctx.db.get(visitor.invitationId);
-    if (
-        invitation?.status !== "claimed" ||
-        invitation.claimedByVisitorId !== visitor._id
-    )
-        throw new Error("Unauthorized");
-    if (!sourcePreparationEnabled())
-        throw sourcePreparationError("preparation_disabled");
-    if (
-        args.documentaryNeed &&
-        (!args.target || args.documentaryNeed.trim().length > 2000)
-    )
-        throw sourcePreparationError("request_invalid");
-    const requestId = args.requestId.trim();
-    if (!requestId || requestId.length > 128)
-        throw new Error("Invalid preparation request");
-    const operationKey = `run:${run._id}:source-review-preparation:request:${requestId}`;
-    const replay = await ctx.db
-        .query("sourceSelectionProposalRebuilds")
-        .withIndex("by_operation_key", (q) =>
-            q.eq("operationKey", operationKey),
-        )
-        .unique();
-    if (replay) {
-        if (
-            replay.corpusRevisionId !== revision._id ||
-            replay.expectedProposalId !== proposal._id ||
-            JSON.stringify(
-                replay.entryPoint === "targeted_search"
-                    ? (replay.target ?? null)
-                    : null,
-            ) !== JSON.stringify(args.target ?? null) ||
-            replay.documentaryNeed !== args.documentaryNeed
-        )
-            throw new Error(
-                "Preparation request was reused for a different proposal",
-            );
-        return { preparationId: replay._id, status: replay.status };
-    }
-    if (
-        revision.status !== "draft" ||
-        run.activeCorpusRevisionId !== revision._id ||
-        revision.sourceSelectionProposalId !== proposal._id
-    )
-        throw new Error("Source selection proposal changed");
-    const modelLimits = readPreparationLimits();
-    const maxConcurrentSources = readPreparationConcurrency();
-    let previous = run.sourcePreparationId
-        ? await ctx.db.get(run.sourcePreparationId)
-        : null;
-    if (
-        previous?.kind === "preparation" &&
-        previous.resourcePolicy !== RESOURCE_POLICY_VERSION &&
-        !args.manualSourceId
-    )
-        throw sourcePreparationError("resource_policy_unsupported");
-    if (
-        previous?.kind === "preparation" &&
-        previous.status === "started" &&
-        (previous.deadlineAt ?? Infinity) <= Date.now() &&
-        previous.executionGeneration === run.executionGeneration &&
-        run.lifecycleState === "awaiting_source_review" &&
-        run.executionStatus === "running"
-    ) {
-        if (previous.workflowId)
-            await workflow.cancel(ctx, previous.workflowId as WorkflowId);
-        await ctx.db.patch(previous._id, {
-            status: "blocked",
-            stopCode: "execution_expired",
-            workflowId: undefined,
-            completedAt: Date.now(),
-        });
-        await ctx.db.patch(run._id, {
-            executionStatus: "paused",
-            pauseReason: "source_review",
-        });
-        previous = {
-            ...previous,
-            status: "blocked",
-            stopCode: "execution_expired",
-            workflowId: undefined,
-        };
-        run = {
-            ...run,
-            executionStatus: "paused",
-            pauseReason: "source_review",
-        };
-    }
-    const recovery =
-        previous?.kind === "preparation" &&
-        !args.target &&
-        !args.manualSourceId &&
-        previous.status !== "started"
-            ? await readPreparationRecovery(ctx.db, {
-                  runId: run._id,
-                  corpusRevisionId: revision._id,
-                  preparation: previous,
-                  now: Date.now(),
-              })
-            : null;
-    if (recovery) {
-        if (recovery.resumableSourceIds.length === 0 && !recovery.hasSearchWork)
-            return {
-                preparationId: recovery.scopePreparation._id,
-                status: "blocked" as const,
-                reason: recovery.blockedReason ?? "complete",
-                retryAt: recovery.retryAt,
-            };
-        previous = recovery.scopePreparation;
-        if (previous.resourcePolicy !== RESOURCE_POLICY_VERSION)
-            throw sourcePreparationError("resource_policy_unsupported");
-    }
-    const resumingTargetedReading =
-        !args.target &&
-        !args.manualSourceId &&
-        previous?.kind === "preparation" &&
-        !!previous.target &&
-        (previous.readingSourceIds?.length ?? 0) > 0;
-    if (
-        previous?.kind === "preparation" &&
-        previous.status === "started" &&
-        previous.corpusRevisionId === revision._id &&
-        previous.executionGeneration === run.executionGeneration &&
-        run.executionStatus === "running"
-    ) {
-        if (
-            args.target &&
-            JSON.stringify(args.target) !==
-                JSON.stringify(previous.target ?? null)
-        )
-            throw sourcePreparationError("preparation_busy");
-        return { preparationId: previous._id, status: previous.status };
-    }
-    if (args.target) {
-        const current = await readCurrentSourceSelection(ctx, {
-            run,
-            revision,
-        });
-        if (
-            !current ||
-            (args.target.kind === "coverage"
-                ? !current.coverageRequirements.some(
-                      (item) =>
-                          args.target?.kind === "coverage" &&
-                          item.role === args.target.role &&
-                          !item.covered,
-                  )
-                : current.failedDiscoveryFamilies.length === 0)
-        )
-            throw sourcePreparationError("request_invalid");
-    }
-    const now = Date.now();
-    if (args.target) {
-        if (previous?.kind !== "preparation")
-            throw sourcePreparationError("preparation_unavailable");
-        if (
-            previous.target &&
-            previous.status === "blocked" &&
-            previous.leaseExpiresAt > now
-        )
-            throw sourcePreparationError("search_cooldown");
-        const supplement = run.automaticSupplementOperationId
-            ? await ctx.db.get(run.automaticSupplementOperationId)
-            : null;
-        const capacity = await readSourceCandidateCapacity(ctx.db, run._id);
-        if (
-            capacity.remaining === 0 ||
-            (supplement?.supplementClaimedQueryIndexes?.length ?? 0) >=
-                MAX_SUPPLEMENT_SEARCHES
-        )
-            throw sourcePreparationError("search_limit_reached");
-    }
-    let executionGeneration = run.executionGeneration;
-    let slotUnavailable = false;
-    try {
-        executionGeneration = await claimPausedRunExecution(ctx, {
-            run,
-            visitor,
-            now,
-            checkpoint: {
-                lifecycleState: "awaiting_source_review",
-                pauseReason: "source_review",
-            },
-        });
-    } catch (error) {
-        if (
-            !(error instanceof ExecutionSlotUnavailableError) ||
-            !args.manualSourceId
-        )
-            throw error;
-        slotUnavailable = true;
-    }
-    const deadlineAt = slotUnavailable
-        ? undefined
-        : ((await readCampaignResearchDeadline(ctx, run)) ??
-          now + sourcePreparationWindowMs());
-    const budget = await readPreparationBudget(
-        ctx.db,
-        run,
-        previous?.kind === "preparation" ? previous : undefined,
-    );
-    const qualificationVersion = qualificationExecutionVersion(
-        previous?.kind === "preparation" &&
-            !(
-                previous.qualificationVersion === "source-qualification-v2" &&
-                (args.manualSourceId || args.target)
-            )
-            ? previous.qualificationVersion
-            : undefined,
-    );
-    const preparationId = await ctx.db.insert(
-        "sourceSelectionProposalRebuilds",
-        {
-            runId: run._id,
-            corpusRevisionId: revision._id,
-            expectedProposalId: proposal._id,
-            kind: "preparation",
-            resourcePolicy: RESOURCE_POLICY_VERSION,
-            ...(previous?.kind === "preparation"
-                ? {
-                      resumesPreparationId: previous._id,
-                      initialReadingsCompletedAt:
-                          previous.initialReadingsCompletedAt,
-                  }
-                : {}),
-            entryPoint: args.target
-                ? "targeted_search"
-                : args.manualSourceId || previous?.manualSourceIds
-                  ? "manual_addition"
-                  : "source_review",
-            manualSourceIds: args.target
-                ? undefined
-                : args.manualSourceId
-                  ? [
-                        ...(previous?.stopCode ===
-                            "execution_slot_unavailable" &&
-                        previous.deadlineAt === undefined
-                            ? (previous.manualSourceIds ?? [])
-                            : []),
-                        args.manualSourceId,
-                    ]
-                  : previous?.manualSourceIds,
-            ...(args.target
-                ? { target: args.target, readingSourceIds: [] }
-                : resumingTargetedReading && previous
-                  ? {
-                        target: previous.target,
-                        readingSourceIds: previous.readingSourceIds ?? [],
-                        ...(previous.insertedCount !== undefined
-                            ? { insertedCount: previous.insertedCount }
-                            : {}),
-                    }
-                  : {}),
-            workflowVersion: run.workflowVersion ?? 1,
-            executionGeneration,
-            policyVersion: qualificationVersion,
-            qualificationVersion,
-            executionPlanVersion:
-                previous?.kind === "preparation" &&
-                previous.resourcePolicy === RESOURCE_POLICY_VERSION
-                    ? previous.executionPlanVersion
-                    : SOURCE_PREPARATION_EXECUTION_PLAN_VERSION,
-            modelRevisionId:
-                previous?.kind === "preparation"
-                    ? previous.modelRevisionId
-                    : undefined,
-            comparisonVersion: SOURCE_COMPARISON_VERSION,
-            ...(env.SOURCE_RETRIEVAL_MODE
-                ? {
-                      retrievalVersion: SOURCE_RETRIEVAL_VERSION,
-                      ...(previous?.kind === "preparation"
-                          ? previous.retrievalRankingPolicy
-                              ? {
-                                    retrievalRankingPolicy:
-                                        previous.retrievalRankingPolicy,
-                                }
-                              : {}
-                          : {
-                                retrievalRankingPolicy:
-                                    SOURCE_RETRIEVAL_RANKING_POLICY,
-                            }),
-                      retrievalMode: env.SOURCE_RETRIEVAL_MODE,
-                  }
-                : {}),
-            operationKey,
-            requestId,
-            documentaryNeed: args.documentaryNeed,
-            cycle: 1,
-            status: slotUnavailable ? "blocked" : "started",
-            progress: { phase: "reading", updatedAt: now },
-            ...(slotUnavailable
-                ? {
-                      stopCode: "execution_slot_unavailable" as const,
-                      reason: "unavailable" as const,
-                  }
-                : {}),
-            failedDiscoveryFamilies: proposal.failedDiscoveryFamilies ?? [],
-            deadlineAt,
-            leaseExpiresAt: deadlineAt ?? now,
-            asOfTime:
-                !args.manualSourceId && previous?.kind === "preparation"
-                    ? (previous.asOfTime ?? previous.createdAt)
-                    : now,
-            modelAttemptCount: 0,
-            modelLimits,
-            maxConcurrentSources,
-            ...(recovery ? { sourceOutcomes: recovery.retainedOutcomes } : {}),
-            createdAt: now,
-        },
-    );
-    await ctx.db.patch(run._id, {
-        sourcePreparationId: preparationId,
-        sourcePreparationBudget: budget,
-        sourceQualificationAttemptCount: budget.dispatches,
-    });
-    if (slotUnavailable) return { preparationId, status: "blocked" as const };
-    const workflowId = await workflow.start(
-        ctx,
-        internal.sourcePreparationWorkflow.run,
-        {
-            preparationId,
-            ...(run.startMode === "framed" ? { controlRunId: run._id } : {}),
-        },
-        {
-            onComplete: internal.sourcePreparationWorkflow.onComplete,
-            context: { preparationId },
-        },
-    );
-    await ctx.db.patch(preparationId, { workflowId });
-    return { preparationId, status: "started" as const };
-}
-
-export const startForReview = mutation({
-    args: {
-        runId: v.id("researchRuns"),
-        corpusRevisionId: v.id("corpusRevisions"),
-        expectedProposalId: v.id("sourceSelectionProposals"),
-        requestId: v.string(),
-        target: v.optional(recoveryTargetValidator),
-    },
-    returns: v.object({
-        preparationId: v.id("sourceSelectionProposalRebuilds"),
-        status: schema.tables.sourceSelectionProposalRebuilds.validator.fields
-            .status,
-        reason: v.optional(v.string()),
-        retryAt: v.optional(v.number()),
-    }),
-    handler: async (ctx, args) => {
-        await requireWorkspaceRun(ctx, args.runId);
-        const authUserId = await getAuthUserId(ctx);
-        if (!authUserId) throw new Error("Not authenticated");
-        const visitor = await ctx.db
-            .query("visitors")
-            .withIndex("by_auth_user_id", (q) => q.eq("authUserId", authUserId))
-            .unique();
-        const invitation = visitor
-            ? await ctx.db.get(visitor.invitationId)
-            : null;
-        const run = await ctx.db.get(args.runId);
-        const revision = await ctx.db.get(args.corpusRevisionId);
-        const proposal = await ctx.db.get(args.expectedProposalId);
-        if (
-            visitor?.status !== "active" ||
-            invitation?.status !== "claimed" ||
-            invitation.claimedByVisitorId !== visitor._id ||
-            run?.ownerVisitorId !== visitor._id ||
-            revision?.runId !== run._id ||
-            proposal?.runId !== run._id ||
-            proposal.corpusRevisionId !== revision._id
-        )
-            throw new Error("Unauthorized");
-        return startReviewPreparation(ctx, {
-            run,
-            revision,
-            proposal,
-            visitor,
-            requestId: args.requestId,
-            target: args.target,
-        });
-    },
-});
 
 export const getQualificationInput = internalQuery({
     args: {

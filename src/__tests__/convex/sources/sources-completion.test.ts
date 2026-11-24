@@ -364,6 +364,63 @@ test.each([
     ).toHaveLength(2);
 });
 
+test("Sources validates the retained mission when replaying its completion event", async () => {
+    vi.useFakeTimers();
+    const f = await seedObservedSources();
+    workflowTest.register(f.t);
+    const retained = await f.t.run(async (ctx) => {
+        const requestKey = `sources:${f.preparationId}`;
+        const workflowId = await workflow.start(
+            ctx,
+            internal.researchWorkflow.run,
+            {
+                runId: f.runId,
+                executionGeneration: 4,
+            },
+        );
+        const eventId = await workflow.createEvent(ctx, {
+            name: requestKey,
+            workflowId,
+        });
+        await ctx.db.patch(f.runId, { workflowId });
+        await ctx.db.patch(f.missionId, {
+            requestKey,
+            completionEventId: eventId,
+        });
+        return { workflowId, eventId };
+    });
+    const input = {
+        preparationId: f.preparationId,
+        expectedGeneration: 4,
+        workflowId: retained.workflowId,
+    };
+    const snapshot = () =>
+        f.t.run(async (ctx) => ({
+            mission: await ctx.db.get(f.missionId),
+            preparation: await ctx.db.get(f.preparationId),
+            calls: await ctx.db.query("providerCalls").collect(),
+            scheduled: await ctx.db.system
+                .query("_scheduled_functions")
+                .collect(),
+        }));
+    const before = await snapshot();
+    await expect(
+        f.t.mutation(internal.sourcesMission.start, input),
+    ).resolves.toEqual({
+        missionId: f.missionId,
+        eventId: retained.eventId,
+    });
+    expect(await snapshot()).toEqual(before);
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.missionId, { executionRuntime: undefined }),
+    );
+    const unsupported = await snapshot();
+    await expect(
+        f.t.mutation(internal.sourcesMission.start, input),
+    ).rejects.toThrow("generation_backend_unknown");
+    expect(await snapshot()).toEqual(unsupported);
+});
+
 test("analyst settlement waits for native qualification and receives its existing operation event", async () => {
     vi.useFakeTimers();
     vi.stubEnv("OPENROUTER_API_KEY", "fixture-only");

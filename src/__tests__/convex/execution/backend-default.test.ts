@@ -1,107 +1,125 @@
-import { internal } from "@convex/_generated/api";
-import agentTest from "@convex-dev/agent/test";
+import { api, internal } from "@convex/_generated/api";
 import { afterEach, expect, test, vi } from "vitest";
-import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
+import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
-afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-});
+afterEach(() => vi.unstubAllEnvs());
 
-for (const legacy of [false, true]) {
-    test(`explicit historical selection ${legacy ? "preserves direct invocations" : "selects the actual Agent implementation"}`, async () => {
-        vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
-        const network = vi.fn(
-            async () =>
-                new Response(
-                    JSON.stringify({
-                        id: "default-backend",
-                        created: 1,
-                        model: "test/agent",
-                        choices: [
-                            {
-                                index: 0,
-                                message: {
-                                    role: "assistant",
-                                    content:
-                                        '{"kind":"blocked","code":"fixture_done"}',
-                                },
-                                finish_reason: "stop",
-                            },
-                        ],
-                        usage: {
-                            prompt_tokens: 8,
-                            completion_tokens: 4,
-                            total_tokens: 12,
-                        },
-                    }),
-                    { headers: { "Content-Type": "application/json" } },
-                ),
-        );
-        vi.stubGlobal("fetch", network);
-        const { t, args } = await seedInspectedEvidence();
-        await installModel(
-            t,
-            { model: "test/agent", provider: "test" },
-            "saved_material_inspection",
-        );
-        agentTest.register(t);
-        const missionId = await t.mutation(internal.execution.missions.start, {
-            generationBackend: { id: "convex-agent", version: 2 },
+test("direct admission refuses the retired backend and defaults new work to Pi", async () => {
+    const { t, args } = await seedInspectedEvidence();
+    const network = vi.fn(() => {
+        throw new Error("Unexpected external I/O");
+    });
+    vi.stubGlobal("fetch", network);
+    try {
+        const input = {
             runId: args.runId,
             corpusRevisionId: args.corpusRevisionId,
-            definitionId: "saved_material_inspection_v1",
-            requestKey: "changed-default",
+            definitionId: "saved_material_inspection_v1" as const,
+            requestKey: "inspect-material",
             expectedGeneration: args.executionGeneration,
+        };
+        const snapshot = () =>
+            t.run(async (ctx) => ({
+                run: await ctx.db.get(args.runId),
+                missions: await ctx.db.query("agentMissions").collect(),
+                receipts: await ctx.db.query("providerCalls").collect(),
+                scheduled: await ctx.db.system
+                    .query("_scheduled_functions")
+                    .collect(),
+            }));
+        const before = await snapshot();
+        await expect(
+            t.mutation(internal.execution.missions.start, {
+                ...input,
+                generationBackend: { id: "convex-agent", version: 2 },
+            }),
+        ).rejects.toThrow("generation_backend_unknown");
+        expect(await snapshot()).toEqual(before);
+        const missionId = await t.mutation(
+            internal.execution.missions.start,
+            input,
+        );
+        expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
+            definitionVersion: 4,
+            executionRuntime: "pi-durable",
+            generationBackend: { id: "pi-durable", version: 1 },
         });
-        const begun = await t.mutation(internal.execution.invocations.begin, {
-            missionId,
-            expectedGeneration: args.executionGeneration,
-            taskKey: "turn",
-            provenance: "live",
-        });
-        if (begun.kind !== "ready") throw new Error("Expected invocation");
-        if (legacy)
-            await t.run((ctx) =>
-                ctx.db.patch(begun.invocationId, {
-                    generationBackend: undefined,
-                }),
-            );
-        const reply = await t.action(internal.execution.modelActions.invoke, {
-            invocationId: begun.invocationId,
-            expectedGeneration: args.executionGeneration,
-        });
-        expect(reply.response).toEqual({
-            kind: "blocked",
-            code: "fixture_done",
-        });
-        const invocation = await t.run((ctx) => ctx.db.get(begun.invocationId));
-        expect(JSON.parse(invocation?.receivedOutputJson ?? "null")).toEqual({
-            kind: "blocked",
-            code: "fixture_done",
-        });
-        expect(invocation?.receivedWhileAuthorized).toBe(true);
-        const providerCallId = invocation?.providerCallId;
-        const receipt = providerCallId
-            ? await t.run((ctx) => ctx.db.get(providerCallId))
-            : null;
-        expect(receipt).toMatchObject({
-            invocationId: begun.invocationId,
-            missionId,
-            status: "succeeded",
-            dispatchOutcome: "response_received",
-            usage: { inputTokens: 8, outputTokens: 4 },
-        });
-        if (legacy)
-            expect(invocation).not.toHaveProperty("generationStorageRef");
-        else {
-            expect(invocation?.generationBackend).toEqual({
-                id: "convex-agent",
-                version: 2,
-            });
-            expect(invocation?.generationStorageRef).toBeTypeOf("string");
-        }
-        expect(network).toHaveBeenCalledOnce();
+        expect(network).not.toHaveBeenCalled();
+    } finally {
+        vi.unstubAllGlobals();
+    }
+});
+
+test("resume refuses a retired mission before recovering its blocked state", async () => {
+    const { t, args } = await seedInspectedEvidence();
+    const missionId = await t.mutation(internal.execution.missions.start, {
+        runId: args.runId,
+        corpusRevisionId: args.corpusRevisionId,
+        definitionId: "saved_material_inspection_v1",
+        requestKey: "retired-recovery",
+        expectedGeneration: args.executionGeneration,
     });
-}
+    await t.run((ctx) =>
+        ctx.db.patch(missionId, {
+            executionRuntime: undefined,
+            generationBackend: { id: "convex-agent", version: 2 },
+            status: "blocked",
+            blockCode: "execution_interrupted",
+        }),
+    );
+    const snapshot = () =>
+        t.run(async (ctx) => ({
+            mission: await ctx.db.get(missionId),
+            run: await ctx.db.get(args.runId),
+            invocations: await ctx.db.query("agentInvocations").collect(),
+            receipts: await ctx.db.query("providerCalls").collect(),
+            scheduled: await ctx.db.system
+                .query("_scheduled_functions")
+                .collect(),
+        }));
+    const before = await snapshot();
+    await expect(
+        t.mutation(internal.execution.missions.resume, {
+            missionId,
+            expectedGeneration: args.executionGeneration,
+        }),
+    ).rejects.toThrow("generation_backend_unknown");
+    expect(await snapshot()).toEqual(before);
+});
+
+test("analyst Resume refuses a retired Sources mission before taking the research slot", async () => {
+    const f = await seedCapturedSources();
+    await f.t.run(async (ctx) => {
+        await ctx.db.patch(f.runId, {
+            startMode: "framed",
+            agentExecutionVersion: 3,
+            executionStatus: "paused",
+            pauseReason: "analyst",
+        });
+        await ctx.db.patch(f.missionId, {
+            generationBackend: { id: "convex-agent", version: 2 },
+            executionRuntime: undefined,
+        });
+    });
+    const snapshot = () =>
+        f.t.run(async (ctx) => ({
+            run: await ctx.db.get(f.runId),
+            mission: await ctx.db.get(f.missionId),
+            preparation: await ctx.db.get(f.preparationId),
+            calls: await ctx.db.query("providerCalls").collect(),
+            scheduled: await ctx.db.system
+                .query("_scheduled_functions")
+                .collect(),
+        }));
+    const before = await snapshot();
+    await expect(
+        f.t
+            .withIdentity({ subject: f.userId })
+            .mutation(api.execution.researchControl.resume, {
+                runId: f.runId,
+                expectedGeneration: 4,
+            }),
+    ).rejects.toThrow("generation_backend_unknown");
+    expect(await snapshot()).toEqual(before);
+});

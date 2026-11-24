@@ -1,8 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
-import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, internalMutation } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 import { manualSourceIntakeError } from "./domain/manualSourceIntake";
 import { assertSourceCandidateRequestFits } from "./domain/sourceCandidateCapacity";
 import { coveragePresetValidator } from "./domain/validators";
@@ -11,14 +10,12 @@ import { MAX_ANALYSES_PER_VISITOR } from "./resourcePolicy";
 import { workspaceForVisitor } from "./runWorkspace";
 import { insertPendingManualSource } from "./sources";
 
-export const confirmAndStartReserved = internalMutation({
+export const createFramingDossier = internalMutation({
     args: {
         preflightId: v.id("companyPreflights"),
         idempotencyKey: v.string(),
         coveragePreset: coveragePresetValidator,
         researchAngle: v.optional(v.string()),
-        // False is reserved for replay through the retired public launch action.
-        framingOnly: v.boolean(),
         manualSourcePreparationIds: v.optional(
             v.array(v.id("manualSourcePreparations")),
         ),
@@ -69,7 +66,7 @@ export const confirmAndStartReserved = internalMutation({
         if (existing) {
             if (
                 existing.companyPreflightId !== args.preflightId ||
-                (existing.startMode === "framed") !== args.framingOnly
+                existing.startMode !== "framed"
             ) {
                 throw new Error(
                     "Idempotency key belongs to another company preflight",
@@ -82,9 +79,6 @@ export const confirmAndStartReserved = internalMutation({
             };
         }
 
-        if (!args.framingOnly) {
-            throw new ConvexError({ code: "framing_required" });
-        }
         const now = Date.now();
         const manualSources = new Map<
             string,
@@ -222,44 +216,5 @@ export const confirmAndStartReserved = internalMutation({
             remainingAnalyses:
                 MAX_ANALYSES_PER_VISITOR - visitor.analysesReserved,
         };
-    },
-});
-
-export const confirmAndStart = action({
-    args: {
-        preflightId: v.id("companyPreflights"),
-        idempotencyKey: v.string(),
-        coveragePreset: coveragePresetValidator,
-        researchAngle: v.optional(v.string()),
-        manualSourcePreparationIds: v.optional(
-            v.array(v.id("manualSourcePreparations")),
-        ),
-    },
-    returns: v.object({
-        runId: v.id("researchRuns"),
-        remainingAnalyses: v.number(),
-    }),
-    handler: async (
-        ctx,
-        args,
-    ): Promise<{
-        runId: Id<"researchRuns">;
-        remainingAnalyses: number;
-    }> => {
-        assertSourceCandidateRequestFits(
-            args.manualSourcePreparationIds?.length ?? 0,
-            sourceCandidateLimit(),
-        );
-        return ctx.runMutation(
-            internal.researchLaunch.confirmAndStartReserved,
-            {
-                preflightId: args.preflightId,
-                framingOnly: false,
-                idempotencyKey: args.idempotencyKey,
-                coveragePreset: args.coveragePreset,
-                researchAngle: args.researchAngle,
-                manualSourcePreparationIds: args.manualSourcePreparationIds,
-            },
-        );
     },
 });

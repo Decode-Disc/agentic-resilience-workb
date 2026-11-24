@@ -320,7 +320,6 @@ export const workbenchDefinition: AgentDefinition & {
     completionValidator: schemas.completion,
     initialState() {
         return {
-            objectiveKey: "workbench",
             state: { kind: "workbench_v1" },
             obligations: [],
         };

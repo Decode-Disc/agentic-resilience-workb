@@ -179,19 +179,49 @@ function supportedDefinitions(): readonly AgentDefinition[] {
     ];
 }
 
-/** Selects the latest compatible retained binding for backends without native completion tools. */
-export function defaultDefinitionVersionForBackend(
-    definitionId: AgentDefinition["id"],
-    backend: import("./executionProtocol").AgentBackendIdentity,
-): number {
-    const candidates = supportedDefinitions().filter(
-        (definition) =>
-            definition.id === definitionId &&
-            (backend.id === "pi-durable" ||
-                definition.completionTransport !== "native_tool"),
-    );
-    if (!candidates.length) throw executionError("definition_contract_invalid");
-    return Math.max(...candidates.map((definition) => definition.version));
+type AgentDefinitionSelection =
+    | {
+          kind: "new";
+          definitionId: AgentDefinition["id"];
+          comparisonVersion?: number;
+      }
+    | {
+          kind: "conversation";
+          definitionId: AgentDefinition["id"];
+          conversation: Doc<"agentConversations">;
+          comparisonVersion?: number;
+      }
+    | { kind: "mission"; mission: Doc<"agentMissions"> };
+
+/** Admission keeps persisted definitions pinned and uses the named binding for new work. */
+export function resolveAgentDefinition(
+    selection: AgentDefinitionSelection,
+): AgentDefinition {
+    if (selection.kind === "mission") {
+        const { definitionId, definitionVersion } = selection.mission;
+        return getAgentDefinition(definitionId, definitionVersion);
+    }
+    const { definitionId, comparisonVersion } = selection;
+    if (selection.kind === "conversation") {
+        const conversation = selection.conversation;
+        if (
+            conversation.definitionId === undefined &&
+            conversation.definitionVersion === undefined
+        ) {
+            const definition = getAgentDefinition(
+                definitionId,
+                comparisonVersion,
+            );
+            if (!definition.nativeConversation) return definition;
+        }
+        if (
+            conversation.definitionId !== definitionId ||
+            conversation.definitionVersion === undefined
+        )
+            throw executionError("definition_version_conflict");
+        return getAgentDefinition(definitionId, conversation.definitionVersion);
+    }
+    return getAgentDefinition(definitionId, comparisonVersion);
 }
 
 /** Enumerates the exact versioned bindings accepted by runtime resolution. */

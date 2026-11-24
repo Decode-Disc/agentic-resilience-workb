@@ -3,7 +3,6 @@ import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import type { OperationOutcome } from "@convex/execution/agentDefinition";
-import type { WorkflowId } from "@convex-dev/workflow";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
@@ -21,7 +20,6 @@ afterEach(() => {
 
 test.each([
     "resume",
-    "next",
     "finish",
 ] as const)("%s refuses a response first observed without authority after same-generation readmission", async (entry) => {
     vi.useFakeTimers();
@@ -35,7 +33,7 @@ test.each([
         requestKey: "readmission",
         expectedGeneration: 4,
     });
-    const workflowId = await t.mutation(internal.execution.missions.resume, {
+    await t.mutation(internal.execution.missions.resume, {
         missionId,
         expectedGeneration: 4,
     });
@@ -100,12 +98,6 @@ test.each([
         expectedGeneration: 4,
         responseJson: JSON.stringify(response),
     });
-    if (entry === "resume")
-        await t.mutation(internal.execution.missionWorkflow.onComplete, {
-            workflowId: workflowId as WorkflowId,
-            context: { missionId },
-            result: { kind: "failed", error: "Simulated process interruption" },
-        });
     const userId = await t.run((ctx) =>
         ctx.db.insert("users", { isAnonymous: true }),
     );
@@ -123,13 +115,6 @@ test.each([
                 expectedGeneration: 4,
             }),
         ).rejects.toThrow("retained_response_not_reusable");
-    else if (entry === "next")
-        expect(
-            await t.mutation(internal.execution.missionWorkflow.next, {
-                missionId,
-                expectedGeneration: 4,
-            }),
-        ).toEqual({ kind: "stopped" });
     else
         expect(
             await t.mutation(internal.execution.invocations.finish, {
@@ -604,22 +589,11 @@ test.each([
             expectedGeneration: recoveredGeneration,
         });
     }
-    const next = await t.mutation(internal.execution.missionWorkflow.next, {
-        missionId,
-        expectedGeneration: recoveredGeneration,
-    });
-    expect(next).toMatchObject({
-        kind: "adopt",
-        invocationId: invocation.invocationId,
-        response,
-    });
-    if (next.kind !== "adopt")
-        throw new Error("Expected retained response adoption");
     expect(
         await t.mutation(internal.execution.invocations.finish, {
             invocationId: invocation.invocationId,
             expectedGeneration: recoveredGeneration,
-            response: next.response,
+            response,
         }),
     ).toMatchObject({ kind: "waiting" });
     expect(
@@ -743,45 +717,4 @@ test.each([
     expect(
         await t.run((ctx) => ctx.db.query("agentOperationRequests").collect()),
     ).toEqual([]);
-});
-
-test("the fresh context automatically carries the previous observable assistant reply", async () => {
-    const { t, args } = await seedInspectedEvidence();
-    await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
-    const missionId = await t.mutation(internal.execution.missions.start, {
-        runId: args.runId,
-        corpusRevisionId: args.corpusRevisionId,
-        definitionId: "saved_material_inspection_v1",
-        requestKey: "assistant-continuity",
-        generationBackend: { id: "convex-agent", version: 2 },
-        expectedGeneration: 4,
-    });
-    const first = await t.mutation(internal.execution.invocations.begin, {
-        missionId,
-        expectedGeneration: 4,
-        taskKey: "first",
-        provenance: "simulation",
-    });
-    if (first.kind !== "ready") throw new Error("Expected invocation");
-    const rawOutputJson = JSON.stringify({
-        assistantOutput:
-            "Hypothesis remains open; reject the distribution interpretation if the cited passage concerns only product scope.",
-    });
-    await t.mutation(internal.execution.invocations.finish, {
-        invocationId: first.invocationId,
-        expectedGeneration: 4,
-        response: { kind: "operations", requests: [] },
-        rawOutputJson,
-    });
-    const next = await t.mutation(internal.execution.invocations.begin, {
-        missionId,
-        expectedGeneration: 4,
-        taskKey: "second",
-        provenance: "simulation",
-    });
-    if (next.kind !== "ready") throw new Error("Expected continuation");
-    expect(JSON.parse(next.inputJson).lastObservableInvocation).toMatchObject({
-        invocationId: first.invocationId,
-        rawOutputJson,
-    });
 });

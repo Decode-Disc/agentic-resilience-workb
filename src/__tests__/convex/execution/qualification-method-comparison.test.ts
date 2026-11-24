@@ -199,3 +199,62 @@ test.each([
     );
     expect(effects).toEqual([]);
 });
+
+test("a saved Workbench pin wins comparison selection while the campaign remains authorized", async () => {
+    const f = await seedWorkbench(
+        true,
+        undefined,
+        60000,
+        "Inspect routing authority.",
+        undefined,
+        null,
+    );
+    const lot = await admitMethodComparison(f.t, f.runId);
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.runId, { reservationKey: "browser:method-control" }),
+    );
+    await f.t.mutation(internal.execution.fixtures.bindCampaignScenarios, {
+        dossiers: [
+            {
+                runId: f.runId,
+                fixtureKey: "method-control",
+                scenarioId: lot.scenarioId,
+            },
+        ],
+    });
+    await f.t.mutation(internal.execution.fixtures.activateWorkbench, {
+        runId: f.runId,
+        fixtureKey: "method-control",
+    });
+    await f.t.run(async (ctx) => {
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .unique();
+        if (!conversation) throw new Error("Expected admitted conversation");
+        await ctx.db.patch(conversation._id, { definitionVersion: 11 });
+    });
+    const input = {
+        runId: f.runId,
+        definitionId: "workbench_v1" as const,
+        scope: { kind: "workbench_v1" as const },
+        simulation: true,
+    };
+    const started = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        input,
+    );
+    if (!started) throw new Error("Expected admitted turn");
+    const mission = await f.t.run((ctx) => ctx.db.get(started.missionId));
+    expect(mission).toMatchObject({
+        definitionVersion: 11,
+        conversationTurnId: started.turnId,
+    });
+    await f.t.run((ctx) => ctx.db.patch(lot.campaignId, { status: "closed" }));
+    await expect(
+        f.t.mutation(internal.execution.conversations.startTurn, input),
+    ).rejects.toThrow("Campaign lot is not active");
+    expect(
+        await f.t.run((ctx) => ctx.db.query("agentMissions").collect()),
+    ).toEqual([mission]);
+});

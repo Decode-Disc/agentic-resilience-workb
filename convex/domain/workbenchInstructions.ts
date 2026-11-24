@@ -358,66 +358,12 @@ export async function processWorkbenchInstructions(
             await ctx.db.patch(preparation._id, { sourcesMission: data });
         return null;
     }
-    if (
-        ["draft", "checking_public_evidence", "discovering_sources"].includes(
-            run.lifecycleState,
-        )
-    )
-        return null;
-    if (preparation?.status === "started") return null;
-    const revision = run.activeCorpusRevisionId
-        ? await ctx.db.get(run.activeCorpusRevisionId)
-        : null;
-    const proposal = revision?.sourceSelectionProposalId
-        ? await ctx.db.get(revision.sourceSelectionProposalId)
-        : null;
     for (const request of requests) {
-        if (
-            run.lifecycleState !== "awaiting_source_review" ||
-            revision?.status !== "draft" ||
-            !proposal ||
-            request.framingRevisionId !== run.fixedFramingRevisionId ||
-            !request.coverageRole
-        ) {
-            await updateInstructionTreatment(ctx, request, {
-                status: "limited",
-                outcome:
-                    "This request cannot reopen the fixed source set or begin another documentary phase.",
-            });
-            continue;
-        }
-        try {
-            const result = await ctx.runMutation(
-                internal.workbench.deliverSourceInstruction,
-                { instructionId: request._id },
-            );
-            await updateInstructionTreatment(ctx, request, {
-                status: result.status === "started" ? "transmitted" : "blocked",
-                preparationId: result.preparationId,
-                outcome:
-                    result.status === "started"
-                        ? "Your request was transmitted to source preparation. Its treatment is still in progress."
-                        : "Source preparation cannot perform this request within the remaining allowance. Inspect Sources for the retained work and available recovery.",
-            });
-            if (result.status === "started") return null;
-        } catch (error) {
-            const code = preparationFailureCode(error);
-            if (!code) throw error;
-            await updateInstructionTreatment(ctx, request, {
-                status: "blocked",
-                outcome:
-                    "This request could not be transmitted under the current preparation limits. Inspect Sources to continue.",
-            });
-            await ctx.db.insert("agentExecutionEvents", {
-                runId,
-                actor: { type: "system" },
-                kind: "analyst_instruction_blocked",
-                cause: "instruction_delivery",
-                messageId: request.messageId,
-                code,
-                occurredAt: Date.now(),
-            });
-        }
+        await updateInstructionTreatment(ctx, request, {
+            status: "limited",
+            outcome:
+                "This request cannot reopen the fixed source set or begin another documentary phase.",
+        });
     }
     if (requests.length === 20)
         await ctx.scheduler.runAfter(

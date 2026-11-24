@@ -3,8 +3,8 @@ import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
 
-test("ordinary workspace excludes legacy evaluations while preserving real reservations with similar keys", async () => {
-    const f = await seedSourcePreparation({ legacyRunPurposes: true });
+test("ordinary workspace excludes evaluations while preserving real reservations with similar keys", async () => {
+    const f = await seedSourcePreparation();
     const ids = await f.t.run(async (ctx) => {
         const fields = {
             ownerVisitorId: f.visitorId,
@@ -17,7 +17,7 @@ test("ordinary workspace excludes legacy evaluations while preserving real reser
             updatedAt: 2,
         };
         const evaluation = await ctx.db.insert("researchRuns", {
-            purpose: "research",
+            purpose: "evaluation",
             ...fields,
             reservationKey: "retrieval-evaluation:study-clone",
         });
@@ -27,17 +27,10 @@ test("ordinary workspace excludes legacy evaluations while preserving real reser
             reservationKey: "retrieval-evaluation:caller-controlled-key",
             reservationStatus: "consumed",
         });
-        await ctx.db.patch(evaluation, { purpose: undefined });
-        await ctx.db.patch(research, { purpose: undefined });
-        await ctx.db.patch(f.runId, { purpose: undefined });
         return { evaluation, research };
     });
     const analyst = f.t.withIdentity({
         subject: `${f.userId}|workspace-session`,
-    });
-    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
-    await f.t.mutation(internal.adminOperations.migrateRunPurposes, {
-        runIds: [f.runId, ids.evaluation, ids.research],
     });
     const visitor = await analyst.query(api.visitors.current, {});
     if (!visitor?.workspace) throw new Error("Expected admitted workspace");
@@ -258,55 +251,6 @@ test("a browser context isolates fixtures, requires explicit rebinding and fence
     await f.t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1000));
 });
 
-test("purpose migration previews before writing and is idempotent without changing business history", async () => {
-    vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
-    const f = await seedSourcePreparation({ legacyRunPurposes: true });
-    const evaluation = await f.t.run((ctx) =>
-        ctx.db.insert("researchRuns", {
-            purpose: "research",
-            ownerVisitorId: f.visitorId,
-            reservationKey: "retrieval-evaluation:historical-study",
-            lifecycleState: "awaiting_source_review",
-            executionStatus: "paused",
-            executionGeneration: 1,
-            nextEventSequence: 1,
-            createdAt: 20,
-            updatedAt: 30,
-        }),
-    );
-    await f.t.run(async (ctx) => {
-        await ctx.db.patch(evaluation, { purpose: undefined });
-        await ctx.db.patch(f.runId, { purpose: undefined });
-    });
-    const before = await f.t.run((ctx) => ctx.db.get(evaluation));
-    const preview = await f.t.query(
-        internal.adminOperations.previewRunPurposes,
-        { paginationOpts: { numItems: 20, cursor: null } },
-    );
-    expect(preview.page.find((row) => row.runId === evaluation)).toMatchObject({
-        purpose: "evaluation",
-        reason: "internal_evaluation_reservation",
-    });
-    expect(await f.t.run((ctx) => ctx.db.get(evaluation))).toEqual(before);
-    expect(
-        await f.t.mutation(internal.adminOperations.migrateRunPurposes, {
-            runIds: [f.runId, evaluation],
-        }),
-    ).toEqual({ changed: 2 });
-    expect(
-        await f.t.mutation(internal.adminOperations.migrateRunPurposes, {
-            runIds: [f.runId, evaluation],
-        }),
-    ).toEqual({ changed: 0 });
-    expect(await f.t.run((ctx) => ctx.db.get(evaluation))).toEqual({
-        ...before,
-        purpose: "evaluation",
-    });
-    expect(await f.t.run((ctx) => ctx.db.get(f.visitorId))).toMatchObject({
-        analysesReserved: 1,
-    });
-});
-
 test("workspace pagination excludes technical history on every page and rejects stale scope keys", async () => {
     const f = await seedSourcePreparation();
     await f.t.run(async (ctx) => {
@@ -518,7 +462,7 @@ async function seedWithdrawalAdministrator(t: WorkspaceTestClient) {
     };
 }
 
-test("administrative withdrawal blocks a scheduled start and a checkpoint retry", async () => {
+test("administrative withdrawal blocks Start, resume and checkpoint retry", async () => {
     const f = await seedSourcePreparation();
     const { admin } = await seedWithdrawalAdministrator(f.t);
     await f.t.run((ctx) =>
@@ -537,14 +481,22 @@ test("administrative withdrawal blocks a scheduled start and a checkpoint retry"
             reason: "Withdraw the abandoned dossier before relaunching",
         }),
     ).resolves.toEqual({ withdrawn: true });
-    await expect(
-        f.t.mutation(internal.workflowControls.startReserved, {
-            runId: f.runId,
-        }),
-    ).rejects.toThrow("A withdrawn dossier cannot be resumed");
     const analyst = f.t.withIdentity({
         subject: `${f.userId}|workspace-session`,
     });
+    await expect(
+        analyst.mutation(api.framing.startResearch, {
+            runId: f.runId,
+            expectedRevision: 1,
+            requestKey: "withdrawn-start",
+        }),
+    ).rejects.toThrow("not_authorized");
+    await expect(
+        analyst.mutation(api.execution.researchControl.resume, {
+            runId: f.runId,
+            expectedGeneration: 2,
+        }),
+    ).rejects.toThrow("not_authorized");
     await expect(
         analyst.mutation(api.workflowControls.retry, { runId: f.runId }),
     ).rejects.toThrow("A withdrawn dossier cannot be resumed");

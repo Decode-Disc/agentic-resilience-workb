@@ -178,7 +178,7 @@ export const agentBackendValidator = v.object({
     version: v.number(),
 });
 export type AgentBackendIdentity = Infer<typeof agentBackendValidator>;
-export const LEGACY_AGENT_BACKEND: AgentBackendIdentity = {
+export const AI_SDK_BACKEND: AgentBackendIdentity = {
     id: "ai-sdk",
     version: 1,
 };
@@ -190,6 +190,20 @@ export const DEFAULT_AGENT_BACKEND: AgentBackendIdentity = {
     id: "pi-durable",
     version: 1,
 };
+
+/** Retained work must explicitly identify its generation backend and runtime. */
+export function requireSupportedMissionBackend({
+    generationBackend,
+    executionRuntime,
+}: Pick<Doc<"agentMissions">, "generationBackend" | "executionRuntime">) {
+    if (
+        generationBackend?.id !== DEFAULT_AGENT_BACKEND.id ||
+        generationBackend.version !== DEFAULT_AGENT_BACKEND.version ||
+        executionRuntime !== "pi-durable"
+    )
+        throw executionError("generation_backend_unknown");
+    return generationBackend;
+}
 
 export type ModelAttemptReceipt = {
     observableReplyJson?: string;

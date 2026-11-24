@@ -58,12 +58,12 @@ import {
 } from "./conversations";
 import { executionFailureValidation } from "./errors";
 import {
-    HISTORICAL_AGENT_BACKEND,
+    AI_SDK_BACKEND,
     invocationReplyValidator,
     invocationResponseValidator,
     invocationStructureError,
-    LEGACY_AGENT_BACKEND,
     operationInputValidator,
+    requireSupportedMissionBackend,
 } from "./executionProtocol";
 import {
     admittedInputHash,
@@ -474,6 +474,7 @@ export const begin = internalMutation({
             args.missionId,
             args.expectedGeneration,
         );
+        const generationBackend = requireSupportedMissionBackend(mission);
         if (mission.provenance && mission.provenance !== args.provenance)
             throw executionError("invocation_identity_conflict");
         if (!/^[a-zA-Z0-9._:-]{1,160}$/.test(args.taskKey))
@@ -619,8 +620,7 @@ export const begin = internalMutation({
             purpose: args.purpose,
             conversationTurnId: mission.conversationTurnId,
             instructionVersion: turn?.instructionVersion,
-            generationBackend:
-                mission.generationBackend ?? HISTORICAL_AGENT_BACKEND,
+            generationBackend,
             journalVersion: 1,
             missionId: mission._id,
             runId: mission.runId,
@@ -955,7 +955,7 @@ export const beginOneShot = internalMutation({
             return existing._id;
         }
         const id = await ctx.db.insert("agentInvocations", {
-            generationBackend: LEGACY_AGENT_BACKEND,
+            generationBackend: AI_SDK_BACKEND,
             journalVersion: 1,
             runId: receipt.runId,
             corpusRevisionId: receipt.corpusRevisionId,

@@ -427,46 +427,6 @@ test("native completion cannot be bound to a native conversation", async () => {
     ).toThrow("definition_contract_invalid");
 });
 
-test("non-Pi backends resolve retained inspection definitions", async () => {
-    const { defaultDefinitionVersionForBackend } = await import(
-        "@convex/execution/agentCatalog"
-    );
-    const {
-        HISTORICAL_AGENT_BACKEND,
-        LEGACY_AGENT_BACKEND,
-        DEFAULT_AGENT_BACKEND,
-    } = await import("@convex/execution/executionProtocol");
-    for (const backend of [HISTORICAL_AGENT_BACKEND, LEGACY_AGENT_BACKEND]) {
-        expect(
-            defaultDefinitionVersionForBackend(
-                "saved_material_inspection_v1",
-                backend,
-            ),
-        ).toBe(3);
-        const f = await seedInspectedEvidence();
-        const missionId = await f.t.mutation(
-            internal.execution.missions.start,
-            {
-                runId: f.args.runId,
-                corpusRevisionId: f.args.corpusRevisionId,
-                definitionId: "saved_material_inspection_v1",
-                expectedGeneration: 4,
-                requestKey: `retained:${backend.id}`,
-                generationBackend: backend,
-            },
-        );
-        expect(
-            (await f.t.run((ctx) => ctx.db.get(missionId)))?.definitionVersion,
-        ).toBe(3);
-    }
-    expect(
-        defaultDefinitionVersionForBackend(
-            "saved_material_inspection_v1",
-            DEFAULT_AGENT_BACKEND,
-        ),
-    ).toBe(4);
-});
-
 test("an explicitly pinned native-tool conversation refuses a historical backend", async () => {
     const { seedConversation } = await import(
         "@/__tests__/setup/agent-harness"
@@ -508,5 +468,5 @@ test("an explicitly pinned native-tool conversation refuses a historical backend
             expectedGeneration: 1,
             generationBackend: HISTORICAL_AGENT_BACKEND,
         }),
-    ).rejects.toThrow("definition_contract_invalid");
+    ).rejects.toThrow("generation_backend_unknown");
 });

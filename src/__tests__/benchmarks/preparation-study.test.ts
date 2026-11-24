@@ -1,7 +1,10 @@
 // @vitest-environment node
-import { expect, test } from "vitest";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect, test, vi } from "vitest";
 
-const { buildPreparationStudyConditions } = await import(
+const { buildPreparationStudyConditions, runPreparationStudy } = await import(
     new URL(
         "../../../scripts/evaluations/source-selection/preparation-study.ts",
         import.meta.url,
@@ -71,4 +74,26 @@ test("comparison lots count only sources that can dispatch model work", () => {
         modelSourceCount: 7,
     });
     expect(conditions).toHaveLength(4);
+});
+
+test.each([
+    "--prepare",
+    "--offline",
+    "--live",
+])("retired study mode %s refuses before network or output", async (mode) => {
+    const dir = await mkdtemp(join(tmpdir(), "retired-preparation-study-"));
+    const fetch = vi.fn(() => {
+        throw new Error("Unexpected network dispatch");
+    });
+    vi.stubGlobal("fetch", fetch);
+    try {
+        await expect(runPreparationStudy([mode, "--out", dir])).rejects.toThrow(
+            "Preparation study execution has been retired",
+        );
+        expect(fetch).not.toHaveBeenCalled();
+        expect(await readdir(dir)).toEqual([]);
+    } finally {
+        vi.unstubAllGlobals();
+        await rm(dir, { recursive: true, force: true });
+    }
 });

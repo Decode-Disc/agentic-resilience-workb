@@ -10,7 +10,6 @@ test("delayed cancellation cleanup preserves a resumed newer generation", async 
     const { t, userId, args } = await seedInspectedEvidence();
     workflowTest.register(t);
     const missionId = await t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",
@@ -73,20 +72,25 @@ afterEach(() => {
 });
 
 test.each([
-    "continuation",
+    "worker wake",
     "dispatch",
 ])("an old queued %s cannot invalidate a recovered generation", async (boundary) => {
     vi.useFakeTimers();
     const { t, args } = await seedInspectedEvidence();
     workflowTest.register(t);
     const missionId = await t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",
         requestKey: "stale-callback",
         expectedGeneration: 4,
     });
+    await t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: 4,
+    });
+    const oldWorker = await t.run((ctx) => ctx.db.get(missionId));
+    if (!oldWorker?.piWakeToken) throw new Error("Expected old worker wake");
     await t.run((ctx) => ctx.db.patch(args.runId, { executionGeneration: 5 }));
     await t.mutation(internal.execution.missions.resume, {
         missionId,
@@ -98,13 +102,15 @@ test.each([
         cause: "current",
         input: { kind: "consult_mission_state" },
     });
-    if (boundary === "continuation")
+    if (boundary === "worker wake")
         expect(
-            await t.mutation(internal.execution.missionWorkflow.next, {
+            await t.mutation(internal.execution.piControl.prepare, {
                 missionId,
                 expectedGeneration: 4,
+                token: oldWorker.piWakeToken,
+                writer: "cancelled-worker",
             }),
-        ).toEqual({ kind: "stopped" });
+        ).toBe(false);
     else
         expect(
             await t.mutation(internal.execution.operations.claim, {
@@ -131,7 +137,6 @@ test("run cancellation fences first and drains mission work in bounded scheduled
     const { t, userId, args } = await seedInspectedEvidence();
     workflowTest.register(t);
     const missionId = await t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",
@@ -162,9 +167,12 @@ test("run cancellation fences first and drains mission work in bounded scheduled
         requestId: firstRequestId,
         expectedGeneration: args.executionGeneration,
     });
-    const missionWorkflowId = await t.mutation(
-        internal.execution.missions.resume,
-        { missionId, expectedGeneration: args.executionGeneration },
+    await t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: args.executionGeneration,
+    });
+    expect(await t.run((ctx) => ctx.db.get(missionId))).toHaveProperty(
+        "piWakeId",
     );
     const missionIds = await t.run(async (ctx) => {
         const base = await ctx.db.get(missionId);
@@ -282,9 +290,9 @@ test("run cancellation fences first and drains mission work in bounded scheduled
             ]),
         );
     }
-    expect(
-        await t.run((ctx) => workflow.status(ctx, missionWorkflowId as never)),
-    ).toMatchObject({ type: "canceled" });
+    expect(await t.run((ctx) => ctx.db.get(missionId))).not.toHaveProperty(
+        "piWakeId",
+    );
 }, 60_000);
 
 test("browser context teardown paginates runs without nesting mission pagination", async () => {
@@ -309,16 +317,18 @@ test("browser context teardown paginates runs without nesting mission pagination
         }),
     );
     const missionId = await t.mutation(internal.execution.missions.start, {
-        generationBackend: { id: "convex-agent", version: 2 },
         runId: args.runId,
         corpusRevisionId: args.corpusRevisionId,
         definitionId: "saved_material_inspection_v1",
         requestKey: "context-cancellation",
         expectedGeneration: args.executionGeneration,
     });
-    const missionWorkflowId = await t.mutation(
-        internal.execution.missions.resume,
-        { missionId, expectedGeneration: args.executionGeneration },
+    await t.mutation(internal.execution.missions.resume, {
+        missionId,
+        expectedGeneration: args.executionGeneration,
+    });
+    expect(await t.run((ctx) => ctx.db.get(missionId))).toHaveProperty(
+        "piWakeId",
     );
 
     await expect(
@@ -338,9 +348,9 @@ test("browser context teardown paginates runs without nesting mission pagination
         status: "cancelled",
         blockCode: "run_cancelled",
     });
-    expect(
-        await t.run((ctx) => workflow.status(ctx, missionWorkflowId as never)),
-    ).toMatchObject({ type: "canceled" });
+    expect(await t.run((ctx) => ctx.db.get(missionId))).not.toHaveProperty(
+        "piWakeId",
+    );
 }, 60_000);
 
 test("cancelling a dossier whose workflow already ended does not fail on the finished workflow", async () => {
@@ -358,7 +368,9 @@ test("cancelling a dossier whose workflow already ended does not fail on the fin
                 executionGeneration: run.executionGeneration,
             },
         );
-        await workflow.cancel(ctx, workflowId);
+        expect(await workflow.status(ctx, workflowId)).toMatchObject({
+            type: "failed",
+        });
         await ctx.db.patch(args.runId, {
             workflowId,
             executionStatus: "paused",

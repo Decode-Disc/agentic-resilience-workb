@@ -1,10 +1,15 @@
 import type { api } from "@convex/_generated/api";
 import { dimensionLabel as domainDimensionLabel } from "@convex/domain/researchPlan";
+import type {
+    RecoveryTarget,
+    recoveryReasonValidator,
+} from "@convex/domain/sourceDiscoveryRecovery";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
+import type { Infer } from "convex/values";
 import { sourcesPhaseState } from "@/lib/presentation/sources-phase-state";
 
 export type CoveragePreset = FunctionArgs<
-    typeof api.researchLaunch.confirmAndStart
+    typeof api.framing.confirmCompany
 >["coveragePreset"];
 
 export const coveragePresetOptions: ReadonlyArray<{
@@ -58,9 +63,7 @@ type AdminCheckpointEvent = FunctionReturnType<
 >["checkpoints"][number];
 
 export type SourceRecoveryState = {
-    target: FunctionArgs<
-        typeof api.sourceSelectionProposalActions.recoverDiscovery
-    >["target"];
+    target: RecoveryTarget;
     feedback: ReturnType<typeof sourceRecoveryFeedback> | null;
     retryAfterSeconds: number;
 };
@@ -1087,14 +1090,11 @@ export function checkpointDecisionLabel(
 }
 
 /** Describes recovery consequences without exposing transport or workflow diagnostics. */
-export function sourceRecoveryFeedback(
-    result: Pick<
-        FunctionReturnType<
-            typeof api.sourceSelectionProposalActions.recoverDiscovery
-        >,
-        "reason" | "outcome"
-    > & { insertedCount?: number },
-): {
+export function sourceRecoveryFeedback(result: {
+    reason?: Infer<typeof recoveryReasonValidator>;
+    outcome: "complete" | "partial" | "blocked";
+    insertedCount?: number;
+}): {
     status: "default" | "success" | "warning" | "danger";
     title: string;
     description: string;

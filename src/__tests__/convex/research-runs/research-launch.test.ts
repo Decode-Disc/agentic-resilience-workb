@@ -28,57 +28,7 @@ const researchProgram = {
     ],
 };
 
-test.each([
-    "public",
-    "internal",
-] as const)("%s admission refuses fresh legacy research without consuming or scheduling work", async (boundary) => {
-    vi.stubEnv("SOURCES_MISSION_ENABLED", "false");
-    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "false");
-    try {
-        const t = convexTest(schema, modules);
-        rateLimiterTest.register(t);
-        workflowTest.register(t);
-        const { userId, preflightId } = await createAdmittedPreflight(t);
-        const analyst = t.withIdentity({ subject: `${userId}|retired-launch` });
-        const snapshot = () =>
-            t.run(async (ctx) => ({
-                runs: await ctx.db.query("researchRuns").collect(),
-                revisions: await ctx.db.query("corpusRevisions").collect(),
-                preflight: await ctx.db.get(preflightId),
-                visitors: await ctx.db.query("visitors").collect(),
-                events: await ctx.db.query("runEvents").collect(),
-                audit: await ctx.db.query("auditEvents").collect(),
-                calls: await ctx.db.query("providerCalls").collect(),
-                scheduled: await ctx.db.system
-                    .query("_scheduled_functions")
-                    .collect(),
-            }));
-        const before = await snapshot();
-        const args = {
-            preflightId,
-            idempotencyKey: "retired-launch",
-            coveragePreset: "balanced" as const,
-        };
-
-        await expect(
-            boundary === "public"
-                ? analyst.action(api.researchLaunch.confirmAndStart, args)
-                : analyst.mutation(
-                      internal.researchLaunch.confirmAndStartReserved,
-                      { ...args, framingOnly: false },
-                  ),
-        ).rejects.toMatchObject({ data: { code: "framing_required" } });
-
-        expect(await snapshot()).toEqual(before);
-    } finally {
-        vi.unstubAllEnvs();
-    }
-});
-
-test.each([
-    "framed",
-    "historical",
-] as const)("refuses replaying a %s dossier through the other launch path", async (mode) => {
+test("confirmation refuses a reservation key belonging to a historical dossier", async () => {
     const t = convexTest(schema, modules);
     agentTest.register(t);
     workflowTest.register(t);
@@ -89,9 +39,7 @@ test.each([
         idempotencyKey: "mode-specific-replay",
         coveragePreset: "balanced" as const,
     };
-    if (mode === "framed")
-        await analyst.mutation(api.framing.confirmCompany, args);
-    else await seedHistoricalResearch(t, args);
+    await seedHistoricalResearch(t, args);
     const snapshot = () =>
         t.run(async (ctx) => ({
             runs: await ctx.db.query("researchRuns").collect(),
@@ -104,9 +52,7 @@ test.each([
         }));
     const before = await snapshot();
     await expect(
-        mode === "framed"
-            ? analyst.action(api.researchLaunch.confirmAndStart, args)
-            : analyst.mutation(api.framing.confirmCompany, args),
+        analyst.mutation(api.framing.confirmCompany, args),
     ).rejects.toThrow("Idempotency key belongs to another company preflight");
     expect(await snapshot()).toEqual(before);
 });
@@ -168,12 +114,6 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
 });
-const confirmAndStart = api.researchLaunch.confirmAndStart;
-const getRun = makeFunctionReference<
-    "query",
-    { runId: Id<"researchRuns"> },
-    unknown
->("researchRuns:get");
 const getMine = makeFunctionReference<
     "query",
     { runId: Id<"researchRuns"> },
@@ -192,83 +132,16 @@ const transition = makeFunctionReference<
     },
     null
 >("researchRuns:transition");
-const decideSufficiency = makeFunctionReference<
-    "mutation",
-    {
-        runId: Id<"researchRuns">;
-        decision:
-            | { kind: "recheck"; decisionKey: string }
-            | {
-                  kind: "force_continue";
-                  decisionKey: string;
-                  reason: string;
-              }
-            | {
-                  kind: "complete_insufficient";
-                  decisionKey: string;
-                  reason: string;
-              };
-    },
-    { accepted: boolean }
->("evidenceSufficiency:decide");
-
-test("replays a historical workflow without reserving or scheduling it again", async () => {
+test("keeps the confirmed company snapshot when canonical SEC metadata changes", async () => {
     const t = convexTest(schema, modules);
-    rateLimiterTest.register(t);
-    workflowTest.register(t);
+    agentTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
-    const analyst = t.withIdentity({ subject: `${userId}|launch-session` });
-
-    const first = await seedHistoricalResearch(t, {
+    const analyst = t.withIdentity({ subject: userId });
+    const first = await analyst.mutation(api.framing.confirmCompany, {
         preflightId,
-        idempotencyKey: "launch-cccs",
+        idempotencyKey: "company-snapshot",
         coveragePreset: "balanced",
-        researchAngle: "Focus on claims workflow control.",
     });
-    const beforeReplay = await t.run(async (ctx) => ({
-        run: await ctx.db.get(first.runId),
-        visitor: await ctx.db.query("visitors").first(),
-        events: await ctx.db.query("runEvents").collect(),
-        scheduled: await ctx.db.system.query("_scheduled_functions").collect(),
-    }));
-    const replay = await analyst.action(confirmAndStart, {
-        preflightId,
-        idempotencyKey: "launch-cccs",
-        coveragePreset: "balanced",
-        researchAngle: "Focus on claims workflow control.",
-    });
-
-    expect(replay).toEqual({ runId: first.runId, remainingAnalyses: 2 });
-    expect(
-        await t.run(async (ctx) => ({
-            run: await ctx.db.get(first.runId),
-            visitor: await ctx.db.query("visitors").first(),
-            events: await ctx.db.query("runEvents").collect(),
-            scheduled: await ctx.db.system
-                .query("_scheduled_functions")
-                .collect(),
-        })),
-    ).toEqual(beforeReplay);
-    await expect(
-        t.query(getRun, { runId: first.runId }),
-    ).resolves.toMatchObject({
-        companyPreflightId: preflightId,
-        coveragePreset: "balanced",
-        researchAngle: "Focus on claims workflow control.",
-        reservationStatus: "consumed",
-        executionStatus: "running",
-        executionGeneration: 1,
-        workflowVersion: 2,
-    });
-    await expect(
-        t.run(async (ctx) => ctx.db.query("corpusRevisions").collect()),
-    ).resolves.toEqual([
-        expect.objectContaining({
-            runId: first.runId,
-            revision: 1,
-            status: "draft",
-        }),
-    ]);
     await t.run(async (ctx) => {
         const run = await ctx.db.get(first.runId);
         if (!run?.companyId) {
@@ -696,7 +569,7 @@ test("explicit research start atomically admits one workflow per visitor and per
     ).toMatchObject({ analysesReserved: 2 });
 });
 
-test("revalidates the confirmed CIK before evidence checks", async () => {
+test("revalidates the confirmed CIK with an SEC identity request", async () => {
     process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
     const fetchImplementation = vi.fn(async () =>
         Promise.resolve(
@@ -723,7 +596,7 @@ test("revalidates the confirmed CIK before evidence checks", async () => {
         idempotencyKey: "revalidate-cccs",
         coveragePreset: "balanced",
     });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await t.action(internal.companyResolution.revalidateRun, { runId });
 
     expect(fetchImplementation).toHaveBeenCalledWith(
         "https://data.sec.gov/submissions/CIK0001818201.json",
@@ -733,10 +606,6 @@ test("revalidates the confirmed CIK before evidence checks", async () => {
             }),
         }),
     );
-    await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: "awaiting_source_review",
-        executionStatus: "paused",
-    });
 });
 
 test("accepts mutable SEC metadata for the same confirmed CIK", async () => {
@@ -788,11 +657,9 @@ test("accepts mutable SEC metadata for the same confirmed CIK", async () => {
         idempotencyKey: "revalidate-mutable-metadata",
         coveragePreset: "balanced",
     });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await t.action(internal.companyResolution.revalidateRun, { runId });
 
     await expect(analyst.query(getMine, { runId })).resolves.toMatchObject({
-        lifecycleState: "awaiting_source_review",
-        executionStatus: "paused",
         company: {
             cik: "1818201",
             legalName: "CCC Intelligent Solutions Inc.",
@@ -801,115 +668,5 @@ test("accepts mutable SEC metadata for the same confirmed CIK", async () => {
             websiteUrl: "https://www.cccis.com/",
             websiteUrlSource: "exa",
         },
-    });
-});
-
-test("pauses when revalidation finds no public evidence", async () => {
-    process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
-    globalThis.fetch = vi.fn(async () =>
-        Promise.resolve(
-            new Response(
-                JSON.stringify({
-                    cik: "0001818201",
-                    name: "CCC Intelligent Solutions Holdings Inc.",
-                    tickers: ["CCCS"],
-                    exchanges: ["Nasdaq"],
-                    filings: { recent: { accessionNumber: [] } },
-                }),
-                { status: 200 },
-            ),
-        ),
-    );
-    const t = convexTest(schema, modules);
-    rateLimiterTest.register(t);
-    workflowTest.register(t);
-    const { userId, preflightId } = await createAdmittedPreflight(t);
-    const analyst = t.withIdentity({
-        subject: `${userId}|insufficient-session`,
-    });
-
-    const { runId } = await seedHistoricalResearch(t, {
-        preflightId,
-        idempotencyKey: "insufficient-cccs",
-        coveragePreset: "balanced",
-    });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-
-    await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: "awaiting_evidence_sufficiency_review",
-        executionStatus: "paused",
-        pauseReason: "evidence_sufficiency_review",
-    });
-    await expect(
-        analyst.mutation(decideSufficiency, {
-            runId,
-            decision: {
-                kind: "complete_insufficient",
-                decisionKey: "complete-insufficient-cccs",
-                reason: "Public evidence cannot support a credible assessment.",
-            },
-        }),
-    ).resolves.toEqual({ accepted: true });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-    await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: "completed",
-        executionStatus: "completed",
-        executionGeneration: 1,
-    });
-});
-
-test("requires a justified force-continuation decision", async () => {
-    process.env.SEC_USER_AGENT = "Evidence Workbench test@example.com";
-    globalThis.fetch = vi.fn(async () =>
-        Promise.resolve(
-            new Response(
-                JSON.stringify({
-                    cik: "0001818201",
-                    name: "CCC Intelligent Solutions Holdings Inc.",
-                    tickers: ["CCCS"],
-                    exchanges: ["Nasdaq"],
-                    filings: { recent: { accessionNumber: [] } },
-                }),
-                { status: 200 },
-            ),
-        ),
-    );
-    const t = convexTest(schema, modules);
-    rateLimiterTest.register(t);
-    workflowTest.register(t);
-    const { userId, preflightId } = await createAdmittedPreflight(t);
-    const analyst = t.withIdentity({ subject: `${userId}|force-session` });
-    const { runId } = await seedHistoricalResearch(t, {
-        preflightId,
-        idempotencyKey: "force-cccs",
-        coveragePreset: "balanced",
-    });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-
-    await expect(
-        analyst.mutation(decideSufficiency, {
-            runId,
-            decision: {
-                kind: "force_continue",
-                decisionKey: "force-short",
-                reason: "too short",
-            },
-        }),
-    ).rejects.toThrow("12 characters");
-    await expect(
-        analyst.mutation(decideSufficiency, {
-            runId,
-            decision: {
-                kind: "force_continue",
-                decisionKey: "force-valid",
-                reason: "Proceed with explicitly limited public evidence.",
-            },
-        }),
-    ).resolves.toEqual({ accepted: true });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-    await expect(t.query(getRun, { runId })).resolves.toMatchObject({
-        lifecycleState: "awaiting_source_review",
-        executionStatus: "paused",
-        executionGeneration: 2,
     });
 });

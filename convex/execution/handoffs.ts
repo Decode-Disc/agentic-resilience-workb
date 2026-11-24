@@ -8,8 +8,8 @@ import { recordMissionEvent, requireMissionAuthority } from "./authority";
 import { requireInstructionVersion } from "./conversations";
 import { executionError, executionFailureCode } from "./errors";
 import {
-    HISTORICAL_AGENT_BACKEND,
     operationOutcomeValidator,
+    requireSupportedMissionBackend,
 } from "./executionProtocol";
 import { isRecoverableInterruption } from "./missionData";
 import {
@@ -78,12 +78,12 @@ export const startChild = internalMutation({
             return { kind: "refused", code: "mission_return_limit" };
         let childId: Id<"agentMissions">;
         try {
+            const generationBackend = requireSupportedMissionBackend(mission);
             // A failed child admission rolls back its subtransaction before any external work is scheduled.
             childId = await ctx.runMutation(internal.execution.missions.start, {
                 runId: run._id,
                 definitionId: grant.definitionId,
-                generationBackend:
-                    mission.generationBackend ?? HISTORICAL_AGENT_BACKEND,
+                generationBackend,
                 scope: grant.scope,
                 expectedGeneration: run.executionGeneration,
                 requestKey: `handoff:${request._id}`,

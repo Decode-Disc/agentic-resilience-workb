@@ -1,4 +1,4 @@
-import type { Doc } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import { supportsResearchControl } from "@convex/domain/transitions";
 import type {
     AgentProgressMission,
@@ -9,6 +9,26 @@ import type {
     OperationPin,
 } from "./agentDefinition";
 import { executionError } from "./errors";
+
+/** Stable persisted identity for a mission's objective across attempts and definition versions. */
+export function missionObjectiveKey(
+    scope: AgentScope,
+    conversationTurnId?: Id<"agentConversationTurns">,
+): string {
+    const suffix = conversationTurnId ? `:${conversationTurnId}` : "";
+    switch (scope.kind) {
+        case "workbench_v1":
+            return `workbench${suffix}`;
+        case "conversation_validation_v1":
+            return `conversation${suffix}`;
+        case "sources_v1":
+            return `sources:${scope.preparationId}${suffix}`;
+        case "saved_material_inspection_v1":
+            return `saved-material:${scope.corpusRevisionId}${suffix}`;
+        case "execution_validation_v1":
+            return `validation:${JSON.stringify(scope.values)}${suffix}`;
+    }
+}
 
 /** Both retained success formats contribute to the same mission progress. */
 export function operationProgressKeys(outcome: OperationOutcome): string[] {

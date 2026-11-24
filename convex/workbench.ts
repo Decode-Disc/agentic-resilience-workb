@@ -14,8 +14,8 @@ import {
     readResearchState,
 } from "@convex/domain/researchState";
 import { researchStateValidator } from "@convex/domain/researchStateContracts";
-import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { SourceReviewReads } from "@convex/domain/sourceReviewReads";
 import {
     readSourcesMission,
     sourcesPhaseValidator,
@@ -78,12 +78,11 @@ import { reasoningEffort } from "@convex/modelConfigurationSchema";
 import { sourceDossierCandidateLimit } from "@convex/resourceLimits";
 import {
     MAX_WORKBENCH_TURN_OPERATIONS,
-    WORKBENCH_OPERATION_PREVIEW_SIZE,
     SOURCES_HANDOFF_READ_CAPACITY,
+    WORKBENCH_OPERATION_PREVIEW_SIZE,
 } from "@convex/resourcePolicy";
 import { requireWorkspaceRun } from "@convex/runWorkspace";
 import schema from "@convex/schema";
-import { startReviewPreparation } from "@convex/sourcePreparation";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
     paginationOptsValidator,
@@ -1151,11 +1150,11 @@ export const performInstruction = internalMutation({
         )
             throw executionError("instruction_capacity");
         const status =
-            input.coverageRole || run.sourcesProtocol === "sources_mission_v1"
+            run.sourcesProtocol === "sources_mission_v1"
                 ? ("waiting" as const)
                 : ("limited" as const);
         const outcome =
-            input.coverageRole || run.sourcesProtocol === "sources_mission_v1"
+            run.sourcesProtocol === "sources_mission_v1"
                 ? "Your request is recorded. Transmission waits for the applicable documentary phase and remaining capacity."
                 : "This request is recorded, but it cannot be executed through the documentary operations currently available. Inspect Sources or refine the request within the current research scope.";
         const id = await ctx.db.insert("workbenchInstructions", {
@@ -1216,53 +1215,4 @@ export const processInstructions = internalMutation({
     args: { runId: v.id("researchRuns") },
     returns: v.null(),
     handler: processWorkbenchInstructions,
-});
-
-/** Keeps a failed native delivery transactional independently from the retained instruction outcome. */
-export const deliverSourceInstruction = internalMutation({
-    args: { instructionId: v.id("workbenchInstructions") },
-    returns: v.object({
-        preparationId: v.id("sourceSelectionProposalRebuilds"),
-        status: v.string(),
-    }),
-    handler: async (
-        ctx,
-        { instructionId },
-    ): Promise<{
-        preparationId: Id<"sourceSelectionProposalRebuilds">;
-        status: string;
-    }> => {
-        const request = await ctx.db.get(instructionId);
-        if (request?.status !== "waiting" || !request.coverageRole)
-            throw executionError("instruction_not_authorized");
-        const { run, visitor } = await requireDossierAuthority(
-            ctx,
-            request.runId,
-        );
-        const revision = run.activeCorpusRevisionId
-            ? await ctx.db.get(run.activeCorpusRevisionId)
-            : null;
-        const proposal = revision?.sourceSelectionProposalId
-            ? await ctx.db.get(revision.sourceSelectionProposalId)
-            : null;
-        if (
-            run.lifecycleState !== "awaiting_source_review" ||
-            isResumableResearchPause(run) ||
-            run.researchPauseRequested ||
-            revision?.status !== "draft" ||
-            !proposal ||
-            run.fixedFramingRevisionId !== request.framingRevisionId
-        )
-            throw executionError("instruction_not_authorized");
-        const result = await startReviewPreparation(ctx, {
-            run,
-            revision,
-            proposal,
-            visitor,
-            requestId: `instruction:${request._id}`,
-            target: { kind: "coverage", role: request.coverageRole },
-            documentaryNeed: request.interpretedNeed,
-        });
-        return { preparationId: result.preparationId, status: result.status };
-    },
 });

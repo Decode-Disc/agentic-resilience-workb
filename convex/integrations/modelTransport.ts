@@ -10,9 +10,6 @@ import {
 import type {
     AgentGenerationLifecycle,
     AgentGenerationObservation,
-    AgentGenerationResult,
-    AgentModelRoute,
-    AgentOperationDefinition,
     ModelAttemptReceipt,
 } from "@convex/execution/executionProtocol";
 import {
@@ -27,16 +24,13 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { TextStreamPart, ToolSet } from "ai";
 import {
     APICallError,
-    isStepCount,
     JSONParseError,
     NoObjectGeneratedError,
     Output,
     streamText,
-    ToolLoopAgent,
     wrapLanguageModel,
 } from "ai";
 import type { ZodType } from "zod";
-import { createAgentTools } from "./modelInput";
 import { readOpenRouterApiKey } from "./openRouterConfiguration";
 import type { SourceQualificationRoute } from "./sourceQualificationConfig";
 
@@ -262,19 +256,6 @@ function visibleOutputWriter(
         },
     };
 }
-
-export type AuthorizedAgentRoute = AgentModelRoute;
-export type DeferredAgentGenerationResult = AgentGenerationResult;
-
-/** SDK-specific generation mechanics stay between transport adapters. */
-export type AgentStepGenerator = (input: {
-    model: ReturnType<typeof wrapLanguageModel>;
-    instructions: string;
-    prompt: string;
-    tools: ToolSet;
-    signal?: AbortSignal;
-    generation: ReturnType<typeof modelCallSettings>["generation"];
-}) => Promise<unknown>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -862,10 +843,6 @@ async function failedAttemptFromError(args: {
     throw error;
 }
 
-function toolHasExecuteCallback(candidate: unknown): boolean {
-    return isRecord(candidate) && typeof candidate.execute === "function";
-}
-
 /** Performs one bounded structured-output attempt; orchestration owns fallback and persistence. */
 export async function invokeOneShot<T>(args: {
     route: SourceQualificationRoute;
@@ -1128,90 +1105,5 @@ export async function invokeOneShot<T>(args: {
     } finally {
         generationSignal.removeEventListener("abort", allowSettlement);
         if (graceTimer !== undefined) clearTimeout(graceTimer);
-    }
-}
-
-/** Runs one authorized model turn and returns tool requests for persisted dispatch. */
-export async function invokeDeferredAgentTurn(args: {
-    route?: AuthorizedAgentRoute;
-    dependencies: AttemptDependencies;
-    instructions: string;
-    prompt: string;
-    operations: Record<
-        string,
-        Pick<AgentOperationDefinition, "description" | "inputValidator">
-    >;
-    generateStep?: AgentStepGenerator;
-}): Promise<DeferredAgentGenerationResult> {
-    if (!args.route)
-        return { status: "blocked", reason: "missing_authorized_route" };
-    if (Object.values(args.operations).some(toolHasExecuteCallback))
-        return { status: "blocked", reason: "tool_callbacks_not_allowed" };
-    const { route, dependencies } = args;
-    const preflight = preflightFailure(route, dependencies);
-    if (preflight) return preflight;
-    const startedAt = Date.now();
-    const state: BoundedTransportState = {
-        responseTooLarge: false,
-        turn: { startedAt },
-    };
-    try {
-        const authority = resolveGenerationAuthority(
-            dependencies.authority,
-            Date.now(),
-        );
-        if (authority.kind === "blocked") throw executionError(authority.code);
-        const provider = createBoundedProvider(dependencies, state, route);
-        const input = {
-            model: createRoutedModel(provider, route, dependencies, state),
-            instructions: args.instructions,
-            prompt: args.prompt,
-            tools: createAgentTools(args.operations),
-            signal: AbortSignal.any([
-                ...(dependencies.signal ? [dependencies.signal] : []),
-                AbortSignal.timeout(authority.timeoutMs),
-            ]),
-            generation: modelCallSettings(route, authority.deadlineAt)
-                .generation,
-        };
-        if (args.generateStep) await args.generateStep(input);
-        else {
-            const { timeout, ...generation } = input.generation;
-            const agent = new ToolLoopAgent({
-                model: input.model,
-                instructions: input.instructions,
-                tools: input.tools,
-                stopWhen: isStepCount(1),
-                ...generation,
-            });
-            await agent.generate({
-                prompt: input.prompt,
-                timeout,
-                abortSignal: input.signal,
-            });
-        }
-        if (!state.turn?.result)
-            throw new Error("Generation completed without an observation");
-        return state.turn.result;
-    } catch (error) {
-        if (state.turn?.observationError) throw state.turn.observationError;
-        // An observed result is durable already; framework failures remain explicit interruptions.
-        if (state.turn?.result) throw error;
-        if (args.generateStep && !state.dispatched && !state.requestBlockCode)
-            return {
-                status: "failed",
-                model: route.model,
-                latencyMs: Math.max(0, Date.now() - startedAt),
-                errorCode: "generation_backend_unavailable",
-                dispatchOutcome: "not_dispatched",
-                retryable: false,
-            };
-        return failedAttemptFromError({
-            error: state.turn?.generationError ?? error,
-            route,
-            dependencies,
-            state,
-            startedAt,
-        });
     }
 }

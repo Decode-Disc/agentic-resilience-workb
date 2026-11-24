@@ -17,10 +17,7 @@ import type { WorkflowId } from "@convex-dev/workflow";
 import { vEventId } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { validate } from "convex-helpers/validators";
-import {
-    defaultDefinitionVersionForBackend,
-    getAgentDefinition,
-} from "./agentCatalog";
+import { resolveAgentDefinition } from "./agentCatalog";
 import { agentScopeValidator } from "./agentSchemas";
 import {
     canAdoptRetainedResponse,
@@ -34,8 +31,13 @@ import {
     agentBackendValidator,
     agentDefinitionIdValidator,
     DEFAULT_AGENT_BACKEND,
+    requireSupportedMissionBackend,
 } from "./executionProtocol";
-import { isRecoverableInterruption, missionScope } from "./missionData";
+import {
+    isRecoverableInterruption,
+    missionObjectiveKey,
+    missionScope,
+} from "./missionData";
 import { cancelPiWake, schedulePiMission } from "./piControl";
 
 export const start = internalMutation({
@@ -52,56 +54,6 @@ export const start = internalMutation({
     },
     returns: v.id("agentMissions"),
     handler: async (ctx, args) => {
-        const conversationTurn = args.conversationTurnId
-            ? await ctx.db.get(args.conversationTurnId)
-            : null;
-        const conversation = conversationTurn
-            ? await ctx.db.get(conversationTurn.conversationId)
-            : null;
-        const backend = args.generationBackend ?? DEFAULT_AGENT_BACKEND;
-        const initialRun = await ctx.db.get(args.runId);
-        const explicitVersion =
-            conversation?.definitionId === args.definitionId
-                ? (conversation.definitionVersion ?? 1)
-                : initialRun
-                  ? await taskMethodDefinitionVersion(
-                        ctx,
-                        initialRun,
-                        args.definitionId,
-                    )
-                  : undefined;
-        const definition = getAgentDefinition(
-            args.definitionId,
-            explicitVersion ??
-                defaultDefinitionVersionForBackend(args.definitionId, backend),
-        );
-        if (
-            definition.completionTransport === "native_tool" &&
-            backend.id !== "pi-durable"
-        )
-            throw executionError("definition_contract_invalid");
-        const executionScope = definition.executionScope;
-        const { run, visitor } =
-            executionScope === "conversation"
-                ? await requireDossierAuthority(ctx, args.runId)
-                : await requireRunAuthority(
-                      ctx,
-                      args.runId,
-                      args.expectedGeneration,
-                  );
-        const turn = args.conversationTurnId
-            ? await ctx.db.get(args.conversationTurnId)
-            : null;
-        if (
-            executionScope === "conversation" &&
-            (!turn ||
-                turn.runId !== run._id ||
-                turn.status !== "active" ||
-                turn.generation !== args.expectedGeneration)
-        )
-            throw executionError("active_turn_required");
-        if (executionScope === "research" && args.conversationTurnId)
-            throw executionError("invalid_delivery_target");
         if (!/^[a-zA-Z0-9._:-]{1,120}$/.test(args.requestKey))
             throw executionError("invalid_request_key");
         const scope =
@@ -115,49 +67,110 @@ export const start = internalMutation({
                 : undefined);
         if (
             !scope ||
-            scope.kind !== definition.id ||
-            !validate(definition.scopeValidator, scope, { db: ctx.db }) ||
+            scope.kind !== args.definitionId ||
             (args.scope && args.corpusRevisionId)
         )
             throw executionError("mission_scope_invalid");
+        const { run, visitor } = await requireDossierAuthority(ctx, args.runId);
+        const turn = args.conversationTurnId
+            ? await ctx.db.get(args.conversationTurnId)
+            : null;
+        const conversation = turn
+            ? await ctx.db.get(turn.conversationId)
+            : null;
+        const objectiveKey = missionObjectiveKey(
+            scope,
+            args.conversationTurnId,
+        );
         const previous = await ctx.db
             .query("agentMissions")
             .withIndex("by_run_and_request_key", (q) =>
                 q.eq("runId", args.runId).eq("requestKey", args.requestKey),
             )
             .unique();
-        if (previous) {
+        const retained =
+            previous ??
+            (await ctx.db
+                .query("agentMissions")
+                .withIndex("by_run_and_objective_key", (q) =>
+                    q.eq("runId", args.runId).eq("objectiveKey", objectiveKey),
+                )
+                .unique());
+        if (retained) {
             if (
-                stableStringify(missionScope(previous)) !==
+                stableStringify(missionScope(retained)) !==
                     stableStringify(scope) ||
-                previous.generation !== args.expectedGeneration ||
-                previous.definitionId !== args.definitionId ||
-                previous.conversationTurnId !== args.conversationTurnId ||
-                previous.completionEventId !== args.completionEventId ||
+                retained.definitionId !== args.definitionId ||
+                retained.conversationTurnId !== args.conversationTurnId ||
+                ((previous ||
+                    retained.status !== "completed" ||
+                    args.completionEventId !== undefined) &&
+                    retained.completionEventId !== args.completionEventId) ||
                 (args.generationBackend !== undefined &&
-                    stableStringify(previous.generationBackend) !==
-                        stableStringify(args.generationBackend))
+                    stableStringify(retained.generationBackend) !==
+                        stableStringify(args.generationBackend)) ||
+                (previous && retained.generation !== args.expectedGeneration)
             )
                 throw executionError("mission_identity_conflict");
-            return previous._id;
-        }
-        const initialState = definition.initialState(scope);
-        const objectiveKey = turn
-            ? `${initialState.objectiveKey}:${turn._id}`
-            : initialState.objectiveKey;
-        const objective = await ctx.db
-            .query("agentMissions")
-            .withIndex("by_run_and_objective_key", (q) =>
-                q.eq("runId", args.runId).eq("objectiveKey", objectiveKey),
+            if (
+                retained.ownerVisitorId !== visitor._id ||
+                retained.generation !== args.expectedGeneration
             )
-            .unique();
-        if (objective) {
-            if (objective.status === "blocked")
-                throw executionError(objective.blockCode ?? "mission_blocked");
-            if (objective.generation !== args.expectedGeneration)
                 throw executionError("stale_execution");
-            return objective._id;
+            requireSupportedMissionBackend(retained);
         }
+        const comparisonVersion = await taskMethodDefinitionVersion(
+            ctx,
+            run,
+            args.definitionId,
+        );
+        const definition = resolveAgentDefinition(
+            retained
+                ? { kind: "mission", mission: retained }
+                : conversation
+                  ? {
+                        kind: "conversation",
+                        conversation,
+                        definitionId: args.definitionId,
+                        comparisonVersion,
+                    }
+                  : {
+                        kind: "new",
+                        definitionId: args.definitionId,
+                        comparisonVersion,
+                    },
+        );
+        if (!validate(definition.scopeValidator, scope, { db: ctx.db }))
+            throw executionError("mission_scope_invalid");
+        const executionScope = definition.executionScope;
+        if (executionScope === "conversation") {
+            if (
+                !turn ||
+                !conversation ||
+                conversation.runId !== run._id ||
+                turn.runId !== run._id ||
+                turn.status !== "active" ||
+                turn.generation !== args.expectedGeneration
+            )
+                throw executionError("active_turn_required");
+        } else {
+            if (args.conversationTurnId)
+                throw executionError("invalid_delivery_target");
+            await requireRunAuthority(ctx, run._id, args.expectedGeneration);
+        }
+        if (retained) {
+            await definition.requireAuthority(ctx, retained, run);
+            if (!previous && retained.status === "blocked")
+                throw executionError(retained.blockCode ?? "mission_blocked");
+            return retained._id;
+        }
+        const backend = args.generationBackend ?? DEFAULT_AGENT_BACKEND;
+        const executionRuntime = "pi-durable";
+        requireSupportedMissionBackend({
+            generationBackend: backend,
+            executionRuntime,
+        });
+        const initialState = definition.initialState(scope);
         const preparation = run.sourcePreparationId
             ? await ctx.db.get(run.sourcePreparationId)
             : null;
@@ -184,11 +197,8 @@ export const start = internalMutation({
                 executionHarnessDeadlineAt: deadlineAt,
             });
 
-        if (backend.id === "pi-durable" && backend.version !== 1)
-            throw executionError("generation_backend_unknown");
         const id = await ctx.db.insert("agentMissions", {
-            executionRuntime:
-                backend.id === "pi-durable" ? "pi-durable" : undefined,
+            executionRuntime,
             generationBackend: backend,
             runId: run._id,
             protocolVersion: 3,
@@ -255,6 +265,15 @@ export const resume = internalMutation({
                       retained.runId,
                       args.expectedGeneration,
                   );
+        requireSupportedMissionBackend(retained);
+        if (
+            retained.blockCode === "execution_time_limit" &&
+            run.executionHarnessDeadlineAt !== undefined &&
+            retained.deadlineAt < run.executionHarnessDeadlineAt
+        )
+            await ctx.db.patch(retained._id, {
+                deadlineAt: run.executionHarnessDeadlineAt,
+            });
         const recoverable = isRecoverableInterruption(retained, run);
         const observed = retained.lastInvocationId
             ? await ctx.db.get(retained.lastInvocationId)
@@ -305,65 +324,30 @@ export const resume = internalMutation({
             });
             if (retained.workflowId)
                 await workflow.cancel(ctx, retained.workflowId as WorkflowId);
-            if (retained.executionRuntime === "pi-durable") {
-                if (retained.piWakeId)
-                    await cancelPiWake(ctx, retained.piWakeId);
-                await ctx.db.patch(retained._id, {
-                    piRebinding: true,
-                    piWakeId: undefined,
-                    piWakeAt: undefined,
-                    piWakeToken: undefined,
-                    piActiveWriter: undefined,
-                });
-                await ctx.scheduler.runAfter(
-                    0,
-                    internal.execution.piControl.rebind,
-                    {
-                        missionId: retained._id,
-                        expectedGeneration: args.expectedGeneration,
-                        stage: 0,
-                        cursor: null,
-                    },
-                );
-            } else {
-                for (const status of [
-                    "pending",
-                    "running",
-                    "observed",
-                    "waiting",
-                ] as const) {
-                    const pending = await ctx.db
-                        .query("agentOperationRequests")
-                        .withIndex("by_mission_and_status", (q) =>
-                            q
-                                .eq("missionId", retained._id)
-                                .eq("status", status),
-                        )
-                        .take(5);
-                    if (pending.length > 4)
-                        throw executionError("continuation_capacity");
-                    for (const request of pending)
-                        await ctx.db.patch(request._id, {
-                            ...(request.status === "pending"
-                                ? {
-                                      expectedGeneration:
-                                          args.expectedGeneration,
-                                  }
-                                : {
-                                      adoptionGeneration:
-                                          args.expectedGeneration,
-                                  }),
-                        });
-                }
-            }
+            if (retained.piWakeId) await cancelPiWake(ctx, retained.piWakeId);
+            await ctx.db.patch(retained._id, {
+                piRebinding: true,
+                piWakeId: undefined,
+                piWakeAt: undefined,
+                piWakeToken: undefined,
+                piActiveWriter: undefined,
+            });
+            await ctx.scheduler.runAfter(
+                0,
+                internal.execution.piControl.rebind,
+                {
+                    missionId: retained._id,
+                    expectedGeneration: args.expectedGeneration,
+                    stage: 0,
+                    cursor: null,
+                },
+            );
             const last = retained.lastInvocationId
                 ? await ctx.db.get(retained.lastInvocationId)
                 : null;
             if (
                 last?.status === "started" ||
-                (retained.executionRuntime === "pi-durable" &&
-                    last?.status === "returned" &&
-                    last.receivedOutputJson)
+                (last?.status === "returned" && last.receivedOutputJson)
             ) {
                 if (last.providerCallId && !last.receivedOutputJson)
                     throw executionError("attempt_outcome_unknown");
@@ -403,58 +387,9 @@ export const resume = internalMutation({
         )
             throw executionError("simulation_not_authorized");
         if (!args.simulation) await pinMissionModel(ctx, mission);
-        if (mission.executionRuntime === "pi-durable") {
-            if (
-                mission.generationBackend?.id !== "pi-durable" ||
-                mission.generationBackend.version !== 1
-            )
-                throw executionError("generation_backend_unknown");
-            await ctx.db.patch(mission._id, { provenance });
-            await schedulePiMission(ctx, mission._id, args.expectedGeneration);
-            return `pi:${mission._id}`;
-        }
-        if (mission.workflowId) return mission.workflowId;
-        const id = await workflow.start(
-            ctx,
-            "protocolVersion" in mission && mission.protocolVersion === 3
-                ? internal.execution.missionWorkflow.runV3
-                : internal.execution.missionWorkflow.run,
-            {
-                missionId: mission._id,
-                expectedGeneration: args.expectedGeneration,
-                simulation: args.simulation ?? false,
-            },
-            {
-                onComplete: internal.execution.missionWorkflow.onComplete,
-                context: { missionId: mission._id },
-            },
-        );
-        await ctx.db.patch(mission._id, { workflowId: id, provenance });
-        for (const status of ["running", "waiting"] as const) {
-            const requests = await ctx.db
-                .query("agentOperationRequests")
-                .withIndex("by_mission_and_status", (q) =>
-                    q.eq("missionId", mission._id).eq("status", status),
-                )
-                .take(5);
-            if (requests.length > 4)
-                throw executionError("continuation_capacity");
-            for (const request of requests) {
-                const eventId = await workflow.createEvent(ctx, {
-                    name: `operation:${request._id}`,
-                    workflowId: id,
-                });
-                await ctx.db.patch(request._id, {
-                    waitEventId: eventId,
-                    waitNotified: false,
-                });
-            }
-        }
-        await recordMissionEvent(ctx, mission, {
-            kind: "mission_resumed",
-            cause: "authorized_continuation",
-        });
-        return id;
+        await ctx.db.patch(mission._id, { provenance });
+        await schedulePiMission(ctx, mission._id, args.expectedGeneration);
+        return `pi:${mission._id}`;
     },
 });
 

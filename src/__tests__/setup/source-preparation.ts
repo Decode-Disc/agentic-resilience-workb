@@ -11,7 +11,7 @@ import {
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import schema from "@convex/schema";
 import agentTest from "@convex-dev/agent/test";
-import { defineSchema, type FunctionArgs } from "convex/server";
+import type { FunctionArgs } from "convex/server";
 import { convexTest, type TestConvex } from "convex-test";
 import { vi } from "vitest";
 import { installModel } from "./model-configuration";
@@ -21,21 +21,14 @@ const modules = import.meta.glob("/convex/**/*.ts");
 
 /** Creates owned public candidates without corpus approval or analytical artifacts. */
 export async function seedSourcePreparation(
-    options: { legacyRunPurposes?: boolean; models?: boolean } = {},
+    options: { models?: boolean } = {},
     existing?: TestConvex<typeof schema>,
 ) {
     vi.stubEnv(
         "SOURCES_PREPARATION_WINDOW_MINUTES",
         String(SOURCES_TEST_WINDOW_MINUTES),
     );
-    const t =
-        existing ??
-        convexTest(
-            options.legacyRunPurposes
-                ? defineSchema(schema.tables, { schemaValidation: false })
-                : schema,
-            modules,
-        );
+    const t = existing ?? convexTest(schema, modules);
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
         const invitationId = await ctx.db.insert("invitations", {

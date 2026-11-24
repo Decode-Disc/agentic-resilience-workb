@@ -78,6 +78,7 @@ import {
 import { executionError } from "@convex/execution/errors";
 import { operationHasStarted } from "@convex/execution/executionProtocol";
 import { recordContextObservation } from "@convex/execution/journal";
+import { missionObjectiveKey } from "@convex/execution/missionData";
 import { registerOperationWaitEvent } from "@convex/execution/operations";
 import {
     notifyResearchControlWaits,
@@ -1011,36 +1012,36 @@ export const start = internalMutation({
             run.workflowId !== args.workflowId
         )
             throw executionError("stale_execution");
-        const requestKey = `sources:${args.preparationId}`;
+        const scope = {
+            kind: "sources_v1" as const,
+            preparationId: args.preparationId,
+        };
+        const requestKey = missionObjectiveKey(scope);
         const previous = await ctx.db
             .query("agentMissions")
             .withIndex("by_run_and_request_key", (q) =>
                 q.eq("runId", run._id).eq("requestKey", requestKey),
             )
             .unique();
-        if (previous?.completionEventId)
-            return {
-                missionId: previous._id,
-                eventId: previous.completionEventId,
-            };
-        const eventId = await workflow.createEvent(ctx, {
-            name: requestKey,
-            workflowId: args.workflowId,
-        });
+        const retainedEventId = previous?.completionEventId;
+        const eventId =
+            retainedEventId ??
+            (await workflow.createEvent(ctx, {
+                name: requestKey,
+                workflowId: args.workflowId,
+            }));
         const missionId: Id<"agentMissions"> = await ctx.runMutation(
             internal.execution.missions.start,
             {
                 runId: run._id,
                 expectedGeneration: args.expectedGeneration,
-                definitionId: "sources_v1",
-                scope: {
-                    kind: "sources_v1",
-                    preparationId: args.preparationId,
-                },
+                definitionId: scope.kind,
+                scope,
                 requestKey,
                 completionEventId: eventId,
             },
         );
+        if (retainedEventId) return { missionId, eventId };
         await ctx.runMutation(internal.execution.missions.resume, {
             missionId,
             expectedGeneration: args.expectedGeneration,
