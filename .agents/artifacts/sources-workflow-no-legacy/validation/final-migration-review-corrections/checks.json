@@ -1,0 +1,49 @@
+{
+  "scope": "TDD29 and outline31 corrections requested after review 44",
+  "head": "c59e2defab5849d6a2d084536d99570b6fcf6d1e",
+  "hashes": {
+    "29-tdd-sources-harness-efficiency.md": "1d5219034d9af9dc8d03bbb149788239531ce8e24db6febb2554b8213b9236ae",
+    "31-structure-outline-sources-harness-efficiency.md": "005e1b2206dc64eea97dd4e19c537ec918c825950e52a6debdf053412477dd0f"
+  },
+  "checks": {
+    "localLinksAndAnchors": 31,
+    "phaseOrder": 7,
+    "packageScripts": [
+      "check",
+      "dev:status",
+      "resource-policy:check"
+    ],
+    "existingTestPaths": 27,
+    "plannedTestPath": "src/__tests__/convex/execution/conversation-storage-migration.test.ts",
+    "reviewSnapshots": "unchanged",
+    "docsCheck": "passed: 77 files, 456 links, zero errors; pre-existing TECH word warning",
+    "gitDiffCheck": "passed",
+    "checkerCorrections": "Excluded prose from command extraction and corrected tsx filename matching; both initial checker errors were not document defects."
+  },
+  "disposition": {
+    "openStreams": "Phase 1: old-layout backfill and producer admission/drain/write fences; phase 6 activation prerequisite",
+    "textualResults": "Phases 2/5/6/7: distinct persisted shape, both old encodings, exact rendering, source preservation and unsettled recovery",
+    "responseControl": "Phase 2: complete facts identity and mutation-owned effects, explicit failure/recovery checks",
+    "cleanup": "Phases 2/4: first-fragment/superseded ownership and shared final-text retention",
+    "deletionCapacity": "Phase 7: byte-qualified explicit deletion limit and largest-record restart checks",
+    "retainedPerformance": "Still open pending complete retained graphs and before/after measurements in phase 6"
+  },
+  "limits": [
+    "No independent recheck",
+    "No runtime tests, backend publication, migration, paid calls or deletion",
+    "Planned checks do not establish implementation acceptance"
+  ],
+  "notification": {
+    "accepted": true,
+    "messageId": 1068,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/6f8e4dfa3be8b05f5fae1142103010f01497815a75c1ef01aba03b40157b4c79.json",
+    "project": "agentic-resilience-workbench-proto",
+    "sender": "Codex",
+    "event": "design-corrections-complete",
+    "key": "sources-migration-review44-corrections-c59e2def",
+    "revision": {
+      "29-tdd-sources-harness-efficiency.md": "1d5219034d9af9dc8d03bbb149788239531ce8e24db6febb2554b8213b9236ae",
+      "31-structure-outline-sources-harness-efficiency.md": "005e1b2206dc64eea97dd4e19c537ec918c825950e52a6debdf053412477dd0f"
+    }
+  }
+}
