@@ -1,0 +1,20 @@
+{
+  "accepted": "Internal action validates immutable content; mutation rechecks current state and adopts atomically. Reset deletes old messages, preserving functionality and domain records.",
+  "files": [
+    {
+      "document": "29-tdd-sources-harness-efficiency.md",
+      "sha256": "f65d8b2a542c9e7e5d0eb50c8584304d969fa2413b4eed0c75413a39970f0321",
+      "localLinksChecked": 21,
+      "missingLinks": []
+    },
+    {
+      "document": "43-research-conversation-capacity-and-purge.md",
+      "sha256": "1078b66bf226ba861e1fe18f7d6b46145d01ae382118a5cc957034d27156254f",
+      "localLinksChecked": 30,
+      "missingLinks": []
+    }
+  ],
+  "verification": "docs:check 77 files, 456 links, 0 errors; existing TECH length advisory. Artifact link and whitespace checks passed. No runtime tests: documentation only.",
+  "implementation": "Not started; no data or dependency changes.",
+  "programApproval": "Expanded detailed design still pending review."
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "invocationId": "r57bv403v8wy8r69drkwa81vg98jgbw0",
+    "httpStatus": 200,
+    "dispatchOutcome": "response_received",
+    "usage": {
+      "cachedInputTokens": 2304,
+      "inputTokens": 14216,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 790,
+      "provider": "Wafer",
+      "reasoningTokens": 0
+    },
+    "providerObservation": {
+      "generationId": "gen-1795132639-APTkw12pl0iPYenO5cIj",
+      "httpStatus": 200,
+      "observedAt": 1795132641468
+    }
+  },
+  {
+    "invocationId": "r57cwh4ecrfxaqje0g6fv8b1h18jhh80",
+    "httpStatus": 200,
+    "dispatchOutcome": "response_received",
+    "usage": {
+      "cachedInputTokens": 2304,
+      "inputTokens": 15151,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 674,
+      "provider": "Wafer",
+      "reasoningTokens": 0
+    },
+    "providerObservation": {
+      "generationId": "gen-1795132654-w1fdJnqrFLbnDryctIuW",
+      "httpStatus": 200,
+      "observedAt": 1795132656439
+    }
+  }
+]

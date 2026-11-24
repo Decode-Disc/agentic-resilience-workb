@@ -1,0 +1,12 @@
+{
+  "project": "agentic-resilience-workbench",
+  "sender": "Codex",
+  "event": "review-needed",
+  "key": "sources-workflow-no-legacy-phase1-cf757669-v1",
+  "revision": "cf757669701104f835a29fb1f0941d1c78ce3304 (uncommitted implementation)",
+  "artifact": "07-implementation-sources-scheduled.md",
+  "accepted": true,
+  "duplicate": false,
+  "messageId": 890,
+  "receipt": "/home/abdwhb/.local/state/agent-stack/notify/a266fa45105a9d8af658e0d604f8ee8d155e4ec869af476c257d6335f12879f5.json"
+}

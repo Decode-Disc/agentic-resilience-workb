@@ -1,0 +1,36 @@
+{
+  "documents": [
+    {
+      "file": "29-tdd-sources-harness-efficiency.md",
+      "sha256": "865ec50b63c5e294d1f5594a6dff82d3ce049cdbdc2ecc8a8fd697dd9741eb60",
+      "links": 21,
+      "words": 9125
+    },
+    {
+      "file": "31-structure-outline-sources-harness-efficiency.md",
+      "sha256": "89ab850e96104b4dcb7a4e6574bd6f107e34162581dc61d55981173ca9b9c02b",
+      "links": 7,
+      "words": 4219
+    }
+  ],
+  "phaseCount": 7,
+  "testPathsVerified": 27,
+  "plannedNewTests": [
+    "src/__tests__/convex/execution/conversation-storage-migration.test.ts"
+  ],
+  "linksHeadingsScripts": "passed",
+  "docsCheck": "77 files, 456 links, 0 errors; existing TECH length advisory",
+  "runtimeTests": "not run; documentation-only revision",
+  "review": "No new implementation, provider call, migration, deletion or dependency change. User-approved TDD status recorded without claiming independent review. Historical completed work retained; overstated cost measurement closure reopened.",
+  "checkerCorrection": "Initial local path checker matched .ts prefix of .tsx; corrected regex and reran without changing valid paths.",
+  "notification": {
+    "project": "agentic-resilience-workbench-proto",
+    "sender": "Codex",
+    "event": "outline-revised",
+    "key": "sources-outline31-migration-89ab850e9610",
+    "revision": "89ab850e96104b4dcb7a4e6574bd6f107e34162581dc61d55981173ca9b9c02b",
+    "accepted": true,
+    "messageId": 1066,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/20cb698d852638302719039b0c8b7112553302c063bcf311ba404654f01d0613.json"
+  }
+}

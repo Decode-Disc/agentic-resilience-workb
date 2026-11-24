@@ -1,0 +1,12 @@
+{
+  "project": "agentic-resilience-workbench",
+  "sender": "Codex",
+  "event": "outline-ready",
+  "key": "sources-workflow-no-legacy-outline-cf757669-v1",
+  "revision": "cf757669701104f835a29fb1f0941d1c78ce3304",
+  "artifact": "06-structure-outline-sources-evaluator.md",
+  "accepted": true,
+  "duplicate": false,
+  "messageId": 888,
+  "receipt": "/home/abdwhb/.local/state/agent-stack/notify/9ad0c561e8647c86e7d2dba37fb7e513109208b9b45a32e2d4676cbb60f02458.json"
+}

@@ -1,0 +1,17 @@
+{
+  "checkedAt": "2026-11-19T22:40:34.552Z",
+  "source": "Executor OpenRouter get-model, dedicated Agentic Resilience workspace",
+  "id": "z-ai/glm-5.3-flash",
+  "canonicalSlug": "z-ai/glm-5.3-flash-20260826",
+  "pricing": {
+    "prompt": "$0.15/M tokens",
+    "completion": "$0.5/M tokens",
+    "input_cache_read": "$0.03/M tokens"
+  },
+  "contextWindow": 1048576,
+  "topProvider": {
+    "context_length": 1048575,
+    "max_completion_tokens": 943717,
+    "is_moderated": false
+  }
+}

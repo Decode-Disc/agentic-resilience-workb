@@ -1,0 +1,62 @@
+{
+  "id": "update-split-2",
+  "startedAt": "2026-11-20T08:10:36.211Z",
+  "elapsedMs": 1384,
+  "status": 200,
+  "body": {
+    "id": "gen-1795162236-2UYdtKtFD26q2oPWHr7L",
+    "object": "chat.completion",
+    "created": 1795162236,
+    "model": "z-ai/glm-5.3-flash",
+    "provider": "Wafer",
+    "system_fingerprint": "vllm-0.33.0rc1.dev229+g3966924d5-tp2-786bac74",
+    "service_tier": null,
+    "choices": [
+      {
+        "index": 0,
+        "logprobs": null,
+        "finish_reason": "tool_calls",
+        "native_finish_reason": "tool_calls",
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "refusal": null,
+          "tool_calls": [
+            {
+              "type": "function",
+              "index": 0,
+              "id": "chatcmpl-tool-b9f1c80751d95df6",
+              "function": {
+                "name": "revise_framing",
+                "arguments": "{\"content\": {\"questions\": [{\"id\": \"bypass\", \"rationale\": \"Identify control points without assuming bypass is possible.\", \"shortLabel\": \"Insurer bypass\", \"text\": \"Which estimate-review dependencies constrain insurer bypass of CCC?\"}, {\"id\": \"switching\", \"rationale\": \"Assess how switching costs shape the feasibility of any bypass the dependencies allow.\", \"shortLabel\": \"Switching costs\", \"text\": \"What switching costs would insurers face in moving estimate review away from CCC?\"}], \"scope\": \"Can insurers bypass CCC during estimate review after the latest announcement?\"}}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 2036,
+      "completion_tokens": 217,
+      "total_tokens": 2253,
+      "cost": 0.000123648,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 1792,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.000123648,
+        "upstream_inference_prompt_cost": 0.00008372,
+        "upstream_inference_completions_cost": 0.000039928
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 82,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documentary reading contracts</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font-sans); color: var(--foreground); font-size: 14px; line-height: 1.5; }
+  p { margin: 0; }
+  .lead { color: var(--muted-foreground); margin-bottom: 14px; }
+  .scenarios { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+  button { font: inherit; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; color: var(--foreground); background: var(--secondary); cursor: pointer; }
+  button[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  button:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+  .columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+  h2 { font-size: 20px; margin: 0 0 12px; }
+  h3 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+  .label { font-size: 14px; color: var(--muted-foreground); margin-bottom: 6px; }
+  .box { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .arrow { text-align: center; color: var(--muted-foreground); padding: 5px; font-size: 19px; }
+  pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 14px; line-height: 1.65; }
+  .input { background: var(--code-background); }
+  .note { font-size: 14px; color: var(--muted-foreground); margin-top: 10px; }
+  .engine { margin-top: 0; background: var(--secondary); }
+  .engine h2 { margin-bottom: 8px; }
+  .resolved { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .resolved span { background: var(--card); border: 1px solid var(--border); padding: 4px 8px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 14px; }
+  .tradeoffs { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
+  .tradeoffs p { border-left: 2px solid var(--border); padding-left: 12px; font-size: 14px; }
+  .foot { margin-top: 14px; font-size: 14px; color: var(--muted-foreground); }
+  @media (max-width: 520px) { .columns, .tradeoffs { grid-template-columns: minmax(0,1fr); } }
+</style>
+<main>
+  <p class="lead">Compare what the model must supply. Both designs use the same document engine and server-side authorization.</p>
+  <nav class="scenarios" aria-label="Reading scenario">
+    <button type="button" data-scenario="begin" aria-pressed="false">Read from the beginning</button>
+    <button type="button" data-scenario="match" aria-pressed="true">Open a search match</button>
+    <button type="button" data-scenario="next" aria-pressed="false">Continue reading</button>
+  </nav>
+  <section class="columns" aria-label="Contract alternatives" aria-live="polite">
+    <article>
+      <h2>Explicit selectors</h2>
+      <div class="box"><p class="label" id="explicit-source-label"></p><pre id="explicit-source"></pre></div>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <div class="box input"><h3>The model assembles this call</h3><pre id="explicit-call"></pre></div>
+      <p class="note" id="explicit-note"></p>
+    </article>
+    <article>
+      <h2>One reading reference</h2>
+      <div class="box"><p class="label" id="reference-source-label"></p><pre id="reference-source"></pre></div>
+      <div class="arrow" aria-hidden="true">↓</div>
+      <div class="box input"><h3>The model copies the reference</h3><pre id="reference-call"></pre></div>
+      <p class="note" id="reference-note"></p>
+    </article>
+  </section>
+  <div class="arrow" aria-hidden="true">↘ &nbsp; ↙</div>
+  <section class="box engine">
+    <h2>Same documentary engine</h2>
+    <p id="engine-detail"></p>
+    <div class="resolved"><span>capture + hash</span><span>exact range</span><span>active authority</span><span>adopted provenance</span></div>
+    <p class="note">The server checks authority and the selected representation. A reference selects a reading; it does not grant access. Only returned text becomes a displayed reading.</p>
+  </section>
+  <section class="tradeoffs" aria-label="Trade-offs">
+    <p><strong>Explicit selectors:</strong> direct range control, but the model must keep parameters consistent.</p>
+    <p><strong>Reading reference:</strong> smaller input, but reference creation and resolution belong to the engine. The agent follows offered reading locations.</p>
+  </section>
+  <p class="foot">Proposed interfaces, not implemented behavior. Handle values are illustrative. This comparison concerns reading; the acquisition input is not finalized.</p>
+</main>
+<script>
+  const scenarios = {
+    begin: {
+      label: 'Acquisition result — no document text',
+      explicitSource: '{ captureId: "capture_A" }',
+      referenceSource: '{\n  captureId: "capture_A",\n  readingRef: "read_begin_A"\n}',
+      explicitCall: 'read_in_context({\n  captureId: "capture_A",\n  target: {\n    kind: "range",\n    startOffset: 0\n  }\n})',
+      referenceCall: 'read_in_context({\n  reference: "read_begin_A"\n})',
+      explicitNote: 'The model specifies the beginning. The engine derives the end and page size.',
+      referenceNote: 'The acquisition result supplies a reference to the beginning. It has not returned document text.',
+      engine: 'Read the first page of the selected captured representation. Return the displayed extent and how to continue.'
+    },
+    match: {
+      label: 'One passage returned by search',
+      explicitSource: '{\n  captureId: "capture_A",\n  passageOrder: 68,\n  exactQuote: "…"\n}',
+      referenceSource: '{\n  exactQuote: "…",\n  readingRef: "read_match_A_68"\n}',
+      explicitCall: 'read_in_context({\n  captureId: "capture_A",\n  target: {\n    kind: "passage",\n    passageOrder: 68\n  }\n})',
+      referenceCall: 'read_in_context({\n  reference: "read_match_A_68"\n})',
+      explicitNote: 'The model carries the capture and passage selector into the next call.',
+      referenceNote: 'The reference identifies the offered contextual reading for this search match.',
+      engine: 'Resolve the verified passage, read its surrounding context and return exact offsets and documentary provenance.'
+    },
+    next: {
+      label: 'Previous reading result',
+      explicitSource: '{\n  surroundingText: "…",\n  continuation: "page_2_A"\n}',
+      referenceSource: '{\n  surroundingText: "…",\n  nextReadingRef: "read_next_A"\n}',
+      explicitCall: 'read_in_context({\n  captureId: "capture_A",\n  target: {\n    kind: "range",\n    startOffset: 0\n  },\n  continuation: "page_2_A"\n})',
+      referenceCall: 'read_in_context({\n  reference: "read_next_A"\n})',
+      explicitNote: 'The model repeats the original target together with its continuation.',
+      referenceNote: 'The next reference binds the original representation, range and next offset.',
+      engine: 'Read the next page of the same retained range. Do not reacquire the document or silently switch captures.'
+    }
+  };
+  function showScenario(key) {
+    const scenario = scenarios[key];
+    document.getElementById('explicit-source-label').textContent = scenario.label;
+    document.getElementById('reference-source-label').textContent = scenario.label;
+    document.getElementById('explicit-source').textContent = scenario.explicitSource;
+    document.getElementById('reference-source').textContent = scenario.referenceSource;
+    document.getElementById('explicit-call').textContent = scenario.explicitCall;
+    document.getElementById('reference-call').textContent = scenario.referenceCall;
+    document.getElementById('explicit-note').textContent = scenario.explicitNote;
+    document.getElementById('reference-note').textContent = scenario.referenceNote;
+    document.getElementById('engine-detail').textContent = scenario.engine;
+    document.querySelectorAll('[data-scenario]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scenario === key)));
+  }
+  document.querySelectorAll('[data-scenario]').forEach(button => button.addEventListener('click', () => showScenario(button.dataset.scenario)));
+  showScenario('match');
+</script>
+</html>

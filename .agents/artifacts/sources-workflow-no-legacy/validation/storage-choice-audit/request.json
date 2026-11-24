@@ -1,0 +1,37 @@
+{
+  "phase": "storage design audit before decision",
+  "sha": "e8e32ec11983d06a91b582c820e6f097360a35f9",
+  "productionChanges": false,
+  "designDecision": "pending; user requested audit before choosing",
+  "commands": [
+    {
+      "command": "pnpm exec vitest run src/__tests__/convex/execution/storage-choice-audit.test.ts --maxWorkers=1",
+      "result": "4 passed; includes explicit assertions for expected capacity errors"
+    },
+    {
+      "command": "pnpm exec vitest run src/__tests__/convex/execution/pi-store.test.ts src/__tests__/convex/execution/journal.test.ts src/__tests__/convex/execution/pi-storage.test.ts -t 'fragment staging|false complete-content hash|fragmented requests publish|confirmed native observable reply|append storage packs|a committed Pi append|same durable conversation after a lost' --maxWorkers=1",
+      "result": "7 passed; 55 not selected by name filter"
+    }
+  ],
+  "sha256": {
+    "probes.log": "df036667a492eab06769d6c1e3098370148251e2004b36dba1b028a800467988",
+    "measurements.json": "e13a0726001d4d371485b8f7eec30f2d08d255a0b8dbc9ed3a383062cc3079c3",
+    "storage-choice-audit.test.ts": "a8defedc5f435cd00258b6eaafc48651b8829a0f841ce8328bed5b4c9bbe0f14",
+    "existing-regressions.log": "3439ab96eded87be5d596154a9ac48edf5c78b08a371ab7f1e67d6860d59bbc9"
+  },
+  "notification": {
+    "project": "agentic-resilience-workbench-proto",
+    "sender": "Codex",
+    "event": "audit-complete",
+    "key": "sources-storage-choice-audit-e8e32ec",
+    "revision": "e8e32ec11983d06a91b582c820e6f097360a35f9",
+    "messageId": 1064,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/f1f551167a4f8f4f16c17f320a642887ad8a1e4898822b82f758e3819b91eeba.json"
+  },
+  "finalValidation": {
+    "docsCheck": "0 errors; existing TECH word advisory",
+    "localLinks": "resolved",
+    "gitDiffCheck": "passed",
+    "trackedWorkingTree": "clean"
+  }
+}

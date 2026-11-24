@@ -1,0 +1,46 @@
+{
+  "invocations": [
+    {
+      "file": "invocations-10.json",
+      "invocationId": "r5797m0dd5avybnrg92mz9vv8n8jnphq",
+      "characters": 13603,
+      "trailingWhitespace": 1833,
+      "bytes": 13609,
+      "sha256": "9a01265ef468b407b917473e768409942f6e3d6c98adf68ef98358323ae29cc5",
+      "durationMs": 44479,
+      "complete": true,
+      "reason": "length",
+      "wireSha256": "6b290b41b48e116951fdff0578159729cb70cb58a9efb1790299b141a67bdef8",
+      "chunkTimestampsRetained": false
+    },
+    {
+      "file": "invocations-11.json",
+      "invocationId": "r5794qgpbzjd274nv5sqmnjwss8jn6w6",
+      "characters": 11220,
+      "trailingWhitespace": 0,
+      "bytes": 11220,
+      "sha256": "bd3851fe7362338630a66faf398200ccd5181cd0b0a3b08ea7cf602294b0daa5",
+      "durationMs": 43778,
+      "complete": true,
+      "reason": "stop",
+      "wireSha256": "6b290b41b48e116951fdff0578159729cb70cb58a9efb1790299b141a67bdef8",
+      "chunkTimestampsRetained": false
+    },
+    {
+      "file": "invocations-9.json",
+      "invocationId": "r57e2ka7fetqr0m8zdkr9h0thn8jn1mg",
+      "characters": 1141943,
+      "trailingWhitespace": 1131782,
+      "bytes": 1141961,
+      "sha256": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+      "durationMs": 590641,
+      "complete": false,
+      "reason": "TimeoutError",
+      "wireSha256": "4c25f7cba56eda841492bcda82ace72e49be42911ae879d3fb7c686361da7813",
+      "chunkTimestampsRetained": false
+    }
+  ],
+  "arizeSpanCount": 8,
+  "spansWithEvents": 0,
+  "note": "Invocation wall-clock durations include local orchestration. No inter-chunk timing series exists in these inspected invocation exports or the retained Arize spans."
+}

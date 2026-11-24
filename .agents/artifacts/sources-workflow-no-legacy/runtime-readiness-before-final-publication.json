@@ -1,0 +1,75 @@
+{
+  "status": "passed",
+  "node": "v26.12.1",
+  "target": "http://127.0.0.1:35120",
+  "mode": "readiness",
+  "heldIoMs": 92374,
+  "gateCalls": 1,
+  "records": [
+    {
+      "event": "waiting_worker_released",
+      "at": 1795087074511,
+      "requestId": "k57143awq72f6k7spgyq70th458jhtcq",
+      "scheduledJobId": "kc289xwvpqmcpa2dkrxaywwpxs8jh29q"
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 15095,
+      "workerActive": false,
+      "writerEpoch": 1,
+      "logSequence": 14
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 30211,
+      "workerActive": false,
+      "writerEpoch": 1,
+      "logSequence": 14
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 45216,
+      "workerActive": false,
+      "writerEpoch": 1,
+      "logSequence": 14
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 60495,
+      "workerActive": false,
+      "writerEpoch": 1,
+      "logSequence": 14
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 75503,
+      "workerActive": false,
+      "writerEpoch": 1,
+      "logSequence": 14
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 90683,
+      "workerActive": false,
+      "writerEpoch": 1,
+      "logSequence": 14
+    },
+    {
+      "event": "result_adopted",
+      "elapsedMs": 92034,
+      "outcome": "success",
+      "providerCalls": 0
+    }
+  ],
+  "instrumentation": {
+    "checkout": "/tmp/workbench-sources-runtime",
+    "model": "native Pi faux provider",
+    "io": "loopback gate after real Sources reservation",
+    "nextTurn": "fixture stops after first success",
+    "sourceActionSha256": "f24046141f846d25c1ddad9c3d363c26ad28101f3df8171a1aecf5e0507932d1"
+  },
+  "limitations": [
+    "Deterministic external I/O; no real provider or analytical quality claim",
+    "Cancellation with late result is covered separately by integration regressions"
+  ]
+}

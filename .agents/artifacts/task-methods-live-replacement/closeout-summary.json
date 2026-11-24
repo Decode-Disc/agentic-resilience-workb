@@ -1,0 +1,25 @@
+{
+  "campaignId": "t979844qm3rp0mfqprmsgzng958jhyr3",
+  "status": "closed",
+  "workflowCalls": 47,
+  "workflowCostUsd": 0.028495084,
+  "reviewCalls": 47,
+  "reviewSdkEstimateUsd": 5.581988,
+  "priorWorkflowCalls": 4,
+  "priorWorkflowCostUsd": 0.00237242,
+  "cumulativeCostUsd": 5.612855504,
+  "attempted": 7,
+  "settledReplies": 5,
+  "executionFailed": 2,
+  "unrun": 17,
+  "sourcesStarted": 0,
+  "browserUsed": false,
+  "publication": {
+    "held": false,
+    "hasActiveWorkers": false
+  },
+  "independentVerdicts": [
+    "failed",
+    "failed"
+  ]
+}

@@ -1,0 +1,241 @@
+{
+  "empty_stop": {
+    "result": {
+      "model": "z-ai/glm-5.3-flash",
+      "dispatchOutcome": "response_received",
+      "httpStatus": 200,
+      "latencyMs": 57,
+      "status": "failed",
+      "errorCode": "invalid_output",
+      "retryable": true,
+      "outputDiagnostic": {
+        "reason": "json_invalid",
+        "finishReason": "stop",
+        "originalBytes": 0,
+        "truncated": false
+      },
+      "resolvedModel": "z-ai/glm-5.3-flash",
+      "inputTokens": 10,
+      "outputTokens": 10,
+      "reasoningTokens": 0,
+      "cachedInputTokens": 0
+    },
+    "capturedLength": 0,
+    "seal": {
+      "complete": true,
+      "reason": "stop"
+    },
+    "elapsedMs": 61.28766900000028
+  },
+  "whitespace_stop": {
+    "result": {
+      "model": "z-ai/glm-5.3-flash",
+      "dispatchOutcome": "response_received",
+      "httpStatus": 200,
+      "latencyMs": 17,
+      "status": "failed",
+      "errorCode": "invalid_output",
+      "retryable": true,
+      "outputDiagnostic": {
+        "reason": "json_invalid",
+        "finishReason": "stop",
+        "originalBytes": 4,
+        "truncated": false
+      },
+      "resolvedModel": "z-ai/glm-5.3-flash",
+      "inputTokens": 10,
+      "outputTokens": 10,
+      "reasoningTokens": 0,
+      "cachedInputTokens": 0
+    },
+    "capturedLength": 4,
+    "seal": {
+      "complete": true,
+      "reason": "stop"
+    },
+    "elapsedMs": 19.41483100000005
+  },
+  "partial_length": {
+    "result": {
+      "model": "z-ai/glm-5.3-flash",
+      "dispatchOutcome": "response_received",
+      "httpStatus": 200,
+      "latencyMs": 16,
+      "status": "failed",
+      "errorCode": "invalid_output",
+      "retryable": true,
+      "outputDiagnostic": {
+        "reason": "finish_reason_invalid",
+        "finishReason": "length",
+        "originalBytes": 28,
+        "truncated": false
+      },
+      "resolvedModel": "z-ai/glm-5.3-flash",
+      "inputTokens": 10,
+      "outputTokens": 10,
+      "reasoningTokens": 0,
+      "cachedInputTokens": 0
+    },
+    "capturedLength": 28,
+    "seal": {
+      "complete": true,
+      "reason": "length"
+    },
+    "elapsedMs": 18.29769699999997
+  },
+  "partial_eof": {
+    "result": {
+      "model": "z-ai/glm-5.3-flash",
+      "dispatchOutcome": "response_received",
+      "httpStatus": 200,
+      "latencyMs": 24,
+      "status": "failed",
+      "errorCode": "invalid_output",
+      "retryable": true,
+      "outputDiagnostic": {
+        "reason": "finish_reason_invalid",
+        "finishReason": "other",
+        "originalBytes": 28,
+        "truncated": false
+      },
+      "resolvedModel": "z-ai/glm-5.3-flash"
+    },
+    "capturedLength": 28,
+    "seal": {
+      "complete": true,
+      "reason": "other"
+    },
+    "elapsedMs": 26.07921299999998
+  },
+  "valid_object_eof": {
+    "result": {
+      "model": "z-ai/glm-5.3-flash",
+      "dispatchOutcome": "response_received",
+      "httpStatus": 200,
+      "resolvedModel": "z-ai/glm-5.3-flash",
+      "latencyMs": 19,
+      "status": "failed",
+      "errorCode": "invalid_output",
+      "retryable": true,
+      "outputDiagnostic": {
+        "reason": "finish_reason_invalid",
+        "finishReason": "other",
+        "originalBytes": 11220,
+        "truncated": false
+      }
+    },
+    "capturedLength": 11220,
+    "seal": {
+      "complete": true,
+      "reason": "other"
+    },
+    "elapsedMs": 21.442047999999886
+  },
+  "empty_eof": {
+    "result": {
+      "model": "z-ai/glm-5.3-flash",
+      "dispatchOutcome": "response_received",
+      "httpStatus": 200,
+      "latencyMs": 7,
+      "status": "failed",
+      "errorCode": "invalid_output",
+      "retryable": true,
+      "outputDiagnostic": {
+        "reason": "finish_reason_invalid",
+        "finishReason": "other",
+        "originalBytes": 0,
+        "truncated": false
+      },
+      "resolvedModel": "z-ai/glm-5.3-flash"
+    },
+    "capturedLength": 0,
+    "seal": {
+      "complete": true,
+      "reason": "other"
+    },
+    "elapsedMs": 8.951781999999184
+  },
+  "done_without_finish": {
+    "result": {
+      "model": "z-ai/glm-5.3-flash",
+      "dispatchOutcome": "response_received",
+      "httpStatus": 200,
+      "latencyMs": 9,
+      "status": "failed",
+      "errorCode": "invalid_output",
+      "retryable": true,
+      "outputDiagnostic": {
+        "reason": "finish_reason_invalid",
+        "finishReason": "other",
+        "originalBytes": 0,
+        "truncated": false
+      },
+      "resolvedModel": "z-ai/glm-5.3-flash"
+    },
+    "capturedLength": 0,
+    "seal": {
+      "complete": true,
+      "reason": "other"
+    },
+    "elapsedMs": 12.475129999999808
+  },
+  "retainedReplay": {
+    "elapsedMs": 1239.7481120000002,
+    "result": {
+      "model": "z-ai/glm-5.3-flash",
+      "dispatchOutcome": "response_received",
+      "httpStatus": 200,
+      "latencyMs": 1237,
+      "status": "failed",
+      "errorCode": "request_timeout",
+      "retryable": false
+    },
+    "inputCharacters": 1141943,
+    "capturedCharacters": 1141943,
+    "hash": "7798c7096b96cbe5028cb34ff916dfc219290bf39712c56d6a76484957d7b4fa",
+    "seal": {
+      "complete": false,
+      "reason": "TimeoutError"
+    },
+    "aborted": true
+  },
+  "nativePartials": {
+    "parts": [
+      "{\"text\":\"start",
+      "  ",
+      "\\n",
+      "end\",\"coherence\":",
+      "    ",
+      "\t",
+      "true}"
+    ],
+    "partials": [
+      {
+        "text": "start"
+      },
+      {
+        "text": "start  "
+      },
+      {
+        "text": "start  \n"
+      },
+      {
+        "text": "start  \nend"
+      },
+      {
+        "text": "start  \nend",
+        "coherence": true
+      }
+    ],
+    "output": {
+      "text": "start  \nend",
+      "coherence": true
+    }
+  },
+  "nativeChunkTimeout": {
+    "elapsedMs": 434.5401549999997,
+    "timeoutMs": 100,
+    "characters": 40,
+    "finish": "length"
+  }
+}

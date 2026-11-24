@@ -1,0 +1,18 @@
+{
+  "decision": "One-time migration preserving exact content, identities, references and behavior; data equality and deployed functional verification before deleting obsolete copies and removing Convex Agent. Supersedes reset proposals.",
+  "files": [
+    {
+      "file": "29-tdd-sources-harness-efficiency.md",
+      "sha256": "74c241657b5196206489d622e977ba7dca84f9fa636152ae5ed0ae3940612d40",
+      "linksChecked": 21
+    },
+    {
+      "file": "43-research-conversation-capacity-and-purge.md",
+      "sha256": "78790e394cf2ea7abe3482951a11d9c277da86ed47a7e86f44695a2b7a966a63",
+      "linksChecked": 33
+    }
+  ],
+  "validation": "docs:check passed (77 files, 456 links, 0 errors; existing TECH length advisory); artifact links and whitespace passed; git diff --check passed.",
+  "runtime": "No migration, deletion, tests, provider calls or dependency changes executed.",
+  "status": "Detailed design revised; implementation and deployment evidence pending."
+}

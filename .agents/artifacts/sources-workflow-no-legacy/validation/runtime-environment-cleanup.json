@@ -1,0 +1,26 @@
+[
+  {
+    "name": "E2E_FIXTURES_ENABLED",
+    "absent": true
+  },
+  {
+    "name": "SOURCES_MISSION_ENABLED",
+    "absent": true
+  },
+  {
+    "name": "SOURCES_PREPARATION_WINDOW_MINUTES",
+    "absent": true
+  },
+  {
+    "name": "SOURCES_MISSION_ENVELOPE",
+    "absent": true
+  },
+  {
+    "name": "OPENROUTER_API_KEY",
+    "absent": true
+  },
+  {
+    "name": "EXA_API_KEY",
+    "absent": true
+  }
+]

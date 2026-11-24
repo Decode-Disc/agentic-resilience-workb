@@ -1,0 +1,11 @@
+{
+  "project": "agentic-resilience-workbench",
+  "sender": "Codex",
+  "event": "research-complete",
+  "key": "generation-resilience-rpi-6043a64",
+  "revision": "6043a64af02577cb3aaf13eb2a3ce1e8804f7060",
+  "message": "Recherche RPI terminée : stagnation et absence de reprise durable confirmées. Un probe Sources démontre aussi une seconde génération après EOF sans terminaison fournisseur attestée. 66 tests/probes passent ; aucune correction de production ni inférence payante. Rapport 26 prêt pour le TDD ; délai de stagnation encore à justifier.",
+  "accepted": true,
+  "messageId": 998,
+  "receipt": "/home/abdwhb/.local/state/agent-stack/notify/94500b3c0293864291b7e8bbbd733d82c9c1a2a70c6f6003f8d9628e941d5240.json"
+}

@@ -1,0 +1,114 @@
+{
+  "identity": {
+    "root": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+    "gitCommonDir": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.git",
+    "worktreeId": "9236675c1a720242504695ae"
+  },
+  "processes": [
+    {
+      "role": "convex",
+      "pid": 267820,
+      "runId": "9b855215-c671-4f0f-94bc-081b2e17f64a",
+      "process": {
+        "pid": 267820,
+        "startTime": "2766925",
+        "parentPid": 267763,
+        "command": "node",
+        "cwd": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+        "runtimeRoot": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+        "runId": "9b855215-c671-4f0f-94bc-081b2e17f64a"
+      },
+      "verified": true
+    },
+    {
+      "role": "web",
+      "pid": 269027,
+      "runId": "9b855215-c671-4f0f-94bc-081b2e17f64a",
+      "process": {
+        "pid": 269027,
+        "startTime": "2771216",
+        "parentPid": 269000,
+        "command": "node",
+        "cwd": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+        "runtimeRoot": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+        "runId": "9b855215-c671-4f0f-94bc-081b2e17f64a"
+      },
+      "verified": true
+    }
+  ],
+  "ports": [
+    {
+      "role": "convex",
+      "port": 3210,
+      "listeners": [
+        {
+          "address": "0.0.0.0:3210",
+          "port": 3210,
+          "processes": [
+            {
+              "pid": 267863,
+              "startTime": "2767135",
+              "parentPid": 267820,
+              "command": "convex-local-backend",
+              "cwd": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+              "runtimeRoot": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+              "runId": "9b855215-c671-4f0f-94bc-081b2e17f64a"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "role": "site",
+      "port": 3211,
+      "listeners": [
+        {
+          "address": "0.0.0.0:3211",
+          "port": 3211,
+          "processes": [
+            {
+              "pid": 267863,
+              "startTime": "2767135",
+              "parentPid": 267820,
+              "command": "convex-local-backend",
+              "cwd": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+              "runtimeRoot": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+              "runId": "9b855215-c671-4f0f-94bc-081b2e17f64a"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "role": "web",
+      "port": 5173,
+      "listeners": [
+        {
+          "address": "127.0.0.1:5173",
+          "port": 5173,
+          "processes": [
+            {
+              "pid": 269027,
+              "startTime": "2771216",
+              "parentPid": 269000,
+              "command": "node",
+              "cwd": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+              "runtimeRoot": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto",
+              "runId": "9b855215-c671-4f0f-94bc-081b2e17f64a"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "role": "preview",
+      "port": 6173,
+      "listeners": []
+    },
+    {
+      "role": "appPreview",
+      "port": 4173,
+      "listeners": []
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "status": "passed",
+  "node": "v26.12.1",
+  "target": "http://127.0.0.1:35120",
+  "heldIoMs": 317139,
+  "gateCalls": 1,
+  "records": [
+    {
+      "event": "waiting_worker_released",
+      "at": 1795086647465,
+      "requestId": "k57ek2sw1rnvg3qqb828y77xts8jhrpw",
+      "scheduledJobId": "kc22vzcrf3r5jbvctmakj6x4f18jh464"
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 15126,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 30207,
+      "workerActive": true
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 45322,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 60324,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 75455,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 90458,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 105568,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 120570,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 135673,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 150679,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 165798,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 180806,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 195921,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 210924,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 226033,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 241037,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 256151,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 271154,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 286262,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 301269,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 316374,
+      "workerActive": false
+    },
+    {
+      "event": "result_adopted",
+      "elapsedMs": 316965,
+      "outcome": "success",
+      "providerCalls": 0
+    }
+  ],
+  "instrumentation": {
+    "checkout": "/tmp/workbench-sources-runtime",
+    "model": "native Pi faux provider",
+    "io": "loopback gate after real Sources reservation",
+    "nextTurn": "fixture stops after first success",
+    "sourceActionSha256": "f24046141f846d25c1ddad9c3d363c26ad28101f3df8171a1aecf5e0507932d1"
+  },
+  "limitations": [
+    "Deterministic external I/O; no real provider or analytical quality claim",
+    "Cancellation with late result is covered separately by integration regressions"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "id": "repair-split-1",
+  "startedAt": "2026-11-20T08:10:22.208Z",
+  "elapsedMs": 3350,
+  "status": 200,
+  "body": {
+    "id": "gen-1795162223-laZpTzmgzftKNQXToGN0",
+    "object": "chat.completion",
+    "created": 1795162223,
+    "model": "z-ai/glm-5.3-flash",
+    "provider": "Wafer",
+    "system_fingerprint": "vllm-0.33.0rc1.dev229+g3966924d5-tp2-786bac74",
+    "service_tier": null,
+    "choices": [
+      {
+        "index": 0,
+        "logprobs": null,
+        "finish_reason": "tool_calls",
+        "native_finish_reason": "tool_calls",
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "refusal": null,
+          "tool_calls": [
+            {
+              "type": "function",
+              "index": 0,
+              "id": "chatcmpl-tool-aec4bcbd39611616",
+              "function": {
+                "name": "create_framing",
+                "arguments": "{\"content\": {\"questions\": [{\"id\": \"workflow-role\", \"rationale\": \"Before evaluating bypass, establish what part of estimate review CCC's tools cover and whether an insurer can execute that step outside CCC.\", \"shortLabel\": \"CCC's estimate-review role\", \"text\": \"In the insurer estimate-review workflow, which steps does CCC's estimate-review tooling perform for insurers (e.g., receiving repairer-written estimates, applying insurer rules, routing for approval or reinspection), and which steps can an insurer execute without CCC?\"}, {\"id\": \"bypass-feasibility\", \"rationale\": \"A new solution could lower the cost of using CCC, but it does not remove the option to review outside CCC. This question tests whether bypass is technically and contractually available regardless of the announcement.\", \"shortLabel\": \"Bypass feasibility\", \"text\": \"Can insurers review repairer-written estimates without routing them through CCC-hosted workflows — e.g., via in-house appraisers, third-party review services, or insurer-built tools — and what contract terms, network connections, or data access enable or prevent this?\"}, {\"id\": \"reinspection-impact\", \"rationale\": \"The announcement AI-powered solution aimed to speed up insurer review of estimates, not to make bypass harder or easier; investigate whether it changed the bypass decision.\", \"shortLabel\": \"Reinspection-launch impact\", \"text\": \"Does CCC's Intelligent Reinspection launch change the cost or capability of estimate review in a way that makes bypass more or less attractive for insurers?\"}, {\"id\": \"take-private-impact\", \"rationale\": \"An acquisition event can alter pricing pressure, contract terms, and strategic direction; this tests whether that pressure changes the bypass calculation for insurers.\", \"shortLabel\": \"Take-private impact\", \"text\": \"Does the GTCR/Elliott acquisition (announced October 15, 2026) or the pending leveraged-buyout financing affect insurers' ability or incentive to bypass CCC during estimate review?\"}, {\"id\": \"switching-cost\", \"rationale\": \"Bypass depends on network effects and switching costs as much as on features; test whether insurers can substitute CCC for alternative review processes without losing speed or repairer connectivity.\", \"shortLabel\": \"Substitution economics\", \"text\": \"How do network effects, switching costs, and repairer connectivity shape whether insurers can substitute alternative estimate-review processes for CCC's without losing cycle time or repairer relationships?\"}], \"scope\": \"Can insurers bypass CCC during estimate review after the latest announcement?\"}, \"eventBasis\": {\"activityExcerpt\": \"Can insurers bypass CCC during estimate review after the latest announcement?\", \"conditions\": [{\"basis\": {\"excerpt\": \"Can insurers bypass CCC during estimate review after the latest announcement?\", \"kind\": \"analyst\"}, \"hypothesis\": \"The announcement refers to CCC's estimate-review offering (CCC Intelligent Reinspection, announced July 30, 2024), not the GTCR/Elliott take-private announcement of October 15, 2026. Alternative hypothesis: the analyst means the most recent dated announcement, which is the October 15, 2026 take-private agreement. Which announcement the analyst intends materially changes which program questions matter.\", \"questionId\": \"reinspection-impact\"}], \"kind\": \"open\"}}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 2146,
+      "completion_tokens": 738,
+      "total_tokens": 2884,
+      "cost": 0.000225924,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.000225924,
+        "upstream_inference_prompt_cost": 0.000090132,
+        "upstream_inference_completions_cost": 0.000135792
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 47,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    }
+  }
+}

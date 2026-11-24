@@ -1,0 +1,25 @@
+{
+  "status": "completed",
+  "scope": "Independent Oracle design review before program-design approval",
+  "approval": "Program design not approved; user requested Oracle review first.",
+  "document": "29-tdd-sources-harness-efficiency.md",
+  "documentSha256": "7ea0a081f78f29959a00dc73982dec5ebd884060537253d2013876f7310b5c42",
+  "repositorySha": "6043a64af02577cb3aaf13eb2a3ce1e8804f7060",
+  "provider": "codex",
+  "model": "gpt-6-astra",
+  "reasoningEffort": "xhigh",
+  "taskId": "node:delegated-task:command%3Amcp%3A578ea3a3-0244-480e-a3b7-6684166e06ae%3Adelegate-task%3Acc9ef977-694f-40d7-bab7-0a5941c6cbe4",
+  "threadId": "thread:delegated-task:command%3Amcp%3A578ea3a3-0244-480e-a3b7-6684166e06ae%3Adelegate-task%3Acc9ef977-694f-40d7-bab7-0a5941c6cbe4",
+  "constraints": [
+    "read-only",
+    "no tests",
+    "no provider inference",
+    "no nested delegation"
+  ],
+  "next": "Read complete result after completion wake, reconcile all findings, then resume design approval.",
+  "verdict": "BLOCK",
+  "blockingFindings": 4,
+  "nonblockingWatches": 3,
+  "report": "oracle-report.md",
+  "snapshot": "reviewed-tdd.md"
+}

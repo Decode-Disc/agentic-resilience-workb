@@ -1,0 +1,61 @@
+{
+  "recordedAt": "2026-11-19T08:42:52.660Z",
+  "externalRequests": 0,
+  "observations": [
+    {
+      "boundary": "createBoundedModelFetch",
+      "contentType": "application/json",
+      "interrupted": false,
+      "emittedBytes": 47,
+      "observedBodies": 1,
+      "observedBodyBytes": 47
+    },
+    {
+      "boundary": "createBoundedModelFetch",
+      "contentType": "application/json",
+      "interrupted": true,
+      "emittedBytes": 47,
+      "observedBodies": 0,
+      "observedBodyBytes": 0,
+      "readError": "TimeoutError"
+    },
+    {
+      "boundary": "createBoundedModelFetch",
+      "contentType": "text/event-stream",
+      "interrupted": false,
+      "emittedBytes": 61,
+      "observedBodies": 1,
+      "observedBodyBytes": 61
+    },
+    {
+      "boundary": "createBoundedModelFetch",
+      "contentType": "text/event-stream",
+      "interrupted": true,
+      "emittedBytes": 61,
+      "observedBodies": 0,
+      "observedBodyBytes": 0,
+      "readError": "TimeoutError"
+    },
+    {
+      "boundary": "examineDocumentaryContributions",
+      "interrupted": false,
+      "emittedBytes": 417,
+      "wireStream": "absent",
+      "strictSchema": true,
+      "status": "succeeded",
+      "observableReplyPresent": true,
+      "generationObserved": true
+    },
+    {
+      "boundary": "examineDocumentaryContributions",
+      "interrupted": true,
+      "emittedBytes": 208,
+      "wireStream": "absent",
+      "strictSchema": true,
+      "status": "failed",
+      "errorCode": "request_timeout",
+      "observableReplyPresent": false,
+      "generationObserved": true
+    }
+  ]
+}

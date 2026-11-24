@@ -1,0 +1,24 @@
+{
+  "reviewer": "native Oracle",
+  "model": "gpt-6-astra",
+  "reasoningEffort": "xhigh",
+  "scope": "read-only TDD review",
+  "baselineHead": "2816370980accf0155c09d62054ca83511ca43d3",
+  "target": ".agents/artifacts/sources-workflow-no-legacy/18-tdd-documentary-engine-unification.md",
+  "targetSha256": "101feab270bcbd9a530c1a925f354f64439ef9bea99a9b856f8e0a58ebe371c0",
+  "status": "complete",
+  "programDesignApproved": true,
+  "verdict": "BLOCK",
+  "blockingFindings": 4,
+  "watchFindings": 5,
+  "inputSnapshot": "documentary-tdd-oracle-input.md",
+  "revisedTargetSha256": "1b9dcab8ade032116fa82e3b0250d1e5eb041fdd254ce0585475d986e9483e26",
+  "revisionStatus": "parent-addressed-all-nine-findings-awaiting-user-approval",
+  "oracleRecheckedRevision": false,
+  "revisionValidation": {
+    "rpiDocuments": 3,
+    "localLinks": 62,
+    "balancedCodeFences": true
+  },
+  "approvalRecord": "documentary-tdd-approval.json"
+}

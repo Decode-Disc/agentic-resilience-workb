@@ -1,0 +1,35 @@
+{
+  "sourceIdentity": "/home/abdwhb/.cache/workbench-evaluations/framing-v9-qualification-20261120-ready/lots/lot-1/observations/after-cleanup-1ee9e20b-c15c-4460-97fa-e39e37767b51/sources-attribution-independence#traversal-0",
+  "eventCount": 27,
+  "totalCharacters": 50695,
+  "restoredHashesVerified": true,
+  "consultations": 5,
+  "totalResponseBytes": 61631,
+  "pages": [
+    {
+      "entries": 18,
+      "resultBytes": 24205,
+      "historyCharacters": 20050
+    },
+    {
+      "entries": 1,
+      "resultBytes": 4974,
+      "historyCharacters": 4000
+    },
+    {
+      "entries": 5,
+      "resultBytes": 16639,
+      "historyCharacters": 14294
+    },
+    {
+      "entries": 3,
+      "resultBytes": 6374,
+      "historyCharacters": 5048
+    },
+    {
+      "entries": 5,
+      "resultBytes": 9439,
+      "historyCharacters": 7652
+    }
+  ]
+}

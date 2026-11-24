@@ -1,0 +1,19 @@
+{
+  "status": "approved",
+  "systemDesignApproved": true,
+  "programDesignApproved": true,
+  "approvalSource": "Explicit user answer: Oui, valider la conception détaillée et terminer le TDD.",
+  "approvedAt": "2026-11-20T14:28:45.268200+00:00",
+  "baselineHead": "2816370980accf0155c09d62054ca83511ca43d3",
+  "target": ".agents/artifacts/sources-workflow-no-legacy/18-tdd-documentary-engine-unification.md",
+  "targetSha256": "ff0f8664b2f63ffe66d0fd2f568c17cfaafb0e079154ecd5289313046a538a90",
+  "oracleReviews": 2,
+  "finalBoundedCorrectionsOracleRechecked": false,
+  "implementationAuthorized": false,
+  "productionCodeChanged": false,
+  "validation": {
+    "localLinks": 68,
+    "balancedCodeFences": true,
+    "docsCheck": "passed; existing advisory TECH word-count warning"
+  }
+}

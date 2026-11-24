@@ -1,0 +1,62 @@
+{
+  "id": "repair-single-2",
+  "startedAt": "2026-11-20T08:10:36.211Z",
+  "elapsedMs": 3037,
+  "status": 200,
+  "body": {
+    "id": "gen-1795162236-8z14EDhZriGRMwIq3jKS",
+    "object": "chat.completion",
+    "created": 1795162236,
+    "model": "z-ai/glm-5.3-flash",
+    "provider": "Wafer",
+    "system_fingerprint": "vllm-0.33.0rc1.dev229+g3966924d5-tp2-786bac74",
+    "service_tier": null,
+    "choices": [
+      {
+        "index": 0,
+        "logprobs": null,
+        "finish_reason": "tool_calls",
+        "native_finish_reason": "tool_calls",
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "refusal": null,
+          "tool_calls": [
+            {
+              "type": "function",
+              "index": 0,
+              "id": "chatcmpl-tool-bea627663cd9be23",
+              "function": {
+                "name": "adjust_framing",
+                "arguments": "{\"content\": {\"questions\": [{\"id\": \"workflow-role\", \"rationale\": \"Before evaluating bypass, establish what part of estimate review CCC's tooling actually covers and whether an insurer can execute that step outside CCC.\", \"shortLabel\": \"CCC's estimate-review role\", \"text\": \"In the insurer estimate-review workflow, which steps does CCC's tooling perform for insurers (e.g., receiving repairer-written estimates, applying insurer rules, routing for approval or reinspection), and which steps can an insurer execute without CCC?\"}, {\"id\": \"bypass-feasibility\", \"rationale\": \"The core question: test whether bypass is technically and contractually available regardless of any announcement.\", \"shortLabel\": \"Bypass feasibility\", \"text\": \"Can insurers review repairer-written estimates without routing them through CCC-hosted workflows — e.g., via in-house appraisers, third-party review services, or insurer-built tools — and what contract terms, network connections, or data access enable or prevent this?\"}, {\"id\": \"announcement-impact\", \"rationale\": \"An announcement can change the cost or capability of estimate review; investigate whether it changes the bypass calculus rather than assuming the premise.\", \"shortLabel\": \"Announcement impact\", \"text\": \"Does the latest announcement change the cost or capability of estimate review in a way that makes bypass more or less attractive for insurers?\"}, {\"id\": \"switching-cost\", \"rationale\": \"Bypass depends on network effects and switching costs as much as on features; test whether insurers can substitute alternative review processes without losing speed or repairer connectivity.\", \"shortLabel\": \"Substitution economics\", \"text\": \"How do network effects, switching costs, and repairer connectivity shape whether insurers can substitute alternative estimate-review processes for CCC's without losing cycle time or repairer relationships?\"}], \"scope\": \"Can insurers bypass CCC during estimate review after the latest announcement?\"}, \"eventBasis\": {\"activityExcerpt\": \"Can insurers bypass CCC during estimate review after the latest announcement?\", \"conditions\": [{\"basis\": {\"excerpt\": \"Can insurers bypass CCC during estimate review after the latest announcement?\", \"kind\": \"analyst\"}, \"hypothesis\": \"The analyst's 'latest announcement' is unresolved: it could refer to a recent CCC product or corporate announcement relevant to estimate review, but the specific event is not named and no supplied observation identifies it. This materially affects which event-dependent questions apply.\", \"questionId\": \"announcement-impact\"}], \"kind\": \"open\"}}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 2146,
+      "completion_tokens": 616,
+      "total_tokens": 2762,
+      "cost": 0.000201428,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 2048,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.000201428,
+        "upstream_inference_prompt_cost": 0.000088084,
+        "upstream_inference_completions_cost": 0.000113344
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 88,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    }
+  }
+}

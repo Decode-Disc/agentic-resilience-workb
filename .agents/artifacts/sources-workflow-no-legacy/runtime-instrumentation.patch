@@ -1,0 +1,20 @@
+--- a/convex/sourcesMissionActions.ts
++++ b/convex/sourcesMissionActions.ts
+@@ -51,6 +51,7 @@
+             args,
+         );
+         const { preparation, input, sourceId } = reservation;
++        if(input.kind === "discover_sources_for_need") await (await fetch("http://127.0.0.1:35125/gate",{signal:AbortSignal.timeout(Math.max(1,executionDeadlineAt-Date.now()))})).text();
+         const simulation = await ctx.runQuery(
+             internal.sourcesSimulation.enabled,
+             { runId: preparation.runId },
+--- a/convex/domain/sourcesSimulation.ts
++++ b/convex/domain/sourcesSimulation.ts
+@@ -28,6 +28,7 @@
+         return { kind: "blocked", code: "simulation_context_invalid" };
+     const { activeWork, triggeringRequestsAndResults: requests } = parsed.data;
+     const latest = requests.at(-1);
++    if (latest?.outcome?.kind === "success") return {kind:"blocked",code:"runtime_probe_finished"};
+     if (latest && latest.outcome?.kind !== "success")
+         return { kind: "blocked", code: "simulation_operation_failed" };
+     const need = activeWork.needs[0];

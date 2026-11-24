@@ -1,0 +1,16 @@
+{
+  "boundary": "Logical documents and inline payload bytes delivered to the real Convex history query; physical database bytes and latency are not measured",
+  "sourceCharacters": 44418,
+  "measurements": [
+    {
+      "documents": 3,
+      "payloadBytes": 88046,
+      "resultBytes": 45682,
+      "entries": 2
+    }
+  ],
+  "totals": {
+    "documents": 3,
+    "payloadBytes": 88046
+  }
+}

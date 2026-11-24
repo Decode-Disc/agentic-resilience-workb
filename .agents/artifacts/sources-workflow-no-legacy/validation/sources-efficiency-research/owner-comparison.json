@@ -1,0 +1,67 @@
+[
+  {
+    "path": "convex/execution/commonOperations.ts",
+    "frozenPresent": true,
+    "identical": true
+  },
+  {
+    "path": "convex/execution/history.ts",
+    "frozenPresent": true,
+    "identical": false
+  },
+  {
+    "path": "convex/execution/missionHistory.ts",
+    "frozenPresent": true,
+    "identical": true
+  },
+  {
+    "path": "convex/execution/journal.ts",
+    "frozenPresent": true,
+    "identical": false
+  },
+  {
+    "path": "convex/domain/researchState.ts",
+    "frozenPresent": true,
+    "identical": true
+  },
+  {
+    "path": "convex/domain/sourcesAgent.ts",
+    "frozenPresent": true,
+    "identical": false
+  },
+  {
+    "path": "convex/execution/approvalCatalog.ts",
+    "frozenPresent": true,
+    "identical": true
+  },
+  {
+    "path": "convex/execution/researchControl.ts",
+    "frozenPresent": true,
+    "identical": false
+  },
+  {
+    "path": "convex/execution/invokeAgentModel.ts",
+    "frozenPresent": true,
+    "identical": true
+  },
+  {
+    "path": "convex/integrations/documentaryControl.ts",
+    "frozenPresent": true,
+    "identical": true
+  },
+  {
+    "path": "convex/integrations/modelTransport.ts",
+    "frozenPresent": true,
+    "identical": false
+  },
+  {
+    "path": "scripts/evaluations/workbench-browser/relay.mjs",
+    "frozenPresent": true,
+    "identical": false
+  },
+  {
+    "path": "convex/execution/invocationLifecycle.ts",
+    "frozenPresent": true,
+    "identical": false
+  }
+]

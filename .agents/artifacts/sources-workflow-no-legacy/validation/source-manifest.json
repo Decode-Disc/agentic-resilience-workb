@@ -1,0 +1,298 @@
+{
+  "baseCommit": "cf757669701104f835a29fb1f0941d1c78ce3304",
+  "files": [
+    {
+      "path": "convex/adminOperations.ts",
+      "sha256": "1ac887443fd9db0c4a42b08d7f0d43fea7004df33f77ed603a42e7861c00e49e"
+    },
+    {
+      "path": "convex/domain/savedMaterialAgentOperations.ts",
+      "sha256": "8bf1d0cf1bc65e4b4e8343be3e11eb08338ae7a1da7bb4b923be46b38ae980c7"
+    },
+    {
+      "path": "convex/domain/sourcesAgent.ts",
+      "sha256": "4290edba1714d27a030cc56d27ef16d3b308fab6fb9f2970ef6dc10ea8b15d3f"
+    },
+    {
+      "path": "convex/dossierPurge.ts",
+      "sha256": "5818183e0eefb89a0f67cf57ed400a30ddd4bf3b5a248a710644ceff8e10cf75"
+    },
+    {
+      "path": "convex/execution/agentCatalog.ts",
+      "sha256": "97f7a23630ef706497f0b5266365f77cbedea7cfe4bd0d2fbc1b6314e48dea8c"
+    },
+    {
+      "path": "convex/execution/cancellation.ts",
+      "sha256": "dcee1b06185260d48580753c47fd889339cf4d44d6d49d090a035358b45e0d05"
+    },
+    {
+      "path": "convex/execution/executionProtocol.ts",
+      "sha256": "96bf17102c6f1fcdc2399c21035a6bc79c6b1e482cf78a894940b21d7bcad651"
+    },
+    {
+      "path": "convex/execution/fixtures.ts",
+      "sha256": "db6b5a9c961512739e2c8ccc95e9406cf2a0f94f0e2849eeb8b84d13700ded9d"
+    },
+    {
+      "path": "convex/execution/invocationLifecycle.ts",
+      "sha256": "fdbe623c3f49726bcd66066b6e284cffad7a878c157a13b7e3e224c81337b943"
+    },
+    {
+      "path": "convex/execution/journal.ts",
+      "sha256": "61758e48e2351117cb061a9cb6638313f74b1e227ce0f830bbe2ee4c4ec016dc"
+    },
+    {
+      "path": "convex/execution/operations.ts",
+      "sha256": "81f8b6cda6db64fa872830aa56afbe0343a05bff9ab5e44005f1c3dff66d1a1a"
+    },
+    {
+      "path": "convex/execution/piControl.ts",
+      "sha256": "c8cc876488bdade7b30b2e20dcec572b56dc73eccf4d43c0eb6633c30c231675"
+    },
+    {
+      "path": "convex/execution/researchControl.ts",
+      "sha256": "f3c2cb2a60e393ce0df6c04350cc185f9987b5f208d65a884c1cac3c6e7561c1"
+    },
+    {
+      "path": "convex/execution/retainedText.ts",
+      "sha256": "5c14ce65be5e7c24e3e16645da317ed6e1434ab258ac40275948c326ea6a9440"
+    },
+    {
+      "path": "convex/execution/schema.ts",
+      "sha256": "a73917b3dd7bb9931ed916634373d46ef07da9b33196d74e631bb723a1232b79"
+    },
+    {
+      "path": "convex/integrations/modelTransport.ts",
+      "sha256": "9b378c4c7cc94ba0e8e4c1760be97b8670f7176e7880e7946b154b785d33047a"
+    },
+    {
+      "path": "convex/integrations/piMission.ts",
+      "sha256": "f23f86c45426b6e112e4faf4dfd13b6488818d953393c6e1a155b6dc2e9ff3a9"
+    },
+    {
+      "path": "convex/providerCalls.ts",
+      "sha256": "de183cda4149b5d5e403557e2e844d026198118afa8b0e5250df05f502213597"
+    },
+    {
+      "path": "convex/qualificationCampaignPolicy.ts",
+      "sha256": "108ec86150ed241be4ee0c4e85bfb48493c280b6760b65dfbcf4d5a6483b8853"
+    },
+    {
+      "path": "convex/qualificationUsage.ts",
+      "sha256": "662ea71e356de87450fbbbacbfeff416074cd263f06587bda1eff9411272c715"
+    },
+    {
+      "path": "convex/schema.ts",
+      "sha256": "ed51cab7e0bec920255f74f15a7a17ba3b514f7e07a5f8f099c9efdcc1fb95cc"
+    },
+    {
+      "path": "convex/sources/preparationModel.ts",
+      "sha256": "c6db71c37d9c61e3d879fd3cae85f48d36964ff017021b0c2a71e91d227b0118"
+    },
+    {
+      "path": "convex/sourcesMission.ts",
+      "sha256": "f289a0c55c9029075bb7ad571025ea1fa18eb9a88c463503ba49f0722549977d"
+    },
+    {
+      "path": "convex/sourcesMissionActions.ts",
+      "sha256": "fd657332a0c6b8187979bba010687abb4ce14f24c4bf8953f40c75f230b0a0b4"
+    },
+    {
+      "path": "scripts/evaluations/workbench-browser/campaign-review.ts",
+      "sha256": "37a47d3be63ea64516d473dc2287e16a63b37977335e95eb2b9a5d9bdb1ab1e2"
+    },
+    {
+      "path": "scripts/evaluations/workbench-browser/journal.ts",
+      "sha256": "2d8e3139193fc833881a4bdfa739b40790c06e14b189abad905fb0c4e2a03c24"
+    },
+    {
+      "path": "scripts/evaluations/workbench-browser/qualify.ts",
+      "sha256": "fb1dd7b4f8c3ca54c005647d0f5313cc8b16197e76b7fe965c38a2afc5966206"
+    },
+    {
+      "path": "scripts/evaluations/workbench-browser/relay.d.mts",
+      "sha256": "c1d3ff69d257cae64b942ff0496ded7962ef563ad7b2ddd297ae56c09f1059f3"
+    },
+    {
+      "path": "scripts/evaluations/workbench-browser/relay.mjs",
+      "sha256": "77c1d317a2e67130a4b420671ecbc4f394e729c8415510837b8ddc408e97bbd0"
+    },
+    {
+      "path": "scripts/evaluations/workbench-browser/scenarios.ts",
+      "sha256": "7443944284ddc39a3fd0b83a317bb47ab254407184807f3cc3d13e79296395b9"
+    },
+    {
+      "path": "scripts/evaluations/workbench-browser/sources.ts",
+      "sha256": "b9090474c3e7c0f6f21a7cfd6519da27c7554c0967de34bf9bced7774646f6b2"
+    },
+    {
+      "path": "src/__tests__/config/qualification-v2.test.mjs",
+      "sha256": "f56117104dbe6a342096701f5c64e3dbb0a6767cbc9134b33e6f247beaf73411"
+    },
+    {
+      "path": "src/__tests__/config/workbench-relay.test.mjs",
+      "sha256": "09ef7f581ee9422e0b2c10ae58427e8be910860320dc06a5269b17173d4eec37"
+    },
+    {
+      "path": "src/__tests__/convex/access/dossier-purge.test.ts",
+      "sha256": "d97e29fc174d328c3a8c985f86c76161fefd0421e80910550d583b929bf565ed"
+    },
+    {
+      "path": "src/__tests__/convex/admin/invocation-journal.test.ts",
+      "sha256": "9fd8ece758dabcf76552d5f7e8588357e16d18aabbef5c3d9cfb4991861351bc"
+    },
+    {
+      "path": "src/__tests__/convex/execution/dispatch.test.ts",
+      "sha256": "61c66d026b4fa7cad157cd3c12ef6bcc8bc50b993580a1c0a42163fa046832fb"
+    },
+    {
+      "path": "src/__tests__/convex/execution/documentary-reading-context.test.ts",
+      "sha256": "3ea2456c491ff71f8f06f3fd6cad2a7b3545aae662c0fdc659b9c0741a92a8ef"
+    },
+    {
+      "path": "src/__tests__/convex/execution/journal.test.ts",
+      "sha256": "6c32388f6ec05a1fbe12fe8f0be0b8acb9991715f184a0f5394eb45676541e6f"
+    },
+    {
+      "path": "src/__tests__/convex/execution/operation-contracts.test.ts",
+      "sha256": "8394e80b553c42b3acb9a6ac7a74e5b8e31ac2a75e54edcee5d53ce116f49aac"
+    },
+    {
+      "path": "src/__tests__/convex/execution/operation-result-contracts.test.ts",
+      "sha256": "937835a3a7e5cc0d3fc2c5a235b81348012adcd8345be695d1ea3e772bde5c6e"
+    },
+    {
+      "path": "src/__tests__/convex/execution/pi-deferred-wake.test.ts",
+      "sha256": "a18e5533f868141f93921191a67444ef4a039626386bec418e7d31cac7788452"
+    },
+    {
+      "path": "src/__tests__/convex/execution/qualification-v2.test.ts",
+      "sha256": "2dd89d8c14f1eb3ae507979c8785e0800c68bf398b5cc7e3f80edb8f2bdfcd64"
+    },
+    {
+      "path": "src/__tests__/convex/execution/separated-agent-context.test.ts",
+      "sha256": "8d975b8178bfaee2e43b7ab2d08afbe2fde27935ca46c0a2a8f6aaedccb7f300"
+    },
+    {
+      "path": "src/__tests__/convex/execution/sources-qualification.test.ts",
+      "sha256": "4bfd40ebdea57222198e064e386c611176ee026438b249cb034b67ca9ddeaedf"
+    },
+    {
+      "path": "src/__tests__/convex/execution/sources-simulation.test.ts",
+      "sha256": "948fb843219309b9b071ba9865ba1816025677c6635b1b07e17ae986f5a2f3cb"
+    },
+    {
+      "path": "src/__tests__/convex/execution/workbench-approvals.test.ts",
+      "sha256": "34a91120cf659705c21103046aafd51b6ac7adbaf670e3cda280506d2186ba28"
+    },
+    {
+      "path": "src/__tests__/convex/execution/workbench-operation-effects.test.ts",
+      "sha256": "c11384ded330adc6fb04b3e74147f65b1edb5313067361f616cb985cabfa84d8"
+    },
+    {
+      "path": "src/__tests__/convex/integrations/documentary-control-transport.test.ts",
+      "sha256": "d08ec35662b2ec6135c03a8ecd0c3175f21c07414c8a822375e02e42e98b99cf"
+    },
+    {
+      "path": "src/__tests__/convex/integrations/model-effort-transport.test.ts",
+      "sha256": "e6abb76c9d6f4d7c7dadc61fbc6f92ef51f9e0d67d80334ee9dfd1b522f48dd2"
+    },
+    {
+      "path": "src/__tests__/convex/integrations/model-invocation.test.ts",
+      "sha256": "696d147095c85e68cde1bc61d9927889ad1aa356363b2412ec8316df011693c1"
+    },
+    {
+      "path": "src/__tests__/convex/integrations/source-comparison-transport.test.ts",
+      "sha256": "20759ac11ea38461704c8387eb6575cd8be5094c5d4772fb2b712bf996e0b410"
+    },
+    {
+      "path": "src/__tests__/convex/integrations/source-qualification-transport.test.ts",
+      "sha256": "85530e5458c04f3997167c408ef4e7ce3de36b2115bb20a0764666721b6ccf11"
+    },
+    {
+      "path": "src/__tests__/convex/integrations/structured-model-capacity.test.ts",
+      "sha256": "c73b86f7625a44d7c1fba971e846fa479ea4cd6498e7fc4837843882c37da2c3"
+    },
+    {
+      "path": "src/__tests__/convex/sources/documentary-control-integration.test.ts",
+      "sha256": "ea1254d90254d5671c97dce5266094b309cdf8f28d86064e88658ac1d6a31c1d"
+    },
+    {
+      "path": "src/__tests__/convex/sources/source-comparison-action.test.ts",
+      "sha256": "84963ed63962341f2a6f970c2b9cdc03fcc2ac2cce9285d53f7773e4c7f48c61"
+    },
+    {
+      "path": "src/__tests__/convex/sources/source-qualification-action.test.ts",
+      "sha256": "1ee5a9e95433ca9a8f476e44f1c833619218ae20253f76b77262b4ab00843ca1"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-boundaries.test.ts",
+      "sha256": "28679aaf07b88d7f7b4b50d4a5d6b4940584200caf53e910f28c60db41ca35ff"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-completion-freshness.test.ts",
+      "sha256": "bdd5fdc9d9b15b8799af434fdced2a041e3b98d34b12b14779353d8f071d32fb"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-completion.test.ts",
+      "sha256": "2afb3cd151d5f8f994ed5b540e9f33a6d7aa360fa962dd65cc87e1ed2ca96958"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-control-concurrency.test.ts",
+      "sha256": "5718bf7e77f1f81e16bf7a551bea92dad9dfda7ad922d744d9fd936474d78f48"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-diagnostics.test.ts",
+      "sha256": "5570f5b080f26c367bb07b81ed03ea8549f2ea306c0242eeba85f977b372b31f"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-discovery.test.ts",
+      "sha256": "54d79ec357927e7e7a4a7072388ad29374def780425b181bef50b1c1285c6b1c"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-handoff-capacity.test.ts",
+      "sha256": "0ac8494e75370542c9164c5f80348d9da363f9109e1450fe1338366e407568c8"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-instruction-capacity.test.ts",
+      "sha256": "0ebeac6541b77cdc46171fe426d33192f64dceb14633c9318d92cb290e019926"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-mission.test.ts",
+      "sha256": "cf6f14dc90c6d519b7a970a2891ff7ec4644ab6a58fb0c4954f910206fd8938b"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-observed-evidence.test.ts",
+      "sha256": "a26560932576842b84372eddd8af6e0b4d383fb59ac3d0f86133a99a14750638"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-pause-admission.test.ts",
+      "sha256": "7d99e21da5e67b736cc958f0b267ec26750c73792b0587110593f657809a83ab"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-progress-evidence.test.ts",
+      "sha256": "5b278393660459505839ba89b81bc3418073dd70fe3c2b7427129e7646b1a11e"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-resource-status.test.ts",
+      "sha256": "54f68731f97b6a63d98ce9b0f90db5d6b91ffdecd7dc89b652c9ffb7d309c284"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-transaction-admission.test.ts",
+      "sha256": "00d48701db80e70fd4c6f3716938f240dd0635933fee0f843e976b883ba835a3"
+    },
+    {
+      "path": "src/__tests__/convex/sources/sources-workspace.test.ts",
+      "sha256": "af895a0e0a9302960366809da13626453610fb3a803c1a6c9c58743cf56f4d4f"
+    },
+    {
+      "path": "src/__tests__/setup/model-stream.ts",
+      "sha256": "29d76092b47983243c23746aa46142c13c846b38748c58429e622968db763165"
+    },
+    {
+      "path": "src/__tests__/setup/sources-mission.ts",
+      "sha256": "6739c0ecdafbd562d6a9fdbf66e7ca6f1e956a823fcb0fd37ff36a8eb4783bdf"
+    }
+  ],
+  "digest": "a8013e8a6333d7bc77e63b13db89e5034ba22b97eec39dbcb2c2c6ab859fd4e7"
+}

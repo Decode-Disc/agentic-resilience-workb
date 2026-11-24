@@ -1,0 +1,63 @@
+[
+  {
+    "change": {
+      "kind": "reasoning",
+      "key": "ss75t5f25z9yh637naxzhw2k7n8hd7c7",
+      "beforeRevision": 80,
+      "afterRevision": 81
+    },
+    "current": [
+      {
+        "revision": 81,
+        "enabled": true,
+        "status": "ready",
+        "reasoning": {
+          "choices": [
+            "low",
+            "high",
+            "max"
+          ],
+          "effective": "high",
+          "preference": "recommended",
+          "recommended": "high"
+        }
+      }
+    ]
+  },
+  {
+    "change": {
+      "kind": "assignment",
+      "key": "sources",
+      "beforeRevision": 46,
+      "afterRevision": 47
+    },
+    "current": [
+      {
+        "_creationTime": 1793569784754.887,
+        "_id": "sn75vfvt50mhw0q9p0r6gpravs8hdza9",
+        "agent": "sources",
+        "catalogId": "ss75t5f25z9yh637naxzhw2k7n8hd7c7",
+        "requestHash": "44f98e2897bbca523dfbc69cc149ae4dd84150b22a8adec6a22ce461a9b84e7f",
+        "requestKey": "native-task-methods-20261119:sources:assign",
+        "revision": 47,
+        "updatedAt": 1795128508098
+      }
+    ]
+  },
+  {
+    "change": {
+      "kind": "controller",
+      "key": "global",
+      "beforeRevision": 6,
+      "afterRevision": 7,
+      "restored": true
+    },
+    "current": {
+      "contradictionThreshold": 0.9,
+      "enabled": false,
+      "model": "typesafe/jev-1.14",
+      "revision": 8,
+      "supportThreshold": 0.8
+    }
+  }
+]

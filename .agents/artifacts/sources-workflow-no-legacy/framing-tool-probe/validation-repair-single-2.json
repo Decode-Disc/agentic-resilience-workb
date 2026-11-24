@@ -1,0 +1,59 @@
+{
+  "outcome": {
+    "kind": "success",
+    "valueJson": "{\"revision\":2}"
+  },
+  "framing": {
+    "_creationTime": 1795162459235.2383,
+    "_id": "0000000000010244framingRevisions",
+    "content": {
+      "questions": [
+        {
+          "id": "workflow-role",
+          "rationale": "Before evaluating bypass, establish what part of estimate review CCC's tooling actually covers and whether an insurer can execute that step outside CCC.",
+          "shortLabel": "CCC's estimate-review role",
+          "text": "In the insurer estimate-review workflow, which steps does CCC's tooling perform for insurers (e.g., receiving repairer-written estimates, applying insurer rules, routing for approval or reinspection), and which steps can an insurer execute without CCC?"
+        },
+        {
+          "id": "bypass-feasibility",
+          "rationale": "The core question: test whether bypass is technically and contractually available regardless of any announcement.",
+          "shortLabel": "Bypass feasibility",
+          "text": "Can insurers review repairer-written estimates without routing them through CCC-hosted workflows — e.g., via in-house appraisers, third-party review services, or insurer-built tools — and what contract terms, network connections, or data access enable or prevent this?"
+        },
+        {
+          "id": "announcement-impact",
+          "rationale": "An announcement can change the cost or capability of estimate review; investigate whether it changes the bypass calculus rather than assuming the premise.",
+          "shortLabel": "Announcement impact",
+          "text": "If The analyst's 'latest announcement' is unresolved: it could refer to a recent CCC product or corporate announcement relevant to estimate review, but the specific event is not named and no supplied observation identifies it. This materially affects which event-dependent questions apply., Does the latest announcement change the cost or capability of estimate review in a way that makes bypass more or less attractive for insurers?"
+        },
+        {
+          "id": "switching-cost",
+          "rationale": "Bypass depends on network effects and switching costs as much as on features; test whether insurers can substitute alternative review processes without losing speed or repairer connectivity.",
+          "shortLabel": "Substitution economics",
+          "text": "How do network effects, switching costs, and repairer connectivity shape whether insurers can substitute alternative estimate-review processes for CCC's without losing cycle time or repairer relationships?"
+        }
+      ],
+      "scope": "Can insurers bypass CCC during estimate review after the latest announcement?"
+    },
+    "contentHash": "7d28697673b9dd6701bb3602629861146a5e88d4fe65f6f8ef221262cdfd179f",
+    "createdAt": 1795162459235,
+    "eventBasis": {
+      "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+      "conditions": [
+        {
+          "basis": {
+            "excerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+            "kind": "analyst"
+          },
+          "hypothesis": "The analyst's 'latest announcement' is unresolved: it could refer to a recent CCC product or corporate announcement relevant to estimate review, but the specific event is not named and no supplied observation identifies it. This materially affects which event-dependent questions apply.",
+          "questionId": "announcement-impact"
+        }
+      ],
+      "kind": "open"
+    },
+    "origin": "workbench",
+    "requestKey": "operation:0000010240agentOperationRequests",
+    "revision": 2,
+    "runId": "00000000000000010005researchRuns"
+  }
+}

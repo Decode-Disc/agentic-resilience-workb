@@ -1,0 +1,62 @@
+{
+  "id": "initial-split-1",
+  "startedAt": "2026-11-20T08:10:22.207Z",
+  "elapsedMs": 7678,
+  "status": 200,
+  "body": {
+    "id": "gen-1795162222-HJgGLa8RBez0ybHrDRi4",
+    "object": "chat.completion",
+    "created": 1795162222,
+    "model": "z-ai/glm-5.3-flash",
+    "provider": "Wafer",
+    "system_fingerprint": "vllm-0.33.0rc1.dev229+g3966924d5-tp2-786bac74",
+    "service_tier": null,
+    "choices": [
+      {
+        "index": 0,
+        "logprobs": null,
+        "finish_reason": "tool_calls",
+        "native_finish_reason": "tool_calls",
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "refusal": null,
+          "tool_calls": [
+            {
+              "type": "function",
+              "index": 0,
+              "id": "chatcmpl-tool-932625dbff5dd099",
+              "function": {
+                "name": "create_framing",
+                "arguments": "{\"content\": {\"questions\": [{\"id\": \"q1\", \"rationale\": \"Defines what 'bypass' means operationally before asking whether it is possible; stays useful whichever announcement, if any, turns out to be relevant.\", \"shortLabel\": \"Estimate review steps\", \"text\": \"What steps does CCC's estimate review workflow include, and at which points can insurers act independently of CCC (e.g., submitting, editing, approving, or settling estimates)?\"}, {\"id\": \"q2\", \"rationale\": \"Roles, permissions and contract terms are common ground across plausible interpretations of the request and any candidate announcement.\", \"shortLabel\": \"Roles & authority\", \"text\": \"What roles, permissions, or contractual terms govern the respective authority of insurers and CCC over estimates during review?\"}, {\"id\": \"q3\", \"rationale\": \"Event-dependent: the announcement the analyst refers to has not been established from public sources, so the question is held conditional on that unresolved event rather than assumed into the request's premise.\", \"shortLabel\": \"Announcement effect (conditional)\", \"text\": \"If the announcement the analyst refers to is identified, did it change whether insurers can bypass CCC during estimate review — and if so, how?\"}], \"scope\": \"Investigate whether insurers can bypass CCC during estimate review, focusing on the insurers' estimate review workflow with CCC. Preserve the analyst's activity verbatim: \\\"Can insurers bypass CCC during estimate review after the latest announcement?\\\". The request names an announcement whose identity and effect on the workflow are not yet established from public sources; treat it as an open event rather than a premise.\"}, \"eventBasis\": {\"activityExcerpt\": \"Can insurers bypass CCC during estimate review after the latest announcement?\", \"conditions\": [{\"basis\": {\"excerpt\": \"after the latest announcement\", \"kind\": \"analyst\"}, \"hypothesis\": \"A recent announcement changed insurers' ability to bypass CCC during estimate review; the announcement has not yet been identified or verified in public sources.\", \"questionId\": \"q3\"}], \"kind\": \"open\"}}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 1387,
+      "completion_tokens": 1331,
+      "total_tokens": 2718,
+      "cost": 0.000303158,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.000303158,
+        "upstream_inference_prompt_cost": 0.000058254,
+        "upstream_inference_completions_cost": 0.000244904
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 888,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    }
+  }
+}

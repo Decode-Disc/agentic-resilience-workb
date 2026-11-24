@@ -1,0 +1,66 @@
+import { api, internal } from "@convex/_generated/api";
+import type { FunctionArgs } from "convex/server";
+import { afterEach, assert, expect, test, vi } from "vitest";
+import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
+
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+});
+
+test("research reproduction: saving a provisional draft fences prior candidate and fresh citation authority", async () => {
+    vi.stubEnv("EXA_API_KEY", "fixture-only");
+    vi.stubEnv("WORKBENCH_PUBLIC_CONTEXT_ALLOWANCE", JSON.stringify({ searches: 3, readings: 3 }));
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (url) => {
+        const endpoint = String(url);
+        calls.push(endpoint);
+        if (endpoint.endsWith("/search")) return Response.json({ results: [
+            { id: "first", url: "https://example.com/first", title: "First announcement", publishedDate: "2026-11-17" },
+            { id: "second", url: "https://example.com/second", title: "Second announcement", publishedDate: "2026-11-17" },
+        ] });
+        if (endpoint.endsWith("/contents")) return Response.json({ results: [
+            { id: "first", url: "https://example.com/first", text: "The insurer retains validation rights. ".repeat(400) },
+        ] });
+        throw new Error(`Unexpected external boundary: ${endpoint}`);
+    }));
+    const excerpt = "Investigate insurer estimate review after the latest announcement.";
+    const { t, client, runId } = await seedWorkbench(false, nativePiFixtureRoute, 60000, excerpt, undefined, 7);
+    const active = await t.mutation(internal.execution.conversations.startTurn, {
+        runId, definitionId: "workbench_v1", scope: { kind: "workbench_v1" }, simulation: false,
+    });
+    assert(active);
+    const message = await t.run((ctx) => ctx.db.query("agentMessageDeliveries").withIndex("by_turn", (q) => q.eq("turnId", active.turnId)).first());
+    assert(message);
+    async function dispatch(cause: string, input: FunctionArgs<typeof internal.execution.operations.enqueue>["input"]) {
+        const id = await t.mutation(internal.execution.operations.enqueue, { missionId: active!.missionId, expectedGeneration: 1, cause, input });
+        const outcome = await t.action(internal.execution.operations.dispatch, { requestId: id, expectedGeneration: 1 });
+        return { id, outcome };
+    }
+    const search = await dispatch("research-search", { kind: "search_public_context", messageId: message._id, query: "validation rights" });
+    expect(search.outcome.kind).toBe("success");
+    const read = await dispatch("research-read-first", { kind: "read_public_context", messageId: message._id, target: { kind: "candidate", searchId: search.id, index: 0 } });
+    assert(read.outcome.kind === "success");
+    expect(JSON.parse(read.outcome.valueJson)).toMatchObject({ readId: read.id, continuation: read.id, reference: { url: "https://example.com/first" } });
+    const content = { scope: excerpt, questions: [{ id: "rights", shortLabel: "Validation rights", text: "Who controls estimate validation?", rationale: "Identify control of the workflow." }] };
+    const saved = await dispatch("research-save-open", { kind: "adjust_framing", messageId: message._id, expectedRevision: 1, eventBasis: { kind: "open", activityExcerpt: excerpt }, content });
+    expect(saved.outcome.kind).toBe("success");
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({ revision: 2, content });
+    const beforeRefusals = [...calls];
+    const unread = await dispatch("research-read-second", { kind: "read_public_context", messageId: message._id, target: { kind: "candidate", searchId: search.id, index: 1 } });
+    expect(unread.outcome).toMatchObject({ kind: "unavailable", code: "source_reference_not_observed" });
+    const continued = await dispatch("research-continue-first", { kind: "read_public_context", messageId: message._id, target: { kind: "candidate", searchId: search.id, index: 0 }, continuation: read.id });
+    expect(continued.outcome).toMatchObject({ kind: "unavailable", code: "source_reference_not_observed" });
+    const cited = await dispatch("research-cite-prior-reading", { kind: "adjust_framing", messageId: message._id, expectedRevision: 2, content, eventBasis: { kind: "public", label: "Validation rights", readIds: [read.id] } });
+    expect(cited.outcome).toMatchObject({ kind: "refused", code: "framing_public_lookup_invalid" });
+    expect(calls).toEqual(beforeRefusals);
+    expect(await client.query(api.framing.get, { runId })).toMatchObject({ revision: 2, content });
+    const records = await t.run(async (ctx) => ({ search: await ctx.db.get(search.id), read: await ctx.db.get(read.id), unread: await ctx.db.get(unread.id), run: await ctx.db.get(runId) }));
+    expect(records.search).toMatchObject({ status: "completed", adoptedAt: expect.any(Number), missionId: active.missionId, instructionVersion: records.unread?.instructionVersion });
+    expect(records.read).toMatchObject({ status: "completed", adoptedAt: expect.any(Number) });
+    expect(records.search?.pin).not.toEqual(records.unread?.pin);
+    expect(records.unread?.pin).toEqual({ kind: "framing_revision", revisionId: records.run?.currentFramingRevisionId });
+    expect(records.run?.sourcePreparationId).toBeUndefined();
+});

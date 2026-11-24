@@ -1,0 +1,235 @@
+{
+  "agents": [
+    {
+      "agent": "workbench",
+      "implemented": true,
+      "label": "Workbench"
+    },
+    {
+      "agent": "sources",
+      "implemented": true,
+      "label": "Sources \u00b7 documentary preparation"
+    },
+    {
+      "agent": "investigation",
+      "implemented": false,
+      "label": "Investigation"
+    },
+    {
+      "agent": "synthesis",
+      "implemented": false,
+      "label": "Synthesis"
+    },
+    {
+      "agent": "saved_material_inspection",
+      "implemented": true,
+      "label": "Saved material inspection"
+    }
+  ],
+  "assignments": [
+    {
+      "_creationTime": 1793569784754.8872,
+      "_id": "sn7010bb24jexkbp7h7npzzyz58hcc1h",
+      "agent": "investigation",
+      "catalogId": "ss75t5f25z9yh637naxzhw2k7n8hd7c7",
+      "requestHash": "8196a9f7e515728c243422463d87054379ce19d217d4cbbf1835075569adb6b2",
+      "requestKey": "initial:investigation",
+      "revision": 1,
+      "updatedAt": 1793569784754
+    },
+    {
+      "_creationTime": 1793569784754.8877,
+      "_id": "sn7drdk686tag2brjj201v1mx18hce5n",
+      "agent": "saved_material_inspection",
+      "catalogId": "ss75t5f25z9yh637naxzhw2k7n8hd7c7",
+      "requestHash": "8196a9f7e515728c243422463d87054379ce19d217d4cbbf1835075569adb6b2",
+      "requestKey": "initial:saved_material_inspection",
+      "revision": 1,
+      "updatedAt": 1793569784754
+    },
+    {
+      "_creationTime": 1793569784754.887,
+      "_id": "sn75vfvt50mhw0q9p0r6gpravs8hdza9",
+      "agent": "sources",
+      "catalogId": "ss7dgpmds3nnfhmm897p77fpf98hd9ws",
+      "requestHash": "b75d1ca0a7cd42620d516515de719ae4b7882662fcbbba3dbcd481195497f306",
+      "requestKey": "sources:campaign-restore:51",
+      "revision": 52,
+      "updatedAt": 1795132729050
+    },
+    {
+      "_creationTime": 1793569784754.8875,
+      "_id": "sn7828b91kvnjsxdsf74f8pfkh8hdtg9",
+      "agent": "synthesis",
+      "catalogId": "ss75t5f25z9yh637naxzhw2k7n8hd7c7",
+      "requestHash": "8196a9f7e515728c243422463d87054379ce19d217d4cbbf1835075569adb6b2",
+      "requestKey": "initial:synthesis",
+      "revision": 1,
+      "updatedAt": 1793569784754
+    },
+    {
+      "_creationTime": 1793569784754.8867,
+      "_id": "sn7frx98fhzxpp3bh5essv98g58hdk1p",
+      "agent": "workbench",
+      "catalogId": "ss75t5f25z9yh637naxzhw2k7n8hd7c7",
+      "requestHash": "82b52e9a9662cadc8747339d4c24b7432d48d3c055253f1543b55d409ea196e6",
+      "requestKey": "controller-off-3nq7aboe-restore-workbench",
+      "revision": 17,
+      "updatedAt": 1793820122640
+    }
+  ],
+  "models": [
+    {
+      "_creationTime": 1793569783024.6167,
+      "_id": "ss75t5f25z9yh637naxzhw2k7n8hd7c7",
+      "compatible": true,
+      "currentRevisionId": "sx7930ycw7z1s5h4drwmc4vsfx8jg8vq",
+      "defaultsInitialized": true,
+      "enabled": true,
+      "label": "GLM-5.3-Flash",
+      "lastUpdateHash": "3f6254fefc9bb288634e1c5697fb110fa8807b9cec2f6d97c7a8e5b6b5bc754a",
+      "lastUpdateKey": "ss75t5f25z9yh637naxzhw2k7n8hd7c7:campaign-restore:85",
+      "model": "z-ai/glm-5.3-flash",
+      "preparationHash": "7d0383817c37d743b8ed410cd86b57d18a8832b7bc1120bd1cfd39827e047227",
+      "preparationKey": "native-task-methods-20261119-metadata",
+      "preparedProfileCatalog": "8fbd8da108294d2d5ad8b8b096c5ebadda60f1d5faaab0030022f16a9835e0db",
+      "preparedSerializer": "pi-ai@1.4.0/pi-durable@1.4.0/chord@1.4.0:3",
+      "reasoning": {
+        "choices": [
+          "low",
+          "high",
+          "max"
+        ],
+        "effective": "high",
+        "preference": "high",
+        "recommended": "high"
+      },
+      "revision": 86,
+      "status": "ready",
+      "updatedAt": 1795132729240,
+      "workbenchSelectable": true
+    },
+    {
+      "_creationTime": 1793569785063.1086,
+      "_id": "ss7dgpmds3nnfhmm897p77fpf98hd9ws",
+      "compatible": true,
+      "currentRevisionId": "sx7ax2431f0cvzqnktpkxes85d8j8vaj",
+      "defaultsInitialized": true,
+      "enabled": true,
+      "label": "DeepSeek V4.1 Flash 1017",
+      "lastUpdateHash": "a91ff6b648683f12d22d7fea782d285aa0e6ac4355cf00e39fbd9294cdcfc59d",
+      "lastUpdateKey": "0d55cb00-aa71-476a-8a61-f810bbec4db2",
+      "model": "deepseek/deepseek-v4.1-flash-1017",
+      "preparationHash": "072854e12ddf1ed5dc72d3a8619c13402936eef1a597ce07a5293c85d62f8cff",
+      "preparationKey": "2a27631c-f4fb-49a4-a66b-58b523a8d76d",
+      "preparedProfileCatalog": "8fbd8da108294d2d5ad8b8b096c5ebadda60f1d5faaab0030022f16a9835e0db",
+      "preparedSerializer": "pi-ai@1.4.0/pi-durable@1.4.0/chord@1.4.0:3",
+      "reasoning": {
+        "choices": [
+          "none",
+          "low",
+          "high",
+          "max"
+        ],
+        "effective": "high",
+        "preference": "high",
+        "recommended": "high"
+      },
+      "revision": 18,
+      "status": "ready",
+      "updatedAt": 1794758927762,
+      "workbenchSelectable": true
+    },
+    {
+      "_creationTime": 1793784698279.9004,
+      "_id": "ss74nhwqzdycjdtkb924bteybx8hj0cz",
+      "compatible": false,
+      "currentRevisionId": "sx77j17q8chen0bac8phv2rdnn8hj9m1",
+      "enabled": false,
+      "label": "Mistral Nemo \u00b7 local stress qualification",
+      "lastUpdateHash": "2126c44043dde080410cea393a1d1b021691ac460ed3f67c5f63989a5c123a19",
+      "lastUpdateKey": "sources-nemo-continuation-20261104-disable",
+      "model": "mistralai/mistral-nemo",
+      "preparationHash": "ff508a53342f04eb6e8a989fa6c33aae7b06be6e8d57c590f3222c18350b68b6",
+      "preparationKey": "sources-nemo-continuation-20261104-prepare",
+      "preparedProfileCatalog": "d069529d8a3b56044f17be6ca67112e98777febb80e99b8d82a2c0edd46c18c4",
+      "preparedSerializer": "pi-ai@1.4.0/pi-durable@1.4.0/chord@1.4.0:2",
+      "provider": "deepinfra/fp8",
+      "reasoning": {
+        "choices": [],
+        "effective": null,
+        "preference": null,
+        "recommended": null
+      },
+      "revision": 6,
+      "status": "ready",
+      "updatedAt": 1793787738190,
+      "workbenchSelectable": false
+    },
+    {
+      "_creationTime": 1793789150332.7627,
+      "_id": "ss7dnq6jt1pn4hjmswzmyaj5ax8hjphx",
+      "compatible": false,
+      "currentRevisionId": "sx73wrjb388fjb4k91tj8mrwyd8hk5ra",
+      "enabled": false,
+      "label": "GPT-OSS 20B \u00b7 OpenRouter automatic",
+      "lastUpdateHash": "35f19cf5e39e1093068247c6fc2a8e78c7e3dfb6bbb0179cbae9f475ad7dd929",
+      "lastUpdateKey": "sources-gpt-oss20b-20261104-disable",
+      "model": "openai/gpt-oss-20b",
+      "preparationHash": "96f4bc3a339f9f28f68f6aec46b37a133cf9d9541d9c25ab50e6d065f7164cd6",
+      "preparationKey": "sources-gpt-oss20b-20261104-automatic-prepare",
+      "preparedProfileCatalog": "d069529d8a3b56044f17be6ca67112e98777febb80e99b8d82a2c0edd46c18c4",
+      "preparedSerializer": "pi-ai@1.4.0/pi-durable@1.4.0/chord@1.4.0:2",
+      "reasoning": {
+        "choices": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "effective": "low",
+        "preference": "low",
+        "recommended": "medium"
+      },
+      "revision": 5,
+      "status": "ready",
+      "updatedAt": 1793790021061,
+      "workbenchSelectable": false
+    },
+    {
+      "_creationTime": 1793790900620.8691,
+      "_id": "ss7dbj24whevxan0hezr0p28s58hkrt7",
+      "compatible": false,
+      "currentRevisionId": "sx77xe5p1ww8ffmem0mg8rarcs8hmyjw",
+      "enabled": false,
+      "label": "GPT-OSS 120B \u00b7 OpenRouter automatic",
+      "lastUpdateHash": "4fabead7ce2c16d94a9c9935e06923625d53dccacc601139e6397603bb4158f3",
+      "lastUpdateKey": "6cU3TX-restore-availability-openai/gpt-oss-120b",
+      "model": "openai/gpt-oss-120b",
+      "preparationHash": "230e64b1d8bc2b8f22e7298cbe112b0ca227aee7b3387fff6ba9fb5192f2fb6b",
+      "preparationKey": "sources-oss120b-20261104-prepare",
+      "preparedProfileCatalog": "2810b0e63de21e848efc172b5f9a9e11d67b9805fffd742a98c0fe9124754c2c",
+      "preparedSerializer": "pi-ai@1.4.0/pi-durable@1.4.0/chord@1.4.0:2",
+      "reasoning": {
+        "choices": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "effective": "low",
+        "preference": "low",
+        "recommended": "medium"
+      },
+      "revision": 46,
+      "status": "ready",
+      "updatedAt": 1793890122490,
+      "workbenchSelectable": false
+    }
+  ],
+  "responseControl": {
+    "contradictionThreshold": 0.9,
+    "enabled": false,
+    "model": "typesafe/jev-1.14",
+    "revision": 8,
+    "supportThreshold": 0.8
+  }
+}

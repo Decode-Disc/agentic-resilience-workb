@@ -1,0 +1,62 @@
+{
+  "id": "update-single-2",
+  "startedAt": "2026-11-20T08:10:36.212Z",
+  "elapsedMs": 2171,
+  "status": 200,
+  "body": {
+    "id": "gen-1795162236-BItLCX2YsGkxgj9x3Xtk",
+    "object": "chat.completion",
+    "created": 1795162236,
+    "model": "z-ai/glm-5.3-flash",
+    "provider": "Wafer",
+    "system_fingerprint": "vllm-0.33.0rc1.dev229+g3966924d5-tp2-786bac74",
+    "service_tier": null,
+    "choices": [
+      {
+        "index": 0,
+        "logprobs": null,
+        "finish_reason": "tool_calls",
+        "native_finish_reason": "tool_calls",
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "refusal": null,
+          "tool_calls": [
+            {
+              "type": "function",
+              "index": 0,
+              "id": "chatcmpl-tool-b3d3d225eb09150b",
+              "function": {
+                "name": "adjust_framing",
+                "arguments": "{\"content\": {\"questions\": [{\"id\": \"bypass\", \"rationale\": \"Identify control points without assuming bypass is possible.\", \"shortLabel\": \"Insurer bypass\", \"text\": \"Which estimate-review dependencies constrain insurer bypass of CCC?\"}, {\"id\": \"switching-costs\", \"rationale\": \"Requested addition: the analyst said to add one question about switching costs. Switching costs bear directly on the feasibility of any bypass, without assuming it is possible.\", \"shortLabel\": \"Switching costs\", \"text\": \"What switching costs would insurers face in moving estimate-review workflows away from CCC?\"}], \"scope\": \"Can insurers bypass CCC during estimate review after the latest announcement?\"}, \"eventBasis\": {\"activityExcerpt\": \"Can insurers bypass CCC during estimate review after the latest announcement?\", \"kind\": \"open\"}}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 2035,
+      "completion_tokens": 368,
+      "total_tokens": 2403,
+      "cost": 0.00015139,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 1792,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.00015139,
+        "upstream_inference_prompt_cost": 0.000083678,
+        "upstream_inference_completions_cost": 0.000067712
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 183,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    }
+  }
+}

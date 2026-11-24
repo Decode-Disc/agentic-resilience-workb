@@ -1,0 +1,26 @@
+{
+  "reconciliation": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"result\":{\"reconciled\":true,\"usage\":{\"acquisition\":0,\"costUsd\":0.0023724199999999307,\"model\":4,\"search\":0}},\"logLines\":[]}"
+      }
+    ]
+  },
+  "state": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"result\":{\"allocation\":{\"acquisition\":0,\"costUsd\":0.0023724199999999307,\"model\":4,\"search\":0},\"analysisAllocated\":null,\"campaignId\":\"t971fqpwrxbzzwyfkhk9rt6rj98jhecf\",\"campaignStatus\":\"closed\",\"checks\":[{\"requestId\":\"rd79ahnaekcp6cshefc6b1rebd8jhgsp\"}],\"contextStatus\":\"closed\",\"controllerPolicy\":{\"contradictionThreshold\":0.9,\"enabled\":true,\"model\":\"z-ai/glm-5.3-flash\",\"revision\":7,\"supportThreshold\":0.8},\"controllerSummary\":null,\"lotStatus\":\"review\",\"turnStatus\":\"active\"},\"logLines\":[]}"
+      }
+    ]
+  },
+  "operation": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"result\":{\"request\":{\"adoptedAt\":1795128593972,\"outcome\":{\"code\":\"configuration_unavailable\",\"kind\":\"unavailable\"},\"status\":\"completed\"},\"reviewAttempts\":[]},\"logLines\":[]}"
+      }
+    ]
+  }
+}

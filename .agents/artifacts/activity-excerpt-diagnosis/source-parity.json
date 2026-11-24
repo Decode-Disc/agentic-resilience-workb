@@ -1,0 +1,8 @@
+{
+  "convex/domain/workbenchAgent.ts": true,
+  "convex/domain/framingContracts.ts": true,
+  "convex/domain/framingProvenance.ts": true,
+  "convex/execution/agentDefinition.ts": true,
+  "convex/execution/invocationLifecycle.ts": true,
+  "convex/execution/commonOperations.ts": true
+}

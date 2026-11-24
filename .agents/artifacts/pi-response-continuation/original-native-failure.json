@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"result\":{\"commitSequence\":80,\"missionId\":\"r97b5qrvdx63qhnvy5qn2nhd0h8jhs1q\",\"operation\":{\"adoptedAt\":1795128593972,\"id\":\"rd79ahnaekcp6cshefc6b1rebd8jhgsp\",\"outcome\":{\"code\":\"configuration_unavailable\",\"kind\":\"unavailable\"},\"status\":\"completed\"},\"session\":{\"id\":\"s578g1yj2pfwe0d0gdpstgdwvs8jgxeb\",\"sequence\":80,\"settledSequence\":80},\"status\":\"running\",\"writes\":[{\"type\":\"submission\",\"value\":{\"conversationId\":1,\"detail\":\"execution_interrupted\",\"entry\":7,\"id\":8,\"reason\":\"model_error\",\"requestId\":\"turn:rn73p9t6fq1ywsc27g5hz40jp58jg0qc:initial\",\"status\":\"unanswered\",\"type\":\"input\"}},{\"type\":\"task\",\"value\":{\"abortRequested\":false,\"background\":false,\"conversationId\":1,\"endedAt\":1795128591070,\"id\":30,\"input\":{},\"kind\":\"pi.generation\",\"startedAt\":1795128578918,\"state\":{\"outcome\":{\"error\":{\"detail\":{\"reason\":\"model_error\"},\"message\":\"execution_interrupted\"},\"status\":\"failed\"},\"status\":\"terminal\"},\"version\":1}}]},\"logLines\":[]}"
+    }
+  ]
+}

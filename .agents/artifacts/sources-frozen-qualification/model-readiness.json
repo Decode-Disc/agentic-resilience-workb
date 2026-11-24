@@ -1,0 +1,25 @@
+{
+  "checkedAt": "2026-11-19T22:36:08.879Z",
+  "prepared": {
+    "refreshed": false,
+    "pages": 0,
+    "model": "z-ai/glm-5.3-flash",
+    "catalogId": "ss75t5f25z9yh637naxzhw2k7n8hd7c7",
+    "revisionId": "sx7249gcktrx7ce46ef5dxprjd8jg2ce",
+    "preparedSerializer": "pi-ai@1.4.0/pi-durable@1.4.0/chord@1.4.0:3",
+    "preparedProfileCatalog": "8fbd8da108294d2d5ad8b8b096c5ebadda60f1d5faaab0030022f16a9835e0db"
+  },
+  "reasoning": {
+    "choices": [
+      "low",
+      "high",
+      "max"
+    ],
+    "effective": "high",
+    "preference": "high",
+    "recommended": "high"
+  },
+  "status": "ready",
+  "compatible": true,
+  "assignmentsUnchanged": true
+}

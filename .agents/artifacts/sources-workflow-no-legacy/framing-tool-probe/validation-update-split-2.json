@@ -1,0 +1,37 @@
+{
+  "outcome": {
+    "kind": "success",
+    "valueJson": "{\"revision\":2}"
+  },
+  "framing": {
+    "_creationTime": 1795162459354.2383,
+    "_id": "0000000000010244framingRevisions",
+    "content": {
+      "questions": [
+        {
+          "id": "bypass",
+          "rationale": "Identify control points without assuming bypass is possible.",
+          "shortLabel": "Insurer bypass",
+          "text": "Which estimate-review dependencies constrain insurer bypass of CCC?"
+        },
+        {
+          "id": "switching",
+          "rationale": "Assess how switching costs shape the feasibility of any bypass the dependencies allow.",
+          "shortLabel": "Switching costs",
+          "text": "What switching costs would insurers face in moving estimate review away from CCC?"
+        }
+      ],
+      "scope": "Can insurers bypass CCC during estimate review after the latest announcement?"
+    },
+    "contentHash": "27d46100df4ffeb26673da98f317d9da84138fbeccc5ec5a379706adb0889a8e",
+    "createdAt": 1795162459354,
+    "eventBasis": {
+      "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+      "kind": "open"
+    },
+    "origin": "workbench",
+    "requestKey": "operation:0000010240agentOperationRequests",
+    "revision": 2,
+    "runId": "00000000000000010005researchRuns"
+  }
+}

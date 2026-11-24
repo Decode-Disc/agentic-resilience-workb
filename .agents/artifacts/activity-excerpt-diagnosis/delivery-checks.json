@@ -1,0 +1,142 @@
+[
+  {
+    "call": 1,
+    "messages": 2,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 0
+  },
+  {
+    "call": 2,
+    "messages": 5,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 0
+  },
+  {
+    "call": 3,
+    "messages": 7,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 0
+  },
+  {
+    "call": 4,
+    "messages": 9,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 0
+  },
+  {
+    "call": 5,
+    "messages": 11,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 0
+  },
+  {
+    "call": 6,
+    "messages": 13,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 0
+  },
+  {
+    "call": 7,
+    "messages": 15,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 0
+  },
+  {
+    "call": 8,
+    "messages": 17,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 0
+  },
+  {
+    "call": 9,
+    "messages": 19,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 0
+  },
+  {
+    "call": 10,
+    "messages": 21,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 1
+  },
+  {
+    "call": 11,
+    "messages": 23,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 2
+  },
+  {
+    "call": 12,
+    "messages": 25,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 2
+  },
+  {
+    "call": 13,
+    "messages": 27,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 2
+  },
+  {
+    "call": 14,
+    "messages": 29,
+    "activityInstructionPresent": true,
+    "schemaHash": "257ac105fe0fa53ba8a3630f7db0238bc9757f49f3623b68f3dbbd232b647990",
+    "requiredOpen": [
+      "kind"
+    ],
+    "refusalMessages": 2
+  }
+]

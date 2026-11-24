@@ -1,0 +1,50 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { api, internal } from "@convex/_generated/api";
+import { directedNativeAdjustFramingInput } from "@convex/domain/workbenchContracts";
+import { validate } from "convex-helpers/validators";
+import { afterEach, assert, expect, test, vi } from "vitest";
+import { fromJSONSchema } from "zod";
+import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
+
+const base = ".agents/artifacts/sources-workflow-no-legacy/framing-tool-probe";
+const requests = JSON.parse(readFileSync(`${base}/requests.json`, "utf8"));
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+
+for (const request of requests) test(request.id, async () => {
+    const response = JSON.parse(readFileSync(`${base}/result-${request.id}.json`, "utf8"));
+    const calls = response.body.choices[0].message.tool_calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0].function.name).toBe(request.body.tools[0].function.name);
+    const args: unknown = JSON.parse(calls[0].function.arguments);
+    fromJSONSchema(request.body.tools[0].function.parameters).parse(args);
+    assert(validate(directedNativeAdjustFramingInput.omit("expectedRevision", "messageId"), args));
+    const analyst = request.current ? "Keep the existing scope exactly. Add one question about switching costs; retain the existing question unchanged." : request.original;
+    const { t, client, runId } = await seedWorkbench(false, nativePiFixtureRoute, 60000, analyst, undefined, 7);
+    if (request.current) await t.run(async (ctx) => {
+        const run = await ctx.db.get(runId);
+        assert(run?.currentFramingRevisionId);
+        await ctx.db.patch(run.currentFramingRevisionId, request.current);
+    });
+    const active = await t.mutation(internal.execution.conversations.startTurn, { runId, definitionId: "workbench_v1", scope: { kind: "workbench_v1" }, simulation: false });
+    assert(active);
+    const message = await t.run((ctx) => ctx.db.query("agentMessageDeliveries").withIndex("by_turn", (q) => q.eq("turnId", active.turnId)).first());
+    assert(message);
+    const id = await t.mutation(internal.execution.operations.enqueue, { missionId: active.missionId, expectedGeneration: 1, cause: request.id, input: { kind: "adjust_framing", ...args, expectedRevision: 1, messageId: message._id } });
+    const outcome = await t.action(internal.execution.operations.dispatch, { requestId: id, expectedGeneration: 1 });
+    const framing = await client.query(api.framing.get, { runId });
+    writeFileSync(`${base}/validation-${request.id}.json`, JSON.stringify({ outcome, framing }, null, 2));
+    expect(outcome.kind).toBe("success");
+    expect(framing).toMatchObject({ revision: 2, content: { scope: args.content.scope } });
+    expect(framing?.content.questions.map((question) => question.id)).toEqual(args.content.questions.map((question) => question.id));
+    for (const question of args.content.questions) expect(framing?.content.questions.find((saved) => saved.id === question.id)?.text).toContain(question.text);
+    if (request.current) {
+        expect(framing?.content.scope).toBe(request.current.content.scope);
+        expect(framing?.content.questions).toHaveLength(2);
+        expect(framing?.content.questions[0]).toEqual(request.current.content.questions[0]);
+        expect(framing?.content.questions[1].text).toMatch(/switching costs/i);
+        expect(framing?.eventBasis).toMatchObject(request.current.eventBasis);
+    } else {
+        expect(framing?.eventBasis).toMatchObject({ kind: "open", activityExcerpt: request.original });
+    }
+});

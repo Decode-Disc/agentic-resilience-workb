@@ -1,0 +1,78 @@
+{
+  "scope": "Independent pre-implementation final review of approved TDD29 and outline31 against current source",
+  "head": "e8e32ec11983d06a91b582c820e6f097360a35f9",
+  "hashes": {
+    "tdd29": "865ec50b63c5e294d1f5594a6dff82d3ce049cdbdc2ecc8a8fd697dd9741eb60",
+    "outline31": "89ab850e96104b4dcb7a4e6574bd6f107e34162581dc61d55981173ca9b9c02b"
+  },
+  "lanes": [
+    {
+      "role": "Oracle",
+      "model": "gpt-6-astra",
+      "effort": "xhigh",
+      "provider": "codex",
+      "taskId": "node:delegated-task:command%3Amcp%3Aa1c2ac37-d721-4d17-9b5e-3dcd7e25ef69%3Adelegate-task%3Acd0bb02c-b015-4e24-b3b0-9821b5c20fe3",
+      "state": "completed",
+      "executedModel": "gpt-6-astra",
+      "verdict": "BLOCK",
+      "findings": "One medium blocking persisted-format gap; four nonblocking implementation watches",
+      "report": "oracle-report.md"
+    },
+    {
+      "role": "Code Reviewer",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "provider": "codex",
+      "taskId": "node:delegated-task:command%3Amcp%3Aa1c2ac37-d721-4d17-9b5e-3dcd7e25ef69%3Adelegate-task%3Aec08a582-4e45-4fd9-88f8-9858a5ce1518",
+      "state": "completed",
+      "executedModel": "gpt-6.1-sol",
+      "verdict": "REQUEST CHANGES",
+      "findings": "Two medium blocking persisted-format compatibility gaps",
+      "report": "code-reviewer-report.md"
+    }
+  ],
+  "readOnly": true,
+  "status": "completed",
+  "next": "Specify both persisted-format transitions in TDD29 and outline31; preserve all four implementation acceptance watches. No implementation or migration was performed.",
+  "verdict": "REQUEST CHANGES",
+  "synthesis": "../../44-review-migration-design-and-outline.md",
+  "distinctBlockingFindings": 2,
+  "nonblockingWatches": 4,
+  "checks": {
+    "tdd29": {
+      "sha256": "865ec50b63c5e294d1f5594a6dff82d3ce049cdbdc2ecc8a8fd697dd9741eb60",
+      "unchanged": true
+    },
+    "outline31": {
+      "sha256": "89ab850e96104b4dcb7a4e6574bd6f107e34162581dc61d55981173ca9b9c02b",
+      "unchanged": true
+    },
+    "reportLocalLinks": {
+      "checked": 19,
+      "missing": 0
+    },
+    "trackedStatus": "",
+    "documentation": {
+      "command": "pnpm docs:check",
+      "exitCode": 0,
+      "files": 77,
+      "links": 456,
+      "errors": 0,
+      "advisory": "context/TECH.md: 8857 words against advisory 6000"
+    },
+    "runtime": "Not run: design/source review only"
+  },
+  "notification": {
+    "accepted": true,
+    "messageId": 1067,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/b4e4a368805fd4a8a400b443d0e104babdd3bf8a0341ce31a0fb99d10344ae30.json",
+    "project": "agentic-resilience-workbench-proto",
+    "sender": "Codex",
+    "event": "design-review-complete",
+    "key": "sources-migration-final-review-89ab850e9610",
+    "revision": {
+      "tdd29": "865ec50b63c5e294d1f5594a6dff82d3ce049cdbdc2ecc8a8fd697dd9741eb60",
+      "outline31": "89ab850e96104b4dcb7a4e6574bd6f107e34162581dc61d55981173ca9b9c02b"
+    }
+  }
+}

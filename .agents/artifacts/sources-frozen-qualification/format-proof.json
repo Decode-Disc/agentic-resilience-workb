@@ -1,0 +1,14 @@
+{
+  "manifestUnchanged": true,
+  "manifestHash": "885e37ee97baede347fc39be2a362292b19b1e950b3dc53913b2d1b1ec92330e",
+  "candidateHash": "c68b14a062af96b139f0e3763756e210b313372efdea947f2cdea1dbcd5b64a2",
+  "changedPaths": [
+    "scripts/evaluations/workbench-browser/fixtures/native-task-methods-20261119/cases.json",
+    "scripts/evaluations/workbench-browser/fixtures/native-task-methods-20261119/provenance.json",
+    "scripts/evaluations/workbench-browser/fixtures/native-task-methods-20261119/sources-attribution-independence.json",
+    "scripts/evaluations/workbench-browser/fixtures/native-task-methods-20261119/sources-counterevidence-scope.json",
+    "scripts/evaluations/workbench-browser/fixtures/native-task-methods-20261119/sources-interrupted-preparation.json",
+    "scripts/evaluations/workbench-browser/fixtures/native-task-methods-20261119/sources-partial-reading.json"
+  ],
+  "reason": "JSON formatting and descriptor byte hashes only; documentary bytes and resolved scenarios unchanged; no lot admitted before this correction"
+}

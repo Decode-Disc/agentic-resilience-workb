@@ -1,0 +1,189 @@
+{
+  "checkedAt": "2026-11-20T08:08:27.602Z",
+  "model": {
+    "id": "z-ai/glm-5.3-flash",
+    "canonical_slug": "z-ai/glm-5.3-flash-20260826",
+    "reasoning": {
+      "mandatory": true,
+      "default_enabled": true,
+      "supported_efforts": [
+        "max",
+        "high",
+        "low"
+      ],
+      "default_effort": "max"
+    }
+  },
+  "endpoints": [
+    {
+      "name": "Wafer | z-ai/glm-5.3-flash-20260826",
+      "model_id": "z-ai/glm-5.3-flash",
+      "model_name": "Z.ai: GLM 5.3 Flash",
+      "context_length": 1048576,
+      "pricing": {
+        "prompt": "$0.042/M tokens",
+        "completion": "$0.184/M tokens",
+        "input_cache_read": "$0.041/M tokens",
+        "discount": 0
+      },
+      "provider_name": "Wafer",
+      "tag": "wafer/us",
+      "service_tier": null,
+      "quantization": "nvfp4",
+      "max_completion_tokens": 943718,
+      "max_prompt_tokens": null,
+      "supported_parameters": [
+        "reasoning",
+        "include_reasoning",
+        "response_format",
+        "structured_outputs",
+        "tools",
+        "tool_choice",
+        "logprobs",
+        "top_logprobs",
+        "temperature",
+        "top_p",
+        "top_k",
+        "min_p",
+        "presence_penalty",
+        "frequency_penalty",
+        "repetition_penalty",
+        "stop",
+        "seed",
+        "max_tokens",
+        "logit_bias",
+        "reasoning_effort"
+      ],
+      "supports_tool_choice": {
+        "none": true,
+        "auto": true,
+        "required": true,
+        "function": true
+      },
+      "status": 0,
+      "uptime_last_30m": 100,
+      "uptime_last_5m": 100,
+      "uptime_last_1d": 100,
+      "supports_implicit_caching": true,
+      "native_tools": {},
+      "supports_voice_cloning": false,
+      "supports_multiple_audio_references": false,
+      "supports_image_reference": false,
+      "supports_diarization": false,
+      "latency_last_30m": {
+        "p50": 367,
+        "p75": 498,
+        "p90": 794.7000000000016,
+        "p99": 2385.430000000004
+      },
+      "throughput_last_30m": {
+        "p50": 136,
+        "p75": 106,
+        "p90": 80,
+        "p99": 29
+      },
+      "perf_last_30m_by_workload": {
+        "text_generation": {
+          "latency": {
+            "p50": 367,
+            "p75": 498,
+            "p90": 794.7000000000016,
+            "p99": 2385.430000000004
+          },
+          "throughput": {
+            "p50": 136,
+            "p75": 106,
+            "p90": 80,
+            "p99": 29
+          },
+          "request_count": 132335
+        }
+      }
+    },
+    {
+      "name": "Wafer | z-ai/glm-5.3-flash-20260826",
+      "model_id": "z-ai/glm-5.3-flash",
+      "model_name": "Z.ai: GLM 5.3 Flash",
+      "context_length": 1048576,
+      "pricing": {
+        "prompt": "$0.065/M tokens",
+        "completion": "$0.24/M tokens",
+        "input_cache_read": "$0.064/M tokens",
+        "discount": 0
+      },
+      "provider_name": "Wafer",
+      "tag": "wafer/nvfp4",
+      "service_tier": null,
+      "quantization": "nvfp4",
+      "max_completion_tokens": 943718,
+      "max_prompt_tokens": null,
+      "supported_parameters": [
+        "reasoning",
+        "include_reasoning",
+        "temperature",
+        "top_p",
+        "top_k",
+        "min_p",
+        "frequency_penalty",
+        "presence_penalty",
+        "repetition_penalty",
+        "stop",
+        "seed",
+        "max_tokens",
+        "logit_bias",
+        "response_format",
+        "tools",
+        "tool_choice",
+        "structured_outputs",
+        "logprobs",
+        "top_logprobs",
+        "reasoning_effort"
+      ],
+      "supports_tool_choice": {
+        "none": true,
+        "auto": true,
+        "required": true,
+        "function": true
+      },
+      "status": 0,
+      "uptime_last_30m": 100,
+      "uptime_last_5m": 100,
+      "uptime_last_1d": 100,
+      "supports_implicit_caching": true,
+      "native_tools": {},
+      "supports_voice_cloning": false,
+      "supports_multiple_audio_references": false,
+      "supports_image_reference": false,
+      "supports_diarization": false,
+      "latency_last_30m": {
+        "p50": 410,
+        "p75": 587,
+        "p90": 954,
+        "p99": 3198.8100000000013
+      },
+      "throughput_last_30m": {
+        "p50": 152,
+        "p75": 111,
+        "p90": 73,
+        "p99": 25
+      },
+      "perf_last_30m_by_workload": {
+        "text_generation": {
+          "latency": {
+            "p50": 410,
+            "p75": 587,
+            "p90": 954,
+            "p99": 3198.8100000000013
+          },
+          "throughput": {
+            "p50": 152,
+            "p75": 111,
+            "p90": 73,
+            "p99": 25
+          },
+          "request_count": 27477
+        }
+      }
+    }
+  ]
+}

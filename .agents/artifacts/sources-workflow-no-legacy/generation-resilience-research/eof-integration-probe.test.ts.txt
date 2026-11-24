@@ -1,0 +1,27 @@
+
+// BEGIN generation-resilience research-only EOF characterization
+// Remove this appended probe after saving its source and results as research evidence.
+test("research: EOF without provider termination admits another documentary generation", async () => {
+    const f = await fixture();
+    let generations = 0;
+    vi.stubGlobal("fetch", async (_url: unknown, init?: RequestInit) => {
+        generations++;
+        if (generations === 1)
+            return new Response('data: {"id":"offline-eof","model":"z-ai/glm-5.3-flash","choices":[{"index":0,"delta":{"content":"{\\"coherence\\":"},"finish_reason":null}]}\n\n', {headers:{"content-type":"text/event-stream","x-generation-id":"offline-eof"}});
+        return documentaryReply(init);
+    });
+    const result = await dispatchSourcesOperation(f.t, {requestId:f.requestId,expectedGeneration:4});
+    const calls = await f.t.run(ctx=>ctx.db.query("providerCalls").withIndex("by_run",q=>q.eq("runId",f.runId)).collect());
+    const first = calls.find(call=>call.attempt===1);
+    const second = calls.find(call=>call.attempt===2);
+    expect(first).toMatchObject({status:"failed",errorCode:"invalid_output",dispatchOutcome:"response_received",diagnostic:{finishReason:"other"}});
+    expect(first?.reportedCost).toBeUndefined();
+    expect(first?.billing?.state).toBe("pending");
+    expect(second).toMatchObject({status:"succeeded",attempt:2});
+    expect(generations).toBe(2);
+    expect(result.kind).toBe("success");
+    const saved = await f.t.run(ctx=>ctx.db.get(f.requestId));
+    expect(saved?.outcome?.kind).toBe("success");
+    console.log("RESEARCH EOF: first receipt has no terminal reason or known cost; billing pending; second generation succeeded and operation outcome persisted", JSON.stringify({generations,firstError:first?.errorCode,firstFinish:first?.diagnostic?.finishReason,firstBilling:first?.billing?.state,secondStatus:second?.status,outcome:result.kind}));
+});
+// END generation-resilience research-only EOF characterization

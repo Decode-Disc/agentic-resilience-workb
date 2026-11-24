@@ -1,0 +1,288 @@
+{
+  "node": "v26.12.1",
+  "input": {
+    "path": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-frozen-model-20261118-current-candidate/lots/lot-1/observations/after-cleanup-73ba4885-cccd-4248-860b-9a7ea8d3659f/nvidia-unnamed/invocations-6.json",
+    "invocationId": "r57fbnt8p1r7t3zqh5zj5cyx0n8jfze5",
+    "hash": "b3637b9dda055fa7f0824d2b6aba165fa3382716a46f75a2951a18dae317751f",
+    "visibleHash": "05451f7316228ba005518258c71b979fb3d563d8e5fef80629d81952a4aef59c",
+    "visibleBytes": 4029
+  },
+  "samples": [
+    {
+      "workload": "retained",
+      "cadence": "burst",
+      "mode": "unbatched-sdk",
+      "visibleBytes": 4029,
+      "nativeEvents": 16,
+      "enrichedEvents": 22,
+      "enrichedSnapshotBytes": 4975,
+      "appendMutations": 0,
+      "packedFragments": 0,
+      "headerBytesWritten": 0,
+      "maxTailCharacters": 0,
+      "maxAppendsInFlight": 0,
+      "parseCalls": 16,
+      "partialSnapshotBytes": 34991,
+      "elapsedMs": 35.26520399999981,
+      "cpuMicros": {
+        "user": 55451,
+        "system": 4086
+      },
+      "peakHeapBytes": 59421016,
+      "sampledHeapGrowthBytes": 3482576
+    },
+    {
+      "workload": "retained",
+      "cadence": "burst",
+      "mode": "production",
+      "visibleBytes": 4029,
+      "nativeEvents": 16,
+      "enrichedEvents": 1,
+      "enrichedSnapshotBytes": 0,
+      "appendMutations": 5,
+      "packedFragments": 1,
+      "headerBytesWritten": 14726,
+      "maxTailCharacters": 4027,
+      "maxAppendsInFlight": 1,
+      "parseCalls": 1,
+      "partialSnapshotBytes": 4041,
+      "firstCaptureLatencyMs": 17.441012,
+      "elapsedMs": 29.674470999999812,
+      "cpuMicros": {
+        "user": 45120,
+        "system": 6072
+      },
+      "peakHeapBytes": 63044464,
+      "sampledHeapGrowthBytes": 5916776
+    },
+    {
+      "workload": "retained",
+      "cadence": "slow",
+      "mode": "unbatched-sdk",
+      "visibleBytes": 4029,
+      "nativeEvents": 16,
+      "enrichedEvents": 22,
+      "enrichedSnapshotBytes": 4975,
+      "appendMutations": 0,
+      "packedFragments": 0,
+      "headerBytesWritten": 0,
+      "maxTailCharacters": 0,
+      "maxAppendsInFlight": 0,
+      "parseCalls": 16,
+      "partialSnapshotBytes": 34991,
+      "elapsedMs": 41.30055600000014,
+      "cpuMicros": {
+        "user": 30906,
+        "system": 0
+      },
+      "peakHeapBytes": 60051600,
+      "sampledHeapGrowthBytes": 1855960
+    },
+    {
+      "workload": "retained",
+      "cadence": "slow",
+      "mode": "production",
+      "visibleBytes": 4029,
+      "nativeEvents": 16,
+      "enrichedEvents": 1,
+      "enrichedSnapshotBytes": 0,
+      "appendMutations": 16,
+      "packedFragments": 1,
+      "headerBytesWritten": 43245,
+      "maxTailCharacters": 4027,
+      "maxAppendsInFlight": 1,
+      "parseCalls": 1,
+      "partialSnapshotBytes": 4041,
+      "firstCaptureLatencyMs": 10.570373000000018,
+      "elapsedMs": 48.93739800000003,
+      "cpuMicros": {
+        "user": 46034,
+        "system": 2806
+      },
+      "peakHeapBytes": 65364576,
+      "sampledHeapGrowthBytes": 7597648
+    },
+    {
+      "workload": "expanded",
+      "cadence": "burst",
+      "mode": "unbatched-sdk",
+      "visibleBytes": 135682,
+      "nativeEvents": 530,
+      "enrichedEvents": 536,
+      "enrichedSnapshotBytes": 169702,
+      "appendMutations": 0,
+      "packedFragments": 0,
+      "headerBytesWritten": 0,
+      "maxTailCharacters": 0,
+      "maxAppendsInFlight": 0,
+      "parseCalls": 530,
+      "partialSnapshotBytes": 36047654,
+      "elapsedMs": 779.0729649999998,
+      "cpuMicros": {
+        "user": 720905,
+        "system": 266919
+      },
+      "peakHeapBytes": 196205760,
+      "sampledHeapGrowthBytes": 137061480
+    },
+    {
+      "workload": "expanded",
+      "cadence": "burst",
+      "mode": "production",
+      "visibleBytes": 135682,
+      "nativeEvents": 530,
+      "enrichedEvents": 3,
+      "enrichedSnapshotBytes": 0,
+      "appendMutations": 120,
+      "packedFragments": 3,
+      "headerBytesWritten": 3579687,
+      "maxTailCharacters": 60672,
+      "maxAppendsInFlight": 1,
+      "parseCalls": 3,
+      "partialSnapshotBytes": 320132,
+      "firstCaptureLatencyMs": 7.605379999999968,
+      "elapsedMs": 234.64499300000034,
+      "cpuMicros": {
+        "user": 273631,
+        "system": 20360
+      },
+      "peakHeapBytes": 163794336,
+      "sampledHeapGrowthBytes": 34995592
+    },
+    {
+      "workload": "expanded",
+      "cadence": "slow",
+      "mode": "unbatched-sdk",
+      "visibleBytes": 135682,
+      "nativeEvents": 530,
+      "enrichedEvents": 536,
+      "enrichedSnapshotBytes": 169702,
+      "appendMutations": 0,
+      "packedFragments": 0,
+      "headerBytesWritten": 0,
+      "maxTailCharacters": 0,
+      "maxAppendsInFlight": 0,
+      "parseCalls": 530,
+      "partialSnapshotBytes": 36047654,
+      "elapsedMs": 1298.7571900000003,
+      "cpuMicros": {
+        "user": 736161,
+        "system": 199671
+      },
+      "peakHeapBytes": 291464752,
+      "sampledHeapGrowthBytes": 159523128
+    },
+    {
+      "workload": "expanded",
+      "cadence": "slow",
+      "mode": "production",
+      "visibleBytes": 135682,
+      "nativeEvents": 530,
+      "enrichedEvents": 3,
+      "enrichedSnapshotBytes": 0,
+      "appendMutations": 530,
+      "packedFragments": 3,
+      "headerBytesWritten": 15936370,
+      "maxTailCharacters": 61184,
+      "maxAppendsInFlight": 1,
+      "parseCalls": 3,
+      "partialSnapshotBytes": 320132,
+      "firstCaptureLatencyMs": 9.568450000000212,
+      "elapsedMs": 1199.4543090000002,
+      "cpuMicros": {
+        "user": 737962,
+        "system": 74052
+      },
+      "peakHeapBytes": 167114888,
+      "sampledHeapGrowthBytes": 37272400
+    }
+  ],
+  "limitations": [
+    "Replay uses the installed real SDK and Convex-test storage, not network/provider or production database timings",
+    "Peak heap is sampled at stream/mutation boundaries; native process RSS includes Vite loader overhead",
+    "The expanded workload repeats retained material inside valid JSON; it is an admitted-large fixture, not another observed generation"
+  ],
+  "piLogInputPath": "/home/abdwhb/.cache/workbench-evaluations/sources-workflow-no-legacy/retained-runtime-pi-log.json",
+  "piLogReplay": [
+    {
+      "workload": "actual-retained",
+      "logHash": "9cf2220f173f9d440f97387c532b4c15cfed8a055775d85ea758d2dd40009a73",
+      "commits": 14,
+      "bytes": 34856,
+      "twentyFallbackReadsBytes": 697120,
+      "samples": [
+        {
+          "elapsedMs": 3.474130999999943,
+          "cpuMicros": {
+            "user": 15012,
+            "system": 0
+          },
+          "scanPages": 1,
+          "heapBytes": 164130296
+        },
+        {
+          "elapsedMs": 1.4578209999999672,
+          "cpuMicros": {
+            "user": 6178,
+            "system": 0
+          },
+          "scanPages": 1,
+          "heapBytes": 163880160
+        },
+        {
+          "elapsedMs": 1.8253569999997126,
+          "cpuMicros": {
+            "user": 1821,
+            "system": 0
+          },
+          "scanPages": 1,
+          "heapBytes": 163864624
+        }
+      ]
+    },
+    {
+      "workload": "admitted-large",
+      "logHash": "6cf3a35bf7925d44a22407e114e6a6c69bc0d1be330b811453464121693eb068",
+      "commits": 1024,
+      "bytes": 33352830,
+      "twentyFallbackReadsBytes": 667056600,
+      "samples": [
+        {
+          "elapsedMs": 123.48082199999953,
+          "cpuMicros": {
+            "user": 69218,
+            "system": 102376
+          },
+          "scanPages": 16,
+          "heapBytes": 197311168
+        },
+        {
+          "elapsedMs": 86.69616200000019,
+          "cpuMicros": {
+            "user": 75264,
+            "system": 64497
+          },
+          "scanPages": 16,
+          "heapBytes": 230781320
+        },
+        {
+          "elapsedMs": 57.68034299999999,
+          "cpuMicros": {
+            "user": 70586,
+            "system": 30376
+          },
+          "scanPages": 16,
+          "heapBytes": 230744168
+        }
+      ]
+    }
+  ],
+  "polling": {
+    "snapshotQueries": 2,
+    "snapshotBytes": 1512,
+    "requestBytes": 25000,
+    "hydrations": 1,
+    "fragmentReads": 0,
+    "artifacts": 1
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "boundary": "isolated next native tool-call choice; no application execution or adaptive mission",
+  "model": "z-ai/glm-5.3-flash",
+  "effort": "high",
+  "provider": "Wafer",
+  "calls": 12,
+  "maxCostUsd": 0.25,
+  "conservativeReservationUsd": 0.029113799999999992,
+  "maxCompletionTokens": 8192,
+  "perRequestTimeoutMs": 90000,
+  "retries": 0,
+  "cases": [
+    {
+      "id": "initial",
+      "initial": true
+    },
+    {
+      "id": "repair",
+      "initial": true
+    },
+    {
+      "id": "update",
+      "initial": false
+    }
+  ],
+  "comparison": "Only tool name differs between paired requests; lifecycle availability and equivalent input schemas remain matched. Other tools are not offered. This measures naming/interface response, not runtime integration.",
+  "criteria": [
+    "exact offered tool selected once",
+    "arguments satisfy offered structure and real business write validation",
+    "initial and repair include a valid open activity anchor",
+    "update preserves scope and prior question while adding the requested question",
+    "no unsupported success without a tool call"
+  ],
+  "stop": "12 attempts or first unknown transport/charge outcome; no additional repeats",
+  "requestDigest": "23e6fb0e30ef8b8d3f4707405b7300382196d366e1e53fcdcd54d3e555535999"
+}

@@ -1,0 +1,21 @@
+{
+  "head": "a18e82a71de38db7fe34cba75e51447129e19464",
+  "files": {
+    "convex/domain/framingContracts.ts": "d1d1431320b2ea6bfcfeb863b558e7c729035b48970c01dabebff851f5ea9e50",
+    "convex/domain/framingProvenance.ts": "8d71e0a64a1c3343ef2692b2f28000712981f68ebbb4184184bc59b0d136f748",
+    "convex/domain/workbenchContracts.ts": "f53d538eee7dc0c6455fcc749eb9e25734a794fdf0104609e3cd740e63c654fc",
+    "convex/domain/workbenchAgent.ts": "e343c45f16fdb51006470a9aff8b50e7b0aebe083e370e8fbf34e70073961253",
+    "convex/domain/workbenchAgentOperations.ts": "2dd19c36c947c5aec0a244dbe68c75c6005632da48ad67a59e0f3239aa5ee5c5",
+    "convex/domain/framingEditAuthority.ts": "58299f247a2402823d433829c606dbd4be2c5dd19b3e4e750535f25669298508",
+    "convex/framing.ts": "bb381b692f96b34910294e0502510f3015684dde02ad745d6187408e8003f26e",
+    "convex/workbenchPublicContext.ts": "e2e3aaf83383d829298aebbdc1f32c6f5da6832d36a37995ed149cf30122c18c",
+    "convex/workbenchPublicContextActions.ts": "5ec442b466efeabd6baf76d1aa7c010b8af08cbde0dcd10f8ee8ede115272bb9",
+    "convex/execution/invocationLifecycle.ts": "e34ee8d21745bb11036cc265ecd71ea695a58ba9585eb485a792fb9ba1497a95",
+    "convex/execution/agentDefinition.ts": "913df100fe2a3c95a72ad1c339bdc9e991339a4de034834d2a1808a061021e92",
+    "convex/execution/operations.ts": "abc1229923d726a09c3f9e9845bbc3107cc6f6876ed23dfdbb28a31e213b19d1",
+    "convex/resourcePolicy.ts": "44b9e397502ab600fc0a13bf5610421570f7f4cb419bbcd802d06c5146163f4b",
+    "convex/providerCalls.ts": "de183cda4149b5d5e403557e2e844d026198118afa8b0e5250df05f502213597",
+    "convex/integrations/modelInput.ts": "8cca6d9b22cc4cd124484fbbcddf4f9a472effe8760b48466170e0ec0fe4066d",
+    "convex/integrations/piMission.ts": "1c3d241333ce2523cf6bcd83bb327957859a1074ba1ac4ed22f9fc38663a91b4"
+  }
+}

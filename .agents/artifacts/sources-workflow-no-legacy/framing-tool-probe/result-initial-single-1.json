@@ -1,0 +1,62 @@
+{
+  "id": "initial-single-1",
+  "startedAt": "2026-11-20T08:10:22.180Z",
+  "elapsedMs": 4571,
+  "status": 200,
+  "body": {
+    "id": "gen-1795162222-PS0mEo63M14bDp8vermh",
+    "object": "chat.completion",
+    "created": 1795162222,
+    "model": "z-ai/glm-5.3-flash",
+    "provider": "Wafer",
+    "system_fingerprint": "vllm-0.33.0rc1.dev229+g3966924d5-tp2-786bac74",
+    "service_tier": null,
+    "choices": [
+      {
+        "index": 0,
+        "logprobs": null,
+        "finish_reason": "tool_calls",
+        "native_finish_reason": "tool_calls",
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "refusal": null,
+          "tool_calls": [
+            {
+              "type": "function",
+              "index": 0,
+              "id": "chatcmpl-tool-9a0dd2bf376599d6",
+              "function": {
+                "name": "adjust_framing",
+                "arguments": "{\"content\": {\"questions\": [{\"id\": \"q1\", \"rationale\": \"The analyst's question presupposes a division of labor between insurers and CCC during estimate review; mapping that division is useful under any interpretation of the announcement and grounds all later questions.\", \"shortLabel\": \"Estimate review workflow\", \"text\": \"What is the current workflow and division of labor between insurers and CCC during claims estimate review — which steps does CCC mediate and which do insurers control?\"}, {\"id\": \"q2\", \"rationale\": \"The 'can they bypass' question is ultimately about technical and contractual controls, so identify what currently constrains or enables direct insurer action on estimates.\", \"shortLabel\": \"Bypass mechanisms\", \"text\": \"What mechanisms — integrations, permissions, API access, or contractual terms — currently determine whether an insurer can review, edit, or approve estimates without CCC's direct involvement?\"}, {\"id\": \"q3\", \"rationale\": \"The analyst explicitly frames the question as being 'after the latest announcement' without naming it; the actual announcement is unresolved, so the consequence is investigated as an open condition rather than assumed in the premise.\", \"shortLabel\": \"Announcement consequence (conditional)\", \"text\": \"Did the latest announcement change whether insurers can bypass CCC during estimate review — and if so, how do those changes alter the workflow and controls identified in the first two questions?\"}], \"scope\": \"Analyst activity: \\\"Can insurers bypass CCC during estimate review after the latest announcement?\\\" The program examines whether insurers can review, edit, or settle claims estimates without CCC's direct involvement, and what the most recent announcement may have changed about that workflow. No specific announcement has yet been established as the referenced event, so the event-dependent question remains conditional on what the announcement turns out to be.\"}, \"eventBasis\": {\"activityExcerpt\": \"Can insurers bypass CCC during estimate review after the latest announcement?\", \"conditions\": [{\"basis\": {\"excerpt\": \"after the latest announcement\", \"kind\": \"analyst\"}, \"hypothesis\": \"The referenced announcement may concern a CCC product or policy change affecting insurer estimate review — for example, expanded insurer-side tools or revised platform terms — that would alter whether insurers can operate independently of CCC during review.\", \"questionId\": \"q3\"}], \"kind\": \"open\"}}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 1387,
+      "completion_tokens": 711,
+      "total_tokens": 2098,
+      "cost": 0.000189078,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.000189078,
+        "upstream_inference_prompt_cost": 0.000058254,
+        "upstream_inference_completions_cost": 0.000130824
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 207,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    }
+  }
+}

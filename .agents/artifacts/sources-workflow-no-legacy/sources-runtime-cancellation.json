@@ -1,0 +1,22 @@
+{
+  "status": "passed",
+  "mode": "cancel",
+  "target": "http://127.0.0.1:35120",
+  "gateCalls": 1,
+  "records": [
+    {
+      "event": "waiting_worker_released",
+      "at": 1795087328683,
+      "requestId": "k57bamvj69t2mn0rfpbsvjc6a18jgsnq",
+      "scheduledJobId": "kc2anynadwdaxswxp2qp0ns90h8jgs2j"
+    },
+    {
+      "event": "cancelled_without_adoption",
+      "generation": 5,
+      "outcome": {
+        "code": "stale_execution",
+        "kind": "unavailable"
+      }
+    }
+  ]
+}

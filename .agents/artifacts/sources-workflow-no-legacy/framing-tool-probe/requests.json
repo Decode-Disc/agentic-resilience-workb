@@ -1,0 +1,3062 @@
+[
+  {
+    "id": "initial-single-1",
+    "caseId": "initial",
+    "arm": "single",
+    "repeat": 1,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": null,
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Create the initial proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "adjust_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "activityExcerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content",
+                "eventBasis"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Analyst: Can insurers bypass CCC during estimate review after the latest announcement?\nCurrent framing: empty scope, no questions. No public event has been established. Prepare and save a useful provisional program now, preserving the activity and keeping event-specific assumptions open."
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "initial-split-1",
+    "caseId": "initial",
+    "arm": "split",
+    "repeat": 1,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": null,
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Create the initial proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "create_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "activityExcerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content",
+                "eventBasis"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Analyst: Can insurers bypass CCC during estimate review after the latest announcement?\nCurrent framing: empty scope, no questions. No public event has been established. Prepare and save a useful provisional program now, preserving the activity and keeping event-specific assumptions open."
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "repair-single-1",
+    "caseId": "repair",
+    "arm": "single",
+    "repeat": 1,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": null,
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Create the initial proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "adjust_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "activityExcerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content",
+                "eventBasis"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Analyst: Can insurers bypass CCC during estimate review after the latest announcement?\nCurrent framing remains empty. The preceding attempt was refused. Correct the indicated missing field in that proposal and submit the corrected write."
+        },
+        {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "retained_refusal",
+              "type": "function",
+              "function": {
+                "name": "adjust_framing",
+                "arguments": "{\"content\":{\"questions\":[{\"id\":\"workflow-role\",\"rationale\":\"Before evaluating bypass, establish what part of estimate review CCC's tools cover and whether an insurer can execute that step outside CCC.\",\"shortLabel\":\"CCC's estimate-review role\",\"text\":\"In the insurer estimate-review workflow, which steps does CCC's estimate-review tooling perform for insurers (e.g., receiving repairer-written estimates, applying insurer rules, routing for approval or reinspection), and which steps can an insurer execute without CCC?\"},{\"id\":\"bypass-feasibility\",\"rationale\":\"A new solution could lower the cost of using CCC, but it does not remove the option to review outside CCC. This question tests whether bypass is technically and contractually available regardless of the announcement.\",\"shortLabel\":\"Bypass feasibility\",\"text\":\"Can insurers review repairer-written estimates without routing them through CCC-hosted workflows — e.g., via in-house appraisers, third-party review services, or insurer-built tools — and what contract terms, network connections, or data access enable or prevent this?\"},{\"id\":\"reinspection-impact\",\"rationale\":\"The announcement AI-powered solution aimed to speed up insurer review of estimates, not to make bypass harder or easier; investigate whether it changed the bypass decision.\",\"shortLabel\":\"Reinspection-launch impact\",\"text\":\"Does CCC's Intelligent Reinspection launch change the cost or capability of estimate review in a way that makes bypass more or less attractive for insurers?\"},{\"id\":\"take-private-impact\",\"rationale\":\"An acquisition event can alter pricing pressure, contract terms, and strategic direction; this tests whether that pressure changes the bypass calculation for insurers.\",\"shortLabel\":\"Take-private impact\",\"text\":\"Does the GTCR/Elliott acquisition (announced October 15, 2026) or the pending leveraged-buyout financing affect insurers' ability or incentive to bypass CCC during estimate review?\"},{\"id\":\"switching-cost\",\"rationale\":\"Bypass depends on network effects and switching costs as much as on features; test whether insurers can substitute CCC for alternative review processes without losing speed or repairer connectivity.\",\"shortLabel\":\"Substitution economics\",\"text\":\"How do network effects, switching costs, and repairer connectivity shape whether insurers can substitute alternative estimate-review processes for CCC's without losing cycle time or repairer relationships?\"}],\"scope\":\"Can insurers bypass CCC during estimate review after the latest announcement?\"},\"eventBasis\":{\"conditions\":[{\"basis\":{\"excerpt\":\"Can insurers bypass CCC during estimate review after the latest announcement?\",\"kind\":\"analyst\"},\"hypothesis\":\"The announcement refers to CCC's estimate-review offering (CCC Intelligent Reinspection, announced July 30, 2024), not the GTCR/Elliott take-private announcement of October 15, 2026. Alternative hypothesis: the analyst means the most recent dated announcement, which is the October 15, 2026 take-private agreement. Which announcement the analyst intends materially changes which program questions matter.\",\"questionId\":\"reinspection-impact\"}],\"kind\":\"open\"}}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "retained_refusal",
+          "content": "{\"kind\":\"refused\",\"code\":\"framing_event_basis_invalid\",\"validation\":{\"path\":\"eventBasis.activityExcerpt\",\"expected\":\"Copy a nonblank excerpt of the analyst's activity or open request verbatim from the active message and include it in content.scope.\"},\"diagnostic\":\"Supply a valid eventBasis: none for ordinary framing, open for an unresolved event, an exact analyst excerpt, or a public label with readIds from adopted passages.\"}"
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "repair-split-1",
+    "caseId": "repair",
+    "arm": "split",
+    "repeat": 1,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": null,
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Create the initial proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "create_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "activityExcerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content",
+                "eventBasis"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Analyst: Can insurers bypass CCC during estimate review after the latest announcement?\nCurrent framing remains empty. The preceding attempt was refused. Correct the indicated missing field in that proposal and submit the corrected write."
+        },
+        {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "retained_refusal",
+              "type": "function",
+              "function": {
+                "name": "create_framing",
+                "arguments": "{\"content\":{\"questions\":[{\"id\":\"workflow-role\",\"rationale\":\"Before evaluating bypass, establish what part of estimate review CCC's tools cover and whether an insurer can execute that step outside CCC.\",\"shortLabel\":\"CCC's estimate-review role\",\"text\":\"In the insurer estimate-review workflow, which steps does CCC's estimate-review tooling perform for insurers (e.g., receiving repairer-written estimates, applying insurer rules, routing for approval or reinspection), and which steps can an insurer execute without CCC?\"},{\"id\":\"bypass-feasibility\",\"rationale\":\"A new solution could lower the cost of using CCC, but it does not remove the option to review outside CCC. This question tests whether bypass is technically and contractually available regardless of the announcement.\",\"shortLabel\":\"Bypass feasibility\",\"text\":\"Can insurers review repairer-written estimates without routing them through CCC-hosted workflows — e.g., via in-house appraisers, third-party review services, or insurer-built tools — and what contract terms, network connections, or data access enable or prevent this?\"},{\"id\":\"reinspection-impact\",\"rationale\":\"The announcement AI-powered solution aimed to speed up insurer review of estimates, not to make bypass harder or easier; investigate whether it changed the bypass decision.\",\"shortLabel\":\"Reinspection-launch impact\",\"text\":\"Does CCC's Intelligent Reinspection launch change the cost or capability of estimate review in a way that makes bypass more or less attractive for insurers?\"},{\"id\":\"take-private-impact\",\"rationale\":\"An acquisition event can alter pricing pressure, contract terms, and strategic direction; this tests whether that pressure changes the bypass calculation for insurers.\",\"shortLabel\":\"Take-private impact\",\"text\":\"Does the GTCR/Elliott acquisition (announced October 15, 2026) or the pending leveraged-buyout financing affect insurers' ability or incentive to bypass CCC during estimate review?\"},{\"id\":\"switching-cost\",\"rationale\":\"Bypass depends on network effects and switching costs as much as on features; test whether insurers can substitute CCC for alternative review processes without losing speed or repairer connectivity.\",\"shortLabel\":\"Substitution economics\",\"text\":\"How do network effects, switching costs, and repairer connectivity shape whether insurers can substitute alternative estimate-review processes for CCC's without losing cycle time or repairer relationships?\"}],\"scope\":\"Can insurers bypass CCC during estimate review after the latest announcement?\"},\"eventBasis\":{\"conditions\":[{\"basis\":{\"excerpt\":\"Can insurers bypass CCC during estimate review after the latest announcement?\",\"kind\":\"analyst\"},\"hypothesis\":\"The announcement refers to CCC's estimate-review offering (CCC Intelligent Reinspection, announced July 30, 2024), not the GTCR/Elliott take-private announcement of October 15, 2026. Alternative hypothesis: the analyst means the most recent dated announcement, which is the October 15, 2026 take-private agreement. Which announcement the analyst intends materially changes which program questions matter.\",\"questionId\":\"reinspection-impact\"}],\"kind\":\"open\"}}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "retained_refusal",
+          "content": "{\"kind\":\"refused\",\"code\":\"framing_event_basis_invalid\",\"validation\":{\"path\":\"eventBasis.activityExcerpt\",\"expected\":\"Copy a nonblank excerpt of the analyst's activity or open request verbatim from the active message and include it in content.scope.\"},\"diagnostic\":\"Supply a valid eventBasis: none for ordinary framing, open for an unresolved event, an exact analyst excerpt, or a public label with readIds from adopted passages.\"}"
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "update-single-1",
+    "caseId": "update",
+    "arm": "single",
+    "repeat": 1,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": {
+      "content": {
+        "scope": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "questions": [
+          {
+            "id": "bypass",
+            "shortLabel": "Insurer bypass",
+            "text": "Which estimate-review dependencies constrain insurer bypass of CCC?",
+            "rationale": "Identify control points without assuming bypass is possible."
+          }
+        ]
+      },
+      "eventBasis": {
+        "kind": "open",
+        "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?"
+      }
+    },
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Revise the existing proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "adjust_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Active analyst message: Keep the existing scope exactly. Add one question about switching costs; retain the existing question unchanged.\nCurrent saved framing: {\"content\":{\"scope\":\"Can insurers bypass CCC during estimate review after the latest announcement?\",\"questions\":[{\"id\":\"bypass\",\"shortLabel\":\"Insurer bypass\",\"text\":\"Which estimate-review dependencies constrain insurer bypass of CCC?\",\"rationale\":\"Identify control points without assuming bypass is possible.\"}]},\"eventBasis\":{\"kind\":\"open\",\"activityExcerpt\":\"Can insurers bypass CCC during estimate review after the latest announcement?\"}}\nNo public event has been established. Save the requested revision now."
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "update-split-1",
+    "caseId": "update",
+    "arm": "split",
+    "repeat": 1,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": {
+      "content": {
+        "scope": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "questions": [
+          {
+            "id": "bypass",
+            "shortLabel": "Insurer bypass",
+            "text": "Which estimate-review dependencies constrain insurer bypass of CCC?",
+            "rationale": "Identify control points without assuming bypass is possible."
+          }
+        ]
+      },
+      "eventBasis": {
+        "kind": "open",
+        "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?"
+      }
+    },
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Revise the existing proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "revise_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Active analyst message: Keep the existing scope exactly. Add one question about switching costs; retain the existing question unchanged.\nCurrent saved framing: {\"content\":{\"scope\":\"Can insurers bypass CCC during estimate review after the latest announcement?\",\"questions\":[{\"id\":\"bypass\",\"shortLabel\":\"Insurer bypass\",\"text\":\"Which estimate-review dependencies constrain insurer bypass of CCC?\",\"rationale\":\"Identify control points without assuming bypass is possible.\"}]},\"eventBasis\":{\"kind\":\"open\",\"activityExcerpt\":\"Can insurers bypass CCC during estimate review after the latest announcement?\"}}\nNo public event has been established. Save the requested revision now."
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "initial-split-2",
+    "caseId": "initial",
+    "arm": "split",
+    "repeat": 2,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": null,
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Create the initial proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "create_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "activityExcerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content",
+                "eventBasis"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Analyst: Can insurers bypass CCC during estimate review after the latest announcement?\nCurrent framing: empty scope, no questions. No public event has been established. Prepare and save a useful provisional program now, preserving the activity and keeping event-specific assumptions open."
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "initial-single-2",
+    "caseId": "initial",
+    "arm": "single",
+    "repeat": 2,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": null,
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Create the initial proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "adjust_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "activityExcerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content",
+                "eventBasis"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Analyst: Can insurers bypass CCC during estimate review after the latest announcement?\nCurrent framing: empty scope, no questions. No public event has been established. Prepare and save a useful provisional program now, preserving the activity and keeping event-specific assumptions open."
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "repair-split-2",
+    "caseId": "repair",
+    "arm": "split",
+    "repeat": 2,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": null,
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Create the initial proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "create_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "activityExcerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content",
+                "eventBasis"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Analyst: Can insurers bypass CCC during estimate review after the latest announcement?\nCurrent framing remains empty. The preceding attempt was refused. Correct the indicated missing field in that proposal and submit the corrected write."
+        },
+        {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "retained_refusal",
+              "type": "function",
+              "function": {
+                "name": "create_framing",
+                "arguments": "{\"content\":{\"questions\":[{\"id\":\"workflow-role\",\"rationale\":\"Before evaluating bypass, establish what part of estimate review CCC's tools cover and whether an insurer can execute that step outside CCC.\",\"shortLabel\":\"CCC's estimate-review role\",\"text\":\"In the insurer estimate-review workflow, which steps does CCC's estimate-review tooling perform for insurers (e.g., receiving repairer-written estimates, applying insurer rules, routing for approval or reinspection), and which steps can an insurer execute without CCC?\"},{\"id\":\"bypass-feasibility\",\"rationale\":\"A new solution could lower the cost of using CCC, but it does not remove the option to review outside CCC. This question tests whether bypass is technically and contractually available regardless of the announcement.\",\"shortLabel\":\"Bypass feasibility\",\"text\":\"Can insurers review repairer-written estimates without routing them through CCC-hosted workflows — e.g., via in-house appraisers, third-party review services, or insurer-built tools — and what contract terms, network connections, or data access enable or prevent this?\"},{\"id\":\"reinspection-impact\",\"rationale\":\"The announcement AI-powered solution aimed to speed up insurer review of estimates, not to make bypass harder or easier; investigate whether it changed the bypass decision.\",\"shortLabel\":\"Reinspection-launch impact\",\"text\":\"Does CCC's Intelligent Reinspection launch change the cost or capability of estimate review in a way that makes bypass more or less attractive for insurers?\"},{\"id\":\"take-private-impact\",\"rationale\":\"An acquisition event can alter pricing pressure, contract terms, and strategic direction; this tests whether that pressure changes the bypass calculation for insurers.\",\"shortLabel\":\"Take-private impact\",\"text\":\"Does the GTCR/Elliott acquisition (announced October 15, 2026) or the pending leveraged-buyout financing affect insurers' ability or incentive to bypass CCC during estimate review?\"},{\"id\":\"switching-cost\",\"rationale\":\"Bypass depends on network effects and switching costs as much as on features; test whether insurers can substitute CCC for alternative review processes without losing speed or repairer connectivity.\",\"shortLabel\":\"Substitution economics\",\"text\":\"How do network effects, switching costs, and repairer connectivity shape whether insurers can substitute alternative estimate-review processes for CCC's without losing cycle time or repairer relationships?\"}],\"scope\":\"Can insurers bypass CCC during estimate review after the latest announcement?\"},\"eventBasis\":{\"conditions\":[{\"basis\":{\"excerpt\":\"Can insurers bypass CCC during estimate review after the latest announcement?\",\"kind\":\"analyst\"},\"hypothesis\":\"The announcement refers to CCC's estimate-review offering (CCC Intelligent Reinspection, announced July 30, 2024), not the GTCR/Elliott take-private announcement of October 15, 2026. Alternative hypothesis: the analyst means the most recent dated announcement, which is the October 15, 2026 take-private agreement. Which announcement the analyst intends materially changes which program questions matter.\",\"questionId\":\"reinspection-impact\"}],\"kind\":\"open\"}}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "retained_refusal",
+          "content": "{\"kind\":\"refused\",\"code\":\"framing_event_basis_invalid\",\"validation\":{\"path\":\"eventBasis.activityExcerpt\",\"expected\":\"Copy a nonblank excerpt of the analyst's activity or open request verbatim from the active message and include it in content.scope.\"},\"diagnostic\":\"Supply a valid eventBasis: none for ordinary framing, open for an unresolved event, an exact analyst excerpt, or a public label with readIds from adopted passages.\"}"
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "repair-single-2",
+    "caseId": "repair",
+    "arm": "single",
+    "repeat": 2,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": null,
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Create the initial proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "adjust_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "activityExcerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content",
+                "eventBasis"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Analyst: Can insurers bypass CCC during estimate review after the latest announcement?\nCurrent framing remains empty. The preceding attempt was refused. Correct the indicated missing field in that proposal and submit the corrected write."
+        },
+        {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "retained_refusal",
+              "type": "function",
+              "function": {
+                "name": "adjust_framing",
+                "arguments": "{\"content\":{\"questions\":[{\"id\":\"workflow-role\",\"rationale\":\"Before evaluating bypass, establish what part of estimate review CCC's tools cover and whether an insurer can execute that step outside CCC.\",\"shortLabel\":\"CCC's estimate-review role\",\"text\":\"In the insurer estimate-review workflow, which steps does CCC's estimate-review tooling perform for insurers (e.g., receiving repairer-written estimates, applying insurer rules, routing for approval or reinspection), and which steps can an insurer execute without CCC?\"},{\"id\":\"bypass-feasibility\",\"rationale\":\"A new solution could lower the cost of using CCC, but it does not remove the option to review outside CCC. This question tests whether bypass is technically and contractually available regardless of the announcement.\",\"shortLabel\":\"Bypass feasibility\",\"text\":\"Can insurers review repairer-written estimates without routing them through CCC-hosted workflows — e.g., via in-house appraisers, third-party review services, or insurer-built tools — and what contract terms, network connections, or data access enable or prevent this?\"},{\"id\":\"reinspection-impact\",\"rationale\":\"The announcement AI-powered solution aimed to speed up insurer review of estimates, not to make bypass harder or easier; investigate whether it changed the bypass decision.\",\"shortLabel\":\"Reinspection-launch impact\",\"text\":\"Does CCC's Intelligent Reinspection launch change the cost or capability of estimate review in a way that makes bypass more or less attractive for insurers?\"},{\"id\":\"take-private-impact\",\"rationale\":\"An acquisition event can alter pricing pressure, contract terms, and strategic direction; this tests whether that pressure changes the bypass calculation for insurers.\",\"shortLabel\":\"Take-private impact\",\"text\":\"Does the GTCR/Elliott acquisition (announced October 15, 2026) or the pending leveraged-buyout financing affect insurers' ability or incentive to bypass CCC during estimate review?\"},{\"id\":\"switching-cost\",\"rationale\":\"Bypass depends on network effects and switching costs as much as on features; test whether insurers can substitute CCC for alternative review processes without losing speed or repairer connectivity.\",\"shortLabel\":\"Substitution economics\",\"text\":\"How do network effects, switching costs, and repairer connectivity shape whether insurers can substitute alternative estimate-review processes for CCC's without losing cycle time or repairer relationships?\"}],\"scope\":\"Can insurers bypass CCC during estimate review after the latest announcement?\"},\"eventBasis\":{\"conditions\":[{\"basis\":{\"excerpt\":\"Can insurers bypass CCC during estimate review after the latest announcement?\",\"kind\":\"analyst\"},\"hypothesis\":\"The announcement refers to CCC's estimate-review offering (CCC Intelligent Reinspection, announced July 30, 2024), not the GTCR/Elliott take-private announcement of October 15, 2026. Alternative hypothesis: the analyst means the most recent dated announcement, which is the October 15, 2026 take-private agreement. Which announcement the analyst intends materially changes which program questions matter.\",\"questionId\":\"reinspection-impact\"}],\"kind\":\"open\"}}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "retained_refusal",
+          "content": "{\"kind\":\"refused\",\"code\":\"framing_event_basis_invalid\",\"validation\":{\"path\":\"eventBasis.activityExcerpt\",\"expected\":\"Copy a nonblank excerpt of the analyst's activity or open request verbatim from the active message and include it in content.scope.\"},\"diagnostic\":\"Supply a valid eventBasis: none for ordinary framing, open for an unresolved event, an exact analyst excerpt, or a public label with readIds from adopted passages.\"}"
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "update-split-2",
+    "caseId": "update",
+    "arm": "split",
+    "repeat": 2,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": {
+      "content": {
+        "scope": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "questions": [
+          {
+            "id": "bypass",
+            "shortLabel": "Insurer bypass",
+            "text": "Which estimate-review dependencies constrain insurer bypass of CCC?",
+            "rationale": "Identify control points without assuming bypass is possible."
+          }
+        ]
+      },
+      "eventBasis": {
+        "kind": "open",
+        "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?"
+      }
+    },
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Revise the existing proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "revise_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Active analyst message: Keep the existing scope exactly. Add one question about switching costs; retain the existing question unchanged.\nCurrent saved framing: {\"content\":{\"scope\":\"Can insurers bypass CCC during estimate review after the latest announcement?\",\"questions\":[{\"id\":\"bypass\",\"shortLabel\":\"Insurer bypass\",\"text\":\"Which estimate-review dependencies constrain insurer bypass of CCC?\",\"rationale\":\"Identify control points without assuming bypass is possible.\"}]},\"eventBasis\":{\"kind\":\"open\",\"activityExcerpt\":\"Can insurers bypass CCC during estimate review after the latest announcement?\"}}\nNo public event has been established. Save the requested revision now."
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  },
+  {
+    "id": "update-single-2",
+    "caseId": "update",
+    "arm": "single",
+    "repeat": 2,
+    "original": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "current": {
+      "content": {
+        "scope": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "questions": [
+          {
+            "id": "bypass",
+            "shortLabel": "Insurer bypass",
+            "text": "Which estimate-review dependencies constrain insurer bypass of CCC?",
+            "rationale": "Identify control points without assuming bypass is possible."
+          }
+        ]
+      },
+      "eventBasis": {
+        "kind": "open",
+        "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?"
+      }
+    },
+    "body": {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": {
+        "only": [
+          "wafer"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "high",
+        "enabled": true,
+        "exclude": true
+      },
+      "temperature": 0,
+      "max_completion_tokens": 8192,
+      "stream": false,
+      "tools": [
+        {
+          "function": {
+            "description": "Revise the existing proposed activity and research questions before Start research. Preserve explicit analyst adjustments. The harness binds the observed revision; stale edits are refused.",
+            "name": "adjust_framing",
+            "parameters": {
+              "~standard": {
+                "jsonSchema": {},
+                "vendor": "zod",
+                "version": 1
+              },
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "shortLabel": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "text",
+                          "rationale",
+                          "shortLabel"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "questions"
+                  ],
+                  "type": "object"
+                },
+                "eventBasis": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "activityExcerpt": {
+                          "type": "string",
+                          "description": "A verbatim excerpt of the analyst activity or request, also present in content.scope. This is separate from condition-basis excerpts."
+                        },
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basis": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "excerpt": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "analyst",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "excerpt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "readIds": {
+                                        "items": {
+                                          "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "readIds"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "hypothesis": {
+                                "type": "string"
+                              },
+                              "questionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "questionId",
+                              "hypothesis",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "const": "open",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "excerpt": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "analyst",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "excerpt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "public",
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "readIds": {
+                          "items": {
+                            "description": "Id<agentOperationRequests>: copy an observed identifier of this type; identifiers from other tables are invalid.",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label",
+                        "readIds"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "content"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "tool_choice": "auto",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Workbench, preparing an analyst's research program before Start research. Use only the supplied state and observations. Save the requested proposal with the available framing tool. Do not start research or invent public facts. The analyst's activity and explicit edits remain authoritative. An unresolved event uses an open basis. For a new open scope, activityExcerpt must quote the analyst's words verbatim and occur in content.scope. The harness owns revision and message identifiers.\n\n---\nname: workbench-framing\ndescription: Prepare a faithful economic research program when an analyst request leaves the relevant activity, event or interpretation uncertain.\n---\n\n# Framing an economic inquiry\n\nConsult this method when moving from an analyst's request to a proposed activity and research questions, especially when an announcement could change the program. Read the [worked cases](examples/worked-cases.md) for ambiguous events and the [documentary distinctions](../references/documentary-method.md) for attribution and dates.\n\nBegin with the activity, actors and economic question the analyst actually supplied. Preserve their explicit refinements. Separate their words from a system hypothesis. An analyst's mention of an announcement does not establish that it changes the workflow.\n\nUse the message date and coverage priority to orient discovery. Compare plausible events by their connection to the requested activity, their observed dates and available supporting passages. Read material that can distinguish those interpretations. A newer result can be less relevant; an older release can still explain an explicitly named event. Never describe an event as the latest found when returned observations contradict that statement.\n\nPrepare common questions that remain useful across plausible interpretations. Make only event-dependent questions conditional, naming the unresolved condition and its actual basis. Investigate possible economic consequences as questions rather than adding them to the request's premise.\n\nContinue factual checks while they could change the proposed program. When the remaining work is what the program will investigate, present the useful draft and explain how the readings shaped it. If an unresolved distinction materially changes preparation, ask one focused clarification alongside a system-proposed scope. An open event can coexist with a launchable provisional program.\n"
+        },
+        {
+          "role": "user",
+          "content": "Active analyst message: Keep the existing scope exactly. Add one question about switching costs; retain the existing question unchanged.\nCurrent saved framing: {\"content\":{\"scope\":\"Can insurers bypass CCC during estimate review after the latest announcement?\",\"questions\":[{\"id\":\"bypass\",\"shortLabel\":\"Insurer bypass\",\"text\":\"Which estimate-review dependencies constrain insurer bypass of CCC?\",\"rationale\":\"Identify control points without assuming bypass is possible.\"}]},\"eventBasis\":{\"kind\":\"open\",\"activityExcerpt\":\"Can insurers bypass CCC during estimate review after the latest announcement?\"}}\nNo public event has been established. Save the requested revision now."
+        }
+      ],
+      "usage": {
+        "include": true
+      }
+    }
+  }
+]

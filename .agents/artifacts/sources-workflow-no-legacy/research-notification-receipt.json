@@ -1,0 +1,12 @@
+{
+  "project": "agentic-resilience-workbench",
+  "sender": "Codex",
+  "event": "research-complete",
+  "key": "sources-evaluator-d8dda4fcd742ef66845af0a56e99445bf84c027c53fcde8fe280701727908a06",
+  "revision": "d8dda4fcd742ef66845af0a56e99445bf84c027c53fcde8fe280701727908a06",
+  "message": "Recherche Sources et \u00e9valuateur termin\u00e9e : perte de suivi durable et d\u00e9faut de capture \u00e9tay\u00e9s, divergence de comptabilit\u00e9 confirm\u00e9e. 200 tests cibl\u00e9s et sonde locale r\u00e9ussis. Cause des 45 867 tokens toujours inconnue ; aucun correctif ni appel mod\u00e8le. Rapport RPI pr\u00eat pour la conception technique.",
+  "accepted": true,
+  "duplicate": false,
+  "messageId": 885,
+  "receipt": "/home/abdwhb/.local/state/agent-stack/notify/911287c73843d107b34b8f5e89d614f48923b143359cec4cae3d85e625eccb4d.json"
+}

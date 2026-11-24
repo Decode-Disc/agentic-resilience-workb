@@ -1,0 +1,92 @@
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { examineDocumentaryContributions } from "@convex/integrations/documentaryControl";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { Output, streamText } from "ai";
+import { z } from "zod";
+import { afterAll, expect, test } from "vitest";
+
+// Temporary current-behavior research probe. Only external HTTP is replaced.
+const artifact = ".agents/artifacts/sources-workflow-no-legacy/generation-resilience-research";
+const observations: Record<string, unknown> = {};
+const base = "/home/abdwhb/.cache/workbench-evaluations/framing-fidelity-method-v3-20261121/shared-material-prepared/lots/lot-1/observations/before-cleanup-8facecc3-e50c-4911-967d-c96630c144b0/nvidia-sources-capture-handoff/";
+const historical = JSON.parse(readFileSync(`${base}invocations-9.json`, "utf8"));
+const request = JSON.parse(historical.payloads.find((p: {part: string}) => p.part === "request").json);
+const input = JSON.parse(request.input.messages[1].content);
+const route = request.route;
+const good = JSON.parse(readFileSync(`${base}invocations-11.json`, "utf8")).page[0].visibleOutputText;
+const digest = (s: string) => createHash("sha256").update(s).digest("hex");
+const frame = (content: string, finish: string | null = null) => `data: ${JSON.stringify({id:"research-offline",model:route.model,choices:[{index:0,delta:{content},finish_reason:finish}],...(finish ? {usage:{prompt_tokens:10,completion_tokens:10,total_tokens:20}} : {})})}\n\n`;
+const response = (wire: string) => new Response(wire,{headers:{"content-type":"text/event-stream"}});
+afterAll(() => {
+    mkdirSync(artifact,{recursive:true});
+    writeFileSync(`${artifact}/observations.json`,JSON.stringify(observations,null,2)+"\n");
+});
+
+test.each([
+    {name:"empty_stop",text:"",finish:"stop",done:true},
+    {name:"whitespace_stop",text:" \t\n ",finish:"stop",done:true},
+    {name:"partial_length",text:'{"findings":{},"coherence": ',finish:"length",done:true},
+    {name:"partial_eof",text:'{"findings":{},"coherence": ',finish:null,done:false},
+    {name:"valid_object_eof",text:good,finish:null,done:false},
+    {name:"empty_eof",text:"",finish:null,done:false},
+    {name:"done_without_finish",text:"",finish:null,done:true},
+])("characterizes current documentary outcome: $name",async(scenario)=>{
+    let captured="";
+    let seal: unknown;
+    const started=performance.now();
+    const result=await examineDocumentaryContributions(input,route,{
+        apiKey:"offline-only",
+        authority:{resourcePolicy:"authority_native_v1",deadlineAt:Date.now()+30000},
+        fetch:async()=>response((scenario.text || scenario.finish ? frame(scenario.text,scenario.finish) : "")+(scenario.done?"data: [DONE]\n\n":"")),
+        onVisibleText:async(text)=>{captured+=text;},
+        finishVisibleOutput:async(complete,reason)=>{seal={complete,reason};},
+    });
+    observations[scenario.name]={result:{...result,outputDiagnostic:result.outputDiagnostic?{...result.outputDiagnostic,output:undefined}:undefined,observableReplyJson:undefined},capturedLength:captured.length,seal,elapsedMs:performance.now()-started};
+    expect(captured).toBe(scenario.text);
+    expect(result.status).toBe("failed");
+});
+
+test("replays retained whitespace and measures only local deadline containment",async()=>{
+    const original:string=historical.page[0].visibleOutputText;
+    let captured="";let seal:unknown;let offset=0;let aborted=false;
+    const start=performance.now();
+    const result=await examineDocumentaryContributions(input,route,{
+        apiKey:"offline-only",authority:{resourcePolicy:"authority_native_v1",deadlineAt:Date.now()+1200},
+        onVisibleText:async(text)=>{captured+=text;},finishVisibleOutput:async(complete,reason)=>{seal={complete,reason};},
+        fetch:async(_url,init)=>new Response(new ReadableStream({
+            start(controller){init?.signal?.addEventListener("abort",()=>{aborted=true;controller.error(init.signal?.reason);},{once:true});},
+            pull(controller){if(offset>=original.length)return;const chunk=original.slice(offset,offset+4096);offset+=chunk.length;controller.enqueue(new TextEncoder().encode(frame(chunk)));},
+        }),{headers:{"content-type":"text/event-stream"}}),
+    });
+    observations.retainedReplay={elapsedMs:performance.now()-start,result:{...result,observableReplyJson:undefined},inputCharacters:original.length,capturedCharacters:captured.length,hash:digest(captured),seal,aborted};
+    expect(result).toMatchObject({status:"failed",errorCode:"request_timeout",retryable:false});
+    expect(captured).toBe(original);
+    expect(digest(captured)).toBe(historical.page[0].visibleOutput.contentHash);
+});
+
+test("native partial outputs distinguish changes inside strings from whitespace after a key",async()=>{
+    const parts=['{"text":"start','  ','\\n','end","coherence":','    ','\t','true}'];
+    let index=0;
+    const provider=createOpenRouter({apiKey:"offline-only",fetch:async()=>new Response(new ReadableStream({async pull(controller){await new Promise(r=>setTimeout(r,15));if(index<parts.length){controller.enqueue(new TextEncoder().encode(frame(parts[index++])));}else{controller.enqueue(new TextEncoder().encode(frame("","stop")+"data: [DONE]\n\n"));controller.close();}}}),{headers:{"content-type":"text/event-stream"}})});
+    const result=streamText({model:provider.chat(route.model),prompt:"offline",output:Output.object({schema:z.object({text:z.string(),coherence:z.boolean()})}),maxRetries:0});
+    const partials:unknown[]=[];
+    for await(const partial of result.partialOutputStream)partials.push(partial);
+    const output=await result.output;
+    observations.nativePartials={parts,partials,output};
+    expect(output).toEqual({text:"start  \nend",coherence:true});
+    expect(partials).toContainEqual({text:"start  "});
+});
+
+test("native chunk timeout permits continuous whitespace activity",async()=>{
+    let index=0;
+    const provider=createOpenRouter({apiKey:"offline-only",fetch:async()=>new Response(new ReadableStream({async pull(controller){await new Promise(r=>setTimeout(r,10));if(index++<40)controller.enqueue(new TextEncoder().encode(frame(" ")));else{controller.enqueue(new TextEncoder().encode(frame("","length")+"data: [DONE]\n\n"));controller.close();}}}),{headers:{"content-type":"text/event-stream"}})});
+    const start=performance.now();
+    const result=streamText({model:provider.chat(route.model),prompt:"offline",timeout:{chunkMs:100},maxRetries:0});
+    await result.consumeStream();
+    const text=await result.text;
+    const finish=await result.finishReason;
+    observations.nativeChunkTimeout={elapsedMs:performance.now()-start,timeoutMs:100,characters:text.length,finish};
+    expect(text).toBe(" ".repeat(40));
+    expect(finish).toBe("length");
+});

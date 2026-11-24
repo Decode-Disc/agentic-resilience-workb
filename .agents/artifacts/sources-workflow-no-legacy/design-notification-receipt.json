@@ -1,0 +1,12 @@
+{
+  "project": "agentic-resilience-workbench",
+  "sender": "Codex",
+  "event": "design-approved",
+  "key": "sources-evaluator-095994e2ffeb9ce017663518a89654e63c16c81a63f33ebbc1ee5fb83468485f",
+  "revision": "095994e2ffeb9ce017663518a89654e63c16c81a63f33ebbc1ee5fb83468485f",
+  "message": "Conception technique Sources et \u00e9valuateur approuv\u00e9e : attente durable, streaming et diagnostic local, comptabilit\u00e9 coh\u00e9rente, poursuite s\u00fbre des cas ind\u00e9pendants. Revue performance int\u00e9gr\u00e9e ; mesures de ressources exig\u00e9es \u00e0 l\u2019impl\u00e9mentation. Aucun correctif de production ni appel mod\u00e8le effectu\u00e9.",
+  "accepted": true,
+  "duplicate": false,
+  "messageId": 887,
+  "receipt": "/home/abdwhb/.local/state/agent-stack/notify/8cf397c7cd273cec3d2e0b118442516a1d09ddd72118b4c3cfc30719fd4ee243.json"
+}

@@ -1,0 +1,302 @@
+{
+  "status": "reference_only_not_a_mandate",
+  "sourceCampaign": "framing-harness-requalification-20261119",
+  "scenarios": [
+    {
+      "id": "nvidia-h20-supplied",
+      "company": {
+        "cik": "1045810",
+        "name": "NVIDIA Corporation",
+        "ticker": "NVDA",
+        "websiteUrl": "https://www.nvidia.com"
+      },
+      "framing": {
+        "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+        "questions": [
+          {
+            "id": "resilience",
+            "text": "Which workflow dependencies need documentary examination?",
+            "shortLabel": "Resilience",
+            "rationale": "Assessor reference only; Workbench must save its own program."
+          }
+        ]
+      },
+      "framingRequest": {
+        "text": "Investigate NVIDIA data-center resilience after the April 2025 H20 export restrictions. Read this filing: https://www.sec.gov/Archives/edgar/data/1045810/000104581025000082/nvda-20250409.htm",
+        "receivedAt": "2026-11-18T09:00:00.000Z"
+      },
+      "framingPublicContext": true,
+      "coveragePreset": "balanced",
+      "steps": [
+        {
+          "id": "framed",
+          "action": "wait_for",
+          "state": "conversation_settled"
+        }
+      ]
+    },
+    {
+      "id": "ccc-balanced",
+      "company": {
+        "cik": "1818201",
+        "name": "CCC Intelligent Solutions Holdings Inc.",
+        "ticker": "CCCS",
+        "websiteUrl": "https://www.cccis.com"
+      },
+      "framing": {
+        "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+        "questions": [
+          {
+            "id": "resilience",
+            "text": "Which workflow dependencies need documentary examination?",
+            "shortLabel": "Resilience",
+            "rationale": "Assessor reference only; Workbench must save its own program."
+          }
+        ]
+      },
+      "framingRequest": {
+        "text": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "receivedAt": "2026-11-18T09:00:00.000Z"
+      },
+      "framingPublicContext": true,
+      "coveragePreset": "balanced",
+      "steps": [
+        {
+          "id": "framed",
+          "action": "wait_for",
+          "state": "conversation_settled"
+        }
+      ]
+    },
+    {
+      "id": "ccc-first-party-depth",
+      "company": {
+        "cik": "1818201",
+        "name": "CCC Intelligent Solutions Holdings Inc.",
+        "ticker": "CCCS",
+        "websiteUrl": "https://www.cccis.com"
+      },
+      "framing": {
+        "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+        "questions": [
+          {
+            "id": "resilience",
+            "text": "Which workflow dependencies need documentary examination?",
+            "shortLabel": "Resilience",
+            "rationale": "Assessor reference only; Workbench must save its own program."
+          }
+        ]
+      },
+      "framingRequest": {
+        "text": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "receivedAt": "2026-11-18T09:00:00.000Z"
+      },
+      "framingPublicContext": true,
+      "coveragePreset": "first_party_depth",
+      "steps": [
+        {
+          "id": "framed",
+          "action": "wait_for",
+          "state": "conversation_settled"
+        }
+      ]
+    },
+    {
+      "id": "ccc-independent-scrutiny",
+      "company": {
+        "cik": "1818201",
+        "name": "CCC Intelligent Solutions Holdings Inc.",
+        "ticker": "CCCS",
+        "websiteUrl": "https://www.cccis.com"
+      },
+      "framing": {
+        "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+        "questions": [
+          {
+            "id": "resilience",
+            "text": "Which workflow dependencies need documentary examination?",
+            "shortLabel": "Resilience",
+            "rationale": "Assessor reference only; Workbench must save its own program."
+          }
+        ]
+      },
+      "framingRequest": {
+        "text": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "receivedAt": "2026-11-18T09:00:00.000Z"
+      },
+      "framingPublicContext": true,
+      "coveragePreset": "independent_scrutiny",
+      "steps": [
+        {
+          "id": "framed",
+          "action": "wait_for",
+          "state": "conversation_settled"
+        }
+      ]
+    },
+    {
+      "id": "lookup-unavailable",
+      "company": {
+        "cik": "1818201",
+        "name": "CCC Intelligent Solutions Holdings Inc.",
+        "ticker": "CCCS",
+        "websiteUrl": "https://www.cccis.com"
+      },
+      "framing": {
+        "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+        "questions": [
+          {
+            "id": "resilience",
+            "text": "Which workflow dependencies need documentary examination?",
+            "shortLabel": "Resilience",
+            "rationale": "Assessor reference only; Workbench must save its own program."
+          }
+        ]
+      },
+      "framingRequest": {
+        "text": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "receivedAt": "2026-11-18T09:00:00.000Z"
+      },
+      "framingPublicContext": true,
+      "framingReplay": {
+        "materialHash": "48943261ddef51ecca75da8b315ddd7ad2f0fb712838cf5df87abd6fe19c5be6",
+        "case": "lookupUnavailable",
+        "unavailable": true,
+        "documents": []
+      },
+      "coveragePreset": "balanced",
+      "steps": [
+        {
+          "id": "framed",
+          "action": "wait_for",
+          "state": "conversation_settled"
+        }
+      ]
+    },
+    {
+      "id": "insufficient-dated-support",
+      "company": {
+        "cik": "1818201",
+        "name": "CCC Intelligent Solutions Holdings Inc.",
+        "ticker": "CCCS",
+        "websiteUrl": "https://www.cccis.com"
+      },
+      "framing": {
+        "scope": "Reference placeholder required by the legacy manifest schema; fresh framing never sends this field.",
+        "questions": [
+          {
+            "id": "resilience",
+            "text": "Which workflow dependencies need documentary examination?",
+            "shortLabel": "Resilience",
+            "rationale": "Assessor reference only; Workbench must save its own program."
+          }
+        ]
+      },
+      "framingRequest": {
+        "text": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "receivedAt": "2026-11-18T09:00:00.000Z"
+      },
+      "framingPublicContext": true,
+      "framingReplay": {
+        "materialHash": "48943261ddef51ecca75da8b315ddd7ad2f0fb712838cf5df87abd6fe19c5be6",
+        "case": "insufficientDatedSupport",
+        "unavailable": false,
+        "documents": [
+          {
+            "url": "https://example.org/undated",
+            "title": "Illustrative undated announcement",
+            "text": "Illustrative fixture: the workflow may have changed; no event or publication date is known."
+          }
+        ]
+      },
+      "coveragePreset": "balanced",
+      "steps": [
+        {
+          "id": "framed",
+          "action": "wait_for",
+          "state": "conversation_settled"
+        }
+      ]
+    }
+  ],
+  "expectations": [
+    {
+      "id": "nvidia-h20-supplied",
+      "checks": [
+        "exact-dated-request-and-no-answer-leakage",
+        "agent-saved-useful-program",
+        "readings-and-claims-grounded",
+        "preset-and-uncertainty-handling",
+        "no-start-or-sources-execution",
+        "event-identity-separated-from-economic-consequence",
+        "questions-do-not-assume-their-answer",
+        "actual-preset-guided-reading-or-explained-override"
+      ]
+    },
+    {
+      "id": "ccc-balanced",
+      "checks": [
+        "exact-dated-request-and-no-answer-leakage",
+        "agent-saved-useful-program",
+        "readings-and-claims-grounded",
+        "preset-and-uncertainty-handling",
+        "no-start-or-sources-execution",
+        "event-identity-separated-from-economic-consequence",
+        "questions-do-not-assume-their-answer",
+        "actual-preset-guided-reading-or-explained-override"
+      ]
+    },
+    {
+      "id": "ccc-first-party-depth",
+      "checks": [
+        "exact-dated-request-and-no-answer-leakage",
+        "agent-saved-useful-program",
+        "readings-and-claims-grounded",
+        "preset-and-uncertainty-handling",
+        "no-start-or-sources-execution",
+        "event-identity-separated-from-economic-consequence",
+        "questions-do-not-assume-their-answer",
+        "actual-preset-guided-reading-or-explained-override"
+      ]
+    },
+    {
+      "id": "ccc-independent-scrutiny",
+      "checks": [
+        "exact-dated-request-and-no-answer-leakage",
+        "agent-saved-useful-program",
+        "readings-and-claims-grounded",
+        "preset-and-uncertainty-handling",
+        "no-start-or-sources-execution",
+        "event-identity-separated-from-economic-consequence",
+        "questions-do-not-assume-their-answer",
+        "actual-preset-guided-reading-or-explained-override"
+      ]
+    },
+    {
+      "id": "lookup-unavailable",
+      "checks": [
+        "exact-dated-request-and-no-answer-leakage",
+        "agent-saved-useful-program",
+        "readings-and-claims-grounded",
+        "preset-and-uncertainty-handling",
+        "no-start-or-sources-execution",
+        "event-identity-separated-from-economic-consequence",
+        "questions-do-not-assume-their-answer",
+        "actual-preset-guided-reading-or-explained-override"
+      ]
+    },
+    {
+      "id": "insufficient-dated-support",
+      "checks": [
+        "exact-dated-request-and-no-answer-leakage",
+        "agent-saved-useful-program",
+        "readings-and-claims-grounded",
+        "preset-and-uncertainty-handling",
+        "no-start-or-sources-execution",
+        "event-identity-separated-from-economic-consequence",
+        "questions-do-not-assume-their-answer",
+        "actual-preset-guided-reading-or-explained-override"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "outcome": {
+    "kind": "success",
+    "valueJson": "{\"revision\":2}"
+  },
+  "framing": {
+    "_creationTime": 1795162458994.2383,
+    "_id": "0000000000010244framingRevisions",
+    "content": {
+      "questions": [
+        {
+          "id": "q1",
+          "rationale": "Establishes the baseline mechanics of the requested activity so any conditional claim about bypassing is evaluated against a concrete, well-sourced description of current practice.",
+          "shortLabel": "Current estimate review workflow",
+          "text": "How do insurers currently conduct estimate review in connection with CCC platforms, and at which points in that workflow could an insurer act without CCC (e.g., in-house appraisers, direct shop adjuster review, competing estimating tools)?"
+        },
+        {
+          "id": "q2",
+          "rationale": "The analyst asked whether bypass is possible; answering requires the factual question of what contractually and technically binds insurers to CCC's review workflow before any announcement-dependent conclusion is drawn.",
+          "shortLabel": "CCC lock-in channels",
+          "text": "What contractual, data-integration, and ecosystem arrangements connect insurers to CCC's estimating and review workflow (e.g., APIs, photo-estimating, direct repair program rules), and which of these could be suspended or rerouted by an insurer?"
+        },
+        {
+          "id": "q3",
+          "rationale": "The announcement is unresolved: the analyst named it but no public event has been established. This question conditions on the open basis 'the latest announcement' and asks for the event and its operative terms, including which insurers and which review functions it touches.",
+          "shortLabel": "Identify the announcement",
+          "text": "If The analyst's question presupposes a recent announcement that may have changed insurer estimate review workflows or insurer-CCC arrangements; since no public event has been established, the identity, date, and content of this announcement remain open and must be identified before the bypass claim can be evaluated against it., [Conditional on the analyst-referenced announcement] What is the specific announcement the analyst refers to as 'the latest announcement', what does it actually change about insurer estimate review relative to CCC, and is the claim that insurers can or will bypass CCC supported or contradicted by its terms?"
+        },
+        {
+          "id": "q4",
+          "rationale": "Investigates possible economic consequences as a question rather than adding them to the request's premise, so the program remains faithful to the analyst's bypass question while covering its stakes.",
+          "shortLabel": "Economic consequences of bypass",
+          "text": "If If the unresolved announcement does alter insurer review workflows, it could have economic consequences for CCC and insurers; these consequences are investigated conditionally rather than assumed in the request's premise., [Conditional on the analyst-referenced announcement] If insurers were to route estimate review around CCC, what would be the economic consequences — for CCC's revenue and pricing power, for insurer cycle time and loss-adjustment expense, and for collision repair shops?"
+        }
+      ],
+      "scope": "Analyst request: \"Can insurers bypass CCC during estimate review after the latest announcement?\" — investigate whether and how insurance carriers could conduct claims estimate review without relying on CCC Intelligent Solutions' estimating/claims software, in light of an unspecified recent announcement. No public event has been established yet; the announcement the analyst cites is unresolved, so the program prepares common questions on current insurer-CCC estimate review practice and keeps event-specific questions conditional on the open announcement basis."
+    },
+    "contentHash": "246ee45512013a6e8afe2b1a28470e44fcede913de25ae19be93a5ef44768503",
+    "createdAt": 1795162458994,
+    "eventBasis": {
+      "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+      "conditions": [
+        {
+          "basis": {
+            "excerpt": "after the latest announcement",
+            "kind": "analyst"
+          },
+          "hypothesis": "The analyst's question presupposes a recent announcement that may have changed insurer estimate review workflows or insurer-CCC arrangements; since no public event has been established, the identity, date, and content of this announcement remain open and must be identified before the bypass claim can be evaluated against it.",
+          "questionId": "q3"
+        },
+        {
+          "basis": {
+            "excerpt": "after the latest announcement",
+            "kind": "analyst"
+          },
+          "hypothesis": "If the unresolved announcement does alter insurer review workflows, it could have economic consequences for CCC and insurers; these consequences are investigated conditionally rather than assumed in the request's premise.",
+          "questionId": "q4"
+        }
+      ],
+      "kind": "open"
+    },
+    "origin": "workbench",
+    "requestKey": "operation:0000010240agentOperationRequests",
+    "revision": 2,
+    "runId": "00000000000000010005researchRuns"
+  }
+}

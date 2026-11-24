@@ -1,0 +1,536 @@
+{
+  "staged": {
+    "bytes": 18874369,
+    "fragments": 308,
+    "stageSamples": [
+      {
+        "index": 0,
+        "bytesRead": {
+          "remaining": 16750234,
+          "used": 26982
+        },
+        "bytesWritten": {
+          "remaining": 16673943,
+          "used": 103273
+        },
+        "databaseQueries": {
+          "remaining": 4081,
+          "used": 15
+        },
+        "documentsRead": {
+          "remaining": 31985,
+          "used": 15
+        },
+        "documentsWritten": {
+          "remaining": 15996,
+          "used": 4
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      },
+      {
+        "index": 154,
+        "bytesRead": {
+          "remaining": 16704413,
+          "used": 72803
+        },
+        "bytesWritten": {
+          "remaining": 16693210,
+          "used": 84006
+        },
+        "databaseQueries": {
+          "remaining": 4081,
+          "used": 15
+        },
+        "documentsRead": {
+          "remaining": 31983,
+          "used": 17
+        },
+        "documentsWritten": {
+          "remaining": 15997,
+          "used": 3
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      },
+      {
+        "index": 307,
+        "bytesRead": {
+          "remaining": 16700282,
+          "used": 76934
+        },
+        "bytesWritten": {
+          "remaining": 16740975,
+          "used": 36241
+        },
+        "databaseQueries": {
+          "remaining": 4081,
+          "used": 15
+        },
+        "documentsRead": {
+          "remaining": 31983,
+          "used": 17
+        },
+        "documentsWritten": {
+          "remaining": 15997,
+          "used": 3
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      }
+    ],
+    "twoPublications": {
+      "bytesRead": {
+        "remaining": 16717545,
+        "used": 59671
+      },
+      "bytesWritten": {
+        "remaining": 16776769,
+        "used": 447
+      },
+      "databaseQueries": {
+        "remaining": 4066,
+        "used": 30
+      },
+      "documentsRead": {
+        "remaining": 31970,
+        "used": 30
+      },
+      "documentsWritten": {
+        "remaining": 15998,
+        "used": 2
+      },
+      "functionsScheduled": {
+        "remaining": 1000,
+        "used": 0
+      },
+      "scheduledFunctionArgsBytes": {
+        "remaining": 16777216,
+        "used": 0
+      }
+    },
+    "range": {
+      "bytesRead": {
+        "remaining": 16741245,
+        "used": 35971
+      },
+      "bytesWritten": {
+        "remaining": 16777216,
+        "used": 0
+      },
+      "databaseQueries": {
+        "remaining": 4094,
+        "used": 2
+      },
+      "documentsRead": {
+        "remaining": 31998,
+        "used": 2
+      },
+      "documentsWritten": {
+        "remaining": 16000,
+        "used": 0
+      },
+      "functionsScheduled": {
+        "remaining": 1000,
+        "used": 0
+      },
+      "scheduledFunctionArgsBytes": {
+        "remaining": 16777216,
+        "used": 0
+      }
+    },
+    "cleanup": [
+      {
+        "bytesRead": {
+          "remaining": 11335591,
+          "used": 5441625
+        },
+        "bytesWritten": {
+          "remaining": 16777216,
+          "used": 0
+        },
+        "databaseQueries": {
+          "remaining": 4094,
+          "used": 2
+        },
+        "documentsRead": {
+          "remaining": 31911,
+          "used": 89
+        },
+        "documentsWritten": {
+          "remaining": 15956,
+          "used": 44
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      },
+      {
+        "bytesRead": {
+          "remaining": 11335591,
+          "used": 5441625
+        },
+        "bytesWritten": {
+          "remaining": 16777216,
+          "used": 0
+        },
+        "databaseQueries": {
+          "remaining": 4094,
+          "used": 2
+        },
+        "documentsRead": {
+          "remaining": 31911,
+          "used": 89
+        },
+        "documentsWritten": {
+          "remaining": 15956,
+          "used": 44
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      },
+      {
+        "bytesRead": {
+          "remaining": 11335591,
+          "used": 5441625
+        },
+        "bytesWritten": {
+          "remaining": 16777216,
+          "used": 0
+        },
+        "databaseQueries": {
+          "remaining": 4094,
+          "used": 2
+        },
+        "documentsRead": {
+          "remaining": 31911,
+          "used": 89
+        },
+        "documentsWritten": {
+          "remaining": 15956,
+          "used": 44
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      },
+      {
+        "bytesRead": {
+          "remaining": 11335591,
+          "used": 5441625
+        },
+        "bytesWritten": {
+          "remaining": 16777216,
+          "used": 0
+        },
+        "databaseQueries": {
+          "remaining": 4094,
+          "used": 2
+        },
+        "documentsRead": {
+          "remaining": 31911,
+          "used": 89
+        },
+        "documentsWritten": {
+          "remaining": 15956,
+          "used": 44
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      },
+      {
+        "bytesRead": {
+          "remaining": 11335591,
+          "used": 5441625
+        },
+        "bytesWritten": {
+          "remaining": 16777216,
+          "used": 0
+        },
+        "databaseQueries": {
+          "remaining": 4094,
+          "used": 2
+        },
+        "documentsRead": {
+          "remaining": 31911,
+          "used": 89
+        },
+        "documentsWritten": {
+          "remaining": 15956,
+          "used": 44
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      },
+      {
+        "bytesRead": {
+          "remaining": 11335591,
+          "used": 5441625
+        },
+        "bytesWritten": {
+          "remaining": 16777216,
+          "used": 0
+        },
+        "databaseQueries": {
+          "remaining": 4094,
+          "used": 2
+        },
+        "documentsRead": {
+          "remaining": 31911,
+          "used": 89
+        },
+        "documentsWritten": {
+          "remaining": 15956,
+          "used": 44
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      },
+      {
+        "bytesRead": {
+          "remaining": 11433893,
+          "used": 5343323
+        },
+        "bytesWritten": {
+          "remaining": 16777216,
+          "used": 0
+        },
+        "databaseQueries": {
+          "remaining": 4094,
+          "used": 2
+        },
+        "documentsRead": {
+          "remaining": 31911,
+          "used": 89
+        },
+        "documentsWritten": {
+          "remaining": 15956,
+          "used": 44
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      },
+      {
+        "bytesRead": {
+          "remaining": 16730110,
+          "used": 47106
+        },
+        "bytesWritten": {
+          "remaining": 16777216,
+          "used": 0
+        },
+        "databaseQueries": {
+          "remaining": 4094,
+          "used": 2
+        },
+        "documentsRead": {
+          "remaining": 31998,
+          "used": 2
+        },
+        "documentsWritten": {
+          "remaining": 15999,
+          "used": 1
+        },
+        "functionsScheduled": {
+          "remaining": 1000,
+          "used": 0
+        },
+        "scheduledFunctionArgsBytes": {
+          "remaining": 16777216,
+          "used": 0
+        }
+      }
+    ]
+  },
+  "stream": {
+    "bytes": 18874369,
+    "fragments": 308,
+    "sealing": "read capacity failure; transaction rolled back; stream remains unsealed"
+  },
+  "agent-hidden-false": {
+    "bytes": 122880,
+    "twoWrites": {
+      "bytesRead": {
+        "remaining": 16038960,
+        "used": 738256
+      },
+      "bytesWritten": {
+        "remaining": 16285204,
+        "used": 492012
+      },
+      "databaseQueries": {
+        "remaining": 4080,
+        "used": 16
+      },
+      "documentsRead": {
+        "remaining": 31995,
+        "used": 5
+      },
+      "documentsWritten": {
+        "remaining": 15998,
+        "used": 2
+      },
+      "functionsScheduled": {
+        "remaining": 1000,
+        "used": 0
+      },
+      "scheduledFunctionArgsBytes": {
+        "remaining": 16777216,
+        "used": 0
+      }
+    },
+    "oneRead": {
+      "bytesRead": {
+        "remaining": 16531210,
+        "used": 246006
+      },
+      "bytesWritten": {
+        "remaining": 16777216,
+        "used": 0
+      },
+      "databaseQueries": {
+        "remaining": 4095,
+        "used": 1
+      },
+      "documentsRead": {
+        "remaining": 31999,
+        "used": 1
+      },
+      "documentsWritten": {
+        "remaining": 16000,
+        "used": 0
+      },
+      "functionsScheduled": {
+        "remaining": 1000,
+        "used": 0
+      },
+      "scheduledFunctionArgsBytes": {
+        "remaining": 16777216,
+        "used": 0
+      }
+    },
+    "repeatedCall": "distinct message IDs"
+  },
+  "agent-hidden-true": {
+    "bytes": 122880,
+    "twoWrites": {
+      "bytesRead": {
+        "remaining": 16407621,
+        "used": 369595
+      },
+      "bytesWritten": {
+        "remaining": 16530978,
+        "used": 246238
+      },
+      "databaseQueries": {
+        "remaining": 4080,
+        "used": 16
+      },
+      "documentsRead": {
+        "remaining": 31995,
+        "used": 5
+      },
+      "documentsWritten": {
+        "remaining": 15998,
+        "used": 2
+      },
+      "functionsScheduled": {
+        "remaining": 1000,
+        "used": 0
+      },
+      "scheduledFunctionArgsBytes": {
+        "remaining": 16777216,
+        "used": 0
+      }
+    },
+    "oneRead": {
+      "bytesRead": {
+        "remaining": 16654097,
+        "used": 123119
+      },
+      "bytesWritten": {
+        "remaining": 16777216,
+        "used": 0
+      },
+      "databaseQueries": {
+        "remaining": 4095,
+        "used": 1
+      },
+      "documentsRead": {
+        "remaining": 31999,
+        "used": 1
+      },
+      "documentsWritten": {
+        "remaining": 16000,
+        "used": 0
+      },
+      "functionsScheduled": {
+        "remaining": 1000,
+        "used": 0
+      },
+      "scheduledFunctionArgsBytes": {
+        "remaining": 16777216,
+        "used": 0
+      }
+    },
+    "repeatedCall": "distinct message IDs"
+  }
+}

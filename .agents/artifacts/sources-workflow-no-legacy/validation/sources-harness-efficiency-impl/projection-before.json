@@ -1,0 +1,23 @@
+{
+  "boundary": "Logical rows and serialized Convex document bytes read by real query handlers across all db.get/db.query calls (including outside SourceReviewReads); does not measure physical Convex billing or deployed latency.",
+  "measurements": {
+    "sourcesContext": {
+      "bytes": 31582,
+      "gets": 40,
+      "queries": 32,
+      "rows": 57
+    },
+    "standaloneConsultation": {
+      "bytes": 3249,
+      "gets": 3,
+      "queries": 3,
+      "rows": 4
+    },
+    "workbenchContext": {
+      "bytes": 33670,
+      "gets": 46,
+      "queries": 33,
+      "rows": 57
+    }
+  }
+}

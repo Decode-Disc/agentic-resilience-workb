@@ -1,0 +1,37 @@
+CCC Launches CCC® Intelligent Reinspection to Help Auto Insurers Review Repair Estimates Faster, Expediting Repairer Workflows and Claims Resolutions | CCC Intelligent Solutions
+
+## CCC Launches CCC® Intelligent Reinspection to Help Auto Insurers Review Repair Estimates Faster, Expediting Repairer Workflows and Claims Resolutions
+
+July 30, 2024 at 8:00 AM EDT
+
+AI-Powered Solution Streamlines Estimate Reviews and Helps Get Drivers Back on the Road Sooner Following an Accident
+
+CHICAGO--(BUSINESS WIRE)--Jul. 30, 2024-- CCC Intelligent Solutions Inc.(CCC), a leading cloud platform powering the P&C insurance economy, announces today the launch of CCC® Intelligent Reinspection, a new solution designed to help auto insurers streamline the review of incoming repair facility estimates, expediting repairer workflows and claims resolutions. Leveraging advanced AI technology, CCC Intelligent Reinspection identifies areas for review, and provides reason codes based on insurer rules, helping reinspectors review increasingly complex estimates quickly, reducing repair and claim cycle times so drivers can get back on the road sooner following a car accident.
+
+“The increasing complexity of vehicles today requires advanced solutions to streamline the claims and repair process,” said John Goodson, chief product and technology officer for CCC. “With CCC Intelligent Reinspection, AI helps insurers review repair estimates more quickly and transparently, allowing them to resolve questions with their repair partners. Our solution integrates seamlessly into existing insurer and repairer workflows, so estimates turn into completed repairs and claims can be resolved faster.”
+
+Using AI-powered analysis and audit capabilities, CCC Intelligent Reinspection assesses incoming shop estimates based on insurer-provided rules. It automatically routes estimates for approval or review, significantly reducing manual workloads for appraisers and desk reviewers. This fosters better collaboration between insurers and repairers, helping to provide timely and accurate feedback without disrupting workflows, helping both save valuable time. CCC’s AI, developed over ten years and used broadly across collision repairers and insurers, employs computer vision and other advanced AI technologies to analyze photos of vehicle damage along with the repair estimate, improving accuracy and supporting repairers’ commitment to quality repairs.
+
+“CCC Intelligent Reinspection represents a significant advancement in how repair estimates are managed between insurers and repairers,” Goodson added. “Our AI-powered solution makes it easy for estimates to be quickly reviewed so repairers can get to work faster. Intelligent Reinspection is the latest in a line of intelligent, AI-driven solutions from CCC designed to save time and reduce inefficiencies in the increasingly complex claims and repair process, supporting our vision of shaping a world where life just works for our customers and theirs.”
+
+Key benefits of CCC Intelligent Reinspection include:
+
+Seamless Integration: Connects effortlessly to existing reinspection processes, enabling continuity and efficiency.
+
+Improved Review Efficiency: Provides reason codes based on individual insurer rules, supporting more efficient and transparent reviews and insurer, shop communications.
+
+Reduced Cycle Times: Helps reduce the time required for claim resolutions, enabling faster service for consumers.
+
+About CCC
+
+CCC Intelligent Solutions Inc. (CCC), a subsidiary of CCC Intelligent Solutions Holdings Inc. (NASDAQ: CCCS), is a leading cloud platform for the multi-trillion-dollar P&C insurance economy, creating intelligent experiences for insurers, repairers, automakers, part suppliers, and more. The CCC Intelligent Experience (IX) Cloud™ platform, powered by proven AI and an innovative event-based architecture, connects more than 35,000 businesses to power customized applications and platforms for optimal outcomes and personalized experiences that just work. Through purposeful innovation and the strength of its connections, CCC technologies empower the people and industry relied upon to keep lives moving forward when it matters most. Learn more about CCC at www.cccis.com.
+
+Special Note Regarding Forward-Looking Statements
+
+This press release contains forward-looking statements that are based on beliefs and assumptions and on information currently available. In some cases, you can identify forward-looking statements by the following words: “may,” “will,” “could,” “would,” “should,” “expect,” “intend,” “plan,” “anticipate,” “believe,” “estimate,” “predict,” “project,” “potential,” “continue,” “ongoing” or the negative of these terms or other comparable terminology, although not all forward-looking statements contain these words. These statements involve risks, uncertainties and other factors that may cause actual results, levels of activity, performance or achievements to be materially different from the information expressed or implied by these forward-looking statements. Forward-looking statements in this press release include, but are not limited to, statements regarding future use and performance of CCC’s digital solutions. We cannot assure you that the forward-looking statements in this press release will prove to be accurate. These forward-looking statements are subject to a number of risks and uncertainties, including, among others, competition, including technological advances and new products marketed by competitors; changes to applicable laws and regulations; and other risks and uncertainties, including those included under the header “Risk Factors” in CCC’s filings with the Securities and Exchange Commission (“SEC”), including the Form 10-K filed February 28, 2024, which can be obtained, without charge, at the SEC’s website (www.sec.gov). The forward-looking statements in this press release represent our views as of the date of this press release. We anticipate that subsequent events and developments will cause our views to change. However, while we may elect to update these forward-looking statements at some point in the future, we have no current intention of doing so except to the extent required by applicable law. You should, therefore, not rely on these forward-looking statements as representing our views as of any date subsequent to the date of this press release.
+
+View source version on businesswire.com: https://www.businesswire.com/news/home/20240730257989/en/
+
+Laura Weber lweber@cccis.com| 773.960.7144
+
+Source: CCC Intelligent Solutions Inc.

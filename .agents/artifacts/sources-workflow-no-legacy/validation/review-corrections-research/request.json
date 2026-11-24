@@ -1,0 +1,37 @@
+{
+  "phase": "research",
+  "flow": "tdd",
+  "date": "2026-11-24",
+  "sha": "e8e32ec11983d06a91b582c820e6f097360a35f9",
+  "productionChanges": false,
+  "probeCommand": "pnpm exec vitest run src/__tests__/convex/execution/review-research-probe.test.ts --maxWorkers=1",
+  "restoreProbeFrom": "validation/review-corrections-research/review-research-probe.test.ts",
+  "results": {
+    "total": 13,
+    "passed": 6,
+    "failedForInvestigatedDefects": 7
+  },
+  "initialProbe": "probe-first.log contains three invalid invocation-status fixture failures; these are excluded from causal evidence. The fixture was corrected from completed to started, then all 13 probes reran.",
+  "limits": "convex-test 0.0.62, transactionLimits true for conversation probes; no deployed backend or model inference",
+  "sha256": {
+    "review-research-probe.test.ts": "4cb5afdf2db323db51925b51d33a01d3bdc0069f96bcb9e0fc9a510140bbc62e",
+    "probe-first.test.ts": "7f86826fcb02d9ab1c9bd81e229b54d9fcf78fd589abebcd85d73bc501b1af72",
+    "probe-first.log": "2316a7f0bb43a37712443172d51ca1beda4289fe527cbaa298c23d580c10cf2a",
+    "probe-final.log": "5fb8ecd31d9889afa4bba1c8c292ba04465a295982a2c0d737a2f7b9bf0efa4e"
+  },
+  "finalValidation": {
+    "docsCheck": "77 files, 456 links, 0 errors; existing TECH word advisory",
+    "researchLocalLinks": "all resolved",
+    "trackedWorkingTree": "clean",
+    "gitDiffCheck": "passed"
+  },
+  "notification": {
+    "project": "agentic-resilience-workbench-proto",
+    "sender": "Codex",
+    "event": "research-complete",
+    "key": "sources-review-corrections-research-e8e32ec-43",
+    "revision": "e8e32ec11983d06a91b582c820e6f097360a35f9",
+    "messageId": 1063,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/f7e225000f9200057410645fdf16a82b0f2e1cf6e3660ea889871e0f946913a1.json"
+  }
+}

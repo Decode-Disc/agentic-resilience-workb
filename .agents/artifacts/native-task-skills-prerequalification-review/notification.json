@@ -1,0 +1,10 @@
+{
+  "accepted": true,
+  "project": "agentic-resilience-workbench",
+  "sender": "Codex",
+  "event": "review-complete",
+  "key": "native-task-skills-prerequalification-review-20261119-v1",
+  "revision": "review-v1-current-uncommitted-implementation",
+  "messageId": 926,
+  "receipt": "/home/abdwhb/.local/state/agent-stack/notify/4871053dd91e4ef67f190c5551555a2f300d35755f8344d20e922efd114ac4f9.json"
+}

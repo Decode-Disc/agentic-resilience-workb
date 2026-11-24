@@ -1,0 +1,53 @@
+{
+  "outcome": {
+    "kind": "success",
+    "valueJson": "{\"revision\":2}"
+  },
+  "framing": {
+    "_creationTime": 1795162458241.2383,
+    "_id": "0000000000010244framingRevisions",
+    "content": {
+      "questions": [
+        {
+          "id": "q1",
+          "rationale": "Defines what 'bypass' means operationally before asking whether it is possible; stays useful whichever announcement, if any, turns out to be relevant.",
+          "shortLabel": "Estimate review steps",
+          "text": "What steps does CCC's estimate review workflow include, and at which points can insurers act independently of CCC (e.g., submitting, editing, approving, or settling estimates)?"
+        },
+        {
+          "id": "q2",
+          "rationale": "Roles, permissions and contract terms are common ground across plausible interpretations of the request and any candidate announcement.",
+          "shortLabel": "Roles & authority",
+          "text": "What roles, permissions, or contractual terms govern the respective authority of insurers and CCC over estimates during review?"
+        },
+        {
+          "id": "q3",
+          "rationale": "Event-dependent: the announcement the analyst refers to has not been established from public sources, so the question is held conditional on that unresolved event rather than assumed into the request's premise.",
+          "shortLabel": "Announcement effect (conditional)",
+          "text": "If A recent announcement changed insurers' ability to bypass CCC during estimate review; the announcement has not yet been identified or verified in public sources., If the announcement the analyst refers to is identified, did it change whether insurers can bypass CCC during estimate review — and if so, how?"
+        }
+      ],
+      "scope": "Investigate whether insurers can bypass CCC during estimate review, focusing on the insurers' estimate review workflow with CCC. Preserve the analyst's activity verbatim: \"Can insurers bypass CCC during estimate review after the latest announcement?\". The request names an announcement whose identity and effect on the workflow are not yet established from public sources; treat it as an open event rather than a premise."
+    },
+    "contentHash": "1bb1a58f69fbf3f0b60fec764ace84c6c2d5ab877706d342ccba89fc2533c3e2",
+    "createdAt": 1795162458241,
+    "eventBasis": {
+      "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+      "conditions": [
+        {
+          "basis": {
+            "excerpt": "after the latest announcement",
+            "kind": "analyst"
+          },
+          "hypothesis": "A recent announcement changed insurers' ability to bypass CCC during estimate review; the announcement has not yet been identified or verified in public sources.",
+          "questionId": "q3"
+        }
+      ],
+      "kind": "open"
+    },
+    "origin": "workbench",
+    "requestKey": "operation:0000010240agentOperationRequests",
+    "revision": 2,
+    "runId": "00000000000000010005researchRuns"
+  }
+}

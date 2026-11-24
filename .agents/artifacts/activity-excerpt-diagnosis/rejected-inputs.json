@@ -1,0 +1,110 @@
+[
+  {
+    "content": {
+      "questions": [
+        {
+          "id": "workflow-role",
+          "rationale": "Before evaluating bypass, establish what part of estimate review CCC's tools cover and whether an insurer can execute that step outside CCC.",
+          "shortLabel": "CCC's estimate-review role",
+          "text": "In the insurer estimate-review workflow, which steps does CCC's estimate-review tooling perform for insurers (e.g., receiving repairer-written estimates, applying insurer rules, routing for approval or reinspection), and which steps can an insurer execute without CCC?"
+        },
+        {
+          "id": "bypass-feasibility",
+          "rationale": "A new solution could lower the cost of using CCC, but it does not remove the option to review outside CCC. This question tests whether bypass is technically and contractually available regardless of the announcement.",
+          "shortLabel": "Bypass feasibility",
+          "text": "Can insurers review repairer-written estimates without routing them through CCC-hosted workflows \u2014 e.g., via in-house appraisers, third-party review services, or insurer-built tools \u2014 and what contract terms, network connections, or data access enable or prevent this?"
+        },
+        {
+          "id": "reinspection-impact",
+          "rationale": "The announcement AI-powered solution aimed to speed up insurer review of estimates, not to make bypass harder or easier; investigate whether it changed the bypass decision.",
+          "shortLabel": "Reinspection-launch impact",
+          "text": "Does CCC's Intelligent Reinspection launch change the cost or capability of estimate review in a way that makes bypass more or less attractive for insurers?"
+        },
+        {
+          "id": "take-private-impact",
+          "rationale": "An acquisition event can alter pricing pressure, contract terms, and strategic direction; this tests whether that pressure changes the bypass calculation for insurers.",
+          "shortLabel": "Take-private impact",
+          "text": "Does the GTCR/Elliott acquisition (announced October 15, 2026) or the pending leveraged-buyout financing affect insurers' ability or incentive to bypass CCC during estimate review?"
+        },
+        {
+          "id": "switching-cost",
+          "rationale": "Bypass depends on network effects and switching costs as much as on features; test whether insurers can substitute CCC for alternative review processes without losing speed or repairer connectivity.",
+          "shortLabel": "Substitution economics",
+          "text": "How do network effects, switching costs, and repairer connectivity shape whether insurers can substitute alternative estimate-review processes for CCC's without losing cycle time or repairer relationships?"
+        }
+      ],
+      "scope": "Can insurers bypass CCC during estimate review after the latest announcement? Tentative activity: insurer estimate review of repairer-written estimates. Bypass means an insurer substituting its own review process (in-house appraisers, third-party review, or its own platform) instead of routing reviews through CCC workflows. A concrete transaction to investigate: an insurer receiving a repairer-written estimate (written in CCC ONE) and choosing how to review and approve it \u2014 either through a CCC-hosted estimate-review workflow or through an alternative that does not require CCC. Whether bypass is possible depends on CCC's workflow design and contract terms, which this program will investigate."
+    },
+    "eventBasis": {
+      "conditions": [
+        {
+          "basis": {
+            "excerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+            "kind": "analyst"
+          },
+          "hypothesis": "The announcement refers to CCC's estimate-review offering (CCC Intelligent Reinspection, announced July 30, 2024), not the GTCR/Elliott take-private announcement of October 15, 2026. Alternative hypothesis: the analyst means the most recent dated announcement, which is the October 15, 2026 take-private agreement. Which announcement the analyst intends materially changes which program questions matter.",
+          "questionId": "reinspection-impact"
+        }
+      ],
+      "kind": "open"
+    },
+    "eventBasisRequired": true,
+    "expectedRevision": 1,
+    "kind": "adjust_framing",
+    "messageId": "rx727g93gx1ksmah1d77kc0ze58jhkw4"
+  },
+  {
+    "content": {
+      "questions": [
+        {
+          "id": "workflow-role",
+          "rationale": "Before evaluating bypass, establish what part of estimate review CCC's tools cover and whether an insurer can execute that step outside CCC.",
+          "shortLabel": "CCC's estimate-review role",
+          "text": "In the insurer estimate-review workflow, which steps does CCC's estimate-review tooling perform for insurers (e.g., receiving repairer-written estimates, applying insurer rules, routing for approval or reinspection), and which steps can an insurer execute without CCC?"
+        },
+        {
+          "id": "bypass-feasibility",
+          "rationale": "A new solution could lower the cost of using CCC, but it does not remove the option to review outside CCC. This question tests whether bypass is technically and contractually available regardless of the announcement.",
+          "shortLabel": "Bypass feasibility",
+          "text": "Can insurers review repairer-written estimates without routing them through CCC-hosted workflows \u2014 e.g., via in-house appraisers, third-party review services, or insurer-built tools \u2014 and what contract terms, network connections, or data access enable or prevent this?"
+        },
+        {
+          "id": "reinspection-impact",
+          "rationale": "The announcement AI-powered solution aimed to speed up insurer review of estimates, not to make bypass harder or easier; investigate whether it changed the bypass decision.",
+          "shortLabel": "Reinspection-launch impact",
+          "text": "Does CCC's Intelligent Reinspection launch change the cost or capability of estimate review in a way that makes bypass more or less attractive for insurers?"
+        },
+        {
+          "id": "take-private-impact",
+          "rationale": "An acquisition event can alter pricing pressure, contract terms, and strategic direction; this tests whether that pressure changes the bypass calculation for insurers.",
+          "shortLabel": "Take-private impact",
+          "text": "Does the GTCR/Elliott acquisition (announced October 15, 2026) or the pending leveraged-buyout financing affect insurers' ability or incentive to bypass CCC during estimate review?"
+        },
+        {
+          "id": "switching-cost",
+          "rationale": "Bypass depends on network effects and switching costs as much as on features; test whether insurers can substitute CCC for alternative review processes without losing speed or repairer connectivity.",
+          "shortLabel": "Substitution economics",
+          "text": "How do network effects, switching costs, and repairer connectivity shape whether insurers can substitute alternative estimate-review processes for CCC's without losing cycle time or repairer relationships?"
+        }
+      ],
+      "scope": "Can insurers bypass CCC during estimate review after the latest announcement?"
+    },
+    "eventBasis": {
+      "conditions": [
+        {
+          "basis": {
+            "excerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+            "kind": "analyst"
+          },
+          "hypothesis": "The announcement refers to CCC's estimate-review offering (CCC Intelligent Reinspection, announced July 30, 2024), not the GTCR/Elliott take-private announcement of October 15, 2026. Alternative hypothesis: the analyst means the most recent dated announcement, which is the October 15, 2026 take-private agreement. Which announcement the analyst intends materially changes which program questions matter.",
+          "questionId": "reinspection-impact"
+        }
+      ],
+      "kind": "open"
+    },
+    "eventBasisRequired": true,
+    "expectedRevision": 1,
+    "kind": "adjust_framing",
+    "messageId": "rx727g93gx1ksmah1d77kc0ze58jhkw4"
+  }
+]

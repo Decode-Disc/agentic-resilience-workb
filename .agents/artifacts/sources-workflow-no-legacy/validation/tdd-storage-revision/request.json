@@ -1,0 +1,31 @@
+{
+  "sourceHead": "e8e32ec11983d06a91b582c820e6f097360a35f9",
+  "document": ".agents/artifacts/sources-workflow-no-legacy/29-tdd-sources-harness-efficiency.md",
+  "beforeSha256": "616a3b7f78e2bca59a404dc1c7445477ceb6be1602d24f1393e8d0720a2cd3a9",
+  "afterSha256": "64879f3fea12bf196ff6095300992575330f445301006852a2c802584e9ccf8b",
+  "acceptedSystemDecision": [
+    "single progressive retained-text conversation representation",
+    "delete existing conversations without conversion or legacy reader",
+    "remove Convex Agent after reset",
+    "replace and remove all three whole-body helpers across consumers"
+  ],
+  "programReview": "pending for expanded program details and cutover inventory",
+  "validation": {
+    "docsCheck": "77 Markdown files, 456 local links, 0 errors; existing TECH word-count advisory",
+    "artifactLocalLinks": 21,
+    "artifactMissingLinks": [],
+    "diffCheck": "passed",
+    "productionTests": "not run: documentation-only"
+  },
+  "execution": "No production code, dependencies, data or deployment changed.",
+  "notification": {
+    "accepted": true,
+    "messageId": 1065,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/5eea0b0c8c7436ea36a6f9fe95fb37d2e8db5cfa1f9186112637541bcdbce372.json",
+    "project": "agentic-resilience-workbench-proto",
+    "sender": "Codex",
+    "event": "design-revision-complete",
+    "key": "sources-tdd29-single-storage-e8e32ec-20261124",
+    "revision": "64879f3fea12bf196ff6095300992575330f445301006852a2c802584e9ccf8b"
+  }
+}

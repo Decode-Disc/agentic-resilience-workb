@@ -1,0 +1,316 @@
+# Technical Contract
+
+## Authority and Boundaries
+
+This document owns architecture, persistence, workflow, provenance, providers, and security. [PRODUCT.md](../PRODUCT.md) owns analyst behavior and acceptance; [AGENTS.md](../AGENTS.md), development and verification; the [roadmap](../docs/ROADMAP.md), delivery evidence and activation. Unfinished contracts remain requirements, not delivery claims; ADRs preserve rationale without adding obligations. This document is not a code or test index.
+
+TanStack Start owns web/SSR with strict TypeScript, React, and shadcn. Convex owns domain policy, persistence, reactivity, artifacts, audit, and quotas. Pi Durable owns new agent mission loops and technical checkpoints on Convex storage and scheduling. Convex Workflow retains documentary/research orchestration, human waits, and pinned historical agent executions. Pi native transport and Vercel AI SDK adapters share admission and accounting boundaries. Retrieval uses native Convex search; optional hosted embeddings add no state owner.
+
+Separate domain records, persistence, orchestration, acquisition/normalization, model routing, analytical policy, and UI projections. Keep evidence policy out of UI/SSR, and keep provider types/model identifiers behind adapters and configuration. CIK is the canonical company identity; mutable tickers, names, exchanges, and provider metadata never identify retries, associations, or duplicates outside deterministic fixtures.
+
+Pi replaces new agent execution machinery rather than adding a second business workflow engine. The baseline excludes PostgreSQL, separate object storage, and custom realtime transport; Eve or Vercel Workflow require demonstrated need and an explicit decision. Vercel Hobby is acceptable only within verified limits; routes, credentials, resource settings, showcase identity, and deployment URLs remain configuration.
+
+### Local development
+
+`package.json` pins pnpm and Node.js (`devEngines.runtime` + lockfile); `.node-version` must match for CI. `pnpm-workspace.yaml` enforces a 7-day release age, no trust downgrade, blocked exotic subdependencies, and explicit build-script permissions (approved migration exceptions target exact versions). Convex CLI 1.47.0 carries a version-scoped pnpm patch for [upstream issue 635](https://github.com/convex/convex-backend/issues/635) so activity-reporting errors warn without stopping the local backend.
+
+Worktrees use isolated native configuration and instance identities. A locked `local-runtime-ports.json` in the common Git directory reserves fixed ports for Convex, its site endpoint, dev web, build preview, and Playwright capture; startup never silently picks another port on conflict. Commands: `pnpm dev:ports` (offline reservations), `pnpm dev:status [--json]` (live TCP owners via Linux `ss`, `/proc`, and `flock`), `pnpm dev:stop [--port <p> --pid <pid>]` (verifying process birth identity), and `pnpm dev:restart` (preserving capture). `dev:web --port` and `PORT` on `dev:browser` update assignments after conflict checks (`0` is invalid). Native restarts pin existing deployment metadata version and refuse silent upgrades; the local watcher defaults `DATABASE_UDF_USER_TIMEOUT_SECONDS=10` and 10s idle/congested admission waits while preserving `FUNRUN_ISOLATE_ACTIVE_THREADS` overrides. An ignored runtime manifest tracks invocation-tagged live processes (with optional `verificationScope: "required"`) for tree cleanup without removing port reservations.
+
+For worker-protocol edits under a watcher, hold Pi worker admission transactionally (`pnpm convex:sync --url http://127.0.0.1:<port> --hold`), verify/publish while held (requiring zero active writer markers and zero live leases), then `--release`. If a worker disappears, `--recover` while held fences only expired leases whose mission, generation, and writer still match active markers (capped at 16 markers/transaction), advancing writer epoch without provider calls or automatic release.
+
+## AI Use and Deterministic Execution
+
+Model assistance serves explicitly defined phases (including pre-acquisition framing or query planning) with stated purpose, expected output, and semantic justification. Keep reliable lookups, validation, counts, transitions, and formatting deterministic. All dispatch follows [provider boundaries](#provider-boundaries) and [cumulative accounting](#context-recovery-and-resource-accounting); code authorizes work, never a model deciding whether routine work needs AI. Pre-acquisition hypotheses establish no company facts, cannot start Sources/Investigation before Start research, and preserve [implementation transition](#implementation-transition) controls.
+
+## Agentic Missions and Shared Operations
+
+Workbench is the analyst's conversational teammate coordinating dossier requests through [its conversation contract](#workbench-conversation-steering-and-instructions); Sources conducts documentary inquiry; Investigation contributes assertions and investigates framed questions; Synthesis connects retained appraisals. Agents act from mission start without a risk-trigger prerequisite and use the shared harness over domain-owned operations (input/result schemas, validation, policy, versions, persistence, effects, reuse, and dependencies). Server context grants authority; model arguments cannot.
+
+| Business operation | Domain responsibility | Agent exposure | Controlled result |
+| --- | --- | --- | --- |
+| Consult mission state | Dossier and preparation | All roles (scoped) | Compact scope, versions, references, progress, restrictions, pending work. |
+| Search available material | Documentary material | All roles (scoped) | Candidate passages, reproducible references, search limits. |
+| Read in context | Documentary material | All roles (scoped) | Exact passages, surrounding context, observed links, restrictions. |
+| Verify public context for framing | Framing | Workbench pre-Start | Dated event observations or explicit inconclusive outcome. |
+| Adjust proposed framing | Framing | Workbench pre-Start | Versioned draft changes preserving explicit analyst edits. |
+| Transmit an analyst instruction | Workflow | Workbench | Tracked domain request linked to original message and need. |
+| Pause or resume research | Workflow | Workbench on analyst request | Controlled suspension/resumption preserving work and prerequisites. |
+| Discover sources for a need | Sources | Sources | Bounded candidates/provenance or explicit empty/unavailable/capacity result. |
+| Make a source consultable | Sources | Sources | Acquired or reused content with capture and provenance. |
+| Submit documentary qualification | Sources | Sources | Document contributions and restrictions with targeted diagnostics. |
+| Request a targeted documentary check | Sources | Sources | Statement documentary support, scope, and limits. |
+| Contribute to the inventory | Shared inventory | Investigation | Assertions, corrections, and question-specific uses under shared rules. |
+| Request a documentary complement | Workflow | Investigation | Grouped decisive needs in the single permitted complement phase. |
+| Submit appraisals | Investigation | Investigation | Controlled responses per question for grouped analyst review. |
+| Request analytical re-examination | Workflow | Synthesis | Concern or necessary premise routed to Investigation on available material. |
+| Submit synthesis | Synthesis | Synthesis | Joint mechanism diagram and argued note, or reasoned non-establishment. |
+
+Consultable sources require an authorized candidate or observed link with recorded origin and retained destination bytes; URLs or labels establish neither reading nor qualification.
+
+### Shared Execution Structure
+
+| Code boundary | Single responsibility owner |
+| --- | --- |
+| `convex/execution/` | Shared contracts, mission lifecycle, operation requests/outcomes, suspension/continuation, repetition controls, causal traces, Pi Durable missions, and retained Workflow drivers. |
+| Static versioned agent definitions | Instructions, context construction, allowed operation refs, result/completion criteria (`AgentDefinition` contract without modifying the executor driver). |
+| Existing domains and integrations | Business operations, semantic criteria, artifact models, acquisition, provider adapters, attempt receipts, cumulative accounting. |
+
+Definitions declare `research-slot` or `conversation-turn` scope, closed operation effect kinds (`pure query`, `atomic domain effect`, `durable action`, `child delegation`), and immutable `inputJson` completion callbacks. Publication revisions freeze conversation-read membership atomically; domains emit fact deltas deduplicated by the executor under a 256-fact ceiling. AST ownership checks and registry conformance tests guard boundaries across the same registered definitions used by runtime, profile preparation, and offline calibration.
+
+Durable operations declare either an inline `execute` callback or a trusted static `scheduledAction`. For scheduled work, `execution/operations.claim` authorizes and schedules the actual action atomically with the request's waiting reference and job ownership; `beginScheduledExecution` permits one start in the original execution generation. Running and waiting effects remain engaged for sequential admission and analyst pause settlement. The action records its own result through the existing observation/adoption owner, which wakes Pi; duplicates consult retained work, cancellation cancels queued jobs, and an unknown outcome never authorizes redispatch.
+
+New agent missions pin `pi-durable` version 1 (`@earendil-works/pi-durable`, Pi AI, Chord 1.4.0) for generation/tool loops, checkpoints, technical logs, and automatic compaction; Convex retains persistence, wakeups, admission, accounting, adoption, and publication. New Workbench conversations pin definition version 7 (versions 4, 5 and 6 remain supported for already-pinned conversations) and share one append-only Pi commit log across turns (retiring older prompt variants; unsupported versions refuse execution). Fenced leases track mission, generation, writer, and epoch: 90s leases renew every 25s; terminal tail crashes reopen strictly for closure (1s/2s retries, max 3 epochs); commits persist before in-memory projection updates (1 idempotent retry on append acknowledgement loss); deferred operations yield with a 30s recovery check and drain in bounded batches. Delivered definitions cover saved-material inspection, Workbench v7 with retained v4/v5/v6, and default-disabled Sources v5 with retained v4 (`Investigation` and `Synthesis` bindings remain pending; pre-pruning verification evidence is at `docs-checkpoint-2026-11-18:docs/verification/2026-10-30-pi-durable-replacement.md`).
+
+History continuations use opaque `history:<requestId>` references bound to run, mission, generation, and instruction version; first reads omit cursors and fabricated/foreign cursors receive recoverable refusals. Initial mission-state lookups may target one event via `historyReference` (mutually exclusive with `cursor`). `consult_conversation` reads earlier processed exchanges (excluding queued turns) via paginated native reads under 4,096-row / 512 KiB ceilings, returning Unicode-safe 48 KiB pages. Public history exposes each delivery's stable request key for Convex optimistic reconciliation (UI keeps no second transcript store; oldest unblocked awaiting message displays in transcript when idle and unpaused).
+
+Every operation returns a closed object contract verified against database table IDs; models receive structured JSON, not double-encoded strings. Documentary operations pass `sourceId` and `captureId` (plus `contentHash` when available), never `sourceCaptureId` aliases (decoded only at legacy inspection boundaries; acquisition v2). Invalid tool inputs retain field/type diagnostics (`operationInputFeedback` resolves discriminated union branches to the failing nested field rather than defaulting to the final union branch); `normalizeOperationInput` preserves domain refusal codes and field guidance instead of collapsing to `invalid_operation_input`; domain completions may return structured correction feedback into compactable Pi history without replaying effects, refunding reservations, or invoking a second semantic controller.
+
+Shared limits: sequential tool dispatch (reads may run concurrently where independent), 15-minute default cumulative dossier window (explicit campaign grants keep their `researchDurationMs`), 16 KiB notes, 64 KiB operation results, 20 events/history page, 128 KiB structured one-shot input cap (4-request limits apply only to retained Workflow missions). Consecutive non-progress thresholds stop missions: a first completion refusal reaching threshold retains its prior count/identity once so correction stays admissible, and one verified material read (`readRequestId`/receipted history) preserves that streak once until progress resets it (`256`-fact deduplication). Recoverable worker interruptions suspend framed runs with `execution_interrupted` (releasing the execution slot; public Resume reclaims it without replenishing budgets). Cancellation fences adoption immediately and schedules bounded cleanup.
+
+### Accepted Native Conversation and Model Interface
+
+Maintain one Pi conversation per dossier across Workbench turns while scoping authority, mission identity, and accounting per response turn (`docs-checkpoint-2026-11-18:docs/brainstorming/question-led-workbench/2026-10-26-agentic-execution-architecture.md` preserves historical refinement notes). Admit analyst messages as idempotent native submissions; keep queued messages outside active instructions until admitted and reject stale adoption/publication if a steer lands mid-final-answer.
+
+#### Tool inputs and framing authority
+
+Project tool schemas from canonical operation contracts and validate exact received arguments before persistence: malformed JSON becomes a recoverable operation refusal retaining exact original bytes (only spaces/tabs/CR/LF stripped cleanly). Bind unique active messages automatically; multiple candidates require explicit refs. Filter offered tools by preconditions (e.g., EN/FR whole-program preservation grammar disables framing edits for that active turn only; partial/quoted sentences do not trigger preservation).
+
+Framing operation v2 anchors edits to the active message's original receipt revision (`saveFraming` scans up to 128 intervening revisions and blocks changes to analyst-edited scope/content/order or deleted questions). Before native generation dispatch, compare admitted message IDs and projected tool schemas against the transcript; mismatches re-prepare once and stop explicitly after 3 consecutive preparation mismatches.
+
+#### Native commands and delivery
+
+`workbench.command` exposes typed `/pause` and `/resume` (`runId`, `requestKey`, `expectedGeneration`) reusing button mutations/checks atomically with zero model calls, generations, or receipts. Workbench offers `request_approval` (never `control_research`) against `convex/execution/approvalCatalog.ts` (`pause_research`, `resume_research`, `continue_sources_preparation`, `settle_sources_preparation`): active `approvalGrants` (`approvals.listGrants`/`.revokeGrant`) apply automatically, duplicates reuse pending `approvalRequests` IDs, and card choices (`approvals.decide`) sync idempotent `approval_decision` exchanges passively via native `write` submissions (with `recordApprovalNotice` for display-only notices) without generating synthetic turns.
+
+#### Completion and publication
+
+Provisional analyst-facing prose streams via a fenced Pi preview read model keyed by turn, invocation, instruction version, and native sequence; interrupted prose archives on the turn without authorizing effects or exposing hidden reasoning/diagnostics. Workbench converts final text replies to typed completions; structured agents require strict JSON completions (validation failures trigger one bounded continuation correction).
+
+Before advisory review, Workbench v6 checks the initial server-created framing delivery against the current saved program: a nonblank scope and at least one question are required while framing remains open and active instructions permit editing. A valid analyst draft satisfies this without another write. Missing programs return `framing_program_required` through the shared completion correction; Pi can save an open provisional program and continue. Explicit preservation/control authority, later explanatory turns and retained v4/v5 completion behavior are preserved. Repeated non-progress, cancellation or exhausted capacity end through existing technical stops, not a successful framing reply. This structural check does not establish economic usefulness or event relevance, and never invokes Start or reserves an analysis.
+
+Blocked missions suspend framed research via `execution_interrupted`; non-recoverable stops expose `settle_sources_preparation` without Resume, waking durable checkpoints on settlement without renewing deadlines. Control-only messages receive code-owned factual confirmations; failed latest framing writes append explicit refusal receipts. Publication enforces the frozen English `researchStatus` vocabulary v1 (`No research has been started/initiated`, `Research has not/hasn't [been] started/initiated`, `research program`, excluding blockquotes/fenced quotes) and triggers bounded contextual correction on mismatch.
+
+#### Advisory response control
+
+Optional and disabled by default (`responseControlSettings` revisions + `workbenchResponseControlContracts`, provisional defaults: contradiction `>= 0.90` requests correction; final support `< 0.80` shows visible reserve). Eligible replies (after recorded operations or changed dossier fact fingerprint; exempting code-owned confirmations and unchanged-fact discussions) run `check_response_coherence` (hidden from model tools) against OpenRouter Decisions (no provider pin, 32 KiB cap, 30s timeout, zero retries, price-ceiling check). Max 2 semantic checks and 1 tool-free corrective generation per turn (never rewriting drafts or substituting text); private turn audit stores raw requests/scores/receipts for admins while analyst views receive only public reserves.
+
+#### Instructions and domain projections
+
+Compose one autonomous method + stable domain method once at Pi root; Workbench v5/v6/v7 add trusted definition-owned phase instructions alongside the current domain section; `separated_v1` separates `domain` observations, `mission`/`constraints` authority, `conversationInstructions`, and `activeWork` refs. `domain/researchState` owns the compact current projection and single analyst-facing Sources stop sentence (`settledAt` marks handoff, not stop onset; cancellation persists structured mission stops in the journal before clearing mutable status). `consult_run_state` v2 returns versioned lifecycle/observation pins (`operation_result_capacity` on overflow) alongside legacy v1 union support.
+
+### Native task skills and dated observations
+
+Workbench 7 and Sources 5 use application-owned skills under `agent-skills/`, separate from developer skills. Pi native discovery, validation and catalogue rendering generate `convex/integrations/agentSkillPackages.json` through `pnpm agent-skills:sync`; `pnpm agent-skills:check` verifies immutable package bytes. The `read` operation uses Pi's native reader in a Node action through the existing scheduled-operation lifecycle. Workbench 4/5/6 and Sources 4 retain their original methods without skills. A generated immutable resource package is bound to each adopting agent definition; resumed work retains the same method and annexes. Missing resources fail explicitly without latest-version substitution. Native history/compaction remains Pi-owned. Resource consultation grants no documentary contribution, execution authority or additional allowance. Replace migrated method text rather than append a duplicate instruction layer; retain existing authority, provenance and completion controls. The [accepted design](../docs/brainstorming/question-led-workbench/2026-11-19-native-task-skills-and-document-dates.md) records native API probes, worked-example scope and the separate integration and semantic acceptance checks.
+
+Paired method qualification selects `taskMethods` in the immutable campaign configuration. `retained_control` binds qualification-only Workbench 8 and Sources 6 to the previous inline methods while retaining the current reader, domain observations, operations and completion controls; `native_skills` binds Workbench 7 and Sources 5. Both arms require identical model, reasoning and controller settings. The control suppresses catalogue discovery only; it admits the same immutable reader resources. Selection requires an active local fixture, owning campaign lot and declared scenario. Conversation and mission versions are pinned before execution; ordinary dossiers keep the current defaults. The [qualification protocol](../docs/verification/native-task-skills-qualification-protocol.md) records the separate frozen-input and semantic acceptance prerequisites.
+
+The same accepted correction distinguishes document publication from event dates, retains the origin of structured dates, preserves unknowns and exposes conflicting indications. Extract only supported metadata or explicit document labels; a narrative mention is not automatically a publication date. Preserve date associations through continuation and the serialized model input, using existing metadata owners across Workbench and Sources. Correct date delivery does not establish event relevance. The additive `dates` projection shares one reconciliation owner across Workbench and Sources, retaining publication, filing and event evidence separately. Legacy aliases are derived only from reconciled evidence and are unavailable when their date kind conflicts. Acquired document dates use the verified representation, independently of passage pagination; retained excerpts and progress still describe only the returned range. Historical alias-only readings are normalized before continuation reconciliation. Native catalogue and tool contracts participate in the existing input-profile fingerprint. Native provider serialization, persisted harness reopening, forced compaction and pinned rereading have deterministic coverage. Both mission readers have also run through an admitted local deployment with unchanged corpus/preparation snapshots and typed path refusal. These checks do not qualify semantic improvement. New successful context pages preserve the repetition counter without adding documentary progress; canonical path/page identities, including the remaining EOF extent, make repeated pages count as repetition. Invalid paths and beyond-EOF offsets return typed invalid input before native reading.
+
+### Administrative Model Configuration
+
+Convex owns the OpenRouter catalogue and per-agent defaults (bootstrap seeds GLM-5.3-Flash and DeepSeek V4.1 Flash 1017, defaulting unassigned agents to GLM without enabling paid routes). Admin catalogue updates claim a versioned preparation before fetching fixed OpenRouter endpoints (no redirects, 15s HTTP / 60s total, 8 MiB response, 8,192 rows). Routing derives options from descriptor metadata and effective effort (`recommended` picks `medium`, nearest higher, then lower; mandatory reasoning forbids `Off`), keeping zero automatic provider retries.
+
+`Update model` / tooling calibrates native serializer byte profiles offline across ASCII/quotes/backslashes/Unicode for each selectable effort, indexing immutable profiles by instruction/schema/SDK/catalogue fingerprints (stale profiles block dispatch until refreshed page-by-page). Version 3 manifests pin `recommended` for quality lots and explicit lower/`Off` settings only for stress lots. Composers in `src/components/composer` pair assistant-ui slash `TriggerPopover`, Base UI Commands picker, and Pasta UI model/effort selector without resetting drafts.
+
+### Mission Lifecycle and Operation Handoffs
+
+| Execution concept | Retained identity and state |
+| --- | --- |
+| Agent definition | Static ID/version, instructions, operations, completion criteria. |
+| Durable mission | ID, dossier, objective, scope, versions, obligations, result refs, continuation state. |
+| Native Pi conversation | Transcript, compaction, technical continuation (spans Workbench turns). |
+| Workbench turn | Admitted messages/steering, instruction version, correlated work, outcome. |
+| Temporary invocation | Bounded execution attempt, supplied context, provider-attempt reference. |
+| Operation request | Caller, operation/version, validated args/refs, expected domain versions, logical ID, outcome. |
+
+New missions pin protocol v3 + Pi runtime v1; legacy v2 Workflow records and direct AI SDK / Convex Agent v1/v2 tasks stay runnable without implicit migration. Native waits expire under mission deadline or 15-minute native-request limit (`unknown` until factual settlement). Child missions inherit parent backend and stay strictly domain-granted. Atomic operations persist validated receipts and domain pins transactionally; settlement rejects mismatched receipts. Mutations execute sequentially; completion drains outstanding native/child work before artifact validation.
+
+### Sources Mission and Prepared Material
+
+Activated research launches require `sources_mission_v1` (`SOURCES_MISSION_ENABLED=true`, valid `SOURCES_MISSION_ENVELOPE` with `maxNeeds`, `initialSearches`, `complementSearches`, `acquisitions`, `controls`, and positive `SOURCES_PREPARATION_WINDOW_MINUTES` via `sourcePreparationWindowMs()`). Missing config fails Start as `sources_configuration_unavailable` after quota check (no legacy fallback). `researchQuestionCapacity` (`convex/domain/framingEditAuthority.ts`) computes allowed questions via `documentaryQuestionCapacity` (`maxNeeds` minus `initialDocumentaryNeeds` within `MAX_RESEARCH_PLAN_QUESTIONS`), returning recoverable `adjust_framing` refusals (`framing_question_capacity`) on excess growth while `workbench.snapshot.researchStart` disables Start (`sources_need_capacity` authoritative guard). [ADR-029](../docs/decisions/029-ground-workbench-framing-and-carry-coverage-through-handoffs.md) governs coverage and framing provenance (`docs-checkpoint-2026-11-18:docs/brainstorming/question-led-workbench/2026-10-24-source-ingestion-and-processing-conception.md` holds earlier alternatives).
+
+Start pins the selected coverage preset with `sources_coverage_v1`. Sources applies its expected focus when reserving discovery and freezes performed and unfinished searches at handoff. Attributed assessments retain their reading references. Search focus and publisher domain do not establish independence. Historical handoffs without evidence of an applied preset keep that status unknown. Investigation determines which gaps justify a complement. Synthesis carries limits that affect the conclusion.
+
+Preparation tracks needs, captures, work reservations, qualifications, and frozen results (`aiTaskResults`). Qualifications/checks cite passages via `(readRequestId, passageOrder)` verified against capture/passage hashes; quotations materialize exact contiguous bytes before semantic check (max 15 contributions/qualification; blank contribution IDs invalid; max 64 observed URLs × 128 code points / 192 KiB destination aggregate). Seven operation families: `consult_run_state`/`consult_prepared_material`, targeted discovery, saved-material search (nonblank queries required), contextual reading, acquisition, qualification submission, and targeted check.
+
+The common Sources factory declares `sourcesMissionActions.execute` for discovery, acquisition, qualification submission and targeted checks through the [shared scheduled-operation contract](#shared-execution-structure). The Node action computes its deadline at entry and runs its work in place; the shared executor owns its one-time start and terminal settlement. Saved-material consultation keeps its registered execution path.
+
+Unchanged research-only scheduled waits retain their existing fallback wake without claiming a Pi writer or hydrating its log. `piControl.prepare` first validates authority, generation and leases, then requires one owned pending/in-progress job, the current observation frontier and no competing pending/observed/unknown work, result wake or rebind. New observations, results, conversational steering and uncertain state take normal replay. No secondary task cache is maintained.
+
+Handoff (`sources_prepared`, idle) is settlement, not dispatch (`assertPreparationSettlementFence`, `requireSettlementAuthority` omit dispatch deadline/budget for system handoff). Per [ADR-027](../docs/decisions/027-settle-sources-at-limits-and-let-the-analyst-renew-the-window.md), `finishChild` reclassifies `execution_deadline`/`operation_outcome_unknown` when `sourcesContinuationAvailable` holds into `execution_time_limit` → `suspendResearchAtTimeLimit` (`sources_time_limit`), raising `continue_sources_preparation` / `settle_sources_preparation` via `raiseSourcesTimeLimitDecision` (`raiseApproval` auto-applies active grants; `approvals.decide` forbids `Deny`; `researchControl.resume` refuses `sources_time_limit`). Renewal (`renew_window`) extends preparation/harness/mission deadlines by `sourcePreparationWindowMs()`; settlement (`requestSourcesSettlement`) wakes `awaitSourcesHandoff` without consuming a running slot. `sourcesPreparationPhase` (`convex/domain/sources.ts`) drives workspace/Workbench; `convex/sourcesWorkspace.ts` exposes `overview`, `listSources`, and `getSource` (32 recent readings window projected into required context; excerpt bounds in `convex/resourcePolicy.ts`).
+
+## Workflow and Revision Contract
+
+```text
+Company confirmation → persistent framing dossier → proposed scope, questions & mandate
+→ optional refinement → explicit Start research → Sources preparation
+→ Investigation (common inquiry & inventory) → optional single Sources complement
+→ Investigation re-examination & appraisals → grouped analyst review (versioned)
+→ ≥1 retained appraisal → Synthesis (joint diagram & note, or non-establishment)
+```
+
+Start research atomically fixes framing, consumes 1 analysis, claims execution slot, and starts Sources. Initial discovery cannot spend Investigation's complement; Synthesis cannot reopen discovery. Grouped review binds decisions to immutable appraisal versions (zero retained stays at review). Completion validates artifacts, controls, and prerequisites per domain.
+
+### Workbench Conversation, Steering and Instructions
+
+Workbench answers dossier questions by chaining authorized reads/searches without authoring controlled artifacts or claiming unperformed control. Queued messages wait outside active turns; `Steer` joins at the next invocation after in-flight calls settle. Instructions persist original text, interpreted need, versions, and explicit treatment outcomes separately from transmission. Workbench links an existing Sources need before checking capacity for a new request. Sources owns admission and treatment, and Workbench can inspect settled need outcomes. Analyst pause halts new research dispatch while allowing engaged work to settle and supporting read-only discussion/instruction queuing; Resume claims the slot and rechecks human prerequisites.
+
+#### Public context during framing
+
+The accepted framing contract uses the existing Pi Durable mission. Convex supplies the confirmed company, each active analyst message with its exact text and server-recorded date, the selected coverage preset, and the current program including analyst edits. Retries and later consultations preserve the original message date. Instructions and offered operations follow the current phase. At framing, distinguish analyst-supplied details from assumptions introduced in a query. After Start, Workbench consults dossier material and routes unresolved checks under the [conversation contract](#workbench-conversation-steering-and-instructions).
+
+Separate public discovery from reading. Workbench can inspect titles, publishers, URLs and available dates from [Exa search](../convex/integrations/exaSearchClient.ts), reformulate the query or select a returned publication to open. Selected non-SEC leads use [Exa Contents](../convex/integrations/exaContentsClient.ts); analyst-supplied public links use pinned public retrieval, and SEC links reuse the [SEC filing integration](../convex/integrations/secEvidence.ts), under [public URL intake](#public-url-intake-and-analytical-materialization). For material already authorized in the dossier, the shared passage tools preserve the captured version and its use restrictions. The framing grant and shared provider ledger govern external work. SEC submissions and filing fetches are independently admitted and settled. Unknown dispatches retain their ledger state and confer no authority to repeat the call.
+
+Workbench v6 public search uses the same `authorizeDocumentaryDiscovery` policy as Sources: the dossier preset supplies the default focus, with an optional explicit focus for a specific documentary purpose. The query and orientation together must fit the existing 512-character discovery limit before the company prefix; oversize input returns field guidance before provider I/O, without truncation. Provider receipts retain the actual oriented query. V5 keeps its original search schema/query behavior and rejects forged focus; supplied-link reads, selected reads and retained v4 lookup remain unchanged. Source independence and relevance require qualification beyond the query suffix.
+
+At draft write, bind an analyst-identified event to exact causing-message text. For a public basis, resolve each cited passage to an adopted reading for the active dossier, turn and framing revision, including passages from separate reads. Retain the URL and exact excerpt, distinguish publication date from reported event date, and require dated support for the event. Discovery metadata alone cannot support the write. Refusals distinguish missing dates from mismatched reading identity and identify the invalid provenance field. An activity excerpt must occur verbatim both in the active analyst request and in the proposed scope; refusals identify which relation failed. Initial v6/v7 `open` writes require that verbatim `activityExcerpt` rather than silently replacing narrow proposals with `companyProvisionalProgram` (retained v4 and bare v5 fallback paths remain isolated for compatibility). Unavailable reads preserve prior valid readings and the analyst’s explicit direction. Framing provenance explains the proposed program. Sources qualifies any subsequent documentary use under its own mandate. Workbench v5/v6/v7 expose separate `search_public_context` and `read_public_context` operations. Read continuations use retained text without reacquisition and distinguish the displayed extent from acquisition completeness. An open event may retain an exact analyst activity and conditional questions; the writer renders each condition once in the saved question text and retains its basis. Unchanged associations inherit from the authoritative revision, while changed or deleted questions lose their superseded associations. When replacing or removing a structured condition, the writer removes its previous generated prefix before rendering the current question. Conditional passages are projected once by read ID; each question retains its own basis association. A minimal open basis round-tripping identical established content inherits its authoritative open provenance; an insufficient minimal proposal changing that content is refused. Explicit Start fixes that program and its coverage preset for Sources. Retained v4 conversations keep the combined lookup. V6 instructions distinguish a possible event or interpretation from its economic consequences, keep common questions unconditional, restrict analyst attributions and cited hypotheses to observed text, and forbid replacing unresolved intent with the latest dated announcement or overstating search recency. Provenance validity does not prove entailment. Deterministic implementation is delivered; the [roadmap](../docs/ROADMAP.md#phase-6--framing-and-controlled-transition) keeps live economic judgment qualification separate.
+
+## Semantic Controls and Analytical Outputs
+
+Semantic controls run on qualification, inventory assertions/uses, appraisals, and synthesis (consultation/search/reading/handoff stay deterministic). Preparations pinned to `source_actions_v4` return keyed objects normalized to domain arrays; exhausted attempts yield `documentary_control_unfinished` without adoption. `executePreparationModel` reserves `reservedMaxOutputTokens` from model capabilities and journals it in `beforeDispatch` (`known_final_v1` reserves full envelope; final cost settles from receipts).
+
+Shared structured one-shot calls use native SDK streaming. Routed middleware retains visible text before structured enrichment; the SDK transform packs text at the existing retained-fragment capacity before partial parsing. One append runs at a time with backpressure. Ordered appends keep a bounded tail and incremental hash state; sealing constructs the immutable manifest once. Drain and seal use the existing model-settlement grace and preserve known usage on capture failure. HTTP abort owns transport cancellation; the middleware avoids the installed provider's unawaited stream-cancellation rejection. Hidden reasoning is excluded. Complete replies retain their existing schema/adoption checks; diagnostic prefixes never become replay input, evidence or analyst output. Protected administrator/fixture readers can inspect an explicitly incomplete committed prefix after worker loss. Dossier purge deletes these exclusively owned diagnostics in bounded batches while preserving intentional shared immutable storage.
+
+| Boundary | Semantic responsibility |
+| --- | --- |
+| Documentary qualification/check | Passage fidelity, period, modality, attribution, restrictions, genuine comparability (`supported`, conflict, not established, unfinished). |
+| Inventory contribution | Evidence/permitted use, `Fact`/`Inference`/`Hypothesis`/`Unknown`, scope, question-use rationale (admitted before appraisal). |
+| Appraisal submission | Path from assertions/assumptions/mechanisms to economic impact; rivals, objections, decisive unknowns constrain result. |
+| Synthesis submission | Transversal inferences, joint diagram-to-note fidelity, or reasoned non-establishment basis/limits. |
+
+Reuse controls only on identical artifacts/evidences/rules/restrictions (no model equivalence adjudication). Unknown/missing outcomes never turn into admissibility.
+
+### Analytical Control and Question Outcome Contracts
+
+Unimplemented target per [ADR-026](../docs/decisions/026-use-typed-analytical-controls-and-materialized-question-outcomes.md): Appraisal and Synthesis submissions expose one artifact-family operation each (deterministic checks → closed model findings → deterministic `admissible`/`revision_required` initial disposition; later `restricted` narrows affected uses and flags dependents). Investigation will maintain a materialized question-outcome projection separately from `deriveQuestionCoverage` (`Unknown` evidence presence never constitutes an answer), gating grouped review and Synthesis (≥1 retained substantive appraisal required; `justified_insufficiency` completes inquiry without answering).
+
+## Context, Recovery and Resource Accounting
+
+Keep evidence outside model windows: supply required context (scope, instructions, versions, open needs, awaited results), qualitative working memory (notes ≠ facts), and paginated retrievable history. Unrecoverable context overflow blocks explicitly.
+
+Recoverable interruptions reuse confirmed work and never blindly replay `unknown` outcomes; one shared attempt policy owns retries. For pre-ADR-027 failures (`run_failed`, unsettled `started` preparation, deadline-blocked mission), `runRecovery.reopenAtSourcesTimeLimit` (`convex/runRecovery.ts`) and `admin.reopenAtSourcesTimeLimit` (gated by `readReopenBlock` / `adminOperations.inspectRun.reopenable`) advance `executionGeneration` and `researchControlRevision`, pause at `sources_time_limit` without resetting counters, launch `researchWorkflow.run` (`reattachSources` → `sourcesMission.reattach` → `missions.rebindCompletionEvent` → `awaitSourcesHandoff`), and raise the approval/settlement decision. Count all provider calls cumulatively per dossier from framing onward.
+
+### Accepted Native Context and Compaction Design
+
+Supply current Convex state via a native Pi prompt section (`docs-checkpoint-2026-11-18:docs/brainstorming/question-led-workbench/2026-10-26-agentic-execution-architecture.md` preserves alternatives). Settle completed operations before rendering, derive durable transcript proof (state + section + schemas + serializer), verify observation/command frontiers immediately before dispatch, and stop after 3 unchanged preparation stalls. Deliver immutable execution-journal observations one bounded row at a time with queued writes preceding steering; existing pre-metadata sessions receive one current-state anchor without fabricating history.
+
+Project complete controlled contribution statements, restrictions, and inclusion status uniformly across generation, consultation, and review; supply documentary metadata (`title`, `form`, explicit `filingDate` vs `publicationDate`) without inventing missing dates, distinguishing `limitReached` passage pagination from discovery allowance exhaustion. Replace fixed 128 KiB / 6,144-token ceilings with model capacity and Pi native output/compaction sizing (refusing oversized required context or incomplete summaries). FIFO admits messages against the model window one by one. Store >512 KiB payloads in immutable fragments (max 60 Ki UTF-16 code units, preserving surrogate pairs) under the 32 MiB conversation log ceiling. Under `known_final_v1`, reserve from full native capacity/pricing tiers and settle monotonically on confirmed provider costs while fencing unknown/conflicting/over-reservation outcomes.
+
+### Loop Prevention
+
+Reuse confirmed results when versions match; count progress only on new material, changed contributions, resolved obligations, or first reads of distinct conversation fragments. Repetition stops directly with retained work/cause; compaction or new IDs never reset repetition or budgets.
+
+### Traceability and Typed Outcomes
+
+Correlate dossier, turn, mission, invocation, operation, and provider attempts. Journal serialized wire requests (excluding secrets/hidden reasoning) before dispatch and raw model replies + provider receipts atomically before adoption; keep raw un-repaired tool JSON separately from parse diagnostics. Expose a read-only paginated admin dossier timeline. Late cancellation receipts settle cost without adopting output or advancing missions.
+
+## Implementation Transition
+
+Retained corpus-review workflows/revisions/checkpoints stay readable for legacy/evaluation/showcase dossiers (`archive/legacy-source-review/` holds the retired UI retired 2026-11-15). Operators remove analyst research dossiers strictly via `dossierPurge.purgeResearchDossiers` (stops running workflows via `cancelRunExecution`, refunds 1 analysis, emits `dossier_purged`, deletes children-first in indexed batches, and garbage-collects unreferenced captures). Target analytical bindings (Investigation, Synthesis) remain unimplemented and off-limits.
+
+## Domain and Persistence
+
+Legacy compatibility tables (excluding unimplemented target schemas):
+
+| Records | Ownership and invariants |
+| --- | --- |
+| `Visitor`, `Invitation`, `Company`, `ResearchRun` | Admitted identity, 5 access slots, canonical CIK company, revision-aware execution. |
+| `ResearchPlan`, `ResearchPlanQuestion` | Versioned plan & immutable questions; coverage is derived. |
+| `Source`, `CorpusRevision`, `SourceDecision` | Candidate provenance, immutable approved revision, append-only decisions. |
+| `SourceSelectionProposal`, `SourceSelectionProposalItem` | Immutable recommendation snapshot/policy; creates no decision. |
+| `SourceCapture`, `SourceVersion`, `SourcePassage` | Immutable capture bytes, approved version (`media`/hash), exact reproducible locators. |
+| `Claim`, `ClaimEvidence`, `ClaimDimensionLink` | Canonical claim proposal, `supporting`/`counter`/`context` links, `Unknown` → question binding. |
+| `ClaimDecision`, `ClaimDimensionDecision`, `AssessmentDecision` | Append-only analyst decisions & overrides. |
+| `AssessmentDimension`, `ScoreProposal`, `Relationship`, `BriefRevision` | Legacy dimension proposals (superseded for target workflow). |
+| `AITaskResult`, `PolicyEvaluation`, `ProviderCall` | Versioned task snapshots, deterministic policy rationale, attempt telemetry. |
+| `WorkflowStep`, `CheckpointDecision`, `RunEvent`, `AuditEvent` | Durable execution, human checkpoints, product progress, security/quota audit. |
+| `EvidenceSourceStatus`, `ArtifactUploadLease` | Execution projection & `reserved`/`uploaded`/`committed`/`orphaned` file-storage leases. |
+
+Derived `sourceReviewItems` maintain decision heads transactionally; `EvidenceSourceStatus` tracks branch states (`queued`/`running`/`succeeded`/`partial`/`failed`). Workspace URLs map `section=overview|sources|investigation|synthesis` + `subsection` + `inventory=1` (`progress` → Overview, `evidence` → Inventory, `assessment` → Investigation/Review, `map` → Synthesis/Mechanism, `brief` → Synthesis/Full brief; `sources` `view=adjust|inspect`).
+
+## Legacy Workflow and Revision Contract
+
+Installed path: Company selection → preflight → analysis reservation → sufficiency review → discovery/preparation → corpus approval → exact capture materialization → hash-gated deterministic showcase claims (`evidence_ready + idle`, or `extracting_evidence + paused + claim_generation_unavailable` on live dossiers). Research lifecycle closed states (`draft`, `checking_public_evidence`, `awaiting_evidence_sufficiency_review`, `discovering_sources`, `awaiting_source_review`, `corpus_approved`, `extracting_evidence`, `evidence_ready`, `assessing_dimensions`, `awaiting_assessment_review`, `completed`), execution states (`idle`, `running`, `paused`, `failed`, `cancelled`, `completed`), and step states (`queued`, `running`, `completed`, `needs_review`, `failed`, `skipped`) remain enforced server-side. Preparation requires `SOURCE_QUALIFICATION_ENABLED=true`; approval freezes accepted decision heads, claims the visitor slot, and increments generation.
+
+## Source Preparation and Selection
+
+### Captures and qualification
+
+Retain normalized content, resolved URL, timestamp, hash, and parser versions. Preparation uses protocol 4 by default (grouped call, max 15 findings; protocol 5 evaluation-only), `source_actions_v4` (durable per-source inspect/qualify), and `collect_then_compare_v1`. Use all structured passages when fitting 128 KiB, else scoped retrieval. Scoped `no_substantive_content` withholds conflicting contributions while preserving independent ones; targeted additions remain pending; manual links and SEC/Exa recovery families preserve cumulative supplement/work ledgers. Targeted comparison binds exact hashes/spans/aliases (`No conflict observed` vs inconclusive/possible conflict).
+
+### Scoped retrieval
+
+New preparations snapshot `structured-v1` + `stable-passages-v1` (URL + hash + passage order tie-breaking) with `SOURCE_RETRIEVAL_MODE=lexical|hybrid` (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_AI_TOKEN` for optional 1024-d Workers AI embeddings; explicit degradation to lexical on absent config/partial failure). Lexical search prefetches max 2 queries × 2 captures × 64 hits via RRF; `ensureApprovedSourceIndex`/`searchApprovedSource` reuse indexed captures read-only (`512` chars / `16` terms / `64` results UI search; `512` passages/source, `4,096` chars/passage). Legacy deterministic proposals (`recommended`/`needs_attention`/`alternative`, v10–v14) preserve immutable draft/approval rules for existing dossiers.
+
+## Acquisition, Validation and Providers
+
+### Public URL intake and analytical materialization
+
+Canonicalize HTTPS URLs; block private/loopback/link-local/reserved/metadata IPs, credentials, non-standard ports, and fragments; validate DNS before connect and every redirect (pinning validated numeric IP with Host/SNI). Materialization checks SHA/offsets strictly; Unstructured PDF Pipeline Jobs and live analytical adapters remain unfinished. Showcase fixtures require exact normalized-input manifest matches.
+
+### Typed analytical tasks and policy
+
+Installed legacy tasks (source relevance, claim/contradiction/entailment/dimension/brief) stay behind versioned schemas and deterministic `pass`/`needs_review`/`blocked` policy gates; target missions do not inherit dimension-based review.
+
+### Provider boundaries
+
+OpenRouter (via AI SDK / Pi native) and experimental CLIProxyAPI Codex subscription access (pinned release/digest, private credentials, no API-key fallback) are the supported routing boundaries. SEC uses identifying direct HTTP under aggregate rate limits; Exa discovery stays metadata-only (`Exa Contents` capped at 1,000,000 chars). Bounded native SSE caps at 1 MiB, tracks header generation IDs, and uses `authority_native_v1` deadlines + 10s settlement grace (no 60s/5m guesses). Interrupted generations schedule one OpenRouter billing lookup after 5s (no redirects/retries, 15s timeout, 64 KiB cap; admin retry ≥30s). From 2026-11-10, confirmed cancelled documentary examinations with nonconflicting bills settle as known terminal technical failures into incident consumption.
+
+| State | Allowed attempt policy |
+| --- | --- |
+| Never dispatched | Initial primary route plus 1 technical fallback. |
+| Confirmed HTTP 408/429/500/502/503/504 or invalid output | 1 additional explicit recovery attempt on primary route (no fallback), bounded by remaining allowances. |
+| Unknown outcome (timeout, disconnect, expired started receipt) | Zero automatic or additional attempts. |
+| Valid uncertainty, missing config, cancellation, disabled paid work, billing error | Zero fallback; terminal failure stays distinct. |
+
+Persist ≥15s cooldown (honoring longer `Retry-After`). `inline_controls_v2`/`source_actions_v3`/`source_actions_v4` yield on every 4th consecutive inline source save.
+
+## Access, Resources and Security
+
+### Admission and execution authority
+
+Five stable `Invitation` slots (1 admin, `analyst-1`..`analyst-3`, local browser `analyst-4` gated on loopback + `E2E_FIXTURES_ENABLED=true`) use reusable 4-digit codes stored as salted HMAC-SHA-256 digests with atomic attempt consumption before digest check. Client readiness waits for server-confirmed Convex auth. Each visitor receives 3 lifetime analyses and 1 active research slot (analyst pauses release the slot; Resume reclaims it under `agentExecutionVersion: 3` generation checks). One kernel policy enforces visitor/workspace/dossier/role/phase/version across native and agent callers. `researchRuns.purpose` (`research`, `evaluation`, `browser_test`) enforces purpose isolation; `browserTestContext` provides finite-lived private Playwright contexts derived strictly from claimed invitations.
+
+### Qualification campaigns
+
+`pnpm workbench:qualify` runs finite scenarios (`convex/qualificationCampaignPolicy.ts`, v1/v2/v3 manifests) against frozen code/manifests after sequential lint/type/unit gates and offline profile refresh (`executionSurface`: `"backend"` default vs `"browser"`). Live grants require explicit campaign mandates (`known_final_v1` only; `conservative_v1` refused; `researchDurationMs` anchored to Start within max 2h context expiry; scenarios capped within 160 work units / 60 acquisitions; `initialFixture` supports zero-provider or resumed fixture states under digest + loopback + fixture checks). Transport faults require the live relay; cleanup revokes contexts, flags, and exports cursor-paginated evidence regardless of failure. New preparation canonicalizes the accounting policy before mandate hashing; grant, protocol and protected relay route must agree. Historical manifests remain readable but inconsistent or uninitialized conflict accounting cannot authorize dispatch. Exact loopback refusal proof binds invocation, generation and wire-body hash, is persisted before acknowledgement and never forwards upstream. Confirmed non-dispatch releases its financial reservation while keeping the application attempt; uncertain or conflicting charges retain their reservation across replay.
+
+The evaluator records saved framing immediately and archives the first confirmed non-compaction Sources request once per immutable invocation/hash. Polling carries identity/dispatch/hash metadata; request bytes use protected readers. A proven non-dispatch can advance to the next prepared attempt; unknown dispatch remains inconclusive. Review distinguishes saved framing, actual dispatched input and completed `sources_prepared`. Both execution surfaces preserve a failed case and continue independent cases only with settled whole-lot accounting, no engaged effects, released workers/publication controls and remaining authority. Unsafe stops retain later cases as unrun; continuation never changes the failed lot verdict.
+
+Automated review runs `@earendil-works/pi-coding-agent@1.5.0` (`investigator_v1` read-only vs `investigator_v2` allowed `write` to `automated-review-report.md` only; `WORKBENCH_REVIEW_REASONING` resolves env → main-worktree `.env.local` → `high`). Accounting supports `native_subscription` (Codex OAuth via `OPENAI_API_KEY` absence rules; native Pi context/compaction without dollar reservations) and `api_cost` (verified pricing metadata, full-capacity conservative reservation, `sdk_estimate` vs `provider_reported` receipts). Fresh API grants use `verified_usage_v1` with a per-request reservation sized from pinned native capacities and official prices. Settlement replaces reservations atomically with reconciled charges when raw usage and SDK counters agree. Unverified charges keep their reservation and block further review dispatch. See [backend campaign verification](../docs/verification/2026-11-10-pi-subscription-campaign-backend.md) and [live Codex review](../docs/verification/2026-11-10-pi-subscription-live-review.md).
+
+Website enrichment is visual-only (30-day CIK cache, nonblank credential-free HTTPS URLs). Preparation accounting tracks `SOURCE_PREPARATION_WORK_LIMIT` (valid responses) and `SOURCE_PREPARATION_INCIDENT_LIMIT` (confirmed dispatched failures), reserving both pre-dispatch (`dispatchCeiling = sum`).
+
+### Locked resource limits
+
+`convex/resourcePolicy.ts` owns canonical defaults/clocks/unit derivations; `convex/resourceLimits.ts` validates Convex env overrides; `pnpm resource-policy:sync` / `:check` keep preview-service JSON synchronized; `scripts/check-resource-policy.ts` enforces zero duplicate timer/capacity/pagination defaults or byte/token mismatches (`// resource-policy-exception: <reason>` for frozen conditions only). All limits run under `authority_native_v1` and Convex Node 10-minute host lifetime (+10s receipt grace; `node_action_deadline` → `execution_interrupted`).
+
+| Boundary | Accepted limit |
+| --- | --- |
+| Access attempts | 5 per anonymous identity and 25 deployment-wide per 15 minutes. |
+| Ranked company search | 40 candidates, locally paginated from 1 immutable result. |
+| Website enrichment | 30-day cache; max 5 metadata results; 3 displayed + selected/session; 12/session & 25/deployment per 15m; 1 attempt, 5s timeout. |
+| Candidate scope | 48 initial candidates; 1 supplement (max 3 searches, 4 additions each, 12 total); 60 retained/frozen (prepared) or 48 (legacy). |
+| Discovered recommendations | `ceil(initial / 2)` (currently 24); analyst refs excluded. |
+| Legacy distinct proposal caps | 2 annual/interim, 3 material events, 4/official family, 4 independent producers (6 for `independent_scrutiny`). |
+| Acquisition & normalized | 16 MiB each (declared/decompressed); max 400 PDF pages and 5 redirects. |
+| Analytical passages | 512 per source; quotations max 4,000 chars; fail explicitly on broken pins. |
+| Source acquisition attempts | 2 initial (+1 explicit recovery for preparation); SEC 10s abortable timeout; Exa Contents 120s timeout. |
+| One-shot qual/comp/control | 128 KiB serialized input; prepared capability native output (no 6,144-token fallback); mission deadline + 10s grace. |
+| Invocation journal | Fragmented >512 KiB (60 Ki UTF-16 code units/fragment); non-native snapshots capped at 512 KiB. |
+| Pi persistence projection | Fragmented >512 KiB; cumulative 32 MiB/conversation (WB v2) or /mission; replay ≤256 commits / 2 MiB reads, checking cancellation & 25s lease clock. |
+| Preparation concurrency | `SOURCE_PREPARATION_MAX_CONCURRENCY` (default 2), bounded by remaining sources; independent of Workflow global queue. |
+| Preparation accounting | Default `SOURCE_PREPARATION_WORK_LIMIT=120` + `SOURCE_PREPARATION_INCIDENT_LIMIT=40` (dispatch ceiling 160). |
+| Preparation execution | Positive `SOURCES_PREPARATION_WINDOW_MINUTES` via `sourcePreparationWindowMs()`; qualification runs keep `researchDurationMs` (historical 15m). |
+| Preparation route ceiling | USD 0.15 / 1M input tokens and USD 0.60 / 1M output tokens. |
+| Comparison retrieval | 60 metadata candidates, 8 primary captures (16 MiB/capture, 32 MiB aggregate reads); 6 priority + 2 context passages/finding. |
+| Shared comparison context | 32 KiB soft allowance; hard 64 passages / 128 KiB; max 8 citations/finding; 700 KiB materialized output. |
+| Structured parsing & retrieval | 100,000 blocks & 20,000 searchable units/capture; 64 lexical hits/capture/tx (fused 64); vector top 256. |
+| Embeddings & allowance | Max 32 inputs/request, 2 active attempts/dossier, 30s, 1 MiB, 833,333 submitted UTF-8 bytes/dossier (USD 0.01 @ USD 0.012/1M). |
+
+### External I/O and transient preview
+
+Authorize operations, leases, and generations before DNS/HTTP; revalidate before persistence; treat external/model text as untrusted evidence. Visual preview calls standalone Playwright `POST /render` (fresh ephemeral context, 1280×720 PNG only, zero HTML/text/OCR, hostname/duration/status logging only) gated on active owned run, claimed invitation, and pending decision, cached per source (1h default TTL, max 2 renders/visitor/run/source per 30s, purged on decision). Chromium connects via an authenticated loopback CONNECT proxy validating numeric public IPs across ≤5 redirects, blocking service workers, WebSockets, downloads, and non-GET requests.
+
+### Frozen framing qualification observations
+
+The existing campaign preparer can resolve a scenario's `framingReplay` descriptor from a hash-pinned material file into immutable document bytes in the mandate. Only a bound local browser-test context with valid fixture authority and Workbench v5/v6/v7 or the admitted v8 control can serve those observations through the existing search/read operations. The model route and generation accounting remain independently governed by the admitted campaign. Frozen observations expose `replayCorpusHash`, retain it in saved framing projections and create no provider receipts or charges. Missing lookup and undated material are explicit corpus cases, with no fallback to live retrieval. Source discovery after Start remains outside this pre-Start replay; normal Sources authority and accounting still apply.

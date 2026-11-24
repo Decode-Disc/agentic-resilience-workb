@@ -1,0 +1,107 @@
+{
+  "status": "failed",
+  "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'unknown'\n- 'waiting'\n",
+  "records": [
+    {
+      "event": "waiting_worker_released",
+      "at": 1795085572715,
+      "requestId": "k5728hjw1gap9r601ahhmp6kth8jg4b1",
+      "scheduledJobId": "kc21wnv6tf2v07y3my1m83p9nn8jg3zb"
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 15135,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 30267,
+      "workerActive": true
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 45353,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 60401,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 75474,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 90523,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 105716,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 120962,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 136081,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 151124,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 166262,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 181308,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 196550,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 211591,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 226666,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 241666,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 256747,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 271799,
+      "workerActive": false
+    },
+    {
+      "event": "still_waiting",
+      "elapsedMs": 286875,
+      "workerActive": false
+    }
+  ]
+}

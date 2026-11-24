@@ -1,0 +1,149 @@
+[
+  {
+    "lot": 1,
+    "case": "nvidia-h20-supplied",
+    "writes": [
+      {
+        "time": 1795131549194,
+        "kind": "open",
+        "activityExcerpt": "Investigate NVIDIA data-center resilience after the April 2025 H20 export restrictions.",
+        "outcome": "success",
+        "feedback": null
+      }
+    ],
+    "skills": []
+  },
+  {
+    "lot": 1,
+    "case": "ccc-balanced",
+    "writes": [
+      {
+        "time": 1795131668223,
+        "kind": "open",
+        "activityExcerpt": "estimate review",
+        "outcome": "success",
+        "feedback": null
+      }
+    ],
+    "skills": []
+  },
+  {
+    "lot": 1,
+    "case": "ccc-first-party-depth",
+    "writes": [
+      {
+        "time": 1795131747572,
+        "kind": "open",
+        "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "outcome": "refused",
+        "feedback": {
+          "expected": "Use a nonblank exact excerpt from the active analyst message; do not attribute an invented hypothesis to the analyst.",
+          "path": "eventBasis.conditions[0].basis.excerpt"
+        }
+      },
+      {
+        "time": 1795131763097,
+        "kind": "open",
+        "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "outcome": "success",
+        "feedback": null
+      }
+    ],
+    "skills": []
+  },
+  {
+    "lot": 1,
+    "case": "ccc-independent-scrutiny",
+    "writes": [
+      {
+        "time": 1795131863150,
+        "kind": "open",
+        "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "outcome": "refused",
+        "feedback": {
+          "expected": "Include eventBasis.activityExcerpt verbatim in content.scope. Correct the scope wording rather than changing unrelated conditional hypotheses.",
+          "path": "content.scope"
+        }
+      },
+      {
+        "time": 1795131877847,
+        "kind": "open",
+        "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "outcome": "success",
+        "feedback": null
+      }
+    ],
+    "skills": []
+  },
+  {
+    "lot": 2,
+    "case": "nvidia-h20-supplied",
+    "writes": [
+      {
+        "time": 1795132411814,
+        "kind": "open",
+        "activityExcerpt": "Investigate NVIDIA data-center resilience after the April 2025 H20 export restrictions.",
+        "outcome": "success",
+        "feedback": null
+      }
+    ],
+    "skills": [
+      "/agent-skills/research-methods-v1/workbench-framing/SKILL.md"
+    ]
+  },
+  {
+    "lot": 2,
+    "case": "ccc-balanced",
+    "writes": [
+      {
+        "time": 1795132505257,
+        "kind": "open",
+        "activityExcerpt": null,
+        "outcome": "refused",
+        "feedback": {
+          "expected": "Copy a nonblank excerpt of the analyst's activity or open request verbatim from the active message and include it in content.scope.",
+          "path": "eventBasis.activityExcerpt"
+        }
+      },
+      {
+        "time": 1795132518748,
+        "kind": "open",
+        "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+        "outcome": "success",
+        "feedback": null
+      }
+    ],
+    "skills": [
+      "/agent-skills/research-methods-v1/workbench-framing/SKILL.md"
+    ]
+  },
+  {
+    "lot": 2,
+    "case": "ccc-first-party-depth",
+    "writes": [
+      {
+        "time": 1795132647694,
+        "kind": "open",
+        "activityExcerpt": null,
+        "outcome": "refused",
+        "feedback": {
+          "expected": "Copy a nonblank excerpt of the analyst's activity or open request verbatim from the active message and include it in content.scope.",
+          "path": "eventBasis.activityExcerpt"
+        }
+      },
+      {
+        "time": 1795132659936,
+        "kind": "open",
+        "activityExcerpt": null,
+        "outcome": "refused",
+        "feedback": {
+          "expected": "Copy a nonblank excerpt of the analyst's activity or open request verbatim from the active message and include it in content.scope.",
+          "path": "eventBasis.activityExcerpt"
+        }
+      }
+    ],
+    "skills": [
+      "/agent-skills/research-methods-v1/workbench-framing/SKILL.md"
+    ]
+  }
+]

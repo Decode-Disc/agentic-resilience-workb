@@ -1,0 +1,13 @@
+{
+  "project": "agentic-resilience-workbench-proto",
+  "sender": "Codex",
+  "event": "outline-ready",
+  "key": "documentary-unification-outline21-ready-775717ef70d69abc",
+  "revision": "775717ef70d69abc66485699cfefd7359e39e530d40142d5b0f10deba0383296",
+  "receipt": {
+    "accepted": true,
+    "duplicate": false,
+    "messageId": 942,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/e27970accb63fa58e89d445f722fa80af8bcc8a32bb5582b2a437e909cb8feb9.json"
+  }
+}

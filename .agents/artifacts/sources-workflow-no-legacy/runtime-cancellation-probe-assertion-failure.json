@@ -1,0 +1,12 @@
+{
+  "status": "failed",
+  "error": "Runtime condition not observed: cancellation fence settles owned wait",
+  "records": [
+    {
+      "event": "waiting_worker_released",
+      "at": 1795087227696,
+      "requestId": "k573np9cdbtypngyfskvzch9d98jghkh",
+      "scheduledJobId": "kc25wt0p6kejz897d8ct40ge118jgefk"
+    }
+  ]
+}

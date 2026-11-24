@@ -1,0 +1,60 @@
+{
+  "boundary": "Installed Chord boundOutput used by Pi finalResult; not the full native tool lifecycle",
+  "envelopeBytes": 27,
+  "results": [
+    {
+      "valueBytes": 61440,
+      "renderedBytes": 61467,
+      "limit": 51200,
+      "retainedBytes": 51200,
+      "droppedBytes": 10267,
+      "validJson": false,
+      "exact": false
+    },
+    {
+      "valueBytes": 61440,
+      "renderedBytes": 61467,
+      "limit": 65536,
+      "retainedBytes": 61467,
+      "droppedBytes": 0,
+      "validJson": true,
+      "exact": true
+    },
+    {
+      "valueBytes": 61440,
+      "renderedBytes": 61467,
+      "limit": 65563,
+      "retainedBytes": 61467,
+      "droppedBytes": 0,
+      "validJson": true,
+      "exact": true
+    },
+    {
+      "valueBytes": 65536,
+      "renderedBytes": 65563,
+      "limit": 51200,
+      "retainedBytes": 51200,
+      "droppedBytes": 14363,
+      "validJson": false,
+      "exact": false
+    },
+    {
+      "valueBytes": 65536,
+      "renderedBytes": 65563,
+      "limit": 65536,
+      "retainedBytes": 65536,
+      "droppedBytes": 27,
+      "validJson": false,
+      "exact": false
+    },
+    {
+      "valueBytes": 65536,
+      "renderedBytes": 65563,
+      "limit": 65563,
+      "retainedBytes": 65563,
+      "droppedBytes": 0,
+      "validJson": true,
+      "exact": true
+    }
+  ]
+}

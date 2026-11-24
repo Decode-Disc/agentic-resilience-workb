@@ -1,0 +1,28 @@
+{
+  "source": "lot-1/observations/after-cleanup-bd9fecd7-b9be-454a-a934-7577abb3dbfa/ccc-independent-scrutiny/requests-1.json",
+  "search": "rd75dxtp34zrxcb2k04hn2qv7n8jh8yt",
+  "read": "rd78mj52wzqf55kbcqxt75wyhn8jh2sk",
+  "matches": {
+    "missionId": true,
+    "runId": true,
+    "instructionVersion": true,
+    "messageId": true,
+    "revisionId": false
+  },
+  "searchStatus": "completed",
+  "searchAdopted": true,
+  "searchAdoptionRefusal": null,
+  "searchOutcome": "success",
+  "readOutcome": {
+    "code": "source_reference_not_observed",
+    "kind": "unavailable"
+  },
+  "searchPin": {
+    "kind": "framing_revision",
+    "revisionId": "s978pyza0be66fp77s2e87wwy98jhpqr"
+  },
+  "readPin": {
+    "kind": "framing_revision",
+    "revisionId": "s97abhvpcxhtm685m73hgptjzn8jgbzw"
+  }
+}

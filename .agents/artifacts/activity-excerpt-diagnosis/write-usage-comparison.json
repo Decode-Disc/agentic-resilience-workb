@@ -1,0 +1,167 @@
+[
+  {
+    "lot": 1,
+    "case": "nvidia-h20-supplied",
+    "at": 1795131512228,
+    "activityExcerpt": "Investigate NVIDIA data-center resilience after the April 2025 H20 export restrictions.",
+    "usage": {
+      "cachedInputTokens": 0,
+      "inputTokens": 7992,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 1972,
+      "provider": "Wafer",
+      "reasoningTokens": 1013
+    },
+    "generation": "gen-1795131512-YAhulgERDVAGxoVrPo1d"
+  },
+  {
+    "lot": 1,
+    "case": "ccc-balanced",
+    "at": 1795131623623,
+    "activityExcerpt": "estimate review",
+    "usage": {
+      "cachedInputTokens": 0,
+      "inputTokens": 9974,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 2954,
+      "provider": "Wafer",
+      "reasoningTokens": 2000
+    },
+    "generation": "gen-1795131624-MxTyd6ZD01rJm2czxWoS"
+  },
+  {
+    "lot": 1,
+    "case": "ccc-first-party-depth",
+    "at": 1795131728414,
+    "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "usage": {
+      "cachedInputTokens": 2304,
+      "inputTokens": 9953,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 1814,
+      "provider": "Wafer",
+      "reasoningTokens": 866
+    },
+    "generation": "gen-1795131729-aZzHvTuYqlK8hOILJY0W"
+  },
+  {
+    "lot": 1,
+    "case": "ccc-first-party-depth",
+    "at": 1795131753474,
+    "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "usage": {
+      "cachedInputTokens": 2304,
+      "inputTokens": 10957,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 882,
+      "provider": "Wafer",
+      "reasoningTokens": 56
+    },
+    "generation": "gen-1795131754-zauT3b5GXtpZP9xEdVAi"
+  },
+  {
+    "lot": 1,
+    "case": "ccc-independent-scrutiny",
+    "at": 1795131853583,
+    "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "usage": {
+      "cachedInputTokens": 2304,
+      "inputTokens": 12492,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 804,
+      "provider": "Wafer",
+      "reasoningTokens": 0
+    },
+    "generation": "gen-1795131854-OuCXjwnOGaKcCSdmVHFm"
+  },
+  {
+    "lot": 1,
+    "case": "ccc-independent-scrutiny",
+    "at": 1795131870986,
+    "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "usage": {
+      "cachedInputTokens": 2304,
+      "inputTokens": 13429,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 834,
+      "provider": "Wafer",
+      "reasoningTokens": 56
+    },
+    "generation": "gen-1795131871-XGxy4KDdi9XJaleZMhok"
+  },
+  {
+    "lot": 2,
+    "case": "nvidia-h20-supplied",
+    "at": 1795132389371,
+    "activityExcerpt": "Investigate NVIDIA data-center resilience after the April 2025 H20 export restrictions.",
+    "usage": {
+      "cachedInputTokens": 0,
+      "inputTokens": 7939,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 2406,
+      "provider": "Wafer",
+      "reasoningTokens": 1511
+    },
+    "generation": "gen-1795132390-9couTercXt7oox5BgEhl"
+  },
+  {
+    "lot": 2,
+    "case": "ccc-balanced",
+    "at": 1795132487403,
+    "activityExcerpt": null,
+    "usage": {
+      "cachedInputTokens": 2304,
+      "inputTokens": 12450,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 2434,
+      "provider": "Wafer",
+      "reasoningTokens": 1139
+    },
+    "generation": "gen-1795132488-bCWAMieI9PmMiZIGeS35"
+  },
+  {
+    "lot": 2,
+    "case": "ccc-balanced",
+    "at": 1795132511009,
+    "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+    "usage": {
+      "cachedInputTokens": 2304,
+      "inputTokens": 13799,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 1075,
+      "provider": "Wafer",
+      "reasoningTokens": 29
+    },
+    "generation": "gen-1795132511-NYPzmNf6kUQOhmN1XViD"
+  },
+  {
+    "lot": 2,
+    "case": "ccc-first-party-depth",
+    "at": 1795132638740,
+    "activityExcerpt": null,
+    "usage": {
+      "cachedInputTokens": 2304,
+      "inputTokens": 14216,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 790,
+      "provider": "Wafer",
+      "reasoningTokens": 0
+    },
+    "generation": "gen-1795132639-APTkw12pl0iPYenO5cIj"
+  },
+  {
+    "lot": 2,
+    "case": "ccc-first-party-depth",
+    "at": 1795132653866,
+    "activityExcerpt": null,
+    "usage": {
+      "cachedInputTokens": 2304,
+      "inputTokens": 15151,
+      "model": "z-ai/glm-5.3-flash",
+      "outputTokens": 674,
+      "provider": "Wafer",
+      "reasoningTokens": 0
+    },
+    "generation": "gen-1795132654-w1fdJnqrFLbnDryctIuW"
+  }
+]

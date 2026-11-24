@@ -1,0 +1,954 @@
+{
+  "cases": {
+    "sources-attribution-independence": {
+      "generations": 44,
+      "inspectionOnlyGenerations": 22,
+      "inspectionInvocationIds": [
+        "r57e21t923sg69hxffyq4jygah8jjz0t",
+        "r57ch3qt8ytwxkta6a8nhs8znx8jk2j3",
+        "r577a5s5wbt8ya616gayqt3gzs8jj4ms",
+        "r572vx5krf7qsb6yzd0dne6jq58jjkd5",
+        "r57bqsd5v6s315zpbhhmxnzc3n8jj0t8",
+        "r57bdc2d7e8dge9wcm5bsrjbjs8jjgqw",
+        "r57bc358h098ffrffyzydzw5hh8jj5n1",
+        "r578af7sn6tzd53kd4pvxqpry18jk67g",
+        "r5779xqtg37tj12ehg3aavn65h8jkbq8",
+        "r57a7jsbz3h6bsqm3kqgzzwvp98jk8ah",
+        "r57cyhpvtz022e0kzet2twdryn8jjxm6",
+        "r57btyy4v3h6eh8xs86yyyt3xx8jjyw1",
+        "r571dews3kg6wqxe9562wzzxv58jk0h2",
+        "r578h90yvfca3b4axeknv6f41h8jknef",
+        "r573qksd05zbv6p8131fr2cv698jkymq",
+        "r575brej591an6pa1c8ra9j5t18jkstv",
+        "r571t24a9rhpw099waz8tme7h98jj40d",
+        "r57ew1140mc21ryjgzcwc20rmx8jjzq8",
+        "r57819q31j7dmb2w20zdk4y6c98jjw5a",
+        "r5713ne5cqzvpxytzgrgwg5r518jkzvd",
+        "r574wrx4atdpk87f0c2edt85w18jk0pn",
+        "r57fcfnzssmk3brzmr6p02qk1s8jkm2w"
+      ],
+      "operations": {
+        "read": 1,
+        "consult_run_state": 1,
+        "discover_sources_for_need": 8,
+        "consult_mission_state": 22,
+        "make_source_consultable": 5,
+        "search_available_material": 8,
+        "submit_documentary_qualification": 8
+      },
+      "candidatePoolAlreadyPresentBeforeInspection": 11,
+      "historyTraversals": [
+        [
+          {
+            "requestId": "rd7cvf9zbebsy8wqs8akqrczgs8jkfzh",
+            "invocationId": "r572vx5krf7qsb6yzd0dne6jq58jjkd5",
+            "responseBytes": 33994,
+            "historyCharacters": 28914,
+            "fragments": [
+              {
+                "sequence": 1,
+                "offset": 0,
+                "length": 331,
+                "total": 331
+              },
+              {
+                "sequence": 8,
+                "offset": 0,
+                "length": 1672,
+                "total": 1672
+              },
+              {
+                "sequence": 25,
+                "offset": 0,
+                "length": 2943,
+                "total": 2943
+              },
+              {
+                "sequence": 30,
+                "offset": 0,
+                "length": 1159,
+                "total": 1159
+              },
+              {
+                "sequence": 35,
+                "offset": 0,
+                "length": 1124,
+                "total": 1124
+              },
+              {
+                "sequence": 40,
+                "offset": 0,
+                "length": 1148,
+                "total": 1148
+              },
+              {
+                "sequence": 48,
+                "offset": 0,
+                "length": 2287,
+                "total": 2287
+              },
+              {
+                "sequence": 53,
+                "offset": 0,
+                "length": 1116,
+                "total": 1116
+              },
+              {
+                "sequence": 58,
+                "offset": 0,
+                "length": 1106,
+                "total": 1106
+              },
+              {
+                "sequence": 66,
+                "offset": 0,
+                "length": 2567,
+                "total": 2567
+              },
+              {
+                "sequence": 71,
+                "offset": 0,
+                "length": 1129,
+                "total": 1129
+              },
+              {
+                "sequence": 76,
+                "offset": 0,
+                "length": 1158,
+                "total": 1158
+              },
+              {
+                "sequence": 95,
+                "offset": 0,
+                "length": 2785,
+                "total": 2785
+              },
+              {
+                "sequence": 100,
+                "offset": 0,
+                "length": 1081,
+                "total": 1081
+              },
+              {
+                "sequence": 110,
+                "offset": 0,
+                "length": 1092,
+                "total": 1092
+              },
+              {
+                "sequence": 118,
+                "offset": 0,
+                "length": 2216,
+                "total": 2216
+              },
+              {
+                "sequence": 121,
+                "offset": 0,
+                "length": 4000,
+                "total": 11085
+              }
+            ]
+          },
+          {
+            "requestId": "rd70xesp8z1tv1z1m4d5rg78bd8jjgxc",
+            "invocationId": "r57bqsd5v6s315zpbhhmxnzc3n8jj0t8",
+            "responseBytes": 4991,
+            "historyCharacters": 4000,
+            "fragments": [
+              {
+                "sequence": 121,
+                "offset": 4000,
+                "length": 4000,
+                "total": 11085
+              }
+            ]
+          },
+          {
+            "requestId": "rd70xrabxjtyvaxcds3zr00nnx8jj7z3",
+            "invocationId": "r57bdc2d7e8dge9wcm5bsrjbjs8jjgqw",
+            "responseBytes": 8443,
+            "historyCharacters": 7085,
+            "fragments": [
+              {
+                "sequence": 121,
+                "offset": 8000,
+                "length": 3085,
+                "total": 11085
+              },
+              {
+                "sequence": 124,
+                "offset": 0,
+                "length": 4000,
+                "total": 4053
+              }
+            ]
+          },
+          {
+            "requestId": "rd73khb23krcb07f7m53h35ys58jkf9x",
+            "invocationId": "r57bc358h098ffrffyzydzw5hh8jj5n1",
+            "responseBytes": 10623,
+            "historyCharacters": 8684,
+            "fragments": [
+              {
+                "sequence": 124,
+                "offset": 4000,
+                "length": 53,
+                "total": 4053
+              },
+              {
+                "sequence": 132,
+                "offset": 0,
+                "length": 2069,
+                "total": 2069
+              },
+              {
+                "sequence": 135,
+                "offset": 0,
+                "length": 2562,
+                "total": 2562
+              },
+              {
+                "sequence": 138,
+                "offset": 0,
+                "length": 4000,
+                "total": 4252
+              }
+            ]
+          },
+          {
+            "requestId": "rd70snsa0vheqs3dhjq85qcacn8jjh76",
+            "invocationId": "r578af7sn6tzd53kd4pvxqpry18jk67g",
+            "responseBytes": 7880,
+            "historyCharacters": 6370,
+            "fragments": [
+              {
+                "sequence": 138,
+                "offset": 4000,
+                "length": 252,
+                "total": 4252
+              },
+              {
+                "sequence": 146,
+                "offset": 0,
+                "length": 2118,
+                "total": 2118
+              },
+              {
+                "sequence": 149,
+                "offset": 0,
+                "length": 4000,
+                "total": 6540
+              }
+            ]
+          },
+          {
+            "requestId": "rd7003sjf4kjska6sp3cadwyc18jky7w",
+            "invocationId": "r5779xqtg37tj12ehg3aavn65h8jkbq8",
+            "responseBytes": 14265,
+            "historyCharacters": 12074,
+            "fragments": [
+              {
+                "sequence": 149,
+                "offset": 4000,
+                "length": 2540,
+                "total": 6540
+              },
+              {
+                "sequence": 159,
+                "offset": 0,
+                "length": 3921,
+                "total": 3921
+              },
+              {
+                "sequence": 171,
+                "offset": 0,
+                "length": 1613,
+                "total": 1613
+              },
+              {
+                "sequence": 181,
+                "offset": 0,
+                "length": 4000,
+                "total": 4012
+              }
+            ]
+          },
+          {
+            "requestId": "rd78addjbc55tcr387qqrtby4s8jka7n",
+            "invocationId": "r57a7jsbz3h6bsqm3kqgzzwvp98jk8ah",
+            "responseBytes": 5285,
+            "historyCharacters": 4012,
+            "fragments": [
+              {
+                "sequence": 181,
+                "offset": 4000,
+                "length": 12,
+                "total": 4012
+              },
+              {
+                "sequence": 188,
+                "offset": 0,
+                "length": 4000,
+                "total": 4009
+              }
+            ]
+          },
+          {
+            "requestId": "rd715zk4zwdwc2nx6qhz61qf1d8jkcbn",
+            "invocationId": "r57cyhpvtz022e0kzet2twdryn8jjxm6",
+            "responseBytes": 754,
+            "historyCharacters": 9,
+            "fragments": [
+              {
+                "sequence": 188,
+                "offset": 4000,
+                "length": 9,
+                "total": 4009
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "requestId": "rd7axe09qmcptzmsjqqs13nk0h8jkbe5",
+            "invocationId": "r57btyy4v3h6eh8xs86yyyt3xx8jjyw1",
+            "responseBytes": 33994,
+            "historyCharacters": 28914,
+            "fragments": [
+              {
+                "sequence": 1,
+                "offset": 0,
+                "length": 331,
+                "total": 331
+              },
+              {
+                "sequence": 8,
+                "offset": 0,
+                "length": 1672,
+                "total": 1672
+              },
+              {
+                "sequence": 25,
+                "offset": 0,
+                "length": 2943,
+                "total": 2943
+              },
+              {
+                "sequence": 30,
+                "offset": 0,
+                "length": 1159,
+                "total": 1159
+              },
+              {
+                "sequence": 35,
+                "offset": 0,
+                "length": 1124,
+                "total": 1124
+              },
+              {
+                "sequence": 40,
+                "offset": 0,
+                "length": 1148,
+                "total": 1148
+              },
+              {
+                "sequence": 48,
+                "offset": 0,
+                "length": 2287,
+                "total": 2287
+              },
+              {
+                "sequence": 53,
+                "offset": 0,
+                "length": 1116,
+                "total": 1116
+              },
+              {
+                "sequence": 58,
+                "offset": 0,
+                "length": 1106,
+                "total": 1106
+              },
+              {
+                "sequence": 66,
+                "offset": 0,
+                "length": 2567,
+                "total": 2567
+              },
+              {
+                "sequence": 71,
+                "offset": 0,
+                "length": 1129,
+                "total": 1129
+              },
+              {
+                "sequence": 76,
+                "offset": 0,
+                "length": 1158,
+                "total": 1158
+              },
+              {
+                "sequence": 95,
+                "offset": 0,
+                "length": 2785,
+                "total": 2785
+              },
+              {
+                "sequence": 100,
+                "offset": 0,
+                "length": 1081,
+                "total": 1081
+              },
+              {
+                "sequence": 110,
+                "offset": 0,
+                "length": 1092,
+                "total": 1092
+              },
+              {
+                "sequence": 118,
+                "offset": 0,
+                "length": 2216,
+                "total": 2216
+              },
+              {
+                "sequence": 121,
+                "offset": 0,
+                "length": 4000,
+                "total": 11085
+              }
+            ]
+          },
+          {
+            "requestId": "rd723aw3z562d63ht7hy41kd8n8jk72r",
+            "invocationId": "r571dews3kg6wqxe9562wzzxv58jk0h2",
+            "responseBytes": 4991,
+            "historyCharacters": 4000,
+            "fragments": [
+              {
+                "sequence": 121,
+                "offset": 4000,
+                "length": 4000,
+                "total": 11085
+              }
+            ]
+          },
+          {
+            "requestId": "rd792jmfv0x53q4q7byhyhc6q18jk907",
+            "invocationId": "r578h90yvfca3b4axeknv6f41h8jknef",
+            "responseBytes": 8443,
+            "historyCharacters": 7085,
+            "fragments": [
+              {
+                "sequence": 121,
+                "offset": 8000,
+                "length": 3085,
+                "total": 11085
+              },
+              {
+                "sequence": 124,
+                "offset": 0,
+                "length": 4000,
+                "total": 4053
+              }
+            ]
+          },
+          {
+            "requestId": "rd7968kbf2e540fk2bd38206w58jj56v",
+            "invocationId": "r573qksd05zbv6p8131fr2cv698jkymq",
+            "responseBytes": 10623,
+            "historyCharacters": 8684,
+            "fragments": [
+              {
+                "sequence": 124,
+                "offset": 4000,
+                "length": 53,
+                "total": 4053
+              },
+              {
+                "sequence": 132,
+                "offset": 0,
+                "length": 2069,
+                "total": 2069
+              },
+              {
+                "sequence": 135,
+                "offset": 0,
+                "length": 2562,
+                "total": 2562
+              },
+              {
+                "sequence": 138,
+                "offset": 0,
+                "length": 4000,
+                "total": 4252
+              }
+            ]
+          },
+          {
+            "requestId": "rd7ejexh5d2eqywnjgh59g0b0x8jj9kc",
+            "invocationId": "r575brej591an6pa1c8ra9j5t18jkstv",
+            "responseBytes": 7880,
+            "historyCharacters": 6370,
+            "fragments": [
+              {
+                "sequence": 138,
+                "offset": 4000,
+                "length": 252,
+                "total": 4252
+              },
+              {
+                "sequence": 146,
+                "offset": 0,
+                "length": 2118,
+                "total": 2118
+              },
+              {
+                "sequence": 149,
+                "offset": 0,
+                "length": 4000,
+                "total": 6540
+              }
+            ]
+          },
+          {
+            "requestId": "rd71sgtcc4ehqd4kh27hdy15318jky0a",
+            "invocationId": "r571t24a9rhpw099waz8tme7h98jj40d",
+            "responseBytes": 14265,
+            "historyCharacters": 12074,
+            "fragments": [
+              {
+                "sequence": 149,
+                "offset": 4000,
+                "length": 2540,
+                "total": 6540
+              },
+              {
+                "sequence": 159,
+                "offset": 0,
+                "length": 3921,
+                "total": 3921
+              },
+              {
+                "sequence": 171,
+                "offset": 0,
+                "length": 1613,
+                "total": 1613
+              },
+              {
+                "sequence": 181,
+                "offset": 0,
+                "length": 4000,
+                "total": 4012
+              }
+            ]
+          },
+          {
+            "requestId": "rd7fvkzkrtamwxfr5wczjtf0c18jjjj2",
+            "invocationId": "r57ew1140mc21ryjgzcwc20rmx8jjzq8",
+            "responseBytes": 5285,
+            "historyCharacters": 4012,
+            "fragments": [
+              {
+                "sequence": 181,
+                "offset": 4000,
+                "length": 12,
+                "total": 4012
+              },
+              {
+                "sequence": 188,
+                "offset": 0,
+                "length": 4000,
+                "total": 4009
+              }
+            ]
+          },
+          {
+            "requestId": "rd7cv52fzyazt97v49wdkw2kc98jj0rp",
+            "invocationId": "r57819q31j7dmb2w20zdk4y6c98jjw5a",
+            "responseBytes": 7653,
+            "historyCharacters": 6117,
+            "fragments": [
+              {
+                "sequence": 188,
+                "offset": 4000,
+                "length": 9,
+                "total": 4009
+              },
+              {
+                "sequence": 300,
+                "offset": 0,
+                "length": 2108,
+                "total": 2108
+              },
+              {
+                "sequence": 307,
+                "offset": 0,
+                "length": 4000,
+                "total": 4170
+              }
+            ]
+          },
+          {
+            "requestId": "rd79zrq7r8q22aw7y13t8x0g8x8jjq7v",
+            "invocationId": "r5713ne5cqzvpxytzgrgwg5r518jkzvd",
+            "responseBytes": 5242,
+            "historyCharacters": 4170,
+            "fragments": [
+              {
+                "sequence": 307,
+                "offset": 4000,
+                "length": 170,
+                "total": 4170
+              },
+              {
+                "sequence": 312,
+                "offset": 0,
+                "length": 4000,
+                "total": 5748
+              }
+            ]
+          },
+          {
+            "requestId": "rd7b55s6n0mxzjsma12kme34k18jkb5p",
+            "invocationId": "r574wrx4atdpk87f0c2edt85w18jk0pn",
+            "responseBytes": 6928,
+            "historyCharacters": 5748,
+            "fragments": [
+              {
+                "sequence": 312,
+                "offset": 4000,
+                "length": 1748,
+                "total": 5748
+              },
+              {
+                "sequence": 320,
+                "offset": 0,
+                "length": 4000,
+                "total": 8628
+              }
+            ]
+          },
+          {
+            "requestId": "rd71wt8qp6fg8f4cjet9s3x40n8jjr3f",
+            "invocationId": "r57fcfnzssmk3brzmr6p02qk1s8jkm2w",
+            "responseBytes": 5176,
+            "historyCharacters": 4000,
+            "fragments": [
+              {
+                "sequence": 320,
+                "offset": 4000,
+                "length": 4000,
+                "total": 8628
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "sources-counterevidence-scope": {
+      "generations": 44,
+      "inspectionOnlyGenerations": 20,
+      "inspectionInvocationIds": [
+        "r576q6gvnyskdezb8camwkvewn8jjbtp",
+        "r57e4dk13xk5rgyv31fxn02czs8jj772",
+        "r576g6ky2bvmwzawrbqrebgs258jjjdb",
+        "r5798kdt0z7r86kvp6ekyrf9498jj368",
+        "r576cz19ewwh6hq92fzsw99rqd8jjkqh",
+        "r574tna4z42ewy6wh1rr6fam0h8jkfvz",
+        "r57f9shs376b3rnvxwwg9vxk858jkqmk",
+        "r5780w4nv2fc4k9vbq4ga5bs598jkcaw",
+        "r578qy02qffz9g7fek1w59na0h8jk658",
+        "r578qr9peg3yxsz8kv4c2mbwcn8jkf50",
+        "r57ed02kw1sk5pe5p8d4zhaht58jjszp",
+        "r57azz6kx940n80b26jp8a4ard8jjzdr",
+        "r57az9d9bhfg7eh10c8043aew18jjvxz",
+        "r57f94e7sk8ra9m2ykysa0sqq18jj5sn",
+        "r57a2w3012nrrezx2pqb69xebn8jj69w",
+        "r57cm84zrynk1hkbkxvt9zarkn8jk4d4",
+        "r57dgk1aerz0tmhpb1me35wpk18jk1jb",
+        "r57ahj0hp0yhyhzytknrawyxgh8jjwzg",
+        "r57a35qezw939wj5cfsrzbd66d8jk5ft",
+        "r578n5nd27q6pk328605jqbvnx8jj3yv"
+      ],
+      "operations": {
+        "read": 3,
+        "consult_run_state": 6,
+        "make_source_consultable": 6,
+        "consult_mission_state": 10,
+        "read_in_context": 1,
+        "consult_conversation": 5,
+        "discover_sources_for_need": 3,
+        "search_available_material": 6,
+        "submit_documentary_qualification": 4
+      },
+      "lateVerificationReadingReferences": [
+        {
+          "readRequestId": "rd7bjzbcym85p2psdzajyymj2s8jj1fa",
+          "kind": "search_available_material",
+          "sourceId": "n178p0260q9bra5je7ctj48n798jj08g",
+          "captureId": "qd719c2kkvhhvrwn1yer19z1058jjsea",
+          "contentHash": "2fa06650e38983eca9a1c6ddd2a6a72547d7d17498a205a403cf25a468b78dfa",
+          "passageOrders": [
+            1,
+            2
+          ],
+          "historyReference": "r17dgzb9fffd7h06sbb4nzjbe18jkqzr"
+        },
+        {
+          "readRequestId": "rd7c6mmrfatg4hkv8swh32te258jks6q",
+          "kind": "search_available_material",
+          "sourceId": "n176wteb4985p3krvg0zznw4r18jjq3n",
+          "captureId": "qd78jz2vkykd6cn9m2ygpr7c598jkd1s",
+          "contentHash": "b9a0bbf40b28f822a58cf8687a9c1919c09e3f0780b41fd85c6d34ef687a3281",
+          "passageOrders": [
+            2,
+            1,
+            0,
+            5,
+            6,
+            3,
+            4
+          ],
+          "historyReference": "r171w7ptwhha430bzgxk6nfm1h8jjq2g"
+        },
+        {
+          "readRequestId": "rd73safre5tjkpdc9nwmtz04958jkp24",
+          "kind": "search_available_material",
+          "sourceId": "n178p0260q9bra5je7ctj48n798jj08g",
+          "captureId": "qd719c2kkvhhvrwn1yer19z1058jjsea",
+          "contentHash": "2fa06650e38983eca9a1c6ddd2a6a72547d7d17498a205a403cf25a468b78dfa",
+          "passageOrders": [
+            0,
+            1,
+            3,
+            2
+          ],
+          "historyReference": "r17d3w1bg5m7wy0bbdmv52p3xd8jj31z"
+        },
+        {
+          "readRequestId": "rd76768zpfp36hycqtw1zgr3yd8jkp9r",
+          "kind": "search_available_material",
+          "sourceId": "n176wteb4985p3krvg0zznw4r18jjq3n",
+          "captureId": "qd78jz2vkykd6cn9m2ygpr7c598jkd1s",
+          "contentHash": "b9a0bbf40b28f822a58cf8687a9c1919c09e3f0780b41fd85c6d34ef687a3281",
+          "passageOrders": [
+            2,
+            1,
+            0,
+            5,
+            6,
+            3,
+            4
+          ],
+          "historyReference": "r17bxxhfw9qbseqd33zqd27r818jjtv9"
+        }
+      ],
+      "nativeResponseFormatPresent": false,
+      "finalProposal": {
+        "kind": "complete",
+        "needs": [
+          {
+            "gap": "Company and studied activity documented through two complementary sources: the issuer's July 30, 2024 press release describes CCC Intelligent Solutions Inc. as a subsidiary of CCC Intelligent Solutions Holdings Inc. (NASDAQ: CCCS), a cloud platform for the P&C insurance economy whose IX Cloud connects more than 35,000 businesses (issuer self-description with unverifiable marketing characterizations); an independent trade publication (Collision Repair Mag, Nov. 13, 2026) reports the GTCR/Elliott-led take-private at US$7.75/share (~US$6.1B enterprise value) with US$2.85B borrowing, an S&P B-minus assessment of the acquisition entity, and Q3-2026 filed figures (~96% subscription revenue share, US$294.1M revenue, US$30.2M net income, ~US$1.28B debt).",
+            "needId": "common-context",
+            "readRequestIds": [
+              "rd7c6mmrfatg4hkv8swh32te258jks6q",
+              "rd73safre5tjkpdc9nwmtz04958jkp24"
+            ],
+            "unfinished": [
+              "Official SEC filings (10-K filed 2026-02-24, S-8, S-3s, 8-Ks of 2026-07-30 and 2026-10-15, 10-Q of 2026-10-29) could not be acquired for direct inspection (sources_replay_target_unavailable recorded in work outcomes); filing figures above are second-hand via trade press and remain unverified against the filings themselves.",
+              "The Q1 2027 completion expectation and all S&P 2027/2028 projections are forward-looking; deal consummation is not documented."
+            ]
+          },
+          {
+            "gap": "The available evidence establishes only the issuer's product claims: CCC states its Intelligent Reinspection solution assesses incoming shop estimates based on insurer-provided rules and automatically routes them for approval or review, and its product officer claims AI helps insurers review estimates more quickly and transparently. These are launch-announcement claims restricted to context_only; the release does not state who performs the final approval step, and no independent, contractual, or customer-side evidence in the retained material establishes how review and approval authority is actually partitioned between CCC's tooling and insurers.",
+            "needId": "question:review-authority",
+            "readRequestIds": [
+              "rd7c6mmrfatg4hkv8swh32te258jks6q"
+            ],
+            "unfinished": [
+              "Independent discovery for review-authority material inserted no usable candidates; official filing candidates could not be acquired (sources_replay_target_unavailable) and both independent discovery attempts returned no new candidates, so the independent-source challenge the coverage guidance asks for was not obtained.",
+              "Which parts of estimate review and approval remain controlled by insurers in deployed workflows is not established on this record."
+            ]
+          },
+          {
+            "gap": "The release's own forward-looking-statements notice (covering statements regarding future use and performance of CCC's digital solutions, subject to competition and technological-advance risks) establishes that its advertised cycle-time and faster-review benefits are issuer expectations rather than established observed outcomes. No independent observed customer evidence of faster review was retained; the independent trade-press article does not document customer outcomes on estimate review.",
+            "needId": "question:customer-outcomes",
+            "readRequestIds": [
+              "rd7c6mmrfatg4hkv8swh32te258jks6q",
+              "rd73safre5tjkpdc9nwmtz04958jkp24"
+            ],
+            "unfinished": [
+              "Independent customer evidence of faster review could not be obtained: two independent discovery attempts returned no new candidates, and the acquired independent capture addresses financing context only. This is an explicit gap in available material, not a documentary absence."
+            ]
+          }
+        ],
+        "workingNotes": "Two captures were fully read and qualified: the CCC issuer press release of July 30, 2024 (4 contributions, all context_only) and an independent trade-press article of November 13, 2026 (3 contributions; the S&P assessment restricted to attributed_argument_only as a second-hand credit-rating report). Issuer product claims are distinguished from observed outcomes throughout: the 'routing ends in insurer approval' and 'rather than replacing insurer review authority' extensions are flagged as inferences beyond the quoted text, and cycle-time benefits are qualified by the release's own forward-looking notice. Financing context (take-private terms, S&P B-minus assessment, Q3-2026 filed figures) is preserved for the common-context need. SEC filings could not be acquired, so filing-derived figures are second-hand and left explicitly unfinished rather than treated as verified. Searches allowance was used only for discover_sources_for_need; no read was refused for lack of allowance. No economic conclusion was reached or attempted."
+      },
+      "allFinalReadIdsAlreadyPresentBeforeLateVerification": true
+    },
+    "sources-interrupted-preparation": {
+      "generations": 11,
+      "inspectionOnlyGenerations": 5,
+      "inspectionInvocationIds": [
+        "r576gzb0qbgz56gjyftms28dxn8jkfk3",
+        "r571xafktytk3eg006jtn9qwb58jj192",
+        "r5720a9r8r5bmnd4y0aam1dgmh8jj579",
+        "r575dcynwxrn95m1wg5kjwvk4d8jjptd",
+        "r57am237tb8db0s7xry81r8ssh8jjcwm"
+      ],
+      "operations": {
+        "read": 1,
+        "consult_run_state": 2,
+        "discover_sources_for_need": 5,
+        "consult_mission_state": 4,
+        "make_source_consultable": 5
+      }
+    },
+    "sources-partial-reading": {
+      "generations": 37,
+      "inspectionOnlyGenerations": 14,
+      "inspectionInvocationIds": [
+        "r57czx8eac2y8dr9j3ay7m8hsx8jkm5v",
+        "r57664zs9vxy9qx78pzfma9t8x8jjmjh",
+        "r57d3aph0ckp626e714tr6dv7d8jjx5a",
+        "r57fhzvan64zmydva46zb5bmdh8jj4kj",
+        "r5788375d1fjxg3y4ywwsxg1218jks5t",
+        "r5775fkc67k2ceywahd2a61t6d8jkmck",
+        "r5757q78z491eye78a1dgtxrj18jjmeq",
+        "r5736zg6qx85nx3vbxkhd1bfgn8jjvee",
+        "r578v3nfbbxkdxt3qt0z1ycnw18jkdeg",
+        "r57fdgnr5sf99wk140gb7hrv3h8jjq85",
+        "r573v0hn4eq7bh87550bzvy5r18jjat7",
+        "r57a3nkzv4js3zqs0g7g6qje3d8jkrnt",
+        "r5704ts33x82k4kmk420km7drh8jkqq2",
+        "r57c54pc40ht1g509rxxh1rp958jjcwr"
+      ],
+      "operations": {
+        "read": 1,
+        "consult_run_state": 9,
+        "make_source_consultable": 7,
+        "consult_mission_state": 8,
+        "discover_sources_for_need": 4,
+        "search_available_material": 3,
+        "read_in_context": 2,
+        "submit_documentary_qualification": 1
+      },
+      "runStateSemanticMismatch": {
+        "requestedTimes": 9,
+        "retainedRequestId": "rd7dajqz5sc95v68m2d4heybhn8jj2n3",
+        "executionStatus": "running",
+        "resumeActionReason": "human_prerequisite_required",
+        "settledDocumentCount": 0,
+        "lateReadingReferenceCount": 4,
+        "lateContributionObservationCount": 1
+      }
+    }
+  },
+  "controls": [
+    {
+      "case": "sources-attribution-independence",
+      "invocationId": "r57584gp0pgc6wzratk25tebzd8jk98n",
+      "outcome": "succeeded",
+      "error": null,
+      "visibleCharacters": 2305,
+      "trailingWhitespace": 0,
+      "provider": "Wafer",
+      "strictBooleanSchema": true
+    },
+    {
+      "case": "sources-attribution-independence",
+      "invocationId": "r572fsm4bjbpy2y8cyjz8hqnhs8jj67q",
+      "outcome": "failed",
+      "error": "response_too_large",
+      "visibleCharacters": 30886,
+      "trailingWhitespace": 28721,
+      "provider": null,
+      "strictBooleanSchema": true,
+      "invalidJson": true
+    },
+    {
+      "case": "sources-attribution-independence",
+      "invocationId": "r57fqs3r3ssp16n2h992vnbbt98jja6e",
+      "outcome": "succeeded",
+      "error": null,
+      "visibleCharacters": 2250,
+      "trailingWhitespace": 0,
+      "provider": "Wafer",
+      "strictBooleanSchema": true
+    },
+    {
+      "case": "sources-attribution-independence",
+      "invocationId": "r5750d0ar2x5apxk1e889a9s7s8jjcv6",
+      "outcome": "succeeded",
+      "error": null,
+      "visibleCharacters": 2965,
+      "trailingWhitespace": 0,
+      "provider": "Wafer",
+      "strictBooleanSchema": true
+    },
+    {
+      "case": "sources-attribution-independence",
+      "invocationId": "r572101jbk8ffhart19r6j8c9n8jkrzn",
+      "outcome": "succeeded",
+      "error": null,
+      "visibleCharacters": 2788,
+      "trailingWhitespace": 0,
+      "provider": "Wafer",
+      "strictBooleanSchema": true
+    },
+    {
+      "case": "sources-attribution-independence",
+      "invocationId": "r579vegecwgb7hyy4hqe8v8km18jjryc",
+      "outcome": "failed",
+      "error": "response_too_large",
+      "visibleCharacters": 246974,
+      "trailingWhitespace": 245506,
+      "provider": null,
+      "strictBooleanSchema": true,
+      "invalidJson": true
+    },
+    {
+      "case": "sources-counterevidence-scope",
+      "invocationId": "r571q7ht1rkke58pjvbk36gh9n8jka8c",
+      "outcome": "succeeded",
+      "error": null,
+      "visibleCharacters": 5872,
+      "trailingWhitespace": 0,
+      "provider": "Wafer",
+      "strictBooleanSchema": true
+    },
+    {
+      "case": "sources-counterevidence-scope",
+      "invocationId": "r57aw2f6c0vht6npec1y9nm0758jk4w1",
+      "outcome": "succeeded",
+      "error": null,
+      "visibleCharacters": 5303,
+      "trailingWhitespace": 0,
+      "provider": "Wafer",
+      "strictBooleanSchema": true
+    },
+    {
+      "case": "sources-counterevidence-scope",
+      "invocationId": "r5742v794n18vrnnsgy21v0d3d8jkspb",
+      "outcome": "failed",
+      "error": "invalid_output",
+      "visibleCharacters": 16554,
+      "trailingWhitespace": 11800,
+      "provider": "Wafer",
+      "strictBooleanSchema": true,
+      "invalidJson": true
+    },
+    {
+      "case": "sources-partial-reading",
+      "invocationId": "r570861acgkgqb2pn0prgpks0n8jk77y",
+      "outcome": "succeeded",
+      "error": null,
+      "visibleCharacters": 4273,
+      "trailingWhitespace": 0,
+      "provider": "Wafer",
+      "strictBooleanSchema": true
+    }
+  ],
+  "stateComparisons": 136
+}

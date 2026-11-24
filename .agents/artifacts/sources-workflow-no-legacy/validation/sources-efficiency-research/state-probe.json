@@ -1,0 +1,59 @@
+{
+  "definitionVersion": 7,
+  "research": {
+    "actions": {
+      "continuePreparation": {
+        "actor": "analyst_or_authorized_workbench",
+        "applicable": false,
+        "reason": "human_prerequisite_required"
+      },
+      "pause": {
+        "actor": "analyst_or_authorized_workbench",
+        "applicable": true,
+        "reason": null
+      },
+      "resume": {
+        "actor": "analyst_or_authorized_workbench",
+        "applicable": false,
+        "reason": "human_prerequisite_required"
+      },
+      "start": {
+        "actor": "analyst_only",
+        "applicable": false,
+        "reason": "research_already_started"
+      },
+      "usePrepared": {
+        "actor": "analyst_or_authorized_workbench",
+        "applicable": false,
+        "reason": "stale_execution"
+      }
+    },
+    "approvals": {
+      "grants": [],
+      "pending": []
+    },
+    "controlAvailable": true,
+    "executionGeneration": 4,
+    "nextCapability": null,
+    "pauseReason": null,
+    "pauseRequested": false,
+    "phase": "discovering_sources",
+    "sources": {
+      "executionStop": null,
+      "instructionTreatment": {
+        "description": "Additional needs may join the current preparation, subject to framing, authority, execution and capacity checks. Registration is not completed treatment and cannot start another documentary phase.",
+        "status": "open"
+      },
+      "outcome": null,
+      "phase": "collecting",
+      "preparationId": "10021sourceSelectionProposalRebuilds",
+      "retainedDocuments": [],
+      "settledAt": null
+    },
+    "started": true,
+    "status": "running"
+  },
+  "currentCapturePresent": true,
+  "currentCandidateChangeVisible": true,
+  "unchangedDossierProjectionReusesRequest": true
+}

@@ -1,0 +1,68 @@
+[
+  {
+    "source": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-frozen-model-20261118-current-candidate/lots/lot-1/observations/after-cleanup-73ba4885-cccd-4248-860b-9a7ea8d3659f/nvidia-unnamed/invocations-6.json",
+    "invocationId": "r57fbnt8p1r7t3zqh5zj5cyx0n8jfze5",
+    "requestContentHash": "1839a4665bc04a5aeb9c9253546eab03d2019ff49fcd325f86496a84c3cbca7f",
+    "requestKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "provider",
+      "reasoning",
+      "response_format",
+      "temperature",
+      "usage"
+    ],
+    "stream": "absent",
+    "maxOutputTokens": 131072,
+    "temperature": 0,
+    "provider": {
+      "max_price": {
+        "completion": 0.6,
+        "prompt": 0.15
+      },
+      "require_parameters": true
+    },
+    "reasoning": {
+      "effort": "high",
+      "enabled": true,
+      "exclude": true
+    },
+    "strict": true,
+    "contributionCount": 5,
+    "systemMessageSha256": "28deb50b724c8af1383446b11ca53f8d7a4ca81017e4178205a1a6f7b9558ecc"
+  },
+  {
+    "source": "/home/abdwhb/.cache/workbench-evaluations/directed-framing-frozen-model-20261118-current-candidate/lots/lot-1/observations/after-cleanup-73ba4885-cccd-4248-860b-9a7ea8d3659f/nvidia-unnamed/invocations-7.json",
+    "invocationId": "r571sbsvgmnepwp3zsrn3h7zq98jf6eg",
+    "requestContentHash": "2498354f4bcf0c54538a4d06f00fb932fea7429f6b5db44ad0b735b5dbe73436",
+    "requestKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "provider",
+      "reasoning",
+      "response_format",
+      "temperature",
+      "usage"
+    ],
+    "stream": "absent",
+    "maxOutputTokens": 131072,
+    "temperature": 0,
+    "provider": {
+      "max_price": {
+        "completion": 0.6,
+        "prompt": 0.15
+      },
+      "require_parameters": true
+    },
+    "reasoning": {
+      "effort": "high",
+      "enabled": true,
+      "exclude": true
+    },
+    "strict": true,
+    "contributionCount": 3,
+    "systemMessageSha256": "28deb50b724c8af1383446b11ca53f8d7a4ca81017e4178205a1a6f7b9558ecc"
+  }
+]

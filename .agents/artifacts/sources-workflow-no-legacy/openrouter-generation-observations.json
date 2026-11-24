@@ -1,0 +1,155 @@
+{
+  "recordedAt": "2026-11-19T08:37:42.613Z",
+  "observations": [
+    {
+      "id": "gen-1795023997-J0fvISV95BakDdWI2icV",
+      "part": "metadata",
+      "httpStatus": 200,
+      "body": {
+        "data": {
+          "created_at": "2026-11-18T17:46:37.024Z",
+          "model": "z-ai/glm-5.3-flash-20260826",
+          "app_id": null,
+          "external_user": null,
+          "streamed": true,
+          "cancelled": true,
+          "latency": 561,
+          "moderation_latency": null,
+          "generation_time": 589336,
+          "tokens_prompt": 5125,
+          "tokens_completion": 45867,
+          "native_tokens_prompt": 5125,
+          "native_tokens_completion": 45867,
+          "native_tokens_completion_images": null,
+          "native_tokens_reasoning": 2243,
+          "native_tokens_cached": 0,
+          "num_media_prompt": null,
+          "num_input_audio_prompt": null,
+          "num_media_completion": 0,
+          "num_search_results": null,
+          "num_fetches": null,
+          "web_search_engine": null,
+          "origin": "",
+          "is_byok": false,
+          "finish_reason": null,
+          "native_finish_reason": null,
+          "service_tier": null,
+          "usage": 0.011341205,
+          "router": null,
+          "user_agent": "ai/7.0.138 ai-sdk/provider-utils/5.0.42 runtime/node.js/26",
+          "http_referer": null,
+          "request_id": "req-1795023997-ALHRQv39jfw0UeBQBQdQ",
+          "session_id": null,
+          "preset_id": null,
+          "api_type": "completions",
+          "id": "gen-1795023997-J0fvISV95BakDdWI2icV",
+          "upstream_id": "chatcmpl-c1cc03b8-3ea0-4769-984a-17440cf82552",
+          "provider_responses": [
+            {
+              "endpoint_id": "7c22a43e-fac7-4201-bdc2-226a97e8a0d7",
+              "id": "chatcmpl-c1cc03b8-3ea0-4769-984a-17440cf82552",
+              "is_byok": false,
+              "latency": 561,
+              "model_permaslug": "z-ai/glm-5.3-flash-20260826",
+              "provider_name": "Wafer",
+              "status": 499
+            }
+          ],
+          "total_cost": 0.011341205,
+          "cache_discount": null,
+          "upstream_inference_cost": 0,
+          "provider_name": "Wafer",
+          "response_cache_source_id": null,
+          "data_region": "global",
+          "workspace_id": "19c2d15f-3d11-4fdc-b281-0abb63154f13"
+        }
+      }
+    },
+    {
+      "id": "gen-1795023997-J0fvISV95BakDdWI2icV",
+      "part": "content",
+      "httpStatus": 404,
+      "body": {
+        "error": {
+          "message": "Content not available for this generation",
+          "code": 404
+        }
+      }
+    },
+    {
+      "id": "gen-1795023981-sFRDFyLwLm03Be5iO6fK",
+      "part": "metadata",
+      "httpStatus": 200,
+      "body": {
+        "data": {
+          "created_at": "2026-11-18T17:46:21.786Z",
+          "model": "z-ai/glm-5.3-flash-20260826",
+          "app_id": null,
+          "external_user": null,
+          "streamed": true,
+          "cancelled": false,
+          "latency": 515,
+          "moderation_latency": null,
+          "generation_time": 11382,
+          "tokens_prompt": 5019,
+          "tokens_completion": 1443,
+          "native_tokens_prompt": 5332,
+          "native_tokens_completion": 1414,
+          "native_tokens_completion_images": null,
+          "native_tokens_reasoning": 404,
+          "native_tokens_cached": 0,
+          "num_media_prompt": null,
+          "num_input_audio_prompt": null,
+          "num_media_completion": 0,
+          "num_search_results": null,
+          "num_fetches": null,
+          "web_search_engine": null,
+          "origin": "",
+          "is_byok": false,
+          "finish_reason": "stop",
+          "native_finish_reason": "stop",
+          "service_tier": null,
+          "usage": 0.00048412,
+          "router": null,
+          "user_agent": "ai/7.0.138 ai-sdk/provider-utils/5.0.42 runtime/node.js/26",
+          "http_referer": null,
+          "request_id": "req-1795023981-Lgoc2ZTLnWIMphnn1DvN",
+          "session_id": null,
+          "preset_id": null,
+          "api_type": "completions",
+          "id": "gen-1795023981-sFRDFyLwLm03Be5iO6fK",
+          "upstream_id": "chatcmpl-1a69ed66-add5-4023-bf34-7cabdcbe36fc",
+          "provider_responses": [
+            {
+              "endpoint_id": "f4829435-d932-4798-8489-21d56770f093",
+              "id": "chatcmpl-1a69ed66-add5-4023-bf34-7cabdcbe36fc",
+              "is_byok": false,
+              "latency": 515,
+              "model_permaslug": "z-ai/glm-5.3-flash-20260826",
+              "provider_name": "Wafer",
+              "status": 200
+            }
+          ],
+          "total_cost": 0.00048412,
+          "cache_discount": null,
+          "upstream_inference_cost": 0,
+          "provider_name": "Wafer",
+          "response_cache_source_id": null,
+          "data_region": "global",
+          "workspace_id": "19c2d15f-3d11-4fdc-b281-0abb63154f13"
+        }
+      }
+    },
+    {
+      "id": "gen-1795023981-sFRDFyLwLm03Be5iO6fK",
+      "part": "content",
+      "httpStatus": 404,
+      "body": {
+        "error": {
+          "message": "Content not available for this generation",
+          "code": 404
+        }
+      }
+    }
+  ]
+}

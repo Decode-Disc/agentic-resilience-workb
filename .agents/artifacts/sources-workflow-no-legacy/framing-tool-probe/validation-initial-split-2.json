@@ -1,0 +1,49 @@
+{
+  "outcome": {
+    "kind": "success",
+    "valueJson": "{\"revision\":2}"
+  },
+  "framing": {
+    "_creationTime": 1795162458875.2383,
+    "_id": "0000000000010244framingRevisions",
+    "content": {
+      "questions": [
+        {
+          "id": "q-ccc-role",
+          "rationale": "Anchors the analyst's activity in the current estimate-review workflow and is useful under every interpretation of the unresolved announcement.",
+          "shortLabel": "CCC role today",
+          "text": "What role does CCC play in insurers' auto estimate review today, and at which points does the insurer or its reviewers exercise discretion over CCC-generated estimates?"
+        },
+        {
+          "id": "q-announcement",
+          "rationale": "The announcement is unresolved; this question resolves what it actually covers before any event-dependent reading is accepted.",
+          "shortLabel": "Announcement content",
+          "text": "What does the announcement the analyst refers to actually announce, and does it change insurer–CCC integration requirements, data flows, or contractual terms?"
+        },
+        {
+          "id": "q-bypass-pathways",
+          "rationale": "Keeps the core analyst question investigable without assuming the announcement enables it; measures are grounded in documented practices rather than the unverified event.",
+          "shortLabel": "Bypass pathways",
+          "text": "Under what documented conditions could an insurer accept or finalize estimates outside CCC review — for example in-house review, direct repair programs, or manual overrides — and what constraints (contractual, technical, regulatory) bear on that choice?"
+        },
+        {
+          "id": "q-consequences",
+          "rationale": "Economic consequences are treated as an investigated outcome rather than added to the request's premise, so bypass economics inform the program whatever the announcement turns out to be.",
+          "shortLabel": "Consequences",
+          "text": "If estimate review were shifted away from CCC, what economic consequences would follow for insurers, CCC, and repairers (cost, cycle time, leakage, data access)?"
+        }
+      ],
+      "scope": "Analyst request (verbatim): \"Can insurers bypass CCC during estimate review after the latest announcement?\" The activity concerns auto insurance claims estimation workflows and insurers' reliance on CCC's estimating/review software. No public event has been established yet; the announcement the analyst refers to is an unresolved condition. This provisional program examines insurers' current reliance on CCC during estimate review, identifies what pathways exist (or could emerge) for insurers to review or finalize estimates outside CCC, and investigates possible economic consequences of such bypass for insurers, CCC, and repairers."
+    },
+    "contentHash": "92b746e983501ed2762eec02afc0ec7a91a66b8ed5a4a98d4f42295297094442",
+    "createdAt": 1795162458875,
+    "eventBasis": {
+      "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+      "kind": "open"
+    },
+    "origin": "workbench",
+    "requestKey": "operation:0000010240agentOperationRequests",
+    "revision": 2,
+    "runId": "00000000000000010005researchRuns"
+  }
+}

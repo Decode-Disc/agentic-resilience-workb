@@ -1,0 +1,11 @@
+{
+  "project": "agentic-resilience-workbench-proto",
+  "sender": "Codex",
+  "event": "research-complete",
+  "key": "legacy-retirement-version-resolution-0bac64351157f700ad944b12e0fbf2e0ef24b9ba",
+  "revision": "0bac64351157f700ad944b12e0fbf2e0ef24b9ba",
+  "message": "Legacy retirement and version-resolution research saved in artifact 35. All 171 focused tests passed. Deployment inventory remains unverified because the local backend is stopped. Next: technical design.",
+  "accepted": true,
+  "messageId": 1051,
+  "receipt": "/home/abdwhb/.local/state/agent-stack/notify/92556c0382edbb962c94fcb8acbb68cd51b8a0e9c5184865449fd02ae67592ff.json"
+}

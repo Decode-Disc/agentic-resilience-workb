@@ -1,0 +1,80 @@
+{
+  "status": "blocked_sources_frozen_replay",
+  "paidAuthority": false,
+  "plannedExecutions": 24,
+  "methods": {
+    "retained_control": {
+      "workbench": 8,
+      "sources": 6
+    },
+    "native_skills": {
+      "workbench": 7,
+      "sources": 5
+    }
+  },
+  "skillPackages": [
+    {
+      "id": "research-methods-v1",
+      "hash": "59636638f6fe940ad73678c9432fcdeb1deb910a16720a26fe327cf0bfd792e9"
+    }
+  ],
+  "workflowRoute": {
+    "status": "official_metadata_checked_not_application_readiness",
+    "provider": "openrouter",
+    "model": "z-ai/glm-5.3-flash",
+    "canonicalSlug": "z-ai/glm-5.3-flash-20260826",
+    "pricingPerMillionTokens": {
+      "input": 0.15,
+      "output": 0.5,
+      "cacheRead": 0.03
+    },
+    "advertisedReasoning": [
+      "max",
+      "high",
+      "low"
+    ],
+    "providerDefaultReasoning": "max",
+    "effectiveApplicationReasoning": "not_refreshed",
+    "checkedAt": "2026-11-19T22:08:07.587489+00:00",
+    "source": "Executor OpenRouter get-model, Agentic Resilience workspace"
+  },
+  "reviewRoute": {
+    "provider": "openai",
+    "model": "gpt-6.1-sol",
+    "status": "historical_preference_not_refreshed"
+  },
+  "budget": {
+    "status": "not_proposed_before_executable_scope",
+    "workflowUsd": null,
+    "reviewUsd": null
+  },
+  "remaining": [
+    {
+      "cases": [
+        "nvidia-h20-supplied",
+        "ccc-balanced",
+        "ccc-first-party-depth",
+        "ccc-independent-scrutiny",
+        "lookup-unavailable",
+        "insufficient-dated-support"
+      ],
+      "action": "Retain original messages/dates and freeze the selected captured corpus in the final mandate; do not reuse live retrieval as a paired control."
+    },
+    {
+      "cases": [
+        "publication-event-order-heldout",
+        "announcement-without-authority-change-heldout"
+      ],
+      "action": "Freeze held-out source bytes and expected distinctions independently of teaching examples."
+    },
+    {
+      "cases": [
+        "sources-partial-reading",
+        "sources-attribution-independence",
+        "sources-counterevidence-scope",
+        "sources-interrupted-preparation"
+      ],
+      "action": "Extend existing initial-fixture and Sources retrieval owners to serve a bound hash-checked multi-document corpus without live fallback; exercise launched preparation in both arms before mandate preparation."
+    }
+  ]
+}

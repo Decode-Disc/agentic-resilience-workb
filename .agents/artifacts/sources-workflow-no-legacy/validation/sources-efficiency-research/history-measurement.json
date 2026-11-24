@@ -1,0 +1,82 @@
+{
+  "boundary": "Logical documents and inline payload bytes delivered to the real Convex history query; physical database bytes and latency are not measured",
+  "sourceCharacters": 44418,
+  "measurements": [
+    {
+      "documents": 2,
+      "payloadBytes": 44023,
+      "resultBytes": 5261,
+      "entries": 2
+    },
+    {
+      "documents": 1,
+      "payloadBytes": 44023,
+      "resultBytes": 4765,
+      "entries": 1
+    },
+    {
+      "documents": 1,
+      "payloadBytes": 44023,
+      "resultBytes": 4765,
+      "entries": 1
+    },
+    {
+      "documents": 1,
+      "payloadBytes": 44023,
+      "resultBytes": 4766,
+      "entries": 1
+    },
+    {
+      "documents": 1,
+      "payloadBytes": 44023,
+      "resultBytes": 4766,
+      "entries": 1
+    },
+    {
+      "documents": 1,
+      "payloadBytes": 44023,
+      "resultBytes": 4766,
+      "entries": 1
+    },
+    {
+      "documents": 1,
+      "payloadBytes": 44023,
+      "resultBytes": 4766,
+      "entries": 1
+    },
+    {
+      "documents": 1,
+      "payloadBytes": 44023,
+      "resultBytes": 4766,
+      "entries": 1
+    },
+    {
+      "documents": 1,
+      "payloadBytes": 44023,
+      "resultBytes": 4766,
+      "entries": 1
+    },
+    {
+      "documents": 1,
+      "payloadBytes": 44023,
+      "resultBytes": 4766,
+      "entries": 1
+    },
+    {
+      "documents": 1,
+      "payloadBytes": 44023,
+      "resultBytes": 4766,
+      "entries": 1
+    },
+    {
+      "documents": 2,
+      "payloadBytes": 88046,
+      "resultBytes": 5299,
+      "entries": 2
+    }
+  ],
+  "totals": {
+    "documents": 14,
+    "payloadBytes": 572299
+  }
+}

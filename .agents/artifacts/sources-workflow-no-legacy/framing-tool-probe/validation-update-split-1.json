@@ -1,0 +1,35 @@
+{
+  "outcome": {
+    "code": "framing_event_basis_invalid",
+    "kind": "refused",
+    "validation": {
+      "expected": "Use a nonblank exact excerpt from the active analyst message; do not attribute an invented hypothesis to the analyst.",
+      "path": "eventBasis.conditions[0].basis.excerpt"
+    }
+  },
+  "framing": {
+    "_creationTime": 1795162458757.0098,
+    "_id": "0000000000010010framingRevisions",
+    "content": {
+      "questions": [
+        {
+          "id": "bypass",
+          "rationale": "Identify control points without assuming bypass is possible.",
+          "shortLabel": "Insurer bypass",
+          "text": "Which estimate-review dependencies constrain insurer bypass of CCC?"
+        }
+      ],
+      "scope": "Can insurers bypass CCC during estimate review after the latest announcement?"
+    },
+    "contentHash": "79fec635ff5d3b0f6abba667bad1399b048644c91b2b5b697bdce217fc606295",
+    "createdAt": 1795162458757,
+    "eventBasis": {
+      "activityExcerpt": "Can insurers bypass CCC during estimate review after the latest announcement?",
+      "kind": "open"
+    },
+    "origin": "initial",
+    "requestKey": "initial",
+    "revision": 1,
+    "runId": "00000000000000010005researchRuns"
+  }
+}

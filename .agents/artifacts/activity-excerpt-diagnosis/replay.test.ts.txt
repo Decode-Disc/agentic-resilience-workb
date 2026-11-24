@@ -1,0 +1,60 @@
+import { readFileSync } from "node:fs";
+import { api, internal } from "@convex/_generated/api";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
+import { agentToolSchemas } from "@convex/execution/agentDefinition";
+import { buildMissionContext } from "@convex/execution/context";
+import { requestInputValidator } from "@convex/execution/executionProtocol";
+import { validate } from "convex-helpers/validators";
+import { afterEach, assert, expect, test, vi } from "vitest";
+import { seedWorkbench } from "@/__tests__/setup/workbench";
+
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+});
+
+test("replay exact omitted-anchor drafts through the v7 schema and persistence boundary", async () => {
+    const original = "Can insurers bypass CCC during estimate review after the latest announcement?";
+    const f = await seedWorkbench(true, undefined, 60000, original, undefined, 7, "first_party_depth");
+    const active = await f.t.mutation(internal.execution.conversations.startTurn, {
+        runId: f.runId, definitionId: "workbench_v1", scope: { kind: "workbench_v1" }, simulation: true,
+    });
+    assert(active);
+    const message = await f.t.run((ctx) => ctx.db.query("agentMessageDeliveries").withIndex("by_run_and_status", (q) => q.eq("runId", f.runId).eq("status", "active")).first());
+    assert(message);
+    const definition = getAgentDefinition("workbench_v1", 7);
+    const context = await f.t.run((ctx) => buildMissionContext(ctx, active.missionId, 1));
+    assert(context.kind === "ready");
+    const snapshot: unknown = JSON.parse(context.inputJson);
+    const offered = agentToolSchemas(definition, snapshot).adjust_framing;
+    assert(offered);
+    const drafts: unknown = JSON.parse(readFileSync(".agents/artifacts/activity-excerpt-diagnosis/rejected-inputs.json", "utf8"));
+    assert(Array.isArray(drafts));
+    let lastDraft: unknown;
+    for (const [index, raw] of drafts.entries()) {
+        assert(validate(requestInputValidator, raw));
+        assert(raw.kind === "adjust_framing");
+        const modelArguments = { content: raw.content, eventBasis: raw.eventBasis };
+        expect(validate(offered.inputValidator, modelArguments)).toBe(true);
+        const normalized = definition.normalizeOperationInput?.("adjust_framing", modelArguments, snapshot);
+        expect(normalized?.eventBasis).toEqual(raw.eventBasis);
+        const id = await f.t.mutation(internal.execution.operations.enqueue, {
+            missionId: active.missionId, expectedGeneration: 1, cause: `captured-${index}`,
+            input: { ...raw, messageId: message._id, expectedRevision: 1 },
+        });
+        expect(await f.t.action(internal.execution.operations.dispatch, { requestId: id, expectedGeneration: 1 })).toMatchObject({ kind: "refused", code: "framing_event_basis_invalid", validation: { path: "eventBasis.activityExcerpt" } });
+        expect(await f.client.query(api.framing.get, { runId: f.runId })).toMatchObject({ revision: 1, content: { scope: "", questions: [] } });
+        lastDraft = raw;
+    }
+    assert(validate(requestInputValidator, lastDraft));
+    assert(lastDraft.kind === "adjust_framing" && lastDraft.eventBasis?.kind === "open");
+    const corrected = { ...lastDraft, messageId: message._id, expectedRevision: 1, eventBasis: { ...lastDraft.eventBasis, activityExcerpt: original } };
+    const correctedId = await f.t.mutation(internal.execution.operations.enqueue, { missionId: active.missionId, expectedGeneration: 1, cause: "only-add-missing-field", input: corrected });
+    expect(await f.t.action(internal.execution.operations.dispatch, { requestId: correctedId, expectedGeneration: 1 })).toMatchObject({ kind: "success" });
+    const saved = await f.client.query(api.framing.get, { runId: f.runId });
+    expect(saved).toMatchObject({ revision: 2, content: { scope: lastDraft.content.scope }, eventBasis: corrected.eventBasis });
+    expect(saved?.content.questions).toHaveLength(5);
+    const unchangedId = await f.t.mutation(internal.execution.operations.enqueue, { missionId: active.missionId, expectedGeneration: 1, cause: "omit-anchor-on-existing-scope", input: { ...lastDraft, messageId: message._id, expectedRevision: 2 } });
+    expect(await f.t.action(internal.execution.operations.dispatch, { requestId: unchangedId, expectedGeneration: 1 })).toMatchObject({ kind: "success" });
+    expect(await f.client.query(api.framing.get, { runId: f.runId })).toMatchObject({ content: { scope: lastDraft.content.scope } });
+});
