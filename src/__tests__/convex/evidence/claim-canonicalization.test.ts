@@ -1,13 +1,13 @@
-import { describe, expect, test } from "vitest";
 import {
     groupClaimsForCanonicalization,
     normalizeCanonicalText,
     type RawClaimInput,
 } from "@convex/domain/claimCanonicalization";
+import { describe, expect, test } from "vitest";
 
 describe("Claim Canonicalization", () => {
     test("normalizes whitespace, unicode NFKC, and casing", () => {
-        const text1 = "  CCC  connects   30,000+ repair facilities.  ";
+        const text1 = "  ＣＣＣ  connects   ３０,０００+ repair facilities.  ";
         const text2 = "ccc connects 30,000+ repair facilities.";
         expect(normalizeCanonicalText(text1)).toBe(
             "ccc connects 30,000+ repair facilities.",
@@ -36,7 +36,7 @@ describe("Claim Canonicalization", () => {
                 ],
             },
             {
-                statement: "ccc connects 30,000+ repair facilities. ",
+                statement: "ｃｃｃ connects ３０,０００+ repair facilities. ",
                 classification: "Fact",
                 evidence: [
                     {

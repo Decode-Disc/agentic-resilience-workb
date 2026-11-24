@@ -884,7 +884,10 @@ test("unqualified work retains storage headroom for unfinished explanations thro
     });
 });
 
-test("combined real-owner end-to-end: Sources 8 prepares restricted material, Workbench observes pre-handoff progress, single-page targeted >45 KiB history, mixed refusal + sole completion + crash-recovered native settlement", async () => {
+test("current Sources preserves restricted material, complete history and accounting through native completion and crash recovery", async () => {
+    const { getAgentDefinition } = await import(
+        "@convex/execution/agentCatalog"
+    );
     const { readResearchState } = await import("@convex/domain/researchState");
     const { recordMissionEvent } = await import("@convex/execution/authority");
     const { runPiMission } = await import("@convex/integrations/piMission");
@@ -901,7 +904,7 @@ test("combined real-owner end-to-end: Sources 8 prepares restricted material, Wo
     const f = await seedObservedSources();
     await installModel(f.t, nativePiFixtureRoute, "sources");
 
-    // Start a fresh default Sources mission directly through missions.start and confirm it pins v8.
+    // Fresh admission must select the current binding, not inherit the fixture's retained mission.
     await f.t.run(async (ctx) => {
         const framingId = await ctx.db.insert("framingRevisions", {
             runId: f.runId,
@@ -928,8 +931,9 @@ test("combined real-owner end-to-end: Sources 8 prepares restricted material, Wo
         requestKey: "combined-phase5-sources-v8",
     });
     const initialMission = await f.t.run((ctx) => ctx.db.get(missionId));
-    expect(initialMission?.definitionVersion).toBe(8);
-    // Perform an admitted saved-material reading on the Sources 8 mission itself.
+    expect(initialMission?.definitionVersion).toBe(
+        getAgentDefinition("sources_v1").version,
+    );
     const readReqId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
@@ -1053,7 +1057,7 @@ test("combined real-owner end-to-end: Sources 8 prepares restricted material, Wo
         });
     });
 
-    // 4. Drive real Sources 8 through Pi:
+    // 4. Drive the current Sources binding through Pi:
     //    Turn 1: mixed round (premature submit_completion + targeted consult_mission_state on longEventId).
     //    Turn 2: sole submit_completion passing domain checks, then injected crash before tool acknowledgement.
     let turn = 0;

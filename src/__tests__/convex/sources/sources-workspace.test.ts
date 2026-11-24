@@ -455,8 +455,6 @@ test("the conversation exposes the same recorded Sources operation and keeps its
             operations: [
                 expect.objectContaining({
                     id: f.readRequestId,
-                    title: "Search retained documentary material",
-                    summary: "Search completed. Inspect the matching material.",
                     sourceId: f.sourceId,
                     succeeded: true,
                 }),

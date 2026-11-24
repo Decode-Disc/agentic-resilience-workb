@@ -4,7 +4,7 @@ import {
     requireRunAuthority,
     requireSettlementAuthority,
 } from "@convex/execution/authority";
-import { executionError } from "@convex/execution/errors";
+import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { operationHistoryReference } from "@convex/execution/journal";
 import {
     DOCUMENTARY_SEARCH_QUERY_MAX_CHARS,
@@ -1537,7 +1537,7 @@ export async function completeSources(
         const work = data.work.filter((w) =>
             w.needIds.includes(outcome.needId),
         );
-        let completedSearch = false;
+        let examinedNeed = false;
         const readings: NonNullable<
             Infer<
                 typeof preparedMaterialValidator
@@ -1589,35 +1589,51 @@ export async function completeSources(
                     );
             }
             if (
-                data.coveragePolicy &&
                 outcome.gap &&
                 assessmentAuthor?.type === "agent" &&
-                readings.length < SOURCES_MAX_EVIDENCE_REFERENCES &&
                 request?.input.kind === "read_in_context"
             ) {
-                const read = admittedDocumentaryReading(
-                    request,
-                    {
-                        runId: run._id,
-                        missionId: assessmentAuthor.missionId,
-                    },
-                    data,
-                );
-                const passage = read?.passages[0];
-                if (
-                    read &&
-                    passage &&
-                    !readings.some(
-                        (entry) =>
-                            entry.captureId === read.captureId &&
-                            entry.passageOrder === passage.passageOrder,
+                let read: ReturnType<typeof admittedDocumentaryReading>;
+                try {
+                    read = admittedDocumentaryReading(
+                        request,
+                        {
+                            runId: run._id,
+                            missionId: assessmentAuthor.missionId,
+                        },
+                        data,
+                    );
+                } catch (error) {
+                    if (
+                        executionFailureCode(error) !==
+                        "documentary_quote_invalid"
                     )
-                )
-                    readings.push({
-                        sourceId: read.sourceId,
-                        captureId: read.captureId,
-                        passageOrder: passage.passageOrder,
-                    });
+                        throw error;
+                    invalid(
+                        outcome,
+                        "documentary_quote_invalid",
+                        "Use an adopted contextual reading matching its immutable capture. Recover a valid reading or record unfinished work instead of a gap.",
+                    );
+                    continue;
+                }
+                const passage = read?.passages[0];
+                if (read && passage) {
+                    examinedNeed = true;
+                    if (
+                        data.coveragePolicy &&
+                        readings.length < SOURCES_MAX_EVIDENCE_REFERENCES &&
+                        !readings.some(
+                            (entry) =>
+                                entry.captureId === read.captureId &&
+                                entry.passageOrder === passage.passageOrder,
+                        )
+                    )
+                        readings.push({
+                            sourceId: read.sourceId,
+                            captureId: read.captureId,
+                            passageOrder: passage.passageOrder,
+                        });
+                }
             }
             if (!request || request.runId !== run._id)
                 invalid(
@@ -1644,7 +1660,7 @@ export async function completeSources(
                 "query" in request.input &&
                 request.input.query.trim().length > 0
             )
-                completedSearch = true;
+                examinedNeed = true;
         }
         if (
             !coveredNeeds.has(outcome.needId) &&
@@ -1657,11 +1673,11 @@ export async function completeSources(
                 "Provide usable controlled material, a supported examined gap, or an explicit unfinished explanation.",
             );
         if (readings.length) coverageReadings.set(outcome.needId, readings);
-        if (outcome.gap && !completedSearch)
+        if (outcome.gap && !examinedNeed)
             invalid(
                 outcome,
                 "documentary_gap_not_examined",
-                "Omit gap unless a successful nonblank discovery/search examined this need. Record unfinished work instead.",
+                "Omit gap unless a successful nonblank discovery/search or an adopted contextual reading examined this need. Scope the gap to the examined material; otherwise record unfinished work.",
             );
         if (!outcome.workRequestIds.length && !outcome.unfinished.length)
             invalid(

@@ -1,9 +1,7 @@
 /// <reference types="vite/client" />
+import { createHash } from "node:crypto";
+import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type {
-    CLAIM_CLASSIFICATIONS,
-    EVIDENCE_RELATIONS,
-} from "@convex/domain/claims";
 import { ASSESSMENT_DIMENSION_KEYS } from "@convex/domain/researchPlan";
 import {
     CLAIM_SCHEMA_VERSION,
@@ -12,9 +10,8 @@ import {
     SHOWCASE_ADAPTER_VERSION,
     SHOWCASE_FIXTURE_VERSION,
 } from "@convex/domain/showcaseManifest";
-import { computePassageKey } from "@convex/domain/sourcePassages";
+import { computePassageKey, sha256Hex } from "@convex/domain/sourcePassages";
 import schema from "@convex/schema";
-import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
@@ -27,107 +24,13 @@ import workflowTest from "../workflows/workflow-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 
-const generateClaimsForRun = makeFunctionReference<
-    "mutation",
-    {
-        runId: Id<"researchRuns">;
-        executionGeneration: number;
-    },
-    {
-        status: "succeeded" | "unavailable" | "failed";
-        aiTaskResultId?: Id<"aiTaskResults">;
-        claimCount: number;
-        reused: boolean;
-        reason?: string;
-    }
->("claimGeneration:generateClaimsForRun");
-
-const listClaimsForRun = makeFunctionReference<
-    "query",
-    {
-        runId: Id<"researchRuns">;
-    },
-    Array<{
-        _id: Id<"claims">;
-        statement: string;
-        canonicalText: string;
-        classification: (typeof CLAIM_CLASSIFICATIONS)[number];
-        proposingTaskId: Id<"aiTaskResults">;
-    }>
->("claimGeneration:listClaimsForRun");
-
-const getClaimDetails = makeFunctionReference<
-    "query",
-    {
-        claimId: Id<"claims">;
-    },
-    {
-        claim: {
-            _id: Id<"claims">;
-            statement: string;
-            canonicalText: string;
-            classification: (typeof CLAIM_CLASSIFICATIONS)[number];
-            proposingTaskId: Id<"aiTaskResults">;
-        };
-        evidence: Array<{
-            _id: Id<"claimEvidence">;
-            sourcePassageId: Id<"sourcePassages">;
-            relation: (typeof EVIDENCE_RELATIONS)[number];
-        }>;
-        dimensionLinks: Array<{
-            _id: Id<"claimDimensionLinks">;
-            dimensionKey: string;
-            origin: "generated" | "analyst";
-            rationale?: string;
-        }>;
-    }
->("claimGeneration:getClaimDetails");
-
-const getAiTaskResult = makeFunctionReference<
-    "query",
-    {
-        aiTaskResultId: Id<"aiTaskResults">;
-    },
-    {
-        _id: Id<"aiTaskResults">;
-        runId: Id<"researchRuns">;
-        corpusRevisionId: Id<"corpusRevisions">;
-        taskType: string;
-        executionMode: "showcase" | "live";
-        fixtureId?: string;
-        fixtureVersion?: string;
-        schemaVersion: string;
-        adapterVersion: string;
-        inputHash: string;
-        providerCallId?: Id<"providerCalls">;
-        output:
-            | {
-                  kind: "claim_extraction";
-                  claimCount: number;
-                  claimIds: Array<Id<"claims">>;
-              }
-            | {
-                  kind: "semantic_verification";
-                  label: "entailed" | "contradicted" | "mixed";
-                  evidenceReferences: Array<{
-                      sourcePassageId: Id<"sourcePassages">;
-                      passageKey: string;
-                  }>;
-              };
-    }
->("claimGeneration:getAiTaskResult");
-
-const getNormalizedClaimInput = makeFunctionReference<
-    "query",
-    {
-        runId: Id<"researchRuns">;
-        executionGeneration: number;
-    },
-    {
-        normalizedInput: any;
-        inputHash: string;
-    } | null
->("claimGeneration:getNormalizedClaimInput");
+const {
+    generateClaimsForRun,
+    listClaimsForRun,
+    getClaimDetails,
+    getAiTaskResult,
+    getNormalizedClaimInput,
+} = internal.claimGeneration;
 
 type ScenarioPassage = {
     exactQuotation: string;
@@ -353,7 +256,7 @@ async function createShowcaseClaimScenario(
 
                 const createdPassages = [];
                 for (const [pIdx, passage] of src.passages.entries()) {
-                    const quotationHash = `qhash_${sourceId}_${pIdx}`;
+                    const quotationHash = sha256Hex(passage.exactQuotation);
                     const locator = {
                         kind: "web" as const,
                         canonicalUrl: src.url,
@@ -444,6 +347,7 @@ describe("Claim Generation Tracer", () => {
             aiTaskResultId: result.aiTaskResultId,
         });
         expect(taskResult.executionMode).toBe("showcase");
+        expect(taskResult.taskType).toBe("showcase_claim_extraction");
         expect(taskResult.fixtureId).toBe("ccc-showcase-claims");
         expect(taskResult.fixtureVersion).toBe(SHOWCASE_FIXTURE_VERSION);
         expect(taskResult.schemaVersion).toBe(CLAIM_SCHEMA_VERSION);
@@ -491,15 +395,13 @@ describe("Claim Generation Tracer", () => {
         });
     });
 
-    test("one-byte changed input refuses fixture and creates zero claims", async () => {
+    test("absent showcase manifest creates no claims or task results", async () => {
         const t = convexTest(schema, modules);
         rateLimiterTest.register(t);
         workflowTest.register(t);
 
         const scenario = await createShowcaseClaimScenario(t);
 
-        // We DO NOT register the manifest with the exact input hash
-        // (or we register with a different hash)
         const result = await t.mutation(generateClaimsForRun, {
             runId: scenario.runId,
             executionGeneration: 1,
@@ -716,7 +618,10 @@ describe("Claim Generation Tracer", () => {
         expect(details.evidence[0]?.relation).toBe("counter");
     });
 
-    test("one-byte change in question prompt or passage quotation changes inputHash and refuses fixture", async () => {
+    test.each([
+        "question",
+        "passage",
+    ] as const)("one-byte %s change invalidates the registered showcase input without persistence", async (field) => {
         const t = convexTest(schema, modules);
         rateLimiterTest.register(t);
         workflowTest.register(t);
@@ -732,15 +637,21 @@ describe("Claim Generation Tracer", () => {
         // Register fixture with original input
         registerCccShowcaseFixture(inputData.normalizedInput);
 
-        // Mutate one byte in a question prompt in DB
         await t.run(async (ctx) => {
-            const question = await ctx.db
-                .query("researchPlanQuestions")
-                .withIndex("by_run", (q) => q.eq("runId", scenario.runId))
-                .first();
-            if (question) {
+            if (field === "question") {
+                const question = await ctx.db
+                    .query("researchPlanQuestions")
+                    .withIndex("by_run", (q) => q.eq("runId", scenario.runId))
+                    .first();
+                if (!question) throw new Error("Missing question to mutate");
                 await ctx.db.patch(question._id, {
                     prompt: `${question.prompt}!`,
+                });
+            } else {
+                const passage = scenario.sourceRecords[0]?.passages[0];
+                if (!passage) throw new Error("Missing passage to mutate");
+                await ctx.db.patch(passage._id, {
+                    exactQuotation: `${passage.exactQuotation}!`,
                 });
             }
         });
@@ -759,9 +670,18 @@ describe("Claim Generation Tracer", () => {
 
         expect(result.status).toBe("unavailable");
         expect(result.claimCount).toBe(0);
+        expect(
+            await t.run(async (ctx) => ({
+                claims: await ctx.db.query("claims").collect(),
+                tasks: await ctx.db.query("aiTaskResults").collect(),
+            })),
+        ).toEqual({ claims: [], tasks: [] });
     });
 
-    test("invalid dimension key or classification in manifest throws error and creates zero claims", async () => {
+    test.each([
+        "dimensionKey",
+        "classification",
+    ] as const)("invalid manifest %s is refused before persisting claims, links or tasks", async (field) => {
         const t = convexTest(schema, modules);
         rateLimiterTest.register(t);
         workflowTest.register(t);
@@ -775,10 +695,12 @@ describe("Claim Generation Tracer", () => {
         if (!inputData) throw new Error("Missing inputData");
 
         const manifest = buildCccShowcaseManifest(inputData.normalizedInput);
-        const link = manifest.claims[0]?.dimensionLinks[0];
-        if (link) {
-            (link as any).dimensionKey = "nonexistent_dimension_key";
-        }
+        const claim = manifest.claims[0];
+        if (!claim) throw new Error("Missing claim to corrupt");
+        const target =
+            field === "classification" ? claim : claim.dimensionLinks[0];
+        if (!target) throw new Error("Missing dimension link to corrupt");
+        Reflect.set(target, field, "unsupported_value");
         registerShowcaseManifest(manifest);
 
         await expect(
@@ -786,38 +708,16 @@ describe("Claim Generation Tracer", () => {
                 runId: scenario.runId,
                 executionGeneration: 1,
             }),
-        ).rejects.toThrow();
+        ).rejects.toThrow(new RegExp(`invalid ${field}`));
 
-        await t.run(async (ctx) => {
-            const claims = await ctx.db.query("claims").collect();
-            expect(claims).toHaveLength(0);
-        });
-    });
-
-    test("taskType is showcase_claim_extraction (not claim_generation)", async () => {
-        const t = convexTest(schema, modules);
-        rateLimiterTest.register(t);
-        workflowTest.register(t);
-
-        const scenario = await createShowcaseClaimScenario(t);
-        const inputData = await t.query(getNormalizedClaimInput, {
-            runId: scenario.runId,
-            executionGeneration: 1,
-        });
-        if (!inputData) throw new Error("Missing inputData");
-        registerCccShowcaseFixture(inputData.normalizedInput);
-
-        const result = await t.mutation(generateClaimsForRun, {
-            runId: scenario.runId,
-            executionGeneration: 1,
-        });
-        expect(result.status).toBe("succeeded");
-        if (!result.aiTaskResultId) throw new Error("Missing aiTaskResultId");
-
-        const taskResult = await t.query(getAiTaskResult, {
-            aiTaskResultId: result.aiTaskResultId,
-        });
-        expect(taskResult.taskType).toBe("showcase_claim_extraction");
+        expect(
+            await t.run(async (ctx) => ({
+                claims: await ctx.db.query("claims").collect(),
+                evidence: await ctx.db.query("claimEvidence").collect(),
+                links: await ctx.db.query("claimDimensionLinks").collect(),
+                tasks: await ctx.db.query("aiTaskResults").collect(),
+            })),
+        ).toEqual({ claims: [], evidence: [], links: [], tasks: [] });
     });
 
     test("claims include inputHash and different input creates distinct claims", async () => {
@@ -839,13 +739,66 @@ describe("Claim Generation Tracer", () => {
         });
         expect(result.status).toBe("succeeded");
 
-        // Verify claims have inputHash
+        const originalClaims = await t.run((ctx) =>
+            ctx.db.query("claims").collect(),
+        );
+        expect(originalClaims).toHaveLength(result.claimCount);
+        for (const claim of originalClaims)
+            expect(claim.inputHash).toBe(inputData.inputHash);
+        const originalTaskId = result.aiTaskResultId;
+        if (!originalTaskId) throw new Error("Missing original task");
+        const originalTask = await t.run((ctx) => ctx.db.get(originalTaskId));
         await t.run(async (ctx) => {
-            const claims = await ctx.db.query("claims").collect();
-            for (const claim of claims) {
-                expect(claim.inputHash).toBe(inputData.inputHash);
-            }
+            const question = await ctx.db
+                .query("researchPlanQuestions")
+                .withIndex("by_run", (q) => q.eq("runId", scenario.runId))
+                .first();
+            if (!question) throw new Error("Missing question to revise");
+            await ctx.db.patch(question._id, {
+                prompt: `${question.prompt} Include coordination authority.`,
+            });
         });
+        const nextInput = await t.query(getNormalizedClaimInput, {
+            runId: scenario.runId,
+            executionGeneration: 1,
+        });
+        if (!nextInput) throw new Error("Missing revised input");
+        expect(nextInput.inputHash).not.toBe(inputData.inputHash);
+        registerCccShowcaseFixture(nextInput.normalizedInput);
+        const second = await t.mutation(generateClaimsForRun, {
+            runId: scenario.runId,
+            executionGeneration: 1,
+        });
+        expect(second).toMatchObject({ status: "succeeded", reused: false });
+        expect(second.aiTaskResultId).not.toBe(result.aiTaskResultId);
+        const persisted = await t.run(async (ctx) => ({
+            claims: await ctx.db.query("claims").collect(),
+            tasks: await ctx.db.query("aiTaskResults").collect(),
+        }));
+        expect(persisted.tasks).toHaveLength(2);
+        expect(
+            persisted.tasks.find((task) => task._id === result.aiTaskResultId),
+        ).toEqual(originalTask);
+        expect(
+            persisted.tasks.find((task) => task._id === second.aiTaskResultId),
+        ).toMatchObject({ inputHash: nextInput.inputHash });
+        expect(
+            persisted.claims.filter(
+                (claim) => claim.inputHash === inputData.inputHash,
+            ),
+        ).toEqual(originalClaims);
+        const nextClaims = persisted.claims.filter(
+            (claim) => claim.inputHash === nextInput.inputHash,
+        );
+        expect(nextClaims).toHaveLength(second.claimCount);
+        expect(persisted.claims).toHaveLength(
+            result.claimCount + second.claimCount,
+        );
+        expect(new Set(persisted.claims.map((claim) => claim._id)).size).toBe(
+            result.claimCount + second.claimCount,
+        );
+        for (const claim of nextClaims)
+            expect(claim.proposingTaskId).toBe(second.aiTaskResultId);
     });
 
     test("plan questions loaded by plan ID and version, not by run", async () => {
@@ -971,6 +924,55 @@ describe("Claim Generation Tracer", () => {
         expect(p0.sourceId).not.toBe(p1.sourceId);
         // Same text but different sourceId → different passage identity
         expect(p0.exactQuotation).toBe(p1.exactQuotation);
+        const digest = createHash("sha256")
+            .update("Identical passage text.")
+            .digest("hex");
+        expect(p0.quotationHash).toBe(digest);
+        expect(p1.quotationHash).toBe(digest);
+        expect(p0.passageKey).not.toBe(p1.passageKey);
+        expect(new Set([p0.sourceId, p1.sourceId])).toEqual(
+            new Set(scenario.sourceRecords.map(({ sourceId }) => sourceId)),
+        );
+        const manifest = buildCccShowcaseManifest(inputData.normalizedInput);
+        manifest.claims = [
+            {
+                statement:
+                    "Independent sources contain identical passage text.",
+                classification: "Fact",
+                evidence: [p0, p1].map((passage) => ({
+                    passageKey: passage.passageKey,
+                    quotationHash: passage.quotationHash,
+                    sourceVersionHash: passage.sourceVersionHash,
+                    relation: "supporting",
+                })),
+                dimensionLinks: [],
+            },
+        ];
+        registerShowcaseManifest(manifest);
+        const result = await t.mutation(generateClaimsForRun, {
+            runId: scenario.runId,
+            executionGeneration: 1,
+        });
+        expect(result).toMatchObject({ status: "succeeded", claimCount: 1 });
+        const claims = await t.query(listClaimsForRun, {
+            runId: scenario.runId,
+        });
+        expect(claims).toHaveLength(1);
+        const claim = claims[0];
+        if (!claim) throw new Error("Missing generated claim");
+        const details = await t.query(getClaimDetails, { claimId: claim._id });
+        expect(details.evidence).toHaveLength(2);
+        expect(
+            new Set(
+                details.evidence.map((evidence) => evidence.sourcePassageId),
+            ),
+        ).toEqual(
+            new Set(
+                scenario.sourceRecords.flatMap((source) =>
+                    source.passages.map((passage) => passage._id),
+                ),
+            ),
+        );
     });
 
     test("MAX_CLAIM_INPUT_PASSAGES overflow refuses before Convex transaction limits", async () => {

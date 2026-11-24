@@ -75,6 +75,7 @@ describe("preflightCompanyWithResolver", () => {
                     resolver,
                     now: () => 1_000,
                     persist,
+                    resolveWebsite: async () => null,
                 },
             ),
         ).resolves.toEqual({
@@ -104,13 +105,14 @@ describe("preflightCompanyWithResolver", () => {
                     resolver,
                     now: () => 1_000,
                     persist: vi.fn(),
+                    resolveWebsite: async () => null,
                 },
             ),
         ).rejects.toThrow("valid CIK");
         expect(resolver.revalidate).not.toHaveBeenCalled();
     });
 
-    test("uses the website resolver when provided to enrich the company snapshot", async () => {
+    test("enriches the company snapshot with the resolved website", async () => {
         const resolvedCompany = { ...company, websiteUrl: undefined };
         const resolver: SecCompanyResolver = {
             search: vi.fn(async () => [resolvedCompany]),
@@ -148,29 +150,6 @@ describe("preflightCompanyWithResolver", () => {
         );
         expect(result.company.websiteUrl).toBe("https://servicenow.com/");
         expect(result.company.websiteUrlSource).toBe("exa");
-    });
-
-    test("leaves websiteUrl unchanged when no resolver is wired (backward-compat)", async () => {
-        const resolver: SecCompanyResolver = {
-            search: vi.fn(async () => [company]),
-            revalidate: vi.fn(async () => company),
-        };
-        const persist = vi.fn(async (input) => ({
-            preflightId: "preflight-3",
-            company: input.company,
-            expiresAt: input.expiresAt,
-        }));
-
-        const result = await preflightCompanyWithResolver(
-            { cik: "1818201" },
-            {
-                resolver,
-                now: () => 1_000,
-                persist,
-            },
-        );
-
-        expect(result.company.websiteUrl).toBeUndefined();
     });
 });
 

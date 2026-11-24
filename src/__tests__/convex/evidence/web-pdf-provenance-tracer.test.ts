@@ -3,18 +3,19 @@
 import { lookup } from "node:dns/promises";
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { reproducePassage } from "@convex/domain/sourcePassages";
+import { preparePassageReproduction } from "@convex/domain/sourcePassages";
 import {
     clearPdfFixtures,
     registerPdfFixture,
     retrieveAndNormalizePublicPdf,
 } from "@convex/integrations/publicPdfEvidence";
+import { MAX_APPROVED_SOURCE_BYTES } from "@convex/resourcePolicy";
 import schema from "@convex/schema";
 // Workflow's deterministic test environment temporarily removes process.
 // Load Node action dependencies before scheduled workflows begin executing.
 import "@convex/evidenceActions";
 import { makeFunctionReference } from "convex/server";
-import { convexTest } from "convex-test";
+import { convexTest, type TestConvex } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
@@ -102,17 +103,6 @@ const retrieveAndNormalizePublicPdfSource = makeFunctionReference<
     }
 >("evidenceActions:retrieveAndNormalizePublicPdfSource");
 
-const getCommittedSourceVersionCount = makeFunctionReference<
-    "query",
-    {
-        corpusRevisionId?: Id<"corpusRevisions">;
-        sourceId: Id<"sources">;
-        contentHash: string;
-        normalizerVersion: string;
-    },
-    number
->("evidenceArtifacts:getCommittedSourceVersionCount");
-
 const listSourcePassages = makeFunctionReference<
     "query",
     {
@@ -129,6 +119,21 @@ const listSourcePassages = makeFunctionReference<
         locator: any;
     }>
 >("evidenceArtifacts:listSourcePassages");
+
+/** Single-source fixtures let us inspect all passages and blobs without assuming a content hash. */
+async function readSingleSourceArtifacts(
+    t: TestConvex<typeof schema>,
+    sourceId: Id<"sources">,
+) {
+    return t.run(async (ctx) => ({
+        versions: await ctx.db
+            .query("sourceVersions")
+            .withIndex("by_source_and_hash", (q) => q.eq("sourceId", sourceId))
+            .collect(),
+        passages: await ctx.db.query("sourcePassages").collect(),
+        storage: await ctx.db.system.query("_storage").collect(),
+    }));
+}
 
 type ScenarioSourceInput = {
     url: string;
@@ -697,15 +702,13 @@ describe("Phase 5 Exa and Safe Public PDF Provenance Tracers", () => {
                 sourceVersionId,
             });
             expect(passages.length).toBeGreaterThanOrEqual(2);
+            const reproduce = preparePassageReproduction(storedBlob);
             for (const passage of passages) {
                 expect(passage.locator.kind).toBe("web");
                 expect(passage.locator.sourceVersionHash).toBe(
                     version.contentHash,
                 );
-                const replayed = await reproducePassage(
-                    storedBlob,
-                    passage.locator,
-                );
+                const replayed = reproduce(passage.locator);
                 expect(replayed).toBe(passage.exactQuotation);
             }
 
@@ -726,55 +729,6 @@ describe("Phase 5 Exa and Safe Public PDF Provenance Tracers", () => {
                     .unique(),
             );
             expect(statusDoc?.status).toBe("succeeded");
-        });
-
-        test("Exa missing API key: records failed attempt, marks status failed with typed failureReason, creates no SourceVersion", async () => {
-            delete process.env.EXA_API_KEY;
-            const t = convexTest(schema, modules);
-            rateLimiterTest.register(t);
-            workflowTest.register(t);
-
-            const scenario = await createApprovedCorpusScenario(t);
-            await scenario.asOwner.mutation(startPhase5, {
-                runId: scenario.runId,
-                requestKey: "req-start-no-key",
-            });
-
-            const result = await t.action(retrieveAndNormalizeExaSource, {
-                runId: scenario.runId,
-                corpusRevisionId: scenario.corpusRevisionId,
-                sourceId: scenario.firstAccepted.sourceId,
-                acceptedDecisionId: scenario.firstAccepted.lastDecisionId,
-                executionGeneration: 2,
-            });
-
-            expect(result.status).toBe("failed");
-            expect(result.failureReason).toMatch(/not configured/i);
-
-            const versionCount = await t.query(getCommittedSourceVersionCount, {
-                sourceId: scenario.firstAccepted.sourceId,
-                contentHash: "any",
-                normalizerVersion: "exa-text-v1",
-            });
-            expect(versionCount).toBe(0);
-
-            const statusDoc = await t.run(async (ctx) =>
-                ctx.db
-                    .query("evidenceSourceStatuses")
-                    .withIndex(
-                        "by_run_and_execution_generation_and_source",
-                        (q) =>
-                            q
-                                .eq("runId", scenario.runId)
-                                .eq("executionGeneration", 2)
-                                .eq(
-                                    "sourceId",
-                                    scenario.firstAccepted.sourceId,
-                                ),
-                    )
-                    .unique(),
-            );
-            expect(statusDoc?.status).toBe("failed");
         });
 
         test("Exa paid work disabled: records failed attempt, marks status failed with paid_work_disabled, creates no SourceVersion", async () => {
@@ -1042,16 +996,14 @@ describe("Phase 5 Exa and Safe Public PDF Provenance Tracers", () => {
                 sourceVersionId,
             });
             expect(passages.length).toBe(2);
+            const reproduce = preparePassageReproduction(storedBlob);
             for (const passage of passages) {
                 expect(passage.locator.kind).toBe("pdf");
                 expect(passage.locator.sourceVersionHash).toBe(
                     version.contentHash,
                 );
                 expect([1, 2]).toContain(passage.locator.pageNumber);
-                const replayed = await reproducePassage(
-                    storedBlob,
-                    passage.locator,
-                );
+                const replayed = reproduce(passage.locator);
                 expect(replayed).toBe(passage.exactQuotation);
             }
         });
@@ -1104,12 +1056,12 @@ describe("Phase 5 Exa and Safe Public PDF Provenance Tracers", () => {
                 /normalizer is unavailable|normalizer_unavailable/i,
             );
 
-            const versionCount = await t.query(getCommittedSourceVersionCount, {
-                sourceId: scenario.firstAccepted.sourceId,
-                contentHash: "any",
-                normalizerVersion: "pdf-fixture-v1",
-            });
-            expect(versionCount).toBe(0);
+            expect(
+                await readSingleSourceArtifacts(
+                    t,
+                    scenario.firstAccepted.sourceId,
+                ),
+            ).toEqual({ versions: [], passages: [], storage: [] });
 
             const statusDoc = await t.run(async (ctx) =>
                 ctx.db
@@ -1130,31 +1082,43 @@ describe("Phase 5 Exa and Safe Public PDF Provenance Tracers", () => {
             expect(statusDoc?.status).toBe("failed");
         });
 
-        test("PDF oversize: fails when content exceeds 16 MiB limit", async () => {
+        test.each([
+            0, 1,
+        ])("PDF byte boundary: %i bytes beyond the authorized limit", async (excessBytes) => {
             const t = convexTest(schema, modules);
             rateLimiterTest.register(t);
             workflowTest.register(t);
-
+            const bytes = new Uint8Array(
+                MAX_APPROVED_SOURCE_BYTES + excessBytes,
+            );
+            registerPdfFixture("pdf-byte-boundary", {
+                bytes,
+                pages: [
+                    {
+                        pageNumber: 1,
+                        text: "The platform coordinates documented claims workflows.",
+                    },
+                ],
+            });
             const scenario = await createApprovedCorpusScenario(t, {
                 sources: [
                     {
-                        url: "https://oversize.example.com/massive.pdf",
-                        title: "Massive PDF",
+                        url: "https://size.example.com/report.pdf",
+                        title: "Byte boundary fixture PDF",
                         origin: "analyst_url",
                         decisions: ["accepted"],
                     },
                 ],
             });
-
             await scenario.asOwner.mutation(startPhase5, {
                 runId: scenario.runId,
-                requestKey: "req-start-pdf-oversize",
+                requestKey: "pdf-byte-boundary",
             });
-
-            mockPinnedRequest.mockRejectedValueOnce(
-                new Error("Manual source intake failed (response_too_large)"),
+            mockPinnedRequest.mockResolvedValueOnce(
+                new Response(bytes, {
+                    headers: { "content-type": "application/pdf" },
+                }),
             );
-
             const result = await t.action(retrieveAndNormalizePublicPdfSource, {
                 runId: scenario.runId,
                 corpusRevisionId: scenario.corpusRevisionId,
@@ -1162,8 +1126,40 @@ describe("Phase 5 Exa and Safe Public PDF Provenance Tracers", () => {
                 acceptedDecisionId: scenario.firstAccepted.lastDecisionId,
                 executionGeneration: 2,
             });
-
-            expect(result.status).toBe("failed");
+            if (excessBytes === 1) {
+                expect(result.status).toBe("failed");
+                expect(result.failureReason).toBe(
+                    `PDF byte size ${MAX_APPROVED_SOURCE_BYTES + 1} exceeds limit of ${MAX_APPROVED_SOURCE_BYTES} bytes`,
+                );
+                expect(
+                    await readSingleSourceArtifacts(
+                        t,
+                        scenario.firstAccepted.sourceId,
+                    ),
+                ).toEqual({ versions: [], passages: [], storage: [] });
+            } else {
+                expect(result.failureReason).toBeUndefined();
+                expect(result).toMatchObject({ status: "succeeded" });
+                expect(result.sourceVersionId).toBeDefined();
+                const artifacts = await readSingleSourceArtifacts(
+                    t,
+                    scenario.firstAccepted.sourceId,
+                );
+                expect(artifacts.versions).toEqual([
+                    expect.objectContaining({
+                        _id: result.sourceVersionId,
+                        sourceId: scenario.firstAccepted.sourceId,
+                    }),
+                ]);
+                expect(artifacts.passages).toEqual([
+                    expect.objectContaining({
+                        sourceVersionId: result.sourceVersionId,
+                        exactQuotation:
+                            "The platform coordinates documented claims workflows.",
+                    }),
+                ]);
+                expect(artifacts.storage).toHaveLength(1);
+            }
         });
 
         test("PDF page limit: fails when fixture exceeds 400 pages", async () => {
@@ -1339,7 +1335,7 @@ describe("Phase 5 Exa and Safe Public PDF Provenance Tracers", () => {
             expect(failedStatus?.status).toBe("failed");
         });
 
-        test("post-fetch generation advance rejects finalize, orphans lease, and deletes storage blob", async () => {
+        test("post-fetch generation advance prevents artifact reservation and persistence", async () => {
             process.env.EXA_API_KEY = "test-key";
             const t = convexTest(schema, modules);
             rateLimiterTest.register(t);
@@ -1381,12 +1377,22 @@ describe("Phase 5 Exa and Safe Public PDF Provenance Tracers", () => {
                 /fence violation|Finalize failure/i,
             );
 
-            const versionCount = await t.query(getCommittedSourceVersionCount, {
-                sourceId: scenario.firstAccepted.sourceId,
-                contentHash: "any",
-                normalizerVersion: "exa-text-v1",
-            });
-            expect(versionCount).toBe(0);
+            expect(
+                await t.run((ctx) =>
+                    ctx.db
+                        .query("artifactUploadLeases")
+                        .withIndex("by_source_and_content_hash", (q) =>
+                            q.eq("sourceId", scenario.firstAccepted.sourceId),
+                        )
+                        .collect(),
+                ),
+            ).toEqual([]);
+            expect(
+                await readSingleSourceArtifacts(
+                    t,
+                    scenario.firstAccepted.sourceId,
+                ),
+            ).toEqual({ versions: [], passages: [], storage: [] });
         });
 
         test("H1 & M9: missing Exa API key records failed providerCall row and issues zero SDK dispatches", async () => {
@@ -1427,6 +1433,29 @@ describe("Phase 5 Exa and Safe Public PDF Provenance Tracers", () => {
             expect(call).not.toBeNull();
             expect(call?.status).toBe("failed");
             expect(call?.errorCode).toBe("missing_api_key");
+            expect(
+                await readSingleSourceArtifacts(
+                    t,
+                    scenario.firstAccepted.sourceId,
+                ),
+            ).toEqual({ versions: [], passages: [], storage: [] });
+            const sourceStatus = await t.run((ctx) =>
+                ctx.db
+                    .query("evidenceSourceStatuses")
+                    .withIndex(
+                        "by_run_and_execution_generation_and_source",
+                        (q) =>
+                            q
+                                .eq("runId", scenario.runId)
+                                .eq("executionGeneration", 2)
+                                .eq(
+                                    "sourceId",
+                                    scenario.firstAccepted.sourceId,
+                                ),
+                    )
+                    .unique(),
+            );
+            expect(sourceStatus?.status).toBe("failed");
         });
 
         test("H1: stale/cancelled run before Exa SDK dispatch issues zero SDK calls", async () => {

@@ -1,5 +1,4 @@
 import { internal } from "@convex/_generated/api";
-import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { domainSnapshot } from "@convex/execution/agentDefinition";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedPiHistory } from "@/__tests__/setup/pi-mission";
@@ -11,9 +10,24 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-test("native Sources compaction retains adopted reading handles in the subsequent model request", async () => {
+test("retained Sources compaction retains adopted reading handles in the subsequent model request", async () => {
     vi.useFakeTimers();
-    const f = await seedCapturedSources();
+    const unfinishedReason =
+        "Scripted compaction check; documentary preparation remains incomplete.";
+    const f = await seedCapturedSources({
+        modelResponse(input) {
+            const domain = domainSnapshot(input) as {
+                activeWork: { needs: { id: string }[] };
+            };
+            return {
+                kind: "complete",
+                needs: domain.activeWork.needs.map((need) => ({
+                    needId: need.id,
+                    unfinished: [unfinishedReason],
+                })),
+            };
+        },
+    });
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
     vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
     await f.t.run(async (ctx) => {
@@ -36,23 +50,6 @@ test("native Sources compaction retains adopted reading handles in the subsequen
             purpose: "browser_test",
             browserTestContextId: contextId,
         }),
-    );
-    // Only model output is scripted; the journal, compaction, context and executor remain real.
-    vi.spyOn(getAgentDefinition("sources_v1"), "simulate").mockImplementation(
-        (input) => {
-            const domain = domainSnapshot(input) as {
-                activeWork: { needs: { id: string }[] };
-            };
-            return {
-                kind: "complete",
-                needs: domain.activeWork.needs.map((need) => ({
-                    needId: need.id,
-                    unfinished: [
-                        "Scripted compaction check; documentary preparation remains incomplete.",
-                    ],
-                })),
-            };
-        },
     );
     await seedPiHistory(f.t, f.missionId, 4, 8, 16_250);
     await f.t.mutation(internal.execution.missions.resume, {
@@ -93,4 +90,23 @@ test("native Sources compaction retains adopted reading handles in the subsequen
     expect(request.json).toContain("readingReferences");
     expect(request.json).toContain(f.readRequestId);
     expect(request.json).toContain(f.captureId);
+    const completion = JSON.parse(reasoning.outputJson ?? "null");
+    expect(completion).toMatchObject({
+        kind: "complete",
+        needs: expect.arrayContaining([
+            expect.objectContaining({
+                unfinished: [unfinishedReason],
+            }),
+        ]),
+    });
+    expect(reasoning.blockCode).toBeUndefined();
+    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    expect(
+        preparation?.sourcesMission?.result?.needs.map(
+            ({ needId, unfinished }) => ({ needId, unfinished }),
+        ),
+    ).toEqual(completion.needs);
+    expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
+        status: "completed",
+    });
 }, 30_000);

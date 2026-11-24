@@ -918,7 +918,9 @@ test("loopback browser metadata initializes real model settings without external
     } finally {
         vi.unstubAllEnvs();
     }
-});
+    // A cold catalogue is initialized in full here (measured ~17 s), so this case
+    // cannot share the suite default; the assertions are unchanged.
+}, 60_000);
 
 test.each([
     { fixtures: "false", origin: "http://127.0.0.1:3210" },

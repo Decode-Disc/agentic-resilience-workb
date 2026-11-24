@@ -18,7 +18,6 @@ import {
     approvalStatusValidator,
     storedApprovalStatusValidator,
 } from "@convex/execution/approvalContracts";
-import { executionTables } from "@convex/execution/schema";
 import schema from "@convex/schema";
 import { validate } from "convex-helpers/validators";
 import { convexTest } from "convex-test";
@@ -133,9 +132,6 @@ test("approval contract validators enforce allowed actions, statuses, choices, a
 });
 
 test("execution schema persists approvalRequests, approvalGrants, and notice deliveries with their indexes", async () => {
-    expect(executionTables.approvalRequests).toBeDefined();
-    expect(executionTables.approvalGrants).toBeDefined();
-
     const t = convexTest(schema, modules);
     await t.run(async (ctx) => {
         const now = 1_700_000_000_000;

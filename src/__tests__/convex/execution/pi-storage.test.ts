@@ -321,18 +321,33 @@ test("reopening a log of 120 full operation-sized originals preserves their exac
     );
     try {
         const root = await reopened.root(BACKGROUND_CONTEXT);
-        const entries = await root.entries(
-            { order: "descending" },
-            1,
+        let page = await root.entries(
+            { order: "ascending" },
+            17,
             undefined,
             BACKGROUND_CONTEXT,
         );
-        expect(entries.items).toEqual([
-            expect.objectContaining({
-                kind: "workbench.original",
-                data: { index: 119, text },
-            }),
-        ]);
+        expect(page.next).toBeDefined();
+        const entries = [...page.items];
+        const cursors = new Set<string>();
+        while (page.next !== undefined) {
+            const cursor = JSON.stringify(page.next);
+            expect(cursors.has(cursor)).toBe(false);
+            cursors.add(cursor);
+            page = await root.entries(
+                { order: "ascending" },
+                17,
+                page.next,
+                BACKGROUND_CONTEXT,
+            );
+            expect(page.items.length).toBeGreaterThan(0);
+            entries.push(...page.items);
+        }
+        expect(
+            entries
+                .filter((entry) => entry.kind === "workbench.original")
+                .map((entry) => entry.data),
+        ).toEqual(Array.from({ length: 120 }, (_, index) => ({ index, text })));
         expect(
             db.commits.reduce(
                 (bytes, commit) => bytes + commit.payload.length,

@@ -1,5 +1,5 @@
 import { api, internal } from "@convex/_generated/api";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
 
 afterEach(() => {
@@ -10,20 +10,27 @@ afterEach(() => {
 });
 
 test.each([
-    63800, 65456,
-])("admission includes instructions and tool schemas before activating a near-limit message (%i)", async (secondLength) => {
+    { secondLength: 1000, admitted: true },
+    { secondLength: 63800, admitted: false },
+])("turn admission preserves FIFO membership and queued delivery ($secondLength)", async ({
+    secondLength,
+    admitted,
+}) => {
     vi.useFakeTimers();
     const network = vi.fn(() => {
         throw new Error("Unexpected external I/O");
     });
     vi.stubGlobal("fetch", network);
     const f = await seedConversation(true);
-    await f.client.mutation(api.execution.conversations.submit, {
-        runId: f.runId,
-        requestKey: "first",
-        delivery: "queue",
-        text: "a".repeat(64000),
-    });
+    const firstId = await f.client.mutation(
+        api.execution.conversations.submit,
+        {
+            runId: f.runId,
+            requestKey: "first",
+            delivery: "queue",
+            text: "a".repeat(64000),
+        },
+    );
     const secondId = await f.client.mutation(
         api.execution.conversations.submit,
         {
@@ -33,16 +40,46 @@ test.each([
             text: "b".repeat(secondLength),
         },
     );
+    const start = {
+        runId: f.runId,
+        definitionId: "conversation_validation_v1" as const,
+        scope: { kind: "conversation_validation_v1" as const },
+        simulation: true,
+    };
     const started = await f.t.mutation(
         internal.execution.conversations.startTurn,
-        {
-            runId: f.runId,
-            definitionId: "conversation_validation_v1",
-            scope: { kind: "conversation_validation_v1" },
-            simulation: true,
-        },
+        start,
     );
-    if (!started) throw new Error("Expected active turn");
+    assert(started);
+    const context = await f.t.query(internal.execution.context.build, {
+        missionId: started.missionId,
+        expectedGeneration: 1,
+    });
+    assert(context.kind === "ready");
+    expect(
+        JSON.parse(context.inputJson).conversationInstructions.messages,
+    ).toEqual([
+        expect.objectContaining({
+            messageId: firstId,
+            text: "a".repeat(64000),
+        }),
+        ...(admitted
+            ? [
+                  expect.objectContaining({
+                      messageId: secondId,
+                      text: "b".repeat(secondLength),
+                  }),
+              ]
+            : []),
+    ]);
+    const activeSecond = await f.t.run((ctx) => ctx.db.get(secondId));
+    expect(activeSecond?.status).toBe(admitted ? "active" : "queued");
+    expect(activeSecond?.turnId).toBe(admitted ? started.turnId : undefined);
+    expect(
+        await f.client.query(api.execution.conversations.get, {
+            runId: f.runId,
+        }),
+    ).toMatchObject({ queuedCount: admitted ? 0 : 1 });
     await f.t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,
@@ -50,15 +87,42 @@ test.each([
     const mission = await f.t.run((ctx) => ctx.db.get(started.missionId));
     expect(mission?.blockCode).toBeUndefined();
     expect(mission).toMatchObject({ status: "completed" });
-    const second = await f.t.run((ctx) => ctx.db.get(secondId));
-    if (secondLength === 65456)
-        expect(second).toMatchObject({ status: "queued" });
-    else expect(["queued", "processed"]).toContain(second?.status);
+    expect(await f.t.run((ctx) => ctx.db.get(firstId))).toMatchObject({
+        status: "processed",
+        turnId: started.turnId,
+    });
+    expect(await f.t.run((ctx) => ctx.db.get(secondId))).toMatchObject({
+        status: admitted ? "processed" : "queued",
+    });
     expect(
         await f.client.query(api.execution.conversations.get, {
             runId: f.runId,
         }),
-    ).toMatchObject({ queuedCount: second?.status === "queued" ? 1 : 0 });
+    ).toMatchObject({ queuedCount: admitted ? 0 : 1 });
+    if (!admitted) {
+        const next = await f.t.mutation(
+            internal.execution.conversations.startTurn,
+            start,
+        );
+        assert(next);
+        expect(next.turnId).not.toBe(started.turnId);
+        await f.t.finishAllScheduledFunctions(
+            () => vi.advanceTimersByTime(10),
+            500,
+        );
+        expect(
+            await f.t.run((ctx) => ctx.db.get(next.missionId)),
+        ).toMatchObject({ status: "completed" });
+        expect(await f.t.run((ctx) => ctx.db.get(secondId))).toMatchObject({
+            status: "processed",
+            turnId: next.turnId,
+        });
+        expect(
+            await f.client.query(api.execution.conversations.get, {
+                runId: f.runId,
+            }),
+        ).toMatchObject({ queuedCount: 0 });
+    }
     expect(network).not.toHaveBeenCalled();
 }, 30000);
 

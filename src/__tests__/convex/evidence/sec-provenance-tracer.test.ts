@@ -5,7 +5,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import {
     extractPassagesFromNormalizedText,
     LOCATOR_VERSION,
-    reproducePassage,
+    preparePassageReproduction,
     sha256Hex,
 } from "@convex/domain/sourcePassages";
 import schema from "@convex/schema";
@@ -339,7 +339,7 @@ describe("SEC HTML Provenance Tracer", () => {
     });
 
     describe("Passage Reproduction & Replay Invariants (H5)", () => {
-        test("exact quotation replay succeeds with valid hash and character offsets", async () => {
+        test("exact quotation replay succeeds with valid hash and character offsets", () => {
             const rawText =
                 "# Overview\n\nCCC Intelligent Solutions delivers cloud workflows.\n\n## Resilience\n\nMulti-region active-active deployment.";
             const hash = sha256Hex(new TextEncoder().encode(rawText));
@@ -350,16 +350,14 @@ describe("SEC HTML Provenance Tracer", () => {
             });
 
             expect(passages.length).toBeGreaterThanOrEqual(2);
+            const reproduce = preparePassageReproduction(rawText);
             for (const passage of passages) {
-                const replayed = await reproducePassage(
-                    rawText,
-                    passage.locator,
-                );
+                const replayed = reproduce(passage.locator);
                 expect(replayed).toBe(passage.exactQuotation);
             }
         });
 
-        test("reproducePassage rejects hash mismatch", async () => {
+        test("passage reproduction rejects hash mismatch", () => {
             const rawText = "Verified content";
             const wrongHash = sha256Hex("different content");
             const locator = {
@@ -371,18 +369,18 @@ describe("SEC HTML Provenance Tracer", () => {
                 endOffset: 16,
             };
 
-            await expect(reproducePassage(rawText, locator)).rejects.toThrow(
+            expect(() => preparePassageReproduction(rawText)(locator)).toThrow(
                 /Source version hash mismatch/,
             );
         });
 
-        test("reproducePassage rejects corrupt and out-of-bounds offsets", async () => {
+        test("passage reproduction rejects corrupt and out-of-bounds offsets", () => {
             const rawText = "Short text";
             const hash = sha256Hex(new TextEncoder().encode(rawText));
 
             // Out of bounds
-            await expect(
-                reproducePassage(rawText, {
+            expect(() =>
+                preparePassageReproduction(rawText)({
                     kind: "web",
                     canonicalUrl: "https://example.com/doc",
                     sourceVersionHash: hash,
@@ -390,11 +388,11 @@ describe("SEC HTML Provenance Tracer", () => {
                     startOffset: 0,
                     endOffset: 999,
                 }),
-            ).rejects.toThrow(/Invalid passage character offsets/);
+            ).toThrow(/Invalid passage character offsets/);
 
             // Negative offset
-            await expect(
-                reproducePassage(rawText, {
+            expect(() =>
+                preparePassageReproduction(rawText)({
                     kind: "web",
                     canonicalUrl: "https://example.com/doc",
                     sourceVersionHash: hash,
@@ -402,11 +400,11 @@ describe("SEC HTML Provenance Tracer", () => {
                     startOffset: -1,
                     endOffset: 5,
                 }),
-            ).rejects.toThrow(/Invalid passage character offsets/);
+            ).toThrow(/Invalid passage character offsets/);
 
             // startOffset > endOffset
-            await expect(
-                reproducePassage(rawText, {
+            expect(() =>
+                preparePassageReproduction(rawText)({
                     kind: "web",
                     canonicalUrl: "https://example.com/doc",
                     sourceVersionHash: hash,
@@ -414,16 +412,16 @@ describe("SEC HTML Provenance Tracer", () => {
                     startOffset: 6,
                     endOffset: 2,
                 }),
-            ).rejects.toThrow(/Invalid passage character offsets/);
+            ).toThrow(/Invalid passage character offsets/);
         });
 
-        test("reproducePassage rejects offset quotation mismatch without fuzzy fallback", async () => {
+        test("passage reproduction rejects offset quotation mismatch without fuzzy fallback", () => {
             const rawText = "Hello beautiful world";
             const hash = sha256Hex(new TextEncoder().encode(rawText));
 
             // Offsets point to "beautiful" but exactQuotation claims "world"
-            await expect(
-                reproducePassage(rawText, {
+            expect(() =>
+                preparePassageReproduction(rawText)({
                     kind: "web",
                     canonicalUrl: "https://example.com/doc",
                     sourceVersionHash: hash,
@@ -431,7 +429,7 @@ describe("SEC HTML Provenance Tracer", () => {
                     startOffset: 6,
                     endOffset: 15,
                 }),
-            ).rejects.toThrow(/Passage quotation mismatch/);
+            ).toThrow(/Passage quotation mismatch/);
         });
     });
 
@@ -513,6 +511,7 @@ describe("SEC HTML Provenance Tracer", () => {
         });
 
         expect(passages.length).toBeGreaterThanOrEqual(2);
+        const reproduce = preparePassageReproduction(storedArtifactBytes);
         for (const passage of passages) {
             expect(passage.locatorVersion).toBe(LOCATOR_VERSION);
             expect(passage.locator.sourceVersionHash).toBe(
@@ -520,10 +519,7 @@ describe("SEC HTML Provenance Tracer", () => {
             );
 
             // Verify reproducibility gate
-            const replayed = await reproducePassage(
-                storedArtifactBytes,
-                passage.locator,
-            );
+            const replayed = reproduce(passage.locator);
             expect(replayed).toBe(passage.exactQuotation);
         }
 
@@ -1167,6 +1163,42 @@ describe("SEC HTML Provenance Tracer", () => {
 
         expect(frozen.length).toBe(1);
         expect(frozen[0]?.sourceId).toBe(scenario.createdSources[0]?.sourceId);
+
+        const rejected = getRequiredSource(scenario, 1);
+        const superseded = getRequiredSource(scenario, 2);
+        const previousAcceptance = await t.run(async (ctx) => {
+            const latest = await ctx.db.get(superseded.lastDecisionId);
+            if (!latest?.supersedesDecisionId)
+                throw new Error("Missing superseded acceptance in fixture");
+            return latest.supersedesDecisionId;
+        });
+        for (const [sourceId, acceptedDecisionId] of [
+            [rejected.sourceId, rejected.lastDecisionId],
+            [superseded.sourceId, previousAcceptance],
+        ] as const) {
+            expect(
+                await t.action(retrieveAndNormalizeSecSource, {
+                    runId: scenario.runId,
+                    corpusRevisionId: scenario.corpusRevisionId,
+                    sourceId,
+                    acceptedDecisionId,
+                    executionGeneration: startResult.executionGeneration,
+                }),
+            ).toMatchObject({ status: "failed" });
+        }
+        expect(fetchSpy).not.toHaveBeenCalled();
+        const artifacts = await t.run(async (ctx) => ({
+            versions: await ctx.db.query("sourceVersions").collect(),
+            passages: await ctx.db.query("sourcePassages").collect(),
+            storage: await ctx.db.system.query("_storage").collect(),
+            calls: await ctx.db.query("providerCalls").collect(),
+        }));
+        expect(artifacts).toEqual({
+            versions: [],
+            passages: [],
+            storage: [],
+            calls: [],
+        });
     });
 
     test("cancellation / stale generation before dispatch rejects execution", async () => {

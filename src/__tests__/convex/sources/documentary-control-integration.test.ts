@@ -1,7 +1,3 @@
-import {
-    clearTimeout as clearRealTimeout,
-    setTimeout as setRealTimeout,
-} from "node:timers";
 import { api, internal } from "@convex/_generated/api";
 import type {
     DocumentaryContribution,
@@ -713,54 +709,99 @@ test.each([
         await ctx.db.patch(f.missionId, { deadlineAt });
         await ctx.db.patch(f.preparationId, {
             deadlineAt: now + preparationWindowMs,
+            leaseExpiresAt: now + preparationWindowMs,
         });
         await ctx.db.patch(f.requestId, { deadlineAt });
         return deadlineAt;
     });
     mockControlReply("context_only");
     const respond = globalThis.fetch;
-    const timeout = AbortSignal.timeout.bind(AbortSignal);
     const deadlines: number[] = [];
     vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
         deadlines.push(ms);
-        return timeout(Math.max(1, Math.floor(ms / 100)));
+        const controller = new AbortController();
+        setTimeout(
+            () =>
+                controller.abort(new DOMException("Timed out", "TimeoutError")),
+            ms,
+        );
+        return controller.signal;
     });
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    let transportAborted = false;
     let leaseMs: number | undefined;
     let leaseExpiresAt: number | undefined;
-    vi.stubGlobal("fetch", async (url: unknown, init?: RequestInit) => {
-        const call = await f.t.run((ctx) =>
-            ctx.db.query("providerCalls").first(),
-        );
-        leaseExpiresAt = call?.leaseExpiresAt;
-        leaseMs =
-            call?.leaseExpiresAt !== undefined
-                ? call.leaseExpiresAt - call.createdAt
-                : undefined;
-        return new Promise<Response>((resolve, reject) => {
-            const timer = setRealTimeout(() => {
-                void respond(url as RequestInfo, init).then(resolve, reject);
-            }, 3500);
-            init?.signal?.addEventListener(
-                "abort",
-                () => {
-                    clearRealTimeout(timer);
-                    reject(init.signal?.reason);
-                },
-                { once: true },
+    vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+            const call = await f.t.run((ctx) =>
+                ctx.db.query("providerCalls").first(),
             );
-        });
-    });
-    const result = await dispatchSourcesOperation(f.t, {
+            leaseExpiresAt = call?.leaseExpiresAt;
+            leaseMs =
+                call?.leaseExpiresAt !== undefined
+                    ? call.leaseExpiresAt - call.createdAt
+                    : undefined;
+            return new Promise<Response>((resolve, reject) => {
+                const signal = init?.signal;
+                assert(signal);
+                const abort = () => {
+                    transportAborted = true;
+                    reject(signal.reason);
+                };
+                signal.addEventListener("abort", abort, { once: true });
+                release = () => {
+                    signal.removeEventListener("abort", abort);
+                    void respond(url, init).then(resolve, reject);
+                };
+                entered();
+                if (signal.aborted) abort();
+            });
+        }),
+    );
+    const dispatch = dispatchSourcesOperation(f.t, {
         requestId: f.requestId,
         expectedGeneration: 4,
     });
-    expect(result).toMatchObject({
-        kind: succeeds ? "success" : "unavailable",
-    });
+    await started;
+    await vi.advanceTimersByTimeAsync(succeeds ? 350000 : windowMs - 1);
+    expect(transportAborted).toBe(false);
+    if (!succeeds) await vi.advanceTimersByTimeAsync(1);
+    if (!transportAborted) release();
+    const result = await dispatch;
+    expect(transportAborted).toBe(!succeeds);
+    expect(result).toMatchObject(
+        succeeds
+            ? { kind: "success" }
+            : { kind: "refused", code: "execution_deadline" },
+    );
     expect(deadlines.length).toBeGreaterThan(0);
     expect(deadlines.every((ms) => ms > 0 && ms <= windowMs)).toBe(true);
     expect(leaseMs).toBeGreaterThan(0);
     expect(leaseExpiresAt).toBe(deadlineAt + 10000);
+    const receipts = await f.t.run((ctx) =>
+        ctx.db.query("providerCalls").collect(),
+    );
+    expect(receipts).toEqual([
+        expect.objectContaining(
+            succeeds
+                ? {
+                      status: "succeeded",
+                      reportedCost: 0.00001,
+                      reportedCostFinal: true,
+                  }
+                : {
+                      status: "failed",
+                      errorCode: "request_timeout",
+                      reportedCostFinal: false,
+                  },
+        ),
+    ]);
+    if (!succeeds) expect(receipts[0]).not.toHaveProperty("reportedCost");
     const retained = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     expect(retained?.sourcesMission?.qualifications).toHaveLength(
         succeeds ? 1 : 0,

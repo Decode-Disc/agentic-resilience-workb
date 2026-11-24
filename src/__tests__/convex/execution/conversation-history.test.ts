@@ -2,9 +2,9 @@ import { api, internal } from "@convex/_generated/api";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { executionError } from "@convex/execution/errors";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { seedConversation } from "@/__tests__/setup/agent-harness";
 import {
     dispatchHistory,
+    runHistoryTurn,
     seedHistoryMission,
 } from "@/__tests__/setup/execution-history";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
@@ -19,7 +19,8 @@ test.each([
     "consult_conversation",
     "consult_mission_state",
 ] as const)("%s refuses fabricated and empty continuations before pagination", async (kind) => {
-    const f = await seedHistoryMission();
+    const originalQuestion = "Original analyst question";
+    const f = await seedHistoryMission(originalQuestion);
     for (const cursor of [
         "",
         "history:not-an-id",
@@ -39,30 +40,14 @@ test.each([
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toHaveLength(0);
-    expect((await dispatchHistory(f, { kind })).outcome).toMatchObject({
-        kind: "success",
-    });
-});
-
-test("invalid_inner_cursor_is_a_recorded_refusal", async () => {
-    const f = await seedHistoryMission("Original analyst question");
-    const result = await dispatchHistory(f, {
-        kind: "consult_conversation",
-        cursor: JSON.stringify({ cursor: "not-a-database-cursor", offset: 0 }),
-    });
-    expect(result.outcome).toEqual({
-        kind: "refused",
-        code: "history_cursor_invalid",
-    });
-    expect(await f.t.run((ctx) => ctx.db.get(result.requestId))).toMatchObject({
-        status: "completed",
-        outcome: result.outcome,
-    });
-    const corrected = await dispatchHistory(f, {
-        kind: "consult_conversation",
-    });
+    const corrected = await dispatchHistory(f, { kind });
     assert(corrected.outcome.kind === "success");
-    expect(corrected.outcome.valueJson).toContain("Original analyst question");
+    if (kind === "consult_conversation")
+        expect(JSON.parse(corrected.outcome.valueJson).entries).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ content: originalQuestion }),
+            ]),
+        );
 });
 
 test("issued canonical conversation fragments preserve Unicode boundaries and cannot be re-offset", async () => {
@@ -227,58 +212,8 @@ test("a research reader's existing snapshot excludes an older queued message pub
     expect(JSON.stringify(next)).not.toContain("LATER QUEUED INSTRUCTION");
 });
 
-test("common conversation reading retrieves prior published turns and excludes queued instructions", async () => {
-    const f = await seedConversation(true);
-    await f.client.mutation(api.execution.conversations.submit, {
-        runId: f.runId,
-        requestKey: "prior",
-        delivery: "queue",
-        text: "Original prior question",
-    });
-    const turnId = await f.t.mutation(
-        internal.execution.conversations.claimTurn,
-        { runId: f.runId },
-    );
-    if (!turnId) throw new Error("Expected turn");
-    const missionId = await f.t.mutation(internal.execution.missions.start, {
-        runId: f.runId,
-        expectedGeneration: 1,
-        conversationTurnId: turnId,
-        definitionId: "conversation_validation_v1",
-        scope: { kind: "conversation_validation_v1" },
-        requestKey: "prior",
-    });
-    const begun = await f.t.mutation(internal.execution.invocations.begin, {
-        missionId,
-        expectedGeneration: 1,
-        taskKey: "reply",
-        provenance: "simulation",
-    });
-    if (begun.kind !== "ready") throw new Error("Expected invocation");
-    await f.t.mutation(internal.execution.invocations.finish, {
-        invocationId: begun.invocationId,
-        expectedGeneration: 1,
-        response: { kind: "complete", text: "Retained prior answer" },
-    });
-    await f.client.mutation(api.execution.conversations.submit, {
-        runId: f.runId,
-        requestKey: "current",
-        delivery: "queue",
-        text: "Current question",
-    });
-    const nextTurn = await f.t.mutation(
-        internal.execution.conversations.claimTurn,
-        { runId: f.runId },
-    );
-    if (!nextTurn) throw new Error("Expected turn");
-    const nextMission = await f.t.mutation(internal.execution.missions.start, {
-        runId: f.runId,
-        expectedGeneration: 1,
-        conversationTurnId: nextTurn,
-        definitionId: "conversation_validation_v1",
-        scope: { kind: "conversation_validation_v1" },
-        requestKey: "current",
-    });
+test("conversation reading excludes queued instructions and recovers the exact next page after a refused cursor", async () => {
+    const f = await seedHistoryMission("Original prior question");
     await f.client.mutation(api.execution.conversations.submit, {
         runId: f.runId,
         requestKey: "queued",
@@ -288,7 +223,7 @@ test("common conversation reading retrieves prior published turns and excludes q
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
-            missionId: nextMission,
+            missionId: f.missionId,
             expectedGeneration: 1,
             cause: "earlier-turns",
             input: { kind: "consult_conversation" },
@@ -303,7 +238,7 @@ test("common conversation reading retrieves prior published turns and excludes q
     expect(outcome.valueJson).toContain("Original prior question");
     expect(outcome.valueJson).not.toContain("DO NOT DELIVER YET");
     expect(
-        (await f.t.run((ctx) => ctx.db.get(nextMission)))?.progressKeys,
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toHaveLength(1);
     const page = JSON.parse(outcome.valueJson);
     assert(typeof page.continueCursor === "string");
@@ -311,7 +246,7 @@ test("common conversation reading retrieves prior published turns and excludes q
     const invalidId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
-            missionId: nextMission,
+            missionId: f.missionId,
             expectedGeneration: 1,
             cause: "invalid-pagination",
             input: {
@@ -331,12 +266,12 @@ test("common conversation reading retrieves prior published turns and excludes q
         outcome: { kind: "refused", code: "history_cursor_invalid" },
     });
     expect(
-        (await f.t.run((ctx) => ctx.db.get(nextMission)))?.progressKeys,
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toHaveLength(1);
     const correctedId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
-            missionId: nextMission,
+            missionId: f.missionId,
             expectedGeneration: 1,
             cause: "corrected-pagination",
             input: {
@@ -353,80 +288,72 @@ test("common conversation reading retrieves prior published turns and excludes q
     expect(JSON.parse(corrected.valueJson).entries).toEqual([
         expect.objectContaining({
             role: "assistant",
-            content: "Retained prior answer",
+            content: "Original assistant answer",
         }),
     ]);
     expect(
-        (await f.t.run((ctx) => ctx.db.get(nextMission)))?.progressKeys,
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toHaveLength(2);
+});
+
+test.each([
+    { failure: "storage", error: new Error("History backend unavailable") },
+    { failure: "authorization", error: executionError("not_authorized") },
+])("conversation reading preserves $failure failures instead of recasting them as invalid cursors", async ({
+    error,
+}) => {
+    const f = await seedHistoryMission();
+    const read = await dispatchHistory(f, { kind: "consult_conversation" });
+    assert(read.outcome.kind === "success");
     const { commonOperations } = await import(
         "@convex/execution/commonOperations"
     );
-    for (const error of [
-        new Error("History backend unavailable"),
-        executionError("not_authorized"),
-    ]) {
-        await expect(
-            f.t.action((ctx) =>
-                commonOperations.consult_conversation.execute(
-                    {
-                        ...ctx,
-                        runQuery: async () => {
-                            throw error;
-                        },
+    await expect(
+        f.t.action((ctx) =>
+            commonOperations.consult_conversation.execute(
+                {
+                    ...ctx,
+                    runQuery: async () => {
+                        throw error;
                     },
-                    {
-                        requestId: correctedId,
-                        missionId: nextMission,
-                        expectedGeneration: 1,
-                        input: { kind: "consult_conversation" },
-                    },
-                ),
-            ),
-        ).rejects.toThrow(error);
-    }
-    for (let index = 0; index < 5; index++) {
-        const invocation = await f.t.mutation(
-            internal.execution.invocations.begin,
-            {
-                missionId: nextMission,
-                expectedGeneration: 1,
-                taskKey: `repeat-history-${index}`,
-                provenance: "simulation",
-            },
-        );
-        assert(invocation.kind === "ready");
-        const result = await f.t.mutation(
-            internal.execution.invocations.finish,
-            {
-                invocationId: invocation.invocationId,
-                expectedGeneration: 1,
-                response: {
-                    kind: "operations",
-                    requests: [
-                        {
-                            callId: `repeat-${index}`,
-                            name: "consult_conversation",
-                            inputJson: "{}",
-                        },
-                    ],
                 },
-            },
-        );
-        assert(result.requestIds[0]);
-        await f.t.action(internal.execution.operations.dispatch, {
-            requestId: result.requestIds[0],
-            expectedGeneration: 1,
+                {
+                    requestId: read.requestId,
+                    missionId: f.missionId,
+                    expectedGeneration: 1,
+                    input: { kind: "consult_conversation" },
+                },
+            ),
+        ),
+    ).rejects.toThrow(error);
+});
+
+test("repeated exact conversation reads neither invent progress nor trigger repetition stops", async () => {
+    const f = await seedHistoryMission();
+    const first = await dispatchHistory(f, { kind: "consult_conversation" });
+    assert(first.outcome.kind === "success");
+    const cursor = JSON.parse(first.outcome.valueJson).continueCursor;
+    assert(typeof cursor === "string");
+    const next = await dispatchHistory(f, {
+        kind: "consult_conversation",
+        cursor,
+    });
+    assert(next.outcome.kind === "success");
+    expect(
+        (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
+    ).toHaveLength(2);
+    for (let index = 0; index < 5; index++) {
+        const repeated = await runHistoryTurn(f, {
+            kind: "consult_conversation",
+        });
+        expect(repeated.outcome).toMatchObject({
+            kind: "success",
+            valueJson: expect.stringContaining("Original analyst question"),
         });
         expect(
-            (await f.t.run((ctx) => ctx.db.get(nextMission)))?.progressKeys,
+            (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
         ).toHaveLength(2);
-        expect(
-            await f.t.mutation(internal.execution.invocationLifecycle.settle, {
-                invocationId: invocation.invocationId,
-                expectedGeneration: 1,
-            }),
-        ).toMatchObject({ kind: "ready" });
+        expect(repeated.settlement).toMatchObject({ kind: "ready" });
     }
 });
 

@@ -2,13 +2,11 @@ import { startSourcesOperation } from "@/__tests__/setup/sources-mission";
 import "@convex/execution/agentCatalog";
 import { internal } from "@convex/_generated/api";
 import { completeSources } from "@convex/domain/sources";
-import { sourcesV5Definition } from "@convex/domain/sourcesAgent";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedObservedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
-    delete sourcesV5Definition.simulate;
     vi.restoreAllMocks();
     vi.useRealTimers();
     vi.unstubAllEnvs();
@@ -56,7 +54,27 @@ test("Pi refreshes a retained completion after late reservation and completes wi
         throw new Error("Unexpected provider call");
     });
     vi.stubGlobal("fetch", network);
-    const f = await seedObservedSources();
+    const f = await seedObservedSources({
+        modelResponse(input) {
+            const { activeWork } = input as { activeWork: SourcesPreparation };
+            return {
+                kind: "complete",
+
+                needs: [
+                    {
+                        needId: "common-context",
+
+                        unfinished: [
+                            "Documentary checking remains unfinished.",
+                        ],
+                    },
+                ],
+                workingNotes: activeWork.work.length
+                    ? "Updated completion note."
+                    : "Initial completion note.",
+            };
+        },
+    });
     await f.t.run(async (ctx) => {
         const framingId = await ctx.db.insert("framingRevisions", {
             runId: f.runId,
@@ -89,23 +107,6 @@ test("Pi refreshes a retained completion after late reservation and completes wi
         }),
     );
     const requestId = await claimNativeCheck(f);
-    sourcesV5Definition.simulate = (input: unknown) => {
-        const { activeWork } = input as { activeWork: SourcesPreparation };
-        return {
-            kind: "complete",
-
-            needs: [
-                {
-                    needId: "common-context",
-
-                    unfinished: ["Documentary checking remains unfinished."],
-                },
-            ],
-            workingNotes: activeWork.work.length
-                ? "Updated completion note."
-                : "Initial completion note.",
-        };
-    };
     await f.t.mutation(internal.execution.missions.resume, {
         missionId: f.missionId,
         expectedGeneration: 4,

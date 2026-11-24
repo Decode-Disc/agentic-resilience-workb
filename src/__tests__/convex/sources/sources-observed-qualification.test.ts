@@ -1,6 +1,7 @@
 import { sourcesDefinition } from "@convex/domain/sourcesAgent";
 import { qualificationSubmissionInput } from "@convex/domain/sourcesContracts";
 import { agentToolSchemas } from "@convex/execution/agentDefinition";
+import { SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS } from "@convex/resourcePolicy";
 import { assert, expect, test } from "vitest";
 
 test("Sources qualification tools expose semantic changes while canonical operations retain version guards", () => {
@@ -41,5 +42,14 @@ test("Sources selects the retained model contract from the admitted snapshot and
 test("the offered Sources tool states its existing contribution capacity before submission", () => {
     const tool =
         agentToolSchemas(sourcesDefinition).submit_documentary_qualification;
-    expect(tool?.description).toContain("15");
+    expect(tool?.description).toMatch(
+        new RegExp(
+            `1[–-]${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS}\\b.*contributions or corrections`,
+        ),
+    );
+    expect(tool?.description).toMatch(
+        new RegExp(
+            `at most ${SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS} contributions.*resulting qualification`,
+        ),
+    );
 });

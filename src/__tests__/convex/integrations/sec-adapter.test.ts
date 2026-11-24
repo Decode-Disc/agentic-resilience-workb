@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import { createSecCompanyResolver } from "@convex/integrations/sec";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -661,9 +662,15 @@ describe("createSecCompanyResolver", () => {
         const chunk3 = new TextEncoder().encode("<div>Third Chunk</div>");
         let chunkIndex = 0;
         const chunks = [chunk1, chunk2, chunk3];
+        let requestSignal: AbortSignal | undefined;
+        const listenerCounts: number[] = [];
 
         const stream = new ReadableStream({
             pull(controller) {
+                if (requestSignal)
+                    listenerCounts.push(
+                        getEventListeners(requestSignal, "abort").length,
+                    );
                 if (chunkIndex < chunks.length) {
                     controller.enqueue(chunks[chunkIndex++]);
                 } else {
@@ -673,13 +680,16 @@ describe("createSecCompanyResolver", () => {
         });
 
         const fetchImplementation = vi.fn(
-            async () =>
-                new Response(stream, {
+            async (_input: string | URL | Request, init?: RequestInit) => {
+                if (!init?.signal) throw new Error("Missing request signal");
+                requestSignal = init.signal;
+                return new Response(stream, {
                     status: 200,
                     headers: {
                         "Content-Type": "text/html",
                     },
-                }),
+                });
+            },
         );
         const resolver = createSecCompanyResolver({
             fetch: fetchImplementation,
@@ -697,5 +707,9 @@ describe("createSecCompanyResolver", () => {
         expect(result).toBe(
             "<div>First Chunk</div><div>Second Chunk</div><div>Third Chunk</div>",
         );
+        expect(listenerCounts.length).toBeGreaterThan(1);
+        expect(listenerCounts.every((count) => count === 1)).toBe(true);
+        if (!requestSignal) throw new Error("No SEC request was made");
+        expect(getEventListeners(requestSignal, "abort")).toHaveLength(0);
     });
 });

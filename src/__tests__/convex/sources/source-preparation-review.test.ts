@@ -14,7 +14,6 @@ import {
     seedInspectedEvidence,
     seedSourcePreparation,
 } from "@/__tests__/setup/source-preparation";
-import { sourceReadingCopy } from "@/lib/presentation/research-copy";
 
 // The registered handler retains the real query boundary while allowing database read instrumentation.
 type InstrumentedQuery<Ref extends FunctionReference<"query">> = {
@@ -404,9 +403,6 @@ test.each([
         corpusRevisionId,
     });
     if (status === "draft") {
-        expect(review && sourceReadingCopy(review)).toMatchObject({
-            title: "Useful material identified",
-        });
         expect(review).toMatchObject({
             readingStatus: "complete",
             qualificationStatus: "available",

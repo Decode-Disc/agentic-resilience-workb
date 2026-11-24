@@ -1,13 +1,12 @@
 import "@convex/execution/agentCatalog";
 import { internal } from "@convex/_generated/api";
-import { sourcesV5Definition } from "@convex/domain/sourcesAgent";
 import type { SourcesPreparation } from "@convex/domain/sourcesContracts";
 import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
-    delete sourcesV5Definition.simulate;
+    vi.restoreAllMocks();
     vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
@@ -142,7 +141,25 @@ test.each([
         throw new Error("Provider forbidden");
     });
     vi.stubGlobal("fetch", network);
-    const f = await seedCapturedSources();
+    const f = await seedCapturedSources({
+        modelResponse(input) {
+            const { activeWork } = input as {
+                activeWork: SourcesPreparation & { noProgressTurns: number };
+            };
+            return {
+                kind: "complete",
+
+                workingNotes: "Completion note.",
+                needs:
+                    activeWork.noProgressTurns < refusalCount
+                        ? []
+                        : activeWork.needs.map((n) => ({
+                              needId: n.id,
+                              unfinished: ["Not yet examined"],
+                          })),
+            };
+        },
+    });
     await f.t.run(async (ctx) => {
         const id = await ctx.db.insert("framingRevisions", {
             runId: f.runId,
@@ -170,23 +187,6 @@ test.each([
             browserTestContextId: contextId,
         }),
     );
-    sourcesV5Definition.simulate = (input: unknown) => {
-        const { activeWork } = input as {
-            activeWork: SourcesPreparation & { noProgressTurns: number };
-        };
-        return {
-            kind: "complete",
-
-            workingNotes: "Completion note.",
-            needs:
-                activeWork.noProgressTurns < refusalCount
-                    ? []
-                    : activeWork.needs.map((n) => ({
-                          needId: n.id,
-                          unfinished: ["Not yet examined"],
-                      })),
-        };
-    };
     await f.t.mutation(internal.execution.missions.resume, {
         missionId: f.missionId,
         expectedGeneration: 4,

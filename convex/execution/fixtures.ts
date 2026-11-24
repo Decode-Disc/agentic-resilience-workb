@@ -11,6 +11,7 @@ import {
     claimCorpusApprovedRunExecution,
     claimPausedRunExecution,
 } from "@convex/domain/executionClaim";
+import { readInContextResult } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import {
@@ -187,10 +188,25 @@ async function modelReceivedTexts(
         (request?.textId
             ? await readRetainedText(ctx, request.textId)
             : undefined);
-    return [
-        await admittedInputJson(ctx, invocation),
-        ...(recorded === undefined ? [] : [recorded]),
-    ];
+    // Decode the envelope before inspecting native messages: their text may itself contain JSON.
+    let pending: unknown[];
+    try {
+        pending = [
+            JSON.parse(await admittedInputJson(ctx, invocation)),
+            ...(recorded === undefined ? [] : [JSON.parse(recorded)]),
+        ];
+    } catch {
+        throw new Error("Invalid retained simulation input");
+    }
+    const texts: string[] = [];
+    while (pending.length) {
+        const value = pending.pop();
+        if (typeof value === "string") texts.push(value);
+        else if (Array.isArray(value)) pending.push(...value);
+        else if (value && typeof value === "object")
+            pending.push(...Object.values(value));
+    }
+    return texts;
 }
 
 export const bindCampaignScenarios = internalMutation({
@@ -610,10 +626,13 @@ export const inspect = internalQuery({
         let quotation: string | undefined;
         if (quoted?.outcome?.kind === "success") {
             try {
-                const parsed = JSON.parse(quoted.outcome.valueJson) as {
-                    passage?: { exactQuote?: string };
-                };
-                quotation = parsed.passage?.exactQuote;
+                const parsed = readInContextResult.parse(
+                    JSON.parse(quoted.outcome.valueJson),
+                );
+                quotation =
+                    "passage" in parsed
+                        ? parsed.passage.exactQuote
+                        : parsed.text;
             } catch {
                 throw new Error("Invalid retained simulation result");
             }
@@ -656,8 +675,12 @@ export const inspect = internalQuery({
                     )
                 )
                     .flat()
-                    .some((input) =>
-                        input.includes(JSON.stringify(quotation).slice(1, -1)),
+                    .some(
+                        (input) =>
+                            input.includes(quotation) ||
+                            input.includes(
+                                JSON.stringify(quotation).slice(1, -1),
+                            ),
                     ),
             providerCallCount: calls.length,
             completionCount:
@@ -1380,6 +1403,20 @@ export const revealWorkbenchSources = internalMutation({
             pauseReason: "source_review",
             workflowId,
         });
+        return null;
+    },
+});
+
+/** Frees the browser-test visitor's analysis quota so a fixture can exercise the real Start transaction. */
+export const resetBrowserTestUsage = internalMutation({
+    args: { runId: v.id("researchRuns"), fixtureKey: v.string() },
+    returns: v.null(),
+    handler: async (ctx, args): Promise<null> => {
+        const { run, visitor } = await requireLocalFixtureRun(ctx, args);
+        if (run.researchStartedAt !== undefined)
+            throw new Error("An unlaunched dossier is required");
+        if (visitor.analysesReserved !== 0)
+            await ctx.db.patch(visitor._id, { analysesReserved: 0 });
         return null;
     },
 });

@@ -20,10 +20,6 @@ const qualificationRoute = {
     },
     reasoningEffort: "low" as const,
 };
-const sourceQualificationRoutes = [
-    qualificationRoute,
-    { ...qualificationRoute, model: "deepseek/deepseek-v4.1-flash-1017" },
-] as const;
 
 import { expect, test, vi } from "vitest";
 
@@ -45,15 +41,9 @@ const preparedExample = () =>
         text: "ServiceNow provides workflow software.",
     });
 
-test.each([
-    { index: 0, model: "deepseek/deepseek-v4.1-flash" },
-    { index: 1, model: "deepseek/deepseek-v4.1-flash-1017" },
-])("uses $model through Relace with strict structured output and price limits", async ({
-    index,
-    model,
-}) => {
-    const route = sourceQualificationRoutes[index];
-    if (!route) throw new Error("Missing qualification route");
+test("uses the admitted route with strict structured output and price limits", async () => {
+    const route = qualificationRoute;
+    const { model } = route;
     const input = prepareQualificationInput({
         protocolVersion: "source-qualification-v5",
         company: {
@@ -191,16 +181,12 @@ test("rejects an oversized decompressed provider body before parsing", async () 
         async () => new Response("x".repeat(1024 * 1024 + 1)),
     );
     expect(
-        await qualifySourceDocument(
-            preparedExample(),
-            sourceQualificationRoutes[0],
-            {
-                authority: modelAttemptAuthority(),
-                apiKey: "test-only-key",
-                fetch: streamingModelFetch(request),
-                onResponse,
-            },
-        ),
+        await qualifySourceDocument(preparedExample(), qualificationRoute, {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: streamingModelFetch(request),
+            onResponse,
+        }),
     ).toMatchObject({
         status: "failed",
         errorCode: "response_too_large",
@@ -236,16 +222,12 @@ test("makes the bounded HTTP failure available to an explicit diagnostic observe
             }),
     );
     expect(
-        await qualifySourceDocument(
-            preparedExample(),
-            sourceQualificationRoutes[0],
-            {
-                authority: modelAttemptAuthority(),
-                apiKey: "test-only-key",
-                fetch: streamingModelFetch(request),
-                onResponse,
-            },
-        ),
+        await qualifySourceDocument(preparedExample(), qualificationRoute, {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: streamingModelFetch(request),
+            onResponse,
+        }),
     ).toMatchObject({
         status: "failed",
         errorCode: "transport_unavailable",
@@ -280,15 +262,11 @@ test.each([
             ),
     );
     expect(
-        await qualifySourceDocument(
-            preparedExample(),
-            sourceQualificationRoutes[0],
-            {
-                authority: modelAttemptAuthority(),
-                apiKey: "test-only-key",
-                fetch: streamingModelFetch(request),
-            },
-        ),
+        await qualifySourceDocument(preparedExample(), qualificationRoute, {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: streamingModelFetch(request),
+        }),
     ).toMatchObject({ status: "failed", errorCode, retryable });
     expect(request).toHaveBeenCalledOnce();
 });
@@ -296,27 +274,23 @@ test.each([
 test("missing credentials and prior cancellation perform no request", async () => {
     const request = vi.fn<typeof fetch>();
     expect(
-        await qualifySourceDocument(
-            preparedExample(),
-            sourceQualificationRoutes[0],
-            { authority: modelAttemptAuthority(), apiKey: "", fetch: request },
-        ),
+        await qualifySourceDocument(preparedExample(), qualificationRoute, {
+            authority: modelAttemptAuthority(),
+            apiKey: "",
+            fetch: request,
+        }),
     ).toMatchObject({
         status: "failed",
         errorCode: "missing_configuration",
         retryable: false,
     });
     expect(
-        await qualifySourceDocument(
-            preparedExample(),
-            sourceQualificationRoutes[0],
-            {
-                authority: modelAttemptAuthority(),
-                apiKey: "test-only-key",
-                fetch: streamingModelFetch(request),
-                signal: AbortSignal.abort(),
-            },
-        ),
+        await qualifySourceDocument(preparedExample(), qualificationRoute, {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: streamingModelFetch(request),
+            signal: AbortSignal.abort(),
+        }),
     ).toMatchObject({
         status: "failed",
         errorCode: "cancelled",
@@ -360,7 +334,7 @@ test.each([
                 },
             ),
     );
-    await qualifySourceDocument(input, sourceQualificationRoutes[0], {
+    await qualifySourceDocument(input, qualificationRoute, {
         authority: modelAttemptAuthority(),
         apiKey: "test-only-key",
         fetch: streamingModelFetch(request),
@@ -396,7 +370,7 @@ test("retains a bounded rejected assistant output and the exact parsing reason w
                 JSON.stringify({
                     id: "bad-structured-result",
                     created: 1,
-                    model: sourceQualificationRoutes[0].model,
+                    model: qualificationRoute.model,
                     choices: [
                         {
                             index: 0,
@@ -420,7 +394,7 @@ test("retains a bounded rejected assistant output and the exact parsing reason w
     );
     const result = await qualifySourceDocument(
         preparedExample(),
-        sourceQualificationRoutes[0],
+        qualificationRoute,
         {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
@@ -458,7 +432,7 @@ test.each([
                 JSON.stringify({
                     id: "invalid-output",
                     created: 1,
-                    model: sourceQualificationRoutes[0].model,
+                    model: qualificationRoute.model,
                     choices: [
                         {
                             index: 0,
@@ -476,15 +450,11 @@ test.each([
             ),
     );
     expect(
-        await qualifySourceDocument(
-            preparedExample(),
-            sourceQualificationRoutes[0],
-            {
-                authority: modelAttemptAuthority(),
-                apiKey: "test-only-key",
-                fetch: streamingModelFetch(request),
-            },
-        ),
+        await qualifySourceDocument(preparedExample(), qualificationRoute, {
+            authority: modelAttemptAuthority(),
+            apiKey: "test-only-key",
+            fetch: streamingModelFetch(request),
+        }),
     ).toMatchObject({
         status: "failed",
         errorCode: "invalid_output",
@@ -519,7 +489,7 @@ test("retains the original assistant text when documentary validation rejects a 
                 JSON.stringify({
                     id: "invalid-documentary-basis",
                     created: 1,
-                    model: sourceQualificationRoutes[0].model,
+                    model: qualificationRoute.model,
                     choices: [
                         {
                             index: 0,
@@ -538,7 +508,7 @@ test("retains the original assistant text when documentary validation rejects a 
     );
     const result = await qualifySourceDocument(
         preparedExample(),
-        sourceQualificationRoutes[0],
+        qualificationRoute,
         {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",
@@ -591,7 +561,7 @@ test("streaming qualification above 1 MiB of SSE wire frames completes without r
         id: "gen-qual-large",
         object: "chat.completion.chunk",
         created: 1,
-        model: sourceQualificationRoutes[0].model,
+        model: qualificationRoute.model,
         choices: [
             {
                 index: 0,
@@ -604,7 +574,7 @@ test("streaming qualification above 1 MiB of SSE wire frames completes without r
         id: "gen-qual-large",
         object: "chat.completion.chunk",
         created: 1,
-        model: sourceQualificationRoutes[0].model,
+        model: qualificationRoute.model,
         choices: [
             {
                 index: 0,
@@ -625,7 +595,7 @@ test("streaming qualification above 1 MiB of SSE wire frames completes without r
     const encoder = new TextEncoder();
     const result = await qualifySourceDocument(
         preparedExample(),
-        sourceQualificationRoutes[0],
+        qualificationRoute,
         {
             authority: modelAttemptAuthority(),
             apiKey: "test-only-key",

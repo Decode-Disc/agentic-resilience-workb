@@ -8,6 +8,7 @@ import "@convex/evidenceWorkflow";
 import "@convex/sourcePreparationWorkflow";
 import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
+import { seedHistoricalResearch } from "@/__tests__/setup/research-launch";
 import "@convex/evidenceActions";
 import "@convex/sourcePreparationActions";
 import { makeFunctionReference } from "convex/server";
@@ -78,15 +79,7 @@ afterEach(() => {
     vi.unstubAllEnvs();
     vi.useRealTimers();
 });
-const confirmAndStart = makeFunctionReference<
-    "action",
-    {
-        preflightId: Id<"companyPreflights">;
-        idempotencyKey: string;
-        coveragePreset: "balanced";
-    },
-    { runId: Id<"researchRuns">; remainingAnalyses: number }
->("researchLaunch:confirmAndStart");
+
 const decideSource = makeFunctionReference<
     "mutation",
     {
@@ -265,11 +258,15 @@ test.each([
     const analyst = t.withIdentity({
         subject: `${fixture.userId}|phase-4-session`,
     });
-    const { runId } = await analyst.action(confirmAndStart, {
-        preflightId: fixture.preflightId,
-        idempotencyKey: "phase-4-run",
-        coveragePreset: "balanced",
-    });
+    const { runId } = await seedHistoricalResearch(
+        t,
+        {
+            preflightId: fixture.preflightId,
+            idempotencyKey: "phase-4-run",
+            coveragePreset: "balanced",
+        },
+        prepareSources,
+    );
     let canceledHandles: { parent: WorkflowId; child: WorkflowId } | undefined;
     if (cancelDuringReading)
         cancelReading = async () => {

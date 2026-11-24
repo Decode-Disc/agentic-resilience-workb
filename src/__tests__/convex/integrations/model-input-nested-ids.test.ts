@@ -12,6 +12,38 @@ test("canonical nested and nullable Convex IDs serialize for every agent without
         ),
     });
     const schema = agentOperationInputSchema({ inputValidator }).jsonSchema;
-    expect(JSON.stringify(schema)).toContain("Id<sourceCaptures>");
-    expect(JSON.stringify(schema)).toContain('"additionalProperties":false');
+    expect(schema).toMatchObject({
+        type: "object",
+        required: ["changes"],
+        additionalProperties: false,
+        properties: {
+            changes: {
+                type: "array",
+                items: {
+                    type: "object",
+                    required: ["captureId", "previous"],
+                    additionalProperties: false,
+                    properties: {
+                        captureId: {
+                            type: "string",
+                            description:
+                                expect.stringContaining("Id<sourceCaptures>"),
+                        },
+                        previous: {
+                            anyOf: expect.arrayContaining([
+                                {
+                                    type: "string",
+                                    description:
+                                        expect.stringContaining(
+                                            "Id<aiTaskResults>",
+                                        ),
+                                },
+                                { type: "null" },
+                            ]),
+                        },
+                    },
+                },
+            },
+        },
+    });
 });

@@ -6,15 +6,27 @@ import type { TranscriptContext } from "@earendil-works/pi-ai";
 import { getCurrentTools } from "@earendil-works/pi-ai/utils/transcript";
 import { getFunctionName } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import {
+    nativePiFixtureRoute,
+    nativeTextReply,
+} from "@/__tests__/setup/pi-native";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
 });
 
-async function savedProgram() {
-    const fixture = await seedWorkbench(true);
+async function savedProgram(nativeBinding?: "retained" | "current") {
+    const fixture = await seedWorkbench(
+        nativeBinding === undefined,
+        nativeBinding ? nativePiFixtureRoute : undefined,
+        undefined,
+        undefined,
+        undefined,
+        nativeBinding === "current" ? null : undefined,
+    );
     const { t, runId } = fixture;
     await t.run(async (ctx) => {
         const run = await ctx.db.get(runId);
@@ -236,19 +248,34 @@ test("a domain change before admission rebuilds the offered tools from the admit
     ).toEqual([]);
 }, 30000);
 
-test("a direct edit after invocation admission is reconsidered before dispatch", async () => {
-    const { t, client, runId } = await savedProgram();
+test.each([
+    "retained",
+    "current",
+] as const)("%s native dispatch includes the analyst edit made after invocation admission", async (binding) => {
+    const { t, client, runId } = await savedProgram(binding);
+    vi.stubEnv("OPENROUTER_API_KEY", "offline-fixture-only");
+    const scope = "Analyst's new workflow boundary";
+    let edited = false;
+    const requests: string[] = [];
+    const editedAtDispatch: boolean[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url, init) => {
+            requests.push(String(init?.body));
+            editedAtDispatch.push(edited);
+            return nativeTextReply("I will use your revised scope.");
+        }),
+    );
     const active = await t.mutation(
         internal.execution.conversations.startTurn,
         {
             runId,
             definitionId: "workbench_v1",
             scope: { kind: "workbench_v1" },
-            simulation: true,
+            simulation: false,
         },
     );
     assert(active);
-    let edited = false;
     await t.action((ctx) =>
         runPiMission(
             {
@@ -272,7 +299,7 @@ test("a direct edit after invocation admission is reconsidered before dispatch",
                             requestKey: "edit-after-begin",
                             content: {
                                 ...frame.content,
-                                scope: "Analyst's new workflow boundary",
+                                scope,
                             },
                         });
                     }
@@ -288,11 +315,20 @@ test("a direct edit after invocation admission is reconsidered before dispatch",
         status: "completed",
     });
     expect(await client.query(api.framing.get, { runId })).toMatchObject({
-        content: { scope: "Analyst's new workflow boundary" },
+        content: { scope },
     });
+    expect(requests).toHaveLength(1);
+    expect(editedAtDispatch).toEqual([true]);
+    expect(requests[0]).toContain(scope);
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").collect()),
-    ).toEqual([]);
+    ).toEqual([
+        expect.objectContaining({
+            missionId: active.missionId,
+            status: "succeeded",
+            service: "model",
+        }),
+    ]);
 }, 30000);
 
 test("unchanged native preparation cannot reschedule indefinitely without an admitted invocation", async () => {

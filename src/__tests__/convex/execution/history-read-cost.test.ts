@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
@@ -23,31 +23,28 @@ test("dense mission history reads only the source documents used by each page an
     vi.stubGlobal("fetch", () => {
         throw new Error("No provider calls in history measurement");
     });
-    const source = await f.t.run(
-        async (
-            ctx,
-        ): Promise<{ sequence: number; json: string; contentHash: string }> => {
-            const mission = await ctx.db.get(f.missionId);
-            assert(mission);
-            let first: Doc<"agentExecutionEvents"> | null = null;
-            for (let i = 0; i < 20; i++) {
-                const id = await recordMissionEvent(ctx, mission, {
-                    kind: "retained_evidence",
-                    cause: `dense:${i}`,
-                    historySource: "material",
-                    observation: {
-                        text: `Evidence ${i}. ${"x".repeat(44000)}`,
-                    },
-                });
-                if (i === 0) first = await ctx.db.get(id);
-            }
-            assert(first?.sequence);
-            return {
-                sequence: first.sequence,
-                ...(await projectMissionHistoryEvent(ctx, first)),
-            };
-        },
-    );
+    const sources = await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(f.missionId);
+        assert(mission);
+        const retained = [];
+        for (let i = 0; i < 20; i++) {
+            const id = await recordMissionEvent(ctx, mission, {
+                kind: "retained_evidence",
+                cause: `dense:${i}`,
+                historySource: "material",
+                observation: {
+                    text: `Evidence ${i}. ${"x".repeat(44000)}`,
+                },
+            });
+            const event = await ctx.db.get(id);
+            assert(event?.sequence);
+            retained.push({
+                sequence: event.sequence,
+                ...(await projectMissionHistoryEvent(ctx, event)),
+            });
+        }
+        return retained;
+    });
     const { read } = await import("@convex/execution/history");
     const registered = read as typeof read & {
         _handler: typeof readHistoryPage;
@@ -113,12 +110,9 @@ test("dense mission history reads only the source documents used by each page an
         return result;
     });
     let cursor: string | undefined;
-    let restored = "";
-    for (
-        let page = 0;
-        page < 20 && restored.length < source.json.length;
-        page++
-    ) {
+    const cursors = new Set<string>();
+    const restored = new Map<number, string>();
+    do {
         const result = await dispatchHistory(f, {
             kind: "consult_mission_state",
             ...(cursor ? { cursor } : {}),
@@ -132,17 +126,24 @@ test("dense mission history reads only the source documents used by each page an
         assert(measure);
         measure.entries = history.entries.length;
         measure.resultBytes = Buffer.byteLength(result.outcome.valueJson);
-        for (const entry of history.entries)
-            if (entry.sequence === source.sequence) {
-                expect(entry.offset).toBe(restored.length);
-                restored += entry.content;
-            }
+        for (const entry of history.entries) {
+            const prior = restored.get(entry.sequence) ?? "";
+            expect(entry.offset).toBe(prior.length);
+            restored.set(entry.sequence, prior + entry.content);
+        }
         cursor = history.continueCursor ?? undefined;
-        if (!cursor) break;
+        if (cursor) {
+            expect(cursors.has(cursor)).toBe(false);
+            cursors.add(cursor);
+        }
+    } while (cursor);
+    for (const source of sources) {
+        expect(restored.get(source.sequence)).toBe(source.json);
+        expect(sha256Hex(restored.get(source.sequence) ?? "")).toBe(
+            source.contentHash,
+        );
     }
-    expect(restored).toBe(source.json);
-    expect(measurements).toHaveLength(1);
-    expect(measurements[0]?.resultBytes).toBeLessThanOrEqual(64 * 1024);
+    expect(measurements.length).toBeGreaterThan(1);
     if (process.env.HARNESS_PERF_OUTPUT)
         writeFileSync(
             process.env.HARNESS_PERF_OUTPUT,
@@ -150,7 +151,11 @@ test("dense mission history reads only the source documents used by each page an
                 {
                     boundary:
                         "Logical documents and inline payload bytes delivered to the real Convex history query; physical database bytes and latency are not measured",
-                    sourceCharacters: source.json.length,
+                    sourceCount: sources.length,
+                    sourceCharacters: sources.reduce(
+                        (sum, source) => sum + source.json.length,
+                        0,
+                    ),
                     measurements,
                     totals: {
                         documents: measurements.reduce(
@@ -168,6 +173,7 @@ test("dense mission history reads only the source documents used by each page an
             ),
         );
     for (const measurement of measurements) {
+        expect(measurement.resultBytes).toBeLessThanOrEqual(64 * 1024);
         expect(measurement.documents).toBeGreaterThan(0);
         expect(measurement.documents).toBeLessThanOrEqual(
             measurement.entries + 1,
@@ -178,25 +184,24 @@ test("dense mission history reads only the source documents used by each page an
     }
 });
 
-test("replays real retained traversal payloads through readHistoryPage with exact hash restoration", async () => {
+test(`restores ${process.env.HARNESS_REAL_TRAVERSAL_INPUT ? "supplied retained traversal" : "synthetic traversal-shaped"} payloads through readHistoryPage with exact hashes`, async () => {
     const f = await seedHistoryMission();
     vi.stubGlobal("fetch", () => {
         throw new Error("No provider calls in history replay");
     });
     const realInputPath = process.env.HARNESS_REAL_TRAVERSAL_INPUT;
-    const realData =
-        realInputPath && existsSync(realInputPath)
-            ? (JSON.parse(readFileSync(realInputPath, "utf8")) as {
-                  sourceArchive: string;
-                  traversalIndex: number;
-                  items: {
-                      originalSequence: number;
-                      characters: number;
-                      sha256: string;
-                      parsed: { observation?: unknown };
-                  }[];
-              })
-            : null;
+    const realData = realInputPath
+        ? (JSON.parse(readFileSync(realInputPath, "utf8")) as {
+              sourceArchive: string;
+              traversalIndex: number;
+              items: {
+                  originalSequence: number;
+                  characters: number;
+                  sha256: string;
+                  parsed: { observation?: unknown };
+              }[];
+          })
+        : null;
     const payloadSpecs = realData
         ? realData.items.map((item) => ({
               label: `real-seq-${item.originalSequence}`,
@@ -207,7 +212,7 @@ test("replays real retained traversal payloads through readHistoryPage with exac
               1158, 2785, 1081, 1092, 2216, 11085, 4053, 2069, 2562, 4252, 2118,
               6540, 3921, 1613, 4012, 4009,
           ].map((size, index) => ({
-              label: `real-shape-${index}`,
+              label: `synthetic-shape-${index}`,
               observation: { text: "a".repeat(Math.max(1, size - 250)) },
           }));
 
@@ -287,7 +292,7 @@ test("replays real retained traversal payloads through readHistoryPage with exac
                 {
                     sourceIdentity: realData
                         ? `${realData.sourceArchive}#traversal-${realData.traversalIndex}`
-                        : "deterministic-real-shape-27-events",
+                        : "synthetic-traversal-shape-27-events",
                     eventCount: expectedBySequence.size,
                     totalCharacters: [...expectedBySequence.values()].reduce(
                         (sum, item) => sum + item.json.length,

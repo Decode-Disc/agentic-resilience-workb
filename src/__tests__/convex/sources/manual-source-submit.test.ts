@@ -1,3 +1,8 @@
+import type { LookupAddress, LookupAllOptions } from "node:dns";
+import { EventEmitter } from "node:events";
+import { IncomingMessage } from "node:http";
+import type { RequestOptions } from "node:https";
+import { Socket } from "node:net";
 import { api, internal } from "@convex/_generated/api";
 import schema from "@convex/schema";
 import { submitManualUrlWithInspector } from "@convex/sourceActions";
@@ -5,13 +10,31 @@ import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { seedManualSource } from "@/__tests__/setup/manual-source";
 
+const { request, lookup } = vi.hoisted(() => ({
+    request: vi.fn(),
+    lookup: vi.fn<
+        (
+            hostname: string,
+            options: LookupAllOptions,
+        ) => Promise<LookupAddress[]>
+    >(),
+}));
+vi.mock("node:https", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("node:https")>();
+    return { ...actual, request, default: { ...actual, request } };
+});
+vi.mock("node:dns/promises", () => ({ lookup, default: { lookup } }));
+
 const modules = import.meta.glob("/convex/**/*.ts");
 const metadata = {
     canonicalUrl: "https://example.com/report",
     title: "Public report",
 };
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    vi.useRealTimers();
+    vi.resetAllMocks();
+});
 
 test("rejects unauthenticated source intake with structured application data", async () => {
     const t = convexTest(schema, modules);
@@ -30,23 +53,45 @@ test("rejects unauthenticated source intake with structured application data", a
     });
 });
 
-test("prepares a source before launch and persists canonical metadata", async () => {
+test("authenticated public intake prepares a source before launch and persists canonical metadata", async () => {
+    vi.useFakeTimers();
     const { t, owned, userId } = await seedManualSource();
-    const inspect = vi.fn(async () => metadata);
-    const now = Date.now();
-    const result = await owned.action((ctx) =>
-        submitManualUrlWithInspector(
-            ctx,
-            userId,
-            {
-                requestKey: "request-1",
-                url: "https://example.com/report#overview",
-                target: { kind: "prelaunch", collectionKey: "composer-1" },
-            },
-            inspect,
-            () => now,
-        ),
+    lookup.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    request.mockImplementation(
+        (
+            url: URL,
+            options: RequestOptions,
+            receive: (response: IncomingMessage) => void,
+        ) => {
+            expect(url.href).toBe(metadata.canonicalUrl);
+            expect(options.servername).toBe("example.com");
+            const response = new IncomingMessage(new Socket());
+            Object.defineProperty(response.socket, "remoteAddress", {
+                value: "93.184.216.34",
+            });
+            response.statusCode = 200;
+            response.headers = { "content-type": "text/html" };
+            return Object.assign(new EventEmitter(), {
+                destroy() {},
+                end() {
+                    receive(response);
+                    response.emit(
+                        "data",
+                        Buffer.from(
+                            "<html><title>Public report</title><body>Source material</body></html>",
+                        ),
+                    );
+                    response.emit("end");
+                },
+            });
+        },
     );
+    const now = Date.now();
+    const result = await owned.action(api.sourceActions.submitManualUrl, {
+        requestKey: "request-1",
+        url: "https://example.com/report#overview",
+        target: { kind: "prelaunch", collectionKey: "composer-1" },
+    });
     expect(result).toMatchObject({
         kind: "prepared",
         ...metadata,
@@ -61,7 +106,11 @@ test("prepares a source before launch and persists canonical metadata", async ()
         requestKey: "request-1",
         ...metadata,
     });
-    expect(inspect).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledOnce();
+    expect(lookup).toHaveBeenCalledWith("example.com", {
+        all: true,
+        verbatim: true,
+    });
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").collect()),
     ).toEqual([
@@ -140,32 +189,6 @@ test("stops a rate-limited preparation before inspection with structured data", 
     ).toHaveLength(0);
 });
 
-test("persists an active-run source through the action helper", async () => {
-    const { t, owned, userId, runId, corpusRevisionId } =
-        await seedManualSource();
-    const inspect = vi.fn(async () => metadata);
-    const result = await owned.action((ctx) =>
-        submitManualUrlWithInspector(
-            ctx,
-            userId,
-            {
-                requestKey: "request-1",
-                url: metadata.canonicalUrl,
-                target: { kind: "run", runId, corpusRevisionId },
-            },
-            inspect,
-        ),
-    );
-    expect(result).toMatchObject({ kind: "persisted", ...metadata });
-    if (result.kind !== "persisted")
-        throw new Error("Expected persisted source");
-    expect(await t.run((ctx) => ctx.db.get(result.sourceId))).toMatchObject({
-        runId,
-        ...metadata,
-    });
-    expect(inspect).toHaveBeenCalledOnce();
-});
-
 test("replays an active-run request with persisted canonical metadata", async () => {
     const { t, owned, userId, runId, corpusRevisionId } =
         await seedManualSource();
@@ -178,18 +201,21 @@ test("replays an active-run request with persisted canonical metadata", async ()
     const first = await owned.action((ctx) =>
         submitManualUrlWithInspector(ctx, userId, args, inspect),
     );
+    expect(first).toMatchObject({ kind: "persisted", ...metadata });
+    if (first.kind !== "persisted")
+        throw new Error("Expected persisted source");
+    expect(await t.run((ctx) => ctx.db.get(first.sourceId))).toMatchObject({
+        runId,
+        ...metadata,
+        providerReference: expect.stringContaining(
+            `corpus:${corpusRevisionId}:manual-source:request:`,
+        ),
+    });
     expect(
         await owned.action((ctx) =>
             submitManualUrlWithInspector(ctx, userId, args, inspect),
         ),
     ).toEqual(first);
-    if (first.kind !== "persisted")
-        throw new Error("Expected persisted source");
-    expect(await t.run((ctx) => ctx.db.get(first.sourceId))).toMatchObject({
-        providerReference: expect.stringContaining(
-            `corpus:${corpusRevisionId}:manual-source:request:`,
-        ),
-    });
     expect(inspect).toHaveBeenCalledOnce();
     expect(
         await t.run((ctx) => ctx.db.query("providerCalls").collect()),

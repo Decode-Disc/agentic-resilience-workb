@@ -1,6 +1,7 @@
 import { approvalCatalog } from "@convex/execution/approvalCatalog";
 import type { ApprovalAction } from "@convex/execution/approvalContracts";
 import { executionFailureCode } from "@convex/execution/errors";
+import { pauseResearchAtBoundary } from "@convex/execution/researchControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 import {
@@ -123,14 +124,20 @@ test("pause and resume apply through the catalogue in normal execution", async (
     });
 
     await f.t.run(async (ctx) => {
-        await ctx.db.patch(f.runId, {
+        expect(await ctx.db.get(f.runId)).toMatchObject({
+            executionStatus: "running",
+            researchPauseRequested: true,
+            executionGeneration: 4,
+        });
+        expect(await pauseResearchAtBoundary(ctx, f.runId)).toBe(true);
+        const pausedRun = await ctx.db.get(f.runId);
+        assert(pausedRun);
+        expect(pausedRun).toMatchObject({
             executionStatus: "paused",
             pauseReason: "analyst",
             researchPauseRequested: false,
             executionGeneration: 5,
         });
-        const pausedRun = await ctx.db.get(f.runId);
-        assert(pausedRun);
         expect(
             await approvalCatalog.resume_research.availability(ctx, pausedRun),
         ).toBeNull();

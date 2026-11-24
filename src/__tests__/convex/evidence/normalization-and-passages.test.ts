@@ -1,16 +1,18 @@
 import { createHash } from "node:crypto";
 import {
+    documentDates,
+    unambiguousDocumentTime,
+} from "@convex/domain/documentDates";
+import {
     extractPassagesFromNormalizedText,
     extractPdfPassagesFromPages,
     LOCATOR_VERSION,
     PDF_LOCATOR_VERSION,
     preparePassageReproduction,
-    reproducePassage,
     sha256Hex,
 } from "@convex/domain/sourcePassages";
 import {
     extractHtmlPublicationEvidence,
-    extractHtmlPublicationTime,
     normalizeExaText,
     normalizePdfPages,
     normalizeSecHtml,
@@ -117,7 +119,7 @@ describe("evidenceNormalization", () => {
         );
     });
 
-    test("extracts reproducible passages and verifies exact quotation replay", async () => {
+    test("extracts reproducible passages and verifies exact quotation replay", () => {
         const rawHtml = `
             <html>
             <body>
@@ -148,16 +150,14 @@ describe("evidenceNormalization", () => {
         );
 
         // Replay verification against the raw normalized artifact
-        const replayed = await reproducePassage(
-            normalizedText,
+        const replayed = preparePassageReproduction(normalizedText)(
             firstPassage.locator,
         );
         expect(replayed).toBe(firstPassage.exactQuotation);
 
         // Replay verification against stored Uint8Array bytes (as returned by Convex storage)
         const storedBytes = new TextEncoder().encode(normalizedText);
-        const replayedFromBytes = await reproducePassage(
-            storedBytes,
+        const replayedFromBytes = preparePassageReproduction(storedBytes)(
             firstPassage.locator,
         );
         expect(replayedFromBytes).toBe(firstPassage.exactQuotation);
@@ -189,7 +189,7 @@ describe("evidenceNormalization", () => {
         ).toThrow(/page number/i);
     });
 
-    test("H6: PDF normalization handles whitespace, control chars, CRLF and reproduces passages exactly", async () => {
+    test("H6: PDF normalization handles whitespace, control chars, CRLF and reproduces passages exactly", () => {
         const pages = [
             {
                 pageNumber: 1,
@@ -222,12 +222,10 @@ describe("evidenceNormalization", () => {
         );
 
         expect(passages.length).toBeGreaterThanOrEqual(2);
+        const reproduce = preparePassageReproduction(normalized.normalizedText);
         for (const p of passages) {
             expect(p.locatorVersion).toBe(PDF_LOCATOR_VERSION);
-            const replayed = await reproducePassage(
-                normalized.normalizedText,
-                p.locator,
-            );
+            const replayed = reproduce(p.locator);
             expect(replayed).toBe(p.exactQuotation);
         }
     });
@@ -254,5 +252,14 @@ test("HTML publication indications retain conflicts instead of choosing one tag"
     expect(
         extractHtmlPublicationEvidence(html).map((item) => item.value),
     ).toEqual(["2026-10-28", "2026-10-29"]);
-    expect(extractHtmlPublicationTime(html)).toBeUndefined();
+    const dates = documentDates({
+        metadata: extractHtmlPublicationEvidence(html),
+        text: "",
+    });
+    expect(dates.publication.status).toBe("conflict");
+    expect(dates.publication.evidence.map((item) => item.value)).toEqual([
+        "2026-10-28",
+        "2026-10-29",
+    ]);
+    expect(unambiguousDocumentTime(dates.publication)).toBeUndefined();
 });

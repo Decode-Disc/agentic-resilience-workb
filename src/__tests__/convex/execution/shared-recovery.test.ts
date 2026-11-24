@@ -1,9 +1,17 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { historyPageValidator } from "@convex/execution/operationContracts";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
+import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+});
 async function refusedProposal(
     text = "Rejected proposal must remain inspectable",
 ) {
@@ -93,36 +101,63 @@ test("current state points to a directly readable refused observation", async ()
 });
 
 test("targeted recovery fragments a large refused proposal and repeated fragments earn no new progress", async () => {
+    // Each unit costs eight bytes in response JSON, ten when embedded in a history page.
     const f = await refusedProposal(
-        `${"x".repeat(14000)}END-OF-REFUSED-PROPOSAL`,
+        `${'é🙂"'.repeat(Math.floor(MAX_OPERATION_RESULT_BYTES / 10))}END-OF-REFUSED-PROPOSAL`,
     );
     let result = await consult(f, { reference: f.event._id });
     assert(result.kind === "success");
-    const first = JSON.parse(result.valueJson);
+    const first: unknown = JSON.parse(result.valueJson).history;
+    assert(validate(historyPageValidator, first));
+    assert(
+        first.continueCursor,
+        "The fixture must require a genuine continuation",
+    );
+    const firstEntry = first.entries[0];
+    assert(firstEntry);
     const before = await f.t.run((ctx) => ctx.db.get(f.missionId));
     const repeated = await consult(f, { reference: f.event._id });
     assert(repeated.kind === "success");
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.progressKeys,
     ).toEqual(before?.progressKeys);
-    let content = first.history.entries
-        .map((entry: { content: string }) => entry.content)
-        .join("");
-    let cursor = first.history.continueCursor;
-    for (let page = 0; cursor && page < 20; page++) {
-        result = await consult(f, { cursor });
-        assert(result.kind === "success");
+    expect(JSON.parse(repeated.valueJson).history.entries).toEqual(
+        first.entries,
+    );
+    let content = "";
+    const cursors = new Set<string>();
+    let history = first;
+    while (true) {
         expect(
             new TextEncoder().encode(result.valueJson).length,
-        ).toBeLessThanOrEqual(48 * 1024);
-        const value = JSON.parse(result.valueJson);
-        content += value.history.entries
-            .map((entry: { content: string }) => entry.content)
-            .join("");
-        cursor = value.history.continueCursor;
+        ).toBeLessThanOrEqual(MAX_OPERATION_RESULT_BYTES);
+        expect(history.entries.length).toBeGreaterThan(0);
+        for (const entry of history.entries) {
+            expect(entry).toMatchObject({
+                sequence: f.event.sequence,
+                offset: content.length,
+                totalCharacters: firstEntry.totalCharacters,
+            });
+            expect(entry.content.length).toBeGreaterThan(0);
+            content += entry.content;
+        }
+        expect(content.length).toBeLessThanOrEqual(firstEntry.totalCharacters);
+        const cursor = history.continueCursor;
+        if (cursor === null) break;
+        expect(cursors.has(cursor)).toBe(false);
+        cursors.add(cursor);
+        result = await consult(f, { cursor });
+        assert(result.kind === "success");
+        const next: unknown = JSON.parse(result.valueJson).history;
+        assert(validate(historyPageValidator, next));
+        history = next;
     }
-    expect(cursor).toBeNull();
-    expect(content).toContain("END-OF-REFUSED-PROPOSAL");
+    expect(cursors.size).toBeGreaterThan(0);
+    expect(content.length).toBe(firstEntry.totalCharacters);
+    const restored = JSON.parse(content);
+    expect(restored.event._id).toBe(f.event._id);
+    expect(restored.observation.state).toBe("complete");
+    expect(restored.observation.value.response).toEqual(f.response);
 });
 
 test("recovery rejects foreign and mixed references without exposing their content", async () => {
@@ -230,8 +265,80 @@ test("Sources correction identifies the affected need with its exact domain iden
 });
 
 test("the real Pi worker corrects Sources completion after non-progress consultations and preserves its gaps", async () => {
-    const { sourcesV5Definition } = await import("@convex/domain/sourcesAgent");
-    const f = await seedCapturedSources();
+    const f = await seedCapturedSources({
+        modelResponse(input) {
+            const state = input as {
+                triggeringRequestsAndResults: { input: { kind: string } }[];
+                activeWork: {
+                    noProgressTurns: number;
+                    needsRevision: number;
+                    needs: { id: string }[];
+                    work: {
+                        requestId: Id<"agentOperationRequests">;
+                        needIds: string[];
+                    }[];
+                };
+                lastObservableInvocation?: {
+                    historyReference?: Id<"agentExecutionEvents">;
+                    correction?: unknown;
+                };
+            };
+            const restored = state.triggeringRequestsAndResults.some(
+                (request) => request.input.kind === "consult_mission_state",
+            );
+            if (!restored) {
+                if (state.lastObservableInvocation?.correction) {
+                    assert(state.lastObservableInvocation.historyReference);
+                    return {
+                        kind: "operations",
+                        requests: [
+                            {
+                                callId: "recover-proposal",
+                                name: "consult_mission_state",
+                                inputJson: JSON.stringify({
+                                    reference:
+                                        state.lastObservableInvocation
+                                            .historyReference,
+                                }),
+                            },
+                        ],
+                    };
+                }
+                if (state.activeWork.noProgressTurns < 2)
+                    return {
+                        kind: "operations",
+                        requests: [
+                            {
+                                callId: `state-${state.activeWork.noProgressTurns + 1}`,
+                                name: "consult_run_state",
+                                inputJson: "{}",
+                            },
+                        ],
+                    };
+                return {
+                    kind: "complete",
+                    needs: [
+                        {
+                            needId: "invented",
+                            unfinished: ["REFUSED-PROPOSAL-TO-RECOVER"],
+                        },
+                    ],
+                };
+            }
+            return {
+                kind: "complete",
+
+                needs: state.activeWork.needs.map((need) => ({
+                    needId: need.id,
+
+                    unfinished: [
+                        "No controlled contributions were prepared in this simulated recovery.",
+                    ],
+                })),
+                workingNotes: "Recovery completed once.",
+            };
+        },
+    });
     vi.useFakeTimers();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");
     vi.stubEnv("CONVEX_CLOUD_URL", "http://127.0.0.1:3210");
@@ -270,156 +377,71 @@ test("the real Pi worker corrects Sources completion after non-progress consulta
             throw new Error("Unexpected external I/O");
         }),
     );
-    const original = sourcesV5Definition.simulate;
-    sourcesV5Definition.simulate = (input: unknown) => {
-        const state = input as {
-            triggeringRequestsAndResults: { input: { kind: string } }[];
-            activeWork: {
-                noProgressTurns: number;
-                needsRevision: number;
-                needs: { id: string }[];
-                work: {
-                    requestId: Id<"agentOperationRequests">;
-                    needIds: string[];
-                }[];
-            };
-            lastObservableInvocation?: {
-                historyReference?: Id<"agentExecutionEvents">;
-                correction?: unknown;
-            };
-        };
-        const restored = state.triggeringRequestsAndResults.some(
-            (request) => request.input.kind === "consult_mission_state",
-        );
-        if (!restored) {
-            if (state.lastObservableInvocation?.correction) {
-                assert(state.lastObservableInvocation.historyReference);
-                return {
-                    kind: "operations",
-                    requests: [
-                        {
-                            callId: "recover-proposal",
-                            name: "consult_mission_state",
-                            inputJson: JSON.stringify({
-                                reference:
-                                    state.lastObservableInvocation
-                                        .historyReference,
-                            }),
-                        },
-                    ],
-                };
-            }
-            if (state.activeWork.noProgressTurns < 2)
-                return {
-                    kind: "operations",
-                    requests: [
-                        {
-                            callId: `state-${state.activeWork.noProgressTurns + 1}`,
-                            name: "consult_run_state",
-                            inputJson: "{}",
-                        },
-                    ],
-                };
-            return {
-                kind: "complete",
+    const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
+    await seedPiHistory(f.t, f.missionId, 4, 8, 16250);
+    await f.t.mutation(internal.execution.missions.resume, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        simulation: true,
+    });
+    await f.t.finishAllScheduledFunctions(
+        () => vi.advanceTimersByTime(10),
+        500,
+    );
+    const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
+    expect(mission?.blockCode).toBeUndefined();
+    expect(mission).toMatchObject({
+        status: "completed",
+        result: {
+            material: {
+                outcome: "blocked",
                 needs: [
                     {
-                        needId: "invented",
-                        unfinished: ["REFUSED-PROPOSAL-TO-RECOVER"],
+                        needId: "common-context",
+                        unfinished: [
+                            "No controlled contributions were prepared in this simulated recovery.",
+                        ],
                     },
                 ],
-            };
-        }
-        return {
-            kind: "complete",
-
-            needs: state.activeWork.needs.map((need) => ({
-                needId: need.id,
-
-                unfinished: [
-                    "No controlled contributions were prepared in this simulated recovery.",
-                ],
-            })),
-            workingNotes: "Recovery completed once.",
-        };
-    };
-    try {
-        const { seedPiHistory } = await import("@/__tests__/setup/pi-mission");
-        await seedPiHistory(f.t, f.missionId, 4, 8, 16250);
-        await f.t.mutation(internal.execution.missions.resume, {
-            missionId: f.missionId,
-            expectedGeneration: 4,
-            simulation: true,
-        });
-        await f.t.finishAllScheduledFunctions(
-            () => vi.advanceTimersByTime(10),
-            500,
-        );
-        const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
-        expect(mission?.blockCode).toBeUndefined();
-        expect(mission).toMatchObject({
-            status: "completed",
-            result: {
-                material: {
-                    outcome: "blocked",
-                    needs: [
-                        {
-                            needId: "common-context",
-                            unfinished: [
-                                "No controlled contributions were prepared in this simulated recovery.",
-                            ],
-                        },
-                    ],
-                },
             },
-        });
-        expect(
-            mission?.workingNotes?.split("Recovery completed once."),
-        ).toHaveLength(2);
-        const requests = await f.t.run((ctx) =>
-            ctx.db
-                .query("agentOperationRequests")
-                .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
-                .collect(),
-        );
-        const recovery = requests.filter(
-            (request) => request.input.kind === "consult_mission_state",
-        );
-        expect(recovery).toHaveLength(1);
-        expect(JSON.stringify(recovery[0]?.outcome)).toContain(
-            "REFUSED-PROPOSAL-TO-RECOVER",
-        );
-        expect(
-            await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
-        ).toEqual([]);
-        const invocations = await f.t.run((ctx) =>
-            ctx.db
-                .query("agentInvocations")
-                .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
-                .collect(),
-        );
-        expect(
-            invocations.filter((invocation) => !invocation.purpose),
-        ).toHaveLength(5);
-        const rejected = invocations.find(
-            (invocation) => invocation.correction,
-        );
-        expect(rejected).toMatchObject({
-            blockCode: "completion_correction_required",
-        });
-        expect(
-            JSON.parse(rejected?.inputJson ?? "null").activeWork
-                .noProgressTurns,
-        ).toBe(2);
-        expect(
-            invocations.some(
-                (invocation) => invocation.purpose === "compaction",
-            ),
-        ).toBe(true);
-    } finally {
-        if (original) sourcesV5Definition.simulate = original;
-        else delete sourcesV5Definition.simulate;
-        vi.useRealTimers();
-        vi.unstubAllEnvs();
-    }
+        },
+    });
+    expect(
+        mission?.workingNotes?.split("Recovery completed once."),
+    ).toHaveLength(2);
+    const requests = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .collect(),
+    );
+    const recovery = requests.filter(
+        (request) => request.input.kind === "consult_mission_state",
+    );
+    expect(recovery).toHaveLength(1);
+    expect(JSON.stringify(recovery[0]?.outcome)).toContain(
+        "REFUSED-PROPOSAL-TO-RECOVER",
+    );
+    expect(
+        await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
+    const invocations = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentInvocations")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .collect(),
+    );
+    expect(
+        invocations.filter((invocation) => !invocation.purpose),
+    ).toHaveLength(5);
+    const rejected = invocations.find((invocation) => invocation.correction);
+    expect(rejected).toMatchObject({
+        blockCode: "completion_correction_required",
+    });
+    expect(
+        JSON.parse(rejected?.inputJson ?? "null").activeWork.noProgressTurns,
+    ).toBe(2);
+    expect(
+        invocations.some((invocation) => invocation.purpose === "compaction"),
+    ).toBe(true);
 }, 30000);

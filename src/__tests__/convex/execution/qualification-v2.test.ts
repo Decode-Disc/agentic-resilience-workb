@@ -1088,11 +1088,8 @@ test("a new grant cannot silently replace an explicitly selected legacy accounti
     );
 });
 
-test.each([
-    undefined,
-    "known_final_v1",
-] as const)("current native reservation uses admitted model capacity (%s)", async (policy) => {
-    const f = await liveFixture(23, false, policy);
+test("current native reservation uses admitted model capacity", async () => {
+    const f = await liveFixture(23, false, "known_final_v1");
     const args = await f.attempt(0);
     await f.t.run(async (ctx) => {
         const mission = await ctx.db.get(args.missionId);
@@ -1572,6 +1569,7 @@ test("qualificationContinuation treats a quiet local generation block as safe wh
             runId: run._id,
             fixtureKey: first.fixtureKey,
             missionId: mission._id,
+            generation: run.executionGeneration,
             sessionId,
             conversationId,
             now,
@@ -1589,6 +1587,70 @@ test("qualificationContinuation treats a quiet local generation block as safe wh
         executionStatus: "idle",
         sourcesStatus: null,
         conversation: { kind: "quiet_blocked", code: "repetition_stop" },
+    });
+
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.conversationId, { queuedCount: 1 }),
+    );
+    expect(await queryContinuation()).toMatchObject({
+        scenarioQuiet: false,
+        conversation: { kind: "unsettled" },
+    });
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.conversationId, { queuedCount: 0 }),
+    );
+
+    const wakeId = await f.t.run(async (ctx) => {
+        const id = await ctx.scheduler.runAfter(
+            60_000,
+            internal.execution.missions.resume,
+            {
+                missionId: setup.missionId,
+                expectedGeneration: setup.generation,
+                simulation: true,
+            },
+        );
+        await ctx.db.patch(setup.missionId, { piWakeId: id });
+        return id;
+    });
+    expect(await queryContinuation()).toMatchObject({
+        scenarioQuiet: false,
+        conversation: { kind: "unsettled" },
+    });
+    await f.t.run(async (ctx) => {
+        await ctx.scheduler.cancel(wakeId);
+        await ctx.db.patch(setup.missionId, {
+            piWakeId: undefined,
+            status: "running",
+            blockCode: undefined,
+        });
+    });
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: setup.missionId,
+            expectedGeneration: setup.generation,
+            cause: "engaged-continuation",
+            input: { kind: "consult_run_state" },
+        },
+    );
+    await f.t.run((ctx) =>
+        ctx.db.patch(setup.missionId, {
+            status: "blocked",
+            blockCode: "repetition_stop",
+        }),
+    );
+    for (const status of ["running", "waiting", "unknown"] as const) {
+        await f.t.run((ctx) => ctx.db.patch(requestId, { status }));
+        expect(await queryContinuation(), status).toMatchObject({
+            scenarioQuiet: true,
+            hasEngagedEffects: true,
+        });
+    }
+    await f.t.run((ctx) => ctx.db.patch(requestId, { status: "pending" }));
+    expect(await queryContinuation()).toMatchObject({
+        scenarioQuiet: true,
+        hasEngagedEffects: false,
     });
 
     // Active lease must stay unsettled.

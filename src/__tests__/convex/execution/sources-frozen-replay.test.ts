@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { api, internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { pauseResearchAtBoundary } from "@convex/execution/researchControl";
 import {
@@ -41,7 +43,7 @@ const documents = [
         title: "Customer comparison",
         acquisition: { status: "unavailable", code: "execution_interrupted" },
     },
-];
+] satisfies ReturnType<typeof sourcesReplaySchema.parse>["documents"];
 
 async function fixture(
     method: "retained_control" | "native_skills" = "retained_control",
@@ -150,6 +152,69 @@ async function fixture(
     throw new Error("Sources mission did not start");
 }
 
+// Observed normalized captures for the two immutable fixtures with noncanonical whitespace.
+// Keys pin the raw input; neither the expected bytes nor digest use the production normalizer.
+const normalizedCaptures: Record<string, { hash: string; bytes: number }> = {
+    "0e18d1dcbb4325da78446434d45f8ded0b02556bb40a280554773b02c0d568b1": {
+        hash: "ec832fb957a016289e5b7f78694ced6aae75608780274bcd3c190f1de0c165f6",
+        bytes: 7621,
+    },
+    "51eb97e9efb8d1d86f7a66fccd5894ab829a630552d15f602f02e86173aaa259": {
+        hash: "59af6234b65917bf40d1655cc9af6ef586723746cc480136efec1b0cc2378769",
+        bytes: 29860,
+    },
+};
+
+async function expectFrozenCapture(
+    f: Awaited<ReturnType<typeof fixture>>,
+    sourceId: Id<"sources">,
+    document: ReturnType<typeof sourcesReplaySchema.parse>["documents"][number],
+) {
+    const { capture, retained } = await f.t.run(async (ctx) => {
+        const capture = await ctx.db
+            .query("sourceCaptures")
+            .withIndex("by_preparation_and_source", (q) =>
+                q.eq("preparationId", f.preparationId).eq("sourceId", sourceId),
+            )
+            .unique();
+        const blob = capture?.storageId
+            ? await ctx.storage.get(capture.storageId)
+            : null;
+        return { capture, retained: blob ? await blob.text() : null };
+    });
+    assert(capture);
+    if (document.acquisition.status === "unavailable") {
+        expect(capture).toMatchObject({
+            status: "unavailable",
+            failureCode: document.acquisition.code,
+        });
+        expect(retained).toBeNull();
+    } else {
+        const rawHash = createHash("sha256")
+            .update(document.acquisition.text)
+            .digest("hex");
+        const expected = normalizedCaptures[rawHash] ?? {
+            hash: rawHash,
+            bytes: Buffer.byteLength(document.acquisition.text, "utf8"),
+        };
+        assert(retained !== null);
+        expect(
+            createHash("sha256").update(retained).digest("hex"),
+            document.url,
+        ).toBe(expected.hash);
+        expect(Buffer.byteLength(retained, "utf8"), document.url).toBe(
+            expected.bytes,
+        );
+        expect(capture).toMatchObject({
+            status: "committed",
+            representationCompleteness: document.acquisition.status,
+            readingCompleteness: document.acquisition.status,
+            byteCount: expected.bytes,
+            contentHash: expected.hash,
+        });
+    }
+}
+
 test("a frozen Sources corpus reaches genuine Start without becoming an initial illustrative fixture", async () => {
     const f = await fixture();
     expect(f.mission.definitionVersion).toBe(6);
@@ -224,6 +289,7 @@ test.each([
             needId: need.id,
             sourceId: source._id,
         });
+        await expectFrozenCapture(f, source._id, document);
         const capture = await f.t.run((ctx) =>
             ctx.db
                 .query("sourceCaptures")
@@ -487,6 +553,7 @@ for (const caseId of [
                 (d: { url: string }) => d.url === source.canonicalUrl,
             );
             assert(document);
+            await expectFrozenCapture(f, source._id, document);
             if (document.acquisition.status === "unavailable")
                 expect(acquisition).toMatchObject({
                     kind: "unavailable",

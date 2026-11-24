@@ -755,12 +755,10 @@ test.each([
     expect(allCommitPayloads).toContain('{\\"kind\\":\\"accepted\\"}');
 }, 30000);
 
-test("structured native_tool settlement enforces stale writer, revoked dossier, cancelled-session fence, bounded retry exhaustion and permanent failure without touching conversations", async () => {
+test("cancelled structured settlement fences inspection and cannot settle or schedule a wake", async () => {
     const { needsNativeSettlement } = await import("@convex/execution/piStore");
-    const { NATIVE_WORKER_POLICY } = await import("@convex/resourcePolicy");
     vi.useFakeTimers();
 
-    // 1. Cancelled non-conversation structured session stays fenced and never settles.
     const cancelledFixture = await seedInspectedEvidence();
     const cancelledMissionId = await cancelledFixture.t.mutation(
         internal.execution.missions.start,
@@ -837,8 +835,10 @@ test("structured native_tool settlement enforces stale writer, revoked dossier, 
         (await cancelledFixture.t.run((ctx) => ctx.db.get(cancelledMissionId)))
             ?.piWakeToken,
     ).toBeUndefined();
+});
 
-    // 2. Stale writer, revoked dossier access, permanent failure, and bounded retry exhaustion on completed structured mission.
+async function completedStructuredSettlement() {
+    vi.useFakeTimers();
     const f = await seedInspectedEvidence();
     const missionId = await f.t.mutation(internal.execution.missions.start, {
         runId: f.args.runId,
@@ -865,7 +865,11 @@ test("structured native_tool settlement enforces stale writer, revoked dossier, 
         await ctx.db.patch(lease1.sessionId, { sequence: 3 });
     });
 
-    // Stale writer (wrong epoch) is fenced on completionDisposition and terminalCompletionAccepted.
+    return { f, missionId, lease1 };
+}
+
+test("completed structured settlement refuses stale epochs and foreign writers", async () => {
+    const { f, lease1 } = await completedStructuredSettlement();
     await expect(
         f.t.query(internal.execution.piControl.completionDisposition, {
             ...lease1,
@@ -879,8 +883,11 @@ test("structured native_tool settlement enforces stale writer, revoked dossier, 
             writer: "wrong-writer",
         }),
     ).rejects.toThrow("pi_writer_fenced");
+});
 
-    // Exhaust bounded retries on transient failure without touching conversations or losing completed result.
+test("completed structured settlement exhausts transient retries without losing its result or scheduling another wake", async () => {
+    const { NATIVE_WORKER_POLICY } = await import("@convex/resourcePolicy");
+    const { f, missionId, lease1 } = await completedStructuredSettlement();
     for (
         let attempt = 1;
         attempt <= NATIVE_WORKER_POLICY.settlementMaxAttempts;
@@ -915,7 +922,10 @@ test("structured native_tool settlement enforces stale writer, revoked dossier, 
             )
             .collect(),
     }));
-    expect(exhausted.mission?.status).toBe("completed");
+    expect(exhausted.mission).toMatchObject({
+        status: "completed",
+        result: { kind: "saved_material_inspection_v1", captureIds: [] },
+    });
     expect(exhausted.mission?.piWakeToken).toBeUndefined();
     expect(exhausted.session).toMatchObject({
         settlementAttempts: NATIVE_WORKER_POLICY.settlementMaxAttempts,
@@ -924,58 +934,37 @@ test("structured native_tool settlement enforces stale writer, revoked dossier, 
     expect(exhausted.session?.settledSequence).toBeUndefined();
     expect(exhausted.events).toHaveLength(1);
     expect(exhausted.events[0]?.code).toBe("native_settlement_incomplete");
+});
 
-    // Permanent failure stops on first attempt; revoked dossier access blocks terminal inspection/recovery.
-    const perm = await seedInspectedEvidence();
-    const permMissionId = await perm.t.mutation(
-        internal.execution.missions.start,
-        {
-            runId: perm.args.runId,
-            corpusRevisionId: perm.args.corpusRevisionId,
-            definitionId: "saved_material_inspection_v1",
-            requestKey: "structured-permanent-and-revoke",
-            expectedGeneration: 4,
-        },
+test("withdrawn dossiers refuse completed structured settlement inspection", async () => {
+    const { f, lease1 } = await completedStructuredSettlement();
+    await f.t.run((ctx) =>
+        ctx.db.patch(f.args.runId, { withdrawnAt: Date.now() }),
     );
-    await perm.t.run((ctx) =>
-        ctx.db.patch(permMissionId, { definitionVersion: 4 }),
-    );
-    const permLease = await perm.t.mutation(internal.execution.piStore.claim, {
-        missionId: permMissionId,
-        expectedGeneration: 4,
-        writer: "perm-writer",
-    });
-    await perm.t.run(async (ctx) => {
-        await ctx.db.patch(permMissionId, {
-            status: "completed",
-            result: { kind: "saved_material_inspection_v1", captureIds: [] },
-            piActiveWriter: "perm-writer",
-        });
-        await ctx.db.patch(permLease.sessionId, { sequence: 2 });
-        await ctx.db.patch(perm.args.runId, { withdrawnAt: Date.now() });
-    });
     await expect(
-        perm.t.query(
+        f.t.query(
             internal.execution.piControl.terminalCompletionAccepted,
-            permLease,
+            lease1,
         ),
     ).rejects.toThrow("not_authorized");
-    await perm.t.mutation(internal.execution.piControl.closeWorker, {
-        missionId: permMissionId,
+});
+
+test("permanent structured settlement failure stops at the first attempt on an authorized dossier", async () => {
+    const { f, missionId, lease1 } = await completedStructuredSettlement();
+    await f.t.mutation(internal.execution.piControl.closeWorker, {
+        missionId,
         expectedGeneration: 4,
-        writer: "perm-writer",
+        writer: "writer-a",
         error: "completion_correlation_invalid",
     });
-    expect(
-        await perm.t.run((ctx) => ctx.db.get(permLease.sessionId)),
-    ).toMatchObject({
+    expect(await f.t.run((ctx) => ctx.db.get(lease1.sessionId))).toMatchObject({
         settlementAttempts: 1,
         settlementFailureCode: "completion_correlation_invalid",
     });
     expect(
-        (await perm.t.run((ctx) => ctx.db.get(permMissionId)))?.piWakeToken,
+        (await f.t.run((ctx) => ctx.db.get(missionId)))?.piWakeToken,
     ).toBeUndefined();
-}, 30000);
+});
 
 test.each([
     "crash",

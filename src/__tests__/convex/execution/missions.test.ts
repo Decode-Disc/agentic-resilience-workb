@@ -1,5 +1,10 @@
 import { internal } from "@convex/_generated/api";
-import { afterEach, expect, test, vi } from "vitest";
+import schema from "@convex/schema";
+import type { EventId } from "@convex-dev/workflow";
+import { anyApi, type ApiFromModules } from "convex/server";
+import { v } from "convex/values";
+import { convexTest } from "convex-test";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 test("an active authorized run retains one mission for repeated start requests", async () => {
@@ -87,7 +92,21 @@ afterEach(() => vi.useRealTimers());
 
 test("terminal notifications survive an analyst pause, and are sent once without resuming research", async () => {
     vi.useFakeTimers();
-    const f = await seedInspectedEvidence();
+    const terminal = v.object({ missionId: v.id("agentMissions") });
+    const consumer = workflow.define({
+        args: {},
+        returns: terminal,
+        handler: (step) =>
+            step.awaitEvent({ name: "terminal", validator: terminal }),
+    });
+    const consumerRef = anyApi.terminalConsumer?.run as ApiFromModules<{
+        terminalConsumer: { run: typeof consumer };
+    }>["terminalConsumer"]["run"];
+    const t = convexTest(schema, {
+        ...import.meta.glob("/convex/**/*.ts"),
+        "/convex/terminalConsumer.ts": async () => ({ run: consumer }),
+    });
+    const f = await seedInspectedEvidence({}, t);
     workflowTest.register(f.t);
     const missionId = await f.t.mutation(internal.execution.missions.start, {
         runId: f.runId,
@@ -96,31 +115,34 @@ test("terminal notifications survive an analyst pause, and are sent once without
         requestKey: "notify-pause",
         expectedGeneration: 4,
     });
-    await f.t.run(async (ctx) => {
-        const workflowId = await workflow.start(
-            ctx,
-            internal.researchWorkflow.run,
-            { runId: f.runId, executionGeneration: 4 },
-        );
-        const eventId = await workflow.createEvent(ctx, {
-            name: "terminal",
-            workflowId,
-        });
+    const workflowId = await f.t.run(async (ctx) => {
+        const id = await workflow.start(ctx, consumerRef, {});
+        const waiting = await workflow.status(ctx, id);
+        assert(waiting.type === "inProgress");
+        expect(waiting.running).toHaveLength(1);
+        const event = waiting.running[0];
+        assert(event?.kind === "event" && event.eventId);
         await ctx.db.patch(missionId, {
             status: "completed",
-            completionEventId: eventId,
+            completionEventId: event.eventId as EventId,
         });
         await ctx.db.patch(f.runId, {
             executionStatus: "paused",
             pauseReason: "analyst",
             executionGeneration: 5,
         });
+        return id;
     });
     await f.t.mutation(internal.execution.handoffs.finishChild, { missionId });
     expect(await f.t.run((ctx) => ctx.db.get(missionId))).toMatchObject({
         completionNotified: true,
     });
     await f.t.mutation(internal.execution.handoffs.finishChild, { missionId });
+    await f.t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    expect(await f.t.run((ctx) => workflow.status(ctx, workflowId))).toEqual({
+        type: "completed",
+        result: { missionId },
+    });
     expect(await f.t.run((ctx) => ctx.db.get(f.runId))).toMatchObject({
         executionStatus: "paused",
         executionGeneration: 5,

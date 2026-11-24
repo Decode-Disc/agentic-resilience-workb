@@ -4,6 +4,7 @@ import { sha256Hex } from "@convex/domain/sourcePassages";
 import { workbenchDefinition } from "@convex/domain/workbenchAgent";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
 import { approvalRequestIdFromOperation } from "@convex/domain/workbenchContracts";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { agentToolSchemas } from "@convex/execution/agentDefinition";
 import { raiseApproval, readApprovalFacts } from "@convex/execution/approvals";
 import { buildMissionContext } from "@convex/execution/context";
@@ -31,10 +32,17 @@ afterEach(() => {
     vi.unstubAllEnvs();
 });
 
-async function seedFramedStartedWorkbench(messageText: string) {
+async function seedFramedStartedWorkbench(
+    messageText: string,
+    binding: "retained" | "current" = "retained",
+) {
     const { t, client, runId } = await seedWorkbench(
         false,
         nativePiFixtureRoute,
+        undefined,
+        undefined,
+        undefined,
+        binding === "current" ? null : undefined,
     );
     const queued = await t.run((ctx) =>
         ctx.db
@@ -586,9 +594,24 @@ test("Workbench facts list pending requests and grants", async () => {
     ]);
 });
 
-test("committed pause_research via request_approval adopts after checkpoint and resumes adopt across generation bumps without weakening stale fences", async () => {
+test.each([
+    "retained",
+    "current",
+] as const)("%s Workbench offers approval controls and adopts pause/checkpoint/resume across generation changes", async (binding) => {
     const { t, client, runId, messageId, active } =
-        await seedFramedStartedWorkbench("Pause research.");
+        await seedFramedStartedWorkbench("Pause research.", binding);
+    const mission = await t.run((ctx) => ctx.db.get(active.missionId));
+    assert(mission);
+    const context = await t.run((ctx) =>
+        buildMissionContext(ctx, active.missionId, 1),
+    );
+    assert(context.kind === "ready");
+    expect(
+        agentToolSchemas(
+            getAgentDefinition("workbench_v1", mission.definitionVersion),
+            JSON.parse(context.inputJson),
+        ),
+    ).toHaveProperty("request_approval");
 
     const pauseReqId = await t.mutation(internal.execution.operations.enqueue, {
         missionId: active.missionId,
@@ -667,18 +690,16 @@ test("committed pause_research via request_approval adopts after checkpoint and 
         executionStatus: "running",
         executionGeneration: 3,
     });
+});
 
-    // Stale fence: an enqueued request at generation 3 is refused if the run moves to generation 4 before dispatch.
-    const staleMessageId = await client.mutation(
-        api.execution.conversations.submit,
-        {
-            runId,
-            requestKey: "stale-msg",
-            text: "Could we pause?",
-            delivery: "steer",
-            turnId: active.turnId,
-        },
-    );
+test("an undispatched approval operation is refused after a later analyst checkpoint changes its generation", async () => {
+    const {
+        t,
+        client,
+        runId,
+        messageId: staleMessageId,
+        active,
+    } = await seedFramedStartedWorkbench("Could we pause?");
     const staleReqId = await t.mutation(internal.execution.operations.enqueue, {
         missionId: active.missionId,
         expectedGeneration: 1,
@@ -691,7 +712,7 @@ test("committed pause_research via request_approval adopts after checkpoint and 
     });
     await client.mutation(api.execution.researchControl.pause, {
         runId,
-        expectedGeneration: 3,
+        expectedGeneration: 1,
     });
     await t.mutation(internal.execution.researchControl.checkpoint, { runId });
     expect(

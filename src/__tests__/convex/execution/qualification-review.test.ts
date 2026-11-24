@@ -1105,7 +1105,7 @@ async function createDiagnosticReviewHarness(options: {
     return { t, lotId, lotRoot, template, stageOptions };
 }
 
-test("automated review retains sanitized dispatch, mid-stream SSE, and HTTP 5xx diagnostics while blocking redispatch", async () => {
+test("automated review persists sanitized dispatch failure without caching a response", async () => {
     const { lotRoot, template, stageOptions } =
         await createDiagnosticReviewHarness({
             fetchImpl: async () => {
@@ -1147,8 +1147,9 @@ test("automated review retains sanitized dispatch, mid-stream SSE, and HTTP 5xx 
             ),
         ),
     ).toBe(false);
+});
 
-    // Mid-stream SSE drop after 200 headers: retain partial SSE metadata without reasoning/secrets or response cache file.
+test("automated review retains sanitized mid-stream SSE diagnostics and blocks redispatch", async () => {
     let streamAttempts = 0;
     const streamDrop = await createDiagnosticReviewHarness({
         fetchImpl: async () => {
@@ -1237,8 +1238,9 @@ test("automated review retains sanitized dispatch, mid-stream SSE, and HTTP 5xx 
     // Re-running after unknown outcome must block redispatch without issuing another HTTP request.
     await runCampaignReviewStage(streamDrop.stageOptions);
     expect(streamAttempts).toBe(1);
+});
 
-    // HTTP 502 response retains httpStatus and sanitized providerMessage alongside unknown_dispatch_outcome.
+test("automated review retains HTTP 502 status without provider URLs or secrets", async () => {
     const badGateway = await createDiagnosticReviewHarness({
         fetchImpl: async () =>
             new Response(

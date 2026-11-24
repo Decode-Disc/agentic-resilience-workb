@@ -1,5 +1,5 @@
 import { api, internal } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import { executionError } from "@convex/execution/errors";
 import { recordContextObservation } from "@convex/execution/journal";
@@ -84,15 +84,28 @@ test.each([
     "consult_mission_state",
 ] as const)("a completed %s prepares the next response without an extra context-change instruction", async (operation) => {
     const requests: NativeWireRequest[] = [];
+    const sessionsBeforeReply: Array<Doc<"piSessions"> | null> = [];
     vi.stubEnv("OPENROUTER_API_KEY", "offline-fixture-only");
     vi.stubGlobal(
         "fetch",
         vi.fn<typeof fetch>(async (_url, init) => {
             requests.push(JSON.parse(String(init?.body)));
-            if (requests.length > 1)
+            if (requests.length > 1) {
+                assert(active);
+                sessionsBeforeReply.push(
+                    await f.t.run((ctx) =>
+                        ctx.db
+                            .query("piSessions")
+                            .withIndex("by_mission", (q) =>
+                                q.eq("missionId", active.missionId),
+                            )
+                            .unique(),
+                    ),
+                );
                 return response(
                     "The saved research program is ready for your review.",
                 );
+            }
             return toolResponse(
                 operation,
                 operation === "adjust_framing"
@@ -148,6 +161,37 @@ test.each([
     expect(state.framing?.revision).toBe(
         operation === "adjust_framing" ? 2 : 1,
     );
+    if (operation === "adjust_framing") {
+        const event = (await observations(f.t, f.runId)).find(
+            (row) =>
+                row.contextObservation?.key === `framing:${state.framing?._id}`,
+        );
+        assert(event?.nativeInputSequence !== undefined);
+        const prefix =
+            "Application observation (data, not an analyst message):\n";
+        const delivered = next.flatMap((message) =>
+            message.role === "user" && message.content?.startsWith(prefix)
+                ? [JSON.parse(message.content.slice(prefix.length))]
+                : [],
+        );
+        expect(delivered).toContainEqual(
+            expect.objectContaining({
+                topic: "framing",
+                historyReference: event._id,
+                sequence: event.nativeInputSequence,
+                value: expect.objectContaining({
+                    revision: 2,
+                    origin: "workbench",
+                    content: program(2),
+                }),
+            }),
+        );
+        expect(sessionsBeforeReply).toHaveLength(1);
+        expect(sessionsBeforeReply[0]?.observationSequence).toBe(
+            event.nativeInputSequence,
+        );
+        expect(sessionsBeforeReply[0]?.observationEntry).toBeGreaterThan(0);
+    }
     expect(state.operations).toEqual([
         expect.objectContaining({
             status: "completed",
@@ -1779,48 +1823,6 @@ test("Sources receives the confirmed source decision in its actual native reques
             errorCode: "invalid_output",
         }),
     ]);
-}, 30000);
-
-test("a framing effect produced by a native tool is delivered and acknowledged before the next model request", async () => {
-    const requests: Array<{ messages: unknown[] }> = [];
-    vi.stubEnv("OPENROUTER_API_KEY", "offline-fixture-only");
-    vi.stubGlobal(
-        "fetch",
-        vi.fn<typeof fetch>(async (_url, init) => {
-            requests.push(JSON.parse(String(init?.body)));
-            if (requests.length > 1)
-                return response(
-                    "The saved research program contains two questions.",
-                );
-            return new Response(
-                `data: ${JSON.stringify({ id: "save-through-native-tool", choices: [{ index: 0, delta: { role: "assistant", tool_calls: [{ index: 0, id: "save-framing", type: "function", function: { name: "adjust_framing", arguments: JSON.stringify({ content: program(2), eventBasis: { kind: "none" } }) } }] }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: "save-through-native-tool", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], usage: { prompt_tokens: 10, completion_tokens: 5 } })}\n\ndata: [DONE]\n\n`,
-                { headers: { "content-type": "text/event-stream" } },
-            );
-        }),
-    );
-    const f = await seedWorkbench(false, nativePiFixtureRoute);
-    await f.t.finishAllScheduledFunctions(
-        () => vi.advanceTimersByTime(10),
-        500,
-    );
-    expect(
-        (await f.client.query(api.framing.get, { runId: f.runId }))?.revision,
-    ).toBe(2);
-    expect(requests).toHaveLength(2);
-    expect(JSON.stringify(requests[1]?.messages)).toContain(
-        "Application observation",
-    );
-    const history = await f.client.query(
-        api.execution.conversations.listMessages,
-        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
-    expect(
-        history.page.some(
-            (message) =>
-                message.text ===
-                "The saved research program contains two questions.",
-        ),
-    ).toBe(true);
 }, 30000);
 
 test.each([

@@ -1207,7 +1207,7 @@ test("a correction refused by the shared model budget publishes the original wit
     ).toBe(1);
 });
 
-test("a residual closed-status conflict can still receive the configured final numeric assessment", async () => {
+test("a residual closed-status conflict queues host review instead of completing", async () => {
     const { t, missionId, draft } = await liveReviewFixture();
     const row = await draft("closed-conflict");
     const op = await t.mutation(internal.execution.operations.enqueue, {
@@ -1239,6 +1239,15 @@ test("a residual closed-status conflict can still receive the configured final n
             response,
         }),
     ).toMatchObject({ kind: "blocked", code: "pending_operations" });
+    const review = await latestReview(t, missionId);
+    assert(review?.requestId);
+    const requestId = review.requestId;
+    expect(await t.run((ctx) => ctx.db.get(requestId))).toMatchObject({
+        missionId,
+        actor: "system",
+        status: "pending",
+        input: { kind: "check_response_coherence" },
+    });
 });
 
 test("oversized saved operation facts cannot expand turn audit or strand publication", async () => {

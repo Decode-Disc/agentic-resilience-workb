@@ -1,8 +1,4 @@
-import {
-    type DateEvidence,
-    documentDates,
-    unambiguousDocumentTime,
-} from "@convex/domain/documentDates";
+import type { DateEvidence } from "@convex/domain/documentDates";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { MAX_NORMALIZED_ARTIFACT_BYTES } from "@convex/resourcePolicy";
 
@@ -84,16 +80,6 @@ export function extractHtmlPublicationEvidence(html: string): DateEvidence[] {
         }
     }
     return evidence;
-}
-
-/** Compatibility projection refuses conflicting explicit publication indications. */
-export function extractHtmlPublicationTime(html: string): number | undefined {
-    return unambiguousDocumentTime(
-        documentDates({
-            metadata: extractHtmlPublicationEvidence(html),
-            text: "",
-        }).publication,
-    );
 }
 
 export type NormalizedArtifact = {

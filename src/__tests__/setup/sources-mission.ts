@@ -3,6 +3,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
 import { sourceCaptureScopeKey } from "@convex/domain/sourceRetrievalPolicy";
 import { initializeSources } from "@convex/domain/sources";
+import { sourcesV5Definition as retainedSourcesDefinition } from "@convex/domain/sourcesAgent";
+import type { AgentDefinition } from "@convex/execution/agentDefinition";
 import { vi } from "vitest";
 import { seedInspectedEvidence } from "./source-preparation";
 
@@ -130,13 +132,23 @@ export function activateSourcesMission(envelope = sourcesTestEnvelope) {
     );
 }
 
-/** Real mission/capture fixtures share the public operation path; no provider is called. */
-export async function seedCapturedSources(options: { text?: string } = {}) {
+/** Retained-receipt fixtures share the real operation path; optional model output replaces only simulation and requires vi.restoreAllMocks() at teardown. */
+export async function seedCapturedSources(
+    options: {
+        text?: string;
+        modelResponse?: NonNullable<AgentDefinition["simulate"]>;
+    } = {},
+) {
     vi.stubEnv(
         "SOURCES_PREPARATION_WINDOW_MINUTES",
         String(SOURCES_TEST_WINDOW_MINUTES),
     );
-    const f = await seedInspectedEvidence(options);
+    const f = await seedInspectedEvidence({ text: options.text });
+    if (options.modelResponse) {
+        vi.spyOn(retainedSourcesDefinition, "simulate").mockImplementation(
+            options.modelResponse,
+        );
+    }
     const preparationId = await f.t.run(async (ctx) => {
         const run = await ctx.db.get(f.runId);
         if (!run?.sourcePreparationId)
@@ -166,12 +178,16 @@ export async function seedCapturedSources(options: { text?: string } = {}) {
     const missionId = await f.t.mutation(internal.execution.missions.start, {
         runId: f.runId,
         expectedGeneration: 4,
-        definitionId: "sources_v1",
+        definitionId: retainedSourcesDefinition.id,
         scope: { kind: "sources_v1", preparationId },
         requestKey: "sources-fixture",
     });
     // These fixtures supply retained sourceId/passageOrder receipts to existing callers.
-    await f.t.run((ctx) => ctx.db.patch(missionId, { definitionVersion: 5 }));
+    await f.t.run((ctx) =>
+        ctx.db.patch(missionId, {
+            definitionVersion: retainedSourcesDefinition.version,
+        }),
+    );
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
@@ -212,8 +228,10 @@ export async function seedCapturedSources(options: { text?: string } = {}) {
 }
 
 /** Adds an adopted native reading only for scenarios exercising native documentary controls. */
-export async function seedObservedSources() {
-    const f = await seedCapturedSources();
+export async function seedObservedSources(
+    options: Parameters<typeof seedCapturedSources>[0] = {},
+) {
+    const f = await seedCapturedSources(options);
     const nativeReadRequestId = await f.t.mutation(
         internal.execution.operations.enqueueNative,
         {

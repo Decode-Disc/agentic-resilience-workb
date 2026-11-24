@@ -1,5 +1,5 @@
-import { NATIVE_PROFILE_CATALOG } from "@convex/integrations/modelRouting";
 import { api, internal } from "@convex/_generated/api";
+import { NATIVE_PROFILE_CATALOG } from "@convex/integrations/modelRouting";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
@@ -51,6 +51,35 @@ test("a dossier selection changes future responses without changing an admitted 
         ? await t.run((ctx) => ctx.db.get(modelRevisionId))
         : null;
     expect(effective?.model).toBe("example/first");
+    await client.mutation(api.execution.conversations.stopResponse, {
+        runId,
+        turnId: active.turnId,
+    });
+    await client.mutation(api.execution.conversations.submit, {
+        runId,
+        requestKey: "use-second",
+        text: "Continue with the selected model.",
+        delivery: "queue",
+    });
+    await client.mutation(api.execution.conversations.resumeQueue, { runId });
+    const next = await t.mutation(internal.execution.conversations.startTurn, {
+        runId,
+        definitionId: "workbench_v1",
+        scope: { kind: "workbench_v1" },
+        simulation: false,
+    });
+    assert(next);
+    expect(
+        await t.query(internal.modelConfiguration.forMission, {
+            missionId: next.missionId,
+        }),
+    ).toMatchObject({ model: "example/second" });
+    expect(
+        (await t.run((ctx) => ctx.db.get(active.missionId)))?.modelRevisionId,
+    ).toBe(modelRevisionId);
+    expect(
+        await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+    ).toEqual([]);
 }, 30_000);
 
 test("an administrator's new default does not change a dossier created with the earlier default", async () => {
@@ -224,7 +253,7 @@ test("effort is persisted per dossier and pinned independently for each response
     ).toEqual([]);
 }, 30_000);
 
-test("a refreshed model cannot strand a response when the saved effort is no longer supported", async () => {
+test("a refreshed model blocks a new response without dispatch when its saved effort is no longer supported", async () => {
     const { t, client, runId } = await seedWorkbench();
     vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
     const route = {

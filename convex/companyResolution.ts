@@ -108,22 +108,14 @@ export async function searchCompaniesWithResolver(
     return dependencies.resolver.search(query);
 }
 
-/**
- * Revalidates an explicitly selected CIK and persists an expiring confirmation
- * token without reserving quota or starting durable work.
- *
- * When `resolveWebsite` is provided, the company snapshot is enriched with its
- * marketing `websiteUrl` (and `websiteUrlSource`) before persistence. The dep
- * is optional only for backward-compat with existing tests; the live
- * `preflight` action always wires it.
- */
+/** Revalidates the selected CIK and persists an expiring confirmation without reserving quota. Website enrichment is best-effort and cannot change the SEC identity. */
 export async function preflightCompanyWithResolver<PreflightId extends string>(
     args: { cik: string },
     dependencies: {
         resolver: SecCompanyResolver;
         now: () => number;
         persist: PersistPreflight<PreflightId>;
-        resolveWebsite?: (company: SecCompanyMatch) => Promise<{
+        resolveWebsite: (company: SecCompanyMatch) => Promise<{
             url: string;
             source: "sec_ir" | "exa" | "probe";
         } | null>;
@@ -139,9 +131,10 @@ export async function preflightCompanyWithResolver<PreflightId extends string>(
         throw new Error("Selected company identity could not be verified");
     }
 
-    const enriched = dependencies.resolveWebsite
-        ? await enrichCompanyWithWebsite(company, dependencies.resolveWebsite)
-        : company;
+    const enriched = await enrichCompanyWithWebsite(
+        company,
+        dependencies.resolveWebsite,
+    );
 
     return dependencies.persist({
         query: cik,

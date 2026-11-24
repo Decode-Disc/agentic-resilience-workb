@@ -3,9 +3,13 @@ import { lookup } from "node:dns/promises";
 import { api, internal } from "@convex/_generated/api";
 import type { ActionCtx } from "@convex/_generated/server";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
-import { modelOperationOutcome } from "@convex/execution/agentDefinition";
+import {
+    agentToolSchemas,
+    modelOperationOutcome,
+} from "@convex/execution/agentDefinition";
 import { buildMissionContext } from "@convex/execution/context";
 import { examineDocumentaryContributions } from "@convex/integrations/documentaryControl";
+import { piToolMetadata } from "@convex/integrations/modelInput";
 import { SOURCE_CONTEXT_PAGE_CHARACTERS } from "@convex/resourcePolicy";
 import { requestPinnedPublicSource } from "@convex/sourceActions";
 import { acquireDocument } from "@convex/sourceCaptureActions";
@@ -42,7 +46,7 @@ afterEach(() => {
 });
 
 async function documentaryTurn(
-    definitionVersion: 7 | 10 | 11 | 12 = 7,
+    definitionVersion: 7 | 10 | 11 | 12 | null = 7,
     excerpt = "Investigate insurer estimate review after the latest announcement.",
     requireContextRead = false,
 ) {
@@ -854,9 +858,14 @@ test("Workbench exposes each retained capture and issues references for each act
     });
 });
 
-test("acquires an adopted lead before Start and returns only committed capture metadata", async () => {
+test.each([
+    { binding: "retained reference", version: 10 as const },
+    { binding: "current", version: null },
+])("$binding Workbench hands committed captures to Sources after Start and preserves paused reading authority", async ({
+    version,
+}) => {
     const { t, client, runId, active, message, dispatch, calls } =
-        await documentaryTurn(10);
+        await documentaryTurn(version);
     const search = await dispatch("research-search", {
         kind: "search_public_context",
         messageId: message._id,
@@ -1133,9 +1142,10 @@ test("acquires an adopted lead before Start and returns only committed capture m
         scope: { kind: "sources_v1", preparationId },
         requestKey: "read-shared-capture",
     });
-    await t.run((ctx) =>
-        ctx.db.patch(sourcesMission, { definitionVersion: 7 }),
-    );
+    if (version !== null)
+        await t.run((ctx) =>
+            ctx.db.patch(sourcesMission, { definitionVersion: 7 }),
+        );
     const model = await t.run(async (ctx) => {
         const setting = await ctx.db
             .query("agentModelSettings")
@@ -1754,13 +1764,58 @@ test("an issued refresh gets a new version while the original capture remains re
     expect(requestPinned).toHaveBeenCalledTimes(2);
 });
 
-test("current Workbench method and recovery guidance use the same reference argument as its reading tool", async () => {
-    const { t, active } = await documentaryTurn(10);
+test.each([
+    { binding: "retained reference", version: 10 as const },
+    { binding: "current", version: null },
+])("$binding Workbench offers the reference argument named by its method and recovery guidance", async ({
+    version,
+}) => {
+    const { t, active, message, dispatch } = await documentaryTurn(version);
+    const search = await dispatch("discover-reading-contract", {
+        kind: "search_public_context",
+        messageId: message._id,
+        query: "validation rights",
+    });
+    assert(search.outcome.kind === "success");
+    const acquisition = await dispatch("acquire-reading-contract", {
+        kind: "acquire_document",
+        reference: JSON.parse(search.outcome.valueJson).candidates[0].reference,
+    });
+    const captured = await t.action(
+        internal.sourceCaptureActions.acquireDocument,
+        {
+            requestId: acquisition.id,
+            expectedGeneration: 1,
+        },
+    );
+    assert(captured?.kind === "success");
+    const document = JSON.parse(captured.valueJson);
     const context = await t.run((ctx) =>
         buildMissionContext(ctx, active.missionId, 1),
     );
     assert(context.kind === "ready");
-    const current = getAgentDefinition("workbench_v1", 10);
+    const current = getAgentDefinition("workbench_v1", version ?? undefined);
+    const reading = agentToolSchemas(
+        current,
+        JSON.parse(context.inputJson),
+    ).read_in_context;
+    assert(reading);
+    const input = (await piToolMetadata("read_in_context", reading)).parameters;
+    expect(input).toMatchObject({
+        type: "object",
+        properties: { reference: { type: "string" } },
+        required: expect.arrayContaining(["reference"]),
+    });
+    expect(input).not.toHaveProperty("properties.passageOrder");
+    const read = await dispatch("consume-offered-reading-contract", {
+        kind: "read_in_context",
+        reference: document.readingReference,
+    });
+    assert(read.outcome.kind === "success");
+    expect(JSON.parse(read.outcome.valueJson)).toMatchObject({
+        captureId: document.captureId,
+        text: expect.stringContaining("The insurer retains validation rights."),
+    });
     expect(current.instructions).toContain("issued reference");
     expect(current.instructions).not.toContain("passageOrder");
     const diagnostic = current.operationDiagnostic?.("passage_unavailable");

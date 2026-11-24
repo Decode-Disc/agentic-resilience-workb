@@ -68,11 +68,31 @@ for (const legacy of [false, true]) {
                     generationBackend: undefined,
                 }),
             );
-        await t.action(internal.execution.modelActions.invoke, {
+        const reply = await t.action(internal.execution.modelActions.invoke, {
             invocationId: begun.invocationId,
             expectedGeneration: args.executionGeneration,
         });
+        expect(reply.response).toEqual({
+            kind: "blocked",
+            code: "fixture_done",
+        });
         const invocation = await t.run((ctx) => ctx.db.get(begun.invocationId));
+        expect(JSON.parse(invocation?.receivedOutputJson ?? "null")).toEqual({
+            kind: "blocked",
+            code: "fixture_done",
+        });
+        expect(invocation?.receivedWhileAuthorized).toBe(true);
+        const providerCallId = invocation?.providerCallId;
+        const receipt = providerCallId
+            ? await t.run((ctx) => ctx.db.get(providerCallId))
+            : null;
+        expect(receipt).toMatchObject({
+            invocationId: begun.invocationId,
+            missionId,
+            status: "succeeded",
+            dispatchOutcome: "response_received",
+            usage: { inputTokens: 8, outputTokens: 4 },
+        });
         if (legacy)
             expect(invocation).not.toHaveProperty("generationStorageRef");
         else {

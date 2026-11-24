@@ -429,20 +429,81 @@ test.each([
     expect(bodies[3]?.tools).toEqual(bodies[2]?.tools);
 }, 30000);
 
-test("a structured mission receives an original-argument refusal and corrects without executing repaired JSON", async () => {
+test.each([
+    "invalid JSON",
+    "rebound call identity",
+] as const)("a structured mission does not execute an untrusted call with %s", async (fault) => {
     let captureId: string;
-    const original = '{"sourceId":';
-    const network = vi.fn(async () =>
-        network.mock.calls.length === 1
-            ? new Response(
-                  `data: ${JSON.stringify({ id: "invalid-tool", choices: [{ index: 0, delta: { role: "assistant", tool_calls: [{ index: 0, id: "bad-call", type: "function", function: { name: "read_in_context", arguments: original } }] }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: "invalid-tool", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] })}\n\ndata: [DONE]\n\n`,
-                  { headers: { "content-type": "text/event-stream" } },
-              )
-            : reply({ kind: "complete", captureIds: [captureId] }),
-    );
+    let original = '{"sourceId":';
+    const network = vi.fn(async () => {
+        if (network.mock.calls.length > 1)
+            return reply({ kind: "complete", captureIds: [captureId] });
+        const events = [
+            {
+                id: "invalid-tool",
+                choices: [
+                    {
+                        index: 0,
+                        delta: {
+                            role: "assistant",
+                            tool_calls: [
+                                {
+                                    index: 0,
+                                    id: "bad-call",
+                                    type: "function",
+                                    function: {
+                                        name: "read_in_context",
+                                        arguments: original,
+                                    },
+                                },
+                            ],
+                        },
+                        finish_reason: null,
+                    },
+                ],
+            },
+            ...(fault === "rebound call identity"
+                ? [
+                      {
+                          id: "invalid-tool",
+                          choices: [
+                              {
+                                  index: 0,
+                                  delta: {
+                                      tool_calls: [
+                                          {
+                                              index: 0,
+                                              id: "rebound-call",
+                                              function: { arguments: "" },
+                                          },
+                                      ],
+                                  },
+                                  finish_reason: null,
+                              },
+                          ],
+                      },
+                  ]
+                : []),
+            {
+                id: "invalid-tool",
+                choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+            },
+        ];
+        return new Response(
+            `${events
+                .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+                .join("")}data: [DONE]\n\n`,
+            { headers: { "content-type": "text/event-stream" } },
+        );
+    });
     vi.stubGlobal("fetch", network);
     const f = await fixture();
     captureId = f.captureId;
+    if (fault === "rebound call identity")
+        original = JSON.stringify({
+            sourceId: f.args.sourceId,
+            passageOrder: 0,
+        });
     const existing = new Set(
         (
             await f.t.run((ctx) =>
@@ -467,23 +528,40 @@ test("a structured mission receives an original-argument refusal and corrects wi
             .collect(),
         receipts: await ctx.db.query("providerCalls").collect(),
     }));
-    expect(result.mission?.status).toBe("completed");
-    expect(result.requests.filter((r) => r.input.kind === "invalid")).toEqual([
-        expect.objectContaining({
-            input: expect.objectContaining({
-                kind: "invalid",
-                inputJson: original,
+    if (fault === "rebound call identity") {
+        expect(result.mission).toMatchObject({
+            status: "blocked",
+            blockCode: "invalid_output",
+        });
+        expect(result.requests.filter((r) => !existing.has(r._id))).toEqual([]);
+        expect(result.receipts).toEqual([
+            expect.objectContaining({
+                status: "failed",
+                errorCode: "invalid_output",
             }),
-            outcome: expect.objectContaining({ kind: "refused" }),
-        }),
-    ]);
+        ]);
+        expect(network).toHaveBeenCalledTimes(1);
+    } else {
+        expect(result.mission?.status).toBe("completed");
+        expect(
+            result.requests.filter((r) => r.input.kind === "invalid"),
+        ).toEqual([
+            expect.objectContaining({
+                input: expect.objectContaining({
+                    kind: "invalid",
+                    inputJson: original,
+                }),
+                outcome: expect.objectContaining({ kind: "refused" }),
+            }),
+        ]);
+        expect(result.receipts).toHaveLength(2);
+        expect(network).toHaveBeenCalledTimes(2);
+    }
     expect(
         result.requests.some(
             (r) => !existing.has(r._id) && r.input.kind === "read_in_context",
         ),
     ).toBe(false);
-    expect(result.receipts).toHaveLength(2);
-    expect(network).toHaveBeenCalledTimes(2);
 }, 30000);
 
 test.each([
@@ -2540,47 +2618,42 @@ test("retained v3 does not expose submit_completion and refuses calling it witho
     ).toBe("operations");
 }, 30000);
 
-test("native_tool completion handles missing call, malformed original wire JSON, schema refusal, invalid callId, missing wire args, declaration conflicts and output bounds", async () => {
+test("definition binding refuses conflicting completion capabilities and reserved operation names", async () => {
     const { bindAgentDefinition, getAgentDefinition } = await import(
         "@convex/execution/agentCatalog"
     );
-    const {
-        MAX_MODEL_OPERATION_OUTPUT_BYTES,
-        renderCompletionToolOutcome,
-        SUBMIT_COMPLETION_TOOL,
-    } = await import("@convex/execution/agentDefinition");
-    const { invocationStructureError } = await import(
-        "@convex/execution/executionProtocol"
+    const { SUBMIT_COMPLETION_TOOL } = await import(
+        "@convex/execution/agentDefinition"
     );
-    const { workbenchV12Definition } = await import(
-        "@convex/domain/workbenchAgent"
+    const textDefinition = getAgentDefinition("workbench_v1");
+    const structuredDefinition = getAgentDefinition(
+        "saved_material_inspection_v1",
+        4,
     );
-    const { documentaryInspectionV4Definition } = await import(
-        "@convex/domain/savedMaterialInspection"
-    );
-
-    // Contradictory capability and reserved operation name collisions are rejected at binding time.
     expect(() =>
         bindAgentDefinition({
-            ...workbenchV12Definition,
+            ...textDefinition,
+            textCompletion: (text) => ({ kind: "complete", text }),
             completionTransport: "native_tool",
         }),
     ).toThrow(/definition_contract_invalid/);
-    const existingOp = Object.values(
-        documentaryInspectionV4Definition.operations,
-    )[0];
+    const existingOp = Object.values(structuredDefinition.operations)[0];
     assert(existingOp);
     expect(() =>
         bindAgentDefinition({
-            ...documentaryInspectionV4Definition,
+            ...structuredDefinition,
             operations: {
-                ...documentaryInspectionV4Definition.operations,
+                ...structuredDefinition.operations,
                 [SUBMIT_COMPLETION_TOOL]: existingOp,
             },
         }),
     ).toThrow(/operation_definition_conflict/);
+});
 
-    // Invalid call identity is rejected by shared structure validation.
+test("native completion refuses missing and oversized call identities", async () => {
+    const { invocationStructureError } = await import(
+        "@convex/execution/executionProtocol"
+    );
     expect(
         invocationStructureError(
             {
@@ -2599,8 +2672,11 @@ test("native_tool completion handles missing call, malformed original wire JSON,
             true,
         ),
     ).toBe("invalid_tool_correlation");
+});
 
-    // Shared output handling enforces MAX_MODEL_OPERATION_OUTPUT_BYTES on completion tool output.
+test("completion output remains bounded while accepted receipts stay intact", async () => {
+    const { MAX_MODEL_OPERATION_OUTPUT_BYTES, renderCompletionToolOutcome } =
+        await import("@convex/execution/agentDefinition");
     expect(() =>
         renderCompletionToolOutcome({
             kind: "refused",
@@ -2613,8 +2689,12 @@ test("native_tool completion handles missing call, malformed original wire JSON,
     ).toEqual({
         kind: "accepted",
     });
+});
 
-    // End-to-end native_tool loop: text-only (missing call) -> malformed original wire JSON -> schema refusal -> valid sole call.
+test("native completion corrects a missing call, malformed wire JSON and schema refusal before accepting one call", async () => {
+    const { getAgentDefinition } = await import(
+        "@convex/execution/agentCatalog"
+    );
     vi.useFakeTimers();
     vi.stubEnv("OPENROUTER_API_KEY", "test-only-key");
     const f = await seedInspectedEvidence();

@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import type { Id } from "@convex/_generated/dataModel";
 import { clearShowcaseManifests } from "@convex/domain/showcaseManifest";
-import { reproducePassage } from "@convex/domain/sourcePassages";
+import { preparePassageReproduction } from "@convex/domain/sourcePassages";
 import { executeEvidenceMatrixSeedPipeline } from "@convex/e2eFixtures";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
@@ -286,11 +286,9 @@ test("showcase scenario runs the real Phase 5 workflow to evidence_ready with pe
             )
             .take(10);
         expect(passages).toHaveLength(4);
+        const reproduce = preparePassageReproduction(artifact);
         for (const passage of passages) {
-            const reproduced = await reproducePassage(
-                artifact,
-                passage.locator,
-            );
+            const reproduced = reproduce(passage.locator);
             expect(reproduced).toBe(passage.exactQuotation);
         }
 

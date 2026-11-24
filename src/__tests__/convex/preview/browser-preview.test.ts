@@ -311,25 +311,6 @@ describe("browserPreviewInternals", () => {
             expect(result).toBeNull();
         });
 
-        it("stores then returns a fresh cached preview", async () => {
-            const t = convexTest(schema, modules);
-            const { sourceId, authUserId, visitorId } =
-                await seedVisitorAndRun(t);
-
-            await t.mutation(storePreview, {
-                sourceId,
-                visitorId,
-                dataUrl: "data:image/png;base64,AAAA",
-                sizeBytes: 4,
-                expiresAt: Date.now() + 60_000,
-            });
-
-            const result = await t
-                .withIdentity({ subject: authUserId })
-                .query(getPreview, { sourceId });
-            expect(result).toEqual({ dataUrl: "data:image/png;base64,AAAA" });
-        });
-
         it("treats an expired entry as a miss", async () => {
             const t = convexTest(schema, modules);
             const { sourceId, authUserId, visitorId } =

@@ -1,37 +1,150 @@
+import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
+import agentTest from "@convex-dev/agent/test";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
+import {
+    createAdmittedPreflight,
+    seedHistoricalResearch,
+} from "@/__tests__/setup/research-launch";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 import workflowTest from "../workflows/workflow-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
 const originalFetch = globalThis.fetch;
 const originalSecUserAgent = process.env.SEC_USER_AGENT;
+const researchProgram = {
+    scope: "Auto claims coordination",
+    questions: [
+        {
+            id: "coordination",
+            text: "Who controls claims coordination?",
+            shortLabel: "Coordination",
+            rationale: "Distinguish orchestration from supplying modules.",
+        },
+    ],
+};
 
-test("invalid preparation concurrency rejects launch before reserving quota or calling providers", async () => {
+test.each([
+    "public",
+    "internal",
+] as const)("%s admission refuses fresh legacy research without consuming or scheduling work", async (boundary) => {
+    vi.stubEnv("SOURCES_MISSION_ENABLED", "false");
+    vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "false");
+    try {
+        const t = convexTest(schema, modules);
+        rateLimiterTest.register(t);
+        workflowTest.register(t);
+        const { userId, preflightId } = await createAdmittedPreflight(t);
+        const analyst = t.withIdentity({ subject: `${userId}|retired-launch` });
+        const snapshot = () =>
+            t.run(async (ctx) => ({
+                runs: await ctx.db.query("researchRuns").collect(),
+                revisions: await ctx.db.query("corpusRevisions").collect(),
+                preflight: await ctx.db.get(preflightId),
+                visitors: await ctx.db.query("visitors").collect(),
+                events: await ctx.db.query("runEvents").collect(),
+                audit: await ctx.db.query("auditEvents").collect(),
+                calls: await ctx.db.query("providerCalls").collect(),
+                scheduled: await ctx.db.system
+                    .query("_scheduled_functions")
+                    .collect(),
+            }));
+        const before = await snapshot();
+        const args = {
+            preflightId,
+            idempotencyKey: "retired-launch",
+            coveragePreset: "balanced" as const,
+        };
+
+        await expect(
+            boundary === "public"
+                ? analyst.action(api.researchLaunch.confirmAndStart, args)
+                : analyst.mutation(
+                      internal.researchLaunch.confirmAndStartReserved,
+                      { ...args, framingOnly: false },
+                  ),
+        ).rejects.toMatchObject({ data: { code: "framing_required" } });
+
+        expect(await snapshot()).toEqual(before);
+    } finally {
+        vi.unstubAllEnvs();
+    }
+});
+
+test.each([
+    "framed",
+    "historical",
+] as const)("refuses replaying a %s dossier through the other launch path", async (mode) => {
+    const t = convexTest(schema, modules);
+    agentTest.register(t);
+    workflowTest.register(t);
+    const { userId, preflightId } = await createAdmittedPreflight(t);
+    const analyst = t.withIdentity({ subject: userId });
+    const args = {
+        preflightId,
+        idempotencyKey: "mode-specific-replay",
+        coveragePreset: "balanced" as const,
+    };
+    if (mode === "framed")
+        await analyst.mutation(api.framing.confirmCompany, args);
+    else await seedHistoricalResearch(t, args);
+    const snapshot = () =>
+        t.run(async (ctx) => ({
+            runs: await ctx.db.query("researchRuns").collect(),
+            visitors: await ctx.db.query("visitors").collect(),
+            framing: await ctx.db.query("framingRevisions").collect(),
+            events: await ctx.db.query("runEvents").collect(),
+            scheduled: await ctx.db.system
+                .query("_scheduled_functions")
+                .collect(),
+        }));
+    const before = await snapshot();
+    await expect(
+        mode === "framed"
+            ? analyst.action(api.researchLaunch.confirmAndStart, args)
+            : analyst.mutation(api.framing.confirmCompany, args),
+    ).rejects.toThrow("Idempotency key belongs to another company preflight");
+    expect(await snapshot()).toEqual(before);
+});
+
+test("invalid preparation concurrency rejects explicit research start before reserving quota or calling providers", async () => {
+    activateSourcesMission();
     vi.stubEnv("SOURCE_QUALIFICATION_ENABLED", "true");
     vi.stubEnv("SOURCE_PREPARATION_MAX_CONCURRENCY", "0");
     try {
         const t = convexTest(schema, modules);
         workflowTest.register(t);
         const { userId, preflightId } = await createAdmittedPreflight(t);
+        agentTest.register(t);
+        const analyst = t.withIdentity({ subject: userId });
+        const { runId } = await analyst.mutation(api.framing.confirmCompany, {
+            preflightId,
+            idempotencyKey: "invalid-concurrency",
+            coveragePreset: "balanced",
+        });
+        const revision = await analyst.mutation(api.framing.save, {
+            runId,
+            expectedRevision: 1,
+            requestKey: "prepare-start",
+            content: researchProgram,
+        });
+        const before = await t.run((ctx) => ctx.db.get(runId));
         const request = vi.fn<typeof fetch>(async () => {
             throw new Error("Unexpected provider call");
         });
         globalThis.fetch = request;
         await expect(
-            t.withIdentity({ subject: userId }).action(confirmAndStart, {
-                preflightId,
-                idempotencyKey: "invalid-concurrency",
-                coveragePreset: "balanced",
+            analyst.mutation(api.framing.startResearch, {
+                runId,
+                expectedRevision: revision,
+                requestKey: "start-invalid-concurrency",
             }),
         ).rejects.toThrow("preparation_configuration_invalid");
-        expect(
-            await t.run((ctx) => ctx.db.query("researchRuns").take(1)),
-        ).toEqual([]);
+        expect(await t.run((ctx) => ctx.db.get(runId))).toEqual(before);
         expect(
             await t.run((ctx) => ctx.db.query("visitors").first()),
         ).toMatchObject({ analysesReserved: 0 });
@@ -53,31 +166,9 @@ afterEach(() => {
         process.env.SEC_USER_AGENT = originalSecUserAgent;
     }
     vi.useRealTimers();
+    vi.unstubAllEnvs();
 });
-const confirmAndStart = makeFunctionReference<
-    "action",
-    {
-        preflightId: Id<"companyPreflights">;
-        idempotencyKey: string;
-        coveragePreset:
-            | "balanced"
-            | "first_party_depth"
-            | "independent_scrutiny";
-        researchAngle?: string;
-        manualSourcePreparationIds?: Array<Id<"manualSourcePreparations">>;
-    },
-    { runId: Id<"researchRuns">; remainingAnalyses: number }
->("researchLaunch:confirmAndStart");
-const confirmAndStartReserved = makeFunctionReference<
-    "mutation",
-    {
-        preflightId: Id<"companyPreflights">;
-        idempotencyKey: string;
-        coveragePreset: "balanced";
-        manualSourcePreparationIds: Array<Id<"manualSourcePreparations">>;
-    },
-    { runId: Id<"researchRuns">; remainingAnalyses: number }
->("researchLaunch:confirmAndStartReserved");
+const confirmAndStart = api.researchLaunch.confirmAndStart;
 const getRun = makeFunctionReference<
     "query",
     { runId: Id<"researchRuns"> },
@@ -121,19 +212,25 @@ const decideSufficiency = makeFunctionReference<
     { accepted: boolean }
 >("evidenceSufficiency:decide");
 
-test("confirms a preflight and starts workflow version 2 once", async () => {
+test("replays a historical workflow without reserving or scheduling it again", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({ subject: `${userId}|launch-session` });
 
-    const first = await analyst.action(confirmAndStart, {
+    const first = await seedHistoricalResearch(t, {
         preflightId,
         idempotencyKey: "launch-cccs",
         coveragePreset: "balanced",
         researchAngle: "Focus on claims workflow control.",
     });
+    const beforeReplay = await t.run(async (ctx) => ({
+        run: await ctx.db.get(first.runId),
+        visitor: await ctx.db.query("visitors").first(),
+        events: await ctx.db.query("runEvents").collect(),
+        scheduled: await ctx.db.system.query("_scheduled_functions").collect(),
+    }));
     const replay = await analyst.action(confirmAndStart, {
         preflightId,
         idempotencyKey: "launch-cccs",
@@ -141,7 +238,17 @@ test("confirms a preflight and starts workflow version 2 once", async () => {
         researchAngle: "Focus on claims workflow control.",
     });
 
-    expect(replay).toEqual(first);
+    expect(replay).toEqual({ runId: first.runId, remainingAnalyses: 2 });
+    expect(
+        await t.run(async (ctx) => ({
+            run: await ctx.db.get(first.runId),
+            visitor: await ctx.db.query("visitors").first(),
+            events: await ctx.db.query("runEvents").collect(),
+            scheduled: await ctx.db.system
+                .query("_scheduled_functions")
+                .collect(),
+        })),
+    ).toEqual(beforeReplay);
     await expect(
         t.query(getRun, { runId: first.runId }),
     ).resolves.toMatchObject({
@@ -206,7 +313,8 @@ test("persists validated launch references as pending sources in corpus revision
         }),
     );
 
-    const { runId } = await analyst.mutation(confirmAndStartReserved, {
+    agentTest.register(t);
+    const { runId } = await analyst.mutation(api.framing.confirmCompany, {
         preflightId,
         idempotencyKey: "launch-with-public-reference",
         coveragePreset: "balanced",
@@ -295,8 +403,9 @@ test("replays a launch after its preparation receipt was consumed", async () => 
         manualSourcePreparationIds: [preparationId],
     };
 
-    const first = await analyst.action(confirmAndStart, args);
-    const replay = await analyst.action(confirmAndStart, args);
+    agentTest.register(t);
+    const first = await analyst.mutation(api.framing.confirmCompany, args);
+    const replay = await analyst.mutation(api.framing.confirmCompany, args);
 
     expect(replay).toEqual(first);
     await expect(
@@ -317,7 +426,7 @@ test("replays a launch after its preparation receipt was consumed", async () => 
                 canonicalUrl: "https://example.com/replay-report",
             }),
         ],
-        visitor: { analysesReserved: 1 },
+        visitor: { analysesReserved: 0 },
     });
 });
 
@@ -344,7 +453,7 @@ test("rejects an expired launch preparation without creating a run or reserving 
     });
 
     await expect(
-        analyst.action(confirmAndStart, {
+        analyst.mutation(api.framing.confirmCompany, {
             preflightId,
             idempotencyKey: "launch-with-expired-reference",
             coveragePreset: "balanced",
@@ -400,7 +509,7 @@ test("rejects a foreign launch preparation without creating a run or reserving q
     });
 
     await expect(
-        analyst.action(confirmAndStart, {
+        analyst.mutation(api.framing.confirmCompany, {
             preflightId,
             idempotencyKey: "launch-with-foreign-reference",
             coveragePreset: "balanced",
@@ -467,13 +576,15 @@ test("adopts a pre-admission preflight for the admitted session", async () => {
             analysesReserved: 0,
             admittedAt: 1,
         });
+        await ctx.db.patch(invitationId, { claimedByVisitorId: visitorId });
         return { userId, visitorId, preflightId };
     });
     const admittedSession = t.withIdentity({
         subject: `${userId}|pre-admission-session`,
     });
 
-    const result = await admittedSession.action(confirmAndStart, {
+    agentTest.register(t);
+    const result = await admittedSession.mutation(api.framing.confirmCompany, {
         preflightId,
         idempotencyKey: "launch-after-admission",
         coveragePreset: "balanced",
@@ -493,8 +604,10 @@ test("adopts a pre-admission preflight for the admitted session", async () => {
     });
 });
 
-test("allows exactly one running workflow per visitor", async () => {
+test("explicit research start atomically admits one workflow per visitor and permits another after pause", async () => {
+    activateSourcesMission();
     const t = convexTest(schema, modules);
+    agentTest.register(t);
     rateLimiterTest.register(t);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
@@ -515,33 +628,42 @@ test("allows exactly one running workflow per visitor", async () => {
     });
     const analyst = t.withIdentity({ subject: `${userId}|concurrent-session` });
 
-    const starts = await Promise.allSettled([
-        analyst.action(confirmAndStart, {
-            preflightId,
-            idempotencyKey: "concurrent-a",
+    const programs = [];
+    for (const [index, candidate] of [
+        preflightId,
+        secondPreflightId,
+    ].entries()) {
+        const { runId } = await analyst.mutation(api.framing.confirmCompany, {
+            preflightId: candidate,
+            idempotencyKey: `concurrent-${index}`,
             coveragePreset: "balanced",
-        }),
-        analyst.action(confirmAndStart, {
-            preflightId: secondPreflightId,
-            idempotencyKey: "concurrent-b",
-            coveragePreset: "balanced",
-        }),
-    ]);
-
-    const fulfilled = starts.filter(
-        (
-            result,
-        ): result is PromiseFulfilledResult<{
-            runId: Id<"researchRuns">;
-            remainingAnalyses: number;
-        }> => result.status === "fulfilled",
+        });
+        const expectedRevision = await analyst.mutation(api.framing.save, {
+            runId,
+            expectedRevision: 1,
+            requestKey: "prepare-start",
+            content: researchProgram,
+        });
+        programs.push({
+            runId,
+            expectedRevision,
+            requestKey: `start-${index}`,
+        });
+    }
+    const starts = await Promise.allSettled(
+        programs.map((args) =>
+            analyst.mutation(api.framing.startResearch, args),
+        ),
     );
+    const fulfilled = starts.filter((result) => result.status === "fulfilled");
     expect(fulfilled).toHaveLength(1);
-    expect(starts.filter(({ status }) => status === "rejected")).toHaveLength(
-        1,
-    );
-
-    const runningRunId = fulfilled[0]?.value.runId;
+    const rejected = starts.filter((result) => result.status === "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]?.reason.message).toContain("execution_slot_unavailable");
+    expect(
+        await t.run((ctx) => ctx.db.query("visitors").first()),
+    ).toMatchObject({ analysesReserved: 1 });
+    const runningRunId = fulfilled[0]?.value;
     if (!runningRunId) {
         throw new Error("Expected one running research run");
     }
@@ -560,13 +682,18 @@ test("allows exactly one running workflow per visitor", async () => {
         stepKey: "evidence_sufficiency_review",
     });
 
+    const waiting = programs.find(({ runId }) => runId !== runningRunId);
+    if (!waiting) throw new Error("Expected a waiting research program");
+    expect(await t.run((ctx) => ctx.db.get(waiting.runId))).toMatchObject({
+        lifecycleState: "framing",
+        executionStatus: "idle",
+    });
     await expect(
-        analyst.action(confirmAndStart, {
-            preflightId: secondPreflightId,
-            idempotencyKey: "concurrent-b-retry",
-            coveragePreset: "balanced",
-        }),
-    ).resolves.toMatchObject({ remainingAnalyses: 1 });
+        analyst.mutation(api.framing.startResearch, waiting),
+    ).resolves.toBe(waiting.runId);
+    expect(
+        await t.run((ctx) => ctx.db.query("visitors").first()),
+    ).toMatchObject({ analysesReserved: 2 });
 });
 
 test("revalidates the confirmed CIK before evidence checks", async () => {
@@ -589,10 +716,9 @@ test("revalidates the confirmed CIK before evidence checks", async () => {
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     workflowTest.register(t);
-    const { userId, preflightId } = await createAdmittedPreflight(t);
-    const analyst = t.withIdentity({ subject: `${userId}|revalidate-session` });
+    const { preflightId } = await createAdmittedPreflight(t);
 
-    const { runId } = await analyst.action(confirmAndStart, {
+    const { runId } = await seedHistoricalResearch(t, {
         preflightId,
         idempotencyKey: "revalidate-cccs",
         coveragePreset: "balanced",
@@ -657,7 +783,7 @@ test("accepts mutable SEC metadata for the same confirmed CIK", async () => {
         subject: `${userId}|mutable-metadata-session`,
     });
 
-    const { runId } = await analyst.action(confirmAndStart, {
+    const { runId } = await seedHistoricalResearch(t, {
         preflightId,
         idempotencyKey: "revalidate-mutable-metadata",
         coveragePreset: "balanced",
@@ -702,7 +828,7 @@ test("pauses when revalidation finds no public evidence", async () => {
         subject: `${userId}|insufficient-session`,
     });
 
-    const { runId } = await analyst.action(confirmAndStart, {
+    const { runId } = await seedHistoricalResearch(t, {
         preflightId,
         idempotencyKey: "insufficient-cccs",
         coveragePreset: "balanced",
@@ -753,7 +879,7 @@ test("requires a justified force-continuation decision", async () => {
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({ subject: `${userId}|force-session` });
-    const { runId } = await analyst.action(confirmAndStart, {
+    const { runId } = await seedHistoricalResearch(t, {
         preflightId,
         idempotencyKey: "force-cccs",
         coveragePreset: "balanced",

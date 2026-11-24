@@ -69,13 +69,39 @@ test.each(
         reason: "response_invalid",
     });
 });
-test("an oversized or interrupted response is not retried", async () => {
+test("an oversized response is rejected without retry", async () => {
     const f = vi
         .fn()
         .mockResolvedValue(new Response("a".repeat(1024 * 1024 + 1)));
     vi.stubGlobal("fetch", f);
-    expect(await embedSourceTexts(configured)).toMatchObject({
+    expect(await embedSourceTexts(configured)).toEqual({
         status: "unavailable",
+        reason: "response_invalid",
     });
     expect(f).toHaveBeenCalledOnce();
+});
+
+test("an interrupted response releases its reader without returning vectors or retrying", async () => {
+    let reads = 0;
+    const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+            if (reads++ === 0) {
+                controller.enqueue(
+                    new TextEncoder().encode('{"success":true,"result":'),
+                );
+            } else {
+                controller.error(
+                    new TypeError("Connection closed during body"),
+                );
+            }
+        },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(body));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await embedSourceTexts(configured)).toEqual({
+        status: "unavailable",
+        reason: "transport_unavailable",
+    });
+    expect(body.locked).toBe(false);
+    expect(fetchMock).toHaveBeenCalledOnce();
 });

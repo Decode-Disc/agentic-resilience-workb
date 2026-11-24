@@ -731,10 +731,29 @@ test("baseline profile carry-forward retains unchanged historical keys only unde
     ).rejects.toThrow("model_input_profile_unavailable");
 });
 
-test("V8 routing imports only catalogue metadata", () => {
-    const routing = readFileSync("convex/integrations/modelRouting.ts", "utf8");
-    expect(routing).toContain("./piInputProfileCatalog.json");
-    expect(routing).not.toContain("./piInputProfiles.json");
+test("V8 routing's resolved module graph excludes full calibration data", async () => {
+    const { createServer } = await import("vite");
+    const server = await createServer({
+        configFile: false,
+        resolve: { tsconfigPaths: true },
+        server: { middlewareMode: true, watch: null, hmr: false },
+        appType: "custom",
+    });
+    try {
+        await server.ssrLoadModule("/convex/integrations/modelRouting.ts");
+        const ids = [
+            ...server.environments.ssr.moduleGraph.idToModuleMap.keys(),
+        ];
+        expect(ids.some((id) => id.endsWith("/modelRouting.ts"))).toBe(true);
+        expect(
+            ids.some((id) => id.endsWith("/piInputProfileCatalog.json")),
+        ).toBe(true);
+        expect(ids.some((id) => id.endsWith("/piInputProfiles.json"))).toBe(
+            false,
+        );
+    } finally {
+        await server.close();
+    }
 });
 
 test("offline input sizing prefers active profiles and retains historical calibration fallback", async () => {
@@ -794,14 +813,10 @@ test("native analyst-input sizing subtracts the selected completion transport en
             profileKey: "fixture:transport",
         },
     };
-    const bytes = (value: string) => new TextEncoder().encode(value).length;
-    const expected =
-        1000 +
-        bytes(JSON.stringify(prompt)) -
-        2 +
-        bytes(JSON.stringify(requiredAnalystInput(prompt))) -
-        bytes(JSON.stringify(piMissionInput("native_tool")));
-    expect(await agentInputByteLength(input, async () => 1000)).toBe(expected);
+    // Independent UTF-8 example: quoted snapshot 74 bytes (minus its 2 outer
+    // quotes), quoted "évidence" 11 bytes, quoted native completion envelope 123.
+    // The 1000-byte measured baseline therefore becomes 1000 + 72 + 11 - 123.
+    expect(await agentInputByteLength(input, async () => 1000)).toBe(960);
 });
 
 test("profile regeneration retains previously active keys beside older retained keys and rejects conflicting history", () => {

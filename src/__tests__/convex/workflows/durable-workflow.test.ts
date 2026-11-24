@@ -1,5 +1,6 @@
 import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
+import { seedHistoricalResearch } from "@/__tests__/setup/research-launch";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -11,15 +12,7 @@ const reserve = makeFunctionReference<
     { idempotencyKey: string },
     { runId: Id<"researchRuns">; remainingAnalyses: number }
 >("researchRuns:reserve");
-const confirmAndStart = makeFunctionReference<
-    "action",
-    {
-        preflightId: Id<"companyPreflights">;
-        idempotencyKey: string;
-        coveragePreset: "balanced";
-    },
-    { runId: Id<"researchRuns">; remainingAnalyses: number }
->("researchLaunch:confirmAndStart");
+
 const cancelRun = makeFunctionReference<
     "mutation",
     { runId: Id<"researchRuns"> },
@@ -103,7 +96,7 @@ test("cancellation of a confirmed workflow is terminal and idempotent", async ()
         });
     });
     const analyst = t.withIdentity({ subject: `${userId}|cancel` });
-    const { runId } = await analyst.action(confirmAndStart, {
+    const { runId } = await seedHistoricalResearch(t, {
         preflightId,
         idempotencyKey: "cancel-confirmed",
         coveragePreset: "balanced",

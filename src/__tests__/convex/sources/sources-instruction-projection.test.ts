@@ -3,7 +3,10 @@ import { getDocumentSize } from "convex/values";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+});
 
 test("many instructions share a preparation read and keep the authenticated snapshot within transaction limits", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -119,5 +122,20 @@ test("many instructions share a preparation read and keep the authenticated snap
             { transactionLimits: { bytesRead: 16 * 1024 * 1024 } },
         ),
     );
-    expect(snapshot).toBeTruthy();
+    expect(snapshot.run._id).toBe(f.runId);
+    expect(snapshot.instructions).toEqual(
+        instructions
+            .slice(-20)
+            .reverse()
+            .map((instruction) => ({
+                id: instruction._id,
+                need: instruction.interpretedNeed,
+                status: instruction.status,
+                outcome: instruction.outcome,
+            })),
+    );
+    expect(snapshot.preparation?._id).toBe(f.preparationId);
+    expect(snapshot.preparation?.sourcesMission?.needs).toEqual(
+        preparation.sourcesMission.needs,
+    );
 });

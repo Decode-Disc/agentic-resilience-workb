@@ -32,8 +32,4 @@ describe("validateCoverImageUrl", () => {
     ])("rejects unsafe URL %s", (url) => {
         expect(validateCoverImageUrl(url)).toBeNull();
     });
-
-    test("returns null for a URL with an empty hostname", () => {
-        expect(validateCoverImageUrl("https://example.com/")).not.toBeNull();
-    });
 });

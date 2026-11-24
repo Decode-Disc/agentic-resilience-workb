@@ -9,8 +9,8 @@ test("native profile identity changes with the configured instruction bytes", as
         nativeConversation: true,
     };
     const first = "A";
-    const second = "A much longer changed instruction";
-    expect(new TextEncoder().encode(first).length).not.toBe(
+    const second = "B";
+    expect(new TextEncoder().encode(first).length).toBe(
         new TextEncoder().encode(second).length,
     );
     const nativeFirst = await piInputProfileKey({

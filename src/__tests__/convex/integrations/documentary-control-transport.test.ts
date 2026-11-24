@@ -23,6 +23,14 @@ const finding = {
 };
 const input = { contributions: [contribution], needs: [], evidence: [] };
 
+/**
+ * Settlement overhead a stalled diagnostic may add on top of the product grace:
+ * the grace timer, the failed receipt write and event-loop scheduling. The
+ * product bound stays MODEL_SETTLEMENT_GRACE_MS; this slack only keeps the test
+ * from measuring scheduler punctuality, while still failing on an unbounded hang.
+ */
+const STALL_SETTLEMENT_SLACK_MS = 2_000;
+
 const currentRoute = {
     model: "example/documentary",
     executionPlanVersion: "source_actions_v4" as const,
@@ -268,7 +276,7 @@ test.each([
         new Promise((resolve) =>
             setTimeout(
                 () => resolve({ status: "stalled" }),
-                MODEL_SETTLEMENT_GRACE_MS + 700,
+                MODEL_SETTLEMENT_GRACE_MS + STALL_SETTLEMENT_SLACK_MS,
             ),
         ),
     ]);
@@ -278,7 +286,9 @@ test.each([
         inputTokens: 10,
         outputTokens: 10,
     });
-    expect(Date.now() - began).toBeLessThan(MODEL_SETTLEMENT_GRACE_MS + 700);
+    expect(Date.now() - began).toBeLessThan(
+        MODEL_SETTLEMENT_GRACE_MS + STALL_SETTLEMENT_SLACK_MS,
+    );
 }, 15000);
 
 test("generation expiry remains a typed timeout when no capture RPC began", async () => {

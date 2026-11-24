@@ -15,7 +15,79 @@ test("contextual passage batch RPC declares its return contract", () => {
     assert(typeof approvedPassagesForMission.exportReturns === "function");
     const serialized: unknown = approvedPassagesForMission.exportReturns();
     assert(typeof serialized === "string");
-    expect(JSON.parse(serialized)).not.toBeNull();
+    expect(JSON.parse(serialized)).toMatchObject({
+        type: "union",
+        value: expect.arrayContaining([
+            expect.objectContaining({
+                type: "object",
+                value: expect.objectContaining({
+                    status: {
+                        optional: false,
+                        fieldType: { type: "literal", value: "unavailable" },
+                    },
+                    reason: expect.objectContaining({
+                        optional: false,
+                        fieldType: expect.objectContaining({ type: "union" }),
+                    }),
+                }),
+            }),
+            expect.objectContaining({
+                type: "object",
+                value: expect.objectContaining({
+                    status: {
+                        optional: false,
+                        fieldType: { type: "literal", value: "ready" },
+                    },
+                    capture: {
+                        optional: false,
+                        fieldType: {
+                            type: "object",
+                            value: expect.objectContaining({
+                                captureId: {
+                                    optional: false,
+                                    fieldType: {
+                                        type: "id",
+                                        tableName: "sourceCaptures",
+                                    },
+                                },
+                                contentHash: {
+                                    optional: false,
+                                    fieldType: { type: "string" },
+                                },
+                            }),
+                        },
+                    },
+                    passages: {
+                        optional: false,
+                        fieldType: {
+                            type: "array",
+                            value: {
+                                type: "object",
+                                value: expect.objectContaining({
+                                    quotation: {
+                                        optional: false,
+                                        fieldType: { type: "string" },
+                                    },
+                                    quotationHash: {
+                                        optional: false,
+                                        fieldType: { type: "string" },
+                                    },
+                                    startOffset: {
+                                        optional: false,
+                                        fieldType: { type: "number" },
+                                    },
+                                    endOffset: {
+                                        optional: false,
+                                        fieldType: { type: "number" },
+                                    },
+                                }),
+                            },
+                        },
+                    },
+                }),
+            }),
+        ]),
+    });
 });
 
 test("a retained operation result without capture omission metadata remains usable and immutable", async () => {

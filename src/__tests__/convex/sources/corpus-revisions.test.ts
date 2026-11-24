@@ -2,19 +2,11 @@ import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import rateLimiterTest from "../integrations/rate-limiter-test-register.js";
 
 const modules = import.meta.glob("/convex/**/*.ts");
-const originalSourceCandidateLimit = process.env.SOURCE_CANDIDATE_LIMIT;
-
-afterEach(() => {
-    if (originalSourceCandidateLimit === undefined) {
-        delete process.env.SOURCE_CANDIDATE_LIMIT;
-    } else {
-        process.env.SOURCE_CANDIDATE_LIMIT = originalSourceCandidateLimit;
-    }
-});
+afterEach(() => vi.unstubAllEnvs());
 const getReviewSummary = makeFunctionReference<
     "query",
     {
@@ -377,8 +369,8 @@ test("paginates the all view by pending, accepted, then rejected groups", async 
 });
 
 test("rejects a manual URL before inspection when the dossier is at capacity", async () => {
-    process.env.SOURCE_CANDIDATE_LIMIT = "1";
-    process.env.SOURCE_RECOMMENDATION_CEILING = "1";
+    vi.stubEnv("SOURCE_CANDIDATE_LIMIT", "1");
+    vi.stubEnv("SOURCE_RECOMMENDATION_CEILING", "1");
     const t = convexTest(schema, modules);
     rateLimiterTest.register(t);
     const fixture = await createSourceReviewFixture(t);

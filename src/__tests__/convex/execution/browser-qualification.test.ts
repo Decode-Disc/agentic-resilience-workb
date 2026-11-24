@@ -10,7 +10,10 @@ import { requireQualifiedBrowserMission } from "@convex/providerCalls";
 import { makeFunctionReference } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
-import { seedWorkbench } from "@/__tests__/setup/workbench";
+import {
+    seedWorkbench,
+    workbenchAdmissionInput,
+} from "@/__tests__/setup/workbench";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -776,13 +779,235 @@ test("the relay lookup checks mission generation and revokes transport when the 
     ).rejects.toThrow();
 });
 
-test("Workbench qualification exposes bounded operation receipts for refusal verification", async () => {
+test("Workbench qualification distinguishes refused inputs, applied effects and adopted reads", async () => {
     const f = await fixture();
+    const inspection = { runId: f.runId, fixtureKey: "qualification" };
+    expect(
+        (
+            await f.t.query(
+                internal.execution.fixtures.inspectWorkbench,
+                inspection,
+            )
+        ).operationReceipts,
+    ).toEqual([]);
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    const authority = { missionId: active.missionId, expectedGeneration: 1 };
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        ...authority,
+        taskKey: "invalid-input",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(f.t, active.missionId),
+    });
+    expect(begun).toMatchObject({ kind: "ready" });
+    assert(begun.kind === "ready");
+    const invalid = await f.t.mutation(internal.execution.invocations.finish, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 1,
+        response: {
+            kind: "operations",
+            requests: [
+                {
+                    callId: "invalid-input",
+                    name: "adjust_framing",
+                    inputJson: "{",
+                },
+            ],
+        },
+    });
+    const invalidId = invalid.requestIds[0];
+    assert(invalidId);
+    const refusedId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            ...authority,
+            cause: "invalid-continuation",
+            input: {
+                kind: "consult_conversation",
+                cursor: "history:not-issued",
+            },
+        },
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: refusedId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "refused", code: "history_cursor_invalid" });
+    const readId = await f.t.mutation(internal.execution.operations.enqueue, {
+        ...authority,
+        cause: "pending-read",
+        input: { kind: "consult_conversation" },
+    });
+    expect(
+        (
+            await f.t.query(
+                internal.execution.fixtures.inspectWorkbench,
+                inspection,
+            )
+        ).operationReceipts,
+    ).toContainEqual({
+        id: readId,
+        missionId: active.missionId,
+        invalid: false,
+        refused: false,
+        applied: false,
+    });
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId: readId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "success" });
+    const message = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_turn", (q) => q.eq("turnId", active.turnId))
+            .filter((q) => q.eq(q.field("role"), "user"))
+            .first(),
+    );
+    assert(message);
+    const effectId = await f.t.mutation(internal.execution.operations.enqueue, {
+        ...authority,
+        cause: "saved-effect-before-adoption",
+        input: {
+            kind: "adjust_framing",
+            messageId: message._id,
+            expectedRevision: 1,
+            content: { scope: "Qualification receipt", questions: [] },
+        },
+    });
+    const effect = { requestId: effectId, expectedGeneration: 1 };
+    await f.t.mutation(internal.execution.operations.claim, effect);
+    await f.t.mutation(internal.framing.applyFromWorkbench, effect);
+    expect(
+        await f.client.query(api.framing.get, { runId: f.runId }),
+    ).toMatchObject({
+        revision: 2,
+        content: { scope: "Qualification receipt" },
+    });
+    const effectRecord = await f.t.run((ctx) => ctx.db.get(effectId));
+    expect(effectRecord?.adoptedAt).toBeUndefined();
+    expect(effectRecord?.effect?.outcome.kind).toBe("success");
+    const refusedRecord = await f.t.run((ctx) => ctx.db.get(refusedId));
+    expect(refusedRecord?.adoptedAt).toEqual(expect.any(Number));
+    expect(refusedRecord?.effect).toBeUndefined();
     const snapshot = await f.t.query(
         internal.execution.fixtures.inspectWorkbench,
-        { runId: f.runId, fixtureKey: "qualification" },
+        inspection,
     );
-    expect(snapshot.operationReceipts).toEqual([]);
+    expect(snapshot.providerCallCount).toBe(0);
+    expect(snapshot.operationReceipts).toHaveLength(4);
+    expect(snapshot.operationReceipts).toEqual(
+        expect.arrayContaining([
+            {
+                id: invalidId,
+                missionId: active.missionId,
+                invalid: true,
+                refused: true,
+                applied: false,
+            },
+            {
+                id: refusedId,
+                missionId: active.missionId,
+                invalid: false,
+                refused: true,
+                applied: true,
+            },
+            {
+                id: readId,
+                missionId: active.missionId,
+                invalid: false,
+                refused: false,
+                applied: true,
+            },
+            {
+                id: effectId,
+                missionId: active.missionId,
+                invalid: false,
+                refused: false,
+                applied: true,
+            },
+        ]),
+    );
+    // Qualification must expose forbidden adoption even without a successful domain effect.
+    await f.t.run((ctx) => ctx.db.patch(invalidId, { adoptedAt: Date.now() }));
+    expect(
+        (
+            await f.t.query(
+                internal.execution.fixtures.inspectWorkbench,
+                inspection,
+            )
+        ).operationReceipts,
+    ).toContainEqual({
+        id: invalidId,
+        missionId: active.missionId,
+        invalid: true,
+        refused: true,
+        applied: true,
+    });
+});
+
+test("Workbench operation inspection isolates the dossier and refuses overflow instead of truncating receipts", async () => {
+    const f = await fixture();
+    const ownIds = await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        assert(run);
+        const { _id, _creationTime, ...fields } = run;
+        const foreignRunId = await ctx.db.insert("researchRuns", {
+            ...fields,
+            reservationKey: "browser:foreign-inspection",
+        });
+        const ids = [];
+        for (const runId of [foreignRunId, f.runId]) {
+            const count = runId === foreignRunId ? 101 : 100;
+            for (let index = 0; index < count; index++) {
+                const id = await ctx.db.insert("agentOperationRequests", {
+                    runId,
+                    actor: "system",
+                    cause: "inspection-capacity",
+                    logicalKey: `inspection:${index}`,
+                    expectedGeneration: run.executionGeneration,
+                    operationVersion: 1,
+                    status: "pending",
+                    input: { kind: "consult_run_state" },
+                    createdAt: Date.now(),
+                });
+                if (runId === f.runId) ids.push(id);
+            }
+        }
+        return ids;
+    });
+    const inspection = { runId: f.runId, fixtureKey: "qualification" };
+    const snapshot = await f.t.query(
+        internal.execution.fixtures.inspectWorkbench,
+        inspection,
+    );
+    expect(
+        snapshot.operationReceipts.map((receipt) => receipt.id).sort(),
+    ).toEqual([...ownIds].sort());
+    const firstId = ownIds[0];
+    assert(firstId);
+    await f.t.run(async (ctx) => {
+        const original = await ctx.db.get(firstId);
+        assert(original);
+        const { _id, _creationTime, ...fields } = original;
+        await ctx.db.insert("agentOperationRequests", {
+            ...fields,
+            logicalKey: "inspection:overflow",
+        });
+    });
+    await expect(
+        f.t.query(internal.execution.fixtures.inspectWorkbench, inspection),
+    ).rejects.toThrow("Fixture operation capacity exceeded");
 });
 
 test.each([

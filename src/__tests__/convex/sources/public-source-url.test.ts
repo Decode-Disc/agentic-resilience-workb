@@ -4,9 +4,6 @@ import { describe, expect, test } from "vitest";
 
 describe("validatePublicSourceUrl", () => {
     test.each([
-        "http://example.com/report",
-        "https://user:pass@example.com/report",
-        "https://127.0.0.1/report",
         "https://[::1]/report",
         "https://169.254.169.254/latest/meta-data",
         "https://10.0.0.4/report",

@@ -905,11 +905,3 @@ export function preparePassageReproduction(
         return slice;
     };
 }
-
-/** Reproduces one citation through the same checks used by prepared callers. */
-export async function reproducePassage(
-    storedArtifact: string | Uint8Array,
-    locator: SourceLocator,
-): Promise<string> {
-    return preparePassageReproduction(storedArtifact)(locator);
-}

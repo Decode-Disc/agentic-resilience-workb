@@ -2,9 +2,10 @@ import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 const modules = import.meta.glob("/convex/**/*.ts");
+afterEach(() => vi.unstubAllEnvs());
 const generateForRun = makeFunctionReference<
     "mutation",
     {
@@ -782,7 +783,7 @@ test("hydrates legacy proposal items without automatic role metadata", async () 
 });
 
 test("projects recommendation pages and adjustment sets through analyst decisions", async () => {
-    process.env.SOURCE_RECOMMENDATION_CEILING = "2";
+    vi.stubEnv("SOURCE_RECOMMENDATION_CEILING", "2");
     const t = convexTest(schema, modules);
     const fixture = await t.run(async (ctx) => {
         const userId = await ctx.db.insert("users", { isAnonymous: true });
@@ -943,7 +944,7 @@ test("projects recommendation pages and adjustment sets through analyst decision
         ]),
     });
 
-    process.env.SOURCE_RECOMMENDATION_CEILING = "3";
+    vi.stubEnv("SOURCE_RECOMMENDATION_CEILING", "3");
     await expect(
         analyst.query(getCurrent, {
             runId: fixture.runId,
@@ -1005,7 +1006,37 @@ test("backfills a missing draft proposal idempotently without touching approved 
             createdAt: 1,
         });
         await ctx.db.patch(runId, { activeCorpusRevisionId: revisionId });
-        return { adminUserId, revisionId };
+        // Keep the other backfill predicates true so approval alone prevents regeneration.
+        const approvedRunId = await ctx.db.insert("researchRuns", {
+            purpose: "research",
+            coveragePreset: "balanced",
+            lifecycleState: "awaiting_source_review",
+            executionStatus: "paused",
+            pauseReason: "source_review",
+            executionGeneration: 1,
+            nextEventSequence: 1,
+            createdAt: 1,
+            updatedAt: 1,
+        });
+        const approvedRevisionId = await ctx.db.insert("corpusRevisions", {
+            runId: approvedRunId,
+            revision: 1,
+            status: "approved",
+            approvedByVisitorId: adminVisitorId,
+            approvedAt: 2,
+            createdAt: 1,
+        });
+        await ctx.db.patch(approvedRunId, {
+            activeCorpusRevisionId: approvedRevisionId,
+        });
+        return {
+            adminUserId,
+            revisionId,
+            approvedRunId,
+            approvedRevisionId,
+            approvedRun: await ctx.db.get(approvedRunId),
+            approvedRevision: await ctx.db.get(approvedRevisionId),
+        };
     });
     const admin = t.withIdentity({
         subject: `${fixture.adminUserId}|proposal-backfill`,
@@ -1021,6 +1052,11 @@ test("backfills a missing draft proposal idempotently without touching approved 
             proposalId: expect.any(String),
             outcome: "created",
         }),
+        {
+            revisionId: fixture.approvedRevisionId,
+            proposalId: null,
+            outcome: "skipped",
+        },
     ]);
     expect(second.page).toEqual([
         expect.objectContaining({
@@ -1028,7 +1064,30 @@ test("backfills a missing draft proposal idempotently without touching approved 
             proposalId: first.page[0]?.proposalId,
             outcome: "unchanged",
         }),
+        {
+            revisionId: fixture.approvedRevisionId,
+            proposalId: null,
+            outcome: "skipped",
+        },
     ]);
+    expect(
+        await t.run(async (ctx) => {
+            return {
+                run: await ctx.db.get(fixture.approvedRunId),
+                revision: await ctx.db.get(fixture.approvedRevisionId),
+                proposals: await ctx.db
+                    .query("sourceSelectionProposals")
+                    .withIndex("by_corpus_revision_id_and_version", (q) =>
+                        q.eq("corpusRevisionId", fixture.approvedRevisionId),
+                    )
+                    .take(1),
+            };
+        }),
+    ).toEqual({
+        run: fixture.approvedRun,
+        revision: fixture.approvedRevision,
+        proposals: [],
+    });
 });
 
 const startNewCorpusRevision = makeFunctionReference<

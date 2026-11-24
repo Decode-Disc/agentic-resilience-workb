@@ -37,6 +37,13 @@ test.each([
         assert(run);
         const facts = await readWorkbenchFacts(ctx, run);
         assert(facts.kind === "ready");
+        if (executionStatus === "failed") {
+            expect(
+                (facts.context.research as { summary: string }).summary,
+            ).not.toMatch(
+                /new (?:dossier|analysis)|not started|failed|internal problem/i,
+            );
+        }
         expect(facts.context.research).toMatchObject({ summary });
     });
 });
@@ -297,30 +304,6 @@ test("partial handoff explains a model stop without claiming time exhaustion", a
         expect(research.summary).toContain("partial material");
         expect(research.summary).not.toMatch(
             /time (?:limit|window)|invalid_output|resume|use what's prepared/i,
-        );
-    });
-});
-test("failed status does not prescribe a new dossier", async () => {
-    const f = await seedWorkbench(true);
-    await f.t.run(async (ctx) => {
-        await ctx.db.patch(f.runId, {
-            lifecycleState: "framing",
-            executionStatus: "failed",
-        });
-        const run = await ctx.db.get(f.runId);
-        assert(run);
-        const { readWorkbenchFacts } = await import(
-            "@convex/domain/workbenchContext"
-        );
-        const facts = await readWorkbenchFacts(ctx, run);
-        assert(facts.kind === "ready");
-        expect(facts.context.research).toMatchObject({
-            summary: expect.stringContaining("Research stopped"),
-        });
-        expect(
-            (facts.context.research as { summary: string }).summary,
-        ).not.toMatch(
-            /new (?:dossier|analysis)|not started|failed|internal problem/i,
         );
     });
 });

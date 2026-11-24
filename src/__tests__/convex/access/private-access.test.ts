@@ -1,3 +1,4 @@
+import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { digestInvitationCode } from "@convex/domain/invitationCodes";
 import schema from "@convex/schema";
@@ -39,15 +40,7 @@ const currentVisitor = makeFunctionReference<
     Record<string, never>,
     unknown
 >("visitors:current");
-const confirmAndStart = makeFunctionReference<
-    "action",
-    {
-        preflightId: Id<"companyPreflights">;
-        idempotencyKey: string;
-        coveragePreset: "balanced";
-    },
-    { runId: Id<"researchRuns">; remainingAnalyses: number }
->("researchLaunch:confirmAndStart");
+
 const restoreQuota = makeFunctionReference<
     "mutation",
     { runId: string; reason: string },
@@ -370,7 +363,7 @@ test("an expired preflight cannot consume quota or create a run", async () => {
     });
 
     await expect(
-        visitor.action(confirmAndStart, {
+        visitor.mutation(api.framing.confirmCompany, {
             preflightId,
             idempotencyKey: "expired-preflight",
             coveragePreset: "balanced",

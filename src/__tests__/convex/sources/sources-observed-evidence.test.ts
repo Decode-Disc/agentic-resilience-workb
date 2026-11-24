@@ -816,64 +816,190 @@ test.each([
     }
 });
 
-test("an unchanged observed contribution preserves its version and the earlier qualification snapshot", async () => {
-    const f = await qualifyObservedPassage();
-    const before = await f.t.run(async (ctx) => {
-        const preparation = await ctx.db.get(f.preparationId);
-        const taskId = preparation?.sourcesMission?.qualifications[0];
-        assert(taskId);
-        const task = await ctx.db.get(taskId);
-        assert(task?.output.kind === "documentary_qualification");
-        return task;
-    });
-    assert(before.output.kind === "documentary_qualification");
-    const contribution = before.output.contributions[0];
-    assert(contribution);
-    const { id, version, evidence: _evidence, ...content } = contribution;
+test.each([
+    "adopted",
+    "not-adopted",
+    "foreign-mission",
+    "failed",
+    "capture-hash",
+] as const)("a contextual-only gap requires an admitted reading: %s", async (variant) => {
+    const f = await seedCapturedSources();
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {
             missionId: f.missionId,
             expectedGeneration: 4,
-            cause: "unchanged-observed-contribution",
+            cause: "examine-gap-in-context",
             input: {
-                kind: "submit_documentary_qualification",
+                kind: "read_in_context",
                 sourceId: f.sourceId,
-                captureId: f.captureId,
-                expectedTaskId: before._id,
-                changes: [
-                    {
-                        contributionId: id,
-                        expectedVersion: version,
-                        contribution: {
-                            ...content,
-                            evidence: [
-                                {
-                                    readRequestId: f.readRequestId,
-                                    passageOrder: f.passage.order,
-                                },
-                            ],
-                        },
-                    },
-                ],
+                passageOrder: f.passage.order,
             },
         },
     );
     expect(
-        await dispatchSourcesOperation(f.t, {
+        await f.t.action(internal.execution.operations.dispatch, {
             requestId,
             expectedGeneration: 4,
         }),
     ).toMatchObject({ kind: "success" });
-    const after = await f.t.run(async (ctx) => {
-        const preparation = await ctx.db.get(f.preparationId);
-        const taskId = preparation?.sourcesMission?.qualifications[0];
-        assert(taskId);
-        return ctx.db.get(taskId);
+    const read = await f.t.run((ctx) => ctx.db.get(requestId));
+    expect(read).toMatchObject({
+        status: "completed",
+        input: { kind: "read_in_context" },
+        adoptedAt: expect.any(Number),
     });
-    assert(after?.output.kind === "documentary_qualification");
-    expect(after.output.contributions).toEqual(before.output.contributions);
-    expect(await f.t.run((ctx) => ctx.db.get(before._id))).toEqual(before);
-    expect(after.output.controlTaskId).toBe(before.output.controlTaskId);
-    expect(examiner).toHaveBeenCalledOnce();
+    const begun = await f.t.mutation(internal.execution.invocations.begin, {
+        missionId: f.missionId,
+        expectedGeneration: 4,
+        taskKey: "contextual-gap",
+        provenance: "simulation",
+    });
+    assert(begun.kind === "ready");
+    if (variant !== "adopted") {
+        await f.t.run(async (ctx) => {
+            const retained = await ctx.db.get(requestId);
+            assert(retained?.pin?.kind === "saved_material_inspection_v1");
+            if (variant === "not-adopted")
+                await ctx.db.patch(requestId, { adoptedAt: undefined });
+            else if (variant === "foreign-mission")
+                await ctx.db.patch(requestId, { missionId: undefined });
+            else if (variant === "failed")
+                await ctx.db.patch(requestId, {
+                    outcome: { kind: "unavailable", code: "retrieval_failed" },
+                });
+            else
+                await ctx.db.patch(requestId, {
+                    pin: {
+                        ...retained.pin,
+                        expectedContentHash: "different-capture",
+                    },
+                });
+        });
+    }
+    const gap =
+        "The examined passage does not establish the requested economics.";
+    const outcome = await f.t.mutation(internal.execution.invocations.finish, {
+        invocationId: begun.invocationId,
+        expectedGeneration: 4,
+        response: {
+            kind: "complete",
+            needs: [
+                {
+                    needId: "common-context",
+                    gap,
+                    unfinished: [],
+                    readRequestIds: [requestId],
+                },
+            ],
+        },
+    });
+    const preparation = await f.t.run((ctx) => ctx.db.get(f.preparationId));
+    if (variant === "adopted") {
+        expect(outcome, JSON.stringify(outcome)).toMatchObject({
+            kind: "completed",
+        });
+        expect(preparation?.sourcesMission?.result).toMatchObject({
+            outcome: "complete",
+            documents: [],
+            needs: [
+                { needId: "common-context", gap, workRequestIds: [requestId] },
+            ],
+        });
+    } else {
+        expect(outcome).toMatchObject({
+            kind: "blocked",
+            code: "completion_correction_required",
+        });
+        expect(preparation?.sourcesMission?.result).toBeUndefined();
+        expect(
+            (await f.t.run((ctx) => ctx.db.get(f.missionId)))?.status,
+        ).not.toBe("completed");
+    }
+    expect(preparation?.sourcesMission).toMatchObject({
+        controls: 0,
+        qualifications: [],
+    });
+    expect(examiner).not.toHaveBeenCalled();
+});
+
+test("an unchanged observed contribution preserves version three and earlier qualification snapshots", async () => {
+    const f = await qualifyObservedPassage();
+    let before = f.qualification;
+    const correctedStatement =
+        "The source describes workflow context for the issuer.";
+    for (const [cause, statement, expectedVersion] of [
+        ["expand-context", "The source describes workflow context.", 2],
+        ["issuer-context", correctedStatement, 3],
+        ["unchanged-context", correctedStatement, 3],
+    ] as const) {
+        assert(before.output.kind === "documentary_qualification");
+        const contribution = before.output.contributions[0];
+        assert(contribution);
+        const { id, version, evidence: _evidence, ...content } = contribution;
+        const requestId = await f.t.mutation(
+            internal.execution.operations.enqueue,
+            {
+                missionId: f.missionId,
+                expectedGeneration: 4,
+                cause,
+                input: {
+                    kind: "submit_documentary_qualification",
+                    sourceId: f.sourceId,
+                    captureId: f.captureId,
+                    expectedTaskId: before._id,
+                    changes: [
+                        {
+                            contributionId: id,
+                            expectedVersion: version,
+                            contribution: {
+                                ...content,
+                                statement,
+                                evidence: [
+                                    {
+                                        readRequestId: f.readRequestId,
+                                        passageOrder: f.passage.order,
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                },
+            },
+        );
+        expect(
+            await dispatchSourcesOperation(f.t, {
+                requestId,
+                expectedGeneration: 4,
+            }),
+        ).toMatchObject({ kind: "success" });
+        const after = await f.t.run(async (ctx) => {
+            const preparation = await ctx.db.get(f.preparationId);
+            const taskId = preparation?.sourcesMission?.qualifications[0];
+            assert(taskId);
+            return ctx.db.get(taskId);
+        });
+        assert(after?.output.kind === "documentary_qualification");
+        expect(after.output.contributions).toEqual([
+            {
+                ...contribution,
+                statement,
+                version: expectedVersion,
+            },
+        ]);
+        expect(await f.t.run((ctx) => ctx.db.get(before._id))).toEqual(before);
+        if (cause === "unchanged-context") {
+            expect(after.output.contributions).toEqual(
+                before.output.contributions,
+            );
+            expect(after.output.controlTaskId).toBe(
+                before.output.controlTaskId,
+            );
+        }
+        before = after;
+    }
+    expect(await f.t.run((ctx) => ctx.db.get(f.qualification._id))).toEqual(
+        f.qualification,
+    );
+    expect(examiner).toHaveBeenCalledTimes(3);
 });

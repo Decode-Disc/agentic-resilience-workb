@@ -1,13 +1,13 @@
 import { writeFileSync } from "node:fs";
 import { api, internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { QueryCtx } from "@convex/_generated/server";
 import { readResearchState } from "@convex/domain/researchState";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { commonOperations } from "@convex/execution/commonOperations";
 import { operationReuseIdentity } from "@convex/execution/missionData";
 import { currentRunStateResultValidator } from "@convex/execution/operationContracts";
-import type { QueryCtx } from "@convex/_generated/server";
 import type { FunctionReturnType } from "convex/server";
 import { getDocumentSize, type Value } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -477,19 +477,6 @@ test("foreign retained document metadata is rejected while missing metadata stay
     ).rejects.toMatchObject({ data: { code: "not_authorized" } });
 });
 
-test("historical non-mission preparation does not acquire Sources mission semantics", async () => {
-    const f = await scenario();
-    await f.t.run((ctx) =>
-        ctx.db.patch(f.runId, { sourcesProtocol: undefined }),
-    );
-    const state = await f.t.run(async (ctx) => {
-        const run = await ctx.db.get(f.runId);
-        assert(run);
-        return readResearchState(ctx, run);
-    });
-    expect(state.sources).toBeNull();
-    expect(state.nextCapability).toBeNull();
-});
 test("registered consultation preserves full labels or explicitly reports result capacity", async () => {
     const f = await seedResearchStateScenario({
         outcome: "partial",
@@ -1113,7 +1100,7 @@ function measureDbReads<T extends object>(db: T, table?: "sourceCaptures") {
     return { db: proxy, totals };
 }
 
-test("measures logical database reads across Sources context, Workbench context and standalone consultation", async () => {
+test("Sources, Workbench and standalone projections stay within their measured logical-read budgets", async () => {
     const f = await seedResearchStateScenario({
         outcome: "partial",
         blockCode: "invalid_output",
@@ -1190,9 +1177,18 @@ test("measures logical database reads across Sources context, Workbench context 
                 2,
             ),
         );
-    expect(measurements.sourcesContext.rows).toBeGreaterThan(0);
-    expect(measurements.workbenchContext.rows).toBeGreaterThan(0);
-    expect(measurements.standaloneConsultation.rows).toBeGreaterThan(0);
+    // Characterized ceilings for this frozen five-capture fixture, not application limits or billing estimates.
+    const rowBudgets = {
+        sourcesContext: 53,
+        workbenchContext: 52,
+        standaloneConsultation: 24,
+    };
+    for (const name of Object.keys(rowBudgets) as (keyof typeof rowBudgets)[]) {
+        expect(measurements[name].rows, name).toBeGreaterThan(0);
+        expect(measurements[name].rows, name).toBeLessThanOrEqual(
+            rowBudgets[name],
+        );
+    }
 });
 
 test("running preparation exposes compact progress across Sources, Workbench and consult_run_state v3 without conflating handoff or human pauses", async () => {
@@ -2016,7 +2012,8 @@ test("legacy snapshot and standalone research facts preserve the same protocol b
     });
     expect(standalone.sources).toBeNull();
     expect(snapshot.research.sources).toBeNull();
-    expect(snapshot.research.nextCapability).toBe(standalone.nextCapability);
+    expect(standalone.nextCapability).toBeNull();
+    expect(snapshot.research.nextCapability).toBeNull();
 });
 
 test.each([

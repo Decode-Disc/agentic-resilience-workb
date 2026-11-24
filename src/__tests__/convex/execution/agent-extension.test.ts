@@ -12,7 +12,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-test("the same durable Workflow completes a second definition through temporary invocations", async () => {
+test("shared durable execution completes a second definition through temporary invocations", async () => {
     vi.useFakeTimers();
     const { t, args, missionId } = await validationFixture();
     workflowTest.register(t);

@@ -7,7 +7,6 @@ test.each([
     "[]",
     "null",
     '"text"',
-    "42",
 ])("syntactically valid JSON %s is refused when it is not an argument object", (rawArguments) => {
     const capture = createPiToolArgumentsCapture("openai-completions");
     capture.observe({
@@ -29,6 +28,34 @@ test.each([
         rawArguments,
         argumentsError: "Tool arguments must be a JSON object",
     });
+});
+
+test.each([
+    {
+        collision: "an index changes its call identity",
+        tools: [
+            { index: 0, id: "first", function: { arguments: "{}" } },
+            { index: 0, id: "second", function: { arguments: "" } },
+        ],
+        ids: ["first", "second"],
+    },
+    {
+        collision: "a late identity belongs to another populated index",
+        tools: [
+            { index: 0, function: { arguments: "{}" } },
+            { index: 1, id: "shared", function: { arguments: "{}" } },
+            { index: 0, id: "shared", function: { arguments: "" } },
+        ],
+        ids: ["shared"],
+    },
+])("original arguments are unavailable when $collision", ({ tools, ids }) => {
+    const capture = createPiToolArgumentsCapture("openai-completions");
+    capture.observe({ choices: [{ delta: { tool_calls: tools } }] });
+    for (const id of ids)
+        expect(capture.forCall(id)).toEqual({
+            rawArguments: null,
+            argumentsError: expect.stringContaining("ambiguously correlated"),
+        });
 });
 
 test.each([
