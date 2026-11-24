@@ -1,3 +1,4 @@
+import { hasReceivedResponse } from "./journal";
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
@@ -79,7 +80,7 @@ import {
     DEFAULT_AGENT_BACKEND,
 } from "./executionProtocol";
 import { admittedInputJson } from "./journal";
-import { generationInterruption } from "./missionData";
+import { generationInterruption, missionResult } from "./missionData";
 import {
     completeRetainedText,
     readRetainedText,
@@ -643,6 +644,7 @@ export const inspect = internalQuery({
         const conversation = turn
             ? await ctx.db.get(turn.conversationId)
             : null;
+        const result = await missionResult(ctx, mission);
         return {
             runExecutionStatus: run.executionStatus,
             conversationTurnStatus: turn?.status ?? null,
@@ -660,8 +662,8 @@ export const inspect = internalQuery({
                 (invocation) => invocation.generationStorageRef !== undefined,
             ).length,
             invocationCount: invocations.length,
-            observedInvocationCount: invocations.filter(
-                (invocation) => invocation.receivedOutputJson,
+            observedInvocationCount: invocations.filter((invocation) =>
+                hasReceivedResponse(invocation),
             ).length,
             // What the model received: the admitted state, or a native
             // backend's recorded request, which carries its own tool results.
@@ -685,8 +687,8 @@ export const inspect = internalQuery({
             providerCallCount: calls.length,
             completionCount:
                 "protocolVersion" in mission
-                    ? mission.result?.kind === "saved_material_inspection_v1"
-                        ? mission.result.captureIds.length
+                    ? result?.kind === "saved_material_inspection_v1"
+                        ? result.captureIds.length
                         : 0
                     : mission.completionRefs.length,
         };

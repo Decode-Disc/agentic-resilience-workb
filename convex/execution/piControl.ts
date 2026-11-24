@@ -1,3 +1,4 @@
+import { missionResult } from "./missionData";
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
@@ -30,6 +31,8 @@ import {
     admittedInputJson,
     contextObservationSequence,
     invocationRawOutputJson,
+    invocationResponses,
+    hasReceivedResponse,
 } from "./journal";
 import { completionFeedbackValidator } from "./operationContracts";
 import {
@@ -234,6 +237,7 @@ export const nativeInvocation = internalQuery({
         return invocation
             ? {
                   ...invocation,
+                  ...(await invocationResponses(ctx, invocation)),
                   inputJson: await admittedInputJson(ctx, invocation),
                   rawOutputJson: await invocationRawOutputJson(ctx, invocation),
               }
@@ -571,8 +575,9 @@ export const operation = internalQuery({
             : null;
         if (!invocation) throw executionError("invocation_unavailable");
         // Correlation is retained in invocation order; request.cause may be represented by an event instead.
-        const response = invocation.outputJson
-            ? JSON.parse(invocation.outputJson)
+        const output = await invocationResponses(ctx, invocation);
+        const response = output.outputJson
+            ? JSON.parse(output.outputJson)
             : null;
         const index =
             response?.kind === "operations"
@@ -625,6 +630,9 @@ async function loadVerifiedNativeCompletionInvocation(
     const invocation = mission.lastInvocationId
         ? await ctx.db.get(mission.lastInvocationId)
         : null;
+    const output = invocation
+        ? await invocationResponses(ctx, invocation)
+        : null;
     if (
         !invocation ||
         invocation.missionId !== mission._id ||
@@ -632,13 +640,13 @@ async function loadVerifiedNativeCompletionInvocation(
             lease.generation ||
         !invocation.taskKey.startsWith(`${session._id}:`) ||
         invocation.status !== "returned" ||
-        !invocation.outputJson ||
-        (invocation.receivedOutputJson !== undefined &&
-            invocation.receivedOutputJson !== invocation.outputJson) ||
+        !output?.outputJson ||
+        (output.receivedOutputJson !== undefined &&
+            output.receivedOutputJson !== output.outputJson) ||
         (options.requireNoBlock && invocation.blockCode !== undefined)
     )
         return invalid("completion_correlation_invalid");
-    const response: unknown = JSON.parse(invocation.outputJson);
+    const response: unknown = JSON.parse(output.outputJson);
     if (!validate(invocationResponseValidator, response, { db: ctx.db }))
         return invalid("retained_response_invalid");
     return { session, mission, invocation, response };
@@ -731,7 +739,7 @@ export const finishAuxiliary = internalMutation({
         if (
             !invocation?.missionId ||
             invocation.purpose !== "compaction" ||
-            !invocation.receivedOutputJson
+            !hasReceivedResponse(invocation)
         )
             throw executionError("invocation_unavailable");
         await requireMissionAuthority(
@@ -739,11 +747,18 @@ export const finishAuxiliary = internalMutation({
             invocation.missionId,
             args.expectedGeneration,
         );
-        const response = JSON.parse(invocation.receivedOutputJson);
+        const { receivedOutputJson } = await invocationResponses(
+            ctx,
+            invocation,
+        );
+        if (receivedOutputJson === undefined)
+            throw executionError("invocation_unavailable");
+        const response = JSON.parse(receivedOutputJson);
         if (response.kind === "blocked") throw executionError(response.code);
         await ctx.db.patch(invocation._id, {
             status: "returned",
             outputJson: invocation.receivedOutputJson,
+            outputTextId: invocation.receivedOutputTextId,
             completedAt: Date.now(),
         });
         return null;
@@ -804,11 +819,12 @@ export const closeWorker = internalMutation({
             const last = mission.lastInvocationId
                 ? await ctx.db.get(mission.lastInvocationId)
                 : null;
-            code = last?.receivedOutputJson
-                ? "execution_interrupted"
-                : last?.providerCallId
-                  ? "attempt_outcome_unknown"
-                  : "execution_interrupted";
+            code =
+                last && hasReceivedResponse(last)
+                    ? "execution_interrupted"
+                    : last?.providerCallId
+                      ? "attempt_outcome_unknown"
+                      : "execution_interrupted";
         }
         if (code) await recordWorkerFailure(ctx, mission, code);
         const storageExhausted = storageCapacityFailure(code);
@@ -909,6 +925,7 @@ export const invocation = internalQuery({
         );
         return {
             ...invocation,
+            ...(await invocationResponses(ctx, invocation)),
             inputJson: await admittedInputJson(ctx, invocation),
             rawOutputJson: await invocationRawOutputJson(ctx, invocation),
         };
@@ -1012,16 +1029,18 @@ export const publicationState = internalQuery({
         const last = mission.lastInvocationId
             ? await ctx.db.get(mission.lastInvocationId)
             : null;
+        const result =
+            mission.status === "completed"
+                ? await missionResult(ctx, mission)
+                : undefined;
         return {
             completed: mission.status === "completed",
-            ...(mission.status === "completed" &&
-            "result" in mission &&
-            mission.result
+            ...(result
                 ? {
                       publishedText: getAgentDefinition(
                           mission.definitionId,
                           mission.definitionVersion,
-                      ).conversationReply?.(mission.result),
+                      ).conversationReply?.(result),
                   }
                 : {}),
             staleInstructions:
@@ -1040,14 +1059,20 @@ export const retireForRepreparation = internalMutation({
     returns: v.null(),
     handler: async (ctx, args) => {
         const invocation = await ctx.db.get(args.invocationId);
-        if (!invocation?.missionId || !invocation.receivedOutputJson)
+        if (!invocation?.missionId || !hasReceivedResponse(invocation))
             throw executionError("invocation_unavailable");
         await requireMissionAuthority(
             ctx,
             invocation.missionId,
             args.expectedGeneration,
         );
-        const result = JSON.parse(invocation.receivedOutputJson);
+        const { receivedOutputJson } = await invocationResponses(
+            ctx,
+            invocation,
+        );
+        if (receivedOutputJson === undefined)
+            throw executionError("invocation_unavailable");
+        const result = JSON.parse(receivedOutputJson);
         const receipt = invocation.providerCallId
             ? await ctx.db.get(invocation.providerCallId)
             : null;
@@ -1074,6 +1099,7 @@ export const retireForRepreparation = internalMutation({
             status: "returned",
             blockCode: result.code,
             outputJson: invocation.receivedOutputJson,
+            outputTextId: invocation.receivedOutputTextId,
             completedAt: Date.now(),
         });
         return null;

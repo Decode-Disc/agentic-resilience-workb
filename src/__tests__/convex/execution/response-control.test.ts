@@ -1,3 +1,4 @@
+import { invocationResponses } from "@convex/execution/journal";
 import { api, internal } from "@convex/_generated/api";
 import { domainSnapshot } from "@convex/execution/agentDefinition";
 import { afterEach, assert, expect, test, vi } from "vitest";
@@ -13,7 +14,10 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-test("a closed status conflict asks for one contextual correction without replacing the model reply", async () => {
+test.each([
+    "Research is running.",
+    `Research is running. ${"Supporting explanation. ".repeat(3500)}`,
+])("a closed status conflict preserves its draft through contextual correction (%#)", async (draft) => {
     const { t, client, runId } = await seedWorkbench(true);
     await t.run((ctx) => ctx.db.patch(runId, { agentExecutionVersion: 3 }));
     const active = await t.mutation(
@@ -34,7 +38,6 @@ test("a closed status conflict asks for one contextual correction without replac
         nativeInput: await workbenchAdmissionInput(t, active.missionId),
     });
     assert(invocation.kind === "ready");
-    const draft = "Research is running.";
     const pending = await t.mutation(internal.execution.invocations.finish, {
         invocationId: invocation.invocationId,
         expectedGeneration: 1,
@@ -85,7 +88,11 @@ test("a closed status conflict asks for one contextual correction without replac
         text: draft,
         responseControl: { status: "review_needed" },
     });
-    const original = await t.run((ctx) => ctx.db.get(invocation.invocationId));
+    const original = await t.run(async (ctx) => {
+        const stored = await ctx.db.get(invocation.invocationId);
+        assert(stored);
+        return invocationResponses(ctx, stored);
+    });
     expect(JSON.parse(original?.outputJson ?? "{}").text).toBe(draft);
 });
 

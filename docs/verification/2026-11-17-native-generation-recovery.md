@@ -1,5 +1,7 @@
 # Native generation recovery and documentary interruption — 2026-11-17
 
+Status update — 2026-11-24: the aggregate 64 KiB generated-response refusal described below is superseded by fragmented response retention and complete logical conversation publication. Page/tool-result bounds remain separate. The current contract is in [TECH](../../context/TECH.md#shared-execution-structure); this report and its original execution evidence remain historical. Local publication/runtime verification of the replacement is pending.
+
 ## Scope and result
 
 The shared Pi transport now submits confirmed original tool arguments to canonical operation validation for structured definitions as well as Workbench. Invalid arguments produce a refused operation and native continuation; SDK repairs cannot execute the operation. Missing originals, incomplete replies, response capacity, authority and uncertain-effect protections remain enforced. The shared non-progress mechanism bounds repeated refusals without a separate retry engine or renewed allowance.

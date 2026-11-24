@@ -713,7 +713,7 @@ test.each([
     );
 });
 
-test("reservation admission preserves the shared completion response ceiling before consuming allowance", async () => {
+test("reservation admission and completion allow a response beyond 64 KiB within preparation capacity", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const f = await seedCompletion();
     await queueInstructions(
@@ -765,25 +765,10 @@ test("reservation admission preserves the shared completion response ceiling bef
             requestId,
             expectedGeneration: 4,
         });
-        try {
-            await f.t.mutation(internal.sourcesMission.reserve, {
-                requestId,
-                expectedGeneration: 4,
-            });
-        } catch (error) {
-            expect(executionFailureCode(error)).toBe(
-                "sources_response_capacity",
-            );
-            await f.t.mutation(internal.execution.operations.recordResult, {
-                requestId,
-                expectedGeneration: 4,
-                outcome: {
-                    kind: "unavailable",
-                    code: "sources_response_capacity",
-                },
-            });
-            break;
-        }
+        await f.t.mutation(internal.sourcesMission.reserve, {
+            requestId,
+            expectedGeneration: 4,
+        });
         admitted++;
         await f.t.mutation(internal.execution.operations.recordResult, {
             requestId,
@@ -791,18 +776,19 @@ test("reservation admission preserves the shared completion response ceiling bef
             outcome: { kind: "unavailable", code: "missing_configuration" },
         });
     }
-    expect(admitted).toBeGreaterThan(1);
-    expect(admitted).toBeLessThan(24);
+    expect(admitted).toBe(24);
     const p = await f.t.run((ctx) => ctx.db.get(f.preparationId));
     assert(p?.sourcesMission);
     expect(p.sourcesMission.controls).toBe(admitted);
     const response = completion(
         p.sourcesMission,
-        "A short explanation of the technically unfinished documentary examination.",
+        "A detailed explanation of the technically unfinished documentary examination. ".repeat(
+            15,
+        ),
     );
     expect(
         new TextEncoder().encode(JSON.stringify(response)).length,
-    ).toBeLessThanOrEqual(MAX_OPERATION_RESULT_BYTES);
+    ).toBeGreaterThan(65536);
     expect(
         await f.t.mutation(internal.execution.invocations.finish, {
             invocationId: f.invocationId,
@@ -871,10 +857,7 @@ test("unqualified work retains storage headroom for unfinished explanations thro
                 expectedGeneration: 4,
             });
         } catch (error) {
-            expect([
-                "sources_result_capacity",
-                "sources_response_capacity",
-            ]).toContain(executionFailureCode(error));
+            expect(executionFailureCode(error)).toBe("sources_result_capacity");
             await f.t.mutation(internal.execution.operations.recordResult, {
                 requestId,
                 expectedGeneration: 4,

@@ -846,15 +846,13 @@ test.each([
 }, 30000);
 
 test.each([
-    { label: "short", original: '{"sourceId":', exceedsCapacity: false },
+    { label: "short", original: '{"sourceId":' },
     {
         label: "large escaped",
         original: `{"sourceId":${"\\".repeat(150_000)}`,
-        exceedsCapacity: true,
     },
-])("malformed original tool arguments remain inspectable through correction or capacity refusal ($label)", async ({
+])("malformed original tool arguments remain inspectable through correction until the work budget is exhausted ($label)", async ({
     original,
-    exceedsCapacity,
 }) => {
     const network = vi.fn(
         async () =>
@@ -902,17 +900,9 @@ test.each([
         observed.replies
             .filter((reply) => reply.state !== "complete")
             .map(({ state, code, json }) => ({ state, code, json })),
-    ).toEqual(
-        exceedsCapacity
-            ? []
-            : [
-                  {
-                      state: "incomplete",
-                      code: "not_dispatched",
-                      json: undefined,
-                  },
-              ],
-    );
+    ).toEqual([
+        { state: "incomplete", code: "not_dispatched", json: undefined },
+    ]);
     expect(
         completeReplies.map((p) => {
             if (p.state !== "complete" || p.json === undefined)
@@ -924,42 +914,20 @@ test.each([
     expect(JSON.stringify(observed.replies)).not.toContain(
         "NON_OBSERVABLE_REASONING",
     );
-    if (exceedsCapacity) {
-        expect(
-            observed.calls.map((call) => ({
-                status: call.status,
-                code: call.errorCode,
-                reason: call.diagnostic?.reason,
-            })),
-        ).toEqual([
-            {
-                status: "failed",
-                code: "response_capacity",
-                reason: "response_capacity",
-            },
-        ]);
-        expect(observed.requests).toHaveLength(1);
-        expect(observed.mission).toMatchObject({
-            status: "blocked",
-            blockCode: "response_capacity",
-        });
-        expect(network).toHaveBeenCalledOnce();
-    } else {
-        expect(observed.calls.length).toBeGreaterThan(1);
-        expect(
-            observed.calls.every((call) => call.status === "succeeded"),
-        ).toBe(true);
-        expect(
-            observed.requests.some(
-                (r) =>
-                    r.input.kind === "invalid" && r.outcome?.kind === "refused",
-            ),
-        ).toBe(true);
-        expect(observed.mission).toMatchObject({
-            status: "blocked",
-            blockCode: "work_budget_exhausted",
-        });
-    }
+
+    expect(observed.calls.length).toBeGreaterThan(1);
+    expect(observed.calls.every((call) => call.status === "succeeded")).toBe(
+        true,
+    );
+    expect(
+        observed.requests.some(
+            (r) => r.input.kind === "invalid" && r.outcome?.kind === "refused",
+        ),
+    ).toBe(true);
+    expect(observed.mission).toMatchObject({
+        status: "blocked",
+        blockCode: "work_budget_exhausted",
+    });
 }, 30000);
 
 test.each([

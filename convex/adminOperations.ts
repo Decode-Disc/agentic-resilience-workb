@@ -1,4 +1,7 @@
-import { hasKnownNonDispatch } from "@convex/execution/journal";
+import {
+    hasKnownNonDispatch,
+    invocationResponses,
+} from "@convex/execution/journal";
 import {
     ADMIN_BACKFILL_PAGE_MAX_ITEMS,
     ADMIN_COUNT_LIMIT,
@@ -879,8 +882,7 @@ export const inspectJournalEvent = query({
                       createdAt: invocation.createdAt,
                       completedAt: invocation.completedAt,
                       blockCode: invocation.blockCode,
-                      outputJson: invocation.outputJson,
-                      receivedOutputJson: invocation.receivedOutputJson,
+                      ...(await invocationResponses(ctx, invocation)),
                       receivedWhileAuthorized:
                           invocation.receivedWhileAuthorized,
                   }

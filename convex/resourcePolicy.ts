@@ -73,6 +73,10 @@ export const DEFAULT_PREPARATION_MAX_CONCURRENCY = 2;
 
 // Transport/persistence capacities are bytes, not model-context tokens.
 export const MAX_OPERATION_RESULT_BYTES = 64 * 1024;
+// Storage layout only: larger logical responses are retained as verified fragments.
+export const RETAINED_TEXT_INLINE_BYTES = 64 * 1024;
+// Replaceable analyst preview; the complete response is retained and published separately.
+export const CONVERSATION_PREVIEW_MAX_BYTES = 64 * 1024;
 const DEFAULT_PREVIEW_CACHE_TTL_MS = 60 * 60 * 1000;
 const MIN_PREVIEW_CACHE_TTL_MS = 1000;
 /** Larger screenshots remain returnable but are not retained in the preview cache. */

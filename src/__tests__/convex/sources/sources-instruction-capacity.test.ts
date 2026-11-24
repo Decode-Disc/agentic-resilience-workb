@@ -476,10 +476,7 @@ test("unavailable controls and later requests retain explicit outcomes within co
             });
         } catch (error) {
             const code = executionFailureCode(error);
-            expect([
-                "sources_result_capacity",
-                "sources_response_capacity",
-            ]).toContain(code);
+            expect(code).toBe("sources_result_capacity");
             await f.t.mutation(internal.execution.operations.recordResult, {
                 requestId,
                 expectedGeneration: 4,
@@ -497,8 +494,7 @@ test("unavailable controls and later requests retain explicit outcomes within co
         });
         requestIds.push(requestId);
     }
-    expect(requestIds.length).toBeGreaterThan(1);
-    expect(requestIds.length).toBeLessThan(140);
+    expect(requestIds).toHaveLength(140);
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
             ?.qualifications,
@@ -553,7 +549,7 @@ test("unavailable controls and later requests retain explicit outcomes within co
     assert(result);
     expect(result.outcome).toBe("blocked");
     expect(result.documents).toEqual([]);
-});
+}, 60_000);
 
 test.each([
     "qualification",

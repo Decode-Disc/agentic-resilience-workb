@@ -1,10 +1,24 @@
+import schema from "@convex/schema";
+import { convexTest } from "convex-test";
 import { internal } from "@convex/_generated/api";
 import agentTest from "@convex-dev/agent/test";
 import { vi } from "vitest";
 import { seedSourcePreparation } from "./source-preparation";
 
-export async function seedConversation(local = false) {
-    const f = await seedSourcePreparation();
+export async function seedConversation(
+    local = false,
+    transactionLimits = false,
+) {
+    const f = await seedSourcePreparation(
+        {},
+        transactionLimits
+            ? convexTest({
+                  schema,
+                  modules: import.meta.glob("/convex/**/*.ts"),
+                  transactionLimits: true,
+              })
+            : undefined,
+    );
     agentTest.register(f.t);
     const client = f.t.withIdentity({ subject: f.userId });
     await f.t.run((ctx) =>

@@ -1,3 +1,4 @@
+import { invocationResponses } from "@convex/execution/journal";
 import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
@@ -67,7 +68,10 @@ export async function responseControlContext(
     )
         return { policy };
     const original = await ctx.db.get(correction.invocationId);
-    const outputJson = original?.receivedOutputJson ?? original?.outputJson;
+    const output = original
+        ? await invocationResponses(ctx, original)
+        : undefined;
+    const outputJson = output?.receivedOutputJson ?? output?.outputJson;
     if (
         original?.missionId !== mission._id ||
         original.runId !== mission.runId ||

@@ -74,9 +74,12 @@ import {
     latestNativeControl,
     retainInvocationPayload,
     retainInvocationRawOutput,
+    retainInvocationResponse,
+    invocationResponses,
+    hasReceivedResponse,
 } from "./journal";
 import {
-    domainDataPatch,
+    missionResultPatch,
     invocationScopeFields,
     missionScope,
     operationProgressKeys,
@@ -506,7 +509,7 @@ export const begin = internalMutation({
             ) {
                 if (
                     mission.executionRuntime !== "pi-durable" ||
-                    !existing.receivedOutputJson ||
+                    !hasReceivedResponse(existing) ||
                     !canAdoptRetainedResponse(mission, existing)
                 )
                     throw executionError("invocation_identity_conflict");
@@ -770,19 +773,18 @@ export const retainOutput = internalMutation({
         if (!invocation || invocation.generation !== args.expectedGeneration)
             throw executionError("invocation_unavailable");
         if (
-            new TextEncoder().encode(args.responseJson).length >
-                MAX_OPERATION_RESULT_BYTES ||
-            (invocation.generationBackend?.id !== "pi-durable" &&
-                new TextEncoder().encode(args.rawOutputJson ?? "").length >
-                    MAX_OBSERVABLE_OUTPUT_BYTES)
+            invocation.generationBackend?.id !== "pi-durable" &&
+            new TextEncoder().encode(args.rawOutputJson ?? "").length >
+                MAX_OBSERVABLE_OUTPUT_BYTES
         )
             throw executionError("response_capacity");
         const receivedOutputJson = stableStringify(
             JSON.parse(args.responseJson),
         );
+        const previousResponse = await invocationResponses(ctx, invocation);
         if (
-            invocation.receivedOutputJson &&
-            invocation.receivedOutputJson !== receivedOutputJson
+            previousResponse.receivedOutputJson !== undefined &&
+            previousResponse.receivedOutputJson !== receivedOutputJson
         )
             throw executionError("invocation_result_conflict");
         const receipt = invocation.providerCallId
@@ -825,7 +827,7 @@ export const retainOutput = internalMutation({
             }
         }
         let receivedWhileAuthorized = invocation.receivedWhileAuthorized;
-        if (!invocation.receivedOutputJson && invocation.missionId) {
+        if (!hasReceivedResponse(invocation) && invocation.missionId) {
             try {
                 await requireMissionObservationAuthority(
                     ctx,
@@ -840,8 +842,14 @@ export const retainOutput = internalMutation({
                 receivedWhileAuthorized = false;
             }
         }
-        await ctx.db.patch(invocation._id, {
+        const retainedResponse = await retainInvocationResponse(
+            ctx,
+            invocation,
             receivedOutputJson,
+        );
+        await ctx.db.patch(invocation._id, {
+            receivedOutputJson: retainedResponse.json,
+            receivedOutputTextId: retainedResponse.textId,
             ...(receivedWhileAuthorized !== undefined
                 ? { receivedWhileAuthorized }
                 : {}),
@@ -853,7 +861,7 @@ export const retainOutput = internalMutation({
         });
         if (invocation.missionId) {
             const mission = await ctx.db.get(invocation.missionId);
-            if (mission && !invocation.receivedOutputJson)
+            if (mission && !hasReceivedResponse(invocation))
                 await recordMissionEvent(ctx, mission, {
                     kind: "invocation_output_observed",
                     cause: invocation.taskKey,
@@ -1118,17 +1126,16 @@ export const finish = internalMutation({
         )
             throw executionError("invocation_unavailable");
         const outputJson = stableStringify(args.response);
+        const previousResponse = await invocationResponses(ctx, invocation);
         if (
-            invocation.receivedOutputJson &&
-            invocation.receivedOutputJson !== outputJson
+            previousResponse.receivedOutputJson !== undefined &&
+            previousResponse.receivedOutputJson !== outputJson
         )
             throw executionError("invocation_result_conflict");
         if (
-            new TextEncoder().encode(outputJson).length >
-                MAX_OPERATION_RESULT_BYTES ||
-            (invocation.generationBackend?.id !== "pi-durable" &&
-                new TextEncoder().encode(args.rawOutputJson ?? "").length >
-                    MAX_OBSERVABLE_OUTPUT_BYTES)
+            invocation.generationBackend?.id !== "pi-durable" &&
+            new TextEncoder().encode(args.rawOutputJson ?? "").length >
+                MAX_OBSERVABLE_OUTPUT_BYTES
         )
             throw executionError("response_capacity");
         const mission = await ctx.db.get(invocation.missionId);
@@ -1140,7 +1147,7 @@ export const finish = internalMutation({
                 invocation.blockCode === "pending_operations"
             )
         ) {
-            if (invocation.outputJson !== outputJson)
+            if (previousResponse.outputJson !== outputJson)
                 throw executionError("invocation_result_conflict");
             return {
                 kind: invocation.blockCode
@@ -1156,9 +1163,15 @@ export const finish = internalMutation({
                     : {}),
             };
         }
+        const retainedResponse = await retainInvocationResponse(
+            ctx,
+            invocation,
+            outputJson,
+        );
         const returned = {
             status: "returned" as const,
-            outputJson,
+            outputJson: retainedResponse.json,
+            outputTextId: retainedResponse.textId,
             blockCode: undefined,
             ...(await retainInvocationRawOutput(
                 ctx,
@@ -1305,7 +1318,7 @@ export const finish = internalMutation({
             return block(code);
         }
         if (
-            invocation.receivedOutputJson &&
+            hasReceivedResponse(invocation) &&
             !canAdoptRetainedResponse(mission, invocation)
         )
             return block("retained_response_not_reusable", true);
@@ -1462,7 +1475,7 @@ export const finish = internalMutation({
             }
             await ctx.db.patch(mission._id, {
                 status: "completed",
-                ...domainDataPatch(mission, { result: completion.result }),
+                ...(await missionResultPatch(ctx, mission, completion.result)),
             });
             await recordMissionEvent(ctx, mission, {
                 ...(await invocationEventObservation(

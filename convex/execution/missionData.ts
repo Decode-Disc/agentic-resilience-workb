@@ -1,3 +1,12 @@
+import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
+import { RETAINED_TEXT_INLINE_BYTES } from "@convex/resourcePolicy";
+import { validate } from "convex-helpers/validators";
+import { agentResultValidator } from "./agentSchemas";
+import {
+    retainCompleteText,
+    completeRetainedText,
+    readRetainedText,
+} from "./retainedText";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { supportsResearchControl } from "@convex/domain/transitions";
 import type {
@@ -173,4 +182,41 @@ export function operationReuseIdentity(
               input,
           }
         : { runId, version, pin, input };
+}
+
+/** Domain completion keeps its full result while mission metadata stays within document capacity. */
+export async function missionResultPatch(
+    ctx: MutationCtx,
+    mission: Doc<"agentMissions">,
+    result: AgentResult,
+) {
+    const json = JSON.stringify(result);
+    if (
+        !("protocolVersion" in mission) ||
+        new TextEncoder().encode(json).length <= RETAINED_TEXT_INLINE_BYTES
+    )
+        return domainDataPatch(mission, { result });
+    return {
+        result: undefined,
+        resultTextId: await retainCompleteText(
+            ctx,
+            `${mission._id}:result`,
+            json,
+        ),
+    };
+}
+
+export async function missionResult(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+) {
+    if (!("protocolVersion" in mission)) return undefined;
+    if (!mission.resultTextId) return mission.result;
+    const text = await completeRetainedText(ctx, mission.resultTextId);
+    if (text.key !== `${mission._id}:result`)
+        throw executionError("invocation_result_invalid");
+    const result: unknown = JSON.parse(await readRetainedText(ctx, text._id));
+    if (!validate(agentResultValidator, result, { db: ctx.db }))
+        throw executionError("invalid_completion");
+    return result;
 }

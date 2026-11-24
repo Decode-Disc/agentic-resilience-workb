@@ -334,7 +334,6 @@ export async function processWorkbenchInstructions(
                     preparationFailureCode(error);
                 if (
                     code !== "sources_result_capacity" &&
-                    code !== "sources_response_capacity" &&
                     code !== "source_review_capacity"
                 )
                     throw error;

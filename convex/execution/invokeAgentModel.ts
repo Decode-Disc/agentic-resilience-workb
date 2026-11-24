@@ -6,10 +6,7 @@ import { sha256Hex } from "@convex/domain/sourcePassages";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { rejectedOutputDiagnostic } from "@convex/integrations/modelTransport";
 import { revisionRoute } from "@convex/modelConfiguration";
-import {
-    MAX_OPERATION_RESULT_BYTES,
-    resolveGenerationAuthority,
-} from "@convex/resourcePolicy";
+import { resolveGenerationAuthority } from "@convex/resourcePolicy";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -90,11 +87,6 @@ function decodeReceivedReply(
     }
     if (!validate(invocationResponseValidator, decoded))
         return invalid("invalid_output", result.assistantOutput);
-    if (
-        new TextEncoder().encode(JSON.stringify(decoded)).length >
-        MAX_OPERATION_RESULT_BYTES
-    )
-        return invalid("response_capacity", rawOutputJson);
     const structureError = invocationStructureError(decoded, true);
     if (structureError) return invalid(structureError, rawOutputJson);
     return { reply: { response: decoded, rawOutputJson } };

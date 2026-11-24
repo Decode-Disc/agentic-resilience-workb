@@ -1,5 +1,7 @@
 # Resource Policy Inventory — 2026-11-10
 
+Status update — 2026-11-24: the aggregate 64 KiB generated-response refusal described below is superseded by fragmented response retention and complete logical conversation publication. Page/tool-result bounds remain separate. The current contract is in [TECH](../../context/TECH.md#shared-execution-structure); this report and its original execution evidence remain historical. Local publication/runtime verification of the replacement is pending.
+
 ## Result and evidence boundary
 
 The project has an existing resource-limits module, but effective policy is distributed across domain constants, environment resolvers, schemas, SDK settings, provider receipts, qualification relays, browser-service configuration and tooling. Moving their numbers into one file would not, by itself, correct premature termination. The first correction must distinguish actual authority and capacity from conservative proxies and caller-local cutoffs, then preserve those distinctions through transport, persistence and recovery.

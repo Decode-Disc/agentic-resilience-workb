@@ -1,6 +1,5 @@
 import { internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
-import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { afterEach, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
@@ -62,7 +61,7 @@ test.each([
     expect(fetch).not.toHaveBeenCalled();
 });
 
-test("an unretainable Pi observation rolls back settlement and a retry charges once", async () => {
+test("a conflicting Pi observation rolls back settlement and a retry charges once", async () => {
     const { t, args } = await seedInspectedEvidence();
     await installModel(t, nativePiFixtureRoute, "saved_material_inspection");
     const missionId = await t.mutation(internal.execution.missions.start, {
@@ -106,6 +105,9 @@ test("an unretainable Pi observation rolls back settlement and a retry charges o
             invocation: await ctx.db.get(admitted.invocationId),
             budget: (await ctx.db.get(args.runId))?.sourcePreparationBudget,
         }));
+    await t.run((ctx) =>
+        ctx.db.patch(admitted.invocationId, { rawOutputJson: "original" }),
+    );
     const before = await snapshot();
     expect(before).toMatchObject({
         receipts: [{ _id: receipt.providerCallId, status: "started" }],
@@ -116,7 +118,6 @@ test("an unretainable Pi observation rolls back settlement and a retry charges o
         requests: [],
         workingNotes: "",
     };
-    const envelopeBytes = Buffer.byteLength(JSON.stringify(response));
     const terminal = {
         ...attempt,
         status: "succeeded" as const,
@@ -126,15 +127,11 @@ test("an unretainable Pi observation rolls back settlement and a retry charges o
         t.mutation(internal.execution.invocationLifecycle.recordModelReply, {
             attempt: terminal,
             reply: {
-                response: {
-                    ...response,
-                    workingNotes: "x".repeat(
-                        MAX_OPERATION_RESULT_BYTES - envelopeBytes + 1,
-                    ),
-                },
+                response,
+                rawOutputJson: "conflicting observed output",
             },
         }),
-    ).rejects.toThrow("response_capacity");
+    ).rejects.toThrow("invocation_result_conflict");
     expect(await snapshot()).toEqual(before);
 
     await t.mutation(internal.execution.invocationLifecycle.recordModelReply, {

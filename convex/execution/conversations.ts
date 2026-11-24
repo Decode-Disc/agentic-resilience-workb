@@ -832,11 +832,7 @@ export async function publishTurn(
         return turn.publishedMessageId;
     }
     await requireInstructionVersion(ctx, mission, instructionVersion);
-    if (
-        !text.trim() ||
-        new TextEncoder().encode(text).length > MAX_OPERATION_RESULT_BYTES
-    )
-        throw executionError("response_capacity");
+    if (!text.trim()) throw executionError("response_capacity");
     const conversation = await ctx.db.get(turn.conversationId);
     if (!conversation) throw executionError("conversation_unavailable");
     const publicationRevision = await advancePublication(ctx, conversation._id);

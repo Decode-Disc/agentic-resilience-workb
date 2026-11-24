@@ -1164,16 +1164,6 @@ export async function assertSourcesCompletionCapacity(
             .filter((work) => work.needIds.includes(need.id))
             .map((work) => work.requestId),
     }));
-    // Keep room for a short gap or unfinished-work explanation for each need.
-    const responseBytes = new TextEncoder().encode(
-        stableStringify({
-            kind: "complete",
-            needsRevision: data.needsRevision,
-            needs: needOutcomes,
-        }),
-    ).byteLength;
-    if (responseBytes + data.needs.length * 256 > MAX_OPERATION_RESULT_BYTES)
-        throw executionError("sources_response_capacity");
     let bytes =
         getDocumentSize({
             ...preparation,

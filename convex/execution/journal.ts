@@ -11,6 +11,7 @@ import {
 } from "@convex/domain/sourcePassages";
 import {
     HISTORY_PAGE_SIZE,
+    RETAINED_TEXT_INLINE_BYTES,
     MAX_OBSERVABLE_OUTPUT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
 } from "@convex/resourcePolicy";
@@ -24,6 +25,7 @@ import {
 
 import {
     completeRetainedText,
+    retainCompleteText,
     readRetainedText,
     retainedTextParts,
     retainedTextRange,
@@ -478,26 +480,22 @@ export async function retainInvocationRawOutput(
         invocation.rawOutputJson !== rawOutputJson
     )
         throw executionError("invocation_result_conflict");
-    // Leave room for receivedOutputJson, outputJson and correction at their existing bounds.
+    // Inline responses and correction share the invocation document; larger responses live in fragments.
     const large =
         new TextEncoder().encode(rawOutputJson).length >
             MAX_OBSERVABLE_OUTPUT_BYTES ||
         getDocumentSize({ ...invocation, rawOutputJson }) +
-            3 * MAX_OPERATION_RESULT_BYTES >=
+            2 * RETAINED_TEXT_INLINE_BYTES +
+            MAX_OPERATION_RESULT_BYTES >=
             1_048_576;
     if (!large) return { rawOutputJson };
     if (invocation.generationBackend?.id !== "pi-durable")
         throw executionError("response_capacity");
-    const { manifest, parts } = retainedTextParts(rawOutputJson);
-    let textId: Id<"retainedTexts"> | undefined;
-    for (const [index, content] of parts.entries())
-        textId = await stageRetainedText(ctx, `${invocation._id}:raw_output`, {
-            ...manifest,
-            index,
-            content,
-        });
-    if (!textId) throw executionError("invocation_result_invalid");
-    await completeRetainedText(ctx, textId);
+    const textId = await retainCompleteText(
+        ctx,
+        `${invocation._id}:raw_output`,
+        rawOutputJson,
+    );
     return { rawOutputJson: undefined, rawOutputTextId: textId };
 }
 
@@ -513,13 +511,70 @@ export async function invocationRawOutputJson(
     return readRetainedText(ctx, text._id);
 }
 
+/** Received and adopted response identities share immutable bytes, independent of inline storage. */
+export async function retainInvocationResponse(
+    ctx: MutationCtx,
+    invocation: Doc<"agentInvocations">,
+    json: string,
+) {
+    if (new TextEncoder().encode(json).length <= RETAINED_TEXT_INLINE_BYTES)
+        return { json, textId: undefined };
+    const textId = await retainCompleteText(
+        ctx,
+        `${invocation._id}:response:${sha256Hex(json)}`,
+        json,
+    );
+    return { json: undefined, textId };
+}
+
+/** Rehydrates execution responses only at consumers that need their complete content. */
+export async function invocationResponses(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+) {
+    const read = async (
+        textId: Id<"retainedTexts"> | undefined,
+        inline: string | undefined,
+    ) => {
+        if (!textId) return inline;
+        const manifest = await completeRetainedText(ctx, textId);
+        if (
+            manifest.key !==
+            `${invocation._id}:response:${manifest.contentHash}`
+        )
+            throw executionError("invocation_result_invalid");
+        const json = await readRetainedText(ctx, textId);
+        if (inline !== undefined && inline !== json)
+            throw executionError("invocation_result_conflict");
+        return json;
+    };
+    const receivedOutputJson = await read(
+        invocation.receivedOutputTextId,
+        invocation.receivedOutputJson,
+    );
+    const outputJson =
+        invocation.outputTextId &&
+        invocation.outputTextId === invocation.receivedOutputTextId &&
+        invocation.outputJson === undefined
+            ? receivedOutputJson
+            : await read(invocation.outputTextId, invocation.outputJson);
+    return { receivedOutputJson, outputJson };
+}
+
+export function hasReceivedResponse(invocation: Doc<"agentInvocations">) {
+    return (
+        invocation.receivedOutputJson !== undefined ||
+        invocation.receivedOutputTextId !== undefined
+    );
+}
+
 /** Without provider admission, a retained live response is a known local refusal. */
 export function hasKnownNonDispatch(invocation: Doc<"agentInvocations">) {
     return (
         invocation.journalVersion === 1 &&
         invocation.provenance === "live" &&
         !invocation.providerCallId &&
-        invocation.receivedOutputJson !== undefined
+        hasReceivedResponse(invocation)
     );
 }
 

@@ -324,6 +324,18 @@ const steps: Record<
                     q.eq("invocationId", invocation._id),
                 )
                 .take(DOSSIER_PURGE_BATCH);
+            for (const payload of rows) {
+                if (
+                    payload.textId &&
+                    !(await deleteRetainedTextBatch(
+                        ctx,
+                        payload.textId,
+                        `${invocation._id}:${payload.part}`,
+                        DOSSIER_PURGE_BATCH,
+                    ))
+                )
+                    return true;
+            }
             if (rows.length) return drop(ctx, rows).then(() => true);
         }
         return false;
@@ -344,6 +356,34 @@ const steps: Record<
             .withIndex("by_run_and_task_key", (q) => q.eq("runId", runId))
             .take(DOSSIER_PURGE_BATCH);
         for (const invocation of invocations) {
+            for (const field of [
+                "receivedOutputTextId",
+                "outputTextId",
+                "rawOutputTextId",
+                "inputTextId",
+            ] as const) {
+                const id = invocation[field];
+                if (!id) continue;
+                const text = await ctx.db.get(id);
+                const key =
+                    field === "inputTextId"
+                        ? `${invocation._id}:input`
+                        : field === "rawOutputTextId"
+                          ? `${invocation._id}:raw_output`
+                          : `${invocation._id}:response:${text?.contentHash}`;
+                if (
+                    text &&
+                    !(await deleteRetainedTextBatch(
+                        ctx,
+                        id,
+                        key,
+                        DOSSIER_PURGE_BATCH,
+                    ))
+                )
+                    return true;
+                await ctx.db.patch(invocation._id, { [field]: undefined });
+                return true;
+            }
             if (!invocation.visibleOutput) continue;
             const done = await deleteRetainedTextBatch(
                 ctx,
@@ -381,14 +421,28 @@ const steps: Record<
                 .withIndex("by_run", (q) => q.eq("runId", runId))
                 .take(DOSSIER_PURGE_BATCH),
         ),
-    agentMissions: async (ctx, runId) =>
-        drop(
-            ctx,
-            await ctx.db
-                .query("agentMissions")
-                .withIndex("by_run_and_status", (q) => q.eq("runId", runId))
-                .take(DOSSIER_PURGE_BATCH),
-        ),
+    agentMissions: async (ctx, runId) => {
+        const missions = await ctx.db
+            .query("agentMissions")
+            .withIndex("by_run_and_status", (q) => q.eq("runId", runId))
+            .take(DOSSIER_PURGE_BATCH);
+        for (const mission of missions) {
+            if (!("protocolVersion" in mission) || !mission.resultTextId)
+                continue;
+            if (
+                !(await deleteRetainedTextBatch(
+                    ctx,
+                    mission.resultTextId,
+                    `${mission._id}:result`,
+                    DOSSIER_PURGE_BATCH,
+                ))
+            )
+                return true;
+            await ctx.db.patch(mission._id, { resultTextId: undefined });
+            return true;
+        }
+        return drop(ctx, missions);
+    },
     agentConversations: async (ctx, runId) =>
         drop(
             ctx,

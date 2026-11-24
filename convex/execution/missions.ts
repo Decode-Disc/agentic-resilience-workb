@@ -1,3 +1,4 @@
+import { hasReceivedResponse } from "./journal";
 import { internal } from "@convex/_generated/api";
 import { internalMutation } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
@@ -280,7 +281,7 @@ export const resume = internalMutation({
             : null;
         if (
             observed?.status === "started" &&
-            observed.receivedOutputJson &&
+            hasReceivedResponse(observed) &&
             !canAdoptRetainedResponse(retained, observed)
         )
             throw executionError("retained_response_not_reusable");
@@ -291,11 +292,11 @@ export const resume = internalMutation({
             if (last?.status === "started" && last.providerCallId) {
                 const receipt = await ctx.db.get(last.providerCallId);
                 if (
-                    !last.receivedOutputJson &&
+                    !hasReceivedResponse(last) &&
                     receipt?.dispatchOutcome !== "not_dispatched"
                 )
                     throw executionError("attempt_outcome_unknown");
-                if (!last.receivedOutputJson) {
+                if (!hasReceivedResponse(last)) {
                     await ctx.db.patch(last._id, {
                         status: "blocked",
                         blockCode: "not_dispatched",
@@ -347,11 +348,11 @@ export const resume = internalMutation({
                 : null;
             if (
                 last?.status === "started" ||
-                (last?.status === "returned" && last.receivedOutputJson)
+                (last?.status === "returned" && hasReceivedResponse(last))
             ) {
-                if (last.providerCallId && !last.receivedOutputJson)
+                if (last.providerCallId && !hasReceivedResponse(last))
                     throw executionError("attempt_outcome_unknown");
-                if (last.receivedOutputJson) {
+                if (hasReceivedResponse(last)) {
                     if (!canAdoptRetainedResponse(retained, last))
                         throw executionError("retained_response_not_reusable");
                     await ctx.db.patch(last._id, {

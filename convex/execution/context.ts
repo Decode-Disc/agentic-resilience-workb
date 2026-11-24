@@ -1,3 +1,4 @@
+import { invocationResponses } from "./journal";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
@@ -115,8 +116,11 @@ export async function buildMissionContext(
     const previousInvocation = mission.lastInvocationId
         ? await ctx.db.get(mission.lastInvocationId)
         : null;
-    const previousResponse: unknown = previousInvocation?.outputJson
-        ? JSON.parse(previousInvocation.outputJson)
+    const previousOutput = previousInvocation
+        ? (await invocationResponses(ctx, previousInvocation)).outputJson
+        : undefined;
+    const previousResponse: unknown = previousOutput
+        ? JSON.parse(previousOutput)
         : null;
     const previousRequests =
         validate(invocationResponseValidator, previousResponse) &&
@@ -366,8 +370,7 @@ export async function buildMissionContext(
                                     ),
                             }
                           : {
-                                outputJson:
-                                    previousInvocation.outputJson ?? null,
+                                outputJson: previousOutput ?? null,
                                 rawOutputJson:
                                     previousInvocation.rawOutputJson ?? null,
                             }),

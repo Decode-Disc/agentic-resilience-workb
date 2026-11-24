@@ -8,7 +8,7 @@ import {
 import { readConversationMessages } from "@convex/integrations/agentStorage";
 import {
     PI_SESSION_LEASE_MS as LEASE_MS,
-    MAX_OPERATION_RESULT_BYTES,
+    CONVERSATION_PREVIEW_MAX_BYTES,
     PI_COMMIT_MAX_BYTES,
     PI_SESSION_MAX_BYTES,
 } from "@convex/resourcePolicy";
@@ -411,18 +411,19 @@ export const publishPreview = internalMutation({
                 session.publicPreview.sequence >= args.sequence)
         )
             return false;
-        if (
-            new TextEncoder().encode(args.text).length >
-            MAX_OPERATION_RESULT_BYTES
-        )
-            throw executionError("response_capacity");
+        const previewBytes = new TextEncoder().encode(args.text);
+        const previewText = new TextDecoder("utf-8", {
+            ignoreBOM: true,
+        }).decode(previewBytes.subarray(0, CONVERSATION_PREVIEW_MAX_BYTES), {
+            stream: true,
+        });
         await ctx.db.patch(session._id, {
             publicPreview: {
                 turnId: turn._id,
                 invocationId: invocation._id,
                 instructionVersion: turn.instructionVersion,
                 sequence: args.sequence,
-                text: args.text,
+                text: previewText,
             },
         });
         return true;

@@ -177,6 +177,26 @@ export function retainedTextParts(content: string) {
     };
 }
 
+/** Retains an immutable logical text using the same verified fragments as native observations. */
+export async function retainCompleteText(
+    ctx: MutationCtx,
+    key: string,
+    content: string,
+) {
+    const { manifest, parts } = retainedTextParts(content);
+    let textId: Id<"retainedTexts"> | undefined;
+    for (const [index, part] of parts.entries()) {
+        textId = await stageRetainedText(ctx, key, {
+            ...manifest,
+            index,
+            content: part,
+        });
+    }
+    if (!textId) throw executionError("retained_text_invalid");
+    await completeRetainedText(ctx, textId);
+    return textId;
+}
+
 /** Internal byte storage only; callers enforce their own writer/observation authority on every stage. */
 export async function stageRetainedText(
     ctx: MutationCtx,
