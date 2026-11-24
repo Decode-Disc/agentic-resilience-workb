@@ -19,6 +19,7 @@ export type ExaContentsClient = {
         urls: string[],
         options?: {
             text?: { maxCharacters?: number } | true;
+            maxAgeHours?: number;
         },
         requestOptions?: {
             signal: AbortSignal;
@@ -33,6 +34,8 @@ export type ExaContentsClient = {
         }>;
         searchTime?: number;
         costDollars?: { total: number };
+        requestId?: string;
+        statuses?: Array<{ status: string }>;
     }>;
 };
 

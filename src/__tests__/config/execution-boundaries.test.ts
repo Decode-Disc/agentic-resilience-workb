@@ -60,14 +60,39 @@ test("the real architecture checker rejects aliases, protected writes and privat
             '"use node"; import type { Doc } from "@convex/_generated/dataModel"; import { retainOperationEffect } from "@convex/execution/operations"; export const x = retainOperationEffect; export const read = (ctx:unknown) => ctx.db.get("id");',
         );
         const findings = checkExecutionBoundaries(root);
-        for (const name of Object.keys(cases))
-            expect(findings).toContainEqual(
-                expect.objectContaining({
-                    file: `convex/domain/${name}.ts`,
-                    line: 1,
-                    rule: expect.any(String),
-                }),
+        const expectedRules: Record<string, string[]> = {
+            imported: ["executor-owner"],
+            generated: ["executor-owner"],
+            shadowed: ["executor-owner"],
+            namespace: ["executor-owner"],
+            accounting: ["field-owner"],
+            recovery: ["field-owner"],
+            hiddenWrite: ["private-receipt", "field-owner"],
+            receipt: ["private-receipt"],
+            computed: ["unresolved-write"],
+            directTable: ["table-owner"],
+            retainedTextStage: ["executor-owner"],
+            retainedTextWrite: ["table-owner"],
+            misplacedRuntime: ["runtime-directive"],
+            parenthesizedRuntime: ["runtime-directive"],
+        };
+        for (const name of Object.keys(cases)) {
+            const actual = findings.filter(
+                (finding: { file: string }) =>
+                    finding.file === `convex/domain/${name}.ts`,
             );
+            expect(actual, name).not.toHaveLength(0);
+            expect(
+                new Set(
+                    actual.map((finding: { rule: string }) => finding.rule),
+                ),
+                name,
+            ).toEqual(new Set(expectedRules[name]));
+            expect(
+                actual.every((finding: { line: number }) => finding.line === 1),
+                name,
+            ).toBe(true);
+        }
         expect(
             findings.filter((f: { file: string }) =>
                 f.file.endsWith("allowed.ts"),

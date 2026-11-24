@@ -1,5 +1,5 @@
 import viteReact from "@vitejs/plugin-react";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
     resolve: { tsconfigPaths: true },
@@ -9,6 +9,7 @@ export default defineConfig({
         // Browser storage belongs to jsdom, not Node's optional disk-backed globals.
         execArgv: ["--no-experimental-webstorage"],
         include: ["src/__tests__/**/*.test.{ts,tsx}"],
+        exclude: [...configDefaults.exclude, "src/__tests__/live/**"],
         isolate: true,
         maxWorkers: 4,
         // Concurrent UI, CLI and workflow integration tests exceed Vitest's 5s default.

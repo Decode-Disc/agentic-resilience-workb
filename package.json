@@ -25,6 +25,8 @@
         "test:protocol": "node --experimental-strip-types --test src/__tests__/config/*.test.mjs",
         "test:watch": "TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest",
         "test:e2e": "node --experimental-strip-types scripts/local-dev.ts test:e2e",
+        "test:preview": "npm --prefix services/playwright-browser test",
+        "test:live": "vitest run --config vitest.live.config.ts",
         "typecheck": "tsc --noEmit && tsc --noEmit -p convex/tsconfig.json",
         "lint": "biome lint . && node --experimental-strip-types scripts/check-imports.ts && node --experimental-strip-types scripts/check-execution-boundaries.ts && pnpm resource-policy:check",
         "format": "biome format --write .",

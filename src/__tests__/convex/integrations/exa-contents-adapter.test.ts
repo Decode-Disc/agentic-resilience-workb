@@ -1,9 +1,8 @@
-import { describe, expect, test, vi } from "vitest";
-
 import {
     createExaContentsAdapter,
     type ExaContentsClient,
 } from "@convex/integrations/exa";
+import { describe, expect, test, vi } from "vitest";
 
 describe("Exa Contents Adapter", () => {
     test("records a provider text limit before trimming trailing whitespace", async () => {
@@ -396,7 +395,7 @@ describe("Exa Contents Adapter", () => {
         }
     });
 
-    test("handles empty text or empty results as typed error", async () => {
+    test("rejects an empty result list", async () => {
         const getContents = vi.fn(async () => ({
             results: [],
         }));
@@ -405,6 +404,23 @@ describe("Exa Contents Adapter", () => {
         await expect(
             adapter.retrieveText("https://example.com/empty"),
         ).rejects.toThrow(/no contents returned/i);
+    });
+
+    test("rejects an empty document without retrying it", async () => {
+        const getContents = vi.fn(async () => ({
+            results: [
+                {
+                    id: "empty-document",
+                    url: "https://example.com/empty",
+                    text: "",
+                },
+            ],
+        }));
+        const adapter = createExaContentsAdapter({ getContents });
+        await expect(
+            adapter.retrieveText("https://example.com/empty"),
+        ).rejects.toMatchObject({ errorCode: "no_text_returned" });
+        expect(getContents).toHaveBeenCalledOnce();
     });
 
     test("Task5 defect 2: >16MiB leading/trailing whitespace whose trimmed value is small returns response_too_large and no success", async () => {

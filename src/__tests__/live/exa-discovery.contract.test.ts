@@ -2,10 +2,6 @@ import { fetchExaSearch } from "@convex/integrations/exaSearchClient";
 import { expect, test } from "vitest";
 
 test("discovers public source metadata through the production search transport", async () => {
-    if (process.env.RUN_LIVE_PROVIDER_TESTS !== "1") {
-        expect(process.env.RUN_LIVE_PROVIDER_TESTS).not.toBe("1");
-        return;
-    }
     const key = process.env.EXA_API_KEY?.trim();
     if (!key) throw new Error("Live discovery requires a configured Exa key");
     const startedAt = Date.now();

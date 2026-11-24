@@ -775,6 +775,10 @@ function fakePreviewNpm(root: string) {
     writeFileSync(
         entry,
         `import { createServer } from "node:http";
+import { appendFileSync } from "node:fs";
+if (process.env.LOCAL_RUNTIME_PREVIEW_CALLS_FILE) {
+    appendFileSync(process.env.LOCAL_RUNTIME_PREVIEW_CALLS_FILE, JSON.stringify(process.argv.slice(2)) + "\\n");
+}
 if (process.argv[2] === "run" && process.argv[3] === "build") process.exit(0);
 const port = Number(process.env.PORT);
 const server = createServer((request, response) => {
@@ -1219,7 +1223,9 @@ it.each([
     configureNativeRuntime(root, "runtime-fixture", native.origin);
     const port = await freePort();
     runtimeModule.getLocalRuntimePorts(root, { [role]: port });
+    const previewCallsFile = join(root, "preview-executions.jsonl");
     const env = {
+        LOCAL_RUNTIME_PREVIEW_CALLS_FILE: previewCallsFile,
         ...(role === "web"
             ? await fakeWebPnpm(root, port)
             : fakePreviewNpm(root)),
@@ -1238,6 +1244,10 @@ it.each([
         expect(runtimeModule.getLocalRuntimePorts(root)[role]).toBe(port);
         rmSync(join(root, ".local-runtime"), { recursive: true, force: true });
     }
+    const previewCallsBeforeConflict =
+        role === "preview" ? readFileSync(previewCallsFile, "utf8") : null;
+    if (role === "preview")
+        expect(previewCallsBeforeConflict).toContain('["run","dev"]');
     const occupied = await backend("occupied-reserved-port", port);
     const child = spawnLocalDev(root, mode, env, [], "pipe");
     let output = "";
@@ -1246,6 +1256,10 @@ it.each([
     expect(await processExit(child), output).toBe(1);
     expect(output).toMatch(/EADDRINUSE|already in use/i);
     expect(runtimeModule.getLocalRuntimePorts(root)[role]).toBe(port);
+    if (role === "preview")
+        expect(readFileSync(previewCallsFile, "utf8")).toBe(
+            previewCallsBeforeConflict,
+        );
     expect(await (await fetch(`${occupied.origin}/instance_name`)).text()).toBe(
         "occupied-reserved-port",
     );
@@ -1425,33 +1439,6 @@ it("starts concurrent web listeners on disjoint ports and verifies their worktre
     );
     expect(firstChild.exitCode).toBeNull();
     expect(secondChild.exitCode).toBeNull();
-}, 20_000);
-
-it("refuses an occupied reserved preview port without changing its reservation", async () => {
-    const root = createProjectRoot();
-    initializeRuntimeFixture(root, "local:runtime-fixture");
-    const native = await backend("runtime-fixture");
-    configureNativeRuntime(root, "runtime-fixture", native.origin);
-    const occupied = await backend("occupied-preview");
-    const port = Number(new URL(occupied.origin).port);
-    runtimeModule.getLocalRuntimePorts(root, { preview: port });
-    const child = spawnLocalDev(
-        root,
-        "dev:browser",
-        fakePreviewNpm(root),
-        [],
-        "pipe",
-    );
-    let output = "";
-    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
-    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
-    const exitCode = await Promise.race([
-        processExit(child),
-        new Promise<null>((done) => setTimeout(() => done(null), 5000)),
-    ]);
-    expect(exitCode, output).toBe(1);
-    expect(output).toMatch(/EADDRINUSE|already in use|occupied/i);
-    expect(runtimeModule.getLocalRuntimePorts(root).preview).toBe(port);
 }, 20_000);
 
 it("binds the preview service to a valid explicit PORT instead of its saved port", async () => {

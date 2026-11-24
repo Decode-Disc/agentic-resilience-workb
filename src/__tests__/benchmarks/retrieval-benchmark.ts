@@ -53,74 +53,6 @@ export function measureBenchmarkContent(
     };
 }
 
-export type RetrievalScore = 0 | 1 | 2;
-
-export type ManualRetrievalScores = {
-    completeness: RetrievalScore;
-    noiseAbsence: RetrievalScore;
-    relocalizability: RetrievalScore;
-    structure: RetrievalScore;
-};
-
-export type RetrievalClassification = "partial" | "unusable" | "usable";
-
-export function classifyRetrieval(input: {
-    error?: string;
-    markdown: string;
-    scores: ManualRetrievalScores;
-}): RetrievalClassification {
-    if (
-        input.error ||
-        normalizeBenchmarkMarkdown(input.markdown).length === 0
-    ) {
-        return "unusable";
-    }
-    if (Object.values(input.scores).some((score) => score === 0)) {
-        return "unusable";
-    }
-    if (
-        input.scores.completeness === 2 &&
-        input.scores.relocalizability === 2
-    ) {
-        return "usable";
-    }
-    return "partial";
-}
-
-type ProviderDecisionInput = {
-    anchorCoverage: number;
-    classification: RetrievalClassification;
-    relocalizability: RetrievalScore;
-};
-
-export type RetrievalDecisionPair = {
-    exa: ProviderDecisionInput;
-    firecrawl: ProviderDecisionInput;
-    sourceId: string;
-};
-
-export function recommendFirecrawlFallback(rows: RetrievalDecisionPair[]): {
-    materialWinSourceIds: string[];
-    materialWins: number;
-    recommend: boolean;
-} {
-    const materialWinSourceIds = rows
-        .filter(
-            ({ exa, firecrawl }) =>
-                firecrawl.classification === "usable" &&
-                exa.classification !== "usable" &&
-                firecrawl.anchorCoverage >= exa.anchorCoverage &&
-                firecrawl.relocalizability >= exa.relocalizability,
-        )
-        .map(({ sourceId }) => sourceId);
-
-    return {
-        materialWinSourceIds,
-        materialWins: materialWinSourceIds.length,
-        recommend: materialWinSourceIds.length >= 2,
-    };
-}
-
 export function assertBenchmarkOptIn(env: NodeJS.ProcessEnv): void {
     if (env.RUN_LIVE_PROVIDER_TESTS !== "1") {
         throw new Error(
@@ -197,29 +129,40 @@ export function parseFirecrawlScrapeResponse(
 }
 
 export function isRetryableRetrievalError(error: unknown): boolean {
-    const statusCode = readNumericProperty(error, "statusCode");
-    if (
+    const httpCode = /^http_(\d{3})$/.exec(
+        readStringProperty(error, "errorCode") ?? "",
+    );
+    const statusCode =
+        readNumericProperty(error, "statusCode") ??
+        (httpCode ? Number(httpCode[1]) : undefined);
+    // A transport failure cannot establish whether the provider charged the request.
+    return (
         statusCode === 408 ||
         statusCode === 429 ||
-        (statusCode !== undefined && statusCode >= 500)
-    ) {
-        return true;
-    }
-
-    const code = readStringProperty(error, "code")?.toUpperCase();
-    if (
-        code &&
-        ["ECONNRESET", "ECONNREFUSED", "ENETUNREACH", "ETIMEDOUT"].includes(
-            code,
-        )
-    ) {
-        return true;
-    }
-
-    const message = error instanceof Error ? error.message : String(error);
-    return /\b(?:408|429|5\d\d)\b|timed? ?out|timeout|network|socket hang up/i.test(
-        message,
+        (statusCode !== undefined && statusCode >= 500 && statusCode <= 599)
     );
+}
+
+/** Abort the transport and await its settlement before the collector can continue. */
+export async function withBenchmarkDeadline<T>(
+    operation: (signal: AbortSignal) => Promise<T>,
+    timeoutMs: number,
+): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(
+        () =>
+            controller.abort(
+                new DOMException("Benchmark request timed out", "TimeoutError"),
+            ),
+        timeoutMs,
+    );
+    try {
+        const value = await operation(controller.signal);
+        controller.signal.throwIfAborted();
+        return value;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 export async function runWithBoundedRetry<T>(

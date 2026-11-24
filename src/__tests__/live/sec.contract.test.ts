@@ -1,12 +1,7 @@
+import { createSecCompanyResolver } from "@convex/integrations/sec";
 import { expect, test } from "vitest";
 
-import { createSecCompanyResolver } from "@convex/integrations/sec";
-
 test("SEC submissions contract returns one bounded known-company snapshot", async () => {
-    if (process.env.RUN_LIVE_PROVIDER_TESTS !== "1") {
-        expect(process.env.RUN_LIVE_PROVIDER_TESTS).not.toBe("1");
-        return;
-    }
     const userAgent = process.env.SEC_USER_AGENT?.trim();
     if (!userAgent) {
         throw new Error("SEC_USER_AGENT is required for live provider tests");

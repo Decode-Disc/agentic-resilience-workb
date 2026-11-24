@@ -5,10 +5,6 @@ import Exa from "exa-js";
 import { expect, test } from "vitest";
 
 test("website resolver performs one bounded metadata-only Exa lookup", async () => {
-    if (process.env.RUN_LIVE_PROVIDER_TESTS !== "1") {
-        expect(process.env.RUN_LIVE_PROVIDER_TESTS).not.toBe("1");
-        return;
-    }
     const apiKey = process.env.EXA_API_KEY?.trim();
     if (!apiKey) {
         throw new Error("EXA_API_KEY is required for live provider tests");

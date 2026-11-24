@@ -21,6 +21,12 @@ describe("parseClientEnv", () => {
         ).toThrow();
     });
 
+    it("rejects a well-formed URL with an unsupported protocol", () => {
+        expect(() =>
+            parseClientEnv({ VITE_CONVEX_URL: "ftp://convex.example/" }),
+        ).toThrow("VITE_CONVEX_URL must use http or https");
+    });
+
     it("rejects a missing Convex URL", () => {
         expect(() => parseClientEnv({})).toThrow();
     });

@@ -62,6 +62,22 @@ test("supplies the current authenticated loopback script without caching its cre
         "Cache-Control",
         "no-store",
     );
+
+    await writeFile(
+        join(root, ".impeccable/live/server.json"),
+        JSON.stringify({ port: 8401, token: "rotated-test-credential" }),
+    );
+    const rotated = { statusCode: 200, setHeader: vi.fn(), end: vi.fn() };
+    await handler(
+        { url: "/__impeccable/live-connection", method: "GET" } as never,
+        rotated as never,
+        vi.fn(),
+    );
+    expect(rotated.statusCode).toBe(200);
+    expect(JSON.parse(rotated.end.mock.calls[0]?.[0])).toEqual({
+        src: "http://localhost:8401/live.js?token=rotated-test-credential",
+    });
+    expect(rotated.setHeader).toHaveBeenCalledWith("Cache-Control", "no-store");
 });
 
 test("returns an explicit unavailable result when the helper has not been started", async () => {

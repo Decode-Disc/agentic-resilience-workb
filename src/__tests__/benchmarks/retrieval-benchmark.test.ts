@@ -1,20 +1,140 @@
 // @vitest-environment node
 
-import { describe, expect, test } from "vitest";
+import { once } from "node:events";
+import { createServer } from "node:http";
+import { createExaContentsClient } from "@convex/integrations/exaContentsClient";
+import { fetchExaSearch } from "@convex/integrations/exaSearchClient";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
     assertBenchmarkOptIn,
     assertMinimumFirecrawlCredits,
-    classifyRetrieval,
     isRetryableRetrievalError,
     measureBenchmarkContent,
     normalizeBenchmarkMarkdown,
     parseFirecrawlCreditUsage,
     parseFirecrawlScrapeResponse,
-    recommendFirecrawlFallback,
     runWithBoundedRetry,
+    withBenchmarkDeadline,
 } from "@/__tests__/benchmarks/retrieval-benchmark";
 import { RETRIEVAL_BENCHMARK_CORPUS } from "@/__tests__/benchmarks/retrieval-benchmark-manifest";
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("benchmark transport settlement", () => {
+    test.each([
+        "contents",
+        "search",
+    ] as const)("aborts a stalled %s response before continuing, without redispatch", async (operation) => {
+        const realFetch = globalThis.fetch;
+        let requests = 0;
+        let cancelled = false;
+        let closed: Promise<void> = Promise.resolve();
+        const server = createServer((_request, response) => {
+            requests += 1;
+            response.writeHead(200, { "content-type": "application/json" });
+            response.write('{"results":[');
+            const finish = setTimeout(() => response.end("]}"), 1000);
+            closed = new Promise((resolve) =>
+                response.once("close", () => {
+                    cancelled = !response.writableEnded;
+                    clearTimeout(finish);
+                    resolve();
+                }),
+            );
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const address = server.address();
+        if (!address || typeof address === "string")
+            throw new Error("Missing loopback listener");
+        vi.spyOn(globalThis, "fetch").mockImplementation((url, options) => {
+            expect(url).toBe(`https://api.exa.ai/${operation}`);
+            return realFetch(`http://127.0.0.1:${address.port}`, options);
+        });
+        try {
+            const result = await runWithBoundedRetry(() =>
+                withBenchmarkDeadline(
+                    (signal) =>
+                        operation === "contents"
+                            ? createExaContentsClient(
+                                  "fixture-key",
+                              ).getContents(
+                                  ["https://example.com"],
+                                  { text: true },
+                                  { signal },
+                              )
+                            : fetchExaSearch(
+                                  "fixture-key",
+                                  "research",
+                                  {
+                                      type: "auto",
+                                      numResults: 4,
+                                      contents: false,
+                                  },
+                                  signal,
+                              ),
+                    200,
+                ),
+            );
+            await closed;
+            expect(requests).toBe(1);
+            expect(cancelled).toBe(true);
+            expect(result).toMatchObject({
+                attempts: 1,
+                error: expect.any(String),
+            });
+            expect(result.value).toBeUndefined();
+        } finally {
+            server.closeAllConnections();
+            await new Promise<void>((resolve, reject) =>
+                server.close((error) => (error ? reject(error) : resolve())),
+            );
+        }
+    });
+
+    test("retries a confirmed Contents rejection and preserves cache policy and provider evidence", async () => {
+        const response = {
+            results: [
+                {
+                    id: "document",
+                    url: "https://example.com",
+                    text: "Evidence",
+                },
+            ],
+            requestId: "provider-request",
+            statuses: [{ status: "200" }],
+            costDollars: { total: 0.001 },
+        };
+        const fetch = vi
+            .spyOn(globalThis, "fetch")
+            .mockResolvedValueOnce(new Response("busy", { status: 503 }))
+            .mockResolvedValueOnce(Response.json(response));
+        const result = await runWithBoundedRetry(() =>
+            withBenchmarkDeadline(
+                (signal) =>
+                    createExaContentsClient("fixture-key").getContents(
+                        ["https://example.com"],
+                        { text: true, maxAgeHours: 24 },
+                        { signal },
+                    ),
+                1000,
+            ),
+        );
+        expect(result).toEqual({ attempts: 2, value: response });
+        expect(
+            fetch.mock.calls.map(([, options]) =>
+                JSON.parse(String(options?.body)),
+            ),
+        ).toEqual(
+            Array(2).fill({
+                urls: ["https://example.com"],
+                text: true,
+                maxAgeHours: 24,
+            }),
+        );
+    });
+});
 
 describe("normalizeBenchmarkMarkdown", () => {
     test("normalizes text without rewriting content", () => {
@@ -23,106 +143,6 @@ describe("normalizeBenchmarkMarkdown", () => {
                 "ＣＣＣ  \r\nLine two\t \r\n\r\n\r\n\r\nEnd",
             ),
         ).toBe("CCC\nLine two\n\nEnd");
-    });
-});
-
-describe("classifyRetrieval", () => {
-    test.each([
-        {
-            expected: "usable",
-            input: {
-                markdown: "Relevant content",
-                scores: {
-                    completeness: 2,
-                    noiseAbsence: 1,
-                    relocalizability: 2,
-                    structure: 1,
-                },
-            },
-        },
-        {
-            expected: "partial",
-            input: {
-                markdown: "Relevant content",
-                scores: {
-                    completeness: 1,
-                    noiseAbsence: 2,
-                    relocalizability: 2,
-                    structure: 2,
-                },
-            },
-        },
-        {
-            expected: "unusable",
-            input: {
-                markdown: "Blocked",
-                scores: {
-                    completeness: 0,
-                    noiseAbsence: 2,
-                    relocalizability: 1,
-                    structure: 2,
-                },
-            },
-        },
-    ] as const)("classifies $expected retrieval", ({ expected, input }) => {
-        expect(classifyRetrieval(input)).toBe(expected);
-    });
-
-    test("rejects empty and failed retrievals", () => {
-        const scores = {
-            completeness: 2,
-            noiseAbsence: 2,
-            relocalizability: 2,
-            structure: 2,
-        } as const;
-
-        expect(classifyRetrieval({ markdown: "", scores })).toBe("unusable");
-        expect(
-            classifyRetrieval({
-                error: "timeout",
-                markdown: "content",
-                scores,
-            }),
-        ).toBe("unusable");
-    });
-});
-
-describe("recommendFirecrawlFallback", () => {
-    const materialWin = (sourceId: string) => ({
-        sourceId,
-        exa: {
-            anchorCoverage: 1 / 3,
-            classification: "partial" as const,
-            relocalizability: 1 as const,
-        },
-        firecrawl: {
-            anchorCoverage: 1,
-            classification: "usable" as const,
-            relocalizability: 2 as const,
-        },
-    });
-
-    test("requires repeated material gains", () => {
-        expect(recommendFirecrawlFallback([materialWin("one")])).toMatchObject({
-            recommend: false,
-            materialWins: 1,
-        });
-        expect(
-            recommendFirecrawlFallback([
-                materialWin("one"),
-                materialWin("two"),
-            ]),
-        ).toMatchObject({ recommend: true, materialWins: 2 });
-    });
-
-    test("rejects worse anchor coverage", () => {
-        const row = materialWin("one");
-        row.firecrawl.anchorCoverage = 0;
-
-        expect(recommendFirecrawlFallback([row])).toMatchObject({
-            recommend: false,
-            materialWins: 0,
-        });
     });
 });
 
@@ -201,11 +221,11 @@ describe("isRetryableRetrievalError", () => {
         expect(isRetryableRetrievalError({ statusCode })).toBe(true);
     });
 
-    test("retries timeouts and network failures", () => {
+    test("does not retry unconfirmed timeouts or network failures", () => {
         expect(isRetryableRetrievalError(new Error("request timed out"))).toBe(
-            true,
+            false,
         );
-        expect(isRetryableRetrievalError({ code: "ECONNRESET" })).toBe(true);
+        expect(isRetryableRetrievalError({ code: "ECONNRESET" })).toBe(false);
     });
 
     test("does not retry deterministic failures", () => {
@@ -215,6 +235,18 @@ describe("isRetryableRetrievalError", () => {
 });
 
 describe("runWithBoundedRetry", () => {
+    test("does not redispatch a potentially paid request after an unknown outcome", async () => {
+        let dispatches = 0;
+        const result = await runWithBoundedRetry(async () => {
+            dispatches += 1;
+            throw new Error("Provider timeout after 120000ms");
+        });
+        expect(result).toEqual({
+            attempts: 1,
+            error: "Provider timeout after 120000ms",
+        });
+        expect(dispatches).toBe(1);
+    });
     test("retries one transient failure", async () => {
         let attempts = 0;
         const result = await runWithBoundedRetry(async () => {

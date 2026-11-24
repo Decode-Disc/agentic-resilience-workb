@@ -3,7 +3,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import Exa from "exa-js";
+import { createExaContentsClient } from "@convex/integrations/exaContentsClient";
 import { expect, test } from "vitest";
 import {
     assertBenchmarkOptIn,
@@ -13,6 +13,7 @@ import {
     parseFirecrawlCreditUsage,
     parseFirecrawlScrapeResponse,
     runWithBoundedRetry,
+    withBenchmarkDeadline,
 } from "@/__tests__/benchmarks/retrieval-benchmark";
 import { RETRIEVAL_BENCHMARK_CORPUS } from "@/__tests__/benchmarks/retrieval-benchmark-manifest";
 
@@ -59,17 +60,6 @@ type RetrievalObservation = {
 test(
     "compares Exa Contents with Firecrawl Scrape on the frozen corpus",
     async () => {
-        if (
-            process.env.RUN_LIVE_PROVIDER_TESTS !== "1" ||
-            process.env.RUN_RETRIEVAL_BENCHMARK !== "1"
-        ) {
-            expect([
-                process.env.RUN_LIVE_PROVIDER_TESTS,
-                process.env.RUN_RETRIEVAL_BENCHMARK,
-            ]).not.toEqual(["1", "1"]);
-            return;
-        }
-
         assertBenchmarkOptIn(process.env);
         const apiKey = process.env.EXA_API_KEY?.trim();
         if (!apiKey) {
@@ -88,7 +78,7 @@ test(
         const exaPackage = JSON.parse(
             await readFile("node_modules/exa-js/package.json", "utf8"),
         ) as { version: string };
-        const exa = new Exa(apiKey);
+        const exa = createExaContentsClient(apiKey);
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         const outputDirectory = join(
             "/tmp/agentic-resilience-retrieval-benchmark",
@@ -110,11 +100,16 @@ test(
                 const startedAt = Date.now();
                 const result = await runWithBoundedRetry(async () => {
                     if (provider === "exa") {
-                        const response = await withTimeout(
-                            exa.getContents([source.url], {
-                                maxAgeHours: EXA_MAX_AGE_HOURS,
-                                text: true,
-                            }),
+                        const response = await withBenchmarkDeadline(
+                            (signal) =>
+                                exa.getContents(
+                                    [source.url],
+                                    {
+                                        maxAgeHours: EXA_MAX_AGE_HOURS,
+                                        text: true,
+                                    },
+                                    { signal },
+                                ),
                             EXTERNAL_TIMEOUT_MS,
                         );
                         const first = response.results[0];
@@ -283,11 +278,19 @@ test(
             `${JSON.stringify(scorecard, null, 2)}\n`,
             "utf8",
         );
+        const failures = observations.filter(
+            ({ status }) => status === "failed",
+        );
+        const collectionStatus =
+            failures.length === 0 ? "complete" : "incomplete";
         await writeFile(
             join(outputDirectory, "run.json"),
             `${JSON.stringify(
                 {
                     completedAt: new Date().toISOString(),
+                    collectionStatus,
+                    failedObservationCount: failures.length,
+                    semanticReviewStatus: "awaiting_manual_labels",
                     corpusSize: RETRIEVAL_BENCHMARK_CORPUS.length,
                     creditAfter,
                     creditBefore,
@@ -306,6 +309,8 @@ test(
         console.info(
             "LIVE_PROVIDER_EVIDENCE",
             JSON.stringify({
+                collectionStatus,
+                semanticReviewStatus: "awaiting_manual_labels",
                 corpusSize: RETRIEVAL_BENCHMARK_CORPUS.length,
                 firecrawlCreditsConsumed: creditBefore - creditAfter,
                 observationCount: observations.length,
@@ -313,6 +318,10 @@ test(
                 provider: "exa-vs-firecrawl-retrieval-benchmark",
             }),
         );
+        expect(
+            failures,
+            `Incomplete collection; inspect ${outputDirectory}`,
+        ).toEqual([]);
     },
     30 * 60 * 1_000,
 );
@@ -325,31 +334,6 @@ function emptyManualScore() {
         relocalizability: null,
         structure: null,
     };
-}
-
-async function withTimeout<T>(
-    promise: Promise<T>,
-    timeoutMs: number,
-): Promise<T> {
-    let timeout: NodeJS.Timeout | undefined;
-    try {
-        return await Promise.race([
-            promise,
-            new Promise<never>((_, reject) => {
-                timeout = setTimeout(
-                    () =>
-                        reject(
-                            new Error(`Provider timeout after ${timeoutMs}ms`),
-                        ),
-                    timeoutMs,
-                );
-            }),
-        ]);
-    } finally {
-        if (timeout) {
-            clearTimeout(timeout);
-        }
-    }
 }
 
 function runCommand(

@@ -181,8 +181,21 @@ describe("source selection v2 golden corpus", () => {
             ],
         };
 
-        const metrics = evaluateSourceSelectionPools([pool]);
+        const result = buildSourceSelectionProposal({
+            candidates: pool.candidates,
+            company: pool.company,
+            coveragePreset: pool.coveragePreset,
+            ceiling: 24,
+        });
 
-        expect(metrics.duplicateRecommendations).toBe(0);
+        expect(
+            result.items
+                .filter(({ disposition }) => disposition === "recommended")
+                .map(({ sourceId }) => sourceId)
+                .sort(),
+        ).toEqual(["matching-title-a", "matching-title-b"]);
+        expect(
+            result.items.map(({ duplicateOfSourceId }) => duplicateOfSourceId),
+        ).toEqual([undefined, undefined]);
     });
 });

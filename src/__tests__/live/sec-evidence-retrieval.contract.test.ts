@@ -5,7 +5,7 @@ import {
 } from "@convex/domain/evidenceArtifacts";
 import {
     LOCATOR_VERSION,
-    reproducePassage,
+    preparePassageReproduction,
 } from "@convex/domain/sourcePassages";
 import type { ApprovedSourceRetrievalInput } from "@convex/integrations/approvedSourceRetrieval";
 import { createSecCompanyResolver } from "@convex/integrations/sec";
@@ -28,10 +28,6 @@ const FROZEN_SEC_ARCHIVES_URL = `https://www.sec.gov/Archives/edgar/data/${FROZE
 const SEC_MAX_FETCH_ATTEMPTS = 2;
 
 test("retrieves and normalizes one frozen CCC SEC filing through the production adapter", async () => {
-    if (process.env.RUN_LIVE_PROVIDER_TESTS !== "1") {
-        expect(process.env.RUN_LIVE_PROVIDER_TESTS).not.toBe("1");
-        return;
-    }
     const userAgent = process.env.SEC_USER_AGENT?.trim();
     if (!userAgent) {
         throw new Error(
@@ -97,10 +93,9 @@ test("retrieves and normalizes one frozen CCC SEC filing through the production 
         if (!firstPassage) {
             throw new Error("Expected at least one normalized passage");
         }
-        const reproduced = await reproducePassage(
+        const reproduced = preparePassageReproduction(
             result.normalizedText ?? "",
-            firstPassage.locator,
-        );
+        )(firstPassage.locator);
         expect(reproduced).toBe(firstPassage.exactQuotation);
         locatorReproduction = "exact_match";
     }

@@ -2,44 +2,22 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import Exa from "exa-js";
-import { expect, test } from "vitest";
-
-import { SOURCE_SELECTION_V2_LIVE_COMPANIES } from "@/__tests__/benchmarks/source-selection-v2-benchmark-manifest";
 import { buildResearchPlan } from "@convex/domain/researchPlan";
 import { createExaDiscoveryAdapter } from "@convex/integrations/exa";
+import { fetchExaSearch } from "@convex/integrations/exaSearchClient";
+import { expect, test } from "vitest";
+import { withBenchmarkDeadline } from "@/__tests__/benchmarks/retrieval-benchmark";
+import { SOURCE_SELECTION_V2_LIVE_COMPANIES } from "@/__tests__/benchmarks/source-selection-v2-benchmark-manifest";
 
 const MAX_EXA_REQUESTS = 30;
 const MAX_SEC_REQUESTS = 5;
 const REQUEST_TIMEOUT_MS = 10_000;
 
-async function withTimeout<T>(promise: Promise<T>): Promise<T> {
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    try {
-        return await Promise.race([
-            promise,
-            new Promise<never>((_resolve, reject) => {
-                timeout = setTimeout(
-                    () => reject(new Error("Benchmark request timed out")),
-                    REQUEST_TIMEOUT_MS,
-                );
-            }),
-        ]);
-    } finally {
-        if (timeout) clearTimeout(timeout);
-    }
-}
-
 test("acquires a bounded metadata-only source-selection benchmark corpus", async () => {
-    if (
-        process.env.RUN_LIVE_PROVIDER_TESTS !== "1" ||
-        process.env.RUN_SOURCE_SELECTION_BENCHMARK !== "1"
-    ) {
-        expect([
-            process.env.RUN_LIVE_PROVIDER_TESTS,
-            process.env.RUN_SOURCE_SELECTION_BENCHMARK,
-        ]).not.toEqual(["1", "1"]);
-        return;
+    if (process.env.RUN_SOURCE_SELECTION_BENCHMARK !== "1") {
+        throw new Error(
+            "RUN_SOURCE_SELECTION_BENCHMARK=1 is required for source-selection corpus acquisition",
+        );
     }
     const exaKey = process.env.EXA_API_KEY?.trim();
     const secUserAgent = process.env.SEC_USER_AGENT?.trim();
@@ -52,9 +30,12 @@ test("acquires a bounded metadata-only source-selection benchmark corpus", async
         timestamp,
     );
     await mkdir(outputDirectory, { recursive: true });
-    const exaClient = new Exa(exaKey);
     const exa = createExaDiscoveryAdapter({
-        search: (query, options) => exaClient.search(query, options),
+        search: (query, options) =>
+            withBenchmarkDeadline(
+                (signal) => fetchExaSearch(exaKey, query, options, signal),
+                REQUEST_TIMEOUT_MS,
+            ),
     });
     let exaRequests = 0;
     let secRequests = 0;
@@ -99,9 +80,7 @@ test("acquires a bounded metadata-only source-selection benchmark corpus", async
                 throw new Error("Exa benchmark request ceiling exceeded");
             webBatches.push({
                 query,
-                batch: await withTimeout(
-                    exa.search(query.query, 4, query.includeDomains),
-                ),
+                batch: await exa.search(query.query, 4, query.includeDomains),
             });
         }
         observations.push({
@@ -123,7 +102,7 @@ test("acquires a bounded metadata-only source-selection benchmark corpus", async
     );
     await writeFile(
         join(outputDirectory, "run.json"),
-        `${JSON.stringify({ timestamp, persisted: false, secRequests, exaRequests, maximums: { sec: MAX_SEC_REQUESTS, exa: MAX_EXA_REQUESTS }, observations: observations.map((observation) => ({ company: (observation as { company: { id: string } }).company.id })) }, null, 2)}\n`,
+        `${JSON.stringify({ timestamp, collectionStatus: "complete", semanticReviewStatus: "awaiting_manual_labels", persisted: false, secRequests, exaRequests, maximums: { sec: MAX_SEC_REQUESTS, exa: MAX_EXA_REQUESTS }, observations: observations.map((observation) => ({ company: (observation as { company: { id: string } }).company.id })) }, null, 2)}\n`,
         "utf8",
     );
     expect(secRequests).toBeLessThanOrEqual(MAX_SEC_REQUESTS);

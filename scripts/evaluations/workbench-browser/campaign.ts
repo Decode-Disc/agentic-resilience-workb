@@ -69,8 +69,8 @@ import {
     sourcesBatterySchema,
     verifyQualificationCandidate,
 } from "./protocol.ts";
+import { type Diagnostic, qualificationDiagnostic } from "./qualification.ts";
 import { createQualificationRelay } from "./relay.mjs";
-import { qualificationDiagnostic, type Diagnostic } from "./qualification.ts";
 import {
     inspectCampaignScenarios,
     prepareCampaignScenarios,
@@ -927,118 +927,6 @@ export function campaignReviewReport(root: string) {
     };
     save(root, "automated-review-report", restored);
     return restored;
-}
-
-/** Retains a simulated review intent without dispatching when cleanup is incomplete. */
-export function runSimulatedCampaignReview(
-    root: string,
-    options: {
-        evidenceHash: string;
-        review?: unknown;
-        simulatedOutcome?: "unknown";
-    },
-) {
-    const expected = campaignReviewTemplate(root);
-    assert.equal(
-        options.evidenceHash,
-        expected.evidenceHash,
-        "Stale campaign review",
-    );
-    const mechanical = read(join(root, "campaign-result.json")) as {
-        completed: boolean;
-        cleanupCompleted: boolean;
-        evidenceCaptureFailed?: boolean;
-    };
-    const intent = {
-        kind: "simulated",
-        evidenceHash: expected.evidenceHash,
-        candidateHash: expected.candidateHash,
-        batteryHash: expected.batteryHash,
-    };
-    const intentPath = join(root, "automated-review-intent.json");
-    if (existsSync(intentPath)) {
-        assert.deepEqual(
-            read(intentPath),
-            intent,
-            "Simulated review intent changed",
-        );
-    } else {
-        writeFileSync(intentPath, `${JSON.stringify(intent, null, 2)}\n`, {
-            flag: "wx",
-            mode: 0o600,
-            flush: true,
-        });
-    }
-    const attemptPath = join(root, "automated-review-attempt.json");
-    if (existsSync(attemptPath)) {
-        return {
-            status: "pending" as const,
-            reason: "unknown_dispatch_outcome",
-        };
-    }
-    if (
-        mechanical.cleanupCompleted &&
-        !mechanical.evidenceCaptureFailed &&
-        options.simulatedOutcome === "unknown"
-    ) {
-        writeFileSync(
-            attemptPath,
-            `${JSON.stringify({ evidenceHash: expected.evidenceHash, state: "dispatched", route: "simulated" })}\n`,
-            { flag: "wx", mode: 0o600, flush: true },
-        );
-        return {
-            status: "pending" as const,
-            reason: "unknown_dispatch_outcome",
-        };
-    }
-    if (
-        mechanical.cleanupCompleted &&
-        !mechanical.evidenceCaptureFailed &&
-        options.review !== undefined
-    ) {
-        const review = validateCampaignReview(root, options.review, {
-            reviewer: "automated",
-        });
-        const result = { status: "completed" as const, review };
-        const resultPath = join(root, "automated-review-result.json");
-        if (existsSync(resultPath)) {
-            assert.deepEqual(
-                read(resultPath),
-                result,
-                "Simulated review result changed",
-            );
-        } else {
-            writeFileSync(resultPath, `${JSON.stringify(result, null, 2)}\n`, {
-                flag: "wx",
-                mode: 0o600,
-                flush: true,
-            });
-        }
-        return result;
-    }
-    const result = {
-        status: "pending" as const,
-        reason:
-            !mechanical.cleanupCompleted || mechanical.evidenceCaptureFailed
-                ? "incomplete_evidence_or_cleanup"
-                : "simulated_dispatch_not_implemented",
-    };
-    const statusPath = join(root, "automated-review-status.jsonl");
-    const entry = `${JSON.stringify(result)}\n`;
-    if (!existsSync(statusPath)) {
-        writeFileSync(statusPath, entry, {
-            flag: "wx",
-            mode: 0o600,
-            flush: true,
-        });
-    } else {
-        assert.equal(
-            readFileSync(statusPath, "utf8"),
-            entry,
-            "Simulated review status changed",
-        );
-    }
-    return result;
 }
 
 /** Appends an assessment; a mechanical success cannot fill missing semantic judgments. */

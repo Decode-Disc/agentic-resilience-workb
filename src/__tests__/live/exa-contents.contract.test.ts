@@ -1,7 +1,7 @@
 import type { Id } from "@convex/_generated/dataModel";
 import {
     LOCATOR_VERSION,
-    reproducePassage,
+    preparePassageReproduction,
 } from "@convex/domain/sourcePassages";
 import type { ApprovedSourceRetrievalInput } from "@convex/integrations/approvedSourceRetrieval";
 import { EXA_NORMALIZER_VERSION } from "@convex/integrations/evidenceNormalization";
@@ -27,10 +27,6 @@ import { expect, test } from "vitest";
 const FROZEN_CCC_PUBLIC_URL = "https://www.cccis.com/insurance-carriers/apd";
 
 test("retrieves and normalizes one frozen CCC public page through the production Exa Contents adapter", async () => {
-    if (process.env.RUN_LIVE_PROVIDER_TESTS !== "1") {
-        expect(process.env.RUN_LIVE_PROVIDER_TESTS).not.toBe("1");
-        return;
-    }
     const apiKey = process.env.EXA_API_KEY?.trim();
     if (!apiKey) {
         throw new Error(
@@ -135,10 +131,9 @@ test("retrieves and normalizes one frozen CCC public page through the production
         if (!firstPassage) {
             throw new Error("Expected at least one normalized passage");
         }
-        const reproduced = await reproducePassage(
+        const reproduced = preparePassageReproduction(
             result.normalizedText ?? "",
-            firstPassage.locator,
-        );
+        )(firstPassage.locator);
         expect(reproduced).toBe(firstPassage.exactQuotation);
         locatorReproduction = "exact_match";
     }

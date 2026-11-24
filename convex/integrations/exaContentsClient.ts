@@ -24,6 +24,8 @@ const contentsResponseSchema = z.looseObject({
     ),
     searchTime: z.number().optional(),
     costDollars: z.looseObject({ total: z.number() }).optional(),
+    requestId: z.string().optional(),
+    statuses: z.array(z.looseObject({ status: z.string() })).optional(),
 });
 
 // exa-js 2.16 does not expose a per-request signal. Keep its getContents
