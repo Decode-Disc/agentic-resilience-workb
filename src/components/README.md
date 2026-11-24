@@ -137,12 +137,14 @@ The connected dossier consumer keeps persisted history and its current draft whi
 | Disclosures and their motion | [Collapsible](ui/collapsible.tsx), [Accordion](ui/accordion.tsx), [disclosure-motion](ui/disclosure-motion.tsx) | Animation is enabled by default; the shared owner handles reduced motion. Existing caller exceptions should have a concrete consumer reason. |
 | Popup, modal and sheet | [Popover](ui/popover.tsx), [ResponsivePopover](ui/responsive-popover.tsx), [LinearModal](ui/linear-modal.tsx), [Sheet](ui/sheet.tsx) | Choose the existing interaction for the content; inspect portal theme, dismissal and focus APIs. |
 | Scrolling and split panes | [ScrollArea](ui/scroll-area.tsx), [Resizable](ui/resizable.tsx) | These handle their local regions. The screen host still supplies the available height and decides document scrolling. |
-| Tabs and grouped controls | [Tabs](ui/tabs.tsx), [DiscreteTabs](ui/discrete-tabs.tsx), [ToggleGroup](ui/toggle-group.tsx), [ButtonGroup](ui/button-group.tsx) | Distinguish navigation, selection and adjacent actions before choosing a control. |
+| Tabs and grouped controls | [Tabs](ui/tabs.tsx), [ToggleGroup](ui/toggle-group.tsx), [ButtonGroup](ui/button-group.tsx) | Distinguish navigation, selection and adjacent actions before choosing a control. |
 | Form fields | [Input](ui/input.tsx), [Textarea](ui/textarea.tsx), [RadioGroup](ui/radio-group.tsx), [Checkbox](ui/checkbox.tsx), [Select](ui/select.tsx), [DatePickerField](ui/date-picker-field.tsx) | Established field composition and interaction; the feature owns validation and submission. |
 | Loading, empty and failure feedback | [Skeleton](ui/skeleton.tsx), [Empty](ui/empty.tsx), [LoadErrorAlert](ui/load-error-alert.tsx), [LoadErrorBoundary](load-error-boundary.tsx) | Supplied state, geometry-preserving placeholders and recoverable query subtrees. |
 | Icons and theme switching | [Icon](icon.tsx), [Workbench glyphs](workbench-ui/glyphs.tsx), [ThemeToggle](theme-toggle.tsx) | Icon is the rendering boundary. ThemeToggle reports the requested theme; its consumer owns persistence and document scope. |
 | Workspace host | [WorkbenchShell](workbench-shell/workbench-shell.tsx), [WorkbenchShellSurface](workbench-shell/workbench-shell-surface.tsx) | Installed navigation/backdrop composition; distinct from WorkbenchUiRoot's library styling scope. |
 | Executed styling values | [Active theme](../assets/styles/themes/evidence-workbench.css), [global stylesheet](../styles.css), [responsive hooks](../hooks/use-responsive.tsx) | Tokens and shared composition stay with their runtime owners; component modules own local geometry. |
+
+AnimatedListFilter (`ui/animated-list-filters.tsx`) and BrowserView (`ui/browser-view.tsx`) remain dormant library components, without dedicated behavioral test suites. Retention does not qualify either for production adoption; verify the relevant interaction and accessibility contracts before connecting a consumer.
 
 ## START integration boundaries
 

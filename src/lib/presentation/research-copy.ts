@@ -1,7 +1,6 @@
 import type { api } from "@convex/_generated/api";
 import { dimensionLabel as domainDimensionLabel } from "@convex/domain/researchPlan";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
-import type { JobStage } from "@/components/ai/job-progress";
 import { sourcesPhaseState } from "@/lib/presentation/sources-phase-state";
 
 export type CoveragePreset = FunctionArgs<
@@ -46,8 +45,6 @@ type ProposalSource = FunctionReturnType<
 >["page"][number];
 type AuthorityTier = ProposalSource["authorityTier"];
 type DocumentKind = ProposalSource["documentKind"];
-type CompanyLinkageBasis = ProposalSource["companyLinkageBasis"];
-type SelectionReason = ProposalSource["reasonCodes"][number];
 type ProposalSummary = NonNullable<
     FunctionReturnType<typeof api.sourceSelectionProposals.getCurrent>
 >;
@@ -310,40 +307,6 @@ const documentKindLabels = {
     unknown: "Document type unavailable",
 } satisfies Record<DocumentKind, string>;
 
-const selectionReasonLabels = {
-    added_by_analyst: "Included because it was added by the analyst",
-    required_family_coverage: "Included to cover a required evidence family",
-    ranked_fill: "Recommended as supplementary material",
-    unrecognized_source_family: "Source family could not be verified",
-    not_selected: "Kept available as an alternative",
-    required_coverage_role: "Included to cover a required document role",
-    additional_coverage:
-        "Recommended for additional material; documentary coverage is assessed separately",
-    canonical_duplicate:
-        "Excluded because the same canonical source is already represented",
-    metadata_duplicate:
-        "Excluded because the same document or event is already represented",
-    search_or_index:
-        "Excluded because index and search pages do not add direct evidence",
-    low_information_document:
-        "Excluded because this document type has low value for this research angle",
-    company_identity_unverified:
-        "Excluded because the source could not be matched to the selected company",
-    unverified_publisher:
-        "Excluded because its authority could not be verified",
-    unverified_counter_evidence:
-        "Available for manual review as unverified counter-evidence",
-    qualified_partner_manual_review:
-        "Available for manual review as qualified partner material",
-    no_new_coverage: "Excluded because it does not add distinct coverage",
-    recommendation_ceiling_reached:
-        "Kept available after the reliable recommendation ceiling was reached",
-    targeted_search_review:
-        "Found in a targeted search. Review before including",
-    integrity_conflict:
-        "Needs attention because identity or provenance could not be reconciled",
-} satisfies Record<SelectionReason, string>;
-
 const coverageRoleLabels = {
     regulatory_annual: "Annual regulatory report",
     regulatory_interim: "Interim regulatory report",
@@ -423,159 +386,6 @@ export function sourceMatchesSearch(
     return `${source.title} ${source.canonicalUrl} ${sourceDocumentKindLabel(source.documentKind)}`
         .toLocaleLowerCase("en")
         .includes(query.trim().toLocaleLowerCase("en"));
-}
-
-export function sourceSelectionReasonLabel(
-    reasonCodes: ReadonlyArray<SelectionReason>,
-): string {
-    const reason = reasonCodes[0];
-    return reason
-        ? selectionReasonLabels[reason]
-        : "No additional selection explanation is available";
-}
-
-/** Explains the saved selection witness separately from the source's assessed contribution. */
-export function sourceSelectionExplanation(
-    source: Pick<
-        ProposalSource,
-        | "selectionRationale"
-        | "reasonCodes"
-        | "documentKind"
-        | "roleAvailability"
-        | "inspectionStatus"
-        | "disposition"
-    >,
-) {
-    const rationale = source.selectionRationale;
-    let reason = sourceSelectionReasonLabel(source.reasonCodes);
-    if (rationale?.trigger === "analyst_reference")
-        reason = "Added by the analyst.";
-    else if (rationale?.trigger === "required_role" && rationale.role)
-        reason = `Selected for ${sourceCoverageRoleLabel(rationale.role).toLowerCase()}.`;
-    else if (rationale?.trigger === "distinct_contribution") {
-        const contentRoles = [
-            ...new Set(
-                rationale.contributions
-                    .filter((item) => item.basis === "inspected_content")
-                    .flatMap((item) =>
-                        item.role
-                            ? [sourceCoverageRoleLabel(item.role).toLowerCase()]
-                            : [],
-                    ),
-            ),
-        ];
-        if (contentRoles.length)
-            reason = `Selected for additional material on ${contentRoles.join(", ")}.`;
-        else if (
-            rationale.contributions.some(
-                (item) =>
-                    item.kind === "report_candidate" && item.reportingPeriodEnd,
-            )
-        )
-            reason =
-                "Selected for a reporting period not represented when this source was selected.";
-        else if (
-            rationale.contributions.some(
-                (item) => item.kind === "filing_candidate",
-            )
-        )
-            reason =
-                "Selected as an additional material-event filing candidate.";
-        else if (
-            rationale.contributions.some((item) => item.kind === "publisher")
-        )
-            reason = "Selected for material from an additional publisher.";
-        else
-            reason = `Selected as an additional ${source.documentKind === "unknown" ? "document" : sourceDocumentKindLabel(source.documentKind).toLowerCase()} candidate.`;
-        if (
-            !rationale.contributions.some(
-                (item) => item.basis === "inspected_content",
-            )
-        )
-            reason += " Selection is based on discovery details.";
-    }
-    const useful =
-        source.roleAvailability?.filter(
-            (item) => item.state !== "not_established",
-        ) ?? [];
-    const available = useful
-        .filter((item) => item.state === "available")
-        .map((item) => sourceCoverageRoleLabel(item.role).toLowerCase());
-    const limited = useful
-        .filter((item) => item.state === "limited")
-        .map((item) => sourceCoverageRoleLabel(item.role).toLowerCase());
-    const assessment =
-        source.inspectionStatus === "unavailable"
-            ? "Its documentary contribution could not be assessed."
-            : !source.inspectionStatus
-              ? "Its documentary contribution has not yet been assessed."
-              : useful.length === 0
-                ? "No documentary contribution has been established from the reviewed material."
-                : [
-                      available.length
-                          ? `Documentary contribution: ${available.join(", ")}.`
-                          : "",
-                      limited.length
-                          ? `Limited contribution: ${limited.join(", ")}.`
-                          : "",
-                  ]
-                      .filter(Boolean)
-                      .join(" ");
-    const limitations = [
-        ...new Set(
-            useful.flatMap((item) =>
-                item.reasonCodes.map((code) => {
-                    if (Object.hasOwn(readingConcernLabels, code))
-                        return readingConcernLabels[
-                            code as keyof typeof readingConcernLabels
-                        ];
-                    return "Review the source details for the restrictions on this contribution.";
-                }),
-            ),
-        ),
-    ];
-    if (
-        useful.some((item) => item.usage !== "documentary") &&
-        limitations.length === 0
-    )
-        limitations.push(
-            "Review the source details for the restrictions on this contribution.",
-        );
-    for (const item of useful) {
-        if (item.usage === "attributed_argument_only")
-            limitations.push(
-                "Use only as an attributed argument, not as an established fact.",
-            );
-        if (item.usage === "verification_required")
-            limitations.push("Verify this contribution before relying on it.");
-        if (item.usage === "blocked")
-            limitations.push("This contribution is not available for use.");
-        if (
-            item.usage === "historical_only" &&
-            !item.reasonCodes.includes("historical")
-        )
-            limitations.push(readingConcernLabels.historical);
-    }
-    if (source.inspectionStatus === "partial")
-        limitations.push(readingConcernLabels.partial_reading);
-    return {
-        reason,
-        assessment,
-        limitations: [...new Set(limitations)],
-        missingRationale: !rationale && source.disposition === "recommended",
-    };
-}
-
-/** Explains discovery-only linkage without implying that source content was verified. */
-export function sourceCompanyLinkageLabel(
-    companyLinkageBasis: CompanyLinkageBasis,
-    inspectionStatus?: ReviewSource["inspectionStatus"],
-): string | null {
-    return companyLinkageBasis === "discovery_metadata"
-        ? inspectionStatus === "complete" || inspectionStatus === "partial"
-            ? "Linked from search details; source content was read separately"
-            : "Linked from discovery metadata; source content has not been read"
-        : null;
 }
 
 export function sourceCoverageRoleLabel(role: CoverageRole): string {
@@ -865,97 +675,6 @@ export function sourcePreparationCopy(
     };
 }
 
-/** Presents the persisted journey while supplemental work stays inside the source-checking stage. */
-export function sourcePreparationStages(
-    preparation: NonNullable<ProposalSummary["preparation"]>,
-) {
-    const active = preparation.status === "started";
-    const phase = preparation.progress?.phase;
-    const published =
-        preparation.proposalPublished ??
-        (!active && preparation.status !== "blocked");
-    const readingsComplete =
-        preparation.initialReadingsCompletedAt !== undefined ||
-        (phase !== undefined && phase !== "reading") ||
-        (published && preparation.remaining === 0);
-    const checksComplete =
-        (phase === "proposal" || published) && !preparation.pendingComparisons;
-    const step = !readingsComplete ? 1 : phase === "proposal" ? 3 : 2;
-    const state = (complete: boolean, current: boolean): JobStage["status"] =>
-        complete
-            ? "complete"
-            : current
-              ? active
-                  ? "running"
-                  : "failed"
-              : "pending";
-    const comparison =
-        phase === "comparison" &&
-        preparation.progress?.total !== undefined &&
-        preparation.progress.total > 0;
-    return {
-        step,
-        published,
-        stages: [
-            {
-                id: "reading",
-                label: "Read candidate sources",
-                status: state(readingsComplete, !readingsComplete),
-                detail: readingsComplete
-                    ? "Initial source checks finished"
-                    : `${preparation.checked} of ${preparation.total} sources checked`,
-                ...(!readingsComplete && preparation.total > 0
-                    ? { current: preparation.checked, total: preparation.total }
-                    : {}),
-                progressLabel: "Source reading progress",
-            },
-            {
-                id: "checks",
-                label: "Check source contributions",
-                status: state(
-                    checksComplete,
-                    readingsComplete && !checksComplete,
-                ),
-                detail: checksComplete
-                    ? "Source checks finished"
-                    : !active && preparation.pendingComparisons
-                      ? `${preparation.pendingComparisons} ${preparation.pendingComparisons === 1 ? "source comparison remains" : "source comparisons remain"} unfinished`
-                      : !active && readingsComplete
-                        ? "Source checks did not finish"
-                        : phase === "supplement"
-                          ? "Checking for additional sources"
-                          : readingsComplete && phase === "reading"
-                            ? "Reading additional sources using saved results"
-                            : comparison
-                              ? `${preparation.progress?.current ?? 0} of ${preparation.progress?.total} source comparisons checked`
-                              : preparation.pendingComparisons
-                                ? `${preparation.pendingComparisons} source comparisons remain unfinished`
-                                : readingsComplete
-                                  ? "Source checks have not finished"
-                                  : "Starts after the initial readings finish",
-                ...(comparison
-                    ? {
-                          current: preparation.progress?.current ?? 0,
-                          total: preparation.progress?.total,
-                      }
-                    : {}),
-                progressLabel: "Source comparison progress",
-            },
-            {
-                id: "proposal",
-                label: "Prepare your proposal",
-                status: state(published, active && phase === "proposal"),
-                detail: published
-                    ? "Proposal saved for your review"
-                    : phase === "proposal"
-                      ? "Organizing the saved results for your review"
-                      : "Starts after source checks finish",
-                progressLabel: "Proposal preparation progress",
-            },
-        ],
-    };
-}
-
 /** Explains the server-owned availability of preparation without exposing operational details. */
 export function sourcePreparationActionCopy(
     action: ProposalSummary["preparationAction"],
@@ -1100,74 +819,6 @@ export function sourceFindingKindLabel(
         reported_outcome: "Reported outcome",
         mixed_or_uncertain: "Mixed or unclear",
     }[kind];
-}
-
-export function sourceUsageCopy(
-    usage: NonNullable<ReviewSource["roleAvailability"]>[number]["usage"],
-    comparisonOutcome?: SourceQualification["findings"][number]["comparisonOutcome"],
-    kind?: SourceQualification["findings"][number]["kind"],
-    reasonCodes: readonly string[] = [],
-) {
-    if (reasonCodes.includes("qualification_conflict"))
-        return "The reading gives conflicting assessments of this material. This contribution does not count toward coverage.";
-    if (reasonCodes.includes("qualification_scope_unknown"))
-        return "The scope of an earlier reading restriction is unclear. This contribution does not count toward coverage.";
-
-    if (comparisonOutcome === "possible_conflict") {
-        return "A cited primary passage raises a possible conflict. Review the evidence before relying on this contribution. This concern is not a verified error.";
-    }
-    if (comparisonOutcome === "inconclusive") {
-        return "The available captured primary passages did not resolve this contribution. Verify its key premise before relying on it.";
-    }
-    if (comparisonOutcome === "no_conflict_observed") {
-        return usage === "attributed_argument_only" ||
-            ["attributed_argument", "forecast"].includes(kind ?? "")
-            ? "Use only as an attributed hypothesis. No conflict was observed within the cited captured primary passages, but that does not verify the argument as fact."
-            : "No conflict was observed within the cited captured primary passages. This comparison is limited to those passages and does not verify the assertion.";
-    }
-    if (
-        usage === "verification_required" &&
-        ["attributed_argument", "forecast"].includes(kind ?? "")
-    ) {
-        return "No completed comparison with applicable captured primary passages is available. Verify this contribution before using it even as an attributed hypothesis.";
-    }
-    return {
-        documentary:
-            "May contribute documentary material. Individual assertions still require evidence review.",
-        historical_only:
-            "Use as historical context only. This passage does not establish current conditions.",
-        attributed_argument_only:
-            "Use only as an attributed hypothesis. This passage does not establish a verified fact.",
-        verification_required:
-            "Verify the relevant assertions before factual use.",
-        blocked:
-            "This material has not established a suitable contribution to this need.",
-    }[usage];
-}
-
-const unavailableAssessmentCopy =
-    "The assessment refers to the cited passages and is limited to the available context.";
-
-/** Keeps model-authored reading and comparison notes away from internal pins and workflow details. */
-export function sourceAssessmentExplanationCopy(explanation: string): string {
-    const normalized = explanation.replace(/\s+/g, " ").trim();
-    const exposesInternalDetails =
-        /\b(?:possible_conflict|no_conflict_observed|inconclusive|source_comparison|source_qualification|provider_unavailable|invalid_output|not_run|aiTaskResults|sourceCaptures|api[_ -]?key|request[_ -]?id|http\s+\d{3}|ETIMEDOUT|ECONNRESET|ECONNREFUSED|AbortError|TimeoutError)\b/i.test(
-            normalized,
-        ) ||
-        /\b(?:target|primary|passage|finding)[-_]?\d+\b/i.test(normalized) ||
-        /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/.test(normalized) ||
-        /\b[a-z0-9]{24,}\b/i.test(normalized);
-    if (!normalized || normalized.length > 600 || exposesInternalDetails) {
-        return unavailableAssessmentCopy;
-    }
-    return normalized;
-}
-
-/** Omits unusable contribution prose while keeping its quotation and usage restrictions visible. */
-export function sourceFindingContributionCopy(summary: string): string | null {
-    const contribution = sourceAssessmentExplanationCopy(summary);
-    return contribution === unavailableAssessmentCopy ? null : contribution;
 }
 
 /** Model concerns remain points to inspect, never verified source errors. */
