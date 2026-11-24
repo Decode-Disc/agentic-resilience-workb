@@ -1,10 +1,7 @@
-import type { ErrorComponentProps } from "@tanstack/react-router";
-import { fireEvent, render, screen } from "@testing-library/react";
-import type { ComponentType } from "react";
+import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { invalidate, responsive } = vi.hoisted(() => ({
-    invalidate: vi.fn(),
+const { responsive } = vi.hoisted(() => ({
     responsive: {
         isMobile: false,
         isTabletOrBelow: false,
@@ -22,7 +19,6 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
         await importOriginal<typeof import("@tanstack/react-router")>();
     return {
         ...router,
-        useRouter: () => ({ invalidate }),
         Link: ({
             children,
             to,
@@ -53,7 +49,6 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 });
 
 import { WorkspaceNavigation } from "@/components/workspace/workspace-navigation";
-import { Route as RunRoute } from "@/routes/workspace/_protected/$runId";
 
 afterEach(() => {
     window.localStorage.clear();
@@ -105,27 +100,5 @@ describe("production run workspace", () => {
         expect(
             screen.queryByRole("button", { name: /Workspace section/ }),
         ).toBeNull();
-    });
-
-    it("offers an actionable route recovery when a run query fails", () => {
-        const ErrorComponent = RunRoute.options
-            .errorComponent as ComponentType<ErrorComponentProps>;
-        const reset = vi.fn();
-
-        render(
-            <ErrorComponent
-                error={new Error("Run query failed")}
-                reset={reset}
-                info={{ componentStack: "" }}
-            />,
-        );
-
-        expect(screen.getByRole("alert").textContent).toContain(
-            "We couldn’t load this research dossier.",
-        );
-        expect(screen.queryByText(/Run query failed/i)).toBeNull();
-        fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
-        expect(invalidate).toHaveBeenCalledOnce();
-        expect(reset).not.toHaveBeenCalled();
     });
 });

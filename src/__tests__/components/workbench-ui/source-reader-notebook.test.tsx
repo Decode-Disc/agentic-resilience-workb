@@ -84,7 +84,7 @@ function renderReader(
             {...props}
         />,
     );
-    return screen.getByRole("region", { name: "Annual report" });
+    return screen.getByRole("region", { name: props.title ?? "Annual report" });
 }
 
 const position = () =>
@@ -209,36 +209,13 @@ test("uncited text folds so the citations come first, and Full text restores it"
     fireEvent.click(fold);
     expect(screen.getByText("An uncited opening passage.")).toBeTruthy();
 
-    renderReaderAgain();
-    const full = screen.getAllByRole("button", { name: "Full text" }).at(-1);
-    if (!full) throw new Error("Full text control missing");
+    const second = within(renderReader({ title: "Second copy" }));
+    expect(second.queryByText("An uncited opening passage.")).toBeNull();
+    const full = second.getByRole("button", { name: "Full text" });
     expect(full.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(full);
     expect(full.getAttribute("aria-pressed")).toBe("true");
-    expect(
-        screen.getAllByText("An uncited opening passage.").length,
-    ).toBeGreaterThan(0);
-});
-
-function renderReaderAgain() {
-    render(
-        <SourceReader
-            title="Second copy"
-            meta=""
-            pages={pages}
-            contributions={contributions}
-            noteMode="inline"
-        />,
-    );
-}
-
-test("in the margin layout a single opened note stays in the margin", () => {
-    const reader = renderReader({ noteMode: "margin", notesShown: false });
-    fireEvent.click(
-        screen.getByRole("button", { name: "Citation 3: Hypothesis" }),
-    );
-    expect(screen.getByText("Network participation should grow.")).toBeTruthy();
-    expect(reader.getAttribute("data-layout")).toBe("margin");
+    expect(second.getByText("An uncited opening passage.")).toBeTruthy();
 });
 
 test("follow-up actions sit in the header menu", () => {

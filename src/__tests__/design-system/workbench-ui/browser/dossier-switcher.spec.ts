@@ -17,6 +17,10 @@ for (const width of [1440, 390])
                 name: "Find a dossier",
                 exact: true,
             });
+            await search.click({ trial: true });
+            await expect(
+                page.getByTestId("smooth-dropdown-menu"),
+            ).toBeInViewport({ ratio: 1 });
             await search.fill("service");
             await expect(page.getByRole("option")).toHaveCount(2);
             await page

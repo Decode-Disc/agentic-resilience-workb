@@ -40,6 +40,12 @@ test("the document matrix leads to a selected source in the reader and back", as
         .getByRole("button", { name: /Form 10-K · FY2025/ })
         .click();
     await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+    await expect(
+        page.getByText("Asserted fact", { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+        page.getByText("Forecast", { exact: true }).first(),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Next citation" }).click();
     await expect(
         page.getByRole("status", { name: "Citation position" }),
@@ -159,10 +165,15 @@ test("matrix filter menus, removable filters and the empty state stay coherent",
     ).toHaveCount(0);
 });
 
-test("matrix explains its columns and contribution classes", async ({
+test("matrix explains its columns and documentary contribution kinds", async ({
     page,
 }) => {
     await page.goto("/?layout=sources&screen=matrix&theme=light");
+    await expect(
+        page.getByRole("button", { name: "About Contributions" }),
+    ).toHaveAccessibleDescription(
+        /by documentary kind: asserted facts, attributed arguments, forecasts and context/,
+    );
     const help = page.getByRole("button", { name: "About Availability" });
     await expect(help).toHaveAccessibleDescription(
         /whether the stored copy is complete/,
@@ -175,7 +186,7 @@ test("matrix explains its columns and contribution classes", async ({
     ).toBeVisible();
     await expect(
         page.getByRole("button", {
-            name: "18 contributions: 12 facts, 4 inferences, 2 counter-evidence",
+            name: "18 contributions: 12 asserted facts, 4 attributed arguments, 2 forecasts",
         }),
     ).toBeVisible();
 });
@@ -197,6 +208,11 @@ test("Sources shows an available capture with unverified completeness on desktop
             .filter({ hasText: "Industry overview · reused" });
         await expect(
             row.getByText("Completeness unverified", { exact: true }),
+        ).toBeVisible();
+        await expect(
+            row.getByRole("button", {
+                name: "2 contributions: 2 context statements",
+            }),
         ).toBeVisible();
         await row
             .getByRole("button", { name: "Industry overview · reused" })
@@ -240,7 +256,7 @@ test.describe("on a touch screen", () => {
         await page.keyboard.press("Escape");
         await page.getByRole("button", { name: /^18 contributions/ }).tap();
         await expect(
-            page.getByRole("dialog").filter({ hasText: "12 facts" }),
+            page.getByRole("dialog").filter({ hasText: "12 asserted facts" }),
         ).toBeVisible();
     });
 
@@ -269,13 +285,17 @@ test.describe("on a touch screen", () => {
             .tap();
         const drawer = page.getByRole("dialog", { name: "Form 10-K · FY2025" });
         const close = drawer.getByRole("button", { name: "Close source" });
-        const title = drawer.getByText("Form 10-K · FY2025", { exact: true });
-        const [closeBox, titleBox] = await Promise.all([
-            close.boundingBox(),
-            title.boundingBox(),
-        ]);
-        if (!closeBox || !titleBox) throw new Error("Drawer header missing");
-        const closeCentre = closeBox.y + closeBox.height / 2;
+        // Both measurements must share a frame while the drawer is moving.
+        const { closeCentre, titleBox } = await close.evaluate((button) => {
+            const title = button.closest("header")?.querySelector("h2");
+            if (!title) throw new Error("Drawer header missing");
+            const box = button.getBoundingClientRect();
+            const titleRect = title.getBoundingClientRect();
+            return {
+                closeCentre: box.y + box.height / 2,
+                titleBox: { y: titleRect.y, height: titleRect.height },
+            };
+        });
         // The close action shares the title line instead of adding a row.
         expect(closeCentre).toBeGreaterThanOrEqual(titleBox.y - 8);
         expect(closeCentre).toBeLessThanOrEqual(
@@ -330,6 +350,27 @@ test("the notebook steps through citations, opens their notes and narrows by que
     await expect(
         reader.getByRole("button", { name: /^Citation 2/ }),
     ).toBeFocused();
+    const note = reader.locator("[data-note]");
+    await expect(note).toHaveCount(1);
+    const passage = note.locator("..").locator("[data-passage-id]");
+    await expect
+        .poll(async () => {
+            const [noteBox, passageBox, readerBox] = await Promise.all([
+                note.boundingBox(),
+                passage.boundingBox(),
+                reader.boundingBox(),
+            ]);
+            return !!(
+                noteBox &&
+                passageBox &&
+                readerBox &&
+                noteBox.x >= passageBox.x + passageBox.width &&
+                noteBox.x + noteBox.width <= readerBox.x + readerBox.width &&
+                noteBox.y < passageBox.y + passageBox.height &&
+                noteBox.y + noteBox.height > passageBox.y
+            );
+        })
+        .toBe(true);
     await page.keyboard.press("j");
     await expect(position).toHaveText("Citation 3 of 3");
 
@@ -383,7 +424,7 @@ test("medium reader keeps the list beside the document without a drawer, inside 
     await page.goto("/?layout=sources&screen=reader&theme=light");
     const list = page.getByRole("navigation", { name: "Sources", exact: true });
     await list.getByRole("button", { name: /Calls and investor/ }).click();
-    await list.getByRole("button", { name: /Q2 2025 earnings call/ }).click();
+    await list.getByRole("button", { name: /^Q2 2025 earnings call/ }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     const reader = page.getByRole("region", { name: "Q2 2025 earnings call" });
     await expect(reader).toBeVisible();
@@ -422,7 +463,10 @@ test("inventory dock restores focus and unconnected actions say so", async ({
         .click();
     const drawer = page.getByRole("dialog", { name: "Form 10-K · FY2025" });
     await drawer
-        .getByRole("button", { name: "Request a targeted check" })
+        .getByRole("button", { name: "Follow up", exact: true })
+        .click();
+    await page
+        .getByRole("menuitem", { name: "Request a targeted check" })
         .click();
     await expect(page.locator("output")).toHaveText(
         "Not connected in this preview · no check was requested",

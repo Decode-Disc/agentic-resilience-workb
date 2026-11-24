@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import {
+    act,
     fireEvent,
     render,
     screen,
@@ -332,7 +333,7 @@ describe("StartResearchPage", () => {
         expect(badge?.textContent?.match(/CCCS/g)).toHaveLength(1);
     });
 
-    it("defaults to Balanced and launches once with the real run id", async () => {
+    it("defaults to Balanced and navigates to the confirmed dossier once", async () => {
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
         confirmCompany.mockResolvedValue({
@@ -402,7 +403,7 @@ describe("StartResearchPage", () => {
         );
     });
 
-    it("collects public references from the toolbar and includes them at launch", async () => {
+    it("collects public references from the toolbar and includes them when creating the dossier", async () => {
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
         confirmCompany.mockResolvedValue({
@@ -568,7 +569,7 @@ describe("StartResearchPage", () => {
         );
     }, 10_000);
 
-    it("asks the analyst to re-add an expired reference before launch", async () => {
+    it("asks the analyst to re-add an expired reference before creating the dossier", async () => {
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
         submitManualUrl.mockResolvedValue({
@@ -658,7 +659,7 @@ describe("StartResearchPage", () => {
         );
     });
 
-    it("asks for an access code only when an anonymous visitor confirms launch", async () => {
+    it("asks for an access code only when an anonymous visitor confirms dossier creation", async () => {
         convexReactHarness.query(api.visitors.current).returns(null);
         searchCompanies.mockResolvedValue(companyCandidates);
         preflight.mockResolvedValue(resolvedCompany);
@@ -737,37 +738,36 @@ describe("StartResearchPage", () => {
     });
 
     it("debounces search-as-you-type without clicking Search and ignores 1-character non-numeric queries", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
         searchCompanies.mockResolvedValue(companyCandidates);
-        renderWithInvitationAccess(<StartResearchPage />);
-
-        fireEvent.click(
-            screen.getByRole("button", { name: /Company to investigate/i }),
-        );
-        const searchInput = screen.getByRole("textbox", {
-            name: /^Company search$/i,
-        });
-
-        fireEvent.change(searchInput, { target: { value: "C" } });
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        expect(searchCompanies).not.toHaveBeenCalled();
-
-        fireEvent.change(searchInput, { target: { value: "CC" } });
-        fireEvent.change(searchInput, { target: { value: "CCC" } });
-        expect(searchCompanies).not.toHaveBeenCalled();
-
-        await waitFor(
-            () =>
-                expect(searchCompanies).toHaveBeenCalledWith({
-                    query: "CCC",
+        const { unmount } = renderWithInvitationAccess(<StartResearchPage />);
+        try {
+            fireEvent.click(
+                screen.getByRole("button", { name: /Company to investigate/i }),
+            );
+            const searchInput = screen.getByRole("textbox", {
+                name: /^Company search$/i,
+            });
+            fireEvent.change(searchInput, { target: { value: "C" } });
+            await act(async () => vi.runOnlyPendingTimersAsync());
+            expect(searchCompanies).not.toHaveBeenCalled();
+            fireEvent.change(searchInput, { target: { value: "CC" } });
+            fireEvent.change(searchInput, { target: { value: "CCC" } });
+            expect(searchCompanies).not.toHaveBeenCalled();
+            await act(async () => vi.runOnlyPendingTimersAsync());
+            expect(searchCompanies).toHaveBeenCalledExactlyOnceWith({
+                query: "CCC",
+            });
+            expect(
+                screen.getByRole("option", {
+                    name: /CCC Intelligent Solutions Holdings Inc\..*CCCS.*NASDAQ.*CIK 1818201/i,
                 }),
-            { timeout: 1_500 },
-        );
-        expect(searchCompanies).toHaveBeenCalledTimes(1);
-        expect(
-            await screen.findByRole("option", {
-                name: /CCC Intelligent Solutions Holdings Inc\..*CCCS.*NASDAQ.*CIK 1818201/i,
-            }),
-        ).toBeTruthy();
+            ).toBeTruthy();
+        } finally {
+            unmount();
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
     });
 
     it("ignores stale search results when the user continues typing", async () => {

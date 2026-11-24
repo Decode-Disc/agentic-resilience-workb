@@ -316,3 +316,81 @@ for (const viewport of [
         expect(errors).toEqual([]);
     });
 }
+
+test("Start research launches the real transaction and spends nothing in a browser test", async ({
+    page,
+}) => {
+    test.setTimeout(150000);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+    });
+    await admitAnalyst(page);
+    const fixtureKey = `start-research-launch-${Date.now()}`;
+    const runId = await runConvexJson<string>(
+        "execution/fixtures:startWorkbench",
+        { fixtureKey, slotKey: browserTestSlot() },
+    );
+    await runConvexJson("execution/fixtures:resetBrowserTestUsage", {
+        runId,
+        fixtureKey,
+    });
+    const inspect = () =>
+        runConvexJson<
+            FunctionReturnType<
+                typeof internal.execution.fixtures.inspectWorkbench
+            >
+        >("execution/fixtures:inspectWorkbench", { runId, fixtureKey });
+
+    await page.goto(`/workspace/${runId}?section=overview`);
+    await expect(
+        page.getByRole("region", { name: "Research framing", exact: true }),
+    ).toBeVisible({ timeout: 60000 });
+    const start = page.getByRole("button", {
+        name: "Start research",
+        exact: true,
+    });
+    await expect(start).toBeVisible({ timeout: 60000 });
+    expect((await inspect()).researchStarted).toBe(false);
+    await reviewResearchProgram(page);
+    await expect(
+        page.getByText("Who controls the workflow and its rules?", {
+            exact: true,
+        }),
+    ).toBeVisible({ timeout: 60000 });
+    await expect(start).toBeEnabled({ timeout: 60000 });
+
+    await start.click();
+
+    // The public mutation accepted the launch; the run records it durably.
+    await expect.poll(inspect, { timeout: 60_000 }).toMatchObject({
+        researchStarted: true,
+    });
+    // A browser-test dossier must never reach paid provider work.
+    const launched = await inspect();
+    expect(launched.providerCallCount).toBe(0);
+    expect(launched.receipts).toEqual([]);
+    // The accepted program replaces the Start affordance instead of re-offering it.
+    await expect(start).toHaveCount(0, { timeout: 30000 });
+    await expect(
+        page.getByText("Needs attention", { exact: false }).first(),
+    ).toBeVisible({ timeout: 60000 });
+    const body = await page.locator("body").innerText();
+    expect(body).not.toMatch(
+        /paid_work_disabled|source_preparation|Uncaught Error|CONVEX/,
+    );
+    await page.screenshot({ path: "/tmp/start-workbench-launched.png" });
+
+    await page.reload();
+    await expect(start).toHaveCount(0, { timeout: 60000 });
+    await expect.poll(inspect, { timeout: 60_000 }).toMatchObject({
+        researchStarted: true,
+    });
+    expect((await inspect()).providerCallCount).toBe(0);
+    await expect(page.getByLabel("Access code", { exact: true })).toHaveCount(
+        0,
+    );
+    expect(errors).toEqual([]);
+});

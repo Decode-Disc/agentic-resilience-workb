@@ -77,14 +77,18 @@ export function FaviconAvatar({
     fallbackIcon?: PlatformIcon;
 }) {
     const parsed = parseFaviconUrl(canonicalUrl);
-    const [failed, setFailed] = useState(false);
-
-    // Effect-free reset: the favicon URL is fully derived from canonicalUrl,
-    // so when the identity changes we un-fail. Deriving the reset key from the
-    // input rather than via useEffect avoids a flash of the fallback on every
-    // parent re-render and keeps the component pure wrt its inputs.
     const faviconKey = parsed?.faviconUrl ?? "";
-    const showFallback = !parsed?.isHttps || failed || faviconKey === "";
+    const [imageState, setImageState] = useState({
+        key: faviconKey,
+        failed: false,
+    });
+    if (imageState.key !== faviconKey) {
+        setImageState({ key: faviconKey, failed: false });
+    }
+    const showFallback =
+        !parsed?.isHttps ||
+        (imageState.key === faviconKey && imageState.failed) ||
+        faviconKey === "";
 
     if (showFallback) {
         const label = parsed
@@ -109,8 +113,6 @@ export function FaviconAvatar({
         ? `${entityName} link`
         : `Link icon for ${parsed.hostname}`;
 
-    // An unkeyed async host name is used to reset the failed flag when the
-    // underlying identity changes. See `key` prop on the inner span below.
     return (
         <Avatar size={size} aria-label={label}>
             <span key={faviconKey} className="contents">
@@ -118,7 +120,9 @@ export function FaviconAvatar({
                     src={parsed.faviconUrl}
                     alt={`Favicon for ${parsed.hostname}`}
                     loading="lazy"
-                    onError={() => setFailed(true)}
+                    onError={() =>
+                        setImageState({ key: faviconKey, failed: true })
+                    }
                 />
                 <AvatarFallback delay={FALLBACK_DELAY_MS}>
                     <Icon iconNode={fallbackIcon} />

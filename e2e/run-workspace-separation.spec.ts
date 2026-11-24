@@ -67,7 +67,7 @@ for (const viewport of [
         await expect(page.getByRole("alert").first()).toBeVisible();
         expect(errors).toEqual([]);
     });
-    test(`header keeps its navigation on one row at ${viewport.width}px`, async ({
+    test(`header navigation stays usable on one row at ${viewport.width}px`, async ({
         page,
     }) => {
         await page.setViewportSize(viewport);
@@ -93,14 +93,30 @@ for (const viewport of [
         expect(account).not.toBeNull();
         if (!navigation || !account)
             throw new Error("Header controls are missing");
-        expect(
-            Math.abs(
-                navigation.y +
-                    navigation.height / 2 -
-                    account.y -
-                    account.height / 2,
-            ),
-        ).toBeLessThanOrEqual(2);
+        expect(Math.max(navigation.y, account.y)).toBeLessThan(
+            Math.min(navigation.y + navigation.height, account.y + account.height),
+        );
+        const accountControl = page.getByRole("button", {
+            name: "Workspace menu",
+            exact: true,
+        });
+        await accountControl.click();
+        await expect(
+            page.getByRole("dialog").getByRole("button", {
+                name: "Logout",
+                exact: true,
+            }),
+        ).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(accountControl).toBeFocused();
+        await page.getByRole("button", {
+            name: "Workbench navigation",
+            exact: true,
+        }).click();
+        await page.getByRole("menuitem", { name: "Dossiers", exact: true }).click();
+        await expect(page).toHaveURL(/\/workspace\/dossiers$/);
+        await page.getByRole("link", { name: /Open .* dossier/ }).first().click();
+        await expect(page).toHaveURL(new RegExp(fixture.runId));
     });
 }
 
@@ -178,26 +194,16 @@ test("protected administration separates and pages technical dossiers", async ({
         await expect(
             dialog.getByRole("button", { name: /resume|retry|start/i }),
         ).toHaveCount(0);
-        await closeDossierDetail(page);
-        await page
-            .getByRole("tab", { name: "Activity & spend", exact: true })
-            .click();
+        // This fixture has no receipts; the deployment may have unrelated provider history.
         await expect(
-            page.getByText("No provider attempts recorded", { exact: true }),
+            dialog.getByText("No provider receipts for this dossier.", {
+                exact: true,
+            }),
         ).toBeVisible();
-        const inspectAttempt = page.getByRole("button", {
-            name: "Inspect attempt",
-            exact: true,
-        });
-        if ((await inspectAttempt.count()) > 0) {
-            await inspectAttempt.first().click();
-            const attemptDialog = page.getByRole("dialog", {
-                name: "Provider attempt",
-            });
-            await expect(attemptDialog).toBeVisible();
-            await page.keyboard.press("Escape");
-            await expect(attemptDialog).toBeHidden();
-        }
+        await expect(
+            dialog.getByRole("button", { name: "Inspect attempt", exact: true }),
+        ).toHaveCount(0);
+        await closeDossierDetail(page);
         await page.setViewportSize({ width: 390, height: 844 });
         await page
             .getByRole("tab", { name: "Dossiers", exact: true })

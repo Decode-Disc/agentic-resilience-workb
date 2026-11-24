@@ -135,38 +135,25 @@ test.each(
     allSourcesPhases,
 )("the %s Sources phase reads as analyst copy", (phase) => {
     const copy = sourcesPhasePresentation(phase);
-    for (const text of [copy.label, copy.outcome, copy.title, copy.detail])
+    for (const text of [copy.label, copy.outcome, copy.title, copy.detail]) {
         expect(text).not.toMatch(/_|sources_prepared|execution|mission/i);
+        expect(text).not.toMatch(
+            /^Sources (is|used|handed|stopped|continues|reached)/,
+        );
+    }
     if (phase === "failed")
         expect(copy.detail).not.toMatch(/Start a new analysis|cannot continue/);
-    if (phase === "time_limit")
+    if (phase === "time_limit") {
         expect(copy.detail).toContain("used its time window");
-});
-
-test("Sources copy names the agent and never shows raw codes", () => {
-    for (const phase of allSourcesPhases) {
-        const copy = sourcesPhasePresentation(phase);
-        for (const text of [
-            copy.label,
-            copy.outcome,
-            copy.title,
-            copy.detail,
-        ]) {
-            expect(text).not.toMatch(
-                /^Sources (is|used|handed|stopped|continues|reached)/,
-            );
-            expect(text).not.toMatch(/_[a-z]/);
-        }
+        expect(copy.title).toBe("The Sources Agent reached its time limit");
     }
-    expect(sourcesPhasePresentation("time_limit").title).toBe(
-        "The Sources Agent reached its time limit",
-    );
-    expect(sourcesPhasePresentation("ended_without_material")).toMatchObject({
-        workState: "blocked",
-        label: "No material",
-        outcome: "No material",
-        title: "No usable material prepared",
-    });
+    if (phase === "ended_without_material")
+        expect(copy).toMatchObject({
+            workState: "blocked",
+            label: "No material",
+            outcome: "No material",
+            title: "No usable material prepared",
+        });
 });
 
 const tallied = (total: number) => ({

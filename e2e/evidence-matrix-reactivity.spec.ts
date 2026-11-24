@@ -256,7 +256,7 @@ async function openEvidence(
 }
 
 test.describe("evidence matrix deterministic browser gate", () => {
-    test("showcase reaches persisted evidence_ready and renders the reactive matrix on desktop", async ({
+    test("persisted showcase exposes desktop inventory and keyboard resizing", async ({
         page,
     }) => {
         await page.setViewportSize({ width: 1440, height: 1000 });
@@ -276,9 +276,21 @@ test.describe("evidence matrix deterministic browser gate", () => {
         await expect(separator).toBeVisible();
         // Resize through the focused separator handle and confirm the layout
         // keeps both master and detail functional.
+        const detail = page.getByRole("article", { name: /^Claim detail:/ });
+        const before = await detail.boundingBox();
+        if (!before) throw new Error("Claim detail has no measurable bounds");
         await separator.focus();
         await page.keyboard.press("ArrowRight");
-        await expect(separator).toBeVisible();
+        await expect
+            .poll(async () => (await detail.boundingBox())?.width ?? Infinity)
+            .toBeLessThan(before.width);
+        const narrowed = await detail.boundingBox();
+        if (!narrowed) throw new Error("Claim detail disappeared after resizing");
+        await page.keyboard.press("ArrowLeft");
+        await expect
+            .poll(async () => (await detail.boundingBox())?.width ?? 0)
+            .toBeGreaterThan(narrowed.width);
+        await expect(separator).toBeFocused();
         await expect(
             page.getByRole("article", { name: /^Claim detail:/ }),
         ).toBeVisible();
@@ -355,17 +367,30 @@ test.describe("evidence matrix deterministic browser gate", () => {
             page.getByText(/claim generation is not available for this dossier yet/i),
         ).toBeVisible();
         await expect(
-            page.getByText(/Your approved sources are preserved and will be reused/i),
+            page.getByText(/Your approved sources are preserved\. No claims were produced, and no assessment is available\./i),
         ).toBeVisible();
         // Zero claims produced: no claim list header or rows are rendered.
         await expect(page.getByText(/claims shown/i)).not.toBeVisible();
         await expect(page.getByRole("button", { name: /^Open / })).toHaveCount(0);
 
-        // Assessment stays locked behind the evidence review gate; no claims
-        // and no provider work are produced for the unavailable scenario.
+        for (const width of [1440, 390]) {
+            await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+            await page.screenshot({
+                path: test.info().outputPath(`unavailable-${width}.png`),
+            });
+        }
         await expect(
-            page.getByText(/dimension assessment stays locked until evidence can be reviewed/i),
+            page.getByText(/Close Inventory, then open Overview/),
         ).toBeVisible();
+        await expect(
+            page.getByText(/Return to Progress|dimension assessment stays locked/i),
+        ).toHaveCount(0);
+        await page.getByRole("dialog", { name: "Evidence inventory", exact: true })
+            .getByRole("button", { name: "Close", exact: true }).click();
+        await page.getByRole("navigation", { name: "Research workspace sections" })
+            .getByRole("link", { name: "Overview", exact: true }).click();
+        await expect(page).toHaveURL(/section=overview/);
+        await expect(page.getByRole("region", { name: "Research progress" })).toBeVisible();
     });
 
     test("tablet drawer supports keyboard row selection, focus containment, Escape close, and focus restoration", async ({

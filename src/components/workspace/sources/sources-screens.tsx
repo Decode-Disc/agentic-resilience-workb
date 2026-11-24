@@ -864,8 +864,20 @@ export function SourcesReaderScreen({
                 element.getBoundingClientRect().top + window.scrollY,
             );
         measure();
+        const observer = new ResizeObserver(measure);
+        // Wrapping navigation, notices and loaded fonts can move the reader without a window resize.
+        for (
+            let ancestor = element.parentElement;
+            ancestor;
+            ancestor = ancestor.parentElement
+        ) {
+            observer.observe(ancestor);
+        }
         window.addEventListener("resize", measure);
-        return () => window.removeEventListener("resize", measure);
+        return () => {
+            observer.disconnect();
+            window.removeEventListener("resize", measure);
+        };
     }, [compact]);
     // Both layouts end at the viewport's bottom edge, so long lists scroll inside their card.
     const viewportHeight =

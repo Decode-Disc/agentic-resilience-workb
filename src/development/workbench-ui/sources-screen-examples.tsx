@@ -13,6 +13,7 @@ import {
     workspaceDockActionClass,
 } from "@/components/workspace/workspace-dock";
 import { useMediaQuery } from "@/hooks/use-responsive";
+import { documentaryContributionTerms } from "@/lib/presentation/sources";
 import { IllustrativeInventorySheet } from "./inventory-sheet-fixture";
 import {
     annualReport,
@@ -155,6 +156,7 @@ export function SourcesScreenPreview({
                     <SourcesMatrixScreen
                         frame={frame}
                         rows={filterIllustrativeSources(query, filters)}
+                        contributionTerms={documentaryContributionTerms}
                         total={totalSources}
                         currentId={selectedId}
                         query={query}

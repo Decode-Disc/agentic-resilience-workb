@@ -54,10 +54,10 @@ export function EvidenceCoverageSummary({
                         Claim generation is not available for this dossier yet
                     </p>
                     <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        Your approved sources are preserved and will be reused
-                        when this becomes available. No claims were produced,
-                        and dimension assessment stays locked until evidence can
-                        be reviewed. Return to Progress to try again.
+                        Your approved sources are preserved. No claims were
+                        produced, and no assessment is available. Close
+                        Inventory, then open Overview to inspect the dossier’s
+                        status.
                     </p>
                 </div>
             ) : null}

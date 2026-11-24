@@ -92,7 +92,13 @@ for (const width of [1440, 390])
             );
             await page.keyboard.press("Escape");
             await input.focus();
-            await page.waitForTimeout(250);
+            await expect(input).toBeFocused();
+            await expect(
+                page.getByRole("button", {
+                    name: "Composer tools",
+                    exact: true,
+                }),
+            ).toHaveAttribute("aria-expanded", "false");
             await page.screenshot({
                 path: `/tmp/composer-program-focused-${theme}-${width}.png`,
             });

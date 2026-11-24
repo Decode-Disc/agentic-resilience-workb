@@ -46,9 +46,7 @@ export interface FileDropzoneProps {
  * Drag-and-drop file ingestion surface.
  *
  * Project alignment notes:
- * - Pure client surface. There is no TanStack Start server function to call:
- *   file ingestion only stages files locally in this prototype. Real ingestion
- *   ships with the source-acquisition slice.
+ * - Pure client staging only. Application consumers keep file upload disabled; the prototype accepts public source links, not local uploads.
  * - No `next/image`: the workspace is a React + TanStack Start module bundle,
  *   not a Next app — previews use a native `<img>` and the object URL is
  *   revoked on removal to avoid leaks.
@@ -74,6 +72,12 @@ export function FileDropzone({
     const [error, setError] = useState<string | null>(null);
     const reducedMotion = useReducedMotion();
     const inputId = useId();
+    const maxSizeLabel =
+        maxSize >= 1024 ** 2
+            ? `${maxSize / 1024 ** 2}MB`
+            : maxSize >= 1024
+              ? `${maxSize / 1024}KB`
+              : `${maxSize}B`;
 
     const generateId = useCallback(
         () => Math.random().toString(36).substring(2, 9),
@@ -106,9 +110,7 @@ export function FileDropzone({
             const acceptedFiles: DroppedFile[] = [];
             for (const file of incoming) {
                 if (maxSize && file.size > maxSize) {
-                    setError(
-                        `File ${file.name} exceeds ${Math.round(maxSize / 1024 / 1024)}MB limit`,
-                    );
+                    setError(`File ${file.name} exceeds ${maxSizeLabel} limit`);
                     continue;
                 }
                 acceptedFiles.push({
@@ -124,7 +126,7 @@ export function FileDropzone({
                 emit(multiple ? [...files, ...acceptedFiles] : acceptedFiles);
             }
         },
-        [emit, files, generateId, maxFiles, maxSize, multiple],
+        [emit, files, generateId, maxFiles, maxSize, maxSizeLabel, multiple],
     );
 
     const removeFile = useCallback(
@@ -267,8 +269,7 @@ export function FileDropzone({
                                             iconNode={FileUploadIcon}
                                             size={12}
                                         />
-                                        Max {Math.round(maxSize / 1024 / 1024)}
-                                        MB
+                                        Max {maxSizeLabel}
                                     </span>
                                     <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-secondary-foreground">
                                         <Icon iconNode={File01Icon} size={12} />
@@ -296,8 +297,7 @@ export function FileDropzone({
                                 </p>
                                 {maxSize ? (
                                     <p className="mt-2 text-xs text-muted-foreground">
-                                        Max {Math.round(maxSize / 1024 / 1024)}
-                                        MB per file
+                                        Max {maxSizeLabel} per file
                                     </p>
                                 ) : null}
                             </motion.div>

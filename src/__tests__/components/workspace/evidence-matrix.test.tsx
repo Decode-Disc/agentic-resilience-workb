@@ -393,6 +393,14 @@ test("shows an analyst-safe unavailable banner without raw pause copy", () => {
             /claim generation is not available for this dossier yet/i,
         ),
     ).toBeTruthy();
+    expect(
+        screen.getByText(/Close Inventory, then open Overview/),
+    ).toBeTruthy();
+    expect(
+        screen.queryByText(
+            /Return to Progress|dimension assessment stays locked/i,
+        ),
+    ).toBeNull();
     expect(screen.queryByText(/claim_generation_unavailable/i)).toBeNull();
     expect(
         screen.queryByText(
@@ -501,35 +509,6 @@ test("shows a non-terminal sparse notice while more raw pages may match", () => 
 
     fireEvent.click(screen.getByRole("button", { name: /Load more claims/i }));
     expect(loadMore).toHaveBeenCalledTimes(1);
-});
-
-test("accepts the filtered sparse page through query args without a terminal state", async () => {
-    convexReactHarness.query(api.evidenceMatrix.getSummary).returns({
-        ...readySummary,
-        claimCount: 1,
-    });
-    const loadMore = vi.fn();
-    convexReactHarness.paginatedQuery(api.evidenceMatrix.listClaims).returns({
-        results: [],
-        status: "CanLoadMore",
-        loadMore,
-    } as never);
-
-    render(<EvidenceMatrix runId={"run-1" as never} />);
-    fireEvent.click(screen.getByRole("button", { name: "Fact" }));
-    await waitFor(() =>
-        expect(
-            convexReactHarness.module.usePaginatedQuery,
-        ).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                filters: { classification: "Fact" },
-            }),
-            { initialNumItems: expect.any(Number) },
-        ),
-    );
-    expect(screen.queryByText("No evidence claims")).toBeNull();
-    expect(screen.getByText(/More claims may match this filter/i)).toBeTruthy();
 });
 
 test("separates claim list and detail on desktop with resizable panels", () => {

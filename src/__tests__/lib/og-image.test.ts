@@ -1,12 +1,13 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { resolveOgImage } from "@/lib/workspace/og-image";
 
-const fetchMock = vi.fn();
+const fetchMock = vi.fn<typeof fetch>();
 
-vi.stubGlobal("fetch", fetchMock);
+beforeEach(() => vi.stubGlobal("fetch", fetchMock));
 
 afterEach(() => {
     fetchMock.mockReset();
+    vi.unstubAllGlobals();
 });
 
 describe("resolveOgImage", () => {
@@ -21,25 +22,30 @@ describe("resolveOgImage", () => {
     });
 
     test("returns the og:image URL from the proxy response", async () => {
-        fetchMock.mockResolvedValue({
-            ok: true,
-            json: async () => ({
+        fetchMock.mockResolvedValue(
+            Response.json({
                 ok: true,
                 imageUrl: "https://cdn.example.com/og.png",
                 imageOk: true,
             }),
-        });
-
-        await expect(resolveOgImage("https://example.com/")).resolves.toBe(
+        );
+        const candidate =
+            "https://reports.example.com/annual?year=2026&section=risks";
+        await expect(resolveOgImage(candidate)).resolves.toBe(
             "https://cdn.example.com/og.png",
         );
+        const [input, options] = fetchMock.mock.calls[0] ?? [];
+        const requested = new URL(String(input));
+        expect(requested.origin).toBe("https://api.poly.io");
+        expect(requested.pathname).toBe("/og");
+        expect([...requested.searchParams]).toEqual([["url", candidate]]);
+        expect(options?.headers).toEqual({ Accept: "application/json" });
     });
 
     test("returns null when the proxy reports not-ok", async () => {
-        fetchMock.mockResolvedValue({
-            ok: true,
-            json: async () => ({ ok: false, error: "The site returned 403" }),
-        });
+        fetchMock.mockResolvedValue(
+            Response.json({ ok: false, error: "The site returned 403" }),
+        );
 
         await expect(
             resolveOgImage("https://example.com/"),
@@ -47,15 +53,35 @@ describe("resolveOgImage", () => {
     });
 
     test("returns null when the proxy reports an invalid image", async () => {
-        fetchMock.mockResolvedValue({
-            ok: true,
-            json: async () => ({
+        fetchMock.mockResolvedValue(
+            Response.json({
                 ok: true,
                 imageUrl: "https://cdn.example.com/og.png",
                 imageOk: false,
             }),
-        });
+        );
 
+        await expect(
+            resolveOgImage("https://example.com/"),
+        ).resolves.toBeNull();
+    });
+
+    test.each([
+        {
+            label: "an HTTP failure",
+            response: () =>
+                Response.json(
+                    { ok: true, imageUrl: "https://cdn.example.com/error.png" },
+                    { status: 503 },
+                ),
+        },
+        { label: "malformed JSON", response: () => new Response("not JSON") },
+        {
+            label: "a missing image",
+            response: () => Response.json({ ok: true }),
+        },
+    ])("returns null for $label", async ({ response }) => {
+        fetchMock.mockResolvedValue(response());
         await expect(
             resolveOgImage("https://example.com/"),
         ).resolves.toBeNull();

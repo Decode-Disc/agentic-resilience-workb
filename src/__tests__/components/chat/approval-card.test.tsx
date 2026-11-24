@@ -126,25 +126,30 @@ test("a superseded request shows no choices", () => {
     ).toBeTruthy();
 });
 
-test("choices are reachable in order with Tab", () => {
-    render(
-        <ApprovalCard
-            title="Pause research"
-            state="request"
-            onChoose={vi.fn()}
-        />,
+test.each([
+    false,
+    true,
+])("a receipt restores removed-choice focus without taking focus from another task (outside=%s)", (outside) => {
+    const view = (state: "request" | "done") => (
+        <>
+            <button type="button">Another task</button>
+            <ApprovalCard
+                title="Pause research"
+                state={state}
+                statusLabel={state === "done" ? "Research paused." : undefined}
+                onChoose={vi.fn()}
+            />
+        </>
     );
-    const group = screen.getByRole("group");
-    const buttons = screen.getAllByRole("button");
-    expect(buttons.map((button) => button.textContent)).toEqual([
-        "Deny",
-        "Always allow",
-        "Allow once",
-    ]);
-    for (const button of buttons) {
-        expect(group.contains(button)).toBe(true);
-        expect(button.tabIndex).toBe(0);
-        button.focus();
-        expect(document.activeElement).toBe(button);
-    }
+    const { rerender } = render(view("request"));
+    const otherTask = screen.getByRole("button", { name: "Another task" });
+    (outside
+        ? otherTask
+        : screen.getByRole("button", { name: "Allow once" })
+    ).focus();
+    rerender(view("done"));
+    const receipt = screen.getByRole("status");
+    expect(receipt.textContent).toBe("Research paused.");
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    expect(document.activeElement).toBe(outside ? otherTask : receipt);
 });

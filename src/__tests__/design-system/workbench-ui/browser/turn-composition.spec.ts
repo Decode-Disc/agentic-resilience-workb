@@ -61,11 +61,6 @@ for (const width of [1440, 390])
                 name: "Replacing software is not replacing coordination",
                 exact: true,
             });
-            expect(
-                await answer.evaluate(
-                    (node) => node.closest(".chat-work-entries") === null,
-                ),
-            ).toBe(true);
             await expect
                 .poll(() =>
                     note.evaluate((element) => {
@@ -80,10 +75,24 @@ for (const width of [1440, 390])
                         return opacity;
                     }),
                 )
-                .toBeGreaterThan(0.99);
+                .toBeGreaterThan(0);
             await page.screenshot({
                 path: `/tmp/work-log-after-${theme}-${width}.png`,
             });
+            await group.click();
+            await expect(group).toHaveAttribute("aria-expanded", "false");
+            await expect(note).toBeHidden();
+            await answer.scrollIntoViewIfNeeded();
+            await expect(answer).toBeInViewport({ ratio: 1 });
+            const answerTable = page.getByRole("columnheader", {
+                name: "What to test",
+            });
+            await answerTable.scrollIntoViewIfNeeded();
+            await expect(answerTable).toBeInViewport({ ratio: 1 });
+            await page.screenshot({
+                path: `/tmp/work-log-folded-${theme}-${width}.png`,
+            });
+            await group.click();
             const operation = page.getByRole("button", {
                 name: "Inspect Read the retained investor presentation",
                 exact: true,

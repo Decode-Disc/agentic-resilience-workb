@@ -10,6 +10,13 @@ const scratch =
 const raw =
     /approval_|sources_time_limit|execution_time_limit|stale_execution|_research\b/;
 
+const CARD_TITLE = "The Sources Agent reached its time limit";
+const TIME_LIMIT_CHOICES = [
+    "Use what's prepared",
+    "Continue once",
+    "Always continue",
+] as const;
+
 async function fixture(name: string, runId: string, fixtureKey: string) {
     await runConvexJson(`execution/fixtures:${name}`, { runId, fixtureKey });
 }
@@ -32,7 +39,46 @@ async function expectNoRawBodyCopy(page: Page) {
     expect(await page.locator("body").innerText()).not.toMatch(raw);
 }
 
-test("approval cards and dossier grants govern Sources time limits at 1440px", async ({
+/**
+ * Opens an unlaunched dossier that has just reached the Sources time limit.
+ * The decided outcome stays with each test: a standing grant, a single
+ * continuation and using what's prepared are independent analyst decisions.
+ */
+async function openTimeLimitDossier(page: Page, outcome: string) {
+    await admitAnalyst(page);
+    const fixtureKey = `sources-time-limit-${outcome}-${Date.now()}`;
+    const runId = await runConvexJson<string>(
+        "execution/fixtures:startWorkbench",
+        { fixtureKey, slotKey: browserTestSlot() },
+    );
+    await page.goto(`/workspace/${runId}?section=overview`);
+    const conversation = page.getByLabel("Research conversation");
+    const progress = page.getByLabel("Documentary progress");
+    await expect(
+        page
+            .getByLabel("Framing conversation")
+            .getByText("Simulation: the research program is saved.", {
+                exact: false,
+            }),
+    ).toBeVisible({ timeout: 60000 });
+    await fixture("reachSourcesTimeLimit", runId, fixtureKey);
+    const card = conversation.getByRole("group", { name: CARD_TITLE });
+    const openDecision = progress.getByRole("button", {
+        name: "Open decision",
+    });
+    await expect(card).toBeVisible({ timeout: 30000 });
+    for (const label of TIME_LIMIT_CHOICES) {
+        await expect(card.getByRole("button", { name: label })).toBeEnabled();
+    }
+    // The decision is made once, in the conversation; the progress header only points to it.
+    await expect(progress.getByRole("group")).toHaveCount(0);
+    await expect(
+        page.getByRole("button", { name: "Resume research" }),
+    ).toHaveCount(0);
+    return { runId, fixtureKey, conversation, progress, card, openDecision };
+}
+
+test("a standing grant continues a later limit and can be revoked at 1440px", async ({
     page,
 }) => {
     test.setTimeout(180000);
@@ -43,60 +89,15 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     });
 
     await page.setViewportSize({ width: 1440, height: 844 });
-    await admitAnalyst(page);
-    const fixtureKey = `sources-time-limit-1440-${Date.now()}`;
-    const runId = await runConvexJson<string>(
-        "execution/fixtures:startWorkbench",
-        {
-            fixtureKey,
-            slotKey: browserTestSlot(),
-        },
-    );
-    await page.goto(`/workspace/${runId}?section=overview`);
-    const conversation = page.getByLabel("Research conversation");
-    const progress = page.getByLabel("Documentary progress");
+    const { runId, fixtureKey, conversation, progress, card, openDecision } =
+        await openTimeLimitDossier(page, "grant");
 
-    await expect(
-        page
-            .getByLabel("Framing conversation")
-            .getByText("Simulation: the research program is saved.", {
-                exact: false,
-            }),
-    ).toBeVisible({ timeout: 60000 });
-
-    await fixture("reachSourcesTimeLimit", runId, fixtureKey);
-
-    const cardTitle = "The Sources Agent reached its time limit";
-    const timeLimitChoices = [
-        "Use what's prepared",
-        "Continue once",
-        "Always continue",
-    ] as const;
-
-    const conversationCard = conversation.getByRole("group", {
-        name: cardTitle,
-    });
-    const openDecision = progress.getByRole("button", {
-        name: "Open decision",
-    });
-    await expect(conversationCard).toBeVisible({ timeout: 30000 });
-    for (const label of timeLimitChoices) {
-        await expect(
-            conversationCard.getByRole("button", { name: label }),
-        ).toBeEnabled();
-    }
-    // The decision is made once, in the conversation; the progress header only points to it.
-    await expect(progress.getByRole("group")).toHaveCount(0);
-    await expect(
-        page.getByRole("button", { name: "Resume research" }),
-    ).toHaveCount(0);
     await openDecision.click();
     await expect(
-        conversationCard.getByRole("button", { name: timeLimitChoices[0] }),
+        card.getByRole("button", { name: TIME_LIMIT_CHOICES[0] }),
     ).toBeFocused();
-    await page.waitForTimeout(250);
     await page.screenshot({ path: `${scratch}-attention-1440.png` });
-    await expectChoiceTabOrder(page, conversationCard, timeLimitChoices);
+    await expectChoiceTabOrder(page, card, TIME_LIMIT_CHOICES);
     await expectNoRawBodyCopy(page);
     await page.screenshot({
         path: `${scratch}-research-1440.png`,
@@ -105,26 +106,32 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
 
     await page.goto(`/workspace/${runId}?section=sources`);
     await expect(
-        page.getByRole("button", { name: "Open decision" }),
+        page.getByRole("heading", {
+            name: "Sources, captures and contributions",
+            level: 1,
+        }),
     ).toBeVisible({ timeout: 30000 });
-    await expect(page.getByRole("group", { name: cardTitle })).toHaveCount(0);
+    // The pending decision stays with the conversation; Sources never duplicates its choices.
+    await expect(
+        page.getByText("Decision needed", { exact: false }).first(),
+    ).toBeVisible();
+    await expect(page.getByRole("group", { name: CARD_TITLE })).toHaveCount(0);
     await expectNoRawBodyCopy(page);
     await page.screenshot({
         path: `${scratch}-sources-1440.png`,
         fullPage: true,
     });
 
-    await page.getByRole("button", { name: "Open decision" }).click();
+    await page.getByRole("link", { name: "Overview" }).click();
     await expect(page).toHaveURL(/section=overview/);
-    await expect(conversationCard).toBeVisible({ timeout: 30000 });
-    await conversationCard
-        .getByRole("button", { name: "Always continue" })
-        .click();
+    await expect(openDecision).toBeVisible({ timeout: 30000 });
+    await expect(card).toBeVisible({ timeout: 30000 });
+    await card.getByRole("button", { name: "Always continue" }).click();
+    await expect(card.getByText("Applied: Continue preparation.")).toBeVisible({
+        timeout: 30000,
+    });
     await expect(
-        conversationCard.getByText("Applied: Continue preparation."),
-    ).toBeVisible({ timeout: 30000 });
-    await expect(
-        conversationCard.getByRole("button", { name: "Stop allowing" }),
+        card.getByRole("button", { name: "Stop allowing" }),
     ).toBeVisible();
     await expect(
         progress.getByRole("button", { name: "Pause research" }),
@@ -157,22 +164,79 @@ test("approval cards and dossier grants govern Sources time limits at 1440px", a
     await fixture("reachSourcesTimeLimit", runId, fixtureKey);
     await expect(openDecision).toBeVisible({ timeout: 30000 });
     const pendingCard = conversation
-        .getByRole("group", { name: cardTitle })
+        .getByRole("group", { name: CARD_TITLE })
         .last();
     await expect(
         pendingCard.getByRole("button", { name: "Always continue" }),
     ).toBeEnabled();
+    await expectNoRawBodyCopy(page);
+    expect(errors).toEqual([]);
+});
 
-    await pendingCard
-        .getByRole("button", { name: "Use what's prepared" })
-        .click();
+test("continuing once applies one continuation and keeps asking later at 1440px", async ({
+    page,
+}) => {
+    test.setTimeout(180000);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+    });
+
+    await page.setViewportSize({ width: 1440, height: 844 });
+    const { runId, fixtureKey, progress, card, openDecision } =
+        await openTimeLimitDossier(page, "once");
+
+    await openDecision.click();
+    await card.getByRole("button", { name: "Continue once" }).click();
+    await expect(card.getByText("Applied: Continue preparation.")).toBeVisible({
+        timeout: 30000,
+    });
+    await expect(
+        progress.getByRole("button", { name: "Pause research" }),
+    ).toBeVisible({ timeout: 30000 });
+    // A single continuation never becomes a standing dossier permission.
+    await expect(
+        card.getByRole("button", { name: "Stop allowing" }),
+    ).toHaveCount(0);
+
+    await fixture("reachSourcesTimeLimit", runId, fixtureKey);
+    await expect(openDecision).toBeVisible({ timeout: 30000 });
+    await expect(
+        card.getByRole("button", { name: "Continue once" }).last(),
+    ).toBeEnabled();
+    await expectNoRawBodyCopy(page);
+    expect(errors).toEqual([]);
+});
+
+test("using what's prepared settles a limited run without a grant at 1440px", async ({
+    page,
+}) => {
+    test.setTimeout(180000);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+    });
+
+    await page.setViewportSize({ width: 1440, height: 844 });
+    const { runId, fixtureKey, conversation, card, openDecision } =
+        await openTimeLimitDossier(page, "alternative");
+
+    await openDecision.click();
+    await expect(card).toBeVisible({ timeout: 30000 });
+    await card.getByRole("button", { name: "Use what's prepared" }).click();
     await expect(openDecision).toHaveCount(0, { timeout: 30000 });
     await fixture("settleSourcesFixture", runId, fixtureKey);
     await expect(
-        page.getByText("No usable material prepared", {
-            exact: false,
-        }),
+        page.getByText(
+            "The Sources Agent stopped here because you chose to use what was prepared.",
+            { exact: false },
+        ),
     ).toBeVisible({ timeout: 30000 });
+    await expect(
+        conversation.getByRole("button", { name: "Stop allowing" }),
+    ).toHaveCount(0);
     await expectNoRawBodyCopy(page);
     await page.screenshot({
         path: `${scratch}-after-1440.png`,
@@ -216,13 +280,6 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
     ).toBeVisible({ timeout: 60000 });
     await fixture("reachSourcesTimeLimit", runId, fixtureKey);
 
-    const cardTitle = "The Sources Agent reached its time limit";
-    const timeLimitChoices = [
-        "Use what's prepared",
-        "Continue once",
-        "Always continue",
-    ] as const;
-
     const openDecision = progress.getByRole("button", {
         name: "Open decision",
     });
@@ -237,35 +294,44 @@ test("approval cards work at 390px with reduced motion, including Workbench requ
     // On a phone the pointer opens the conversation with focus on the decision.
     await openDecision.click();
     const conversationTimeLimitCard = conversation.getByRole("group", {
-        name: cardTitle,
+        name: CARD_TITLE,
     });
     await expect(conversationTimeLimitCard).toBeVisible({ timeout: 30000 });
     await expect(
         conversationTimeLimitCard.getByRole("button", {
-            name: timeLimitChoices[0],
+            name: TIME_LIMIT_CHOICES[0],
         }),
     ).toBeFocused();
     await expectChoiceTabOrder(
         page,
         conversationTimeLimitCard,
-        timeLimitChoices,
+        TIME_LIMIT_CHOICES,
     );
     await page.getByRole("button", { name: "Back to progress" }).click();
 
     await page.goto(`/workspace/${runId}?section=sources`);
     await expect(
-        page.getByRole("button", { name: "Open decision" }),
+        page.getByRole("heading", {
+            name: "Sources, captures and contributions",
+            level: 1,
+        }),
     ).toBeVisible({ timeout: 30000 });
-    await expect(page.getByRole("group", { name: cardTitle })).toHaveCount(0);
+    // The pending decision stays with the conversation; Sources never duplicates its choices.
+    await expect(
+        page.getByText("Decision needed", { exact: false }).first(),
+    ).toBeVisible();
+    await expect(page.getByRole("group", { name: CARD_TITLE })).toHaveCount(0);
     await expectNoRawBodyCopy(page);
     await page.screenshot({
         path: `${scratch}-sources-390.png`,
         fullPage: true,
     });
 
-    await page.getByRole("button", { name: "Open decision" }).click();
+    await page.getByRole("link", { name: "Overview" }).click();
     await expect(page).toHaveURL(/section=overview/);
-    await askAi.click();
+    await expect(openDecision).toBeVisible({ timeout: 30000 });
+    await openDecision.click();
+    await expect(conversationTimeLimitCard).toBeVisible({ timeout: 30000 });
     await conversationTimeLimitCard
         .getByRole("button", { name: "Continue once" })
         .click();

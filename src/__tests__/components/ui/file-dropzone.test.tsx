@@ -1,21 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("motion/react", () => ({
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => (
-        <>{children}</>
-    ),
-    motion: new Proxy(
-        {},
-        {
-            get: () => (props: React.ComponentProps<"div">) => (
-                <div {...props} />
-            ),
-        },
-    ),
-    useReducedMotion: () => false,
-}));
-
 import { type DroppedFile, FileDropzone } from "@/components/ui/file-dropzone";
 
 describe("FileDropzone", () => {
@@ -51,27 +36,43 @@ describe("FileDropzone", () => {
         expect(onFilesDropped).toHaveBeenLastCalledWith([]);
     });
 
-    it("reports a per-file size error without dropping valid files already staged", () => {
+    it.each([
+        { maxSize: 512, label: "512B" },
+        { maxSize: 1536, label: "1.5KB" },
+        { maxSize: 1572864, label: "1.5MB" },
+    ])("reports the $label limit and retains an exact-limit file after rejecting one byte over", async ({
+        maxSize,
+        label,
+    }) => {
         const onFilesDropped = vi.fn();
-        const { container } = render(
-            <FileDropzone
-                onFilesDropped={onFilesDropped}
-                maxSize={1024} // 1KB ceiling
-            />,
+        render(
+            <FileDropzone onFilesDropped={onFilesDropped} maxSize={maxSize} />,
         );
-
-        const oversized = new File([new Uint8Array(2048)], "big.pdf", {
+        const input = screen.getByLabelText("Browse files");
+        const accepted = new File([new Uint8Array(maxSize)], "accepted.pdf", {
             type: "application/pdf",
         });
-        const input = container.querySelector(
-            'input[type="file"]',
-        ) as HTMLInputElement;
-        expect(input).toBeTruthy();
-        fireEvent.change(input, { target: { files: [oversized] } });
-
-        expect(screen.getByRole("alert").textContent).toMatch(
-            /big\.pdf exceeds 0MB limit/,
+        const oversized = new File(
+            [new Uint8Array(maxSize + 1)],
+            "oversized.pdf",
+            { type: "application/pdf" },
         );
-        expect(onFilesDropped).not.toHaveBeenCalled();
+        fireEvent.change(input, { target: { files: [accepted] } });
+        expect(screen.getByText("accepted.pdf")).toBeTruthy();
+        expect(onFilesDropped).toHaveBeenLastCalledWith([
+            expect.objectContaining({ file: accepted }),
+        ]);
+        fireEvent.change(input, { target: { files: [oversized] } });
+        expect(screen.getByRole("alert").textContent).toBe(
+            `File oversized.pdf exceeds ${label} limit`,
+        );
+        expect(
+            screen.getByRole("list", { name: "Staged files" }).children,
+        ).toHaveLength(1);
+        expect(screen.getByText("accepted.pdf")).toBeTruthy();
+        expect(onFilesDropped).toHaveBeenCalledTimes(1);
+        expect(screen.getByText(`Max ${label} per file`)).toBeTruthy();
+        fireEvent.dragOver(screen.getByText("Drag & drop files here"));
+        expect(await screen.findByText(`Max ${label}`)).toBeTruthy();
     });
 });

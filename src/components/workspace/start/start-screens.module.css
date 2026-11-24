@@ -990,9 +990,6 @@
         --framing-dock-limit: calc(100cqh - min(180px, 50cqh));
         @apply max-h-(--framing-dock-limit) overflow-x-hidden overflow-y-auto overscroll-contain;
     }
-    .pendingAction [data-slot="conversation-pending-panel"] {
-        @apply max-h-(--framing-dock-limit);
-    }
     .pendingAction [data-slot="conversation-pending-details"] {
         @apply flex flex-col min-h-[0];
     }

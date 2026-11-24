@@ -39,7 +39,7 @@ test("workspace navigation and inventory preserve context on desktop and mobile"
             name: "Research workspace sections",
         });
         await expect(
-            navigation.getByRole("link", { name: "Research", exact: true }),
+            navigation.getByRole("link", { name: "Overview", exact: true }),
         ).toHaveAttribute("aria-current", "page");
         for (const name of ["Investigation", "Synthesis"])
             await expect(
@@ -91,7 +91,7 @@ test("workspace navigation and inventory preserve context on desktop and mobile"
             .getByRole("button", { name: "Close", exact: true })
             .click();
         await expect(inventory).toBeHidden();
-        await expect(page).toHaveURL(/section=progress/);
+        await expect(page).toHaveURL(/section=overview/);
         await page.goto(`/workspace/${seeded.runId}?section=assessment`);
         await expect(
             page.getByRole("heading", {

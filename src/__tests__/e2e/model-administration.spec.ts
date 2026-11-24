@@ -55,46 +55,28 @@ for (const viewport of [
                 name: "Availability of DeepSeek V4.1 Flash 1017",
             }),
         ).not.toContainText("Off");
-        await expect(
-            page.getByText("Preparing compatibility checks", { exact: true }),
-        ).toHaveCount(0);
-        if (
-            viewport.name === "desktop" &&
-            process.env.WORKBENCH_E2E_REFRESH_MODEL_METADATA === "1"
-        ) {
-            for (const label of ["GLM-5.3-Flash", "DeepSeek V4.1 Flash 1017"]) {
-                const entry = page.getByRole("region", {
-                    name: label,
-                    exact: true,
-                });
-                const availability = entry.getByRole("combobox", {
+        // A settled catalogue lists the operator's availability choices; the
+        // transient "checking" state only exists while a vendor check runs.
+        for (const label of ["GLM-5.3-Flash", "DeepSeek V4.1 Flash 1017"]) {
+            await expect(
+                page.getByRole("combobox", {
                     name: `Availability of ${label}`,
-                });
-                const before = (await availability.textContent())?.trim() ?? "";
-                await entry
-                    .getByRole("button", {
-                        name: "Edit configuration",
-                        exact: true,
-                    })
-                    .click();
-                await page
-                    .getByRole("button", { name: "Save", exact: true })
-                    .click();
-                await expect(
-                    entry.getByText("Ready", { exact: true }),
-                ).toBeVisible({ timeout: 90000 });
-                await expect(availability).toBeEnabled({ timeout: 90000 });
-                if ((await availability.textContent())?.trim() !== before) {
-                    await availability.click();
-                    await page.getByRole("option", { name: before }).click();
+                }),
+            ).toHaveCount(1);
+        }
+        // The operator's stored availability is the value a reconnection must restore.
+        const persisted = new Map<string, string>();
+        for (const label of ["GLM-5.3-Flash", "DeepSeek V4.1 Flash 1017"]) {
+            persisted.set(
+                label,
+                (
                     await page
-                        .getByRole("button", {
-                            name: "Save changes",
-                            exact: true,
+                        .getByRole("combobox", {
+                            name: `Availability of ${label}`,
                         })
-                        .click();
-                }
-            }
+                        .textContent()
+                )?.trim() ?? "",
+            );
         }
         await page.screenshot({
             path: `/tmp/workbench-model-controls/after-admin-models-${viewport.name}.png`,
@@ -118,11 +100,13 @@ for (const viewport of [
             .getByRole("tab", { name: "Models & agents", exact: true })
             .click();
         await page.getByRole("tab", { name: /^Model catalogue/ }).click();
-        await expect(
-            page.getByRole("combobox", {
-                name: "Availability of GLM-5.3-Flash",
-            }),
-        ).not.toContainText("Off");
+        for (const label of ["GLM-5.3-Flash", "DeepSeek V4.1 Flash 1017"]) {
+            const availability = page.getByRole("combobox", {
+                name: `Availability of ${label}`,
+            });
+            await expect(availability).not.toContainText("Off");
+            await expect(availability).toHaveText(persisted.get(label) ?? "");
+        }
         expect(
             await page.evaluate(
                 () => document.documentElement.scrollWidth > innerWidth,

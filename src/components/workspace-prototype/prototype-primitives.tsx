@@ -22,7 +22,7 @@ import type { PrototypeClaim } from "./prototype-data";
 
 const claimStatusStyles: Record<PrototypeClaim["status"], string> = {
     Approved: "border-approved/25 bg-approved/10 text-approved",
-    "Needs review": "border-review/25 bg-review/10 text-review",
+    "Needs review": "border-review/25 bg-review/10 text-review-foreground",
     Unresolved:
         "border-evidence-unknown/30 bg-evidence-unknown/10 text-evidence-unknown",
 };

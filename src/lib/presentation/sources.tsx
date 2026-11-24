@@ -182,7 +182,7 @@ export function dossierStages(phase: SourcesPhase): DossierStage[] {
 }
 
 /** Documentary contributions borrow claim tones for colour only; their labels never imply an inventory class. */
-const documentaryKinds: Record<
+export const documentaryKinds: Record<
     ContributionKind,
     { tone: ClaimTone; label: string; counted: [string, string] }
 > = {
@@ -358,6 +358,18 @@ function restrictionText(row: SourcesRow) {
     );
 }
 
+/** A counted documentary kind, using claim tones only for visual presentation. */
+export function documentaryContributionSegment(
+    kind: ContributionKind,
+    count: number,
+) {
+    return {
+        kind: documentaryKinds[kind].tone,
+        count,
+        label: plural(count, documentaryKinds[kind].counted),
+    };
+}
+
 /** One matrix row; inclusion, reading, contribution and control remain separate columns. */
 export function sourcesMatrixRow(row: SourcesRow): SourceMatrixRow {
     const tally = row.contributions;
@@ -377,14 +389,12 @@ export function sourcesMatrixRow(row: SourcesRow): SourceMatrixRow {
                   count: tally.total,
                   segments: kindOrder
                       .filter((kind) => tally.kinds[kind] > 0)
-                      .map((kind) => ({
-                          kind: documentaryKinds[kind].tone,
-                          count: tally.kinds[kind],
-                          label: plural(
+                      .map((kind) =>
+                          documentaryContributionSegment(
+                              kind,
                               tally.kinds[kind],
-                              documentaryKinds[kind].counted,
                           ),
-                      })),
+                      ),
               }
             : undefined,
         emptyContributionsLabel:
@@ -901,6 +911,33 @@ const conclusionBadges = {
     not_established: <Badge tone="unknown">Not established</Badge>,
 };
 
+/** Model-authored commentary is not a source quotation: withhold internal diagnostics without rewriting retained evidence. */
+function documentaryCommentary(text: string | undefined): string | undefined {
+    const normalized = text?.replace(/\s+/g, " ").trim();
+    if (!normalized) return undefined;
+    const internalDetails =
+        /\b(?:possible_conflict|no_conflict_observed|source_comparison|source_qualification|documentary_conflict|not_established|asserted_fact|attributed_argument|attributed_argument_only|context_only|provider_unavailable|invalid_output|not_run|paid_work_disabled|source_preparation|execution_interrupted|attempt_outcome_unknown|operation_outcome_unknown|aiTaskResults|sourceCaptures)\b/i.test(
+            normalized,
+        ) ||
+        // Our own deployment configuration, never a documentary fact.
+        /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b/.test(normalized) ||
+        /\bapi[_-]key\b|\brequest[_-]id\b/i.test(normalized) ||
+        // Labelled diagnostics and credential shapes stay internal even when separated by a space.
+        /\b(?:api[ _-]?key|request[ _-]?id)\s*[:=#]/i.test(normalized) ||
+        /\bsk\.[a-z0-9._-]+/i.test(normalized) ||
+        /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(
+            normalized,
+        ) ||
+        /\b(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|AbortError|TimeoutError)\b/.test(
+            normalized,
+        ) ||
+        // Internal record references keep their machine separator; "passage 12" in prose stays readable.
+        /\b(?:target|primary|passage|finding)[-_]\d+\b/i.test(normalized) ||
+        // Opaque identifiers are unseparated and digit-bearing; plain long words are not ids.
+        /\b(?=[a-z0-9]*\d)[a-z0-9]{24,}\b/i.test(normalized);
+    return internalDetails ? undefined : normalized;
+}
+
 /** Reader document: cited excerpts with their neighbours, never invented pages, and contributions in documentary terms. */
 export function sourcesReaderDocument(
     reading: Reading,
@@ -950,6 +987,17 @@ export function sourcesReaderDocument(
     );
     const contributions: ReaderContribution[] = reading.contributions.map(
         (contribution) => {
+            const statement = documentaryCommentary(contribution.statement);
+            const diagnostic = documentaryCommentary(contribution.diagnostic);
+            const period = documentaryCommentary(contribution.period);
+            const attribution = documentaryCommentary(contribution.attribution);
+            const unavailableWording =
+                !statement ||
+                [
+                    [contribution.diagnostic, diagnostic],
+                    [contribution.period, period],
+                    [contribution.attribution, attribution],
+                ].some(([raw, displayed]) => raw?.trim() && !displayed);
             const passageId = `p${contribution.passageOrders[0]}`;
             const pageId = pageOf.get(passageId);
             const questions = [
@@ -974,9 +1022,7 @@ export function sourcesReaderDocument(
                         ? "counter"
                         : documentaryKinds[contribution.kind].tone,
                 label: documentaryKinds[contribution.kind].label,
-                meta: [contribution.period, contribution.attribution]
-                    .filter(Boolean)
-                    .join(" · "),
+                meta: [period, attribution].filter(Boolean).join(" · "),
                 status: (
                     <>
                         {contribution.conclusion ? (
@@ -986,10 +1032,13 @@ export function sourcesReaderDocument(
                         )}
                     </>
                 ),
-                text: contribution.statement,
+                text: statement ?? "Contribution wording unavailable.",
                 note: [
                     useLabels[contribution.permittedUse],
-                    contribution.diagnostic,
+                    diagnostic,
+                    unavailableWording
+                        ? "Some contribution wording is unavailable. Inspect the cited passage."
+                        : undefined,
                     narrowed,
                     contribution.restricted
                         ? "A later control narrowed this use."

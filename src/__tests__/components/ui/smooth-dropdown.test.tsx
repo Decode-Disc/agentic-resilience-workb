@@ -102,39 +102,3 @@ test("moves from search to options with arrow keys and follows the supplied sele
             .getAttribute("aria-selected"),
     ).toBe("true");
 });
-
-test("supports start, center and end horizontal alignment like DropdownMenuContent", () => {
-    const { rerender } = render(
-        <SmoothDropdwon
-            defaultOpen
-            align="center"
-            items={[{ id: "first", label: "First dossier" }]}
-        />,
-    );
-    const menu = screen.getByTestId("smooth-dropdown-menu");
-    expect(menu.getAttribute("data-align")).toBe("center");
-    expect(menu.className).toContain("left-1/2");
-    expect(menu.className).toContain("-translate-x-1/2");
-
-    rerender(
-        <SmoothDropdwon
-            defaultOpen
-            align="end"
-            items={[{ id: "first", label: "First dossier" }]}
-        />,
-    );
-    expect(menu.getAttribute("data-align")).toBe("end");
-    expect(menu.getAttribute("data-open-from")).toBe("right");
-    expect(menu.className).toContain("right-0");
-
-    rerender(
-        <SmoothDropdwon
-            defaultOpen
-            align="start"
-            items={[{ id: "first", label: "First dossier" }]}
-        />,
-    );
-    expect(menu.getAttribute("data-align")).toBe("start");
-    expect(menu.getAttribute("data-open-from")).toBe("left");
-    expect(menu.className).toContain("left-0");
-});

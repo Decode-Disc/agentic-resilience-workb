@@ -60,18 +60,14 @@ for (const viewport of [
             await expect(
                 page.getByRole("tab", { name: "Overview", selected: true }),
             ).toBeVisible({ timeout: 60_000 });
-            const attention = page.getByRole("heading", {
-                name: "Needs attention",
+            const attention = page.getByRole("region", {
+                name: /^Needs attention/,
             });
             await expect(attention).toBeVisible();
             await expect(
-                page.getByText("Nothing needs attention", { exact: true }).or(
-                    page
-                        .getByRole("button", {
-                            name: /Refresh input profiles|Open dossier|Turn paid work on|Review reservations|Review models/,
-                        })
-                        .first(),
-                ),
+                attention
+                    .getByText("Nothing needs attention", { exact: true })
+                    .or(attention.getByRole("button").first()),
             ).toBeVisible({ timeout: 30_000 });
             await expect(
                 page.getByRole("switch", { name: "Paid work" }),
@@ -131,19 +127,12 @@ for (const viewport of [
             const withdraw = panel.getByRole("button", {
                 name: "Withdraw dossier",
             });
-            if (await withdraw.count()) {
-                await withdraw.click();
-                const confirm = page.getByRole("button", {
-                    name: "Confirm withdrawal",
-                });
-                await expect(confirm).toBeDisabled();
-                await page
-                    .getByLabel("Reason for withdrawal")
-                    .fill("Too short");
-                await expect(confirm).toBeDisabled();
-                await page.getByRole("button", { name: "Cancel" }).click();
-                await expect(confirm).toBeHidden();
-            }
+            await expect(withdraw).toHaveCount(0);
+            await expect(
+                panel.getByText("No provider receipts for this dossier.", {
+                    exact: true,
+                }),
+            ).toBeVisible();
 
             await closeDossierDetail(page);
             await expect(page).not.toHaveURL(/dossier=/);
@@ -169,10 +158,21 @@ for (const viewport of [
                 });
 
             await page.getByRole("tab", { name: "Activity & spend" }).click();
+            const activity = page.getByRole("tabpanel", {
+                name: "Activity & spend",
+            });
+            // Global history is not cleared by this dossier fixture.
             await expect(
-                page.getByText("No provider attempts recorded", {
-                    exact: true,
-                }),
+                activity
+                    .getByText("No provider attempts recorded", {
+                        exact: true,
+                    })
+                    .or(
+                        activity.getByRole("heading", {
+                            name: "Recent provider attempts",
+                            exact: true,
+                        }),
+                    ),
             ).toBeVisible();
             await expectReadable(page);
             if (screenshots)

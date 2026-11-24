@@ -6,23 +6,20 @@ import { ClaimSurface } from "@/components/workspace-prototype/prototype-primiti
 
 describe("ClaimSurface", () => {
     it.each([
-        ["Approved", "bg-approved/10"],
-        ["Needs review", "bg-review/10"],
-        ["Unresolved", "bg-evidence-unknown/10"],
-    ] as const)("colors the %s status surface", (status, colorClass) => {
+        "Approved",
+        "Needs review",
+        "Unresolved",
+    ] as const)("presents the %s claim with its evidence and uncertainty", (status) => {
         const claim = prototypeClaims.find((item) => item.status === status);
-
-        if (!claim) {
-            throw new Error(`Missing ${status} fixture`);
-        }
+        if (!claim) throw new Error(`Missing ${status} fixture`);
 
         render(<ClaimSurface claim={claim} />);
 
-        expect(
-            screen
-                .getByText(`${status}.`)
-                .closest("[data-claim-status]")
-                ?.classList.contains(colorClass),
-        ).toBe(true);
+        expect(screen.getByText(`${status}.`)).toBeTruthy();
+        expect(screen.getByText(claim.classification)).toBeTruthy();
+        expect(screen.getByText(claim.statement)).toBeTruthy();
+        expect(screen.getByText(claim.evidence, { exact: false })).toBeTruthy();
+        expect(screen.getByText(claim.locator, { exact: false })).toBeTruthy();
+        expect(screen.getByText(claim.counterEvidence)).toBeTruthy();
     });
 });

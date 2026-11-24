@@ -1,4 +1,3 @@
-import { ThemeProvider } from "next-themes";
 import { api } from "@convex/_generated/api";
 import {
     fireEvent,
@@ -7,6 +6,7 @@ import {
     waitFor,
     within,
 } from "@testing-library/react";
+import { ThemeProvider } from "next-themes";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -132,18 +132,6 @@ describe("WorkbenchShell", () => {
                 .getByRole("button", { name: /Start a company dossier/i })
                 .getAttribute("href"),
         ).toBe("/workspace/start");
-    });
-
-    it("renders custom children when provided", () => {
-        render(
-            <InvitationAccessProvider>
-                <WorkbenchShell>
-                    <div data-testid="custom-page-content">Custom View</div>
-                </WorkbenchShell>
-            </InvitationAccessProvider>,
-        );
-
-        expect(screen.getByTestId("custom-page-content")).toBeTruthy();
     });
 
     it("preserves company navigation space while admission loads", () => {

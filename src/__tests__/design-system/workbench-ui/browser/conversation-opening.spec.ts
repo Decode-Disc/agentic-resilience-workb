@@ -12,14 +12,17 @@ for (const width of [390, 1440]) {
         });
         if ((await trigger.getAttribute("aria-expanded")) !== "true")
             await trigger.click();
-        const context = page.locator(".chat-context-card");
+        const context = page.getByRole("dialog", {
+            name: "CCCS · Research",
+            exact: true,
+        });
         await expect(context).toBeVisible();
         await expect(
             context.getByRole("region", { name: "Outputs", exact: true }),
         ).toHaveCount(0);
         await expect(
             context.getByRole("region", {
-                name: "Proposed research program",
+                name: "Research program",
                 exact: true,
             }),
         ).toBeVisible();
@@ -32,12 +35,25 @@ for (const width of [390, 1440]) {
         await expect(
             context.getByRole("button", { name: /^Inspect reference:/ }),
         ).toBeVisible();
-        const box = await context.boundingBox();
-        expect(box).not.toBeNull();
-        if (box) expect(box.height).toBeLessThan(600);
-        await context
-            .getByRole("button", { name: "Close research context" })
-            .click();
+        await expect(
+            context.getByRole("region", {
+                name: "Research program",
+                exact: true,
+            }),
+        ).toContainText("4 questions");
+        await expect(context).toBeInViewport({ ratio: 1 });
+        const reference = context.getByRole("button", {
+            name: /^Inspect reference:/,
+        });
+        await reference.scrollIntoViewIfNeeded();
+        await expect(reference).toBeInViewport({ ratio: 1 });
+        await reference.click({ trial: true });
+        const close = context.getByRole("button", {
+            name: "Close research context",
+        });
+        await close.scrollIntoViewIfNeeded();
+        await expect(close).toBeInViewport({ ratio: 1 });
+        await close.click();
         await expect(trigger).toBeFocused();
         await expect(context).toBeHidden();
     });

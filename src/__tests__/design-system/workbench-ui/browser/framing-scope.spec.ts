@@ -4,7 +4,10 @@ import {
     reviewResearchProgram,
 } from "@/__tests__/helpers/research-program";
 
-for (const width of [1440, 390]) {
+for (const { width, theme } of [
+    { width: 1440, theme: "light" },
+    { width: 390, theme: "dark" },
+]) {
     test(`scope clarification stays separate from research questions ${width}`, async ({
         page,
     }) => {
@@ -12,11 +15,14 @@ for (const width of [1440, 390]) {
             width,
             height: width === 390 ? 844 : 1000,
         });
-        await page.goto("/?layout=start&screen=framing&theme=dark");
+        await page.goto(`/?layout=start&screen=framing&theme=${theme}`);
         await reviewResearchProgram(page);
-        await page
-            .getByRole("button", { name: "Add research question", exact: true })
-            .waitFor();
+        await expect(
+            page.getByRole("button", {
+                name: "Add research question",
+                exact: true,
+            }),
+        ).toBeVisible();
         await page.screenshot({
             path: `/tmp/framing-scope-after-${width}.png`,
         });
@@ -55,14 +61,18 @@ for (const width of [1440, 390]) {
             page.getByRole("region", { name: "Clarify research context" }),
         ).toHaveCount(0);
         await reviewResearchProgram(page);
-        await expect(
-            page
-                .getByRole("region", { name: "Research framing" })
-                .getByRole("list", {
-                    name: "Research questions",
-                    exact: true,
-                }),
-        ).toBeVisible();
+        const questions = page
+            .getByRole("region", { name: "Research framing" })
+            .getByRole("list", {
+                name: "Research questions",
+                exact: true,
+            });
+        await expect(questions).toBeVisible();
+        await expect(questions.getByRole("listitem")).toHaveCount(3);
+        await expect(questions).toContainText(
+            "Who controls access to the repair network?",
+        );
+        await expect(page).toHaveURL(/screen=framing/);
         if (width === 390)
             await page
                 .getByRole("button", { name: "Research context", exact: true })

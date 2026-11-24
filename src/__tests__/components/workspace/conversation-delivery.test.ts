@@ -13,11 +13,15 @@ const args = {
     delivery: "queue" as const,
 };
 
-function cache(state: {
-    queuedCount: number;
-    queuePaused: boolean;
-    activeTurn: object | null;
-}) {
+function cache(
+    state:
+        | {
+              queuedCount: number;
+              queuePaused: boolean;
+              activeTurn: object | null;
+          }
+        | undefined,
+) {
     const getQuery = vi.fn(() => state);
     const getAllQueries = vi
         .fn<OptimisticLocalStore["getAllQueries"]>()
@@ -27,7 +31,16 @@ function cache(state: {
                     runId: "other-run",
                     paginationOpts: { cursor: null, numItems: 20 },
                 },
-                value: { page: [], isDone: true, continueCursor: "" },
+                value: {
+                    page: [
+                        {
+                            requestKey: args.requestKey,
+                            text: "Another dossier's message",
+                        },
+                    ],
+                    isDone: true,
+                    continueCursor: "",
+                },
             },
             {
                 args: { runId, paginationOpts: { cursor: null, numItems: 20 } },
@@ -44,7 +57,14 @@ test("an idle submission enters the real SDK paginated cache under its stable re
         queuePaused: false,
         activeTurn: null,
     });
+    const before = structuredClone(store.getAllQueries(api.workbench.history));
     insertOptimisticConversationMessage(store, args);
+    expect(store.getQuery).toHaveBeenCalledWith(
+        api.execution.conversations.get,
+        { runId },
+    );
+    expect(store.setQuery).toHaveBeenCalledTimes(1);
+    expect(store.getAllQueries(api.workbench.history)).toEqual(before);
     const write = store.setQuery.mock.calls[0];
     expect(write && getFunctionName(write[0])).toBe(
         getFunctionName(api.workbench.history),
@@ -64,7 +84,33 @@ test("an idle submission enters the real SDK paginated cache under its stable re
     });
 });
 
+test("an existing request on a later page is not inserted a second time", () => {
+    const store = cache({
+        queuedCount: 0,
+        queuePaused: false,
+        activeTurn: null,
+    });
+    const pages = store.getAllQueries(api.workbench.history);
+    store.getAllQueries.mockReturnValue([
+        ...pages,
+        {
+            args: {
+                runId,
+                paginationOpts: { cursor: "next-page", numItems: 20 },
+            },
+            value: {
+                page: [{ requestKey: args.requestKey, text: args.text }],
+                isDone: true,
+                continueCursor: "",
+            },
+        },
+    ]);
+    insertOptimisticConversationMessage(store, args);
+    expect(store.setQuery).not.toHaveBeenCalled();
+});
+
 test.each([
+    undefined,
     { queuedCount: 0, queuePaused: false, activeTurn: { _id: "active-turn" } },
     { queuedCount: 1, queuePaused: false, activeTurn: null },
     { queuedCount: 0, queuePaused: true, activeTurn: null },

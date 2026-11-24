@@ -1,6 +1,7 @@
 import { Building02Icon } from "@hugeicons/core-free-icons";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mockDecodedImages } from "@/__tests__/setup/images";
 
 import { FaviconAvatar, parseFaviconUrl } from "@/components/favicon-avatar";
 
@@ -37,6 +38,9 @@ describe("parseFaviconUrl", () => {
 });
 
 describe("FaviconAvatar", () => {
+    beforeEach(mockDecodedImages);
+    afterEach(() => vi.unstubAllGlobals());
+
     it("exposes a clear accessible name on the host favicon avatar", () => {
         render(<FaviconAvatar canonicalUrl="https://example.com/report" />);
 
@@ -83,11 +87,38 @@ describe("FaviconAvatar", () => {
         expect(screen.getByLabelText(/Example Holdings Ltd/i)).toBeTruthy();
     });
 
-    // Note on coverage: the `onError` recovery path is wired in the component
-    // (`onError={() => setFailed(true)}` forwarded to AvatarImage, which Base
-    // UI forwards to the underlying <img>). It is not exercised here because
-    // Base UI's Avatar.Image does not emit a real <img> element in jsdom, so
-    // we cannot dispatch a synthetic error event on it. The wiring is trivial
-    // and visually verifiable in a browser; the contract above (label,
-    // fallback icon, hostname) is fully covered.
+    it("tries the new identity after the previous favicon fails", async () => {
+        const { rerender } = render(
+            <FaviconAvatar canonicalUrl="https://first.example/report" />,
+        );
+        fireEvent.error(
+            await screen.findByRole("img", {
+                name: "Favicon for first.example",
+            }),
+        );
+        expect(
+            screen.getByLabelText("Link icon for first.example"),
+        ).toBeTruthy();
+        expect(screen.queryByRole("img")).toBeNull();
+
+        rerender(
+            <FaviconAvatar canonicalUrl="https://second.example/report" />,
+        );
+        const image = await screen.findByRole("img", {
+            name: "Favicon for second.example",
+        });
+        expect(
+            new URL(image.getAttribute("src") ?? "").searchParams.get("domain"),
+        ).toBe("second.example");
+        expect(
+            screen.queryByLabelText("Link icon for first.example"),
+        ).toBeNull();
+
+        rerender(<FaviconAvatar canonicalUrl="https://first.example/report" />);
+        expect(
+            await screen.findByRole("img", {
+                name: "Favicon for first.example",
+            }),
+        ).toBeTruthy();
+    });
 });

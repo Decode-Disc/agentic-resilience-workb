@@ -329,7 +329,7 @@ export function StartResearchScreen({
     const reveal = useCallback(
         (elementId: string) => {
             if (compact) {
-                // The sheet stays mounted; its opening focus lands on the target.
+                // The sheet keeps focus on its trigger; the open effect delivers this reveal.
                 pendingReveal.current = elementId;
                 setConversationOpen(true);
                 return;
@@ -344,6 +344,51 @@ export function StartResearchScreen({
         },
         [compact],
     );
+    // The kept-mounted sheet keeps focus on its trigger, so the pending reveal is delivered once the conversation is open.
+    useEffect(() => {
+        // A reveal belongs to the compact sheet: leaving that layout drops it, as does closing.
+        if (!compact || !conversationOpen) {
+            pendingReveal.current = null;
+            return;
+        }
+        const elementId = pendingReveal.current;
+        if (!elementId) return;
+        let frame = 0;
+        let attempts = 0;
+        let abandoned = false;
+        const abandon = () => {
+            abandoned = true;
+            pendingReveal.current = null;
+            cancelAnimationFrame(frame);
+        };
+        const deliver = () => {
+            if (abandoned) return;
+            const target = revealTarget(elementId);
+            if (target && document.activeElement !== target)
+                target.focus({ preventScroll: true });
+            if (target && document.activeElement === target) {
+                pendingReveal.current = null;
+                target.scrollIntoView?.({ block: "center" });
+                drawAttention(elementId);
+                return;
+            }
+            if (attempts++ < 30) {
+                frame = requestAnimationFrame(deliver);
+                return;
+            }
+            // Never leave a stale reveal to replay on a later, unrelated opening.
+            pendingReveal.current = null;
+        };
+        frame = requestAnimationFrame(deliver);
+        // A deliberate pointer or key action outranks a still-pending reveal.
+        document.addEventListener("pointerdown", abandon, true);
+        document.addEventListener("keydown", abandon, true);
+        return () => {
+            cancelAnimationFrame(frame);
+            document.removeEventListener("pointerdown", abandon, true);
+            document.removeEventListener("keydown", abandon, true);
+        };
+    }, [compact, conversationOpen]);
     const conversationScroll = useRef<number | null>(null);
     const askAiRef = useRef<HTMLButtonElement>(null);
     const group = useRef<GroupImperativeHandle | null>(null);
@@ -504,15 +549,9 @@ export function StartResearchScreen({
                                 finalFocus={askAiRef}
                                 initialFocus={() => {
                                     const elementId = pendingReveal.current;
-                                    pendingReveal.current = null;
-                                    const target = elementId
-                                        ? revealTarget(elementId)
-                                        : null;
-                                    target?.scrollIntoView?.({
-                                        block: "center",
-                                    });
-                                    if (elementId) drawAttention(elementId);
-                                    return target ?? true;
+                                    return elementId
+                                        ? (revealTarget(elementId) ?? true)
+                                        : true;
                                 }}
                                 className={styles.mobileConversation}>
                                 <SheetTitle className="sr-only">

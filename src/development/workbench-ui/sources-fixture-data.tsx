@@ -9,6 +9,10 @@ import type {
 } from "@/components/workbench-ui";
 import { ClaimGlyph, WorkbenchIcon } from "@/components/workbench-ui/glyphs";
 import type { SourcesPreparationView } from "@/components/workspace/sources/sources-screens";
+import {
+    documentaryContributionSegment,
+    documentaryKinds,
+} from "@/lib/presentation/sources";
 import { readerContributions, readerPages } from "./fixture-data";
 
 /** Illustrative CCC preparation; no source was collected or read for this preview. */
@@ -215,6 +219,12 @@ const row = (
     selection: source.selection ?? selection[source.use],
 });
 
+const annualContributionLabels: Readonly<Record<string, string>> = {
+    p3: documentaryKinds.asserted_fact.label,
+    p4: documentaryKinds.asserted_fact.label,
+    p5: documentaryKinds.forecast.label,
+};
+
 const annualReport = row({
     id: "10-k",
     kind: "filings",
@@ -227,9 +237,9 @@ const annualReport = row({
     contributions: {
         count: 18,
         segments: [
-            { kind: "fact", count: 12 },
-            { kind: "inference", count: 4 },
-            { kind: "counter", count: 2 },
+            documentaryContributionSegment("asserted_fact", 12),
+            documentaryContributionSegment("attributed_argument", 4),
+            documentaryContributionSegment("forecast", 2),
         ],
     },
     restriction: "Outlook kept as projection",
@@ -247,13 +257,27 @@ const annualReport = row({
                               quiet: true,
                               text: "[Illustrative excerpt] The company describes a platform that connects insurers, repair facilities and other participants across the auto claims lifecycle.",
                           },
-                          ...page.passages,
+                          ...page.passages.map((passage) => ({
+                              ...passage,
+                              label:
+                                  annualContributionLabels[passage.id] ??
+                                  passage.label,
+                          })),
                       ],
                   }
                 : page,
         ),
         contributionLabel: "Company-authored · annual report · FY2025",
-        contributions: readerContributions,
+        contributions: readerContributions.map((contribution) => {
+            const label =
+                contribution.target &&
+                annualContributionLabels[contribution.target.passageId];
+            if (!label)
+                throw new Error(
+                    `Missing documentary kind for illustrative contribution ${contribution.id}`,
+                );
+            return { ...contribution, label };
+        }),
         observedLinks: [
             {
                 id: "deck",
@@ -273,10 +297,6 @@ const annualReport = row({
 });
 
 type Segments = NonNullable<IllustrativeSource["contributions"]>["segments"];
-const fact = (count: number) => ({ kind: "fact" as const, count });
-const inference = (count: number) => ({ kind: "inference" as const, count });
-const projection = (count: number) => ({ kind: "hypothesis" as const, count });
-const opposing = (count: number) => ({ kind: "counter" as const, count });
 
 /** The remaining 30 illustrative sources; documents are summarized, not excerpted. */
 function additionalSources(): IllustrativeSource[] {
@@ -331,7 +351,10 @@ function additionalSources(): IllustrativeSource[] {
             "sec.gov · annual report · FY2024",
             "Company-authored",
             "full",
-            [fact(9), inference(2)],
+            [
+                documentaryContributionSegment("asserted_fact", 9),
+                documentaryContributionSegment("attributed_argument", 2),
+            ],
             "Earlier period, compared only",
         ),
         source(
@@ -343,7 +366,7 @@ function additionalSources(): IllustrativeSource[] {
             "sec.gov · annual report · FY2023",
             "Company-authored",
             "full",
-            [fact(6)],
+            [documentaryContributionSegment("asserted_fact", 6)],
             "Earlier period, compared only",
         ),
         source(
@@ -355,7 +378,10 @@ function additionalSources(): IllustrativeSource[] {
             "sec.gov · quarterly report",
             "Company-authored",
             "full",
-            [fact(4), inference(1)],
+            [
+                documentaryContributionSegment("asserted_fact", 4),
+                documentaryContributionSegment("attributed_argument", 1),
+            ],
         ),
         source(
             "10-q-q3-2024",
@@ -366,7 +392,7 @@ function additionalSources(): IllustrativeSource[] {
             "sec.gov · quarterly report",
             "Company-authored",
             "full",
-            [fact(3)],
+            [documentaryContributionSegment("asserted_fact", 3)],
         ),
         source(
             "8-k-acquisition",
@@ -377,7 +403,10 @@ function additionalSources(): IllustrativeSource[] {
             "sec.gov · current report",
             "Company-authored",
             "full",
-            [fact(2), inference(1)],
+            [
+                documentaryContributionSegment("asserted_fact", 2),
+                documentaryContributionSegment("attributed_argument", 1),
+            ],
         ),
         source(
             "proxy-2025",
@@ -388,7 +417,7 @@ function additionalSources(): IllustrativeSource[] {
             "sec.gov · proxy",
             "Company-authored",
             "full",
-            [fact(3)],
+            [documentaryContributionSegment("asserted_fact", 3)],
             "Governance context only",
         ),
         source(
@@ -400,7 +429,10 @@ function additionalSources(): IllustrativeSource[] {
             "sec.gov · listing prospectus",
             "Company-authored",
             "full",
-            [fact(5), projection(1)],
+            [
+                documentaryContributionSegment("asserted_fact", 5),
+                documentaryContributionSegment("forecast", 1),
+            ],
             "Period 2021, structural facts only",
         ),
         source(
@@ -412,7 +444,10 @@ function additionalSources(): IllustrativeSource[] {
             "investor relations · transcript",
             "Company-authored",
             "full",
-            [fact(3), inference(2)],
+            [
+                documentaryContributionSegment("asserted_fact", 3),
+                documentaryContributionSegment("attributed_argument", 2),
+            ],
             "Management statements, attributed",
         ),
         source(
@@ -424,7 +459,10 @@ function additionalSources(): IllustrativeSource[] {
             "investor relations · transcript",
             "Company-authored",
             "full",
-            [fact(4), projection(1)],
+            [
+                documentaryContributionSegment("asserted_fact", 4),
+                documentaryContributionSegment("forecast", 1),
+            ],
             "Management statements, attributed",
         ),
         source(
@@ -436,7 +474,10 @@ function additionalSources(): IllustrativeSource[] {
             "investor relations · transcript",
             "Company-authored",
             "full",
-            [fact(2), inference(1)],
+            [
+                documentaryContributionSegment("asserted_fact", 2),
+                documentaryContributionSegment("attributed_argument", 1),
+            ],
             "Management statements, attributed",
         ),
         source(
@@ -448,7 +489,7 @@ function additionalSources(): IllustrativeSource[] {
             "investor relations · transcript",
             "Company-authored",
             "partial",
-            [fact(2)],
+            [documentaryContributionSegment("asserted_fact", 2)],
             "Q&A not captured",
         ),
         source(
@@ -460,7 +501,10 @@ function additionalSources(): IllustrativeSource[] {
             "investor relations · presentation",
             "Company-authored",
             "partial",
-            [fact(2), projection(2)],
+            [
+                documentaryContributionSegment("asserted_fact", 2),
+                documentaryContributionSegment("forecast", 2),
+            ],
             "Absence after slide 22 not established",
         ),
         source(
@@ -472,7 +516,10 @@ function additionalSources(): IllustrativeSource[] {
             "investor relations · letter",
             "Company-authored",
             "full",
-            [inference(2), projection(1)],
+            [
+                documentaryContributionSegment("attributed_argument", 2),
+                documentaryContributionSegment("forecast", 1),
+            ],
             "Management view, attributed",
         ),
         source(
@@ -484,7 +531,7 @@ function additionalSources(): IllustrativeSource[] {
             "investor relations · report",
             "Company-authored",
             "full",
-            [fact(2)],
+            [documentaryContributionSegment("asserted_fact", 2)],
         ),
         source(
             "insurer-association",
@@ -495,7 +542,10 @@ function additionalSources(): IllustrativeSource[] {
             "industry body · report",
             "Third-party",
             "full",
-            [fact(3), opposing(1)],
+            [
+                documentaryContributionSegment("asserted_fact", 3),
+                documentaryContributionSegment("attributed_argument", 1),
+            ],
         ),
         source(
             "repair-survey",
@@ -506,7 +556,10 @@ function additionalSources(): IllustrativeSource[] {
             "industry body · survey",
             "Third-party",
             "partial",
-            [fact(2), opposing(1)],
+            [
+                documentaryContributionSegment("asserted_fact", 2),
+                documentaryContributionSegment("attributed_argument", 1),
+            ],
             "Methodology appendix not read",
         ),
         source(
@@ -518,7 +571,7 @@ function additionalSources(): IllustrativeSource[] {
             "industry publication · article",
             "Third-party",
             "full",
-            [inference(1), opposing(1)],
+            [documentaryContributionSegment("attributed_argument", 2)],
             "Argument checked against filings",
         ),
         source(
@@ -530,7 +583,10 @@ function additionalSources(): IllustrativeSource[] {
             "peer company · annual report",
             "Third-party",
             "full",
-            [fact(3), opposing(2)],
+            [
+                documentaryContributionSegment("asserted_fact", 3),
+                documentaryContributionSegment("attributed_argument", 2),
+            ],
             "Peer claims, not about the company",
         ),
         source(
@@ -542,7 +598,7 @@ function additionalSources(): IllustrativeSource[] {
             "state regulator · bulletin",
             "Regulator",
             "full",
-            [fact(2)],
+            [documentaryContributionSegment("asserted_fact", 2)],
         ),
         source(
             "case-study",
@@ -553,7 +609,10 @@ function additionalSources(): IllustrativeSource[] {
             "insurer site · case study",
             "Third-party",
             "full",
-            [fact(1), inference(1)],
+            [
+                documentaryContributionSegment("asserted_fact", 1),
+                documentaryContributionSegment("attributed_argument", 1),
+            ],
             "Single insurer, not representative",
         ),
         source(
@@ -565,7 +624,7 @@ function additionalSources(): IllustrativeSource[] {
             "conference · transcript",
             "Third-party",
             "partial",
-            [inference(1)],
+            [documentaryContributionSegment("attributed_argument", 1)],
             "Transcript ends at minute 18",
         ),
         source(
@@ -577,7 +636,10 @@ function additionalSources(): IllustrativeSource[] {
             "industry publication · article",
             "Third-party",
             "full",
-            [fact(1), opposing(1)],
+            [
+                documentaryContributionSegment("asserted_fact", 1),
+                documentaryContributionSegment("attributed_argument", 1),
+            ],
         ),
         source(
             "standards-body",
@@ -588,7 +650,7 @@ function additionalSources(): IllustrativeSource[] {
             "standards body · specification",
             "Third-party",
             "full",
-            [fact(2)],
+            [documentaryContributionSegment("asserted_fact", 2)],
             "Describes standards, not adoption",
         ),
         source(
@@ -600,7 +662,10 @@ function additionalSources(): IllustrativeSource[] {
             "sec.gov · customer annual report",
             "Third-party",
             "full",
-            [fact(2), opposing(1)],
+            [
+                documentaryContributionSegment("asserted_fact", 2),
+                documentaryContributionSegment("attributed_argument", 1),
+            ],
         ),
         source(
             "blog",
@@ -647,7 +712,7 @@ function additionalSources(): IllustrativeSource[] {
             "investor relations · release",
             "Company-authored",
             "full",
-            [fact(1)],
+            [documentaryContributionSegment("asserted_fact", 1)],
             "Period 2019, superseded",
         ),
         source(
@@ -671,7 +736,7 @@ function additionalSources(): IllustrativeSource[] {
             "personal blog · article",
             "Third-party",
             "full",
-            [inference(1)],
+            [documentaryContributionSegment("attributed_argument", 1)],
             "Unattributed claims",
         ),
     ];
@@ -692,9 +757,9 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
         contributions: {
             count: 9,
             segments: [
-                { kind: "fact", count: 5 },
-                { kind: "inference", count: 3 },
-                { kind: "hypothesis", count: 1 },
+                documentaryContributionSegment("asserted_fact", 5),
+                documentaryContributionSegment("attributed_argument", 3),
+                documentaryContributionSegment("forecast", 1),
             ],
         },
         restriction: "Management statements, attributed",
@@ -715,7 +780,7 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
                         {
                             id: "routing",
                             kind: "counter",
-                            label: "Conflict",
+                            label: documentaryKinds.asserted_fact.label,
                             meta: "vs 10-K p. 8 ¶4",
                             highlight: "conflict",
                             text: "[Illustrative excerpt] Our platform recommends where each claim should be repaired.",
@@ -733,7 +798,7 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
                 {
                     id: "routing",
                     kind: "counter",
-                    label: "Fact",
+                    label: documentaryKinds.asserted_fact.label,
                     meta: "Prepared remarks",
                     questions: ["Q1"],
                     target: { pageId: "remarks", passageId: "routing" },
@@ -762,9 +827,9 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
         contributions: {
             count: 7,
             segments: [
-                { kind: "fact", count: 3 },
-                { kind: "inference", count: 2 },
-                { kind: "hypothesis", count: 2 },
+                documentaryContributionSegment("asserted_fact", 3),
+                documentaryContributionSegment("attributed_argument", 2),
+                documentaryContributionSegment("forecast", 2),
             ],
         },
         restriction: "Absence after slide 40 not established",
@@ -798,7 +863,10 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
         meta: "sec.gov · quarterly report",
         relationship: "Company-authored",
         reading: "full",
-        contributions: { count: 6, segments: [{ kind: "fact", count: 6 }] },
+        contributions: {
+            count: 6,
+            segments: [documentaryContributionSegment("asserted_fact", 6)],
+        },
         control: supported,
         document: {
             meta: "sec.gov · capture v1 · complete capture",
@@ -837,8 +905,7 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
         contributions: {
             count: 3,
             segments: [
-                { kind: "inference", count: 1 },
-                { kind: "counter", count: 2 },
+                documentaryContributionSegment("attributed_argument", 3),
             ],
         },
         restriction: "Argument checked against filings",
@@ -878,7 +945,10 @@ export const illustrativeSources: readonly IllustrativeSource[] = [
         meta: "earlier dossier · 2022",
         relationship: "Third-party",
         reading: "unknown",
-        contributions: { count: 2, segments: [{ kind: "fact", count: 2 }] },
+        contributions: {
+            count: 2,
+            segments: [documentaryContributionSegment("context", 2)],
+        },
         restriction: "Period 2022, not current",
         control: notEstablished,
         document: {

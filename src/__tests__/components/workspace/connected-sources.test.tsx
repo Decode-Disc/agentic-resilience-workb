@@ -526,6 +526,114 @@ test("the reader shows effective use apart from the reported one and hands a fol
     );
 });
 
+test.each([
+    {
+        field: "statement",
+        value: "See abcdef0123456789abcdef0123456789.",
+    },
+    {
+        field: "diagnostic",
+        value: "documentary_conflict: ECONNRESET during source_qualification.",
+    },
+    { field: "attribution", value: "SOURCE_QUALIFICATION_ENABLED" },
+    {
+        field: "attribution",
+        value: "request id: 550e8400-e29b-41d4-a716-446655440000",
+    },
+    { field: "statement", value: "api key: sk.test.redacted" },
+    { field: "period", value: "target-42" },
+    { field: "statement", value: "   " },
+] as const)("the reader withholds unusable model $field wording: $value", ({
+    field,
+    value,
+}) => {
+    convexReactHarness.query(api.sourcesWorkspace.getSource).returns({
+        ...reading,
+        contributions: reading.contributions.map((contribution) => ({
+            ...contribution,
+            [field]: value,
+        })),
+    });
+    renderSources({ search: { sourcesView: "reader", source: sourceId } });
+    fireEvent.click(
+        screen.getAllByRole("button", {
+            name: /^Show note for citation 1/,
+        })[0] as HTMLElement,
+    );
+    if (value.trim()) expect(document.body.textContent).not.toContain(value);
+    expect(
+        screen.getAllByText(
+            /Some contribution wording is unavailable\. Inspect the cited passage\./,
+        ).length,
+    ).toBeGreaterThan(0);
+    expect(
+        screen.getAllByText("The platform connects insurers.").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Inspection only/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Conflict").length).toBeGreaterThan(0);
+});
+
+test("the reader preserves long ordinary model prose and exact quoted technical text", () => {
+    const statement =
+        "The 10-K discusses EBITDA, AWS and API key ownership; the economic evidence is inconclusive. "
+            .repeat(16)
+            .trim();
+    const quotation = "The configuration uses SOURCE_QUALIFICATION_ENABLED.";
+    convexReactHarness.query(api.sourcesWorkspace.getSource).returns({
+        ...reading,
+        sections: [
+            {
+                id: "excerpt-3",
+                heading: "Business",
+                passages: [{ order: 3, quotation }],
+            },
+        ],
+        contributions: reading.contributions.map((contribution) => ({
+            ...contribution,
+            statement,
+            diagnostic: undefined,
+        })),
+    });
+    renderSources({ search: { sourcesView: "reader", source: sourceId } });
+    fireEvent.click(
+        screen.getAllByRole("button", {
+            name: /^Show note for citation 1/,
+        })[0] as HTMLElement,
+    );
+    expect(screen.getAllByText(statement).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(quotation).length).toBeGreaterThan(0);
+    expect(
+        screen.queryByText(/Some contribution wording is unavailable/),
+    ).toBeNull();
+});
+
+test("the reader keeps documentary commentary that names HTTP statuses and business identifiers", () => {
+    const statement =
+        "The documented API returns HTTP 429 when a customer's rate allowance is exhausted. " +
+        "Customers map CUSTOMER_ID between the platform and their system of record. " +
+        "Filing passage 12 sets the retention period.";
+    convexReactHarness.query(api.sourcesWorkspace.getSource).returns({
+        ...reading,
+        contributions: reading.contributions.map((contribution) => ({
+            ...contribution,
+            statement,
+            diagnostic: undefined,
+            attribution: undefined,
+            period: undefined,
+        })),
+    });
+    renderSources({ search: { sourcesView: "reader", source: sourceId } });
+    fireEvent.click(
+        screen.getAllByRole("button", {
+            name: /^Show note for citation 1/,
+        })[0] as HTMLElement,
+    );
+    expect(screen.getAllByText(statement).length).toBeGreaterThan(0);
+    expect(
+        screen.queryByText(/Some contribution wording is unavailable/),
+    ).toBeNull();
+});
+
 test("going to a conflict in another source starts on it once that document arrives", () => {
     const blog: Reading = {
         ...reading,
