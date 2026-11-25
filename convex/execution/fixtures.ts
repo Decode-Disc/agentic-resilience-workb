@@ -8,6 +8,7 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
+import { REQUEST_APPROVAL_FIXTURE_CAUSE } from "@convex/domain/conversationValidationContracts";
 import {
     claimCorpusApprovedRunExecution,
     claimPausedRunExecution,
@@ -2642,7 +2643,7 @@ export const prepareRequestApprovalFixture = internalMutation({
             {
                 missionId: mission._id,
                 expectedGeneration: mission.generation,
-                cause: "fixture-request-approval",
+                cause: REQUEST_APPROVAL_FIXTURE_CAUSE,
                 input: {
                     kind: "request_approval",
                     action: "pause_research",

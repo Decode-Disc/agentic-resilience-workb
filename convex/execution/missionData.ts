@@ -10,6 +10,7 @@ import {
     internalMutation,
     internalQuery,
 } from "@convex/_generated/server";
+import { REQUEST_APPROVAL_FIXTURE_CAUSE } from "@convex/domain/conversationValidationContracts";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { supportsResearchControl } from "@convex/domain/transitions";
 import {
@@ -317,6 +318,58 @@ const migrationTextualKind = v.union(
 );
 
 /** Inventories historical completion records independently of delivery and component storage. */
+/** Older browser approval fixtures published a delivery directly, with no mission result. */
+async function historicalApprovalFixtureDelivery(
+    ctx: QueryCtx,
+    run: Doc<"researchRuns">,
+    conversation: Doc<"agentConversations">,
+    mission: Doc<"agentMissions">,
+) {
+    if (
+        run.purpose !== "browser_test" ||
+        mission.definitionId !== "workbench_v1" ||
+        mission.provenance !== "simulation" ||
+        mission.lastInvocationId ||
+        mission.completionEventId ||
+        !mission.conversationTurnId
+    )
+        return undefined;
+    const turn = await ctx.db.get(mission.conversationTurnId);
+    if (
+        turn?.status !== "published" ||
+        turn.missionId !== mission._id ||
+        turn.runId !== run._id ||
+        turn.conversationId !== conversation._id ||
+        !turn.publishedMessageId
+    )
+        return undefined;
+    const reply = await ctx.db.get(turn.publishedMessageId);
+    if (
+        reply?.role !== "assistant" ||
+        reply.delivery !== "reply" ||
+        reply.status !== "processed" ||
+        reply.turnId !== turn._id ||
+        reply.runId !== run._id ||
+        reply.conversationId !== conversation._id
+    )
+        return undefined;
+    const approval = await ctx.db
+        .query("agentOperationRequests")
+        .withIndex("by_mission_and_input_kind", (q) =>
+            q.eq("missionId", mission._id).eq("input.kind", "request_approval"),
+        )
+        .filter((q) => q.eq(q.field("cause"), REQUEST_APPROVAL_FIXTURE_CAUSE))
+        .first();
+    if (
+        approval?.runId !== run._id ||
+        approval.status !== "completed" ||
+        approval.input.kind !== "request_approval" ||
+        approval.input.action !== "pause_research"
+    )
+        return undefined;
+    return { deliveryId: reply._id, operationId: approval._id };
+}
+
 export const missionMigrationInventory = internalQuery({
     args: {
         runId: v.id("researchRuns"),
@@ -329,6 +382,12 @@ export const missionMigrationInventory = internalQuery({
             resultTextId: v.optional(v.id("retainedTexts")),
             textId: v.optional(v.id("retainedTexts")),
             retainedHash: v.optional(v.string()),
+            deliveryOnly: v.optional(
+                v.object({
+                    deliveryId: v.id("agentMessageDeliveries"),
+                    operationId: v.id("agentOperationRequests"),
+                }),
+            ),
             status: v.union(
                 v.literal("other"),
                 v.literal("inline"),
@@ -336,6 +395,7 @@ export const missionMigrationInventory = internalQuery({
                 v.literal("copying"),
                 v.literal("switched"),
                 v.literal("retained"),
+                v.literal("delivery_only"),
                 v.literal("inconsistent"),
             ),
         }),
@@ -384,6 +444,26 @@ export const missionMigrationInventory = internalQuery({
                     const inline = mission.result !== undefined;
                     const fragmented = mission.resultTextId !== undefined;
                     const outcome = mission.textualOutcome;
+                    if (
+                        !inline &&
+                        !fragmented &&
+                        !outcome &&
+                        !mission.legacyTextualResultCopy
+                    ) {
+                        const deliveryOnly =
+                            await historicalApprovalFixtureDelivery(
+                                ctx,
+                                run,
+                                conversation,
+                                mission,
+                            );
+                        if (deliveryOnly)
+                            return {
+                                ...base,
+                                status: "delivery_only" as const,
+                                deliveryOnly,
+                            };
+                    }
                     let status:
                         | "inline"
                         | "fragmented"

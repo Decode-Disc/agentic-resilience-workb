@@ -383,7 +383,8 @@ export const reconcileConversationMigration = internalAction({
                     row.status === "inconsistent" ||
                     (!preflight &&
                         row.status !== "switched" &&
-                        row.status !== "retained")
+                        row.status !== "retained" &&
+                        row.status !== "delivery_only")
                 )
                     throw executionError(
                         "conversation_migration_inventory_incomplete",
@@ -404,7 +405,11 @@ export const reconcileConversationMigration = internalAction({
                             contentHash: row.retainedHash,
                         },
                     );
-                } else if (preflight && row.status !== "retained") {
+                } else if (
+                    preflight &&
+                    row.status !== "retained" &&
+                    row.status !== "delivery_only"
+                ) {
                     sourceIdentity = await ctx.runQuery(
                         internal.execution.missionData
                             .legacyMissionSourceIdentity,
@@ -415,7 +420,9 @@ export const reconcileConversationMigration = internalAction({
                     missionId: row.missionId,
                     sourceIdentity,
                     definitionVersion: row.definitionVersion,
-                    resultTextId: row.resultTextId,
+                    ...(row.status === "delivery_only"
+                        ? { deliveryOnly: row.deliveryOnly }
+                        : { resultTextId: row.resultTextId }),
                     retainedHash:
                         row.status === "retained"
                             ? row.retainedHash

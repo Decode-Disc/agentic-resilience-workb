@@ -1529,3 +1529,124 @@ test("a fragmented completed result without a delivery adopts its own exact reta
     });
     expect(await f.t.run((ctx) => ctx.db.get(sourceTextId))).not.toBeNull();
 });
+
+test("a legacy approval fixture preserves its published reply without inventing a mission result", async () => {
+    const f = await legacyConversation(undefined, true);
+    const { missionId, turnId } = await beginHistoricalMission(f);
+    const text = "Simulation: please confirm whether to pause research.";
+    const { deliveryId, operationId } = await f.t.run(async (ctx) => {
+        const turn = await ctx.db.get(turnId);
+        assert(turn);
+        const request = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_turn", (q) => q.eq("turnId", turnId))
+            .first();
+        assert(request?.role === "user");
+        const storageMessageRef = await saveConversationMessage(
+            ctx,
+            f.threadId,
+            "assistant",
+            text,
+        );
+        const deliveryId = await ctx.db.insert("agentMessageDeliveries", {
+            runId: f.runId,
+            conversationId: turn.conversationId,
+            turnId,
+            storageMessageRef,
+            requestKey: "fixture-reply",
+            contentHash: sha256Hex(text),
+            role: "assistant",
+            delivery: "reply",
+            status: "processed",
+            createdAt: 1,
+        });
+        await ctx.db.patch(turn.conversationId, { activeTurnId: undefined });
+        await ctx.db.patch(turnId, {
+            status: "published",
+            publishedMessageId: deliveryId,
+        });
+        await ctx.db.patch(missionId, {
+            definitionId: "workbench_v1",
+            definitionVersion: 12,
+            scope: { kind: "workbench_v1" },
+            state: { kind: "workbench_v1" },
+            provenance: "simulation",
+            status: "completed",
+        });
+        const operationId = await ctx.db.insert("agentOperationRequests", {
+            runId: f.runId,
+            missionId,
+            actor: "agent",
+            cause: "runtime-approval",
+            logicalKey: "fixture-request",
+            input: {
+                kind: "request_approval",
+                action: "pause_research",
+                messageId: request._id,
+            },
+            operationVersion: 1,
+            expectedGeneration: 1,
+            status: "completed",
+            createdAt: 1,
+        });
+        return { deliveryId, operationId };
+    });
+    await freezeMigration(f);
+    const scope = { runId: f.runId };
+    const prepare =
+        internal.integrations.agentStorage.prepareConversationMigration;
+    await expect(f.t.action(prepare, scope)).rejects.toThrow(
+        "conversation_migration_inventory_incomplete",
+    );
+    await f.t.run((ctx) =>
+        ctx.db.patch(operationId, { cause: "fixture-request-approval" }),
+    );
+    const sourceInventoryHash = await f.t.action(prepare, scope);
+    for (const kind of ["deliveries", "missions"] as const) {
+        let cursor = null;
+        for (;;) {
+            const page: FunctionReturnType<
+                typeof internal.integrations.agentStorage.migrateConversationPage
+            > = await f.t.action(
+                internal.integrations.agentStorage.migrateConversationPage,
+                { ...scope, kind, cursor },
+            );
+            if (kind === "missions") expect(page.migrated).toBe(0);
+            if (page.isDone) break;
+            cursor = page.continueCursor;
+        }
+    }
+    const evidence = await f.t.action(
+        internal.integrations.agentStorage.reconcileConversationMigration,
+        scope,
+    );
+    expect(evidence).toMatchObject({
+        sourceInventoryHash,
+        completedMissions: 1,
+    });
+    await f.t.action(
+        internal.integrations.agentStorage.resumeVerifiedConversationMigration,
+        {
+            ...scope,
+            sourceInventoryHash,
+            inventoryHash: evidence.inventoryHash,
+        },
+    );
+    const delivered = await f.client.query(
+        api.execution.conversations.listMessages,
+        {
+            ...scope,
+            paginationOpts: { cursor: null, numItems: 5 },
+        },
+    );
+    expect(delivered.page).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({ _id: deliveryId, text }),
+        ]),
+    );
+    const mission = await f.t.run((ctx) => ctx.db.get(missionId));
+    assert(mission && "protocolVersion" in mission);
+    expect(mission).toMatchObject({ status: "completed" });
+    expect(mission.result).toBeUndefined();
+    expect(mission.textualOutcome).toBeUndefined();
+});
