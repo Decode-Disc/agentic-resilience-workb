@@ -25,6 +25,7 @@ import {
 import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
 });
 
@@ -1159,6 +1160,213 @@ async function beginHistoricalMission(
     });
     return { turnId, missionId };
 }
+
+test.each([
+    "turn_parent",
+    "turn_run",
+    "mission_turn",
+    "mission_run",
+] as const)("maintenance refuses a foreign active correlation (%s)", async (broken) => {
+    vi.useFakeTimers();
+    const f = await legacyConversation(undefined, true);
+    const { turnId, missionId } = await beginHistoricalMission(f);
+    await f.t.run(async (ctx) => {
+        const run = await ctx.db.get(f.runId);
+        const turn = await ctx.db.get(turnId);
+        assert(run && turn);
+        const { _id: _runId, _creationTime: _runTime, ...runFields } = run;
+        const foreignRunId = await ctx.db.insert("researchRuns", runFields);
+        const foreignConversationId = await ctx.db.insert(
+            "agentConversations",
+            {
+                runId: foreignRunId,
+                queuedCount: 0,
+                createdAt: 1,
+            },
+        );
+        const { _id: _turnId, _creationTime: _turnTime, ...turnFields } = turn;
+        const foreignTurnId = await ctx.db.insert("agentConversationTurns", {
+            ...turnFields,
+            runId: foreignRunId,
+            conversationId: foreignConversationId,
+        });
+        if (broken === "turn_parent")
+            await ctx.db.patch(turnId, {
+                conversationId: foreignConversationId,
+            });
+        if (broken === "turn_run")
+            await ctx.db.patch(turnId, { runId: foreignRunId });
+        if (broken === "mission_turn")
+            await ctx.db.patch(missionId, {
+                conversationTurnId: foreignTurnId,
+            });
+        if (broken === "mission_run")
+            await ctx.db.patch(missionId, { runId: foreignRunId });
+    });
+    await f.t.mutation(internal.execution.piControl.holdPublication, {
+        held: true,
+    });
+    await expect(freezeMigration(f)).rejects.toThrow(
+        "conversation_migration_turn_active",
+    );
+    const conversation = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .unique(),
+    );
+    expect(conversation?.activeTurnId).toBe(turnId);
+    expect(conversation).not.toHaveProperty("storageMigrationFrozen");
+});
+
+test.each([
+    "blocked",
+    "running",
+] as const)("a held %s turn migrates without changing its mission or admitting a live writer", async (status) => {
+    vi.useFakeTimers();
+    const f = await legacyConversation(undefined, true);
+    const original = "Preserve the historical request. 🧭";
+    const deliveryId = await f.t.run(async (ctx) => {
+        const reference = await saveConversationMessage(
+            ctx,
+            f.threadId,
+            "user",
+            original,
+        );
+        const id = await f.delivery(
+            ctx,
+            reference,
+            "blocked-history",
+            original,
+        );
+        await ctx.db.patch(id, { status: "processed" });
+        return id;
+    });
+    const { turnId, missionId } = await beginHistoricalMission(f);
+    const queuedId = await f.client.mutation(
+        api.execution.conversations.submit,
+        {
+            runId: f.runId,
+            requestKey: "after-blocked-turn",
+            text: "Keep this request queued for the next turn.",
+            delivery: "queue",
+        },
+    );
+    const lease = await f.t.mutation(internal.execution.piStore.claim, {
+        missionId,
+        expectedGeneration: 1,
+        writer: "blocked-migration",
+    });
+    for (const phase of ["draining", "frozen", "active"] as const)
+        await f.t.mutation(
+            internal.execution.retainedText.advanceStreamUpgrade,
+            { phase },
+        );
+    const begin = () =>
+        f.t.mutation(internal.execution.conversations.beginMessageMigration, {
+            runId: f.runId,
+        });
+    await expect(begin()).rejects.toThrow("conversation_migration_turn_active");
+    await f.t.run((ctx) =>
+        ctx.db.patch(missionId, {
+            status,
+            blockCode:
+                status === "blocked" ? "browser_test_expired" : undefined,
+        }),
+    );
+    await expect(begin()).rejects.toThrow("conversation_migration_turn_active");
+    await f.t.mutation(internal.execution.piControl.holdPublication, {
+        held: true,
+    });
+    await expect(begin()).rejects.toThrow("conversation_migration_turn_active");
+    await f.t.run((ctx) => ctx.db.patch(lease.sessionId, { leaseUntil: 1 }));
+    await f.t.run((ctx) =>
+        ctx.db.patch(missionId, { piActiveWriter: "blocked-migration" }),
+    );
+    await expect(begin()).rejects.toThrow("conversation_migration_turn_active");
+    await f.t.run((ctx) =>
+        ctx.db.patch(missionId, { piActiveWriter: undefined }),
+    );
+    const before = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(missionId),
+        turn: await ctx.db.get(turnId),
+        calls: await ctx.db.query("providerCalls").collect(),
+    }));
+    await expect(begin()).resolves.toBeNull();
+    await expect(
+        f.t.mutation(internal.execution.piStore.claim, {
+            missionId,
+            expectedGeneration: 1,
+            writer: "late-migration-writer",
+        }),
+    ).rejects.toThrow("conversation_migration_frozen");
+    const sourceInventoryHash = await f.t.action(
+        internal.integrations.agentStorage.prepareConversationMigration,
+        { runId: f.runId },
+    );
+    for (const kind of ["deliveries", "missions"] as const) {
+        let cursor:
+            | FunctionReturnType<
+                  typeof internal.integrations.agentStorage.migrateConversationPage
+              >["continueCursor"]
+            | null = null;
+        for (;;) {
+            const page: FunctionReturnType<
+                typeof internal.integrations.agentStorage.migrateConversationPage
+            > = await f.t.action(
+                internal.integrations.agentStorage.migrateConversationPage,
+                {
+                    runId: f.runId,
+                    kind,
+                    cursor,
+                },
+            );
+            if (page.isDone) break;
+            cursor = page.continueCursor;
+        }
+    }
+    const reconciled = await f.t.action(
+        internal.integrations.agentStorage.reconcileConversationMigration,
+        { runId: f.runId },
+    );
+    await f.t.action(
+        internal.integrations.agentStorage.resumeVerifiedConversationMigration,
+        {
+            runId: f.runId,
+            sourceInventoryHash,
+            inventoryHash: reconciled.inventoryHash,
+        },
+    );
+    const after = await f.t.run(async (ctx) => ({
+        mission: await ctx.db.get(missionId),
+        turn: await ctx.db.get(turnId),
+        calls: await ctx.db.query("providerCalls").collect(),
+    }));
+    expect(after).toEqual(before);
+    const conversation = await f.client.query(api.execution.conversations.get, {
+        runId: f.runId,
+    });
+    expect(conversation.activeTurn?._id).toBe(turnId);
+    expect(conversation.queuedCount).toBe(1);
+    const queued = await f.t.run((ctx) => ctx.db.get(queuedId));
+    expect(queued?.status).toBe("queued");
+    expect(queued).not.toHaveProperty("turnId");
+    expect(conversation.execution).toEqual({
+        status,
+        code: status === "blocked" ? "browser_test_expired" : undefined,
+    });
+    const history = await f.client.query(
+        api.execution.conversations.listMessages,
+        {
+            runId: f.runId,
+            paginationOpts: { numItems: 10, cursor: null },
+        },
+    );
+    const messages = await readMessageBodies(f.client, history.page);
+    expect(messages.find((message) => message._id === deliveryId)?.text).toBe(
+        original,
+    );
+});
 
 test("an inline historical outcome shares its exact delivered text and refuses a mismatch", async () => {
     const f = await legacyConversation(undefined, true);

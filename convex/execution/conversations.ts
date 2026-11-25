@@ -128,6 +128,33 @@ export const migrationScopes = internalQuery({
     },
 });
 
+async function requireIdleMigrationWriter(
+    ctx: QueryCtx,
+    conversation: Doc<"agentConversations">,
+) {
+    if (!conversation.activeTurnId) return;
+    const turn = await ctx.db.get(conversation.activeTurnId);
+    const mission = turn?.missionId ? await ctx.db.get(turn.missionId) : null;
+    const session = mission ? await sessionForMission(ctx, mission) : null;
+    const control = await ctx.db
+        .query("piPublication")
+        .withIndex("by_key", (q) => q.eq("key", "workers"))
+        .unique();
+    // Logical turn status can outlive its worker; maintenance fences the idle writer.
+    if (
+        !control?.held ||
+        turn?.conversationId !== conversation._id ||
+        turn.runId !== conversation.runId ||
+        mission?.executionRuntime !== "pi-durable" ||
+        mission.runId !== conversation.runId ||
+        mission.conversationTurnId !== turn._id ||
+        mission.generationBackend?.id !== "pi-durable" ||
+        mission.piActiveWriter ||
+        (session && session.leaseUntil > Date.now())
+    )
+        throw executionError("conversation_migration_turn_active");
+}
+
 export const beginMessageMigration = internalMutation({
     args: { runId: v.id("researchRuns") },
     returns: v.null(),
@@ -143,8 +170,7 @@ export const beginMessageMigration = internalMutation({
             throw executionError("retained_stream_upgrade_order");
         const conversation = await conversationForRun(ctx, runId);
         if (!conversation) throw executionError("conversation_unavailable");
-        if (conversation.activeTurnId)
-            throw executionError("conversation_migration_turn_active");
+        await requireIdleMigrationWriter(ctx, conversation);
         if (!conversation.storageMigrationFrozen)
             await ctx.db.patch(conversation._id, {
                 storageMigrationFrozen: true,
@@ -174,10 +200,10 @@ async function requireFrozenInventoryCheckpoint(
         run.withdrawnAt !== undefined ||
         conversation?._id !== args.conversationId ||
         !conversation.storageMigrationFrozen ||
-        conversation.activeTurnId ||
         (conversation.storageMigrationEpoch ?? 0) !== args.epoch
     )
         throw executionError("conversation_migration_inventory_changed");
+    await requireIdleMigrationWriter(ctx, conversation);
     return { run, conversation };
 }
 
