@@ -11,6 +11,7 @@ import {
     query,
 } from "@convex/_generated/server";
 import { requireAdmin } from "@convex/administrationAuthority";
+import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
 import {
     formatResearchSummary,
     readResearchState,
@@ -260,6 +261,7 @@ export async function readResponseFacts(
     run: Doc<"researchRuns">,
     completedTurn?: TurnOperationFacts,
     instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
+    wording?: AnalystTurnWording,
 ) {
     const retained =
         completedTurn?.requests ??
@@ -313,17 +315,21 @@ export async function readResponseFacts(
             throw executionError("prepared_material_identity_conflict");
         return { requestId: request._id, value };
     });
-    const facts = await readWorkbenchFacts(ctx, run, mission, instructionTexts);
+    const facts = await readWorkbenchFacts(
+        ctx,
+        run,
+        mission,
+        instructionTexts,
+        wording,
+    );
     if (facts.kind !== "ready")
         return { kind: "blocked" as const, code: "context_capacity" };
     const { factsRevisionHash, ...context } = facts.context;
     if (typeof factsRevisionHash !== "string")
         return { kind: "blocked" as const, code: "context_capacity" };
-    const instructions = await conversationInstructions(
-        ctx,
-        mission,
-        instructionTexts,
-    );
+    const instructions =
+        wording ??
+        (await conversationInstructions(ctx, mission, instructionTexts));
     const framingWrite = supportsFramingWriteReceipt(mission.definitionVersion)
         ? completedTurn
             ? completedTurn.framingReceipt
@@ -334,16 +340,39 @@ export async function readResponseFacts(
                   mission.definitionVersion,
               )
         : undefined;
+    const wordingOmitted =
+        wording &&
+        [...wording.messages, ...wording.transmitted].some(
+            ({ text }) => text === undefined,
+        );
+    const activeAnalystMessages =
+        instructions?.messages.map((message) => ({
+            messageId: message.messageId,
+            delivery: message.delivery,
+            receivedAt: message.receivedAt,
+            ...(message.text === undefined && "contentHash" in message
+                ? { contentHash: message.contentHash }
+                : { text: message.text }),
+        })) ?? [];
     const factsJson = stableStringify({
         ...context,
         ...(framingWrite ? { framingWrite } : {}),
-        activeAnalystMessages: instructions?.messages ?? [],
+        activeAnalystMessages,
         operations: observedOperations,
         ...(consultedPreparedMaterial.length
             ? { consultedPreparedMaterial }
             : {}),
     });
-    return { kind: "ready" as const, factsJson, operations, factsRevisionHash };
+    return {
+        kind: "ready" as const,
+        factsJson,
+        operations,
+        factsRevisionHash,
+        wordingOmitted,
+        ...(facts.factsRevisionTemplate
+            ? { factsRevisionTemplate: facts.factsRevisionTemplate }
+            : {}),
+    };
 }
 
 /** Finalization owns the bounded feedback decision; external checking is dispatched as an ordinary system operation. */
@@ -366,6 +395,10 @@ export async function completeResponseControl(
         confirmationOnly: boolean;
     } & TurnOperationFacts,
     instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
+    prepared?: {
+        facts: Awaited<ReturnType<typeof readResponseFacts>>;
+        exactRevision?: string;
+    },
 ): Promise<
     | { kind: "completed" }
     | { kind: "continue" }
@@ -461,16 +494,18 @@ export async function completeResponseControl(
         return { kind: "continue" };
     };
     if (conflict && !state.correction) return requestCorrection();
-    const facts = await readResponseFacts(
-        ctx,
-        mission,
-        run,
-        {
-            requests,
-            framingReceipt,
-        },
-        instructionTexts,
-    );
+    const facts =
+        prepared?.facts ??
+        (await readResponseFacts(
+            ctx,
+            mission,
+            run,
+            {
+                requests,
+                framingReceipt,
+            },
+            instructionTexts,
+        ));
     if (facts.kind !== "ready") {
         state.finalInvocationId = invocation._id;
         state.publicationReason = conflict
@@ -481,13 +516,18 @@ export async function completeResponseControl(
         return { kind: "completed" };
     }
     const { factsJson } = facts;
-    state.factsRevisionHash = facts.factsRevisionHash;
+    if (facts.factsRevisionTemplate && !prepared?.exactRevision)
+        throw executionError("invocation_result_invalid");
+    state.factsRevisionHash = facts.factsRevisionTemplate
+        ? prepared?.exactRevision
+        : facts.factsRevisionHash;
     const factsHash = sha256Hex(factsJson);
     let check = state.checks.find(
         (c) => c.invocationId === invocation._id && c.factsHash === factsHash,
     );
     if (
         !check &&
+        !facts.wordingOmitted &&
         state.checks.length < RESPONSE_CONTROL_LIMITS.checksPerTurn &&
         new TextEncoder().encode(factsJson).length <=
             RESPONSE_CONTROL_LIMITS.inputBytes

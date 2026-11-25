@@ -7,6 +7,7 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
+import type { PreparedAnalystWording } from "@convex/domain/preparedAnalystWording";
 import {
     completeCharacterBoundary,
     sha256Hex,
@@ -1068,8 +1069,18 @@ export function preparedReplyBasisHash(
     basisHash: string,
     reviewDraft: Infer<typeof preparedResponseReviewDraft> | undefined,
     completion: Infer<typeof preparedCompletionValidator>,
+    wording?: PreparedAnalystWording,
+    exactFactsRevision?: string,
 ) {
-    return sha256Hex(stableStringify({ basisHash, reviewDraft, completion }));
+    return sha256Hex(
+        stableStringify({
+            basisHash,
+            reviewDraft,
+            completion,
+            wording,
+            exactFactsRevision,
+        }),
+    );
 }
 
 export function preparedReplyPrefix(invocationId: Id<"agentInvocations">) {

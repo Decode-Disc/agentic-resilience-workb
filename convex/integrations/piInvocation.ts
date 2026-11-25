@@ -1,6 +1,10 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
+import {
+    materializeWordingRevision,
+    projectAnalystWording,
+} from "@convex/domain/preparedAnalystWording";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import {
     type AgentDefinition,
@@ -14,7 +18,10 @@ import {
     retainedTextParts,
     verifyRetainedText,
 } from "@convex/execution/retainedText";
-import { MAX_WORKING_NOTES_BYTES } from "@convex/resourcePolicy";
+import {
+    HISTORY_PAGE_SIZE,
+    MAX_WORKING_NOTES_BYTES,
+} from "@convex/resourcePolicy";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { validate } from "convex-helpers/validators";
 
@@ -230,6 +237,77 @@ async function reconstructBody(
     return verifyRetainedText(first, parts.join(""));
 }
 
+type ReplyInstructionPage = NonNullable<
+    FunctionReturnType<
+        typeof internal.execution.invocationLifecycle.replyInstructionPage
+    >
+>;
+
+async function readReplyWording(
+    ctx: ActionCtx,
+    scope: {
+        invocationId: Id<"agentInvocations">;
+        expectedGeneration: number;
+        responseHash: string;
+    },
+    signal?: AbortSignal,
+) {
+    const references: ReplyInstructionPage["page"] = [];
+    let transmitted: ReplyInstructionPage["page"] = [];
+    let cursor: string | null = null;
+    for (;;) {
+        signal?.throwIfAborted();
+        const page: ReplyInstructionPage | null = await ctx.runQuery(
+            internal.execution.invocationLifecycle.replyInstructionPage,
+            {
+                ...scope,
+                paginationOpts: { cursor, numItems: HISTORY_PAGE_SIZE },
+            },
+        );
+        if (!page) return null;
+        if (page.transmitted) transmitted = page.transmitted;
+        if (page.page.some((reference) => reference.legacy)) return undefined;
+        references.push(...page.page);
+        if (page.isDone) break;
+        if (page.continueCursor === cursor)
+            throw executionError("conversation_message_unavailable");
+        cursor = page.continueCursor;
+    }
+    const activeIds = new Set(references.map(({ messageId }) => messageId));
+    for (const reference of transmitted) {
+        if (reference.legacy) return undefined;
+        if (!activeIds.has(reference.messageId)) references.push(reference);
+    }
+    const exact: { messageId: Id<"agentMessageDeliveries">; text: string }[] =
+        [];
+    for (const { messageId, contentHash } of references) {
+        const read = (index: number) => {
+            signal?.throwIfAborted();
+            return ctx.runQuery(
+                internal.execution.invocationLifecycle.replyInstructionFragment,
+                {
+                    ...scope,
+                    messageId,
+                    contentHash,
+                    index,
+                },
+            );
+        };
+        const first = await read(0);
+        const parts = [first.content];
+        for (let index = 1; index < first.fragmentCount; index++)
+            parts.push((await read(index)).content);
+        exact.push({
+            messageId,
+            text: verifyRetainedText({ ...first, contentHash }, parts.join("")),
+        });
+    }
+    return {
+        wording: projectAnalystWording(exact),
+        texts: new Map(exact.map(({ messageId, text }) => [messageId, text])),
+    };
+}
+
 /** Stages the rendered reply one fragment at a time before business adoption. */
 export async function preparePiReply(
     ctx: ActionCtx,
@@ -261,14 +339,27 @@ export async function preparePiReply(
         !proposal.text.trim()
     )
         return undefined;
+    const scope = { ...authority, responseHash: sha256Hex(responseJson) };
+    const wordingRead = definition.preparedCompletion.analystWording
+        ? await readReplyWording(ctx, scope, signal)
+        : undefined;
+    if (wordingRead === null) return undefined;
+    const wording = wordingRead?.wording;
     const basis = await ctx.runQuery(
         internal.execution.invocationLifecycle.replyPreparation,
-        {
-            ...authority,
-            responseHash: sha256Hex(responseJson),
-        },
+        { ...scope, ...(wording ? { wording } : {}) },
     );
-    if (!basis) return undefined;
+    if (!basis)
+        return wording && definition.preparedCompletion.correction
+            ? { correctionWording: wording }
+            : undefined;
+    const exactFactsRevision =
+        basis.factsRevisionTemplate && wordingRead
+            ? materializeWordingRevision(
+                  basis.factsRevisionTemplate,
+                  wordingRead.texts,
+              )
+            : undefined;
     const { result, reviewDraft } = definition.preparedCompletion.render(
         proposal,
         basis,
@@ -299,6 +390,8 @@ export async function preparePiReply(
         basis.basisHash,
         reviewDraft,
         completion,
+        wording,
+        exactFactsRevision,
     );
     const { parts, manifest } = retainedTextParts(reply);
     let textId: Id<"retainedTexts"> | undefined;
@@ -318,6 +411,8 @@ export async function preparePiReply(
               basisHash: basis.basisHash,
               textId,
               completion,
+              ...(wording ? { wording } : {}),
+              ...(exactFactsRevision ? { exactFactsRevision } : {}),
               ...(reviewDraft ? { reviewDraft } : {}),
           }
         : undefined;

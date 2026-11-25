@@ -153,7 +153,7 @@ test("recovers the exact retained invocation response beyond one read transactio
             getAgentDefinition("conversation_validation_v1", 2),
         ),
     );
-    assert(preparedReply);
+    assert(preparedReply && "textId" in preparedReply);
     const staged = await f.t.run((ctx) => ctx.db.get(preparedReply.textId));
     expect(staged?.key).toContain(`${f.invocationId}:prepared_reply:`);
     const alternativeBasis = "a".repeat(64);

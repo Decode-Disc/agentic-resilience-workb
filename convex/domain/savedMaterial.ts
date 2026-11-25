@@ -13,6 +13,7 @@ import {
     documentDates,
     recordedDocumentDate,
 } from "@convex/domain/documentDates";
+import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
 import {
     acquireDocumentResult,
     type documentaryCause,
@@ -88,7 +89,7 @@ export const retainedDocumentCaptureKey = (
 
 export async function retainedDocumentRoot(
     ctx: QueryCtx,
-    view: DocumentaryView,
+    view: Omit<DocumentaryView, "instructions">,
     root: Doc<"agentOperationRequests"> | null,
     use: "observed" | "continuation" = "observed",
 ) {
@@ -226,13 +227,17 @@ export async function documentaryInventory(
     mission: Doc<"agentMissions">,
     reads?: SourceReviewReads,
     instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
+    preparedWording?: AnalystTurnWording,
 ) {
-    let frame: Awaited<ReturnType<typeof documentaryMaterialContext>>;
+    let frame: Awaited<
+        ReturnType<typeof documentaryMaterialContext<AnalystTurnWording>>
+    >;
     try {
         frame = await documentaryMaterialContext(
             ctx,
             mission,
             instructionTexts,
+            preparedWording,
         );
     } catch (error) {
         if (
@@ -247,8 +252,10 @@ export async function documentaryInventory(
     const instructions =
         "instructions" in frame ? frame.instructions : undefined;
     const messages =
-        instructions?.messages.filter(
-            (message) => !explicitResearchCommand(message.text),
+        instructions?.messages.filter((message) =>
+            "contentHash" in message
+                ? !message.command
+                : !explicitResearchCommand(message.text),
         ) ?? [];
     const committedCaptures: Doc<"sourceCaptures">[] = [];
     if (
@@ -443,13 +450,16 @@ export async function documentaryInventory(
         unavailableMaterials: [...unavailableMaterials.values()],
         analystUrls:
             frame.scope.kind === "framing"
-                ? messages.flatMap(({ messageId, text }) =>
-                      framingMessageUrls(text).map((url) => ({
-                          messageId,
+                ? messages.flatMap((message) =>
+                      ("contentHash" in message
+                          ? message.urls
+                          : framingMessageUrls(message.text)
+                      ).map((url) => ({
+                          messageId: message.messageId,
                           url,
                           reference: documentaryReference({
                               issuer: "analyst_url",
-                              messageId,
+                              messageId: message.messageId,
                               url,
                           }),
                       })),
@@ -472,9 +482,11 @@ function scopeForReference(
             !cause ||
             cause.instructionVersion !== instructions?.instructionVersion ||
             !instructions.messages.some(
-                ({ messageId, text }) =>
-                    messageId === cause.messageId &&
-                    !explicitResearchCommand(text),
+                (message) =>
+                    message.messageId === cause.messageId &&
+                    ("contentHash" in message
+                        ? !message.command
+                        : !explicitResearchCommand(message.text)),
             )
         )
             throw executionError("framing_observation_stale");

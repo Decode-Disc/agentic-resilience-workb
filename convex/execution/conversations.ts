@@ -8,8 +8,13 @@ import {
     type QueryCtx,
     query,
 } from "@convex/_generated/server";
+import type {
+    AnalystTurnWording,
+    PreparedAnalystWording,
+} from "@convex/domain/preparedAnalystWording";
 import { savedMaterialBinding } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { workbenchInstructionMessageIds } from "@convex/domain/workbenchInstructions";
 import {
     adoptRetainedTextKey,
     completeRetainedText,
@@ -54,6 +59,7 @@ import {
     MAX_CONTEXT_BYTES,
     MAX_CONVERSATION_SCAN_BYTES,
     MAX_OPERATION_RESULT_BYTES,
+    RESPONSE_CONTROL_MAX_INPUT_BYTES,
 } from "@convex/resourcePolicy";
 import {
     localBrowserFixturesEnabled,
@@ -1269,6 +1275,76 @@ export function analystTurnDeliveries(
         .query("agentMessageDeliveries")
         .withIndex("by_turn", (q) => q.eq("turnId", turnId))
         .filter((q) => q.eq(q.field("role"), "user"));
+}
+
+/** Revalidates action-prepared wording against current turn and transmitted request identities. */
+export async function readPreparedTurnWording(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+    wording: PreparedAnalystWording,
+): Promise<AnalystTurnWording | null> {
+    const turn = mission.conversationTurnId
+        ? await ctx.db.get(mission.conversationTurnId)
+        : null;
+    if (turn?.missionId !== mission._id || turn.status !== "active")
+        return null;
+
+    const seen = new Set<Id<"agentMessageDeliveries">>();
+    let bytes = 0;
+    const check = async (delivery: Doc<"agentMessageDeliveries"> | null) => {
+        const expected = wording[seen.size];
+        if (
+            !expected ||
+            expected.messageId !== delivery?._id ||
+            !delivery.bodyTextId ||
+            expected.contentHash !== deliveryBodyHash(delivery) ||
+            delivery.role !== "user" ||
+            delivery.runId !== mission.runId ||
+            delivery.conversationId !== turn.conversationId
+        )
+            return null;
+        const manifest = await retainedDeliveryBody(ctx, delivery);
+        if (
+            expected.text !== undefined &&
+            sha256Hex(expected.text) !== manifest.contentHash
+        )
+            return null;
+        bytes += manifest.sizeBytes;
+        seen.add(expected.messageId);
+        return expected;
+    };
+    const messages: AnalystTurnWording["messages"] = [];
+    for await (const delivery of analystTurnDeliveries(ctx, turn._id)) {
+        const expected = await check(delivery);
+        if (!expected) return null;
+        messages.push({
+            ...expected,
+            delivery: delivery.delivery,
+            receivedAt: new Date(delivery.createdAt).toISOString(),
+        });
+    }
+    const transmitted: PreparedAnalystWording = [];
+    for (const id of await workbenchInstructionMessageIds(ctx, mission.runId)) {
+        if (seen.has(id)) continue;
+        const expected = await check(await ctx.db.get(id));
+        if (!expected) return null;
+        transmitted.push(expected);
+    }
+    if (
+        seen.size !== wording.length ||
+        wording.some(
+            (message) =>
+                (message.text !== undefined) !==
+                bytes <= RESPONSE_CONTROL_MAX_INPUT_BYTES,
+        )
+    )
+        return null;
+    return {
+        turnId: turn._id,
+        instructionVersion: turn.instructionVersion,
+        messages,
+        transmitted,
+    };
 }
 
 export async function readTurnInstructions(

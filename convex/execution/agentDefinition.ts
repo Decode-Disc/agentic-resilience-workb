@@ -1,6 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import type { AgentIdentityId } from "@convex/domain/agentIdentities";
+import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
 import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import {
     type GenericValidator,
@@ -155,14 +156,46 @@ export type AgentDefinition = {
     /** Owns completion when proposal and published text are prepared outside the transaction. */
     preparedCompletion?: {
         outcomeKind: "workbench_v1" | "conversation_validation_v1";
+        analystWording?: true;
+        correction?(
+            ctx: QueryCtx,
+            mission: Doc<"agentMissions">,
+            wording: AnalystTurnWording,
+        ): Promise<
+            | { kind: "blocked"; code: string }
+            | {
+                  kind: "correct";
+                  feedback: Infer<typeof completionFeedbackValidator>;
+              }
+        >;
         basis(
             ctx: QueryCtx,
             mission: Doc<"agentMissions">,
             instructionTexts: Map<Id<"agentMessageDeliveries">, string>,
+            wording?: AnalystTurnWording,
         ): Promise<{
             confirmationOnly: boolean;
             confirmations: readonly string[];
             factsHash: string | null;
+            factsRevisionTemplate?: string;
+            adopt(
+                ctx: MutationCtx,
+                invocation: Doc<"agentInvocations">,
+                reviewDraft:
+                    | Infer<
+                          typeof import("@convex/domain/workbenchResponseControlContracts").preparedResponseReviewDraft
+                      >
+                    | undefined,
+                exactFactsRevision?: string,
+            ): Promise<
+                | { kind: "blocked"; code: string }
+                | { kind: "continue" }
+                | {
+                      kind: "correct";
+                      feedback: Infer<typeof completionFeedbackValidator>;
+                  }
+                | { kind: "completed" }
+            >;
         } | null>;
         render(
             proposal: AgentCompletion & { text: string },
@@ -176,25 +209,6 @@ export type AgentDefinition = {
                 typeof import("@convex/domain/workbenchResponseControlContracts").preparedResponseReviewDraft
             >;
         };
-        adopt(
-            ctx: MutationCtx,
-            mission: Doc<"agentMissions">,
-            invocation: Doc<"agentInvocations">,
-            reviewDraft:
-                | Infer<
-                      typeof import("@convex/domain/workbenchResponseControlContracts").preparedResponseReviewDraft
-                  >
-                | undefined,
-            instructionTexts: Map<Id<"agentMessageDeliveries">, string>,
-        ): Promise<
-            | { kind: "blocked"; code: string }
-            | { kind: "continue" }
-            | {
-                  kind: "correct";
-                  feedback: Infer<typeof completionFeedbackValidator>;
-              }
-            | { kind: "completed" }
-        >;
     };
     /** Completion examines the immutable input admitted to this invocation, including during retained-response replay. */
     complete(

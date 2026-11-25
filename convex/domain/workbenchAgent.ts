@@ -1,5 +1,6 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
+import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
 import {
     type AgentDefinition,
     agentToolSchemas,
@@ -311,16 +312,18 @@ async function readWorkbenchReplyState(
     mission: Doc<"agentMissions">,
     version: number,
     instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
+    wording?: AnalystTurnWording,
 ) {
-    const instructions = await conversationInstructions(
-        ctx,
-        mission,
-        instructionTexts,
-    );
+    const instructions =
+        wording ??
+        (await conversationInstructions(ctx, mission, instructionTexts));
     if (!instructions?.messages.length)
         return { kind: "ready", confirmations: [], review: undefined } as const;
     const commands = instructions.messages.flatMap((message) => {
-        const action = explicitResearchCommand(message.text);
+        const action =
+            "contentHash" in message
+                ? message.command
+                : explicitResearchCommand(message.text);
         return action ? [{ message, action }] : [];
     });
     const confirmationOnly = commands.length === instructions.messages.length;
@@ -330,7 +333,9 @@ async function readWorkbenchReplyState(
         supportsFramingContractCorrections(version) &&
         !run.fixedFramingRevisionId &&
         !instructions.messages.some((message) =>
-            explicitFramingPreservation(message.text),
+            "preservesFraming" in message
+                ? message.preservesFraming
+                : explicitFramingPreservation(message.text),
         ) &&
         !confirmationOnly
     ) {
@@ -449,6 +454,10 @@ async function reviewWorkbenchReply(
     draft: ReturnType<typeof prepareResponseReviewDraft>,
     input: unknown,
     instructionTexts: Map<Id<"agentMessageDeliveries">, string>,
+    preparedFacts?: {
+        facts: Awaited<ReturnType<typeof readResponseFacts>>;
+        exactRevision?: string;
+    },
 ) {
     return state.review
         ? completeResponseControl(
@@ -456,6 +465,7 @@ async function reviewWorkbenchReply(
               mission,
               { ...state.review, invocation, draft, input },
               instructionTexts,
+              preparedFacts,
           )
         : { kind: "completed" as const };
 }
@@ -465,12 +475,14 @@ export async function workbenchReplyPreparation(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
     instructionTexts = new Map<Id<"agentMessageDeliveries">, string>(),
+    wording?: AnalystTurnWording,
 ) {
     const state = await readWorkbenchReplyState(
         ctx,
         mission,
         mission.definitionVersion,
         instructionTexts,
+        wording,
     );
     if (state.kind !== "ready") return null;
     const facts = state.review
@@ -480,6 +492,7 @@ export async function workbenchReplyPreparation(
               state.review.run,
               state.review,
               instructionTexts,
+              wording,
           )
         : null;
     const rendering = {
@@ -488,9 +501,36 @@ export async function workbenchReplyPreparation(
     };
     return {
         ...rendering,
+        ...(facts?.kind === "ready" && facts.factsRevisionTemplate
+            ? { factsRevisionTemplate: facts.factsRevisionTemplate }
+            : {}),
+        async adopt(
+            mutation: MutationCtx,
+            invocation: Doc<"agentInvocations">,
+            draft: ReturnType<typeof prepareResponseReviewDraft> | undefined,
+            exactFactsRevision?: string,
+        ) {
+            if (!draft || !invocation.workbenchCompletionAdmission)
+                throw executionError("invocation_result_invalid");
+            return reviewWorkbenchReply(
+                mutation,
+                mission,
+                state,
+                invocation,
+                draft,
+                invocation.workbenchCompletionAdmission,
+                instructionTexts,
+                facts
+                    ? { facts, exactRevision: exactFactsRevision }
+                    : undefined,
+            );
+        },
         factsHash: sha256Hex(
             stableStringify({
                 ...rendering,
+                ...(facts?.kind === "ready" && facts.factsRevisionTemplate
+                    ? { factsRevisionHash: facts.factsRevisionHash }
+                    : {}),
                 facts:
                     facts?.kind === "ready"
                         ? facts.factsJson
@@ -738,7 +778,20 @@ export const workbenchDefinition: AgentDefinition & {
     },
     preparedCompletion: {
         outcomeKind: "workbench_v1",
+        analystWording: true,
         basis: workbenchReplyPreparation,
+        async correction(ctx, mission, wording) {
+            const state = await readWorkbenchReplyState(
+                ctx,
+                mission,
+                mission.definitionVersion,
+                undefined,
+                wording,
+            );
+            return state.kind === "ready"
+                ? { kind: "blocked", code: "mission_context_changed" }
+                : state;
+        },
         render(proposal, basis) {
             return {
                 result: {
@@ -747,26 +800,6 @@ export const workbenchDefinition: AgentDefinition & {
                 },
                 reviewDraft: prepareResponseReviewDraft(proposal.text),
             };
-        },
-        async adopt(ctx, mission, invocation, draft, instructionTexts) {
-            if (!draft || !invocation.workbenchCompletionAdmission)
-                throw executionError("invocation_result_invalid");
-            const state = await readWorkbenchReplyState(
-                ctx,
-                mission,
-                mission.definitionVersion,
-                instructionTexts,
-            );
-            if (state.kind !== "ready") return state;
-            return reviewWorkbenchReply(
-                ctx,
-                mission,
-                state,
-                invocation,
-                draft,
-                invocation.workbenchCompletionAdmission,
-                instructionTexts,
-            );
         },
     },
     async complete(

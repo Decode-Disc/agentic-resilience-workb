@@ -352,7 +352,7 @@ test("a prepared reply is refused after facts change and every attempt stays rea
             preparePiReply(ctx, args, response, responseJson, definition),
         );
     const prepared = await prepare();
-    assert(prepared?.reviewDraft);
+    assert(prepared && "textId" in prepared && prepared.reviewDraft);
     await expect(
         f.t.mutation(internal.execution.invocations.finish, {
             ...args,
@@ -373,7 +373,7 @@ test("a prepared reply is refused after facts change and every attempt stays rea
         }),
     );
     const revised = await prepare();
-    assert(revised);
+    assert(revised && "textId" in revised);
     expect(revised.basisHash).not.toBe(prepared.basisHash);
     expect(revised.textId).not.toBe(prepared.textId);
     await expect(

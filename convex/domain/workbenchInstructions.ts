@@ -20,15 +20,33 @@ import {
 } from "./transitions";
 
 /** Resolves current treatment separately from the retained transmission receipt. */
-export async function readWorkbenchInstructions(
-    ctx: QueryCtx,
-    runId: Id<"researchRuns">,
-) {
-    const requests = await ctx.db
+function recentWorkbenchInstructions(ctx: QueryCtx, runId: Id<"researchRuns">) {
+    return ctx.db
         .query("workbenchInstructions")
         .withIndex("by_run", (q) => q.eq("runId", runId))
         .order("desc")
         .take(20);
+}
+
+/** Original messages represented by the existing Workbench facts projection. */
+export async function workbenchInstructionMessageIds(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+) {
+    return [
+        ...new Set(
+            (await recentWorkbenchInstructions(ctx, runId)).map(
+                (request) => request.messageId,
+            ),
+        ),
+    ];
+}
+
+export async function readWorkbenchInstructions(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+) {
+    const requests = await recentWorkbenchInstructions(ctx, runId);
     const preparationIds = [
         ...new Set(
             requests.flatMap((request) =>
@@ -74,6 +92,7 @@ export async function projectWorkbenchInstructions(
     ctx: QueryCtx,
     requests: Awaited<ReturnType<typeof readWorkbenchInstructions>>,
     loaded?: Map<Id<"agentMessageDeliveries">, string>,
+    wordingReferences?: ReadonlyMap<Id<"agentMessageDeliveries">, string>,
 ) {
     const messageIds = [
         ...new Set(requests.map((request) => request.messageId)),
@@ -108,13 +127,16 @@ export async function projectWorkbenchInstructions(
             )
         )
             throw executionError("conversation_message_unavailable");
+        const bodyReads = selected.filter(
+            (message) => !wordingReferences?.has(message._id),
+        );
         const original = await readConversationMessages(
             ctx,
             conversation.storageRef,
-            selected,
+            bodyReads,
             loaded,
         );
-        selected.forEach((message, index) => {
+        bodyReads.forEach((message, index) => {
             const text = original[index];
             if (text === undefined)
                 throw executionError("conversation_message_unavailable");
@@ -123,12 +145,13 @@ export async function projectWorkbenchInstructions(
     }
     return requests.map((request) => {
         const originalText = texts.get(request.messageId);
-        if (originalText === undefined)
+        const originalTextHash = wordingReferences?.get(request.messageId);
+        if (originalText === undefined && !originalTextHash)
             throw executionError("conversation_message_unavailable");
         return {
             instructionId: request._id,
             messageId: request.messageId,
-            originalText,
+            ...(originalTextHash ? { originalTextHash } : { originalText }),
             interpretedNeed: request.interpretedNeed,
             target: request.target ?? null,
             needId: request.needId ?? null,

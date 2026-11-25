@@ -1495,7 +1495,7 @@ export async function runPiMission(
                 },
             );
         } else {
-            const preparedReply = await preparePiReply(
+            const replyPreparation = await preparePiReply(
                 ctx,
                 invocationArgs,
                 currentResponse,
@@ -1503,6 +1503,10 @@ export async function runPiMission(
                 definition,
                 context.abortSignal,
             );
+            const preparedReply =
+                replyPreparation && "textId" in replyPreparation
+                    ? replyPreparation
+                    : undefined;
             const useReference =
                 preparedReply &&
                 (definition.id === "conversation_validation_v1" ||
@@ -1524,6 +1528,13 @@ export async function runPiMission(
                     ...invocationArgs,
                     ...(useReference ? {} : { response: currentResponse }),
                     ...(preparedReply ? { preparedReply } : {}),
+                    ...(replyPreparation &&
+                    "correctionWording" in replyPreparation
+                        ? {
+                              correctionWording:
+                                  replyPreparation.correctionWording,
+                          }
+                        : {}),
                     ...(rawOutputJson ? { rawOutputJson } : {}),
                 },
             );

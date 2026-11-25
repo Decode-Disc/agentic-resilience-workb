@@ -49,6 +49,9 @@ export const conversationValidationV2Definition: AgentDefinition & {
                 confirmationOnly: false,
                 confirmations: [],
                 factsHash: null,
+                async adopt() {
+                    return { kind: "completed" };
+                },
             };
         },
         render(proposal) {
@@ -58,9 +61,6 @@ export const conversationValidationV2Definition: AgentDefinition & {
                     text: proposal.text,
                 },
             };
-        },
-        async adopt() {
-            return { kind: "completed" };
         },
     },
     async complete(_ctx, _mission, response) {

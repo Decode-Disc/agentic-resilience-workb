@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
+import type { AnalystTurnWording } from "@convex/domain/preparedAnalystWording";
 import { requireMissionAuthority } from "@convex/execution/authority";
 import { conversationInstructions } from "@convex/execution/conversations";
 import { executionError } from "@convex/execution/errors";
@@ -405,11 +406,20 @@ export async function observedFramingCandidate(
     return result.candidates[index];
 }
 
+type CompleteTurnInstructions = NonNullable<
+    Awaited<ReturnType<typeof conversationInstructions>>
+>;
+
 /** Binds a conversation reading to its current draft or to the fixed material view. */
-export async function workbenchDocumentaryContext(
+export async function workbenchDocumentaryContext<
+    Wording extends
+        | CompleteTurnInstructions
+        | AnalystTurnWording = CompleteTurnInstructions,
+>(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
     instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
+    preparedWording?: Wording,
 ) {
     const run = await ctx.db.get(mission.runId);
     if (mission.definitionId !== "workbench_v1")
@@ -455,19 +465,19 @@ export async function workbenchDocumentaryContext(
         revision.status !== "approved"
     )
         throw executionError("documentary_material_unavailable");
-    const instructions = await conversationInstructions(
-        ctx,
-        mission,
-        instructionTexts,
-    );
+    const instructions =
+        preparedWording ??
+        (await conversationInstructions(ctx, mission, instructionTexts));
     const turn = instructions ? await ctx.db.get(instructions.turnId) : null;
     if (
         !instructions ||
         turn?.responseControl?.correction?.instructionVersion ===
             instructions.instructionVersion ||
         (framing &&
-            instructions.messages.some(({ text }) =>
-                explicitFramingPreservation(text),
+            instructions.messages.some((message) =>
+                "preservesFraming" in message
+                    ? message.preservesFraming
+                    : explicitFramingPreservation(message.text),
             ))
     )
         throw executionError("instruction_not_authorized");
@@ -488,13 +498,23 @@ export async function workbenchDocumentaryContext(
     };
 }
 
-export async function documentaryMaterialContext(
+export async function documentaryMaterialContext<
+    Wording extends
+        | CompleteTurnInstructions
+        | AnalystTurnWording = CompleteTurnInstructions,
+>(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
     instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
+    preparedWording?: Wording,
 ) {
     if (mission.definitionId === "workbench_v1")
-        return workbenchDocumentaryContext(ctx, mission, instructionTexts);
+        return workbenchDocumentaryContext(
+            ctx,
+            mission,
+            instructionTexts,
+            preparedWording,
+        );
     const scope = missionScope(mission);
     if (scope.kind === "sources_v1") {
         const view = await requireSourcesPreparation(ctx, scope.preparationId);
@@ -528,7 +548,10 @@ export async function documentaryMaterialContext(
 
 export async function documentaryCaptureAvailable(
     ctx: QueryCtx,
-    view: Awaited<ReturnType<typeof documentaryMaterialContext>>,
+    view: Omit<
+        Awaited<ReturnType<typeof documentaryMaterialContext>>,
+        "instructions"
+    >,
     capture: Doc<"sourceCaptures">,
 ) {
     if (
@@ -581,7 +604,10 @@ export async function documentaryCaptureAvailable(
 /** Historical text was already acquired for the dossier. Current approval and source restrictions still apply. */
 export async function retainedDocumentAvailable(
     ctx: QueryCtx,
-    view: Awaited<ReturnType<typeof documentaryMaterialContext>>,
+    view: Omit<
+        Awaited<ReturnType<typeof documentaryMaterialContext>>,
+        "instructions"
+    >,
     canonicalUrl: string,
 ) {
     const source = await ctx.db

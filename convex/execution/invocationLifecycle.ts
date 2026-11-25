@@ -6,6 +6,10 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
+import {
+    type AnalystTurnWording,
+    preparedAnalystWording,
+} from "@convex/domain/preparedAnalystWording";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
     assertPreparationComparisonFence,
@@ -16,7 +20,12 @@ import {
     projectSourcesOperationAdmission,
 } from "@convex/domain/sourcesAgent";
 import { projectWorkbenchOperationAdmission } from "@convex/domain/workbenchAgent";
+import { workbenchInstructionMessageIds } from "@convex/domain/workbenchInstructions";
 import { preparedResponseReviewDraft } from "@convex/domain/workbenchResponseControlContracts";
+import {
+    deliveryBodyHash,
+    retainedDeliveryBody,
+} from "@convex/integrations/agentStorage";
 import {
     agentToolSetKey,
     piInstructionSection,
@@ -29,6 +38,7 @@ import {
     requireQualifiedBrowserMission,
 } from "@convex/providerCalls";
 import {
+    HISTORY_PAGE_SIZE,
     MAX_CONTEXT_BYTES,
     MAX_OBSERVABLE_OUTPUT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
@@ -38,6 +48,10 @@ import {
 import { projectWorkbenchCompletionAdmission } from "@convex/responseControl";
 import { readWorkbenchQualificationDeadline } from "@convex/runWorkspace";
 import schema from "@convex/schema";
+import {
+    paginationOptsValidator,
+    paginationResultValidator,
+} from "convex/server";
 import { type Infer, v } from "convex/values";
 import { ValidationError, validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
@@ -58,7 +72,12 @@ import {
 } from "./authority";
 import { normalizeNativeHistoryInput } from "./commonOperations";
 import { buildMissionContext } from "./context";
-import { publishTurn, requireInstructionVersion } from "./conversations";
+import {
+    analystTurnDeliveries,
+    publishTurn,
+    readPreparedTurnWording,
+    requireInstructionVersion,
+} from "./conversations";
 import { executionFailureValidation } from "./errors";
 import {
     AI_SDK_BACKEND,
@@ -106,6 +125,7 @@ import {
     appendRetainedText,
     completeRetainedText,
     requireRetainedStreamDispatch,
+    retainedTextFragment,
     retainedTextParts,
     sealRetainedText,
     stageRetainedText,
@@ -1424,6 +1444,7 @@ async function replyPreparationBasis(
     mission: Doc<"agentMissions">,
     responseHash: string,
     instructionTexts = new Map<Id<"agentMessageDeliveries">, string>(),
+    wording?: AnalystTurnWording,
 ) {
     const definition = getAgentDefinition(
         mission.definitionId,
@@ -1431,15 +1452,24 @@ async function replyPreparationBasis(
     );
     if (!mission.conversationTurnId || !definition.preparedCompletion)
         return null;
+    for (const message of wording
+        ? [...wording.messages, ...wording.transmitted]
+        : []) {
+        if (message.text !== undefined)
+            instructionTexts.set(message.messageId, message.text);
+    }
     const rendering = await definition.preparedCompletion.basis(
         ctx,
         mission,
         instructionTexts,
+        wording,
     );
     if (!rendering) return null;
     return {
         confirmationOnly: rendering.confirmationOnly,
+        factsRevisionTemplate: rendering.factsRevisionTemplate,
         confirmations: [...rendering.confirmations],
+        adopt: rendering.adopt,
         basisHash: sha256Hex(
             stableStringify({
                 invocation: invocation._id,
@@ -1456,55 +1486,191 @@ async function replyPreparationBasis(
     };
 }
 
+async function currentReplyPreparation(
+    ctx: QueryCtx,
+    args: {
+        invocationId: Id<"agentInvocations">;
+        expectedGeneration: number;
+        responseHash: string;
+    },
+) {
+    const invocation = await ctx.db.get(args.invocationId);
+    if (
+        !invocation?.missionId ||
+        (invocation.adoptionGeneration ?? invocation.generation) !==
+            args.expectedGeneration
+    )
+        return null;
+    const mission = await ctx.db.get(invocation.missionId);
+    if (
+        !mission ||
+        mission.generation !== args.expectedGeneration ||
+        !(await dossierAcceptsDiagnostics(ctx, mission.runId))
+    )
+        return null;
+    if (
+        invocation.status === "returned" &&
+        invocation.blockCode !== "pending_operations"
+    )
+        return null;
+    try {
+        await requireInstructionVersion(
+            ctx,
+            mission,
+            invocation.instructionVersion,
+        );
+    } catch (error) {
+        if (executionFailureCode(error) === "stale_instructions") return null;
+        throw error;
+    }
+    const receivedHash = await receivedResponseDigest(ctx, invocation);
+    if (receivedHash !== args.responseHash) return null;
+    return { invocation, mission };
+}
+
+const replyInstructionReference = v.object({
+    messageId: v.id("agentMessageDeliveries"),
+    contentHash: v.string(),
+    legacy: v.optional(v.literal(true)),
+});
+
+function replyInstructionIdentity(delivery: Doc<"agentMessageDeliveries">) {
+    return {
+        messageId: delivery._id,
+        contentHash: deliveryBodyHash(delivery),
+        ...(delivery.bodyTextId ? {} : { legacy: true as const }),
+    };
+}
+
+/** Cheaper metadata lookup for active wording and the retained originals used in review facts. */
+export const replyInstructionPage = internalQuery({
+    args: { ...replyPreparationArgs, paginationOpts: paginationOptsValidator },
+    returns: v.union(
+        v.null(),
+        paginationResultValidator(replyInstructionReference).extend({
+            transmitted: v.optional(v.array(replyInstructionReference)),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        const scope = await currentReplyPreparation(ctx, args);
+        if (!scope?.mission.conversationTurnId) return null;
+        const turn = await ctx.db.get(scope.mission.conversationTurnId);
+        if (!turn) return null;
+        const page = await analystTurnDeliveries(ctx, turn._id).paginate({
+            ...args.paginationOpts,
+            numItems: Math.min(args.paginationOpts.numItems, HISTORY_PAGE_SIZE),
+            maximumRowsRead: HISTORY_PAGE_SIZE,
+        });
+        const transmitted =
+            args.paginationOpts.cursor === null
+                ? await Promise.all(
+                      (
+                          await workbenchInstructionMessageIds(
+                              ctx,
+                              scope.mission.runId,
+                          )
+                      ).map(async (id) => {
+                          const delivery = await ctx.db.get(id);
+                          if (
+                              delivery?.role !== "user" ||
+                              delivery.runId !== scope.mission.runId ||
+                              delivery.conversationId !== turn.conversationId
+                          )
+                              throw executionError(
+                                  "conversation_message_unavailable",
+                              );
+                          return replyInstructionIdentity(delivery);
+                      }),
+                  )
+                : undefined;
+        return {
+            ...page,
+            page: page.page.map(replyInstructionIdentity),
+            transmitted,
+        };
+    },
+});
+
+/** Rechecks invocation, active turn and retained identity on every fragment read. */
+export const replyInstructionFragment = internalQuery({
+    args: {
+        ...replyPreparationArgs,
+        messageId: v.id("agentMessageDeliveries"),
+        contentHash: v.string(),
+        index: v.number(),
+    },
+    returns: v.object({
+        content: v.string(),
+        characters: v.number(),
+        sizeBytes: v.number(),
+        fragmentCount: v.number(),
+    }),
+    handler: async (ctx, args) => {
+        const scope = await currentReplyPreparation(ctx, args);
+        const turn = scope?.mission.conversationTurnId
+            ? await ctx.db.get(scope.mission.conversationTurnId)
+            : null;
+        const delivery = await ctx.db.get(args.messageId);
+        if (
+            !scope ||
+            !turn ||
+            !delivery ||
+            delivery.runId !== scope.mission.runId ||
+            delivery.conversationId !== turn.conversationId ||
+            delivery.role !== "user" ||
+            deliveryBodyHash(delivery) !== args.contentHash
+        )
+            throw executionError("conversation_message_unavailable");
+        if (
+            delivery.turnId !== turn._id &&
+            !(
+                await workbenchInstructionMessageIds(ctx, scope.mission.runId)
+            ).includes(delivery._id)
+        )
+            throw executionError("conversation_message_unavailable");
+        const text = await retainedDeliveryBody(ctx, delivery);
+        return {
+            content: await retainedTextFragment(ctx, text, args.index),
+            characters: text.characters,
+            sizeBytes: text.sizeBytes,
+            fragmentCount: text.fragmentHashes.length,
+        };
+    },
+});
+
 export const replyPreparation = internalQuery({
-    args: replyPreparationArgs,
+    args: {
+        ...replyPreparationArgs,
+        wording: v.optional(preparedAnalystWording),
+    },
     returns: v.union(
         v.null(),
         v.object({
             confirmationOnly: v.boolean(),
             confirmations: v.array(v.string()),
             basisHash: v.string(),
+            factsRevisionTemplate: v.optional(v.string()),
         }),
     ),
     handler: async (ctx, args) => {
-        const invocation = await ctx.db.get(args.invocationId);
-        if (
-            !invocation?.missionId ||
-            (invocation.adoptionGeneration ?? invocation.generation) !==
-                args.expectedGeneration
-        )
-            return null;
-        const mission = await ctx.db.get(invocation.missionId);
-        if (
-            !mission ||
-            mission.generation !== args.expectedGeneration ||
-            !(await dossierAcceptsDiagnostics(ctx, mission.runId))
-        )
-            return null;
-        if (
-            invocation.status === "returned" &&
-            invocation.blockCode !== "pending_operations"
-        )
-            return null;
-        try {
-            await requireInstructionVersion(
-                ctx,
-                mission,
-                invocation.instructionVersion,
-            );
-        } catch (error) {
-            if (executionFailureCode(error) === "stale_instructions")
-                return null;
-            throw error;
-        }
-        const receivedHash = await receivedResponseDigest(ctx, invocation);
-        if (receivedHash !== args.responseHash) return null;
-        return replyPreparationBasis(
+        const scope = await currentReplyPreparation(ctx, args);
+        if (!scope) return null;
+        const { invocation, mission } = scope;
+        const wording = args.wording
+            ? await readPreparedTurnWording(ctx, mission, args.wording)
+            : undefined;
+        if (wording === null) return null;
+        const basis = await replyPreparationBasis(
             ctx,
             invocation,
             mission,
             args.responseHash,
+            undefined,
+            wording,
         );
+        if (!basis) return null;
+        const { adopt, ...prepared } = basis;
+        return prepared;
     },
 });
 
@@ -1550,6 +1716,8 @@ const preparedReplyValidator = v.object({
     textId: v.id("retainedTexts"),
     reviewDraft: v.optional(preparedResponseReviewDraft),
     completion: preparedCompletionValidator,
+    wording: v.optional(preparedAnalystWording),
+    exactFactsRevision: v.optional(v.string()),
 });
 
 async function resolvePreparedReply(
@@ -1561,14 +1729,26 @@ async function resolvePreparedReply(
     instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
 ) {
     const text = await completeRetainedText(ctx, prepared.textId);
+    const wording = prepared.wording
+        ? await readPreparedTurnWording(ctx, mission, prepared.wording)
+        : undefined;
+    if (wording === null) return null;
     const basis = await replyPreparationBasis(
         ctx,
         invocation,
         mission,
         responseHash,
         instructionTexts,
+        wording,
     );
     if (basis?.basisHash !== prepared.basisHash) return null;
+    if (
+        (basis.factsRevisionTemplate !== undefined) !==
+            (prepared.exactFactsRevision !== undefined) ||
+        (prepared.exactFactsRevision !== undefined &&
+            !/^[0-9a-f]{64}$/.test(prepared.exactFactsRevision))
+    )
+        throw executionError("invocation_result_invalid");
     if (
         text.key !==
         preparedReplyKey(
@@ -1577,12 +1757,14 @@ async function resolvePreparedReply(
                 prepared.basisHash,
                 prepared.reviewDraft,
                 prepared.completion,
+                prepared.wording,
+                prepared.exactFactsRevision,
             ),
             text.contentHash,
         )
     )
         throw executionError("invocation_result_invalid");
-    return text;
+    return { text, adopt: basis.adopt };
 }
 
 export const finish = internalMutation({
@@ -1591,6 +1773,7 @@ export const finish = internalMutation({
         expectedGeneration: v.number(),
         response: v.optional(invocationResponseValidator),
         preparedReply: v.optional(preparedReplyValidator),
+        correctionWording: v.optional(preparedAnalystWording),
         rawOutputJson: v.optional(v.string()),
     },
     returns: invocationFinishOutcomeValidator,
@@ -1610,7 +1793,10 @@ export const finish = internalMutation({
         const response = args.response;
         const prepared = args.preparedReply;
         const compact = response ? undefined : prepared?.completion;
-        if (!response && !compact)
+        if (
+            (!response && !compact) ||
+            (args.correctionWording && (!response || prepared))
+        )
             throw executionError("invocation_result_invalid");
         const outputJson = response ? stableStringify(response) : undefined;
         const responseHash =
@@ -1630,7 +1816,7 @@ export const finish = internalMutation({
                 outputJson ?? { responseHash },
             );
         const received = await match("received");
-        if (compact && !received)
+        if ((compact || args.correctionWording) && !received)
             throw executionError("invocation_result_conflict");
         const observation = response ?? { responseHash };
         if (
@@ -1914,7 +2100,7 @@ export const finish = internalMutation({
                 Id<"agentMessageDeliveries">,
                 string
             >();
-            const text = await resolvePreparedReply(
+            const candidate = await resolvePreparedReply(
                 ctx,
                 invocation,
                 mission,
@@ -1922,14 +2108,13 @@ export const finish = internalMutation({
                 responseHash,
                 instructionTexts,
             );
-            if (!text) return block("mission_context_changed");
+            if (!candidate) return block("mission_context_changed");
             await ctx.db.patch(mission._id, { workingNotes: notes.notes });
-            const result = await definition.preparedCompletion.adopt(
+            const result = await candidate.adopt(
                 ctx,
-                mission,
                 invocation,
                 prepared.reviewDraft,
-                instructionTexts,
+                prepared.exactFactsRevision,
             );
             if (result.kind === "correct")
                 return correctCompletion(result.feedback);
@@ -1939,7 +2124,7 @@ export const finish = internalMutation({
             const publication = await publishTurn(
                 ctx,
                 mission,
-                text,
+                candidate.text,
                 invocation.instructionVersion,
             );
             if (!publication.bodyTextId)
@@ -2064,6 +2249,24 @@ export const finish = internalMutation({
                 const notes = resolvedNotes.notes;
                 await ctx.db.patch(mission._id, { workingNotes: notes });
             }
+            if (args.correctionWording) {
+                const wording = await readPreparedTurnWording(
+                    ctx,
+                    mission,
+                    args.correctionWording,
+                );
+                if (!wording || !definition.preparedCompletion?.correction)
+                    return block("mission_context_changed");
+                const correction =
+                    await definition.preparedCompletion.correction(
+                        ctx,
+                        mission,
+                        wording,
+                    );
+                return correction.kind === "correct"
+                    ? correctCompletion(correction.feedback)
+                    : block(correction.code);
+            }
             const completion = await definition.complete(
                 ctx,
                 mission,
@@ -2094,7 +2297,7 @@ export const finish = internalMutation({
                     mission,
                     definition.conversationReply(completion.result),
                     invocation.instructionVersion,
-                    preparedText ?? undefined,
+                    preparedText?.text,
                 );
             }
             await ctx.db.patch(mission._id, {

@@ -427,16 +427,17 @@ test.each([
     );
     if (!event) throw new Error("Missing observation event");
     const runId = args.runId;
-    if (size === 70_000) {
-        const detail = await admin.query(
-            api.adminOperations.inspectJournalEvent,
-            {
-                runId,
-                eventId: event._id,
-            },
-        );
-        expect(detail.invocation?.receivedOutputJson).toBe(responseJson);
-    }
+    const detail = await admin.query(api.adminOperations.inspectJournalEvent, {
+        runId,
+        eventId: event._id,
+    });
+    expect(detail.invocation).toMatchObject({
+        receivedOutput: {
+            contentHash: sha256Hex(responseJson),
+            sizeBytes: Buffer.byteLength(responseJson),
+        },
+    });
+    expect(detail.invocation).not.toHaveProperty("receivedOutputJson");
     const separate = await admin.query(
         api.adminOperations.inspectJournalEvent,
         {

@@ -1,7 +1,6 @@
 import {
     hasKnownNonDispatch,
     invocationResponseManifest,
-    readInvocationResponse,
 } from "@convex/execution/journal";
 import {
     ADMIN_BACKFILL_PAGE_MAX_ITEMS,
@@ -898,22 +897,6 @@ export const inspectJournalEvent = query({
             invocation.outputTextId === invocation.receivedOutputTextId
                 ? receivedOutput
                 : await responseReference(invocation?.outputTextId);
-        const separate = args.bodyAccess === "separate";
-        const receivedOutputJson =
-            invocation && !separate
-                ? await readInvocationResponse(ctx, invocation, "received")
-                : receivedOutput
-                  ? undefined
-                  : invocation?.receivedOutputJson;
-        const outputJson =
-            invocation && !separate
-                ? invocation.outputTextId &&
-                  invocation.outputTextId === invocation.receivedOutputTextId
-                    ? receivedOutputJson
-                    : await readInvocationResponse(ctx, invocation, "adopted")
-                : output
-                  ? undefined
-                  : invocation?.outputJson;
         return {
             event,
             request,
@@ -932,8 +915,10 @@ export const inspectJournalEvent = query({
                       blockCode: invocation.blockCode,
                       output,
                       receivedOutput,
-                      outputJson,
-                      receivedOutputJson,
+                      outputJson: output ? undefined : invocation.outputJson,
+                      receivedOutputJson: receivedOutput
+                          ? undefined
+                          : invocation.receivedOutputJson,
                       receivedWhileAuthorized:
                           invocation.receivedWhileAuthorized,
                   }

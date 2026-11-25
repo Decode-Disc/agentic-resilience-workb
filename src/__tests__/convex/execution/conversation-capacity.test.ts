@@ -1,5 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
+import { DEFAULT_RESPONSE_CONTROL_POLICY } from "@convex/domain/workbenchResponseControlContracts";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { agentToolSchemas } from "@convex/execution/agentDefinition";
 import { recordMissionEvent } from "@convex/execution/authority";
@@ -8,6 +10,8 @@ import {
     stageRetainedText,
 } from "@convex/execution/retainedText";
 import { agentToolSetKey } from "@convex/integrations/modelInput";
+import { preparePiReply } from "@convex/integrations/piInvocation";
+import { projectWorkbenchCompletionAdmission } from "@convex/responseControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
@@ -171,7 +175,10 @@ test("native invocation admission reuses the instruction identity from the check
     ).resolves.toMatchObject({ kind: "ready_reference" });
 });
 
-test("native reply preparation fits a read budget that excludes duplicate wording reads", async () => {
+test.each([
+    false,
+    true,
+])("native reply preparation and adoption fit a transaction budget smaller than the analyst body (framing correction: %s)", async (framingCorrection) => {
     const { t, runId, client } = await seedWorkbench(
         true,
         undefined,
@@ -199,21 +206,97 @@ test("native reply preparation fits a read budget that excludes duplicate wordin
         },
     );
     assert(active);
-    const responseJson = stableStringify({
+    const response = {
         kind: "complete",
         text: "Evidence is limited.",
-    });
+    } as const;
+    const responseJson = stableStringify(response);
     const invocationId = await t.run(async (ctx) => {
         const turn = await ctx.db.get(active.turnId);
         assert(turn);
         for await (const delivery of ctx.db
             .query("agentMessageDeliveries")
             .withIndex("by_turn", (q) => q.eq("turnId", active.turnId))) {
-            if (delivery._id !== messageId)
+            if (delivery._id !== messageId && !framingCorrection)
                 await ctx.db.patch(delivery._id, {
                     requestKey: "prior-analysis-question",
                 });
         }
+        if (framingCorrection)
+            await ctx.db.patch(runId, {
+                currentFramingRevisionId: undefined,
+                fixedFramingRevisionId: undefined,
+            });
+        const frame = await ctx.db.insert("framingRevisions", {
+            runId,
+            revision: 1,
+            content: { scope: "Workflow", questions: [] },
+            requestKey: "retained-wording-frame",
+            contentHash: "fixture",
+            origin: "analyst",
+            createdAt: 1,
+        });
+        const previousWording = "p".repeat(42_000);
+        const previousId = await ctx.db.insert("agentMessageDeliveries", {
+            runId,
+            conversationId: turn.conversationId,
+            requestKey: "prior-transmitted-wording",
+            contentHash: sha256Hex(previousWording),
+            role: "user",
+            delivery: "queue",
+            status: "processed",
+            createdAt: 1,
+        });
+        const { manifest, parts } = retainedTextParts(previousWording);
+        assert(parts[0] && parts.length === 1);
+        const bodyTextId = await stageRetainedText(
+            ctx,
+            `delivery:${previousId}`,
+            {
+                ...manifest,
+                index: 0,
+                content: parts[0],
+            },
+        );
+        await ctx.db.patch(previousId, {
+            bodyTextId,
+            bodyContentHash: manifest.contentHash,
+        });
+        for (const originalId of [messageId, previousId]) {
+            const requestId = await ctx.db.insert("agentOperationRequests", {
+                runId,
+                actor: "agent",
+                missionId: active.missionId,
+                cause: "transmitted-wording",
+                input: {
+                    kind: "transmit_source_request",
+                    messageId: originalId,
+                    interpretedNeed: "Supplier evidence",
+                    coverageRole: null,
+                },
+                operationVersion: 1,
+                expectedGeneration: 1,
+                logicalKey: `transmitted-wording:${originalId}`,
+                status: "completed",
+                createdAt: 1,
+            });
+            await ctx.db.insert("workbenchInstructions", {
+                runId,
+                requestId,
+                messageId: originalId,
+                framingRevisionId: frame,
+                interpretedNeed: "Supplier evidence",
+                status: "waiting",
+                outcome: "Waiting",
+                createdAt: 1,
+            });
+        }
+        await ctx.db.patch(turn._id, {
+            responseControl: {
+                policy: { ...DEFAULT_RESPONSE_CONTROL_POLICY, enabled: true },
+                checks: [],
+            },
+        });
         return ctx.db.insert("agentInvocations", {
             runId,
             missionId: active.missionId,
@@ -225,25 +308,174 @@ test("native reply preparation fits a read budget that excludes duplicate wordin
             inputJson: "{}",
             instructionVersion: turn.instructionVersion,
             receivedOutputJson: responseJson,
+            receivedWhileAuthorized: true,
+            scopeKey: sha256Hex(stableStringify({ kind: "workbench_v1" })),
+            workbenchCompletionAdmission: projectWorkbenchCompletionAdmission(
+                {},
+            ),
             createdAt: 1,
         });
     });
-    const result = await t.run((ctx) =>
+    const replyScope = {
+        invocationId,
+        expectedGeneration: 1,
+        responseHash: sha256Hex(responseJson),
+    };
+    const getInstructions =
+        internal.execution.invocationLifecycle.replyInstructionPage;
+    const firstPage = await t.run((ctx) =>
         ctx.runQuery(
-            internal.execution.invocationLifecycle.replyPreparation,
-            {
-                invocationId,
-                expectedGeneration: 1,
-                responseHash: sha256Hex(responseJson),
-            },
-            { transactionLimits: { bytesRead: 110 * 1024 } },
+            getInstructions,
+            { ...replyScope, paginationOpts: { cursor: null, numItems: 1 } },
+            { transactionLimits: { bytesRead: 16 * 1024 } },
         ),
     );
-    expect(result).toMatchObject({
-        confirmationOnly: false,
-        confirmations: [],
-        basisHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+    expect(firstPage?.page).toHaveLength(1);
+    assert(firstPage && !firstPage.isDone);
+    const secondPage = await t.run((ctx) =>
+        ctx.runQuery(
+            getInstructions,
+            {
+                ...replyScope,
+                paginationOpts: {
+                    cursor: firstPage.continueCursor,
+                    numItems: 1,
+                },
+            },
+            { transactionLimits: { bytesRead: 16 * 1024 } },
+        ),
+    );
+    const wording = "w".repeat(40_000);
+    expect(secondPage?.page).toEqual([
+        { messageId, contentHash: sha256Hex(wording) },
+    ]);
+    const fragment =
+        internal.execution.invocationLifecycle.replyInstructionFragment;
+    await expect(
+        t.query(fragment, {
+            ...replyScope,
+            messageId,
+            contentHash: sha256Hex(wording),
+            index: 0,
+        }),
+    ).resolves.toMatchObject({
+        content: wording,
+        characters: wording.length,
+        fragmentCount: 1,
     });
+    await expect(
+        t.query(fragment, {
+            ...replyScope,
+            messageId,
+            contentHash: sha256Hex("different"),
+            index: 0,
+        }),
+    ).rejects.toThrow("conversation_message_unavailable");
+    await expect(
+        t.query(getInstructions, {
+            ...replyScope,
+            responseHash: sha256Hex("different"),
+            paginationOpts: { cursor: null, numItems: 1 },
+        }),
+    ).resolves.toBeNull();
+    const exactRevision = await t.run(async (ctx) => {
+        const run = await ctx.db.get(runId);
+        const mission = await ctx.db.get(active.missionId);
+        assert(run && mission);
+        const facts = await readWorkbenchFacts(ctx, run, mission);
+        assert(facts.kind === "ready");
+        return facts.context.factsRevisionHash;
+    });
+    const preparedReply = await t.action((ctx) =>
+        preparePiReply(
+            ctx,
+            { invocationId, expectedGeneration: 1 },
+            response,
+            responseJson,
+            getAgentDefinition("workbench_v1", 12),
+        ),
+    );
+    if (framingCorrection) {
+        assert(preparedReply && "correctionWording" in preparedReply);
+        const corrected = await t.run((ctx) =>
+            ctx.runMutation(
+                internal.execution.invocations.finish,
+                {
+                    invocationId,
+                    expectedGeneration: 1,
+                    response,
+                    correctionWording: preparedReply.correctionWording,
+                },
+                { transactionLimits: { bytesRead: 38 * 1024 } },
+            ),
+        );
+        expect(corrected).toMatchObject({
+            kind: "blocked",
+            code: "completion_correction_required",
+            correction: { code: "framing_program_required" },
+        });
+        expect(await t.run((ctx) => ctx.db.get(active.turnId))).toMatchObject({
+            status: "active",
+        });
+        return;
+    }
+    assert(preparedReply && "textId" in preparedReply && preparedReply.wording);
+    expect(preparedReply.wording).toContainEqual(
+        expect.objectContaining({
+            messageId,
+            contentHash: sha256Hex(wording),
+        }),
+    );
+    expect(
+        preparedReply.wording.every((message) => message.text === undefined),
+    ).toBe(true);
+    await expect(
+        t.query(internal.execution.invocationLifecycle.replyPreparation, {
+            ...replyScope,
+            wording: preparedReply.wording.map((message) =>
+                message.messageId === messageId
+                    ? { ...message, contentHash: sha256Hex("different") }
+                    : message,
+            ),
+        }),
+    ).resolves.toBeNull();
+    const basis = await t.run((ctx) =>
+        ctx.runQuery(
+            internal.execution.invocationLifecycle.replyPreparation,
+            { ...replyScope, wording: preparedReply.wording },
+            { transactionLimits: { bytesRead: 38 * 1024 } },
+        ),
+    );
+    expect(basis).toMatchObject({
+        basisHash: preparedReply.basisHash,
+        confirmationOnly: false,
+    });
+    const finished = await t.run((ctx) =>
+        ctx.runMutation(
+            internal.execution.invocations.finish,
+            { invocationId, expectedGeneration: 1, preparedReply },
+            { transactionLimits: { bytesRead: 38 * 1024 } },
+        ),
+    );
+    expect(finished).toMatchObject({ kind: "completed" });
+    const turn = await t.run((ctx) => ctx.db.get(active.turnId));
+    expect(turn?.responseControl).toMatchObject({
+        factsRevisionHash: exactRevision,
+        checks: [],
+    });
+    const history = await client.query(
+        api.execution.conversations.listMessages,
+        {
+            runId,
+            paginationOpts: { cursor: null, numItems: 5 },
+        },
+    );
+    expect(history.page).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({ _id: messageId, text: wording }),
+            expect.objectContaining({ role: "assistant", text: response.text }),
+        ]),
+    );
 });
 
 test("Workbench context reuses exact wording for a retained request from the active turn", async () => {
