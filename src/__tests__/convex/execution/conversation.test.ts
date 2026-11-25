@@ -1,6 +1,6 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation as fixture } from "@/__tests__/setup/agent-harness";
 
 afterEach(() => {
@@ -12,7 +12,7 @@ async function observeSimulation(
     invocationId: Id<"agentInvocations">,
 ) {
     const args = { invocationId, expectedGeneration: 1 };
-    const response = await t.query(internal.execution.simulation.invoke, args);
+    const response = await t.action(internal.execution.simulation.invoke, args);
     await t.mutation(internal.execution.invocationLifecycle.retainOutput, {
         ...args,
         responseJson: JSON.stringify(response),
@@ -31,6 +31,36 @@ test("message reading returns application delivery data without component storag
             delivery: "queue",
         },
     );
+    const delivery = await f.t.run((ctx) => ctx.db.get(messageId));
+    expect(delivery?.bodyTextId).toBeDefined();
+    expect(delivery?.storageMessageRef).toBeUndefined();
+    const conversation = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", f.runId))
+            .unique(),
+    );
+    expect(conversation).not.toBeNull();
+    expect(conversation?.storageRef).toBeUndefined();
+    const paged = await f.client.query(
+        api.execution.conversations.listMessages,
+        {
+            runId: f.runId,
+            bodyAccess: "separate",
+            paginationOpts: { numItems: 1, cursor: null },
+        },
+    );
+    const reference = paged.page[0]?.body;
+    assert(reference);
+    expect(
+        await f.client.query(api.execution.conversations.readMessageBody, {
+            runId: f.runId,
+            messageId,
+            contentHash: reference.contentHash,
+            index: 0,
+        }),
+    ).toMatchObject({ content: "Inspect retained material", nextIndex: null });
+
     const page = await f.client.query(
         api.execution.conversations.listMessages,
         { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },

@@ -61,9 +61,11 @@ import {
     discoveryResult,
     documentaryCheckInput,
     documentarySubmissionResult,
+    qualificationObservations,
     qualificationSubmissionInput,
+    sourcesCompletionAdmission,
     sourcesCompletionProposalValidator,
-    sourcesPreparationValidator,
+    sourcesOperationAdmission,
     sourcesSchemas,
 } from "./sourcesContracts";
 import { sourcesSimulation } from "./sourcesSimulation";
@@ -73,6 +75,45 @@ import {
     projectWorkbenchInstructions,
     readWorkbenchInstructions,
 } from "./workbenchInstructions";
+
+/** Retains only the admitted work identities used to settle a Sources proposal. */
+export function projectSourcesCompletionAdmission(snapshot: unknown) {
+    if (
+        !snapshot ||
+        typeof snapshot !== "object" ||
+        !("activeWork" in snapshot)
+    )
+        return undefined;
+    const work = snapshot.activeWork;
+    if (
+        !work ||
+        typeof work !== "object" ||
+        !("preparationId" in work) ||
+        !("needsRevision" in work) ||
+        typeof work.needsRevision !== "number" ||
+        !Number.isSafeInteger(work.needsRevision) ||
+        !("work" in work) ||
+        !Array.isArray(work.work)
+    )
+        return undefined;
+    const admitted = {
+        activeWork: {
+            preparationId: work.preparationId,
+            needsRevision: work.needsRevision,
+            work: work.work.map((item: unknown) =>
+                item &&
+                typeof item === "object" &&
+                "requestId" in item &&
+                "needIds" in item
+                    ? { requestId: item.requestId, needIds: item.needIds }
+                    : null,
+            ),
+        },
+    };
+    return validate(sourcesCompletionAdmission, admitted)
+        ? admitted
+        : undefined;
+}
 
 const operation = (
     description: string,
@@ -169,17 +210,31 @@ const modelQualificationInput = qualificationSubmissionInput
         ),
     });
 
-const qualificationObservations = v.object({
-    contributionObservations: v.array(
-        v.object({
-            taskId: v.id("aiTaskResults"),
-            captureId: v.id("sourceCaptures"),
-            contributions: v.array(
-                v.object({ id: v.string(), version: v.number() }),
+/** Retains the exact qualification identities presented in the admitted Sources snapshot. */
+export function projectSourcesOperationAdmission(snapshot: unknown) {
+    const work = domainSnapshot(snapshot).activeWork;
+    if (
+        !validate(sourcesOperationAdmission.fields.activeWork, work, {
+            allowUnknownFields: true,
+        })
+    )
+        return undefined;
+    return {
+        activeWork: {
+            qualificationInputVersion: work.qualificationInputVersion,
+            contributionObservations: work.contributionObservations.map(
+                ({ taskId, captureId, contributions }) => ({
+                    taskId,
+                    captureId,
+                    contributions: contributions.map(({ id, version }) => ({
+                        id,
+                        version,
+                    })),
+                }),
             ),
-        }),
-    ),
-});
+        },
+    };
+}
 
 /** A retained response keeps the model contract of its immutable admitted snapshot. */
 function qualificationModelInput(snapshot?: unknown) {
@@ -537,40 +592,25 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
                 ctx,
                 mission.scope.preparationId,
             );
+            const admitted = projectSourcesCompletionAdmission(admittedInput);
             if (
-                typeof admittedInput !== "object" ||
-                admittedInput === null ||
-                !("activeWork" in admittedInput) ||
-                typeof admittedInput.activeWork !== "object" ||
-                admittedInput.activeWork === null ||
-                !("preparationId" in admittedInput.activeWork) ||
-                admittedInput.activeWork.preparationId !==
-                    mission.scope.preparationId ||
-                !("needsRevision" in admittedInput.activeWork) ||
-                typeof admittedInput.activeWork.needsRevision !== "number" ||
-                !Number.isSafeInteger(admittedInput.activeWork.needsRevision) ||
-                !("work" in admittedInput.activeWork) ||
-                !validate(
-                    sourcesPreparationValidator.fields.work,
-                    admittedInput.activeWork.work,
-                    { db: ctx.db },
-                )
+                !validate(sourcesCompletionAdmission, admitted, {
+                    db: ctx.db,
+                }) ||
+                admitted.activeWork.preparationId !==
+                    mission.scope.preparationId
             )
                 throw executionError("sources_context_invalid");
-            if (
-                admittedInput.activeWork.needsRevision <
-                current.data.needsRevision
-            )
+            if (admitted.activeWork.needsRevision < current.data.needsRevision)
                 return { kind: "continue" };
             if (
-                admittedInput.activeWork.needsRevision !==
-                current.data.needsRevision
+                admitted.activeWork.needsRevision !== current.data.needsRevision
             )
                 throw executionError("sources_context_invalid");
-            const admittedWork = admittedInput.activeWork.work;
+            const admittedWork = admitted.activeWork.work;
             const response = {
                 kind: "complete" as const,
-                needsRevision: admittedInput.activeWork.needsRevision,
+                needsRevision: admitted.activeWork.needsRevision,
                 needs: proposal.needs.map(({ readRequestIds, ...need }) => ({
                     ...need,
                     workRequestIds: [
@@ -586,7 +626,7 @@ export const sourcesV4Definition: AgentDefinition & { id: "sources_v1" } = {
             const accounting = sourcesCompletionAccounting(
                 current.data,
                 response,
-                admittedInput.activeWork.work,
+                admitted.activeWork.work,
             );
             if (!accounting.issues.length && accounting.stale)
                 return { kind: "continue" };

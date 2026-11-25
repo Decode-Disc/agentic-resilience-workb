@@ -387,3 +387,56 @@ test("streaming documentary control above 1 MiB of SSE reasoning frames complete
         reportedCost: 0.0031,
     });
 });
+
+test("writes valid Unicode when a provider delta ends with half of a surrogate pair", async () => {
+    const content = JSON.stringify({
+        coherence: true,
+        limitations: ["Boundary 😀"],
+        findings: {
+            [contribution.id]: {
+                conclusion: "supported",
+                permittedUse: "documentary",
+                diagnostic: "Exact text",
+            },
+        },
+    });
+    const split = content.indexOf("😀") + 1;
+    const parts = [content.slice(0, split), content.slice(split)];
+    const frames = parts.map(
+        (part, index) =>
+            `data: ${JSON.stringify({
+                id: "gen-surrogate-boundary",
+                object: "chat.completion.chunk",
+                created: 1,
+                model: currentRoute.model,
+                choices: [
+                    {
+                        index: 0,
+                        delta: { content: part },
+                        finish_reason: index === 1 ? "stop" : null,
+                    },
+                ],
+            })}\n\n`,
+    );
+    const sse = [...frames, "data: [DONE]\n\n"].join("");
+    const captured: string[] = [];
+    const result = await examineDocumentaryContributions(input, currentRoute, {
+        apiKey: "offline-only",
+        authority: modelAttemptAuthority(),
+        fetch: async () =>
+            new Response(sse, {
+                headers: { "content-type": "text/event-stream" },
+            }),
+        onVisibleText: async (text, sequence) => {
+            if (
+                new TextDecoder().decode(new TextEncoder().encode(text)) !==
+                text
+            )
+                throw new Error("Convex requires valid Unicode");
+            expect(sequence).toBe(captured.length);
+            captured.push(text);
+        },
+    });
+    expect(result.status).toBe("succeeded");
+    expect(captured.join("")).toBe(content);
+});

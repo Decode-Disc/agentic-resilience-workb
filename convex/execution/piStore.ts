@@ -1,14 +1,17 @@
 import { internal } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
     internalQuery,
     type QueryCtx,
 } from "@convex/_generated/server";
-import { readConversationMessages } from "@convex/integrations/agentStorage";
 import {
-    PI_SESSION_LEASE_MS as LEASE_MS,
+    nativeInputBody,
+    retainedDeliveryBody,
+} from "@convex/integrations/agentStorage";
+import {
     CONVERSATION_PREVIEW_MAX_BYTES,
+    PI_SESSION_LEASE_MS as LEASE_MS,
     PI_COMMIT_MAX_BYTES,
     PI_SESSION_MAX_BYTES,
 } from "@convex/resourcePolicy";
@@ -26,16 +29,16 @@ import {
     requireMissionObservationAuthority,
 } from "./authority";
 import { buildMissionContext } from "./context";
+import { missionConversationMigrationFrozen } from "./conversations";
 import { contextObservationSequence, latestNativeControl } from "./journal";
 import {
     completeRetainedText,
-    readRetainedText,
     retainedTextFragment,
     stageRetainedText,
     textFragmentValidator,
     textManifestValidator,
 } from "./retainedText";
-import { nativeInputsValidator } from "./schema";
+import { nativeInputBodyValidator, nativeInputsValidator } from "./schema";
 
 /** Resolves the pinned storage owner without moving historical mission journals. */
 export async function sessionForMission(
@@ -101,6 +104,14 @@ export const claim = internalMutation({
         const mission = await ctx.db.get(args.missionId);
         if (!mission) throw executionError("mission_unavailable");
         const current = await sessionForMission(ctx, mission);
+        if (
+            await missionConversationMigrationFrozen(
+                ctx,
+                mission,
+                current?.conversationId,
+            )
+        )
+            throw executionError("conversation_migration_frozen");
         if (
             ["completed", "cancelled"].includes(mission.status) &&
             needsNativeSettlement(mission, current)
@@ -233,6 +244,14 @@ async function writer(
     )
         throw executionError("pi_writer_fenced");
     if (
+        await missionConversationMigrationFrozen(
+            ctx,
+            mission,
+            session.conversationId,
+        )
+    )
+        throw executionError("conversation_migration_frozen");
+    if (
         mission.status === "completed" ||
         (mission.status === "cancelled" && session.conversationId)
     )
@@ -244,6 +263,30 @@ async function writer(
             lease.generation,
         );
     return session;
+}
+
+async function controlConfirmation(
+    ctx: QueryCtx,
+    conversationId: Id<"agentConversations">,
+    message: Doc<"agentMessageDeliveries">,
+) {
+    const confirmationId =
+        message.controlCommand?.confirmationMessageId ??
+        message.approvalDecision?.confirmationMessageId;
+    const confirmation = confirmationId
+        ? await ctx.db.get(confirmationId)
+        : null;
+    if (
+        message.conversationId !== conversationId ||
+        message.role !== "user" ||
+        (message.controlCommand && message.approvalDecision) ||
+        !confirmation ||
+        confirmation.runId !== message.runId ||
+        confirmation.conversationId !== conversationId ||
+        confirmation.role !== "assistant"
+    )
+        throw executionError("native_control_unavailable");
+    return confirmation;
 }
 
 /** Reads only unsynchronized, server-owned exchanges for this fenced native conversation. */
@@ -260,8 +303,9 @@ export const pendingControlInputs = internalQuery({
                 messageId: v.id("agentMessageDeliveries"),
                 nativeInputSequence: v.number(),
                 confirmationMessageId: v.id("agentMessageDeliveries"),
-                command: v.string(),
-                text: v.string(),
+                command: nativeInputBodyValidator,
+                confirmation: nativeInputBodyValidator,
+                expectedCommand: v.optional(v.string()),
                 createdAt: v.number(),
                 confirmedAt: v.number(),
             }),
@@ -288,42 +332,22 @@ export const pendingControlInputs = internalQuery({
             .paginate(lease.paginationOpts);
         const entries = [];
         for (const message of page.page) {
-            if (message.controlCommand && message.approvalDecision)
-                throw executionError("native_control_unavailable");
-            const confirmationId =
-                message.controlCommand?.confirmationMessageId ??
-                message.approvalDecision?.confirmationMessageId;
-            const confirmation = confirmationId
-                ? await ctx.db.get(confirmationId)
-                : null;
-            if (
-                message.conversationId !== conversation._id ||
-                message.role !== "user" ||
-                (!message.controlCommand && !message.approvalDecision) ||
-                !confirmation ||
-                confirmation.conversationId !== conversation._id ||
-                confirmation.role !== "assistant"
-            )
-                throw executionError("native_control_unavailable");
-            const [command, text] = await readConversationMessages(
+            const confirmation = await controlConfirmation(
                 ctx,
-                conversation.storageRef,
-                [message.storageMessageRef, confirmation.storageMessageRef],
+                conversation._id,
+                message,
             );
-            if (
-                command === undefined ||
-                text === undefined ||
-                (message.controlCommand
-                    ? command !== message.controlCommand.name
-                    : !command?.trim())
-            )
-                throw executionError("native_control_unavailable");
             entries.push({
                 messageId: message._id,
                 nativeInputSequence: message.nativeInputSequence ?? 0,
                 confirmationMessageId: confirmation._id,
-                command,
-                text,
+                command: await nativeInputBody(ctx, conversation, message),
+                confirmation: await nativeInputBody(
+                    ctx,
+                    conversation,
+                    confirmation,
+                ),
+                expectedCommand: message.controlCommand?.name,
                 createdAt: message.createdAt,
                 confirmedAt: confirmation.createdAt,
             });
@@ -648,6 +672,72 @@ export const scan = internalQuery({
     },
 });
 
+/** Rechecks writer and message ownership for each native input fragment. */
+export const nativeInputFragment = internalQuery({
+    args: {
+        ...leaseValidator.fields,
+        messageId: v.id("agentMessageDeliveries"),
+        contentHash: v.string(),
+        controlMessageId: v.optional(v.id("agentMessageDeliveries")),
+        index: v.number(),
+    },
+    returns: v.object({
+        content: v.string(),
+        fragmentCount: v.number(),
+        characters: v.number(),
+        sizeBytes: v.number(),
+    }),
+    handler: async (ctx, args) => {
+        const session = await writer(ctx, args, Date.now());
+        const mission = await ctx.db.get(session.missionId);
+        const delivery = await ctx.db.get(args.messageId);
+        if (
+            !mission ||
+            !delivery ||
+            !session.conversationId ||
+            delivery.runId !== mission.runId ||
+            delivery.conversationId !== session.conversationId
+        )
+            throw executionError("native_input_unavailable");
+        if (args.controlMessageId) {
+            const command =
+                args.controlMessageId === delivery._id
+                    ? delivery
+                    : await ctx.db.get(args.controlMessageId);
+            if (
+                !command ||
+                command.runId !== mission.runId ||
+                !command.nativeControlStatus
+            )
+                throw executionError("native_control_unavailable");
+            const confirmation = await controlConfirmation(
+                ctx,
+                session.conversationId,
+                command,
+            );
+            if (
+                delivery._id !== command._id &&
+                delivery._id !== confirmation._id
+            )
+                throw executionError("native_control_unavailable");
+        } else if (
+            !mission.conversationTurnId ||
+            delivery.turnId !== mission.conversationTurnId ||
+            delivery.role !== "user"
+        )
+            throw executionError("native_input_unavailable");
+        const body = await retainedDeliveryBody(ctx, delivery);
+        if (body.contentHash !== args.contentHash)
+            throw executionError("native_input_unavailable");
+        return {
+            content: await retainedTextFragment(ctx, body, args.index),
+            fragmentCount: body.fragmentHashes.length,
+            characters: body.characters,
+            sizeBytes: body.sizeBytes,
+        };
+    },
+});
+
 /** Pins admitted inputs and both record frontiers in one transaction, including a truthful legacy anchor. */
 export const inputSnapshot = internalMutation({
     args: leaseValidator.fields,
@@ -696,6 +786,7 @@ export const inputSnapshot = internalMutation({
                 ctx,
                 mission._id,
                 args.generation,
+                true,
             );
             if (current.kind !== "ready") throw executionError(current.code);
             const input = JSON.parse(current.inputJson);
@@ -717,7 +808,7 @@ export const inputSnapshot = internalMutation({
     },
 });
 
-/** A fenced native reader consumes immutable application observations, one bounded row at a time. */
+/** Returns the observation frontier and, when requested, the next retained observation identity. */
 export const pendingObservations = internalQuery({
     args: {
         ...leaseValidator.fields,
@@ -732,7 +823,14 @@ export const pendingObservations = internalQuery({
             v.object({
                 eventId: v.id("agentExecutionEvents"),
                 sequence: v.number(),
-                json: v.string(),
+                topic: schema.tables.agentExecutionEvents.validator.fields
+                    .contextObservation.fields.topic,
+                actor: schema.tables.agentExecutionEvents.validator.fields
+                    .actor,
+                contentHash: v.string(),
+                sizeBytes: v.number(),
+                characters: v.number(),
+                fragmentCount: v.number(),
                 occurredAt: v.number(),
             }),
         ),
@@ -751,42 +849,40 @@ export const pendingObservations = internalQuery({
                 (!Number.isSafeInteger(args.after) || args.after < 0))
         )
             throw executionError("native_observation_invalid");
-        const after =
-            args.after ?? session.observationSequence ?? throughSequence;
-        const events = await ctx.db
-            .query("agentExecutionEvents")
-            .withIndex("by_run_and_native_input_sequence", (q) =>
-                q
-                    .eq("runId", mission.runId)
-                    .gt("nativeInputSequence", after)
-                    .lte("nativeInputSequence", throughSequence),
-            )
-            .take(1);
+        const after = args.after;
+        const event =
+            after === undefined || after >= throughSequence
+                ? null
+                : await ctx.db
+                      .query("agentExecutionEvents")
+                      .withIndex("by_run_and_native_input_sequence", (q) =>
+                          q
+                              .eq("runId", mission.runId)
+                              .gt("nativeInputSequence", after)
+                              .lte("nativeInputSequence", throughSequence),
+                      )
+                      .first();
         const entries = [];
-        for (const event of events) {
+        if (event) {
             if (
                 !event.contextObservation ||
                 event.nativeInputSequence === undefined
             )
                 throw executionError("journal_payload_invalid");
+            const text = await completeRetainedText(
+                ctx,
+                event.contextObservation.textId,
+            );
             entries.push({
                 eventId: event._id,
                 sequence: event.nativeInputSequence,
                 occurredAt: event.occurredAt,
-                json: JSON.stringify({
-                    version: 1,
-                    topic: event.contextObservation.topic,
-                    sequence: event.nativeInputSequence,
-                    historyReference: event._id,
-                    actor: event.actor,
-                    occurredAt: event.occurredAt,
-                    value: JSON.parse(
-                        await readRetainedText(
-                            ctx,
-                            event.contextObservation.textId,
-                        ),
-                    ),
-                }),
+                topic: event.contextObservation.topic,
+                actor: event.actor,
+                contentHash: text.contentHash,
+                sizeBytes: text.sizeBytes,
+                characters: text.characters,
+                fragmentCount: text.fragmentHashes.length,
             });
         }
         return {
@@ -795,6 +891,36 @@ export const pendingObservations = internalQuery({
             throughSequence,
             entries,
         };
+    },
+});
+
+/** Fragment reads recheck the active writer and resolve text through the event's owning run. */
+export const readObservationFragment = internalQuery({
+    args: {
+        ...leaseValidator.fields,
+        eventId: v.id("agentExecutionEvents"),
+        expectedHash: v.string(),
+        index: v.number(),
+    },
+    returns: v.string(),
+    handler: async (ctx, args) => {
+        const session = await writer(ctx, args, Date.now());
+        const mission = await ctx.db.get(session.missionId);
+        const event = await ctx.db.get(args.eventId);
+        if (
+            !mission ||
+            !event?.contextObservation ||
+            event.nativeInputSequence === undefined ||
+            event.runId !== mission.runId
+        )
+            throw executionError("native_observation_invalid");
+        const text = await completeRetainedText(
+            ctx,
+            event.contextObservation.textId,
+        );
+        if (text.contentHash !== args.expectedHash)
+            throw executionError("native_observation_invalid");
+        return retainedTextFragment(ctx, text, args.index);
     },
 });
 

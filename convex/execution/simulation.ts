@@ -1,10 +1,13 @@
-import { internalQuery } from "@convex/_generated/server";
+import { internal } from "@convex/_generated/api";
+import { internalAction, internalQuery } from "@convex/_generated/server";
 import { localBrowserFixturesEnabled } from "@convex/runWorkspace";
 import { type Infer, v } from "convex/values";
 import { getAgentDefinition } from "./agentCatalog";
+import { agentDefinitionIdValidator } from "./agentSchemas";
 import { executionError, requireMissionAuthority } from "./authority";
-import { admittedInputJson } from "./journal";
 import { invocationResponseValidator } from "./executionProtocol";
+import { admittedInputFragment, admittedInputHash } from "./journal";
+import { verifyRetainedText } from "./retainedText";
 
 /** Replaces only provider I/O: both real generation libraries still prepare and execute their turn. */
 export function simulationFetch(
@@ -57,17 +60,27 @@ export function simulationFetch(
     };
 }
 
-/** A local scripted model exercises the real executor without claiming provider or semantic verification. */
-export const invoke = internalQuery({
+const invocationScope = {
+    invocationId: v.id("agentInvocations"),
+    expectedGeneration: v.number(),
+};
+
+export const admittedFragment = internalQuery({
     args: {
-        invocationId: v.id("agentInvocations"),
-        expectedGeneration: v.number(),
+        ...invocationScope,
+        index: v.number(),
+        contentHash: v.optional(v.string()),
     },
-    returns: invocationResponseValidator,
-    handler: async (
-        ctx,
-        args,
-    ): Promise<Infer<typeof invocationResponseValidator>> => {
+    returns: v.object({
+        definitionId: agentDefinitionIdValidator,
+        definitionVersion: v.number(),
+        content: v.string(),
+        contentHash: v.string(),
+        sizeBytes: v.number(),
+        characters: v.number(),
+        fragmentCount: v.number(),
+    }),
+    handler: async (ctx, args) => {
         const invocation = await ctx.db.get(args.invocationId);
         if (
             !invocation?.missionId ||
@@ -82,14 +95,54 @@ export const invoke = internalQuery({
         );
         if (run.purpose !== "browser_test")
             throw executionError("simulation_not_authorized");
+        const contentHash = admittedInputHash(invocation);
+        if (args.contentHash !== undefined && args.contentHash !== contentHash)
+            throw executionError("invocation_input_invalid");
+        return {
+            definitionId: mission.definitionId,
+            definitionVersion: mission.definitionVersion,
+            ...(await admittedInputFragment(
+                ctx,
+                invocation,
+                args.index,
+                contentHash,
+            )),
+        };
+    },
+});
+
+/** A local scripted model exercises the real executor without dispatching to a provider. */
+export const invoke = internalAction({
+    args: invocationScope,
+    returns: invocationResponseValidator,
+    handler: async (
+        ctx,
+        args,
+    ): Promise<Infer<typeof invocationResponseValidator>> => {
+        const read = internal.execution.simulation.admittedFragment;
+        const first = await ctx.runQuery(read, { ...args, index: 0 });
         const definition = getAgentDefinition(
-            mission.definitionId,
-            mission.definitionVersion,
+            first.definitionId,
+            first.definitionVersion,
         );
         if (!definition.simulate)
             throw executionError("simulation_not_configured");
+        const fragments = [first.content];
+        for (let index = 1; index < first.fragmentCount; index++) {
+            const next = await ctx.runQuery(read, {
+                ...args,
+                index,
+                contentHash: first.contentHash,
+            });
+            if (
+                next.definitionId !== first.definitionId ||
+                next.definitionVersion !== first.definitionVersion
+            )
+                throw executionError("invocation_input_invalid");
+            fragments.push(next.content);
+        }
         return definition.simulate(
-            JSON.parse(await admittedInputJson(ctx, invocation)),
+            JSON.parse(verifyRetainedText(first, fragments.join(""))),
         );
     },
 });

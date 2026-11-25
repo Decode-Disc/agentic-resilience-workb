@@ -26,6 +26,8 @@ const TABLE_OWNERS: Record<string, readonly string[]> = {
 const FUNCTION_OWNERS: Record<string, readonly string[]> = {
     "execution.retainedText.stageOperationObservation": ["operations"],
     "execution.retainedText.stageRetainedText": [
+        "missionData",
+        "conversations",
         "journal",
         "piStore",
         "invocationLifecycle",

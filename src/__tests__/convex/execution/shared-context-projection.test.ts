@@ -441,11 +441,22 @@ test("large admitted native state stays immutable and readable without exceeding
     const stored = await f.t.run((ctx) => ctx.db.get(begun.invocationId));
     assert(stored);
     expect(getDocumentSize(stored)).toBeLessThan(1024 * 1024);
-    const hydrated = await f.t.query(
+    const scope = { invocationId: begun.invocationId, expectedGeneration: 4 };
+    const execution = await f.t.query(
         internal.execution.invocations.forExecution,
-        { invocationId: begun.invocationId, expectedGeneration: 4 },
+        scope,
     );
-    expect(hydrated.invocation.inputJson).toBe(begun.inputJson);
+    expect(execution.invocation.inputJson).toBe("");
+    const inputHash = execution.invocation.inputContentHash;
+    assert(inputHash);
+    const read = internal.execution.invocationLifecycle.executionInputFragment;
+    const first = await f.t.query(read, { ...scope, inputHash, index: 0 });
+    const parts = [first.content];
+    for (let index = 1; index < first.fragmentCount; index++)
+        parts.push(
+            (await f.t.query(read, { ...scope, inputHash, index })).content,
+        );
+    expect(parts.join("")).toBe(begun.inputJson);
     const requestId = await f.t.mutation(
         internal.execution.operations.enqueue,
         {

@@ -305,6 +305,8 @@ export const SOURCES_READER_OPENING_PASSAGES = 12;
 
 /** Records removed per dossier-purge transaction; a byte-safe batch under Convex write limits, not a purge allowance. */
 export const DOSSIER_PURGE_BATCH = 100;
+// Leave transaction capacity for journal children and retained fragments.
+export const DOSSIER_PURGE_PARENT_SCAN_BYTES = 2 * 1024 * 1024;
 
 export const SOURCES_MAX_QUALIFICATION_CONTRIBUTIONS = 15;
 
@@ -314,6 +316,10 @@ export const DOCUMENTARY_SEARCH_QUERY_MAX_CHARS = 512;
 export const MAX_EXA_DISCOVERY_ATTEMPTS = 2;
 
 export const EXA_DISCOVERY_TIMEOUT_MS = 10_000;
+
+// Convex database representation limits, independent of generation and provider budgets.
+export const CONVEX_MAX_DOCUMENT_BYTES = 1_048_576;
+export const CONVEX_MAX_ARRAY_VALUES = 8192;
 
 // A fragment stays comfortably below Convex's document and argument limits.
 export const TEXT_FRAGMENT_CHARACTERS = 60 * 1024;

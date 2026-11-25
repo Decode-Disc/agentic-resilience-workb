@@ -437,7 +437,7 @@ export const settle = internalMutation({
                 provenance: "simulation",
             },
         );
-        if (begun.kind !== "ready") throw executionError(begun.code);
+        if (begun.kind === "blocked") throw executionError(begun.code);
         await ctx.runMutation(internal.execution.invocations.finish, {
             invocationId: begun.invocationId,
             expectedGeneration: run.executionGeneration,

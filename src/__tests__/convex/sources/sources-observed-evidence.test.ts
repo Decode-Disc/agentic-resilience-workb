@@ -206,6 +206,7 @@ test.each([
             ctx.db.patch(begun.invocationId, {
                 inputJson: JSON.stringify(snapshot),
                 inputContentHash: undefined,
+                sourcesOperationAdmission: undefined,
             }),
         );
     }
@@ -303,6 +304,7 @@ test.each([
         ctx.db.patch(begun.invocationId, {
             inputJson,
             inputContentHash: undefined,
+            sourcesOperationAdmission: undefined,
         }),
     );
     const response = {
@@ -483,6 +485,18 @@ test("Sources preserves the invocation's observed qualification when another wri
         provenance: "simulation",
     });
     assert(begun.kind === "ready");
+    expect(
+        await f.t.run((ctx) => ctx.db.get(begun.invocationId)),
+    ).toMatchObject({
+        sourcesOperationAdmission: {
+            activeWork: {
+                qualificationInputVersion: "observed_v1",
+                contributionObservations: [
+                    { taskId: f.qualification._id, captureId: f.captureId },
+                ],
+            },
+        },
+    });
     await f.t.run(async (ctx) => {
         const preparation = await ctx.db.get(f.preparationId);
         assert(preparation?.sourcesMission);

@@ -409,6 +409,7 @@ export async function observedFramingCandidate(
 export async function workbenchDocumentaryContext(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
+    instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
 ) {
     const run = await ctx.db.get(mission.runId);
     if (mission.definitionId !== "workbench_v1")
@@ -454,7 +455,11 @@ export async function workbenchDocumentaryContext(
         revision.status !== "approved"
     )
         throw executionError("documentary_material_unavailable");
-    const instructions = await conversationInstructions(ctx, mission);
+    const instructions = await conversationInstructions(
+        ctx,
+        mission,
+        instructionTexts,
+    );
     const turn = instructions ? await ctx.db.get(instructions.turnId) : null;
     if (
         !instructions ||
@@ -486,9 +491,10 @@ export async function workbenchDocumentaryContext(
 export async function documentaryMaterialContext(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
+    instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
 ) {
     if (mission.definitionId === "workbench_v1")
-        return workbenchDocumentaryContext(ctx, mission);
+        return workbenchDocumentaryContext(ctx, mission, instructionTexts);
     const scope = missionScope(mission);
     if (scope.kind === "sources_v1") {
         const view = await requireSourcesPreparation(ctx, scope.preparationId);

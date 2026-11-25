@@ -699,10 +699,31 @@ test("an approval decision is recorded as a control exchange for the native hist
     expect(pending.entries).toHaveLength(1);
     const entry = pending.entries[0];
     assert(entry);
-    expect(entry).toMatchObject({
-        command: "Continue preparation: always for this dossier",
-        text: approvalOutcomeText(view),
-    });
+    const fragments = internal.execution.piStore.nativeInputFragment;
+    for (const [body, expected] of [
+        [entry.command, "Continue preparation: always for this dossier"],
+        [entry.confirmation, approvalOutcomeText(view)],
+    ] as const) {
+        assert("contentHash" in body);
+        await expect(
+            f.t.query(fragments, {
+                ...lease,
+                ...body,
+                controlMessageId: entry.messageId,
+                index: 0,
+            }),
+        ).resolves.toMatchObject({ content: expected, fragmentCount: 1 });
+    }
+    const confirmation = entry.confirmation;
+    assert("contentHash" in confirmation);
+    await expect(
+        f.t.query(fragments, {
+            ...lease,
+            ...confirmation,
+            controlMessageId: confirmation.messageId,
+            index: 0,
+        }),
+    ).rejects.toThrow("native_control_unavailable");
 
     await f.t.mutation(internal.execution.piStore.recordControlInputs, {
         ...lease,

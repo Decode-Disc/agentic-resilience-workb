@@ -2,6 +2,7 @@ import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
+    internalQuery,
     type MutationCtx,
     mutation,
     type QueryCtx,
@@ -9,11 +10,28 @@ import {
 } from "@convex/_generated/server";
 import { savedMaterialBinding } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import {
+    adoptRetainedTextKey,
+    completeRetainedText,
+    retainCompleteText,
+    retainedTextFragment,
+    retainedTextParts,
+    stageRetainedText,
+    textFragmentValidator,
+} from "@convex/execution/retainedText";
 import { readFramingCitationPolicy } from "@convex/framingCitationPolicy";
 import {
-    createConversationStorage,
+    conversationBodyAccess,
+    conversationBodyReference,
+    deliveryBodyHash,
+    deliveryMigrationTextKey,
+    legacyDeliveryIdentity,
     readConversationMessages,
-    saveConversationMessage,
+    readConversationPageBodies,
+    requireExclusiveLegacyThread,
+    retainedDeliveryBody,
+    retainedDeliveryKey,
+    retainedReplyKey,
 } from "@convex/integrations/agentStorage";
 import {
     piMissionStateText,
@@ -34,6 +52,7 @@ import { taskMethodDefinitionVersion } from "@convex/qualificationAgentMethods";
 import {
     HISTORY_PAGE_SIZE,
     MAX_CONTEXT_BYTES,
+    MAX_CONVERSATION_SCAN_BYTES,
     MAX_OPERATION_RESULT_BYTES,
 } from "@convex/resourcePolicy";
 import {
@@ -62,7 +81,7 @@ import { executionError, executionFailureCode } from "./errors";
 import { missionStatusValidator } from "./executionProtocol";
 import { nextNativeInputSequence } from "./journal";
 import { cancelPiWake, schedulePiMission } from "./piControl";
-import { sessionForMission } from "./piStore";
+import { needsNativeSettlement, sessionForMission } from "./piStore";
 
 async function conversationForRun(ctx: QueryCtx, runId: Id<"researchRuns">) {
     return ctx.db
@@ -71,6 +90,440 @@ async function conversationForRun(ctx: QueryCtx, runId: Id<"researchRuns">) {
         .unique();
 }
 
+/** Discovers application-owned scopes for the deployment migration inventory. */
+export const migrationScopes = internalQuery({
+    args: { paginationOpts: paginationOptsValidator },
+    returns: paginationResultValidator(
+        v.object({
+            conversationId: v.id("agentConversations"),
+            runId: v.id("researchRuns"),
+            storageRef: v.optional(v.string()),
+            activeTurnId: v.optional(v.id("agentConversationTurns")),
+            frozen: v.boolean(),
+        }),
+    ),
+    handler: async (ctx, { paginationOpts }) => {
+        const page = await ctx.db.query("agentConversations").paginate({
+            ...paginationOpts,
+            numItems: Math.min(paginationOpts.numItems, HISTORY_PAGE_SIZE),
+            maximumRowsRead: HISTORY_PAGE_SIZE,
+            maximumBytesRead: MAX_CONVERSATION_SCAN_BYTES,
+        });
+        return {
+            ...page,
+            page: page.page.map((conversation) => ({
+                conversationId: conversation._id,
+                runId: conversation.runId,
+                storageRef: conversation.storageRef,
+                activeTurnId: conversation.activeTurnId,
+                frozen: conversation.storageMigrationFrozen === true,
+            })),
+        };
+    },
+});
+
+export const beginMessageMigration = internalMutation({
+    args: { runId: v.id("researchRuns") },
+    returns: v.null(),
+    handler: async (ctx, { runId }) => {
+        const run = await ctx.db.get(runId);
+        if (!run || run.withdrawnAt !== undefined)
+            throw executionError("conversation_unavailable");
+        const control = await ctx.db
+            .query("piPublication")
+            .withIndex("by_key", (q) => q.eq("key", "workers"))
+            .unique();
+        if (control?.retainedStreamUpgrade !== "active")
+            throw executionError("retained_stream_upgrade_order");
+        const conversation = await conversationForRun(ctx, runId);
+        if (!conversation) throw executionError("conversation_unavailable");
+        if (conversation.activeTurnId)
+            throw executionError("conversation_migration_turn_active");
+        if (!conversation.storageMigrationFrozen)
+            await ctx.db.patch(conversation._id, {
+                storageMigrationFrozen: true,
+                storageMigrationSourceHash: undefined,
+                storageMigrationEpoch:
+                    (conversation.storageMigrationEpoch ?? 0) + 1,
+            });
+        return null;
+    },
+});
+
+const frozenInventoryCheckpoint = v.object({
+    runId: v.id("researchRuns"),
+    conversationId: v.id("agentConversations"),
+    epoch: v.number(),
+    sourceInventoryHash: v.string(),
+});
+
+async function requireFrozenInventoryCheckpoint(
+    ctx: QueryCtx,
+    args: Infer<typeof frozenInventoryCheckpoint>,
+) {
+    const run = await ctx.db.get(args.runId);
+    const conversation = await conversationForRun(ctx, args.runId);
+    if (
+        !run ||
+        run.withdrawnAt !== undefined ||
+        conversation?._id !== args.conversationId ||
+        !conversation.storageMigrationFrozen ||
+        conversation.activeTurnId ||
+        (conversation.storageMigrationEpoch ?? 0) !== args.epoch
+    )
+        throw executionError("conversation_migration_inventory_changed");
+    return { run, conversation };
+}
+
+/** Pins the verified source inventory once for this maintenance fence. */
+export const recordMigrationSourceInventory = internalMutation({
+    args: frozenInventoryCheckpoint.fields,
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const { conversation } = await requireFrozenInventoryCheckpoint(
+            ctx,
+            args,
+        );
+        if (conversation.storageMigrationSourceHash !== undefined) {
+            if (
+                conversation.storageMigrationSourceHash !==
+                args.sourceInventoryHash
+            )
+                throw executionError("conversation_migration_source_changed");
+            return null;
+        }
+        await ctx.db.patch(conversation._id, {
+            storageMigrationSourceHash: args.sourceInventoryHash,
+        });
+        return null;
+    },
+});
+
+/** Reopens only the frozen scope just reconciled by the migration action. */
+export const resumeReconciledConversation = internalMutation({
+    args: frozenInventoryCheckpoint.fields,
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const { run, conversation } = await requireFrozenInventoryCheckpoint(
+            ctx,
+            args,
+        );
+        if (conversation.storageMigrationSourceHash === undefined)
+            throw executionError("conversation_migration_preflight_required");
+        if (
+            conversation.storageMigrationSourceHash !== args.sourceInventoryHash
+        )
+            throw executionError("conversation_migration_source_changed");
+        await ctx.db.patch(conversation._id, {
+            storageMigrationFrozen: undefined,
+            storageMigrationSourceHash: undefined,
+        });
+        const turn = await ctx.db
+            .query("agentConversationTurns")
+            .withIndex("by_run", (q) => q.eq("runId", run._id))
+            .order("desc")
+            .first();
+        const tail = turn?.missionId ? await ctx.db.get(turn.missionId) : null;
+        const session = tail ? await sessionForMission(ctx, tail) : null;
+        if (
+            tail &&
+            session &&
+            !session.settlementFailureCode &&
+            needsNativeSettlement(tail, session)
+        ) {
+            // Retire the pre-migration writer before publishing the replacement wake.
+            await ctx.db.patch(session._id, {
+                writer: `migration:${args.epoch}`,
+                epoch: session.epoch + 1,
+            });
+            if (tail.piWakeId) await cancelPiWake(ctx, tail.piWakeId);
+            await ctx.db.patch(tail._id, {
+                piWakeId: undefined,
+                piWakeAt: undefined,
+                piWakeToken: undefined,
+                piActiveWriter: undefined,
+            });
+            await schedulePiMission(
+                ctx,
+                tail._id,
+                tail.generation,
+                Math.max(Date.now(), session.leaseUntil),
+            );
+        } else if (conversation.queuedCount && !conversation.queuePaused) {
+            await ctx.scheduler.runAfter(
+                0,
+                internal.execution.conversations.pumpWorkbench,
+                { runId: run._id },
+            );
+        }
+        return null;
+    },
+});
+
+/** The conversation fence also applies to terminal workers that still own a Pi tail. */
+export async function missionConversationMigrationFrozen(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+    sessionConversationId?: Id<"agentConversations">,
+) {
+    const conversationId =
+        sessionConversationId ??
+        (mission.conversationTurnId
+            ? (await ctx.db.get(mission.conversationTurnId))?.conversationId
+            : undefined);
+    if (!conversationId) return false;
+    return (await ctx.db.get(conversationId))?.storageMigrationFrozen === true;
+}
+
+/** Lists application delivery checkpoints without loading message bodies. */
+export const messageMigrationInventory = internalQuery({
+    args: {
+        runId: v.id("researchRuns"),
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: paginationResultValidator(
+        v.object({
+            deliveryId: v.id("agentMessageDeliveries"),
+            conversationId: v.id("agentConversations"),
+            sourceReference: v.optional(v.string()),
+            requestHash: v.string(),
+            textId: v.optional(v.id("retainedTexts")),
+            verifiedHash: v.optional(v.string()),
+            retainedHash: v.optional(v.string()),
+            status: v.union(
+                v.literal("legacy"),
+                v.literal("copying"),
+                v.literal("verified"),
+                v.literal("switched"),
+                v.literal("retained"),
+                v.literal("inconsistent"),
+            ),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        const run = await ctx.db.get(args.runId);
+        const conversation = await conversationForRun(ctx, args.runId);
+        if (
+            !run ||
+            run.withdrawnAt !== undefined ||
+            !conversation?.storageMigrationFrozen
+        )
+            throw executionError("conversation_migration_not_frozen");
+        const page = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_run", (q) => q.eq("runId", args.runId))
+            .paginate({
+                ...args.paginationOpts,
+                numItems: Math.min(
+                    args.paginationOpts.numItems,
+                    HISTORY_PAGE_SIZE,
+                ),
+                maximumRowsRead: HISTORY_PAGE_SIZE,
+                maximumBytesRead: MAX_CONVERSATION_SCAN_BYTES,
+            });
+        return {
+            ...page,
+            page: await Promise.all(
+                page.page.map(async (row) => {
+                    const copy = row.storageMigrationCopy;
+                    const sourceValid =
+                        !!row.storageMessageRef &&
+                        (!copy ||
+                            copy.sourceIdentity ===
+                                legacyDeliveryIdentity(row, conversation));
+                    let status:
+                        | "legacy"
+                        | "copying"
+                        | "verified"
+                        | "switched"
+                        | "retained"
+                        | "inconsistent";
+                    if (row.conversationId !== conversation._id)
+                        status = "inconsistent";
+                    else if (row.bodyTextId) {
+                        status =
+                            !row.storageMessageRef && !copy
+                                ? "retained"
+                                : copy?.textId === row.bodyTextId &&
+                                    sourceValid &&
+                                    copy.verifiedHash !== undefined &&
+                                    copy.verifiedHash === deliveryBodyHash(row)
+                                  ? "switched"
+                                  : "inconsistent";
+                    } else if (!sourceValid) status = "inconsistent";
+                    else
+                        status = copy?.verifiedHash
+                            ? "verified"
+                            : copy
+                              ? "copying"
+                              : "legacy";
+                    const retained =
+                        status === "switched" || status === "retained"
+                            ? await retainedDeliveryBody(ctx, row)
+                            : undefined;
+                    return {
+                        deliveryId: row._id,
+                        conversationId: row.conversationId,
+                        sourceReference: row.storageMessageRef,
+                        requestHash: row.contentHash,
+                        textId: row.bodyTextId ?? copy?.textId,
+                        verifiedHash: copy?.verifiedHash,
+                        retainedHash: retained?.contentHash,
+                        status,
+                    };
+                }),
+            ),
+        };
+    },
+});
+
+const migrationDeliveryScope = v.object({
+    runId: v.id("researchRuns"),
+    deliveryId: v.id("agentMessageDeliveries"),
+    sourceIdentity: v.string(),
+});
+
+async function frozenMigrationDelivery(
+    ctx: QueryCtx,
+    args: Infer<typeof migrationDeliveryScope>,
+) {
+    const run = await ctx.db.get(args.runId);
+    const delivery = await ctx.db.get(args.deliveryId);
+    if (
+        !run ||
+        run.withdrawnAt !== undefined ||
+        delivery?.runId !== run._id ||
+        !delivery.storageMessageRef
+    )
+        throw executionError("conversation_message_unavailable");
+    const conversation = await ctx.db.get(delivery.conversationId);
+    if (
+        conversation?.runId !== run._id ||
+        !conversation.storageMigrationFrozen ||
+        !conversation.storageRef
+    )
+        throw executionError("conversation_migration_not_frozen");
+    await requireExclusiveLegacyThread(ctx, conversation.storageRef);
+    if (
+        legacyDeliveryIdentity(delivery, conversation) !==
+            args.sourceIdentity ||
+        (delivery.storageMigrationCopy &&
+            delivery.storageMigrationCopy.sourceIdentity !==
+                args.sourceIdentity)
+    )
+        throw executionError("conversation_migration_source_changed");
+    return delivery;
+}
+
+export const stageMessageMigration = internalMutation({
+    args: {
+        ...migrationDeliveryScope.fields,
+        fragment: textFragmentValidator,
+    },
+    returns: v.id("retainedTexts"),
+    handler: async (ctx, args) => {
+        const delivery = await frozenMigrationDelivery(ctx, args);
+        if (delivery.bodyTextId)
+            throw executionError("conversation_migration_already_switched");
+        const textId = await stageRetainedText(
+            ctx,
+            deliveryMigrationTextKey(delivery._id),
+            args.fragment,
+        );
+        if (!delivery.storageMigrationCopy)
+            await ctx.db.patch(delivery._id, {
+                storageMigrationCopy: {
+                    sourceIdentity: args.sourceIdentity,
+                    textId,
+                },
+            });
+        else if (delivery.storageMigrationCopy.textId !== textId)
+            throw executionError("conversation_migration_source_changed");
+        return textId;
+    },
+});
+
+export const verifyMessageMigration = internalMutation({
+    args: {
+        ...migrationDeliveryScope.fields,
+        textId: v.id("retainedTexts"),
+        contentHash: v.string(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const delivery = await frozenMigrationDelivery(ctx, args);
+        if (delivery.bodyTextId)
+            throw executionError("conversation_migration_already_switched");
+        if (delivery.storageMigrationCopy?.textId !== args.textId)
+            throw executionError("conversation_migration_source_changed");
+        const text = await completeRetainedText(ctx, args.textId);
+        if (
+            text.key !== deliveryMigrationTextKey(delivery._id) ||
+            text.contentHash !== args.contentHash
+        )
+            throw executionError("conversation_migration_body_mismatch");
+        await ctx.db.patch(delivery._id, {
+            storageMigrationCopy: {
+                ...delivery.storageMigrationCopy,
+                verifiedHash: args.contentHash,
+            },
+        });
+        return null;
+    },
+});
+
+/** Makes a verified body visible while retaining the component reference for rehearsal and retirement. */
+export const switchMessageMigration = internalMutation({
+    args: migrationDeliveryScope.fields,
+    returns: v.id("retainedTexts"),
+    handler: async (ctx, args) => {
+        const delivery = await frozenMigrationDelivery(ctx, args);
+        const copy = delivery.storageMigrationCopy;
+        if (!copy?.verifiedHash)
+            throw executionError("conversation_migration_unverified");
+        if (delivery.bodyTextId) {
+            if (delivery.bodyTextId !== copy.textId)
+                throw executionError("conversation_migration_body_mismatch");
+            const text = await retainedDeliveryBody(ctx, delivery);
+            if (text.contentHash !== copy.verifiedHash)
+                throw executionError("conversation_migration_body_mismatch");
+            return text._id;
+        }
+        const text = await completeRetainedText(ctx, copy.textId);
+        if (
+            text.key !== deliveryMigrationTextKey(delivery._id) ||
+            text.contentHash !== copy.verifiedHash
+        )
+            throw executionError("conversation_migration_body_mismatch");
+        if (
+            delivery.role === "assistant" &&
+            delivery.delivery === "reply" &&
+            delivery.turnId
+        ) {
+            const turn = await ctx.db.get(delivery.turnId);
+            if (
+                !turn ||
+                turn.publishedMessageId !== delivery._id ||
+                turn.runId !== delivery.runId ||
+                turn.conversationId !== delivery.conversationId ||
+                (turn.publicationHash !== undefined &&
+                    turn.publicationHash !== text.contentHash)
+            )
+                throw executionError("conversation_migration_body_mismatch");
+        }
+        await adoptRetainedTextKey(
+            ctx,
+            text._id,
+            retainedDeliveryKey(delivery),
+        );
+        await ctx.db.patch(delivery._id, {
+            bodyTextId: text._id,
+            bodyContentHash: text.contentHash,
+        });
+        return text._id;
+    },
+});
+
 /** Every newly processed batch receives one atomic, immutable visibility revision. */
 async function advancePublication(
     ctx: MutationCtx,
@@ -78,6 +531,8 @@ async function advancePublication(
 ) {
     const conversation = await ctx.db.get(conversationId);
     if (!conversation) throw executionError("conversation_unavailable");
+    if (conversation.storageMigrationFrozen)
+        throw executionError("conversation_migration_frozen");
     const revision = (conversation.publicationRevision ?? 0) + 1;
     if (!Number.isSafeInteger(revision) || revision < 1)
         throw executionError("conversation_publication_invalid");
@@ -168,6 +623,38 @@ export function isApprovalReceiptMessage(
     );
 }
 
+/** Atomically creates a delivery with its own body while preserving the request identity. */
+async function insertRetainedDelivery(
+    ctx: MutationCtx,
+    fields: Omit<
+        Doc<"agentMessageDeliveries">,
+        | "_id"
+        | "_creationTime"
+        | "storageMessageRef"
+        | "bodyTextId"
+        | "bodyContentHash"
+        | "storageMigrationCopy"
+    >,
+    text: string,
+) {
+    const deliveryId = await ctx.db.insert("agentMessageDeliveries", fields);
+    const key = retainedDeliveryKey({ ...fields, _id: deliveryId });
+    const { parts, manifest } = retainedTextParts(text);
+    let bodyTextId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        bodyTextId = await stageRetainedText(ctx, key, {
+            ...manifest,
+            index,
+            content,
+        });
+    if (!bodyTextId) throw executionError("conversation_message_unavailable");
+    await ctx.db.patch(deliveryId, {
+        bodyTextId,
+        bodyContentHash: manifest.contentHash,
+    });
+    return deliveryId;
+}
+
 /** Persists a server-owned control or approval receipt without admitting a response or changing its queue. */
 export async function recordControlExchange(
     ctx: MutationCtx,
@@ -206,44 +693,35 @@ export async function recordControlExchange(
         args.exchange.kind === "command"
             ? args.exchange.name
             : args.exchange.text;
-    const storageMessageRef = await saveConversationMessage(
+    const messageId = await insertRetainedDelivery(
         ctx,
-        conversation.storageRef,
-        "user",
+        {
+            runId: conversation.runId,
+            conversationId: conversation._id,
+            requestKey: args.requestKey,
+            contentHash: args.contentHash,
+            role: "user",
+            delivery: "control",
+            status: "processed",
+            publicationRevision,
+            createdAt,
+        },
         userText,
     );
-    const messageId = await ctx.db.insert("agentMessageDeliveries", {
-        runId: conversation.runId,
-        conversationId: conversation._id,
-        requestKey: args.requestKey,
-        contentHash: args.contentHash,
-        storageMessageRef,
-        role: "user",
-        delivery: "control",
-        status: "processed",
-        publicationRevision,
-        createdAt,
-    });
-    const confirmationRef = await saveConversationMessage(
+    const confirmationMessageId = await insertRetainedDelivery(
         ctx,
-        conversation.storageRef,
-        "assistant",
-        args.text,
-    );
-    const confirmationMessageId = await ctx.db.insert(
-        "agentMessageDeliveries",
         {
             runId: conversation.runId,
             conversationId: conversation._id,
             requestKey: `${args.exchange.kind === "approval" ? APPROVAL_RECEIPT_KEY_PREFIX : "control-reply:"}${messageId}`,
             contentHash: sha256Hex(args.text),
-            storageMessageRef: confirmationRef,
             role: "assistant",
             delivery: "reply",
             status: "processed",
             publicationRevision,
             createdAt,
         },
+        args.text,
     );
     await ctx.db.patch(messageId, {
         ...(args.exchange.kind === "command"
@@ -297,25 +775,22 @@ export async function recordApprovalNotice(
         .unique();
     if (existing) return existing._id;
     const publicationRevision = await advancePublication(ctx, conversation._id);
-    const storageMessageRef = await saveConversationMessage(
+    return insertRetainedDelivery(
         ctx,
-        conversation.storageRef,
-        "assistant",
+        {
+            runId: conversation.runId,
+            conversationId: conversation._id,
+            requestKey,
+            contentHash: sha256Hex(args.text),
+            role: "assistant",
+            delivery: "notice",
+            status: "processed",
+            approvalRequestId: args.requestId,
+            publicationRevision,
+            createdAt: Date.now(),
+        },
         args.text,
     );
-    return ctx.db.insert("agentMessageDeliveries", {
-        runId: conversation.runId,
-        conversationId: conversation._id,
-        requestKey,
-        contentHash: sha256Hex(args.text),
-        storageMessageRef,
-        role: "assistant",
-        delivery: "notice",
-        status: "processed",
-        approvalRequestId: args.requestId,
-        publicationRevision,
-        createdAt: Date.now(),
-    });
 }
 
 const messageInput = v.object({
@@ -337,7 +812,6 @@ export async function ensureDossierConversation(
         throw executionError("not_authorized");
     let conversation = await conversationForRun(ctx, run._id);
     if (!conversation) {
-        const storageRef = await createConversationStorage(ctx, visitor._id);
         const setting = await ctx.db
             .query("agentModelSettings")
             .withIndex("by_agent", (q) => q.eq("agent", "workbench"))
@@ -382,7 +856,6 @@ export async function ensureDossierConversation(
                   }
                 : {}),
             runId: run._id,
-            storageRef,
             queuedCount: 0,
             createdAt: Date.now(),
         });
@@ -431,6 +904,8 @@ export async function submitAuthorizedMessage(
         { run, visitor },
         args.initialModel,
     );
+    if (conversation.storageMigrationFrozen)
+        throw executionError("conversation_migration_frozen");
     const turn = args.turnId ? await ctx.db.get(args.turnId) : null;
     if (
         args.delivery === "steer" &&
@@ -442,33 +917,30 @@ export async function submitAuthorizedMessage(
         throw executionError("active_turn_required");
     if (args.delivery === "queue" && args.turnId)
         throw executionError("invalid_delivery_target");
-    const storageMessageRef = await saveConversationMessage(
+    const messageId = await insertRetainedDelivery(
         ctx,
-        conversation.storageRef,
-        "user",
+        {
+            runId: args.runId,
+            conversationId: conversation._id,
+            framingBaseRevisionId: run.currentFramingRevisionId,
+            requestKey: args.requestKey,
+            contentHash,
+            role: "user",
+            ...(args.delivery === "steer"
+                ? {
+                      nativeInputSequence: await nextNativeInputSequence(
+                          ctx,
+                          args.runId,
+                      ),
+                  }
+                : {}),
+            delivery: args.delivery,
+            status: args.delivery === "steer" ? "active" : "queued",
+            turnId: args.delivery === "steer" ? turn?._id : undefined,
+            createdAt: Date.now(),
+        },
         args.text,
     );
-    const messageId = await ctx.db.insert("agentMessageDeliveries", {
-        runId: args.runId,
-        conversationId: conversation._id,
-        storageMessageRef,
-        framingBaseRevisionId: run.currentFramingRevisionId,
-        requestKey: args.requestKey,
-        contentHash,
-        role: "user",
-        ...(args.delivery === "steer"
-            ? {
-                  nativeInputSequence: await nextNativeInputSequence(
-                      ctx,
-                      args.runId,
-                  ),
-              }
-            : {}),
-        delivery: args.delivery,
-        status: args.delivery === "steer" ? "active" : "queued",
-        turnId: args.delivery === "steer" ? turn?._id : undefined,
-        createdAt: Date.now(),
-    });
     if (args.delivery === "steer" && turn) {
         await ctx.db.patch(turn._id, {
             instructionVersion: turn.instructionVersion + 1,
@@ -553,7 +1025,7 @@ export const claimTurn = internalMutation({
     handler: async (ctx, { runId, single }) => {
         await requireDossierAuthority(ctx, runId);
         const conversation = await conversationForRun(ctx, runId);
-        if (!conversation) return null;
+        if (!conversation || conversation.storageMigrationFrozen) return null;
         if (conversation.activeTurnId) return conversation.activeTurnId;
         const messages = await ctx.db
             .query("agentMessageDeliveries")
@@ -661,10 +1133,20 @@ export const get = query({
     },
 });
 
+/** History remains readable across research cancellation until the dossier is withdrawn. */
+export async function requireConversationHistoryRun(
+    ctx: QueryCtx,
+    runId: Id<"researchRuns">,
+) {
+    const { run } = await requireWorkspaceRun(ctx, runId);
+    if (run.withdrawnAt !== undefined) throw executionError("not_authorized");
+}
+
 export const listMessages = query({
     args: {
         runId: v.id("researchRuns"),
         paginationOpts: paginationOptsValidator,
+        bodyAccess: conversationBodyAccess,
     },
     returns: paginationResultValidator(
         v.object({
@@ -678,13 +1160,14 @@ export const listMessages = query({
             ).fields,
             _id: v.id("agentMessageDeliveries"),
             text: v.string(),
+            body: conversationBodyReference,
             responseControl:
                 schema.tables.agentMessageDeliveries.validator.fields
                     .responseControl,
         }),
     ),
     handler: async (ctx, args) => {
-        await requireWorkspaceRun(ctx, args.runId);
+        await requireConversationHistoryRun(ctx, args.runId);
         if (args.paginationOpts.numItems > HISTORY_PAGE_SIZE)
             throw executionError("history_page_capacity");
         const page = await ctx.db
@@ -693,16 +1176,17 @@ export const listMessages = query({
             .paginate(args.paginationOpts);
         const conversation = await conversationForRun(ctx, args.runId);
         if (!conversation) return { ...page, page: [] };
-        const texts = await readConversationMessages(
+        const bodies = await readConversationPageBodies(
             ctx,
             conversation.storageRef,
-            page.page.map((message) => message.storageMessageRef),
+            page.page,
+            args.bodyAccess,
         );
         return {
             ...page,
             page: page.page.map((message, index) => {
-                const text = texts[index];
-                if (text === undefined)
+                const body = bodies[index];
+                if (!body)
                     throw executionError("conversation_message_unavailable");
                 return {
                     _id: message._id,
@@ -712,7 +1196,7 @@ export const listMessages = query({
                     delivery: message.delivery,
                     status: message.status,
                     createdAt: message.createdAt,
-                    text,
+                    ...body,
                     ...(message.responseControl
                         ? { responseControl: message.responseControl }
                         : {}),
@@ -722,27 +1206,79 @@ export const listMessages = query({
     },
 });
 
+/** A delivery's body continues independently of the delivery list cursor. */
+export const readMessageBody = query({
+    args: {
+        runId: v.id("researchRuns"),
+        messageId: v.id("agentMessageDeliveries"),
+        contentHash: v.string(),
+        index: v.number(),
+    },
+    returns: v.object({
+        content: v.string(),
+        offset: v.number(),
+        totalCharacters: v.number(),
+        nextIndex: v.union(v.number(), v.null()),
+    }),
+    handler: async (ctx, args) => {
+        await requireConversationHistoryRun(ctx, args.runId);
+        const delivery = await ctx.db.get(args.messageId);
+        if (
+            !delivery ||
+            delivery.runId !== args.runId ||
+            deliveryBodyHash(delivery) !== args.contentHash
+        )
+            throw executionError("conversation_message_unavailable");
+        const text = await retainedDeliveryBody(ctx, delivery);
+        const content = await retainedTextFragment(ctx, text, args.index);
+        const offset = args.index === 0 ? 0 : text.fragmentEnds[args.index - 1];
+        const end = text.fragmentEnds[args.index];
+        const nextIndex =
+            args.index + 1 === text.fragmentHashes.length
+                ? null
+                : args.index + 1;
+        if (
+            offset === undefined ||
+            end !== offset + content.length ||
+            (nextIndex === null && end !== text.characters)
+        )
+            throw executionError("conversation_message_unavailable");
+        return { content, offset, totalCharacters: text.characters, nextIndex };
+    },
+});
+
 /** Only the claimed turn's messages enter required context; queued messages remain outside it. */
 export async function conversationInstructions(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
+    loaded?: Map<Id<"agentMessageDeliveries">, string>,
 ) {
     if (!mission.conversationTurnId) return undefined;
     const turn = await ctx.db.get(mission.conversationTurnId);
     if (!turn || turn.missionId !== mission._id || turn.status !== "active")
         throw executionError("active_turn_required");
-    return readTurnInstructions(ctx, turn);
+    return readTurnInstructions(ctx, turn, loaded);
+}
+
+/** The delivery index order is also the order of the native analyst input lot. */
+export function analystTurnDeliveries(
+    ctx: QueryCtx,
+    turnId: Id<"agentConversationTurns">,
+) {
+    return ctx.db
+        .query("agentMessageDeliveries")
+        .withIndex("by_turn", (q) => q.eq("turnId", turnId))
+        .filter((q) => q.eq(q.field("role"), "user"));
 }
 
 export async function readTurnInstructions(
     ctx: QueryCtx,
     turn: Doc<"agentConversationTurns">,
+    loaded?: Map<Id<"agentMessageDeliveries">, string>,
 ) {
     const conversation = await ctx.db.get(turn.conversationId);
     if (!conversation) throw executionError("conversation_unavailable");
-    const messages = ctx.db
-        .query("agentMessageDeliveries")
-        .withIndex("by_turn", (q) => q.eq("turnId", turn._id));
+    const messages = analystTurnDeliveries(ctx, turn._id);
     const result = {
         turnId: turn._id,
         instructionVersion: turn.instructionVersion,
@@ -768,7 +1304,8 @@ export async function readTurnInstructions(
         const texts = await readConversationMessages(
             ctx,
             conversation.storageRef,
-            batch.map((message) => message.storageMessageRef),
+            batch,
+            loaded,
         );
         for (const [index, message] of batch.entries()) {
             const text = texts[index];
@@ -790,7 +1327,6 @@ export async function readTurnInstructions(
         batch.length = 0;
     };
     for await (const message of messages) {
-        if (message.role !== "user") continue;
         batch.push(message);
         if (batch.length === HISTORY_PAGE_SIZE) await appendBatch();
     }
@@ -814,42 +1350,52 @@ export async function requireInstructionVersion(
         throw executionError("stale_instructions");
 }
 
-/** Publication and delivery acknowledgement share the application/component transaction. */
+/** Publishes the retained reply and acknowledges delivery in one transaction. */
 export async function publishTurn(
     ctx: MutationCtx,
     mission: Doc<"agentMissions">,
-    text: string,
+    reply: string | Doc<"retainedTexts">,
     instructionVersion: number | undefined,
+    preparedText?: Doc<"retainedTexts">,
 ) {
     if (!mission.conversationTurnId)
         throw executionError("active_turn_required");
     const turn = await ctx.db.get(mission.conversationTurnId);
     if (!turn) throw executionError("active_turn_required");
-    const hash = sha256Hex(text);
+    const text = typeof reply === "string" ? reply : undefined;
+    const preparedBody = typeof reply === "string" ? preparedText : reply;
+    const hash =
+        typeof reply === "string" ? sha256Hex(reply) : reply.contentHash;
     if (turn.publishedMessageId) {
         if (turn.publicationHash !== hash)
             throw executionError("publication_conflict");
-        return turn.publishedMessageId;
+        const existing = await ctx.db.get(turn.publishedMessageId);
+        if (!existing) throw executionError("publication_conflict");
+        return { bodyTextId: existing.bodyTextId, contentHash: hash };
     }
     await requireInstructionVersion(ctx, mission, instructionVersion);
-    if (!text.trim()) throw executionError("response_capacity");
+    if (text !== undefined && !text.trim())
+        throw executionError("response_capacity");
     const conversation = await ctx.db.get(turn.conversationId);
     if (!conversation) throw executionError("conversation_unavailable");
     const publicationRevision = await advancePublication(ctx, conversation._id);
-    const storageMessageRef = await saveConversationMessage(
-        ctx,
-        conversation.storageRef,
-        "assistant",
-        text,
-    );
+    const requestKey = retainedReplyKey(turn._id);
+    if (preparedBody && preparedBody.contentHash !== hash)
+        throw executionError("publication_conflict");
+    const bodyTextId =
+        typeof reply === "string" && !preparedBody
+            ? await retainCompleteText(ctx, requestKey, reply)
+            : preparedBody?._id;
+    if (!bodyTextId) throw executionError("publication_conflict");
+    if (preparedBody) await adoptRetainedTextKey(ctx, bodyTextId, requestKey);
     const messageId = await ctx.db.insert("agentMessageDeliveries", {
         ...(turn.responseControl?.summary
             ? { responseControl: turn.responseControl.summary }
             : {}),
         runId: mission.runId,
         conversationId: conversation._id,
-        storageMessageRef,
-        requestKey: `reply:${turn._id}`,
+        bodyTextId,
+        requestKey,
         contentHash: hash,
         role: "assistant",
         delivery: "reply",
@@ -890,7 +1436,7 @@ export async function publishTurn(
             internal.execution.conversations.pumpWorkbench,
             { runId: mission.runId },
         );
-    return messageId;
+    return { bodyTextId, contentHash: hash };
 }
 
 /** Cancellation drains deliveries in bounded transactions, retaining every original message. */
@@ -1091,13 +1637,13 @@ export const startTurn = internalMutation({
         if (!existingTurnId && definition.nativeConversation) {
             const admitted = await ctx.db.get(turnId);
             if (!admitted) throw executionError("active_turn_required");
-            const instructions = await readTurnInstructions(ctx, admitted);
+            const messages = await analystTurnDeliveries(
+                ctx,
+                admitted._id,
+            ).collect();
             await ctx.db.patch(turnId, {
-                nativeInitialMessageIds: instructions.messages.map(
-                    (message) => message.messageId,
-                ),
-                nativeInitialInstructionVersion:
-                    instructions.instructionVersion,
+                nativeInitialMessageIds: messages.map((message) => message._id),
+                nativeInitialInstructionVersion: admitted.instructionVersion,
             });
         }
         return { turnId, missionId };
@@ -1167,6 +1713,8 @@ export const removeQueued = mutation({
             throw executionError("message_not_queued");
         const conversation = await ctx.db.get(message.conversationId);
         if (!conversation) throw executionError("conversation_unavailable");
+        if (conversation.storageMigrationFrozen)
+            throw executionError("conversation_migration_frozen");
         await ctx.db.patch(message._id, { status: "removed" });
         await ctx.db.patch(conversation._id, {
             queuedCount: Math.max(0, conversation.queuedCount - 1),
@@ -1264,6 +1812,8 @@ export const resumeQueue = mutation({
         await requireWorkspaceRun(ctx, runId);
         await requireDossierAuthority(ctx, runId);
         const conversation = await conversationForRun(ctx, runId);
+        if (conversation?.storageMigrationFrozen)
+            throw executionError("conversation_migration_frozen");
         if (
             conversation?.admissionFailure?.code === "pi_storage_capacity" ||
             conversation?.admissionFailure?.code === "pi_commit_capacity" ||
@@ -1292,6 +1842,7 @@ export const pumpWorkbench = internalMutation({
         if (
             run.startMode !== "framed" ||
             !conversation ||
+            conversation.storageMigrationFrozen ||
             conversation.activeTurnId ||
             conversation.queuePaused ||
             !conversation.queuedCount

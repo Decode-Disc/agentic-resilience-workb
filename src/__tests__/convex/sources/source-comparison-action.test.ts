@@ -4,6 +4,7 @@ import {
     materializeSourceComparisonOutput,
     type PreparedSourceComparisonInput,
     SOURCE_COMPARISON_VERSION,
+    sourceComparisonOutputSchema,
 } from "@convex/domain/sourceComparison";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import {
@@ -12,6 +13,7 @@ import {
 } from "@convex/domain/sourceQualification";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import { compareSource } from "@convex/sourcePreparationActions";
+import { executePreparationModel } from "@convex/sources/preparationModel";
 import {
     type FunctionArgs,
     type FunctionReturnType,
@@ -1488,4 +1490,113 @@ test("a scoped conflict does not add retrieval queries to an independent compari
     expect(
         (await t.run((ctx) => ctx.db.get(preparationId)))?.modelAttemptCount,
     ).toBe(1);
+});
+
+test("dossier purge drains large persisted comparisons within its read limit", async () => {
+    const { t, comparison } = await completedComparison();
+    const { _id, _creationTime, ...fields } = comparison;
+    const output = sourceComparisonOutputSchema.parse({
+        ...comparison.output,
+        findings: comparison.output.findings.map((finding, index) =>
+            index === 0
+                ? { ...finding, explanation: "e".repeat(200_000) }
+                : finding,
+        ),
+    });
+    const { runId } = comparison;
+    for (let index = 0; index < 100; index++)
+        await t.run((ctx) =>
+            ctx.db.insert("aiTaskResults", {
+                ...fields,
+                output,
+                inputHash: sha256Hex(`retained-comparison-${index}`),
+            }),
+        );
+    const reason = "Remove dossier with large source comparisons";
+    await t.mutation(internal.dossierPurge.beginPurge, { runId, reason });
+    let more: boolean;
+    do {
+        more = await t.run((ctx) =>
+            ctx.runMutation(
+                internal.dossierPurge.purgeStep,
+                { runId, step: "aiTaskResults" },
+                { transactionLimits: { bytesRead: 16 * 1024 * 1024 } },
+            ),
+        );
+    } while (more);
+    expect(
+        await t.run((ctx) =>
+            ctx.db
+                .query("aiTaskResults")
+                .withIndex("by_run", (q) => q.eq("runId", runId))
+                .first(),
+        ),
+    ).toBeNull();
+});
+
+test.each([
+    75_000, 64,
+])("a paid Sources reply of %i characters settles after withdrawal without adoption", async (size) => {
+    const { t, runId, corpusRevisionId, sourceId } =
+        await seedSourcePreparation({ models: true });
+    const preparationId = await t.mutation(
+        internal.sourcePreparation.claimForDiscovery,
+        { runId, corpusRevisionId, expectedExecutionGeneration: 3 },
+    );
+    const preparation = await t.run((ctx) => ctx.db.get(preparationId));
+    if (!preparation) throw new Error("Missing preparation");
+    const result = await t.action((ctx) =>
+        executePreparationModel(ctx, {
+            preparation,
+            executionDeadlineAt: Date.now() + 60_000,
+            sourceId,
+            operation: "source_qualification",
+            inputHash: sha256Hex("withdrawn-qualification"),
+            invocationInputJson: "{}",
+            execute: async () => {
+                await t.run((ctx) =>
+                    ctx.db.patch(runId, { withdrawnAt: Date.now() }),
+                );
+                return {
+                    status: "succeeded",
+                    qualification: {
+                        companyMatch: "uncertain",
+                        companyPassages: [],
+                        documentKind: "unknown",
+                        reportingPeriodEnd: null,
+                        reportingPeriodPassages: [],
+                        findings: [],
+                        limitations: [],
+                    },
+                    model: "test",
+                    inputTokens: 21,
+                    outputTokens: 150,
+                    reportedCost: 0.01,
+                    latencyMs: 12,
+                    dispatchOutcome: "response_received",
+                    observableReplyJson: JSON.stringify({
+                        text: "x".repeat(size),
+                    }),
+                };
+            },
+        }),
+    );
+    expect(result).toMatchObject({ reasonCode: "not_authorized" });
+    const providerCallId = result.providerCallId;
+    if (!providerCallId) throw new Error("Missing provider call");
+    const call = await t.run((ctx) => ctx.db.get(providerCallId));
+    expect(call).toMatchObject({
+        status: "succeeded",
+        reportedCost: 0.01,
+        usage: { inputTokens: 21, outputTokens: 150 },
+    });
+    const invocationId = call?.invocationId;
+    if (!invocationId) throw new Error("Missing linked invocation");
+    const invocation = await t.run((ctx) => ctx.db.get(invocationId));
+    expect(invocation).toMatchObject({
+        status: "blocked",
+        blockCode: "not_authorized",
+    });
+    expect(invocation?.outputJson).toBeUndefined();
+    expect(invocation?.outputTextId).toBeUndefined();
 });

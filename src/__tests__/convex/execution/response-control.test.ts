@@ -1,6 +1,14 @@
-import { invocationResponses } from "@convex/execution/journal";
 import { api, internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { sha256Hex } from "@convex/domain/sourcePassages";
 import { domainSnapshot } from "@convex/execution/agentDefinition";
+import { readInvocationResponse } from "@convex/execution/journal";
+import { readMissionState } from "@convex/execution/missionHistory";
+import {
+    retainedTextParts,
+    stageRetainedText,
+} from "@convex/execution/retainedText";
+import { recoverCorrectionDraft } from "@convex/responseControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     seedWorkbench,
@@ -12,6 +20,149 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+});
+
+test("native correction reconstructs an exact draft above the transaction read limit", async () => {
+    const { t, runId } = await seedWorkbench(
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        5,
+        "balanced",
+        { bytesRead: 128 * 1024 },
+    );
+    await t.run((ctx) => ctx.db.patch(runId, { agentExecutionVersion: 3 }));
+    const active = await t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    const scope = { missionId: active.missionId, expectedGeneration: 1 };
+    const begun = await t.mutation(internal.execution.invocations.begin, {
+        ...scope,
+        taskKey: "large-correction",
+        provenance: "simulation",
+        nativeInput: await workbenchAdmissionInput(t, active.missionId),
+    });
+    assert(begun.kind === "ready");
+    await t.run(async (ctx) => {
+        const delivery = await ctx.db
+            .query("agentMessageDeliveries")
+            .withIndex("by_turn", (q) => q.eq("turnId", active.turnId))
+            .first();
+        assert(delivery?.bodyTextId);
+        const old = await ctx.db.get(delivery.bodyTextId);
+        assert(old);
+        const { manifest, parts } = retainedTextParts("a".repeat(30_000));
+        const [content] = parts;
+        assert(content && parts.length === 1);
+        const replacement = await stageRetainedText(
+            ctx,
+            "large-correction-instruction",
+            {
+                ...manifest,
+                index: 0,
+                content,
+            },
+        );
+        await ctx.db.patch(old._id, { key: "small-correction-fixture" });
+        await ctx.db.patch(replacement, { key: old.key });
+        await ctx.db.patch(delivery._id, {
+            bodyTextId: replacement,
+            bodyContentHash: manifest.contentHash,
+        });
+    });
+    await expect(
+        t.mutation(internal.execution.invocations.finish, {
+            invocationId: begun.invocationId,
+            expectedGeneration: 1,
+            response: { kind: "complete", text: "Research is running." },
+        }),
+    ).resolves.toMatchObject({
+        kind: "blocked",
+        code: "mission_context_changed",
+    });
+    expect(await t.run((ctx) => ctx.db.get(active.turnId))).toMatchObject({
+        responseControl: {
+            correction: {
+                invocationId: begun.invocationId,
+                instructionVersion: 1,
+            },
+        },
+    });
+    const draft = `Research is running. ${"x".repeat(175_000)} 🧭`;
+    const { manifest, parts } = retainedTextParts(
+        JSON.stringify({ kind: "complete", text: draft }),
+    );
+    let textId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries())
+        textId = await t.run((ctx) =>
+            stageRetainedText(
+                ctx,
+                `${begun.invocationId}:response:${manifest.contentHash}`,
+                { ...manifest, index, content },
+            ),
+        );
+    assert(textId);
+    await t.run((ctx) =>
+        ctx.db.patch(begun.invocationId, {
+            receivedOutputTextId: textId,
+            receivedOutputJson: undefined,
+        }),
+    );
+    await expect(
+        t.query(internal.execution.context.build, scope),
+    ).rejects.toThrow("131072 bytes");
+    const admitted = await t.query(internal.execution.context.build, {
+        ...scope,
+        correctionAdmission: true,
+    });
+    assert(admitted.kind === "ready");
+    const { draftResponseHash } = JSON.parse(admitted.inputJson).domain
+        .responseControl;
+    expect(draftResponseHash).toBe(manifest.contentHash);
+    await expect(
+        t.run((ctx) => readMissionState(ctx, scope, 8_192)),
+    ).resolves.toMatchObject({
+        kind: "ready",
+        state: {
+            version: 2,
+            requiredState: {
+                contentHash: sha256Hex(admitted.inputJson),
+                generation: scope.expectedGeneration,
+            },
+        },
+    });
+    const recover = () =>
+        t.action((ctx) =>
+            recoverCorrectionDraft(ctx, {
+                ...scope,
+                contentHash: draftResponseHash,
+            }),
+        );
+    expect(await recover()).toBe(draft);
+    const retainedId = textId;
+    const last = await t.run(async (ctx) => {
+        const fragment = await ctx.db
+            .query("retainedTextFragments")
+            .withIndex("by_text_and_index", (q) =>
+                q.eq("textId", retainedId).eq("index", parts.length - 1),
+            )
+            .unique();
+        assert(fragment);
+        await ctx.db.patch(fragment._id, { content: "Corrupted tail" });
+        return fragment;
+    });
+    await expect(recover()).rejects.toThrow("retained_text_invalid");
+    await t.run((ctx) => ctx.db.patch(last._id, { content: last.content }));
+    expect(await recover()).toBe(draft);
 });
 
 test.each([
@@ -55,6 +206,46 @@ test.each([
             })
         ).page.filter((m) => m.role === "assistant"),
     ).toHaveLength(0);
+    const originalAdopted = await t.run(async (ctx) => {
+        const original = await ctx.db.get(invocation.invocationId);
+        assert(original);
+        const textId = original.receivedOutputTextId ?? original.outputTextId;
+        await ctx.db.patch(original._id, {
+            receivedOutputJson:
+                original.receivedOutputJson ?? original.outputJson,
+            receivedOutputTextId: textId,
+            outputTextId: textId,
+            outputJson: textId
+                ? "unrelated adopted reply"
+                : original.outputJson,
+        });
+        return {
+            outputJson: original.outputJson,
+            outputTextId: original.outputTextId,
+            receivedOutputJson: original.receivedOutputJson,
+            receivedOutputTextId: original.receivedOutputTextId,
+        };
+    });
+    const admission = await t.query(internal.execution.context.build, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        correctionAdmission: true,
+    });
+    assert(admission.kind === "ready");
+    const admissionInput = JSON.parse(admission.inputJson);
+    expect(admissionInput.domain.responseControl.reminder).toContain(
+        "Research has not started.",
+    );
+    expect(admissionInput.domain.responseControl).not.toHaveProperty("draft");
+    expect(admissionInput.constraints.operations).toEqual([]);
+    await expect(
+        t.query(internal.responseControl.correctionFragment, {
+            missionId: active.missionId,
+            expectedGeneration: 1,
+            contentHash: "0".repeat(64),
+            index: 0,
+        }),
+    ).rejects.toThrow("mission_context_changed");
     const context = await t.query(internal.execution.context.build, {
         missionId: active.missionId,
         expectedGeneration: 1,
@@ -66,6 +257,35 @@ test.each([
     );
     expect(input.domain.responseControl.draft).toBe(draft);
     expect(input.constraints.operations).toEqual([]);
+    await t.run((ctx) =>
+        ctx.db.patch(invocation.invocationId, {
+            outputJson: originalAdopted.outputJson,
+            outputTextId: originalAdopted.outputTextId,
+            receivedOutputJson: originalAdopted.receivedOutputJson,
+            receivedOutputTextId: originalAdopted.receivedOutputTextId,
+        }),
+    );
+    const lease = await t.mutation(internal.execution.piStore.claim, {
+        missionId: active.missionId,
+        expectedGeneration: 1,
+        writer: "historical-correction-anchor",
+    });
+    await t.run((ctx) =>
+        ctx.db.patch(lease.sessionId, {
+            observationSequence: undefined,
+            observationEntry: undefined,
+        }),
+    );
+    const recovered = await t.mutation(
+        internal.execution.piStore.inputSnapshot,
+        lease,
+    );
+    assert(recovered.anchor);
+    const anchorControl = JSON.parse(recovered.anchor).domain.responseControl;
+    expect(anchorControl).not.toHaveProperty("draft");
+    expect(anchorControl.draftResponseHash).toBe(
+        admissionInput.domain.responseControl.draftResponseHash,
+    );
     const correction = await t.mutation(internal.execution.invocations.begin, {
         missionId: active.missionId,
         expectedGeneration: 1,
@@ -91,9 +311,9 @@ test.each([
     const original = await t.run(async (ctx) => {
         const stored = await ctx.db.get(invocation.invocationId);
         assert(stored);
-        return invocationResponses(ctx, stored);
+        return readInvocationResponse(ctx, stored, "adopted");
     });
-    expect(JSON.parse(original?.outputJson ?? "{}").text).toBe(draft);
+    expect(JSON.parse(original ?? "{}").text).toBe(draft);
 });
 
 test("an enabled controller defers an operation-bearing reply for a host-owned check", async () => {
@@ -753,6 +973,55 @@ test("an enabled controller reviews the first reply even without operations", as
     expect(requests[0]?.input.kind).toBe("check_response_coherence");
 });
 
+test("a draft above advisory capacity publishes exact text and retains its review digest without a request", async () => {
+    const { sha256Hex } = await import("@convex/domain/sourcePassages");
+    const { RESPONSE_CONTROL_MAX_INPUT_BYTES } = await import(
+        "@convex/resourcePolicy"
+    );
+    const { t, client, runId, missionId, draft } = await liveReviewFixture();
+    const row = await draft("oversized-advisory-draft");
+    const turnId = row.conversationTurnId;
+    assert(turnId);
+    const text = `${"é".repeat(RESPONSE_CONTROL_MAX_INPUT_BYTES / 2)}!`;
+    await expect(
+        t.mutation(internal.execution.invocations.finish, {
+            invocationId: row._id,
+            expectedGeneration: 1,
+            response: { kind: "complete", text },
+        }),
+    ).resolves.toMatchObject({ kind: "completed" });
+    const turn = await t.run((ctx) => ctx.db.get(turnId));
+    expect(turn?.responseControl).toMatchObject({
+        publicationReason: "context_capacity",
+        summary: { status: "unavailable" },
+        checks: [
+            {
+                draftHash: sha256Hex(text),
+                result: { status: "unavailable", reason: "context_capacity" },
+            },
+        ],
+    });
+    const requests = await t.run((ctx) =>
+        ctx.db
+            .query("agentOperationRequests")
+            .withIndex("by_mission", (q) => q.eq("missionId", missionId))
+            .take(1),
+    );
+    expect(requests).toEqual([]);
+    const history = await client.query(
+        api.execution.conversations.listMessages,
+        {
+            runId,
+            paginationOpts: { numItems: 20, cursor: null },
+        },
+    );
+    expect(
+        history.page
+            .filter((entry) => entry.role === "assistant")
+            .map((entry) => entry.text),
+    ).toEqual([text]);
+});
+
 test("the actual Pi worker delivers the reminder and publishes only the revised explanation", async () => {
     const { directedWorkbenchDefinition: workbenchDefinition } = await import(
         "@convex/domain/workbenchAgent"
@@ -841,9 +1110,10 @@ test("the actual Pi worker delivers the reminder and publishes only the revised 
             )
             .join("\n");
         expect(actualMessageText).toContain('"draft":"Research is running."');
-        expect(
-            JSON.parse(corrected.inputJson).domain.responseControl.draft,
-        ).toBe("Research is running.");
+        const admittedControl = JSON.parse(corrected.inputJson).domain
+            .responseControl;
+        expect(admittedControl.draftResponseHash).toMatch(/^[0-9a-f]{64}$/);
+        expect(admittedControl).not.toHaveProperty("draft");
         expect(
             invocations.map(
                 (i) => JSON.parse(i.receivedOutputJson ?? "{}").text,

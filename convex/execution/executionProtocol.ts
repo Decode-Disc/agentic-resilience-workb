@@ -24,6 +24,17 @@ import {
     validationFeedbackValidator,
 } from "./operationContracts";
 
+/** The preparation model operations that own a one-shot visible output stream. */
+export const ONE_SHOT_PREPARATION_OPERATIONS = [
+    "source_qualification",
+    "source_comparison",
+    "source_documentary_control",
+] as const;
+
+export function isOneShotPreparationOperation(operation: string) {
+    return ONE_SHOT_PREPARATION_OPERATIONS.some((value) => value === operation);
+}
+
 export {
     agentDefinitionIdValidator,
     agentDefinitionVersionValidator,
@@ -313,6 +324,11 @@ export const invocationResponseValidator = v.union(
     agentCompletionValidator,
     v.object({ kind: v.literal("blocked"), code: v.string() }),
 );
+
+/** Compaction retains native output separately from its application disposition. */
+export function successfulAuxiliaryResponse() {
+    return { kind: "operations" as const, requests: [] };
+}
 
 export const invocationReplyValidator = v.object({
     response: invocationResponseValidator,

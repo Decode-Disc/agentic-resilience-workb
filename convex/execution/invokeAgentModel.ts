@@ -2,11 +2,14 @@
 
 import { internal } from "@convex/_generated/api";
 import type { ActionCtx } from "@convex/_generated/server";
-import { sha256Hex } from "@convex/domain/sourcePassages";
+import { stableStringify } from "@convex/domain/sourcePassages";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { rejectedOutputDiagnostic } from "@convex/integrations/modelTransport";
 import { revisionRoute } from "@convex/modelConfiguration";
-import { resolveGenerationAuthority } from "@convex/resourcePolicy";
+import {
+    MAX_OBSERVABLE_OUTPUT_BYTES,
+    resolveGenerationAuthority,
+} from "@convex/resourcePolicy";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -24,9 +27,12 @@ import {
     type invocationReplyValidator,
     invocationResponseValidator,
     invocationStructureError,
+    successfulAuxiliaryResponse,
 } from "./executionProtocol";
 
-import { retainedTextParts } from "./retainedText";
+import { admittedInputHash } from "./journal";
+import { stageObservedBody } from "./observedReply";
+import { retainedTextParts, verifyRetainedText } from "./retainedText";
 import { simulationFetch } from "./simulation";
 
 function decodeReceivedReply(
@@ -58,7 +64,7 @@ function decodeReceivedReply(
     };
     let decoded: unknown;
     if (auxiliary) {
-        decoded = { kind: "operations", requests: [] };
+        decoded = successfulAuxiliaryResponse();
     } else if (definition.completionTransport === "native_tool") {
         if (result.requests.length === 0) {
             decoded = { kind: "completion_submission", call: null };
@@ -164,10 +170,16 @@ export async function invokeControlledGeneration(
         mission.definitionId,
         mission.definitionVersion,
     );
-    const tools = agentToolSchemas(
-        definition,
-        JSON.parse(invocation.inputJson),
-    );
+    const inputHash = admittedInputHash(invocation);
+    const read = internal.execution.invocationLifecycle.executionInputFragment;
+    const first = await ctx.runQuery(read, { ...args, inputHash, index: 0 });
+    const fragments = [first.content];
+    for (let index = 1; index < first.fragmentCount; index++)
+        fragments.push(
+            (await ctx.runQuery(read, { ...args, inputHash, index })).content,
+        );
+    const inputJson = verifyRetainedText(first, fragments.join(""));
+    const tools = agentToolSchemas(definition, JSON.parse(inputJson));
     const attempt = {
         missionId: mission._id,
         invocationId: invocation._id,
@@ -188,7 +200,7 @@ export async function invokeControlledGeneration(
                 : "agent_reasoning",
         operationKey: `mission:${mission._id}:invocation:${invocation._id}:attempt:1`,
         attempt: 1,
-        inputHash: sha256Hex(invocation.inputJson),
+        inputHash,
     };
     const recordReply = async (
         reply: Infer<typeof invocationReplyValidator>,
@@ -198,28 +210,68 @@ export async function invokeControlledGeneration(
         >,
         observableReplyJson?: string,
     ) => {
-        if (simulated) {
-            await ctx.runMutation(
-                internal.execution.invocationLifecycle.retainOutput,
-                {
-                    ...args,
-                    responseJson: JSON.stringify(reply.response),
-                    ...(reply.rawOutputJson
-                        ? { rawOutputJson: reply.rawOutputJson }
-                        : {}),
-                    ...(observableReplyJson
-                        ? {
-                              observableReplyJson: JSON.stringify({
-                                  ...JSON.parse(observableReplyJson),
-                                  provenance: "simulation",
-                              }),
-                          }
-                        : {}),
-                },
+        if (!simulated && !admitted) return retainReply(reply);
+        if (simulated || invocation.generationBackend?.id === "pi-durable") {
+            const responseJson = stableStringify(reply.response);
+            const rawOutputJson = reply.rawOutputJson;
+            const observed =
+                observableReplyJson === undefined
+                    ? undefined
+                    : JSON.parse(observableReplyJson);
+            const envelope = simulated
+                ? stableStringify({
+                      ...(observed ?? { version: 1, response: reply.response }),
+                      provenance: "simulation",
+                  })
+                : observed === undefined
+                  ? undefined
+                  : stableStringify(observed);
+            const responseTextId = await stageObservedBody(
+                ctx,
+                args,
+                "response",
+                responseJson,
             );
+            const rawOutputTextId = await stageObservedBody(
+                ctx,
+                args,
+                "raw",
+                rawOutputJson,
+                MAX_OBSERVABLE_OUTPUT_BYTES,
+            );
+            const observableReplyTextId = await stageObservedBody(
+                ctx,
+                args,
+                "reply",
+                envelope,
+            );
+            const prepared = {
+                ...(responseTextId ? { responseTextId } : { responseJson }),
+                ...(rawOutputTextId ? { rawOutputTextId } : { rawOutputJson }),
+            };
+            const observation = observableReplyTextId
+                ? { observableReplyTextId }
+                : { observableReplyJson: envelope };
+            if (simulated)
+                await ctx.runMutation(
+                    internal.execution.invocationLifecycle.retainOutput,
+                    {
+                        ...args,
+                        ...prepared,
+                        ...observation,
+                    },
+                );
+            else
+                await ctx.runMutation(
+                    internal.execution.invocationLifecycle.recordModelReply,
+                    {
+                        attempt: { ...attempt, ...receipt },
+                        prepared,
+                        ...observation,
+                    },
+                );
             return reply;
         }
-        if (!admitted) return retainReply(reply);
         await ctx.runMutation(
             internal.execution.invocationLifecycle.recordModelReply,
             {
@@ -237,7 +289,7 @@ export async function invokeControlledGeneration(
     try {
         await ctx.runQuery(
             internal.execution.invocationLifecycle.forExecution,
-            args,
+            { ...args, inputHash },
         );
     } catch (error) {
         const code =
@@ -328,7 +380,7 @@ export async function invokeControlledGeneration(
         return observedReply;
     };
     const simulatedResponse = simulated
-        ? await ctx.runQuery(internal.execution.simulation.invoke, args)
+        ? await ctx.runAction(internal.execution.simulation.invoke, args)
         : undefined;
     let result: AgentGenerationResult;
     let dispatchRefusal: string | undefined;
@@ -337,7 +389,7 @@ export async function invokeControlledGeneration(
             {
                 route,
                 instructions: definition.instructions,
-                prompt: invocation.inputJson,
+                prompt: inputJson,
                 operations: tools,
             },
             {

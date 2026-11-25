@@ -83,6 +83,40 @@ test("issued canonical conversation fragments preserve Unicode boundaries and ca
     ).toEqual(before);
 });
 
+test("consultation pages a retained reply larger than the transaction read budget", async () => {
+    const reply = `${'"'.repeat(32_550)}${"😀".repeat(160)}${"m".repeat(300_000)}`;
+    const f = await seedHistoryMission("Prior question", {
+        reply,
+        transactionLimits: { bytesRead: 256 * 1024 },
+    });
+    const chunks: string[] = [];
+    let cursor: string | undefined;
+    let consumed = 0;
+    do {
+        const { outcome } = await dispatchHistory(f, {
+            kind: "consult_conversation",
+            ...(cursor ? { cursor } : {}),
+        });
+        expect(outcome).toMatchObject({ kind: "success" });
+        assert(outcome.kind === "success");
+        const page = JSON.parse(outcome.valueJson);
+        for (const entry of page.entries) {
+            if (entry.role !== "assistant") continue;
+            expect(entry.offset).toBe(consumed);
+            expect(entry.totalCharacters).toBe(reply.length);
+            expect(entry.content).toEqual(expect.any(String));
+            expect(entry.content).not.toMatch(/[\uD800-\uDBFF]$/);
+            expect(entry.content).not.toMatch(/^[\uDC00-\uDFFF]/);
+            chunks.push(entry.content);
+            consumed += entry.content.length;
+        }
+        if (page.continueCursor) expect(page.continueCursor).not.toBe(cursor);
+        cursor = page.continueCursor ?? undefined;
+    } while (cursor);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.join("")).toBe(reply);
+});
+
 test("a research reader's existing snapshot excludes an older queued message published by a later response", async () => {
     const f = await seedInspectedEvidence();
     vi.stubEnv("E2E_FIXTURES_ENABLED", "true");

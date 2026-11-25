@@ -23,6 +23,34 @@ import {
     responseReviewPin,
 } from "./workbenchResponseControlContracts";
 
+export const workbenchOperationAdmission = v.object({
+    toolAvailability: v.union(
+        v.null(),
+        v.object({
+            single: v.boolean(),
+            framing: v.union(
+                v.literal(false),
+                v.literal("initial"),
+                v.literal("established"),
+            ),
+            approvals: v.boolean(),
+            sourceRequest: v.union(
+                v.literal("legacy"),
+                v.literal("modern"),
+                v.null(),
+            ),
+            savedMaterial: v.boolean(),
+            preparedNeeds: v.boolean(),
+        }),
+    ),
+    messageIds: v.array(v.string()),
+    settledNeedIds: v.array(v.string()),
+    framingRevision: v.optional(v.number()),
+});
+export type WorkbenchOperationAdmission = Infer<
+    typeof workbenchOperationAdmission
+>;
+
 export const workbenchCommand = v.union(
     v.literal("/pause"),
     v.literal("/resume"),

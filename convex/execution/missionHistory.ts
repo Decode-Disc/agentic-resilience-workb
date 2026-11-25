@@ -23,7 +23,14 @@ export async function readMissionState(
     | { kind: "ready"; state: Record<string, unknown> }
     | { kind: "unavailable"; code: string }
 > {
-    const context = await ctx.runQuery(internal.execution.context.build, args);
+    const mission = await ctx.db.get(args.missionId);
+    const nativeReference =
+        mission?.executionRuntime === "pi-durable" &&
+        maximumBytes !== undefined;
+    const context = await ctx.runQuery(internal.execution.context.build, {
+        ...args,
+        correctionAdmission: nativeReference ? true : undefined,
+    });
     if (context.kind === "blocked")
         return { kind: "unavailable", code: context.code };
     const input: unknown = JSON.parse(context.inputJson);
@@ -34,11 +41,7 @@ export async function readMissionState(
         typeof input.definition.version !== "number"
     )
         throw executionError("mission_state_invalid");
-    const mission = await ctx.db.get(args.missionId);
-    if (
-        mission?.executionRuntime === "pi-durable" &&
-        maximumBytes !== undefined
-    )
+    if (nativeReference)
         return {
             kind: "ready",
             state: {

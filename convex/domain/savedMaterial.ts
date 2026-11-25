@@ -225,10 +225,15 @@ export async function documentaryInventory(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
     reads?: SourceReviewReads,
+    instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
 ) {
     let frame: Awaited<ReturnType<typeof documentaryMaterialContext>>;
     try {
-        frame = await documentaryMaterialContext(ctx, mission);
+        frame = await documentaryMaterialContext(
+            ctx,
+            mission,
+            instructionTexts,
+        );
     } catch (error) {
         if (
             [

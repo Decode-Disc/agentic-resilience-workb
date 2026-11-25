@@ -1,9 +1,15 @@
 import { api, internal } from "@convex/_generated/api";
+import type { Doc } from "@convex/_generated/dataModel";
 import { executionError } from "@convex/execution/errors";
 import type { ModelRoute } from "@convex/integrations/modelRouting";
+import { recoverPiInvocationBody } from "@convex/integrations/piInvocation";
 import { runPiMission } from "@convex/integrations/piMission";
 import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
-import { getFunctionName } from "convex/server";
+import {
+    type FunctionArgs,
+    type FunctionReturnType,
+    getFunctionName,
+} from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
@@ -69,6 +75,78 @@ test.each([
             simulation: false,
         });
     }
+    let verifiedStagedReceipt = false;
+    if (!compaction) {
+        await expect(
+            f.t.action((ctx) =>
+                runPiMission(
+                    {
+                        ...ctx,
+                        runMutation: async (reference, ...args) => {
+                            if (
+                                getFunctionName(reference) ===
+                                "execution/invocationLifecycle:recordModelReply"
+                            ) {
+                                const settlement = args[0] as FunctionArgs<
+                                    typeof internal.execution.invocationLifecycle.recordModelReply
+                                >;
+                                const raw =
+                                    settlement.prepared?.rawOutputTextId;
+                                const envelope =
+                                    settlement.observableReplyTextId;
+                                assert(
+                                    raw &&
+                                        envelope &&
+                                        settlement.attempt.invocationId,
+                                );
+                                expect(settlement.reply).toBeUndefined();
+                                expect(
+                                    settlement.observableReplyJson,
+                                ).toBeUndefined();
+                                const invocationId =
+                                    settlement.attempt.invocationId;
+                                const original = await f.t.run((db) =>
+                                    db.db.get(invocationId),
+                                );
+                                assert(original?.providerCallId);
+                                const providerCallId = original.providerCallId;
+                                const wrong = {
+                                    ...settlement,
+                                    prepared: {
+                                        ...settlement.prepared,
+                                        rawOutputTextId: envelope,
+                                    },
+                                };
+                                await expect(
+                                    ctx.runMutation(
+                                        internal.execution.invocationLifecycle
+                                            .recordModelReply,
+                                        wrong,
+                                    ),
+                                ).rejects.toThrow("invocation_result_invalid");
+                                expect(
+                                    await f.t.run((db) =>
+                                        db.db.get(providerCallId),
+                                    ),
+                                ).toMatchObject({ status: "started" });
+                                expect(
+                                    await f.t.run((db) =>
+                                        db.db.get(invocationId),
+                                    ),
+                                ).not.toHaveProperty("receivedOutputJson");
+                                verifiedStagedReceipt = true;
+                            }
+                            return ctx.runMutation(reference, ...args);
+                        },
+                    },
+                    { missionId: f.missionId, expectedGeneration: 4 },
+                    "staged-receipt-test",
+                    nodeActionGenerationDeadline(Date.now()),
+                ),
+            ),
+        ).rejects.toMatchObject({ data: { code: "invalid_output" } });
+        expect(verifiedStagedReceipt).toBe(true);
+    }
     await f.t.finishAllScheduledFunctions(
         () => vi.advanceTimersByTime(10),
         500,
@@ -97,11 +175,18 @@ test.each([
     );
     if (!invocation) throw new Error("Expected observed invocation");
     if (compaction) expect(invocation.status).not.toBe("returned");
-    const { invocationRawOutputJson } = await import(
-        "@convex/execution/journal"
+    const session = await f.t.run((ctx) =>
+        ctx.db
+            .query("piSessions")
+            .withIndex("by_mission", (q) => q.eq("missionId", f.missionId))
+            .unique(),
     );
-    const restored = await f.t.run((ctx) =>
-        invocationRawOutputJson(ctx, invocation),
+    assert(session);
+    const restored = await f.t.action((ctx) =>
+        recoverPiInvocationBody(ctx, invocation, "raw", {
+            expectedGeneration: 4,
+            sessionId: session._id,
+        }),
     );
     expect(restored?.includes(text)).toBe(true);
     expect(invocation.rawOutputJson).toBeUndefined();
@@ -203,6 +288,45 @@ test.each([
     });
     expect(network).toHaveBeenCalledOnce();
 }, 30000);
+
+async function inspectReplies(
+    fixture: Awaited<ReturnType<typeof seedInspectedEvidence>>,
+    replies: Doc<"agentInvocationPayloads">[],
+) {
+    const { t, visitorId, userId } = fixture;
+    await t.run((ctx) => ctx.db.patch(visitorId, { role: "admin" }));
+    const admin = t.withIdentity({ subject: `${userId}|native-journal` });
+    return Promise.all(
+        replies.map(async ({ invocationId, runId }) => {
+            const args = { invocationId, runId, part: "reply" as const };
+            const detail = await admin.query(
+                api.adminOperations.readInvocationJournalPayload,
+                args,
+            );
+            assert(
+                detail.kind === "recorded" &&
+                    detail.payload.state === "complete",
+            );
+            if (detail.payload.json !== undefined) return detail.payload.json;
+            const parts: string[] = [];
+            let cursor: string | null = null;
+            while (true) {
+                const page: FunctionReturnType<
+                    typeof api.adminOperations.listInvocationPayloadFragmentsPage
+                > = await admin.query(
+                    api.adminOperations.listInvocationPayloadFragmentsPage,
+                    {
+                        ...args,
+                        paginationOpts: { numItems: 1, cursor },
+                    },
+                );
+                parts.push(...page.page.map(({ content }) => content));
+                if (page.isDone) return parts.join("");
+                cursor = page.continueCursor;
+            }
+        }),
+    );
+}
 
 async function fixture(reasoningEffort?: ModelRoute["reasoningEffort"]) {
     vi.useFakeTimers();
@@ -728,9 +852,10 @@ test.each([
         mission: await ctx.db.get(current.missionId),
     }));
     const firstReply = observed.replies[0];
-    if (firstReply?.state !== "complete" || firstReply.json === undefined)
-        throw new Error("Expected complete observable reply");
-    expect(JSON.parse(firstReply.json).content).toEqual([
+    assert(firstReply?.state === "complete");
+    const [replyJson] = await inspectReplies(current, [firstReply]);
+    assert(replyJson);
+    expect(JSON.parse(replyJson).content).toEqual([
         {
             type: "toolCall",
             id: "first-call",
@@ -903,17 +1028,12 @@ test.each([
     ).toEqual([
         { state: "incomplete", code: "not_dispatched", json: undefined },
     ]);
+    const replies = await inspectReplies(f, completeReplies);
     expect(
-        completeReplies.map((p) => {
-            if (p.state !== "complete" || p.json === undefined)
-                throw new Error("Expected a complete observable reply");
-            return JSON.parse(p.json).content[0].rawArguments;
-        }),
+        replies.map((json) => JSON.parse(json).content[0].rawArguments),
     ).toEqual(Array(completeReplies.length).fill(original));
-    expect(JSON.stringify(observed.replies)).toContain("argumentsError");
-    expect(JSON.stringify(observed.replies)).not.toContain(
-        "NON_OBSERVABLE_REASONING",
-    );
+    expect(replies.join("")).toContain("argumentsError");
+    expect(replies.join("")).not.toContain("NON_OBSERVABLE_REASONING");
 
     expect(observed.calls.length).toBeGreaterThan(1);
     expect(observed.calls.every((call) => call.status === "succeeded")).toBe(
@@ -3114,6 +3234,7 @@ test("nonterminal native tool turns avoid terminal invocation lookups", async ()
         simulation: false,
     });
     let nonterminalLookups = 0;
+    const adoptionInputs: unknown[] = [];
     const { nodeActionGenerationDeadline } = await import(
         "@convex/resourcePolicy"
     );
@@ -3121,6 +3242,14 @@ test("nonterminal native tool turns avoid terminal invocation lookups", async ()
         runPiMission(
             {
                 ...ctx,
+                runMutation: async (reference, ...args) => {
+                    if (
+                        getFunctionName(reference) ===
+                        "execution/invocations:finish"
+                    )
+                        adoptionInputs.push(args[0]);
+                    return ctx.runMutation(reference, ...args);
+                },
                 runQuery: async (reference, ...args) => {
                     if (
                         getFunctionName(reference) ===
@@ -3142,6 +3271,22 @@ test("nonterminal native tool turns avoid terminal invocation lookups", async ()
     );
     expect(turn).toBe(2);
     expect(nonterminalLookups).toBe(0);
+    expect(adoptionInputs).toHaveLength(2);
+    for (const input of adoptionInputs)
+        expect(input).not.toHaveProperty("rawOutputJson");
+    const invocations = await f.t.run((ctx) =>
+        ctx.db
+            .query("agentInvocations")
+            .filter((q) => q.eq(q.field("missionId"), missionId))
+            .collect(),
+    );
+    const terminal = invocations.find(
+        (invocation) => invocation.nativeCompletion,
+    );
+    assert(terminal?.rawOutputJson);
+    expect(JSON.parse(terminal.rawOutputJson).backendOutputJson).toContain(
+        '"done"',
+    );
 });
 
 test.each([
@@ -3185,6 +3330,10 @@ test.each([
         expectedGeneration: 1,
         simulation: true,
     });
+    const replyText =
+        scenario === "pending_operations"
+            ? "Validated active request. ".repeat(3000).trim()
+            : "Validated active request.";
     let turns = 0;
     let waitingId:
         | import("@convex/_generated/dataModel").Id<"agentOperationRequests">
@@ -3210,13 +3359,15 @@ test.each([
                         text:
                             scenario === "invalid_arguments" && turn === 1
                                 ? {}
-                                : "Validated active request.",
+                                : replyText,
                     }),
                 },
             ],
         };
     };
     let injected = false;
+    let stagedSimulation = false;
+    let adoptedSimulationByReference = false;
     const run = () =>
         f.t.action((ctx) =>
             runPiMission(
@@ -3224,11 +3375,41 @@ test.each([
                     ...ctx,
                     runMutation: async (reference, ...args) => {
                         if (
+                            scenario === "pending_operations" &&
+                            getFunctionName(reference) ===
+                                "execution/invocationLifecycle:retainOutput"
+                        ) {
+                            const observation = args[0] as FunctionArgs<
+                                typeof internal.execution.invocationLifecycle.retainOutput
+                            >;
+                            if (
+                                observation.responseTextId &&
+                                observation.observableReplyTextId
+                            ) {
+                                expect(
+                                    observation.responseJson,
+                                ).toBeUndefined();
+                                expect(
+                                    observation.observableReplyJson,
+                                ).toBeUndefined();
+                                stagedSimulation = true;
+                            }
+                        }
+                        if (
                             getFunctionName(reference) ===
                                 "execution/invocations:finish" &&
                             !injected &&
                             scenario !== "invalid_arguments"
                         ) {
+                            if (scenario === "pending_operations") {
+                                const finish = args[0] as FunctionArgs<
+                                    typeof internal.execution.invocations.finish
+                                >;
+                                expect(finish.response).toBeUndefined();
+                                expect(finish.rawOutputJson).toBeUndefined();
+                                expect(finish.preparedReply).toBeDefined();
+                                adoptedSimulationByReference = true;
+                            }
                             injected = true;
                             if (scenario === "stale_instructions")
                                 await f.client.mutation(
@@ -3290,6 +3471,11 @@ test.each([
             );
             await run();
             expect(turns).toBe(1);
+            expect(stagedSimulation).toBe(true);
+            expect(adoptedSimulationByReference).toBe(true);
+            expect(
+                await f.t.run((ctx) => ctx.db.query("providerCalls").collect()),
+            ).toEqual([]);
             expect(
                 (await f.t.run((ctx) => ctx.db.get(deferredId)))?.outcome,
             ).toEqual({ kind: "success", valueJson: '{"value":14}' });
@@ -3306,11 +3492,20 @@ test.each([
         }));
         expect(state.mission).toMatchObject({
             status: "completed",
-            result: {
-                kind: "conversation_validation_v1",
-                text: "Validated active request.",
-            },
+            textualOutcome: { kind: "conversation_validation_v1" },
         });
+        const history = await f.client.query(
+            api.execution.conversations.listMessages,
+            {
+                runId: f.runId,
+                paginationOpts: { numItems: 20, cursor: null },
+            },
+        );
+        expect(
+            history.page
+                .filter((entry) => entry.role === "assistant")
+                .map((entry) => entry.text),
+        ).toEqual([replyText]);
         if (scenario !== "invalid_arguments")
             expect(state.events.some((event) => event.code === scenario)).toBe(
                 true,

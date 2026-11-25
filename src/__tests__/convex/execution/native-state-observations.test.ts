@@ -1,8 +1,12 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { executionError } from "@convex/execution/errors";
-import { recordContextObservation } from "@convex/execution/journal";
+import {
+    readMissionHistoryEventFragment,
+    recordContextObservation,
+} from "@convex/execution/journal";
 import { suspendInterruptedResearch } from "@convex/execution/researchControl";
 import { readRetainedText } from "@convex/execution/retainedText";
 import { runPiMission } from "@convex/integrations/piMission";
@@ -1221,6 +1225,209 @@ async function nativeSession<Result>(
         }
     });
 }
+
+test("delivers and acknowledges a context observation larger than one transaction read budget", async () => {
+    const f = await seedWorkbench(
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { bytesRead: 128 * 1024 },
+    );
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: true,
+        },
+    );
+    assert(active);
+    await nativeSession(f, active.missionId, async () => null);
+    const value = {
+        excerpt: `${"x".repeat(70_000)}${"界".repeat(2_000)}${"y".repeat(120_000)} 😀`,
+    };
+    const observation = {
+        key: "large-observation",
+        topic: "research",
+        actor: { type: "system" },
+        value,
+    } as const;
+    const eventId = await f.t.run((ctx) =>
+        recordContextObservation(ctx, f.runId, observation),
+    );
+    expect(
+        await f.t.run((ctx) =>
+            recordContextObservation(ctx, f.runId, observation),
+        ),
+    ).toBe(eventId);
+    await expect(
+        f.t.run((ctx) =>
+            recordContextObservation(ctx, f.runId, {
+                ...observation,
+                value: { excerpt: value.excerpt.replace("界", "海") },
+            }),
+        ),
+    ).rejects.toThrow("journal_payload_conflict");
+    const original = await f.t.run((ctx) => ctx.db.get(eventId));
+    assert(original?.contextHistoryHash);
+    await f.t.run((ctx) =>
+        ctx.db.patch(eventId, { contextHistoryHash: undefined }),
+    );
+    await expect(
+        f.t.run(async (ctx) => {
+            const event = await ctx.db.get(eventId);
+            assert(event);
+            return readMissionHistoryEventFragment(ctx, event, 0, 8192);
+        }),
+    ).rejects.toThrow("131072 bytes");
+    const secondId = await f.t.run(async (ctx) => {
+        const id = await recordContextObservation(ctx, f.runId, {
+            ...observation,
+            key: "another-legacy-observation",
+            value: { excerpt: "Unmigrated" },
+        });
+        await ctx.db.patch(id, { contextHistoryHash: undefined });
+        return id;
+    });
+    const inventory = internal.execution.journal.pendingContextHistoryBackfills;
+    const first = await f.t.query(inventory, {
+        paginationOpts: { cursor: null, numItems: 1 },
+    });
+    expect(first.page).toEqual([{ runId: f.runId, eventId }]);
+    expect(first.isDone).toBe(false);
+    const backfillNext =
+        internal.execution.journal.backfillNextContextHistoryHash;
+    await expect(f.t.action(backfillNext, {})).resolves.toEqual({
+        runId: f.runId,
+        eventId,
+        historyHash: original.contextHistoryHash,
+    });
+    await expect(
+        f.t.action(internal.execution.journal.backfillContextHistoryHash, {
+            runId: f.runId,
+            eventId,
+        }),
+    ).resolves.toBe(original.contextHistoryHash);
+    const next = await f.t.query(inventory, {
+        paginationOpts: { cursor: first.continueCursor, numItems: 1 },
+    });
+    expect(next.page).toEqual([{ runId: f.runId, eventId: secondId }]);
+    await expect(f.t.action(backfillNext, {})).resolves.toMatchObject({
+        runId: f.runId,
+        eventId: secondId,
+        historyHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    await expect(f.t.action(backfillNext, {})).resolves.toBeNull();
+    expect(
+        await f.t.query(inventory, {
+            paginationOpts: { cursor: null, numItems: 10 },
+        }),
+    ).toMatchObject({
+        page: [],
+        isDone: true,
+    });
+    const event = await f.t.run((ctx) => ctx.db.get(eventId));
+    assert(event?.nativeInputSequence && event.contextObservation);
+    let history = "";
+    let historyHash: string | undefined;
+    let totalCharacters: number;
+    do {
+        const fragment = await f.t.run((ctx) =>
+            readMissionHistoryEventFragment(ctx, event, history.length, 8192),
+        );
+        historyHash ??= fragment.contentHash;
+        expect(fragment.contentHash).toBe(historyHash);
+        expect(fragment.end).toBeGreaterThan(history.length);
+        history += fragment.content;
+        totalCharacters = fragment.totalCharacters;
+    } while (history.length < totalCharacters);
+    const { contextHistoryHash: _, ...metadata } = event;
+    expect(history).toBe(
+        stableStringify({
+            event: metadata,
+            version: 1,
+            observation: { state: "complete", value },
+        }),
+    );
+    expect(historyHash).toBe(sha256Hex(history));
+
+    const { nativeInputSequence: sequence, contextObservation } = event;
+    const lastFragment = await f.t.run((ctx) =>
+        ctx.db
+            .query("retainedTextFragments")
+            .withIndex("by_text_and_index", (q) =>
+                q.eq("textId", contextObservation.textId).eq("index", 1),
+            )
+            .unique(),
+    );
+    assert(lastFragment);
+    await f.t.run((ctx) =>
+        ctx.db.patch(lastFragment._id, {
+            content: lastFragment.content.replace("界", "海"),
+        }),
+    );
+    await nativeSession(f, active.missionId, async (ctx, root, storage) => {
+        const delivery = createNativeInputDelivery(
+            ctx,
+            { missionId: active.missionId, expectedGeneration: 1 },
+            storage,
+        );
+        const lease = storage.lease;
+        assert(lease);
+        await expect(
+            delivery.synchronizeObservations(root, BACKGROUND_CONTEXT),
+        ).rejects.toThrow("retained_text_invalid");
+        const refused = await ctx.runQuery(
+            internal.execution.piStore.pendingObservations,
+            lease,
+        );
+        expect(refused.acknowledged).toBeLessThan(sequence);
+        await f.t.run((ctx) =>
+            ctx.db.patch(lastFragment._id, { content: lastFragment.content }),
+        );
+        await delivery.synchronizeObservations(root, BACKGROUND_CONTEXT);
+        const frontier = await ctx.runQuery(
+            internal.execution.piStore.pendingObservations,
+            lease,
+        );
+        const second = await f.t.run((ctx) => ctx.db.get(secondId));
+        assert(second?.nativeInputSequence);
+        expect(frontier.acknowledged).toBe(second.nativeInputSequence);
+        const entries = (
+            await root.entries(
+                { order: "ascending" },
+                100,
+                undefined,
+                BACKGROUND_CONTEXT,
+            )
+        ).items;
+        const observed = entries.filter(
+            (entry) => entry.kind === "application.observation",
+        );
+        expect(observed).toHaveLength(2);
+        expect(observed[0]?.model).toEqual([
+            {
+                role: "user",
+                content: `Application observation (data, not an analyst message):
+${JSON.stringify({
+    version: 1,
+    topic: "research",
+    sequence,
+    historyReference: eventId,
+    actor: { type: "system" },
+    occurredAt: event.occurredAt,
+    value,
+})}`,
+                timestamp: event.occurredAt,
+            },
+        ]);
+    });
+});
 
 test("an observation acknowledgement loss reopens the same durable entry without replaying the effect", async () => {
     const f = await seedWorkbench(true);

@@ -1,10 +1,20 @@
-import { api, internal } from "@convex/_generated/api";
+import { readFileSync } from "node:fs";
+import { api, components, internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { sha256Hex } from "@convex/domain/sourcePassages";
 import { executionError } from "@convex/execution/errors";
+import {
+    readRetainedText,
+    retainedTextParts,
+    stageRetainedText,
+} from "@convex/execution/retainedText";
 import { runPiMission } from "@convex/integrations/piMission";
-import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
 import { PiConvexStorage } from "@convex/integrations/piStorage";
+import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
+import { saveMessage } from "@convex-dev/agent";
 import { type FunctionArgs, getFunctionName } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { createConversationStorage } from "@/__tests__/setup/legacy-conversation-storage";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -46,7 +56,10 @@ test("a reopened final reply adopts once after an operation arrived before compl
                         const finish = args as FunctionArgs<
                             typeof internal.execution.invocations.finish
                         >;
-                        if (finish.response.kind === "complete") {
+                        if (
+                            finish.response?.kind === "complete" ||
+                            finish.preparedReply
+                        ) {
                             const run = await t.run((c) => c.db.get(runId));
                             assert(run?.currentFramingRevisionId);
                             const revisionId = run.currentFramingRevisionId;
@@ -146,7 +159,7 @@ test("reopening after a stale tool reply preserves its refusal instead of execut
                         const finish = args as FunctionArgs<
                             typeof internal.execution.invocations.finish
                         >;
-                        if (finish.response.kind === "operations") {
+                        if (finish.response?.kind === "operations") {
                             await client.mutation(
                                 api.execution.conversations.submit,
                                 {
@@ -209,7 +222,48 @@ test("reopening after a stale tool reply preserves its refusal instead of execut
     ).toEqual([]);
 }, 30000);
 
-test("a crash after publication settles the original native task before the next mission without replaying model work", async () => {
+test.each([
+    null,
+    "completed-unsettled.json",
+    "fragmented-completed-unsettled.json",
+])("a crash after publication settles the native task before the next mission (baseline: %s)", async (captureName) => {
+    const baseline = captureName
+        ? (JSON.parse(
+              readFileSync(
+                  `.agents/artifacts/sources-workflow-no-legacy/baseline-recovery/${captureName}`,
+                  "utf8",
+              ),
+          ) as {
+              mission: {
+                  definitionVersion: number;
+                  result?: { kind: "workbench_v1"; text: string };
+              };
+              delivery: { contentHash: string };
+              messages: { message: { content: string } }[];
+              resultFragments?: { content: string }[];
+              resultManifest?: { contentHash: string };
+          })
+        : undefined;
+    const legacyResultJson = baseline?.resultFragments
+        ?.map(({ content }) => content)
+        .join("");
+    const archivedReply = baseline?.messages
+        .map(({ message }) => message.content)
+        .join("");
+    if (baseline) {
+        const { directedWorkbenchDefinition } = await import(
+            "@convex/domain/workbenchAgent"
+        );
+        assert(archivedReply);
+        expect(directedWorkbenchDefinition.version).toBe(
+            baseline.mission.definitionVersion,
+        );
+        expect(sha256Hex(archivedReply)).toBe(baseline.delivery.contentHash);
+        vi.spyOn(directedWorkbenchDefinition, "simulate").mockReturnValue({
+            kind: "complete",
+            text: archivedReply,
+        });
+    }
     const { t, client, runId } = await seedWorkbench(true);
     const active = await t.mutation(
         internal.execution.conversations.startTurn,
@@ -247,6 +301,7 @@ test("a crash after publication settles the original native task before the next
         ).rejects.toThrow();
     } finally {
         fault.mockRestore();
+        vi.restoreAllMocks();
     }
     const before = await t.run(async (ctx) => ({
         mission: await ctx.db.get(active.missionId),
@@ -264,6 +319,165 @@ test("a crash after publication settles the original native task before the next
     const sessionId = before.session?._id;
     assert(sessionId);
     await t.run((ctx) => ctx.db.patch(sessionId, { leaseUntil: 0 }));
+    if (baseline) {
+        const { deliveryId, storageMessageRef } = await t.run(async (ctx) => {
+            const mission = await ctx.db.get(active.missionId);
+            const turn = await ctx.db.get(active.turnId);
+            assert(
+                mission &&
+                    "protocolVersion" in mission &&
+                    mission.textualOutcome,
+            );
+            assert(turn?.publishedMessageId);
+            const delivery = await ctx.db.get(turn.publishedMessageId);
+            assert(delivery?.bodyTextId);
+            const bodyTextId = delivery.bodyTextId;
+            const body = await readRetainedText(ctx, bodyTextId);
+            const run = await ctx.db.get(runId);
+            assert(run?.ownerVisitorId);
+            const storageRef = await createConversationStorage(
+                ctx,
+                run.ownerVisitorId,
+            );
+            expect(sha256Hex(body)).toBe(baseline.delivery.contentHash);
+            const messageIds = [];
+            for (const { message } of baseline.messages) {
+                const saved = await saveMessage(ctx, components.agent, {
+                    threadId: storageRef,
+                    message: { role: "assistant", content: message.content },
+                });
+                messageIds.push(saved.messageId);
+            }
+            const [first] = messageIds;
+            assert(first);
+            const storageMessageRef =
+                messageIds.length === 1 ? first : JSON.stringify(messageIds);
+            await ctx.db.patch(turn.conversationId, { storageRef });
+            await ctx.db.patch(delivery._id, {
+                storageMessageRef,
+                bodyTextId: undefined,
+                bodyContentHash: undefined,
+            });
+            if (legacyResultJson) {
+                const { parts, manifest } = retainedTextParts(legacyResultJson);
+                expect(manifest.contentHash).toBe(
+                    baseline.resultManifest?.contentHash,
+                );
+                expect(parts).toEqual(
+                    baseline.resultFragments?.map(({ content }) => content),
+                );
+                let resultTextId: Id<"retainedTexts"> | undefined;
+                for (const [index, content] of parts.entries())
+                    resultTextId = await stageRetainedText(
+                        ctx,
+                        `${mission._id}:result`,
+                        { ...manifest, index, content },
+                    );
+                assert(resultTextId);
+                await ctx.db.patch(mission._id, {
+                    textualOutcome: undefined,
+                    resultTextId,
+                });
+            } else {
+                assert(baseline.mission.result);
+                await ctx.db.patch(mission._id, {
+                    textualOutcome: undefined,
+                    result: baseline.mission.result,
+                });
+            }
+            const fragments = await ctx.db
+                .query("retainedTextFragments")
+                .withIndex("by_text_and_index", (q) =>
+                    q.eq("textId", bodyTextId),
+                )
+                .collect();
+            for (const fragment of fragments) await ctx.db.delete(fragment._id);
+            await ctx.db.delete(bodyTextId);
+            return { deliveryId: delivery._id, storageMessageRef };
+        });
+        for (const phase of ["draining", "frozen", "active"] as const)
+            await t.mutation(
+                internal.execution.retainedText.advanceStreamUpgrade,
+                { phase },
+            );
+        await t.mutation(
+            internal.execution.conversations.beginMessageMigration,
+            { runId },
+        );
+        const sourceInventoryHash = await t.action(
+            internal.integrations.agentStorage.prepareConversationMigration,
+            { runId },
+        );
+        const scope = { runId, deliveryId };
+        const source = await t.query(
+            internal.integrations.agentStorage.legacyMigrationFragment,
+            {
+                ...scope,
+                index: 0,
+            },
+        );
+        await t.action(
+            internal.integrations.agentStorage.copyLegacyDelivery,
+            scope,
+        );
+        await t.action(
+            internal.integrations.agentStorage.verifyLegacyDeliveryCopy,
+            scope,
+        );
+        await t.mutation(
+            internal.execution.conversations.switchMessageMigration,
+            {
+                ...scope,
+                sourceIdentity: source.sourceIdentity,
+            },
+        );
+        await t.action(
+            internal.execution.missionData.migrateLegacyMissionResult,
+            {
+                runId,
+                missionId: active.missionId,
+            },
+        );
+        const inventory = await t.action(
+            internal.integrations.agentStorage.reconcileConversationMigration,
+            { runId },
+        );
+        await t.action(
+            internal.integrations.agentStorage
+                .resumeVerifiedConversationMigration,
+            {
+                runId,
+                inventoryHash: inventory.inventoryHash,
+                sourceInventoryHash,
+            },
+        );
+        await t.finishAllScheduledFunctions(
+            () => vi.advanceTimersByTime(10),
+            500,
+        );
+        const settled = await t.run((ctx) => ctx.db.get(sessionId));
+        assert(settled);
+        expect(settled.settledSequence).toBe(settled.sequence);
+        const retained = await t.run((ctx) => ctx.db.get(deliveryId));
+        expect(retained).toMatchObject({
+            storageMessageRef,
+            bodyTextId: expect.any(String),
+        });
+        const history = await client.query(
+            api.execution.conversations.listMessages,
+            {
+                runId,
+                paginationOpts: { numItems: 10, cursor: null },
+            },
+        );
+        const replies = history.page.filter(({ role }) => role === "assistant");
+        expect(replies.map(({ _id }) => _id)).toEqual([deliveryId]);
+        assert(replies[0]);
+        expect(sha256Hex(replies[0].text)).toBe(baseline.delivery.contentHash);
+        expect(
+            await t.run((ctx) => ctx.db.query("providerCalls").collect()),
+        ).toEqual([]);
+    }
     await client.mutation(api.execution.conversations.submit, {
         runId,
         requestKey: "after-crash",

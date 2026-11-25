@@ -9,7 +9,10 @@ import {
     nativeTextReply,
     nativeToolReply,
 } from "@/__tests__/setup/pi-native";
-import { seedWorkbench } from "@/__tests__/setup/workbench";
+import {
+    seedWorkbench,
+    workbenchAdmissionInput,
+} from "@/__tests__/setup/workbench";
 
 vi.mock("node:dns/promises", async (importOriginal) => {
     const original = await importOriginal<typeof import("node:dns/promises")>();
@@ -761,6 +764,72 @@ test("Workbench skill admission closes when framing is fixed", async () => {
             missionId: active.missionId,
             expectedGeneration: 1,
             cause: "post-start-method",
+            input: {
+                kind: "read",
+                path: "/agent-skills/research-methods-v1/workbench-framing/SKILL.md",
+            },
+        },
+    );
+    expect(
+        await f.t.action(internal.execution.operations.dispatch, {
+            requestId,
+            expectedGeneration: 1,
+        }),
+    ).toMatchObject({ kind: "refused", code: "skill_resource_not_allowed" });
+});
+
+test("Workbench skill admission uses the active correction identity without reading its draft", async () => {
+    const f = await seedWorkbench(
+        false,
+        undefined,
+        undefined,
+        "Prepare a program.",
+        undefined,
+        7,
+    );
+    const active = await f.t.mutation(
+        internal.execution.conversations.startTurn,
+        {
+            runId: f.runId,
+            definitionId: "workbench_v1",
+            scope: { kind: "workbench_v1" },
+            simulation: false,
+        },
+    );
+    assert(active);
+    const invocation = await f.t.mutation(
+        internal.execution.invocations.begin,
+        {
+            missionId: active.missionId,
+            expectedGeneration: 1,
+            taskKey: "rejected-skill-draft",
+            nativeInput: await workbenchAdmissionInput(f.t, active.missionId),
+            provenance: "live",
+        },
+    );
+    assert(invocation.kind === "ready");
+    await f.t.run(async (ctx) => {
+        const mission = await ctx.db.get(active.missionId);
+        assert(mission?.conversationTurnId);
+        const turn = await ctx.db.get(mission.conversationTurnId);
+        assert(turn?.responseControl);
+        await ctx.db.patch(turn._id, {
+            responseControl: {
+                ...turn.responseControl,
+                correction: {
+                    invocationId: invocation.invocationId,
+                    instructionVersion: turn.instructionVersion,
+                    reminder: "Revise the explanation.",
+                },
+            },
+        });
+    });
+    const requestId = await f.t.mutation(
+        internal.execution.operations.enqueue,
+        {
+            missionId: active.missionId,
+            expectedGeneration: 1,
+            cause: "correction-skill-read",
             input: {
                 kind: "read",
                 path: "/agent-skills/research-methods-v1/workbench-framing/SKILL.md",

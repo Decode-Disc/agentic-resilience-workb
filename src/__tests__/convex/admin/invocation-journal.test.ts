@@ -1,12 +1,17 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { appendRetainedText } from "@convex/execution/retainedText";
+import schema from "@convex/schema";
 import type { FunctionReturnType } from "convex/server";
+import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
-async function journalFixture() {
-    const fixture = await seedInspectedEvidence();
+async function journalFixture(
+    existing?: Parameters<typeof seedInspectedEvidence>[1],
+) {
+    const fixture = await seedInspectedEvidence({}, existing);
     const { t, args } = fixture;
     const missionId = await t.mutation(internal.execution.missions.start, {
         runId: args.runId,
@@ -387,4 +392,97 @@ test("only an active administrator can read a committed open diagnostic prefix a
     expect(output?.fragments.page).toEqual([
         { index: 0, content: "committed before crash" },
     ]);
+});
+
+test.each([
+    70_000, 175_000,
+])("administrator inspects retained output of %i characters and recovers exact fragments", async (size) => {
+    const { t, args, userId, visitorId, invocationId } = await journalFixture(
+        convexTest({
+            schema,
+            modules: import.meta.glob("/convex/**/*.ts"),
+            transactionLimits: { bytesRead: 128 * 1024 },
+        }),
+    );
+    const responseJson = stableStringify({
+        kind: "blocked",
+        code: `${"x".repeat(size)} 🧭`,
+    });
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        invocationId,
+        expectedGeneration: 4,
+        responseJson,
+    });
+    await t.run((ctx) => ctx.db.patch(visitorId, { role: "admin" }));
+    const admin = t.withIdentity({ subject: `${userId}|large-result` });
+    const event = await t.run((ctx) =>
+        ctx.db
+            .query("agentExecutionEvents")
+            .withIndex("by_invocation_and_kind", (q) =>
+                q
+                    .eq("invocationId", invocationId)
+                    .eq("kind", "invocation_output_observed"),
+            )
+            .first(),
+    );
+    if (!event) throw new Error("Missing observation event");
+    const runId = args.runId;
+    if (size === 70_000) {
+        const detail = await admin.query(
+            api.adminOperations.inspectJournalEvent,
+            {
+                runId,
+                eventId: event._id,
+            },
+        );
+        expect(detail.invocation?.receivedOutputJson).toBe(responseJson);
+    }
+    const separate = await admin.query(
+        api.adminOperations.inspectJournalEvent,
+        {
+            runId,
+            eventId: event._id,
+            bodyAccess: "separate",
+        },
+    );
+    const contentHash = sha256Hex(responseJson);
+    expect(separate.invocation).toMatchObject({
+        receivedOutput: {
+            contentHash,
+            sizeBytes: Buffer.byteLength(responseJson),
+        },
+    });
+    expect(separate.invocation).not.toHaveProperty("receivedOutputJson");
+    const read = api.adminOperations.listInvocationPayloadFragmentsPage;
+    const scope = {
+        runId,
+        invocationId,
+        part: "received" as const,
+        contentHash,
+    };
+    await expect(
+        t.query(read, {
+            ...scope,
+            paginationOpts: { numItems: 1, cursor: null },
+        }),
+    ).rejects.toThrow("Not authenticated");
+    await expect(
+        admin.query(read, {
+            ...scope,
+            contentHash: "wrong-content",
+            paginationOpts: { numItems: 1, cursor: null },
+        }),
+    ).rejects.toThrow("Journal correlation mismatch");
+    let cursor: string | null = null;
+    let actual = "";
+    for (;;) {
+        const page: FunctionReturnType<typeof read> = await admin.query(read, {
+            ...scope,
+            paginationOpts: { numItems: 1, cursor },
+        });
+        actual += page.page.map((item) => item.content).join("");
+        if (page.isDone) break;
+        cursor = page.continueCursor;
+    }
+    expect(actual).toBe(responseJson);
 });

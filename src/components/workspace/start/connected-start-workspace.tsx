@@ -16,8 +16,8 @@ import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { ConvexError } from "convex/values";
 import { MotionConfig, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ConversationActivityList } from "@/components/chat/conversation-activity-list";
 import { AgentByline } from "@/components/chat/agent-identity";
+import { ConversationActivityList } from "@/components/chat/conversation-activity-list";
 import {
     DEFAULT_CONVERSATION_AGENTS as agents,
     SOURCES_AGENT,
@@ -30,6 +30,7 @@ import {
 import {
     ConversationActivity,
     ConversationApprovalProvider,
+    ConversationBodyRetryProvider,
     ConversationComposer,
     ConversationContext,
     ConversationReference,
@@ -73,7 +74,10 @@ import {
     workbenchTurn,
 } from "@/lib/presentation/workbench";
 import { conversationMessageContent } from "@/lib/workspace/conversation-approvals";
-import { insertOptimisticConversationMessage } from "@/lib/workspace/conversation-delivery";
+import {
+    insertOptimisticConversationMessage,
+    WORKBENCH_HISTORY_BODY_ACCESS,
+} from "@/lib/workspace/conversation-delivery";
 import {
     clearWorkbenchDraft,
     peekWorkbenchDraft,
@@ -87,6 +91,7 @@ import {
     StartSourcesHeader,
     useRevealInConversation,
 } from "./start-screens";
+import { useRetainedReplyBodies } from "./use-retained-reply-bodies";
 
 import { WorkbenchTurnDetails } from "./workbench-turn-details";
 
@@ -289,7 +294,7 @@ function StartWorkspaceContent({
     } | null>(null);
     const history = usePaginatedQuery(
         api.workbench.history,
-        { runId },
+        { runId, bodyAccess: WORKBENCH_HISTORY_BODY_ACCESS },
         { initialNumItems: HISTORY_PAGE_SIZE },
     );
     const submit = useMutation(
@@ -522,16 +527,18 @@ function StartWorkspaceContent({
             preview: responsePreview,
         });
     for (const id of publishedTurns) previewTurns.delete(id);
-    const messages = history.results
-        .filter(
-            (m) =>
-                (m.status !== "queued" || m._id === awaitingAdmission) &&
-                m.status !== "removed",
-        )
+    const deliveries = history.results.filter(
+        (m) =>
+            (m.status !== "queued" || m._id === awaitingAdmission) &&
+            m.status !== "removed",
+    );
+    const retainedReplies = useRetainedReplyBodies(runId, deliveries);
+    const messages = deliveries
         .slice()
         .reverse()
         .map((m) => ({
             ...m,
+            deliveryId: m._id,
             _id:
                 m.role === "assistant" && m.turnId
                     ? `reply:${m.turnId}`
@@ -550,12 +557,15 @@ function StartWorkspaceContent({
                         : m.approvalRequestId
                           ? [m.approvalRequestId]
                           : [];
+                const body = m.body
+                    ? retainedReplies.get({ ...m, _id: m.deliveryId })
+                    : undefined;
                 return {
                     id: m._id,
                     role: m.role,
                     content: conversationMessageContent(
                         m._id,
-                        m.text,
+                        body?.kind === "ready" ? body.text : m.text,
                         approvalIds,
                     ),
                     createdAt: new Date(m.createdAt),
@@ -566,6 +576,10 @@ function StartWorkspaceContent({
                                     ? "workbench"
                                     : undefined,
                             responseControl: m.responseControl,
+                            bodyLoad:
+                                m.body && body?.kind !== "ready"
+                                    ? (body?.kind ?? "loading")
+                                    : undefined,
                         },
                     },
                 };
@@ -814,51 +828,67 @@ function StartWorkspaceContent({
                             requestId={requestId as Id<"approvalRequests">}
                         />
                     )}>
-                    <ConversationHistory
-                        entries={[
-                            ...messages.map((m) => ({
-                                kind: "message" as const,
-                                id: m._id,
-                                time: m.createdAt,
-                            })),
-                            ...[...previewTurns.values()].map((turn) => ({
-                                kind: "message" as const,
-                                id: `reply:${turn._id}`,
-                                time: turn.createdAt,
-                            })),
-                            ...[...work.values()]
-                                .filter(
-                                    (turn) =>
-                                        !turn.entries.some(
-                                            (entry) =>
-                                                entry.kind === "message" &&
-                                                (messages.some(
-                                                    (m) => m._id === entry.id,
-                                                ) ||
-                                                    [
-                                                        ...previewTurns.values(),
-                                                    ].some(
-                                                        (t) =>
-                                                            `reply:${t._id}` ===
-                                                            entry.id,
-                                                    )),
-                                        ),
-                                )
-                                .map((turn) => ({
-                                    kind: "turn" as const,
-                                    id: turn.id,
-                                    time: Date.parse(turn.startedAt ?? "") || 0,
+                    <ConversationBodyRetryProvider
+                        retry={(messageId) => {
+                            const delivery = messages.find(
+                                (message) => message._id === messageId,
+                            );
+                            if (delivery)
+                                retainedReplies.retry({
+                                    ...delivery,
+                                    _id: delivery.deliveryId,
+                                });
+                        }}>
+                        <ConversationHistory
+                            entries={[
+                                ...messages.map((m) => ({
+                                    kind: "message" as const,
+                                    id: m._id,
+                                    time: m.createdAt,
                                 })),
-                            ...missions.map((m) => ({
-                                kind: "mission" as const,
-                                id: m.id,
-                                time: run.researchStartedAt ?? run.updatedAt,
-                            })),
-                        ].sort((a, b) => a.time - b.time)}
-                        turns={[...work.values()]}
-                        missions={missions}
-                        agents={agents}
-                    />
+                                ...[...previewTurns.values()].map((turn) => ({
+                                    kind: "message" as const,
+                                    id: `reply:${turn._id}`,
+                                    time: turn.createdAt,
+                                })),
+                                ...[...work.values()]
+                                    .filter(
+                                        (turn) =>
+                                            !turn.entries.some(
+                                                (entry) =>
+                                                    entry.kind === "message" &&
+                                                    (messages.some(
+                                                        (m) =>
+                                                            m._id === entry.id,
+                                                    ) ||
+                                                        [
+                                                            ...previewTurns.values(),
+                                                        ].some(
+                                                            (t) =>
+                                                                `reply:${t._id}` ===
+                                                                entry.id,
+                                                        )),
+                                            ),
+                                    )
+                                    .map((turn) => ({
+                                        kind: "turn" as const,
+                                        id: turn.id,
+                                        time:
+                                            Date.parse(turn.startedAt ?? "") ||
+                                            0,
+                                    })),
+                                ...missions.map((m) => ({
+                                    kind: "mission" as const,
+                                    id: m.id,
+                                    time:
+                                        run.researchStartedAt ?? run.updatedAt,
+                                })),
+                            ].sort((a, b) => a.time - b.time)}
+                            turns={[...work.values()]}
+                            missions={missions}
+                            agents={agents}
+                        />
+                    </ConversationBodyRetryProvider>
                 </ConversationApprovalProvider>
             )}
             {state?.execution?.status === "blocked" && (

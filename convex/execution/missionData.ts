@@ -1,14 +1,33 @@
-import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
-import { RETAINED_TEXT_INLINE_BYTES } from "@convex/resourcePolicy";
-import { validate } from "convex-helpers/validators";
-import { agentResultValidator } from "./agentSchemas";
-import {
-    retainCompleteText,
-    completeRetainedText,
-    readRetainedText,
-} from "./retainedText";
+import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import type {
+    ActionCtx,
+    MutationCtx,
+    QueryCtx,
+} from "@convex/_generated/server";
+import {
+    internalAction,
+    internalMutation,
+    internalQuery,
+} from "@convex/_generated/server";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { supportsResearchControl } from "@convex/domain/transitions";
+import {
+    retainedDeliveryBody,
+    retainedReplyKey,
+} from "@convex/integrations/agentStorage";
+import {
+    HISTORY_PAGE_SIZE,
+    MAX_CONVERSATION_SCAN_BYTES,
+    RETAINED_TEXT_INLINE_BYTES,
+} from "@convex/resourcePolicy";
+import {
+    paginationOptsValidator,
+    paginationResultValidator,
+} from "convex/server";
+import { v } from "convex/values";
+import { validate } from "convex-helpers/validators";
+import { getAgentDefinition } from "./agentCatalog";
 import type {
     AgentProgressMission,
     AgentResult,
@@ -18,6 +37,15 @@ import type {
     OperationPin,
 } from "./agentDefinition";
 import { executionError } from "./errors";
+import {
+    completeRetainedText,
+    retainCompleteText,
+    retainedTextFragment,
+    retainedTextParts,
+    stageRetainedText,
+    textFragmentValidator,
+    verifyRetainedText,
+} from "./retainedText";
 
 /** Stable persisted identity for a mission's objective across attempts and definition versions. */
 export function missionObjectiveKey(
@@ -184,12 +212,57 @@ export function operationReuseIdentity(
         : { runId, version, pin, input };
 }
 
+export function textualMissionOutcomePatch(
+    kind: "workbench_v1" | "conversation_validation_v1",
+    textId: Id<"retainedTexts">,
+    contentHash: string,
+) {
+    return {
+        result: undefined,
+        resultTextId: undefined,
+        textualOutcome: { version: 1 as const, kind, textId, contentHash },
+    };
+}
+
 /** Domain completion keeps its full result while mission metadata stays within document capacity. */
+/** Returns a validated completion identity for bounded inspection and replay. */
+export async function retainedTextualOutcome(
+    ctx: QueryCtx,
+    mission: Doc<"agentMissions">,
+) {
+    if (!("protocolVersion" in mission) || !mission.textualOutcome)
+        return undefined;
+    const outcome = mission.textualOutcome;
+    const text = await completeRetainedText(ctx, outcome.textId);
+    if (
+        text.key !== textualOutcomeKey(mission) ||
+        text.contentHash !== outcome.contentHash ||
+        outcome.kind !== mission.definitionId
+    )
+        throw executionError("invocation_result_invalid");
+    return text;
+}
+
 export async function missionResultPatch(
     ctx: MutationCtx,
     mission: Doc<"agentMissions">,
     result: AgentResult,
+    publication?: Pick<
+        Doc<"agentMessageDeliveries">,
+        "bodyTextId" | "contentHash"
+    >,
 ) {
+    if (
+        "protocolVersion" in mission &&
+        publication?.bodyTextId &&
+        (result.kind === "workbench_v1" ||
+            result.kind === "conversation_validation_v1")
+    )
+        return textualMissionOutcomePatch(
+            result.kind,
+            publication.bodyTextId,
+            publication.contentHash,
+        );
     const json = JSON.stringify(result);
     if (
         !("protocolVersion" in mission) ||
@@ -206,17 +279,499 @@ export async function missionResultPatch(
     };
 }
 
-export async function missionResult(
+/** Resolves the retained JSON from the mission's historical result slot. */
+export async function retainedLegacyMissionResult(
     ctx: QueryCtx,
     mission: Doc<"agentMissions">,
+    textId: Id<"retainedTexts">,
 ) {
-    if (!("protocolVersion" in mission)) return undefined;
-    if (!mission.resultTextId) return mission.result;
-    const text = await completeRetainedText(ctx, mission.resultTextId);
+    const text = await completeRetainedText(ctx, textId);
     if (text.key !== `${mission._id}:result`)
         throw executionError("invocation_result_invalid");
-    const result: unknown = JSON.parse(await readRetainedText(ctx, text._id));
-    if (!validate(agentResultValidator, result, { db: ctx.db }))
-        throw executionError("invalid_completion");
-    return result;
+    return text;
 }
+
+export function missionTextualResultKey(missionId: Id<"agentMissions">) {
+    return `${missionId}:textual_outcome`;
+}
+
+/** A completed result either shares a published delivery or owns its own exact text. */
+export function textualOutcomeKey(mission: Doc<"agentMissions">) {
+    if (
+        "protocolVersion" in mission &&
+        mission.textualOutcome?.ownership === "mission"
+    )
+        return missionTextualResultKey(mission._id);
+    if (mission.conversationTurnId)
+        return retainedReplyKey(mission.conversationTurnId);
+    throw executionError("invocation_result_invalid");
+}
+
+const textualMigrationScope = {
+    runId: v.id("researchRuns"),
+    missionId: v.id("agentMissions"),
+};
+const migrationTextualKind = v.union(
+    v.literal("workbench_v1"),
+    v.literal("conversation_validation_v1"),
+);
+
+/** Inventories historical completion records independently of delivery and component storage. */
+export const missionMigrationInventory = internalQuery({
+    args: {
+        runId: v.id("researchRuns"),
+        paginationOpts: paginationOptsValidator,
+    },
+    returns: paginationResultValidator(
+        v.object({
+            missionId: v.id("agentMissions"),
+            definitionVersion: v.number(),
+            resultTextId: v.optional(v.id("retainedTexts")),
+            textId: v.optional(v.id("retainedTexts")),
+            retainedHash: v.optional(v.string()),
+            status: v.union(
+                v.literal("other"),
+                v.literal("inline"),
+                v.literal("fragmented"),
+                v.literal("copying"),
+                v.literal("switched"),
+                v.literal("retained"),
+                v.literal("inconsistent"),
+            ),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        const run = await ctx.db.get(args.runId);
+        const conversation = await ctx.db
+            .query("agentConversations")
+            .withIndex("by_run", (q) => q.eq("runId", args.runId))
+            .unique();
+        if (
+            !run ||
+            run.withdrawnAt !== undefined ||
+            !conversation?.storageMigrationFrozen
+        )
+            throw executionError("conversation_migration_not_frozen");
+        const page = await ctx.db
+            .query("agentMissions")
+            .withIndex("by_run_and_status", (q) =>
+                q.eq("runId", args.runId).eq("status", "completed"),
+            )
+            .paginate({
+                ...args.paginationOpts,
+                numItems: Math.min(
+                    args.paginationOpts.numItems,
+                    HISTORY_PAGE_SIZE,
+                ),
+                maximumRowsRead: HISTORY_PAGE_SIZE,
+                maximumBytesRead: MAX_CONVERSATION_SCAN_BYTES,
+            });
+        return {
+            ...page,
+            page: await Promise.all(
+                page.page.map(async (mission) => {
+                    const base = {
+                        missionId: mission._id,
+                        definitionVersion: mission.definitionVersion,
+                    };
+                    if (
+                        mission.definitionId !== "workbench_v1" &&
+                        mission.definitionId !== "conversation_validation_v1"
+                    )
+                        return { ...base, status: "other" as const };
+                    if (!("protocolVersion" in mission))
+                        return { ...base, status: "inconsistent" as const };
+                    const inline = mission.result !== undefined;
+                    const fragmented = mission.resultTextId !== undefined;
+                    const outcome = mission.textualOutcome;
+                    let status:
+                        | "inline"
+                        | "fragmented"
+                        | "copying"
+                        | "switched"
+                        | "retained"
+                        | "inconsistent";
+                    if (
+                        (inline && fragmented) ||
+                        (outcome && outcome.kind !== mission.definitionId)
+                    )
+                        status = "inconsistent";
+                    else if (outcome)
+                        status = inline || fragmented ? "switched" : "retained";
+                    else if (inline || fragmented)
+                        status = mission.legacyTextualResultCopy
+                            ? "copying"
+                            : inline
+                              ? "inline"
+                              : "fragmented";
+                    else status = "inconsistent";
+                    const retained =
+                        status === "switched" || status === "retained"
+                            ? await retainedTextualOutcome(ctx, mission)
+                            : undefined;
+                    return {
+                        ...base,
+                        retainedHash: retained?.contentHash,
+                        status,
+                        resultTextId: mission.resultTextId,
+                        textId:
+                            outcome?.textId ??
+                            mission.legacyTextualResultCopy?.textId,
+                    };
+                }),
+            ),
+        };
+    },
+});
+
+async function legacyTextualSource(
+    ctx: QueryCtx,
+    args: { runId: Id<"researchRuns">; missionId: Id<"agentMissions"> },
+) {
+    const run = await ctx.db.get(args.runId);
+    const mission = await ctx.db.get(args.missionId);
+    if (
+        !run ||
+        run.withdrawnAt !== undefined ||
+        mission?.runId !== run._id ||
+        !("protocolVersion" in mission) ||
+        mission.status !== "completed" ||
+        (mission.definitionId !== "workbench_v1" &&
+            mission.definitionId !== "conversation_validation_v1") ||
+        (mission.result === undefined) === (mission.resultTextId === undefined)
+    )
+        throw executionError("mission_migration_source_unavailable");
+    const conversation = await ctx.db
+        .query("agentConversations")
+        .withIndex("by_run", (q) => q.eq("runId", run._id))
+        .unique();
+    if (!conversation?.storageMigrationFrozen)
+        throw executionError("conversation_migration_not_frozen");
+    const turn = mission.conversationTurnId
+        ? await ctx.db.get(mission.conversationTurnId)
+        : null;
+    if (
+        mission.conversationTurnId &&
+        (!turn ||
+            turn.runId !== run._id ||
+            turn.conversationId !== conversation._id ||
+            turn.missionId !== mission._id)
+    )
+        throw executionError("mission_migration_source_unavailable");
+    const delivery = turn?.publishedMessageId
+        ? await ctx.db.get(turn.publishedMessageId)
+        : null;
+    if (
+        turn?.publishedMessageId &&
+        (!delivery ||
+            delivery.turnId !== turn._id ||
+            delivery.role !== "assistant" ||
+            delivery.delivery !== "reply")
+    )
+        throw executionError("mission_migration_source_unavailable");
+    const resultText = mission.resultTextId
+        ? await retainedLegacyMissionResult(ctx, mission, mission.resultTextId)
+        : undefined;
+    const inline =
+        mission.result === undefined
+            ? undefined
+            : JSON.stringify(mission.result);
+    const sourceIdentity = sha256Hex(
+        stableStringify({
+            missionId: mission._id,
+            runId: run._id,
+            generation: mission.generation,
+            status: mission.status,
+            definitionId: mission.definitionId,
+            definitionVersion: mission.definitionVersion,
+            turnId: turn?._id,
+            deliveryId: delivery?._id,
+            resultTextId: resultText?._id,
+            resultHash: resultText?.contentHash ?? sha256Hex(inline ?? ""),
+        }),
+    );
+    return {
+        mission,
+        delivery,
+        resultText,
+        inline,
+        sourceIdentity,
+        kind: mission.definitionId,
+    };
+}
+
+/** Binds the preflight inventory to the frozen original result without reading its fragments. */
+export const legacyMissionSourceIdentity = internalQuery({
+    args: textualMigrationScope,
+    returns: v.string(),
+    handler: async (ctx, args) =>
+        (await legacyTextualSource(ctx, args)).sourceIdentity,
+});
+
+export const legacyMissionResultFragment = internalQuery({
+    args: {
+        ...textualMigrationScope,
+        index: v.number(),
+        deliveryBody: v.optional(v.literal(true)),
+        switchedTextId: v.optional(v.id("retainedTexts")),
+        sourceIdentity: v.optional(v.string()),
+    },
+    returns: v.object({
+        sourceIdentity: v.string(),
+        kind: migrationTextualKind,
+        definitionVersion: v.number(),
+        content: v.string(),
+        fragmentCount: v.number(),
+        contentHash: v.string(),
+        sizeBytes: v.number(),
+        characters: v.number(),
+        hasDelivery: v.boolean(),
+        textId: v.optional(v.id("retainedTexts")),
+    }),
+    handler: async (ctx, args) => {
+        const source = await legacyTextualSource(ctx, args);
+        if (
+            args.sourceIdentity !== undefined &&
+            args.sourceIdentity !== source.sourceIdentity
+        )
+            throw executionError("mission_migration_source_changed");
+        const text = args.switchedTextId
+            ? await retainedTextualOutcome(ctx, source.mission)
+            : args.deliveryBody && source.delivery
+              ? await retainedDeliveryBody(ctx, source.delivery)
+              : source.resultText;
+        if (args.deliveryBody && !source.delivery)
+            throw executionError("mission_migration_source_changed");
+        if (args.switchedTextId && text?._id !== args.switchedTextId)
+            throw executionError("mission_migration_body_mismatch");
+        if (!text && args.index !== 0)
+            throw executionError("retained_text_range");
+        const inline = source.inline ?? "";
+        return {
+            sourceIdentity: source.sourceIdentity,
+            kind: source.kind,
+            definitionVersion: source.mission.definitionVersion,
+            content: text
+                ? await retainedTextFragment(ctx, text, args.index)
+                : inline,
+            fragmentCount: text?.fragmentHashes.length ?? 1,
+            contentHash: text?.contentHash ?? sha256Hex(inline),
+            sizeBytes:
+                text?.sizeBytes ?? new TextEncoder().encode(inline).length,
+            characters: text?.characters ?? inline.length,
+            hasDelivery: source.delivery !== null,
+            textId: text?._id,
+        };
+    },
+});
+
+export const stageLegacyMissionText = internalMutation({
+    args: {
+        ...textualMigrationScope,
+        sourceIdentity: v.string(),
+        fragment: textFragmentValidator,
+    },
+    returns: v.id("retainedTexts"),
+    handler: async (ctx, args) => {
+        const { mission, delivery, sourceIdentity } = await legacyTextualSource(
+            ctx,
+            args,
+        );
+        if (
+            sourceIdentity !== args.sourceIdentity ||
+            delivery ||
+            (mission.legacyTextualResultCopy &&
+                mission.legacyTextualResultCopy.sourceIdentity !==
+                    sourceIdentity)
+        )
+            throw executionError("mission_migration_source_changed");
+        const textId = await stageRetainedText(
+            ctx,
+            missionTextualResultKey(mission._id),
+            args.fragment,
+        );
+        if (
+            mission.legacyTextualResultCopy &&
+            mission.legacyTextualResultCopy.textId !== textId
+        )
+            throw executionError("mission_migration_source_changed");
+        if (!mission.legacyTextualResultCopy)
+            await ctx.db.patch(mission._id, {
+                legacyTextualResultCopy: { sourceIdentity, textId },
+            });
+        return textId;
+    },
+});
+
+export const switchLegacyMissionResult = internalMutation({
+    args: {
+        ...textualMigrationScope,
+        sourceIdentity: v.string(),
+        bodyHash: v.string(),
+        textId: v.id("retainedTexts"),
+    },
+    returns: v.id("retainedTexts"),
+    handler: async (ctx, args) => {
+        const { mission, delivery, sourceIdentity, kind } =
+            await legacyTextualSource(ctx, args);
+        if (sourceIdentity !== args.sourceIdentity)
+            throw executionError("mission_migration_source_changed");
+        const copy = mission.legacyTextualResultCopy;
+        const text = delivery
+            ? await retainedDeliveryBody(ctx, delivery)
+            : copy?.sourceIdentity === sourceIdentity
+              ? await completeRetainedText(ctx, copy.textId)
+              : undefined;
+        if (
+            !text ||
+            text._id !== args.textId ||
+            text.contentHash !== args.bodyHash ||
+            text.key !==
+                (delivery && mission.conversationTurnId
+                    ? retainedReplyKey(mission.conversationTurnId)
+                    : missionTextualResultKey(mission._id))
+        )
+            throw executionError("mission_migration_body_mismatch");
+        if (mission.textualOutcome) {
+            if (
+                mission.textualOutcome.textId !== text._id ||
+                mission.textualOutcome.contentHash !== text.contentHash ||
+                mission.textualOutcome.kind !== kind
+            )
+                throw executionError("mission_migration_body_mismatch");
+            return text._id;
+        }
+        await ctx.db.patch(mission._id, {
+            textualOutcome: {
+                version: 1,
+                kind,
+                textId: text._id,
+                contentHash: text.contentHash,
+                ...(!delivery ? { ownership: "mission" as const } : {}),
+            },
+        });
+        return text._id;
+    },
+});
+
+async function readLegacyMissionText(
+    ctx: ActionCtx,
+    args: {
+        runId: Id<"researchRuns">;
+        missionId: Id<"agentMissions">;
+        sourceIdentity?: string;
+        switchedTextId?: Id<"retainedTexts">;
+        deliveryBody?: true;
+    },
+) {
+    const read = internal.execution.missionData.legacyMissionResultFragment;
+    const first = await ctx.runQuery(read, { ...args, index: 0 });
+    const fragments = [first.content];
+    for (let index = 1; index < first.fragmentCount; index++) {
+        const fragment = await ctx.runQuery(read, {
+            ...args,
+            sourceIdentity: first.sourceIdentity,
+            index,
+        });
+        if (
+            fragment.textId !== first.textId ||
+            fragment.contentHash !== first.contentHash
+        )
+            throw executionError("mission_migration_source_changed");
+        fragments.push(fragment.content);
+    }
+    return { first, content: verifyRetainedText(first, fragments.join("")) };
+}
+
+/** Renders historical prose using the pinned result contract without replaying effects. */
+export function renderLegacyTextualResult(
+    persisted: string,
+    kind: Doc<"agentMissions">["definitionId"],
+    definitionVersion: number,
+) {
+    const result: unknown = JSON.parse(persisted);
+    const definition = getAgentDefinition(kind, definitionVersion);
+    if (
+        !validate(definition.resultValidator, result) ||
+        result.kind !== kind ||
+        !definition.conversationReply
+    )
+        throw executionError("invalid_completion");
+    return definition.conversationReply(result);
+}
+
+async function legacyMissionReply(
+    ctx: ActionCtx,
+    args: { runId: Id<"researchRuns">; missionId: Id<"agentMissions"> },
+) {
+    const { first, content: persisted } = await readLegacyMissionText(
+        ctx,
+        args,
+    );
+    const scope = { ...args, sourceIdentity: first.sourceIdentity };
+    const body = renderLegacyTextualResult(
+        persisted,
+        first.kind,
+        first.definitionVersion,
+    );
+    if (!body.trim()) throw executionError("invalid_completion");
+    return { first, scope, body };
+}
+
+/** Compares the switched outcome to the historical result without writing either copy. */
+export const verifySwitchedMissionResult = internalAction({
+    args: {
+        ...textualMigrationScope,
+        textId: v.id("retainedTexts"),
+        contentHash: v.string(),
+    },
+    returns: v.string(),
+    handler: async (ctx, { textId, contentHash, ...args }): Promise<string> => {
+        const { scope, body } = await legacyMissionReply(ctx, args);
+        const { first, content: retained } = await readLegacyMissionText(ctx, {
+            ...scope,
+            switchedTextId: textId,
+        });
+        if (retained !== body || first.contentHash !== contentHash)
+            throw executionError("mission_migration_body_mismatch");
+        return scope.sourceIdentity;
+    },
+});
+
+/** Decodes the historical result off-transaction, then adopts only its exact rendered identity. */
+export const migrateLegacyMissionResult = internalAction({
+    args: textualMigrationScope,
+    returns: v.id("retainedTexts"),
+    handler: async (ctx, args): Promise<Id<"retainedTexts">> => {
+        const { first, scope, body } = await legacyMissionReply(ctx, args);
+        let textId: Id<"retainedTexts"> | undefined;
+        if (first.hasDelivery) {
+            const received = await readLegacyMissionText(ctx, {
+                ...scope,
+                deliveryBody: true,
+            });
+            if (received.content !== body)
+                throw executionError("mission_migration_body_mismatch");
+            textId = received.first.textId;
+        } else {
+            const { parts, manifest } = retainedTextParts(body);
+            for (const [index, content] of parts.entries())
+                textId = await ctx.runMutation(
+                    internal.execution.missionData.stageLegacyMissionText,
+                    {
+                        ...scope,
+                        fragment: { ...manifest, index, content },
+                    },
+                );
+        }
+        if (!textId) throw executionError("mission_migration_body_mismatch");
+        return ctx.runMutation(
+            internal.execution.missionData.switchLegacyMissionResult,
+            {
+                ...scope,
+                bodyHash: sha256Hex(body),
+                textId,
+            },
+        );
+    },
+});

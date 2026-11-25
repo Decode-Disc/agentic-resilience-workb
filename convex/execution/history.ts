@@ -9,7 +9,10 @@ import {
     sha256Hex,
     stableStringify,
 } from "@convex/domain/sourcePassages";
-import { readConversationMessages } from "@convex/integrations/agentStorage";
+import {
+    readConversationMessages,
+    retainedDeliveryBody,
+} from "@convex/integrations/agentStorage";
 import {
     HISTORY_PAGE_SIZE,
     MAX_CONVERSATION_SCAN,
@@ -38,6 +41,7 @@ import {
     historyReadReceiptValidator,
     historySourceFor,
 } from "./operationContracts";
+import { retainedTextRange } from "./retainedText";
 
 const CURSOR_PREFIX = "history:";
 type Frontier = Infer<typeof historyReadReceiptValidator>["frontier"];
@@ -595,17 +599,46 @@ async function conversationFragment(
     }
     if (message.conversationId !== conversation._id)
         throw executionError("conversation_message_unavailable");
-    const [text] = await readConversationMessages(
-        ctx,
-        conversation.storageRef,
-        [message.storageMessageRef],
-    );
-    if (!text) throw executionError("conversation_message_unavailable");
-    const candidate = fragment(
-        text,
-        position.offset,
-        MAX_OPERATION_RESULT_BYTES,
-    );
+    let candidate: ReturnType<typeof fragment>;
+    let contentHash: string;
+    if (message.bodyTextId) {
+        const body = await retainedDeliveryBody(ctx, message);
+        const offset = position.offset;
+        if (
+            !Number.isSafeInteger(offset) ||
+            offset < 0 ||
+            offset >= body.characters
+        )
+            throw executionError("history_receipt_invalid");
+        // One neighboring code unit on each side preserves the existing surrogate checks.
+        const start = Math.max(0, offset - 1);
+        const end = Math.min(
+            body.characters,
+            offset + MAX_OPERATION_RESULT_BYTES + 1,
+        );
+        const window = await retainedTextRange(ctx, body, start, end - start);
+        const local = fragment(
+            window,
+            offset - start,
+            MAX_OPERATION_RESULT_BYTES,
+        );
+        candidate = {
+            offset,
+            totalCharacters: body.characters,
+            content: local.content,
+            end: start + local.end,
+        };
+        contentHash = body.contentHash;
+    } else {
+        const [text] = await readConversationMessages(
+            ctx,
+            conversation.storageRef,
+            [message],
+        );
+        if (!text) throw executionError("conversation_message_unavailable");
+        candidate = fragment(text, position.offset, MAX_OPERATION_RESULT_BYTES);
+        contentHash = sha256Hex(text);
+    }
     const mission = request.missionId
         ? await ctx.db.get(request.missionId)
         : null;
@@ -658,7 +691,7 @@ async function conversationFragment(
         fragmentId: fragmentIdentity(
             "conversation",
             message._id,
-            sha256Hex(text),
+            contentHash,
             candidate.offset,
             fitted.end,
         ),

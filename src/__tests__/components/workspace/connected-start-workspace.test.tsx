@@ -1,6 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import {
+    act,
     fireEvent,
     render,
     screen,
@@ -150,6 +151,153 @@ beforeEach(() => {
     convexReactHarness
         .mutation(api.execution.conversations.submit)
         .uses(submitMessage);
+});
+
+test("a paged reply stays in one message, retries its missing chunk, and copies exact text", async () => {
+    const messageId = "stored-reply" as Id<"agentMessageDeliveries">;
+    const firstText = "Control sits with ";
+    const lastText = "the workflow operator. 😀";
+    const fullText = firstText + lastText;
+    let releaseFirst: () => void = () => {};
+    const firstReady = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+    });
+    let fail = true;
+    const indices: number[] = [];
+    convexReactHarness
+        .query(api.execution.conversations.readMessageBody)
+        .returnsFrom(({ args }) => {
+            if (args === "skip") return undefined;
+            expect(args).toMatchObject({
+                runId,
+                messageId,
+                contentHash: "published-reply",
+            });
+            indices.push(args.index);
+            if (args.index === 0)
+                return firstReady.then(() => ({
+                    content: firstText,
+                    offset: 0,
+                    totalCharacters: fullText.length,
+                    nextIndex: 1,
+                }));
+            if (fail) throw new Error("storage_debug_id");
+            return {
+                content: lastText,
+                offset: firstText.length,
+                totalCharacters: fullText.length,
+                nextIndex: null,
+            };
+        });
+    convexReactHarness
+        .paginatedQuery(api.workbench.history)
+        .returnsFrom(({ args }) => {
+            expect(args).toMatchObject({ runId, bodyAccess: "separate" });
+            return {
+                results: [
+                    {
+                        _id: messageId,
+                        runId,
+                        role: "assistant",
+                        delivery: "reply",
+                        status: "processed",
+                        text: "",
+                        body: { contentHash: "published-reply" },
+                        createdAt: 1,
+                        work: null,
+                    },
+                ],
+                status: "Exhausted",
+                loadMore: vi.fn(),
+            };
+        });
+    render(<ConnectedStartWorkspace runId={runId} />);
+    expect(screen.getByLabelText("Loading reply")).toBeTruthy();
+    expect(
+        screen
+            .getByRole("button", { name: "Copy message" })
+            .hasAttribute("disabled"),
+    ).toBe(true);
+    await act(async () => releaseFirst());
+    expect(await screen.findByText("Reply unavailable")).toBeTruthy();
+    expect(screen.queryByText(/storage_debug_id|Control sits with/)).toBeNull();
+    expect(
+        screen
+            .getByRole("button", { name: "Copy message" })
+            .hasAttribute("disabled"),
+    ).toBe(true);
+
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText(fullText)).toBeTruthy();
+    expect(screen.getAllByRole("article", { name: /message/i })).toHaveLength(
+        1,
+    );
+    expect(indices).toEqual([0, 1, 1]);
+
+    const originalClipboard = Object.getOwnPropertyDescriptor(
+        navigator,
+        "clipboard",
+    );
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText },
+    });
+    try {
+        fireEvent.click(screen.getByRole("button", { name: "Copy message" }));
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith(fullText));
+    } finally {
+        if (originalClipboard)
+            Object.defineProperty(navigator, "clipboard", originalClipboard);
+        else Reflect.deleteProperty(navigator, "clipboard");
+    }
+});
+
+test("leaving a reply stops its pending fragment continuation", async () => {
+    const messageId = "removed-reply" as Id<"agentMessageDeliveries">;
+    let release: () => void = () => {};
+    const pending = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const reads: number[] = [];
+    convexReactHarness
+        .query(api.execution.conversations.readMessageBody)
+        .returnsFrom(({ args }) => {
+            if (args === "skip") return undefined;
+            reads.push(args.index);
+            return pending.then(() => ({
+                content: "Obsolete",
+                offset: 0,
+                totalCharacters: 20,
+                nextIndex: 1,
+            }));
+        });
+    const history = convexReactHarness.paginatedQuery(api.workbench.history);
+    history.returns({
+        results: [
+            {
+                _id: messageId,
+                runId,
+                role: "assistant",
+                delivery: "reply",
+                status: "processed",
+                text: "",
+                body: { contentHash: "obsolete-reply" },
+                createdAt: 1,
+                work: null,
+            },
+        ],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+    });
+    const { rerender } = render(<ConnectedStartWorkspace runId={runId} />);
+    expect(reads).toEqual([0]);
+    history.returns({ results: [], status: "Exhausted", loadMore: vi.fn() });
+    rerender(<ConnectedStartWorkspace runId={runId} />);
+    await act(async () => release());
+    expect(reads).toEqual([0]);
+    expect(screen.queryByText("Obsolete")).toBeNull();
 });
 
 test.each([

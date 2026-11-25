@@ -73,6 +73,7 @@ export async function readWorkbenchInstructions(
 export async function projectWorkbenchInstructions(
     ctx: QueryCtx,
     requests: Awaited<ReturnType<typeof readWorkbenchInstructions>>,
+    loaded?: Map<Id<"agentMessageDeliveries">, string>,
 ) {
     const messageIds = [
         ...new Set(requests.map((request) => request.messageId)),
@@ -110,7 +111,8 @@ export async function projectWorkbenchInstructions(
         const original = await readConversationMessages(
             ctx,
             conversation.storageRef,
-            selected.map((message) => message.storageMessageRef),
+            selected,
+            loaded,
         );
         selected.forEach((message, index) => {
             const text = original[index];

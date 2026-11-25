@@ -2,6 +2,7 @@ import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import { executionError } from "@convex/execution/errors";
+import { verifyRetainedText } from "@convex/execution/retainedText";
 import { PERSISTENCE_PAGE_SIZE } from "@convex/resourcePolicy";
 import type { Context } from "@earendil-works/chord/context";
 import type {
@@ -38,6 +39,33 @@ export function createNativeInputDelivery(
         if (!storage.lease) throw executionError("pi_writer_fenced");
         return storage.lease;
     };
+    async function inputBodyText(
+        message: NativeInput["messages"][number],
+        context: Context,
+        controlMessageId?: Id<"agentMessageDeliveries">,
+    ) {
+        if ("text" in message) return message.text;
+        const scope = { ...lease(), ...message };
+        const read = (index: number) => {
+            context.abortSignal?.throwIfAborted();
+            return ctx.runQuery(
+                internal.execution.piStore.nativeInputFragment,
+                {
+                    ...scope,
+                    controlMessageId,
+                    index,
+                },
+            );
+        };
+        const first = await read(0);
+        const parts = [first.content];
+        for (let index = 1; index < first.fragmentCount; index++)
+            parts.push((await read(index)).content);
+        return verifyRetainedText(
+            { ...first, contentHash: message.contentHash },
+            parts.join(""),
+        );
+    }
     async function controls(throughCreationTime: number) {
         const result: ControlInput[] = [];
         let cursor: string | null = null;
@@ -65,9 +93,25 @@ export function createNativeInputDelivery(
         context: Context,
         exchange: ControlInput,
     ) {
+        const command = await inputBodyText(
+            exchange.command,
+            context,
+            exchange.messageId,
+        );
+        if (
+            exchange.expectedCommand
+                ? command !== exchange.expectedCommand
+                : !command.trim()
+        )
+            throw executionError("native_control_unavailable");
+        const text = await inputBodyText(
+            exchange.confirmation,
+            context,
+            exchange.messageId,
+        );
         const confirmation: AssistantMessage = {
             role: "assistant",
-            content: [{ type: "text", text: exchange.text }],
+            content: [{ type: "text", text }],
             api: "application-control",
             provider: "application",
             model: "deterministic-control",
@@ -101,7 +145,7 @@ export function createNativeInputDelivery(
                     model: [
                         {
                             role: "user",
-                            content: exchange.command,
+                            content: command,
                             timestamp: exchange.createdAt,
                         },
                         confirmation,
@@ -218,14 +262,42 @@ export function createNativeInputDelivery(
             if (!event) throw executionError("native_observation_gap");
             yield {
                 sequence: event.sequence,
-                deliver: () =>
-                    writeObservation(root, context, {
+                deliver: async () => {
+                    const parts: string[] = [];
+                    for (let index = 0; index < event.fragmentCount; index++) {
+                        context.abortSignal?.throwIfAborted();
+                        parts.push(
+                            await ctx.runQuery(
+                                internal.execution.piStore
+                                    .readObservationFragment,
+                                {
+                                    ...lease(),
+                                    eventId: event.eventId,
+                                    expectedHash: event.contentHash,
+                                    index,
+                                },
+                            ),
+                        );
+                    }
+                    const value: unknown = JSON.parse(
+                        verifyRetainedText(event, parts.join("")),
+                    );
+                    return writeObservation(root, context, {
                         requestId: `observation:${event.eventId}`,
                         kind: "application.observation",
                         sequence: event.sequence,
-                        json: event.json,
+                        json: JSON.stringify({
+                            version: 1,
+                            topic: event.topic,
+                            sequence: event.sequence,
+                            historyReference: event.eventId,
+                            actor: event.actor,
+                            occurredAt: event.occurredAt,
+                            value,
+                        }),
                         timestamp: event.occurredAt,
-                    }),
+                    });
+                },
             };
             after = event.sequence;
         }
@@ -252,12 +324,17 @@ export function createNativeInputDelivery(
             const deliveries: Delivery[] = nativeInputs.map((input) => ({
                 sequence: input.nativeInputSequence,
                 deliver: async () => {
+                    const messages = [];
+                    for (const message of input.messages)
+                        messages.push({
+                            text: await inputBodyText(message, context),
+                        });
                     const submission = await root.submit(
                         {
                             type: "input",
                             requestId: input.requestId,
                             whenBusy: "steer",
-                            content: nativeAnalystInput(input.messages),
+                            content: nativeAnalystInput(messages),
                             entry: {
                                 kind: "workbench.analyst-input",
                                 data: {

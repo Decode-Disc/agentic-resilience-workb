@@ -29,6 +29,7 @@ import {
     PI_WORKER_SLICE_MS,
     resolveGenerationAuthority,
 } from "@convex/resourcePolicy";
+import { recoverCorrectionDraft } from "@convex/responseControl";
 import {
     BACKGROUND_CONTEXT,
     withAbortSignal,
@@ -88,6 +89,14 @@ import {
     generationObservation,
     readReportedCost,
 } from "./modelTransport";
+import {
+    lookupPiOperation,
+    preparePiReply,
+    recoverHistoricalCompletion,
+    recoverPiHistoricalPublication,
+    recoverPiInvocationBody,
+    recoverPiPublication,
+} from "./piInvocation";
 import { configuredNativeModel } from "./piModelProfiles";
 import { createNativeInputDelivery } from "./piNativeInput";
 import { openMissionPiStorage } from "./piStorage";
@@ -118,11 +127,18 @@ function nativePreparation(
         nativeConversation,
         contextRendering,
     );
-    const inputJson = section?.startsWith(prefix)
+    let inputJson = section?.startsWith(prefix)
         ? section.slice(prefix.length)
         : undefined;
+    if (inputJson?.includes('"draftResponseHash"')) {
+        const snapshot = JSON.parse(inputJson);
+        const control = snapshot.domain?.responseControl;
+        if (typeof control?.draftResponseHash === "string") {
+            delete control.draft;
+            inputJson = JSON.stringify(snapshot);
+        }
+    }
     return {
-        inputJson,
         inputHash:
             inputJson === undefined
                 ? "native_state_unavailable"
@@ -323,9 +339,10 @@ export async function runPiMission(
                         )),
                         async execute(_input, api, toolContext) {
                             try {
-                                const request = await ctx.runQuery(
-                                    internal.execution.piControl.operation,
+                                const request = await lookupPiOperation(
+                                    ctx,
                                     { ...args, callId: api.callId },
+                                    toolContext.abortSignal,
                                 );
                                 if (!request)
                                     throw executionError(
@@ -398,13 +415,25 @@ export async function runPiMission(
                     if (!storage.lease)
                         throw executionError("pi_writer_fenced");
                     await storage.renewLease();
-                    const disposition = await ctx.runQuery(
-                        internal.execution.piControl.completionDisposition,
-                        {
-                            ...storage.lease,
-                            callId: api.callId,
-                        },
-                    );
+                    const lease = storage.lease;
+                    const lookup = {
+                        ...lease,
+                        callId: api.callId,
+                    };
+                    const read =
+                        internal.execution.piControl.completionDisposition;
+                    let disposition = await ctx.runQuery(read, lookup);
+                    if (disposition.kind === "historical") {
+                        await recoverHistoricalCompletion(
+                            ctx,
+                            lease,
+                            disposition.invocation,
+                            context.abortSignal,
+                        );
+                        disposition = await ctx.runQuery(read, lookup);
+                    }
+                    if (disposition.kind === "historical")
+                        throw executionError("completion_correlation_invalid");
                     if (disposition.kind === "operation") {
                         const outcome = await dispatchRetainedOperation(
                             disposition.requestId,
@@ -470,13 +499,31 @@ export async function runPiMission(
                             try {
                                 const current = await ctx.runQuery(
                                     internal.execution.context.build,
-                                    args,
+                                    { ...args, correctionAdmission: true },
                                 );
                                 if (current.kind !== "ready")
                                     throw executionError(current.code);
+                                let inputJson = current.inputJson;
+                                if (inputJson.includes('"draftResponseHash"')) {
+                                    const snapshot = JSON.parse(inputJson);
+                                    const control =
+                                        snapshot.domain?.responseControl;
+                                    if (
+                                        typeof control?.draftResponseHash ===
+                                        "string"
+                                    ) {
+                                        control.draft =
+                                            await recoverCorrectionDraft(ctx, {
+                                                ...args,
+                                                contentHash:
+                                                    control.draftResponseHash,
+                                            });
+                                        inputJson = JSON.stringify(snapshot);
+                                    }
+                                }
                                 const messages = piMissionMessages(
                                     definition.instructions,
-                                    current.inputJson,
+                                    inputJson,
                                     [],
                                     0,
                                     definition.nativeConversation,
@@ -515,14 +562,24 @@ export async function runPiMission(
                             if (
                                 definition.completionTransport ===
                                     "native_tool" &&
-                                storage.lease &&
-                                (await ctx.runQuery(
+                                storage.lease
+                            ) {
+                                const lease = storage.lease;
+                                const read =
                                     internal.execution.piControl
-                                        .terminalCompletionAccepted,
-                                    storage.lease,
-                                ))
-                            )
-                                return;
+                                        .terminalCompletionAccepted;
+                                let accepted = await ctx.runQuery(read, lease);
+                                if (typeof accepted === "object") {
+                                    await recoverHistoricalCompletion(
+                                        ctx,
+                                        lease,
+                                        accepted.invocation,
+                                        context.abortSignal,
+                                    );
+                                    accepted = await ctx.runQuery(read, lease);
+                                }
+                                if (accepted === true) return;
+                            }
                             await settleRetainedOperations();
                             await syncInputs();
                             await refreshTools();
@@ -555,10 +612,10 @@ export async function runPiMission(
     }
     installTools();
     async function refreshTools() {
-        const current = await ctx.runQuery(
-            internal.execution.context.build,
-            args,
-        );
+        const current = await ctx.runQuery(internal.execution.context.build, {
+            ...args,
+            correctionAdmission: true,
+        });
         if (current.kind === "blocked") throw executionError(current.code);
         const snapshot: unknown = JSON.parse(current.inputJson);
         tools = await buildTools(snapshot);
@@ -605,11 +662,17 @@ export async function runPiMission(
                 expectedGeneration: args.expectedGeneration,
             },
         );
-        if (
-            previous.status === "returned" &&
-            previous.outputJson &&
-            JSON.parse(previous.outputJson).kind === "operations"
-        ) {
+        const output =
+            previous.status === "returned"
+                ? await recoverPiInvocationBody(
+                      ctx,
+                      previous,
+                      "adopted",
+                      args,
+                      context.abortSignal,
+                  )
+                : undefined;
+        if (output && JSON.parse(output).kind === "operations") {
             const settled = await ctx.runMutation(
                 internal.execution.invocations.settle,
                 {
@@ -662,11 +725,32 @@ export async function runPiMission(
             terminal &&
             original?.status === "returned" &&
             !original.blockCode &&
-            original.receivedOutputJson &&
-            original.rawOutputJson
+            (original.receivedOutputJson || original.receivedOutputTextId) &&
+            storage.sessionId
         ) {
-            const raw = JSON.parse(original.rawOutputJson);
-            if (raw.backendOutputJson) return JSON.parse(raw.backendOutputJson);
+            const authority = {
+                expectedGeneration: args.expectedGeneration,
+                sessionId: storage.sessionId,
+            };
+            const received = await recoverPiInvocationBody(
+                ctx,
+                original,
+                "received",
+                authority,
+                context.abortSignal,
+            );
+            const rawJson = received
+                ? await recoverPiInvocationBody(
+                      ctx,
+                      original,
+                      "raw",
+                      authority,
+                      context.abortSignal,
+                  )
+                : undefined;
+            const raw = rawJson ? JSON.parse(rawJson) : null;
+            if (raw?.backendOutputJson)
+                return JSON.parse(raw.backendOutputJson);
         }
         if (["completed", "cancelled"].includes(mission.status))
             throw executionError("pi_terminal_dispatch_forbidden");
@@ -724,6 +808,7 @@ export async function runPiMission(
             {
                 ...args,
                 taskKey,
+                returnInputReference: true,
                 ...(prepared
                     ? {
                           preparedInputHash: prepared.inputHash,
@@ -751,11 +836,13 @@ export async function runPiMission(
                 ...(auxiliary ? { purpose: "compaction" as const } : {}),
             },
         );
-        if (begun.kind !== "ready") {
+        if (begun.kind === "blocked") {
             if (begun.code === "native_input_changed")
                 return changedPreparation();
             throw executionError(begun.code);
         }
+        if (begun.kind !== "ready_reference")
+            throw executionError("native_state_unavailable");
         preparationChanges = 0;
         const invocationArgs = {
             invocationId: begun.invocationId,
@@ -765,12 +852,19 @@ export async function runPiMission(
             internal.execution.piControl.invocation,
             invocationArgs,
         );
+        const retainedResponseJson = await recoverPiInvocationBody(
+            ctx,
+            retained,
+            "received",
+            args,
+            context.abortSignal,
+        );
         if (
             !auxiliary &&
-            !retained.receivedOutputJson &&
+            !retainedResponseJson &&
             !retained.providerCallId &&
             (!retained.nativePreparation ||
-                prepared?.inputJson !== begun.inputJson ||
+                prepared?.inputHash !== begun.inputHash ||
                 prepared.toolSetKey !== retained.nativePreparation.toolSetKey ||
                 prepared.instructionsHash !==
                     retained.nativePreparation.instructionsHash)
@@ -800,7 +894,7 @@ export async function runPiMission(
             !auxiliary &&
             ["blocked", "returned"].includes(retained.status) &&
             generationInterruption(retained.blockCode) !== undefined &&
-            retained.receivedOutputJson &&
+            retainedResponseJson &&
             retained.receivedWhileAuthorized === true &&
             retained.generation !== args.expectedGeneration &&
             retained.adoptionGeneration === args.expectedGeneration
@@ -813,8 +907,8 @@ export async function runPiMission(
                 ),
             );
         }
-        if (retained.receivedOutputJson) {
-            const response = JSON.parse(retained.receivedOutputJson);
+        if (retainedResponseJson) {
+            const response = JSON.parse(retainedResponseJson);
             if (
                 response.kind === "blocked" &&
                 response.code === "native_input_changed" &&
@@ -826,9 +920,14 @@ export async function runPiMission(
                 response.code !== "context_capacity"
             )
                 throw executionError(response.code);
-            const raw = retained.rawOutputJson
-                ? JSON.parse(retained.rawOutputJson)
-                : null;
+            const rawJson = await recoverPiInvocationBody(
+                ctx,
+                retained,
+                "raw",
+                args,
+                context.abortSignal,
+            );
+            const raw = rawJson ? JSON.parse(rawJson) : null;
             message = raw?.backendOutputJson
                 ? JSON.parse(raw.backendOutputJson)
                 : undefined;
@@ -890,7 +989,7 @@ export async function runPiMission(
                         });
                         const response = auxiliary
                             ? undefined
-                            : await ctx.runQuery(
+                            : await ctx.runAction(
                                   internal.execution.simulation.invoke,
                                   invocationArgs,
                               );
@@ -1355,9 +1454,16 @@ export async function runPiMission(
             internal.execution.piControl.invocation,
             invocationArgs,
         );
-        if (!current.receivedOutputJson || !message)
+        const responseJson = await recoverPiInvocationBody(
+            ctx,
+            current,
+            "received",
+            args,
+            context.abortSignal,
+        );
+        if (!responseJson || !message)
             throw executionError("retained_response_invalid");
-        const currentResponse = JSON.parse(current.receivedOutputJson);
+        const currentResponse = JSON.parse(responseJson);
         const refusalCode = currentResponse.code;
         if (
             ["context_capacity", "native_input_changed"].includes(
@@ -1377,17 +1483,48 @@ export async function runPiMission(
         if (auxiliary) {
             await ctx.runMutation(
                 internal.execution.piControl.finishAuxiliary,
-                invocationArgs,
+                {
+                    ...invocationArgs,
+                    recovered: {
+                        responseHash: sha256Hex(responseJson),
+                        refusalCode:
+                            currentResponse.kind === "blocked"
+                                ? currentResponse.code
+                                : undefined,
+                    },
+                },
             );
         } else {
+            const preparedReply = await preparePiReply(
+                ctx,
+                invocationArgs,
+                currentResponse,
+                responseJson,
+                definition,
+                context.abortSignal,
+            );
+            const useReference =
+                preparedReply &&
+                (definition.id === "conversation_validation_v1" ||
+                    current.workbenchCompletionAdmission);
+            // Historical simulation observations embed the original reply envelope.
+            const rawOutputJson =
+                simulated && !useReference
+                    ? await recoverPiInvocationBody(
+                          ctx,
+                          current,
+                          "raw",
+                          args,
+                          context.abortSignal,
+                      )
+                    : undefined;
             const adopted = await ctx.runMutation(
                 internal.execution.invocations.finish,
                 {
                     ...invocationArgs,
-                    response: currentResponse,
-                    ...(current.rawOutputJson
-                        ? { rawOutputJson: current.rawOutputJson }
-                        : {}),
+                    ...(useReference ? {} : { response: currentResponse }),
+                    ...(preparedReply ? { preparedReply } : {}),
+                    ...(rawOutputJson ? { rawOutputJson } : {}),
                 },
             );
             if (adopted.kind === "blocked") {
@@ -1643,7 +1780,9 @@ export async function runPiMission(
             );
             if (
                 publication.completed &&
-                publication.publishedText !== undefined
+                (publication.publishedReply ||
+                    publication.publishedResult ||
+                    publication.publishedText !== undefined)
             ) {
                 const entries = await root.entries(
                     { order: "descending" },
@@ -1670,7 +1809,27 @@ export async function runPiMission(
                         content.type === "text" ? [content.text] : [],
                     )
                     .join("");
-                if (text !== publication.publishedText) {
+                const historicalText = publication.publishedResult
+                    ? await recoverPiHistoricalPublication(
+                          ctx,
+                          { ...args, ...publication.publishedResult },
+                          context.abortSignal,
+                      )
+                    : publication.publishedText;
+                const reply = publication.publishedReply;
+                const changed = reply
+                    ? sha256Hex(text) !== reply.contentHash
+                    : text !== historicalText;
+                if (changed) {
+                    const publishedText = reply
+                        ? await recoverPiPublication(
+                              ctx,
+                              { ...args, ...reply },
+                              context.abortSignal,
+                          )
+                        : historicalText;
+                    if (publishedText === undefined)
+                        throw executionError("publication_context_unavailable");
                     const edited = await root.submit(
                         {
                             type: "write",
@@ -1688,7 +1847,7 @@ export async function runPiMission(
                                                 content: [
                                                     {
                                                         type: "text",
-                                                        text: publication.publishedText,
+                                                        text: publishedText,
                                                     },
                                                 ],
                                             },
@@ -1718,9 +1877,16 @@ export async function runPiMission(
                       expectedGeneration: args.expectedGeneration,
                   })
                 : null;
-            const response = last?.receivedOutputJson
-                ? JSON.parse(last.receivedOutputJson)
-                : null;
+            const json = last
+                ? await recoverPiInvocationBody(
+                      ctx,
+                      last,
+                      "received",
+                      args,
+                      context.abortSignal,
+                  )
+                : undefined;
+            const response = json ? JSON.parse(json) : null;
             throw executionError(
                 response?.kind === "blocked"
                     ? response.code

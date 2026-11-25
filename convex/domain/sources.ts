@@ -1313,7 +1313,10 @@ export async function assertSourcesCompletionCapacity(
 export function sourcesCompletionAccounting(
     data: SourcesPreparation,
     response: Infer<typeof sourcesCompletionValidator>,
-    admittedWork: SourcesPreparation["work"] = data.work,
+    admittedWork: readonly Pick<
+        SourcesPreparation["work"][number],
+        "requestId"
+    >[] = data.work,
 ) {
     const issues: { path: string; expected: string; code: string }[] = [];
     const add = (path: string, expected: string, code: string) =>

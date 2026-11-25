@@ -27,7 +27,9 @@ export async function seedWorkbench(
         | "balanced"
         | "first_party_depth"
         | "independent_scrutiny" = "balanced",
-    transactionLimits = false,
+    transactionLimits: NonNullable<
+        Parameters<typeof convexTest>[0]["transactionLimits"]
+    > = false,
 ) {
     vi.useFakeTimers();
     const t = convexTest({

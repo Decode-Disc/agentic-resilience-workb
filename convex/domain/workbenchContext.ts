@@ -35,6 +35,7 @@ export async function readWorkbenchFacts(
     ctx: QueryCtx,
     run: Doc<"researchRuns">,
     mission?: Doc<"agentMissions">,
+    instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
 ): ReturnType<AgentDefinition["context"]> {
     const framing = run.currentFramingRevisionId
         ? await ctx.db.get(run.currentFramingRevisionId)
@@ -54,7 +55,12 @@ export async function readWorkbenchFacts(
             mission.definitionId,
             mission.definitionVersion,
         ) === "referenced"
-            ? await documentaryInventoryForMission(ctx, mission, reads)
+            ? await documentaryInventoryForMission(
+                  ctx,
+                  mission,
+                  reads,
+                  instructionTexts,
+              )
             : null;
     const framingCitationPolicy = mission
         ? await turnFramingCitationPolicy(ctx, mission)
@@ -206,7 +212,11 @@ export async function readWorkbenchFacts(
                     ),
                 };
             }),
-        analystRequests: await projectWorkbenchInstructions(ctx, instructions),
+        analystRequests: await projectWorkbenchInstructions(
+            ctx,
+            instructions,
+            instructionTexts,
+        ),
         ...(preparation?.sourcesMission
             ? {
                   documentaryPreparation: {

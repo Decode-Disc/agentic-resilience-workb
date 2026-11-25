@@ -87,6 +87,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useResponsive } from "@/hooks/use-responsive";
 import { responseCoherenceNotice } from "@/lib/presentation/workbench";
@@ -641,6 +642,25 @@ export function ConversationApprovalProvider({
     );
 }
 
+const ConversationBodyRetryContext = createContext<
+    ((messageId: string) => void) | undefined
+>(undefined);
+
+/** Keeps retry scoped to the reply whose body is unavailable. */
+export function ConversationBodyRetryProvider({
+    retry,
+    children,
+}: {
+    retry: (messageId: string) => void;
+    children: ReactNode;
+}) {
+    return (
+        <ConversationBodyRetryContext.Provider value={retry}>
+            {children}
+        </ConversationBodyRetryContext.Provider>
+    );
+}
+
 function ConversationApprovalPart(
     props: ToolCallMessagePartProps<{ requestId?: unknown }>,
 ) {
@@ -667,6 +687,22 @@ function ConversationMessage({
     authorName: string;
     agents: ConversationAgents;
 }) {
+    const retry = useContext(ConversationBodyRetryContext);
+    const messageId = useAuiState((s) => s.message.id);
+    const bodyLoad = useAuiState((s) => s.message.metadata.custom.bodyLoad);
+    const bodyStatus =
+        bodyLoad === "loading" ? (
+            <div role="status" aria-label="Loading reply">
+                <Skeleton className="h-5 w-3/4" />
+            </div>
+        ) : bodyLoad === "failed" ? (
+            <LoadErrorAlert
+                variant="inline"
+                title="Reply unavailable"
+                description="Try again to load this reply."
+                onRetry={retry ? () => retry(messageId) : undefined}
+            />
+        ) : null;
     const role = useAuiState((s) => s.message.role);
     const agentId = useAuiState((s) => s.message.metadata.custom.agentId);
     const resolvedAuthor =
@@ -712,6 +748,7 @@ function ConversationMessage({
                     />
                 }>
                 {attributionError}
+                {bodyStatus}
                 <MessagePrimitive.Parts
                     components={CONVERSATION_PART_COMPONENTS}
                 />
@@ -738,6 +775,7 @@ function ConversationMessage({
                     </span>
                 )}
                 <MessageContent>
+                    {bodyStatus}
                     <MessagePrimitive.Parts
                         components={CONVERSATION_PART_COMPONENTS}
                     />
@@ -760,7 +798,11 @@ function ConversationMessage({
                         available.
                     </p>
                 )}
-                <MessageFooter createdAt={createdAt} text={text} />
+                <MessageFooter
+                    createdAt={createdAt}
+                    text={text}
+                    copyDisabled={bodyStatus !== null}
+                />
             </MessageBody>
         </MessagePrimitive.Root>
     );

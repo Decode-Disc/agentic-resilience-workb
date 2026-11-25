@@ -12,6 +12,12 @@ import {
     assertPreparationExecutionFence,
 } from "@convex/domain/sourcePreparationAuthority";
 import {
+    projectSourcesCompletionAdmission,
+    projectSourcesOperationAdmission,
+} from "@convex/domain/sourcesAgent";
+import { projectWorkbenchOperationAdmission } from "@convex/domain/workbenchAgent";
+import { preparedResponseReviewDraft } from "@convex/domain/workbenchResponseControlContracts";
+import {
     agentToolSetKey,
     piInstructionSection,
 } from "@convex/integrations/modelInput";
@@ -29,6 +35,7 @@ import {
     MAX_WORKING_NOTES_BYTES,
     SOURCE_COMPARISON_MAX_OUTPUT_BYTES,
 } from "@convex/resourcePolicy";
+import { projectWorkbenchCompletionAdmission } from "@convex/responseControl";
 import { readWorkbenchQualificationDeadline } from "@convex/runWorkspace";
 import schema from "@convex/schema";
 import { type Infer, v } from "convex/values";
@@ -51,38 +58,43 @@ import {
 } from "./authority";
 import { normalizeNativeHistoryInput } from "./commonOperations";
 import { buildMissionContext } from "./context";
-import {
-    conversationInstructions,
-    publishTurn,
-    requireInstructionVersion,
-} from "./conversations";
+import { publishTurn, requireInstructionVersion } from "./conversations";
 import { executionFailureValidation } from "./errors";
 import {
     AI_SDK_BACKEND,
     invocationReplyValidator,
     invocationResponseValidator,
     invocationStructureError,
+    isOneShotPreparationOperation,
     operationInputValidator,
     requireSupportedMissionBackend,
 } from "./executionProtocol";
 import {
+    admittedInputFragment,
     admittedInputHash,
     admittedInputJson,
+    admittedInputManifest,
     contextObservationSequence,
     hasKnownNonDispatch,
+    hasReceivedResponse,
     invocationEventObservation,
+    invocationResponseManifest,
     latestNativeControl,
+    matchInvocationResponse,
+    preparedCompletionValidator,
+    preparedReplyBasisHash,
+    preparedReplyPrefix,
+    receivedResponseDigest,
     retainInvocationPayload,
     retainInvocationRawOutput,
     retainInvocationResponse,
-    invocationResponses,
-    hasReceivedResponse,
 } from "./journal";
 import {
-    missionResultPatch,
     invocationScopeFields,
+    missionResultPatch,
     missionScope,
     operationProgressKeys,
+    textualMissionOutcomePatch,
 } from "./missionData";
 import {
     completionFeedbackValidator,
@@ -92,6 +104,8 @@ import { persistOperationRequest } from "./operations";
 import { pauseResearchAtBoundary } from "./researchControl";
 import {
     appendRetainedText,
+    completeRetainedText,
+    requireRetainedStreamDispatch,
     retainedTextParts,
     sealRetainedText,
     stageRetainedText,
@@ -107,6 +121,15 @@ function resolveWorkingNotes(
     return new TextEncoder().encode(notes).length > MAX_WORKING_NOTES_BYTES
         ? { ok: false }
         : { ok: true, notes };
+}
+
+/** Cancellation can retain engaged diagnostics. Withdrawal starts permanent ownership removal. */
+async function dossierAcceptsDiagnostics(
+    ctx: QueryCtx,
+    runId: Doc<"researchRuns">["_id"],
+) {
+    const run = await ctx.db.get(runId);
+    return !!run && run.withdrawnAt === undefined;
 }
 
 export const appendVisibleOutput = internalMutation({
@@ -128,6 +151,8 @@ export const appendVisibleOutput = internalMutation({
             invocation.status !== "started"
         )
             throw executionError("invocation_unavailable");
+        if (!(await dossierAcceptsDiagnostics(ctx, invocation.runId)))
+            throw executionError("not_authorized");
         const textId = await appendRetainedText(
             ctx,
             `${invocation._id}:visible`,
@@ -153,7 +178,14 @@ export const sealVisibleOutput = internalMutation({
         const invocation = await ctx.db.get(args.invocationId);
         if (!invocation || invocation.missionId)
             throw executionError("invocation_unavailable");
+        if (!(await dossierAcceptsDiagnostics(ctx, invocation.runId)))
+            throw executionError("not_authorized");
         if (!invocation.visibleOutput) return null;
+        if (
+            invocation.visibleOutput.contentHash === undefined &&
+            invocation.status !== "started"
+        )
+            throw executionError("invocation_unavailable");
         const text = await sealRetainedText(
             ctx,
             invocation.visibleOutput.textId,
@@ -206,6 +238,7 @@ async function settleReceiptObservation(
     invocation: Doc<"agentInvocations">,
     attempt: Infer<typeof providerAttemptValidator>,
     observableReplyJson?: string,
+    observableReplyTextId?: Id<"retainedTexts">,
 ) {
     if (
         attempt.status === "started" ||
@@ -219,6 +252,7 @@ async function settleReceiptObservation(
     );
     if (settled.providerCallId !== invocation.providerCallId)
         throw executionError("invocation_receipt_invalid");
+    if (!(await dossierAcceptsDiagnostics(ctx, invocation.runId))) return;
     if (attempt.dispatchOutcome === "not_dispatched") {
         const request = await ctx.db
             .query("agentInvocationPayloads")
@@ -245,6 +279,7 @@ async function settleReceiptObservation(
             : attempt.dispatchOutcome === "not_dispatched"
               ? "not_dispatched"
               : "observable_reply_unavailable",
+        { textId: observableReplyTextId },
     );
 }
 
@@ -274,6 +309,7 @@ async function requireDispatchAuthority(
             invocation.instructionVersion,
         );
     } else {
+        await requireRetainedStreamDispatch(ctx);
         const receipt = invocation.providerCallId
             ? await ctx.db.get(invocation.providerCallId)
             : null;
@@ -367,17 +403,13 @@ export const authorizeDispatch = internalQuery({
                 preparation.serializer !== NATIVE_MODEL_SERIALIZER ||
                 preparation.instructionsHash !==
                     sha256Hex(piInstructionSection(definition.instructions)) ||
-                preparation.toolSetKey !==
-                    (await agentToolSetKey(
-                        agentToolSchemas(
-                            definition,
-                            JSON.parse(
-                                await admittedInputJson(ctx, invocation),
-                            ),
-                        ),
-                    ))
+                (!invocation.inputTextId &&
+                    sha256Hex(invocation.inputJson) !== preparation.inputHash)
             )
                 throw executionError("native_input_changed");
+            // Admission already verified the tool schemas against this exact input digest.
+            if (invocation.inputTextId)
+                await admittedInputManifest(ctx, invocation);
         }
         return null;
     },
@@ -447,6 +479,7 @@ export const begin = internalMutation({
         missionId: v.id("agentMissions"),
         expectedGeneration: v.number(),
         taskKey: v.string(),
+        returnInputReference: v.optional(v.literal(true)),
         piSessionId: v.optional(v.id("piSessions")),
         preparedInputHash: v.optional(v.string()),
         preparedObservationSequence: v.optional(v.number()),
@@ -468,6 +501,11 @@ export const begin = internalMutation({
             kind: v.literal("ready"),
             invocationId: v.id("agentInvocations"),
             inputJson: v.string(),
+        }),
+        v.object({
+            kind: v.literal("ready_reference"),
+            invocationId: v.id("agentInvocations"),
+            inputHash: v.string(),
         }),
         v.object({ kind: v.literal("blocked"), code: v.string() }),
     ),
@@ -517,6 +555,12 @@ export const begin = internalMutation({
                     adoptionGeneration: args.expectedGeneration,
                 });
             }
+            if (args.returnInputReference)
+                return {
+                    kind: "ready_reference" as const,
+                    invocationId: existing._id,
+                    inputHash: admittedInputHash(existing),
+                };
             return {
                 kind: "ready" as const,
                 invocationId: existing._id,
@@ -537,6 +581,7 @@ export const begin = internalMutation({
             ctx,
             mission._id,
             args.expectedGeneration,
+            args.returnInputReference,
         );
         if (context.kind === "blocked") {
             await ctx.db.patch(mission._id, {
@@ -550,19 +595,18 @@ export const begin = internalMutation({
             });
             return context;
         }
+        const snapshot = JSON.parse(context.inputJson);
+        const inputHash = sha256Hex(context.inputJson);
         const preparedDefinition = getAgentDefinition(
             mission.definitionId,
             mission.definitionVersion,
         );
         if (
             args.preparedInputHash &&
-            (args.preparedInputHash !== sha256Hex(context.inputJson) ||
+            (args.preparedInputHash !== inputHash ||
                 args.preparedToolSetKey !==
                     (await agentToolSetKey(
-                        agentToolSchemas(
-                            preparedDefinition,
-                            JSON.parse(context.inputJson),
-                        ),
+                        agentToolSchemas(preparedDefinition, snapshot),
                     )) ||
                 args.preparedInstructionsHash !==
                     sha256Hex(
@@ -582,33 +626,24 @@ export const begin = internalMutation({
             args.preparedInputHash &&
             !args.purpose &&
             (args.preparedObservationSequence ?? 0) !==
-                (JSON.parse(context.inputJson).nativeObservations
-                    ?.throughSequence ?? 0)
+                (snapshot.nativeObservations?.throughSequence ?? 0)
         )
             return { kind: "blocked" as const, code: "native_input_changed" };
         if (definition.nativeConversation && !args.purpose) {
             // Delivery proves native messages and tools; the fresh context returned
             // by begin supplies business state, fenced by the invocation's version.
-            const instructions = await conversationInstructions(ctx, mission);
+            const messageIds = context.nativeMessageIds;
             const native = args.nativeInput;
             if (
                 !native ||
                 (native.controlSequence ?? 0) !==
-                    (JSON.parse(context.inputJson).nativeObservations
-                        ?.controlSequence ?? 0) ||
-                !instructions ||
+                    (snapshot.nativeObservations?.controlSequence ?? 0) ||
+                !messageIds ||
                 stableStringify([...native.messageIds].sort()) !==
-                    stableStringify(
-                        instructions.messages
-                            .map((message) => message.messageId)
-                            .sort(),
-                    ) ||
+                    stableStringify([...messageIds].sort()) ||
                 native.toolSetKey !==
                     (await agentToolSetKey(
-                        agentToolSchemas(
-                            definition,
-                            JSON.parse(context.inputJson),
-                        ),
+                        agentToolSchemas(definition, snapshot),
                     ))
             )
                 return {
@@ -635,7 +670,26 @@ export const begin = internalMutation({
             provenance: args.provenance,
             status: "started",
             inputJson: fragmentInput ? "" : context.inputJson,
-            inputContentHash: sha256Hex(context.inputJson),
+            inputContentHash: inputHash,
+            ...(definition.id === "workbench_v1" && !args.purpose
+                ? {
+                      workbenchOperationAdmission:
+                          projectWorkbenchOperationAdmission(
+                              snapshot,
+                              definition.version,
+                          ),
+                      workbenchCompletionAdmission:
+                          projectWorkbenchCompletionAdmission(snapshot),
+                  }
+                : {}),
+            ...(definition.id === "sources_v1" && !args.purpose
+                ? {
+                      sourcesCompletionAdmission:
+                          projectSourcesCompletionAdmission(snapshot),
+                      sourcesOperationAdmission:
+                          projectSourcesOperationAdmission(snapshot),
+                  }
+                : {}),
             ...(args.preparedInputHash &&
             args.preparedToolSetKey &&
             args.preparedInstructionsHash &&
@@ -686,6 +740,12 @@ export const begin = internalMutation({
             cause: args.taskKey,
             invocationId,
         });
+        if (args.returnInputReference)
+            return {
+                kind: "ready_reference" as const,
+                invocationId,
+                inputHash,
+            };
         return {
             kind: "ready" as const,
             invocationId,
@@ -694,10 +754,30 @@ export const begin = internalMutation({
     },
 });
 
+async function executionInvocation(
+    ctx: QueryCtx,
+    args: { invocationId: Id<"agentInvocations">; expectedGeneration: number },
+) {
+    const invocation = await ctx.db.get(args.invocationId);
+    if (
+        !invocation?.missionId ||
+        invocation.generation !== args.expectedGeneration ||
+        invocation.status !== "started"
+    )
+        throw executionError("invocation_unavailable");
+    const { mission, run } = await requireMissionAuthority(
+        ctx,
+        invocation.missionId,
+        args.expectedGeneration,
+    );
+    return { invocation, mission, run };
+}
+
 export const forExecution = internalQuery({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
+        inputHash: v.optional(v.string()),
     },
     returns: v.object({
         invocation: schema.doc("agentInvocations"),
@@ -708,27 +788,21 @@ export const forExecution = internalQuery({
         }),
     }),
     handler: async (ctx, args) => {
-        const invocation = await ctx.db.get(args.invocationId);
-        if (
-            !invocation?.missionId ||
-            invocation.generation !== args.expectedGeneration ||
-            invocation.status !== "started"
-        )
-            throw executionError("invocation_unavailable");
-        const { mission, run } = await requireMissionAuthority(
+        const { invocation, mission, run } = await executionInvocation(
             ctx,
-            invocation.missionId,
-            args.expectedGeneration,
+            args,
         );
+        if (
+            args.inputHash !== undefined &&
+            args.inputHash !== admittedInputHash(invocation)
+        )
+            throw executionError("invocation_input_invalid");
         const qualificationDeadline =
             invocation.provenance === "live"
                 ? await readWorkbenchQualificationDeadline(ctx, run)
                 : undefined;
         return {
-            invocation: {
-                ...invocation,
-                inputJson: await admittedInputJson(ctx, invocation),
-            },
+            invocation,
             mission,
             authority: {
                 resourcePolicy: mission.resourcePolicy,
@@ -738,6 +812,31 @@ export const forExecution = internalQuery({
                 ),
             },
         };
+    },
+});
+
+export const executionInputFragment = internalQuery({
+    args: {
+        invocationId: v.id("agentInvocations"),
+        expectedGeneration: v.number(),
+        index: v.number(),
+        inputHash: v.string(),
+    },
+    returns: v.object({
+        content: v.string(),
+        contentHash: v.string(),
+        sizeBytes: v.number(),
+        characters: v.number(),
+        fragmentCount: v.number(),
+    }),
+    handler: async (ctx, args) => {
+        const { invocation } = await executionInvocation(ctx, args);
+        return admittedInputFragment(
+            ctx,
+            invocation,
+            args.index,
+            args.inputHash,
+        );
     },
 });
 
@@ -759,32 +858,127 @@ export const noteBackendInterruption = internalMutation({
     },
 });
 
+const observedReplyPart = v.union(
+    v.literal("response"),
+    v.literal("raw"),
+    v.literal("reply"),
+);
+
+export const stageObservedReply = internalMutation({
+    args: {
+        invocationId: v.id("agentInvocations"),
+        expectedGeneration: v.number(),
+        part: observedReplyPart,
+        fragment: textFragmentValidator,
+    },
+    returns: v.id("retainedTexts"),
+    handler: async (ctx, args) => {
+        const invocation = await ctx.db.get(args.invocationId);
+        if (
+            !invocation ||
+            invocation.generation !== args.expectedGeneration ||
+            (invocation.generationBackend?.id !== "pi-durable" &&
+                (invocation.missionId !== undefined || args.part === "raw"))
+        )
+            throw executionError("invocation_unavailable");
+        if (!(await dossierAcceptsDiagnostics(ctx, invocation.runId)))
+            throw executionError("not_authorized");
+        if (invocation.providerCallId) {
+            const receipt = await ctx.db.get(invocation.providerCallId);
+            if (
+                receipt?.invocationId !== invocation._id ||
+                receipt.executionGeneration !== invocation.generation ||
+                (!invocation.missionId && !receipt.preparationId)
+            )
+                throw executionError("invocation_receipt_invalid");
+        } else if (
+            invocation.provenance !== "simulation" ||
+            !invocation.missionId
+        ) {
+            throw executionError("invocation_unavailable");
+        }
+        const key =
+            args.part === "response"
+                ? `${invocation._id}:response:${args.fragment.contentHash}`
+                : `${invocation._id}:${args.part === "raw" ? "raw_output" : "reply"}`;
+        return stageRetainedText(ctx, key, args.fragment);
+    },
+});
+
+const receivedOutputArgs = {
+    responseJson: v.optional(v.string()),
+    responseTextId: v.optional(v.id("retainedTexts")),
+    rawOutputJson: v.optional(v.string()),
+    rawOutputTextId: v.optional(v.id("retainedTexts")),
+};
+
 export const retainOutput = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
-        responseJson: v.string(),
-        rawOutputJson: v.optional(v.string()),
+        ...receivedOutputArgs,
         observableReplyJson: v.optional(v.string()),
+        observableReplyTextId: v.optional(v.id("retainedTexts")),
     },
     returns: v.null(),
     handler: async (ctx, args) => {
         const invocation = await ctx.db.get(args.invocationId);
         if (!invocation || invocation.generation !== args.expectedGeneration)
             throw executionError("invocation_unavailable");
+        if (!(await dossierAcceptsDiagnostics(ctx, invocation.runId)))
+            throw executionError("not_authorized");
         if (
             invocation.generationBackend?.id !== "pi-durable" &&
             new TextEncoder().encode(args.rawOutputJson ?? "").length >
                 MAX_OBSERVABLE_OUTPUT_BYTES
         )
             throw executionError("response_capacity");
-        const receivedOutputJson = stableStringify(
-            JSON.parse(args.responseJson),
-        );
-        const previousResponse = await invocationResponses(ctx, invocation);
         if (
-            previousResponse.receivedOutputJson !== undefined &&
-            previousResponse.receivedOutputJson !== receivedOutputJson
+            (args.responseJson === undefined) ===
+                (args.responseTextId === undefined) ||
+            (args.rawOutputJson !== undefined &&
+                args.rawOutputTextId !== undefined)
+        )
+            throw executionError("invocation_result_invalid");
+        const receivedOutputJson =
+            args.responseJson !== undefined
+                ? stableStringify(JSON.parse(args.responseJson))
+                : undefined;
+        const responseText = args.responseTextId
+            ? await invocationResponseManifest(
+                  ctx,
+                  invocation,
+                  args.responseTextId,
+                  "response",
+              )
+            : undefined;
+        const expected = responseText
+            ? { responseHash: responseText.contentHash }
+            : receivedOutputJson;
+        if (expected === undefined)
+            throw executionError("invocation_result_invalid");
+        const previous = await matchInvocationResponse(
+            ctx,
+            invocation,
+            "received",
+            expected,
+        );
+        const rawText = args.rawOutputTextId
+            ? await invocationResponseManifest(
+                  ctx,
+                  invocation,
+                  args.rawOutputTextId,
+                  "raw",
+              )
+            : undefined;
+        if (
+            rawText &&
+            (invocation.generationBackend?.id !== "pi-durable" ||
+                (invocation.rawOutputTextId &&
+                    invocation.rawOutputTextId !== rawText._id) ||
+                (invocation.rawOutputJson !== undefined &&
+                    sha256Hex(invocation.rawOutputJson) !==
+                        rawText.contentHash))
         )
             throw executionError("invocation_result_conflict");
         const receipt = invocation.providerCallId
@@ -796,19 +990,40 @@ export const retainOutput = internalMutation({
                 receipt.status === "started")
         )
             throw executionError("provider_receipt_required");
-        if (invocation.provenance === "simulation")
+        if (invocation.provenance === "simulation") {
+            if (
+                args.observableReplyTextId &&
+                args.observableReplyJson !== undefined
+            )
+                throw executionError("journal_payload_conflict");
+            const envelope =
+                args.observableReplyJson ??
+                (args.observableReplyTextId
+                    ? undefined
+                    : receivedOutputJson !== undefined
+                      ? JSON.stringify({
+                            version: 1,
+                            provenance: "simulation",
+                            response: JSON.parse(receivedOutputJson),
+                        })
+                      : undefined);
+            if (envelope === undefined && !args.observableReplyTextId)
+                throw executionError("journal_payload_unavailable");
             await retainInvocationPayload(
                 ctx,
                 invocation,
                 "reply",
-                args.observableReplyJson ??
-                    JSON.stringify({
-                        version: 1,
-                        provenance: "simulation",
-                        response: JSON.parse(args.responseJson),
-                    }),
+                envelope,
+                "observable_reply_unavailable",
+                { textId: args.observableReplyTextId },
             );
-        else if (hasKnownNonDispatch({ ...invocation, receivedOutputJson })) {
+        } else if (
+            hasKnownNonDispatch({
+                ...invocation,
+                receivedOutputJson,
+                receivedOutputTextId: responseText?._id,
+            })
+        ) {
             for (const part of ["request", "reply"] as const) {
                 const existing = await ctx.db
                     .query("agentInvocationPayloads")
@@ -842,22 +1057,32 @@ export const retainOutput = internalMutation({
                 receivedWhileAuthorized = false;
             }
         }
-        const retainedResponse = await retainInvocationResponse(
-            ctx,
-            invocation,
-            receivedOutputJson,
-        );
+        const retainedResponse =
+            previous ??
+            (responseText
+                ? { json: undefined, textId: responseText._id }
+                : receivedOutputJson !== undefined
+                  ? await retainInvocationResponse(
+                        ctx,
+                        invocation,
+                        receivedOutputJson,
+                    )
+                  : null);
+        if (!retainedResponse)
+            throw executionError("invocation_result_invalid");
         await ctx.db.patch(invocation._id, {
             receivedOutputJson: retainedResponse.json,
             receivedOutputTextId: retainedResponse.textId,
             ...(receivedWhileAuthorized !== undefined
                 ? { receivedWhileAuthorized }
                 : {}),
-            ...(await retainInvocationRawOutput(
-                ctx,
-                invocation,
-                args.rawOutputJson,
-            )),
+            ...(rawText
+                ? { rawOutputTextId: rawText._id, rawOutputJson: undefined }
+                : await retainInvocationRawOutput(
+                      ctx,
+                      invocation,
+                      args.rawOutputJson,
+                  )),
         });
         if (invocation.missionId) {
             const mission = await ctx.db.get(invocation.missionId);
@@ -876,19 +1101,30 @@ export const retainOutput = internalMutation({
 export const recordModelReply = internalMutation({
     args: {
         attempt: providerAttemptValidator,
-        reply: invocationReplyValidator,
+        reply: v.optional(invocationReplyValidator),
+        prepared: v.optional(v.object(receivedOutputArgs)),
+        observableReplyTextId: v.optional(v.id("retainedTexts")),
         observableReplyJson: v.optional(v.string()),
     },
     returns: v.null(),
     handler: async (
         ctx,
-        { attempt, reply, observableReplyJson },
+        {
+            attempt,
+            reply,
+            prepared,
+            observableReplyJson,
+            observableReplyTextId,
+        },
     ): Promise<null> => {
         if (
             !attempt.missionId ||
             !attempt.invocationId ||
             attempt.executionGeneration === undefined ||
-            attempt.status === "started"
+            attempt.status === "started" ||
+            Boolean(reply) === Boolean(prepared) ||
+            (observableReplyJson !== undefined &&
+                observableReplyTextId !== undefined)
         )
             throw executionError("invocation_receipt_invalid");
         const invocation = await ctx.db.get(attempt.invocationId);
@@ -898,16 +1134,20 @@ export const recordModelReply = internalMutation({
             invocation,
             attempt,
             observableReplyJson,
+            observableReplyTextId,
         );
         await ctx.runMutation(
             internal.execution.invocationLifecycle.retainOutput,
             {
                 invocationId: attempt.invocationId,
                 expectedGeneration: attempt.executionGeneration,
-                responseJson: JSON.stringify(reply.response),
-                ...(reply.rawOutputJson !== undefined
-                    ? { rawOutputJson: reply.rawOutputJson }
-                    : {}),
+                ...(prepared ??
+                    (reply
+                        ? {
+                              responseJson: JSON.stringify(reply.response),
+                              rawOutputJson: reply.rawOutputJson,
+                          }
+                        : {})),
             },
         );
         return null;
@@ -926,11 +1166,7 @@ export const beginOneShot = internalMutation({
             !receipt.corpusRevisionId ||
             receipt.executionGeneration === undefined ||
             receipt.status !== "started" ||
-            ![
-                "source_qualification",
-                "source_comparison",
-                "source_documentary_control",
-            ].includes(receipt.operation)
+            !isOneShotPreparationOperation(receipt.operation)
         )
             throw executionError("one_shot_not_authorized");
         if (receipt.operation === "source_comparison" && receipt.sourceId)
@@ -991,21 +1227,91 @@ export const beginOneShot = internalMutation({
 export const finishOneShot = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
-        outputJson: v.string(),
+        captureFailure: v.optional(v.string()),
+        outputJson: v.optional(v.string()),
+        outputTextId: v.optional(v.id("retainedTexts")),
         attempt: v.optional(providerAttemptValidator),
         observableReplyJson: v.optional(v.string()),
+        observableReplyTextId: v.optional(v.id("retainedTexts")),
     },
-    returns: v.null(),
+    returns: v.union(v.null(), v.string()),
     handler: async (ctx, args) => {
         const invocation = await ctx.db.get(args.invocationId);
         if (!invocation || invocation.missionId)
             throw executionError("invocation_unavailable");
+        const withdrawn = !(await dossierAcceptsDiagnostics(
+            ctx,
+            invocation.runId,
+        ));
+        const captureFailure = withdrawn
+            ? "not_authorized"
+            : args.captureFailure;
+        if (captureFailure !== undefined) {
+            if (withdrawn && invocation.status === "returned")
+                return captureFailure;
+            if (
+                !args.attempt ||
+                (args.captureFailure !== undefined &&
+                    (args.outputJson !== undefined ||
+                        args.outputTextId !== undefined ||
+                        args.observableReplyJson !== undefined ||
+                        args.observableReplyTextId !== undefined)) ||
+                (invocation.status !== "started" &&
+                    invocation.status !== "blocked")
+            )
+                throw executionError("invocation_result_invalid");
+            await settleReceiptObservation(ctx, invocation, args.attempt);
+            if (invocation.status === "started")
+                await ctx.db.patch(invocation._id, {
+                    status: "blocked",
+                    blockCode: captureFailure,
+                    completedAt: Date.now(),
+                });
+            await ctx.runMutation(internal.providerCalls.requestBilling, {
+                invocationId: invocation._id,
+            });
+            return invocation.blockCode ?? captureFailure;
+        }
+        if (invocation.status === "blocked")
+            throw executionError("invocation_result_invalid");
+        if (
+            (args.outputJson === undefined) ===
+                (args.outputTextId === undefined) ||
+            (args.observableReplyJson !== undefined &&
+                args.observableReplyTextId !== undefined)
+        )
+            throw executionError("invocation_result_invalid");
+        const output = args.outputTextId
+            ? await invocationResponseManifest(
+                  ctx,
+                  invocation,
+                  args.outputTextId,
+                  "response",
+              )
+            : undefined;
+        const outputBytes =
+            output?.sizeBytes ??
+            new TextEncoder().encode(args.outputJson ?? "").length;
+        if (outputBytes > SOURCE_COMPARISON_MAX_OUTPUT_BYTES + 1024)
+            throw executionError("response_capacity");
+        const expected = output
+            ? { responseHash: output.contentHash }
+            : args.outputJson;
+        if (expected === undefined)
+            throw executionError("invocation_result_invalid");
+        const previous = await matchInvocationResponse(
+            ctx,
+            invocation,
+            "adopted",
+            expected,
+        );
         if (args.attempt)
             await settleReceiptObservation(
                 ctx,
                 invocation,
                 args.attempt,
                 args.observableReplyJson,
+                args.observableReplyTextId,
             );
         const receipt = invocation?.providerCallId
             ? await ctx.db.get(invocation.providerCallId)
@@ -1017,21 +1323,13 @@ export const finishOneShot = internalMutation({
             receipt.status === "started"
         )
             throw executionError("provider_receipt_required");
-        if (
-            new TextEncoder().encode(args.outputJson).length >
-            SOURCE_COMPARISON_MAX_OUTPUT_BYTES + 1024
-        )
-            throw executionError("response_capacity");
-        if (
-            invocation.outputJson !== undefined &&
-            invocation.outputJson !== args.outputJson
-        )
-            throw executionError("invocation_result_conflict");
-        await ctx.db.patch(invocation._id, {
-            outputJson: args.outputJson,
-            status: "returned",
-            completedAt: Date.now(),
-        });
+        if (!previous)
+            await ctx.db.patch(invocation._id, {
+                outputJson: args.outputJson,
+                outputTextId: output?._id,
+                status: "returned",
+                completedAt: Date.now(),
+            });
         await ctx.runMutation(internal.providerCalls.requestBilling, {
             invocationId: invocation._id,
         });
@@ -1106,11 +1404,193 @@ const invocationFinishOutcomeValidator = v.object({
     correction: v.optional(completionFeedbackValidator),
 });
 
+const replyPreparationArgs = {
+    invocationId: v.id("agentInvocations"),
+    expectedGeneration: v.number(),
+    responseHash: v.string(),
+};
+
+function preparedReplyKey(
+    invocationId: Id<"agentInvocations">,
+    basisHash: string,
+    contentHash: string,
+) {
+    return `${preparedReplyPrefix(invocationId)}:${basisHash}:${contentHash}`;
+}
+
+async function replyPreparationBasis(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+    mission: Doc<"agentMissions">,
+    responseHash: string,
+    instructionTexts = new Map<Id<"agentMessageDeliveries">, string>(),
+) {
+    const definition = getAgentDefinition(
+        mission.definitionId,
+        mission.definitionVersion,
+    );
+    if (!mission.conversationTurnId || !definition.preparedCompletion)
+        return null;
+    const rendering = await definition.preparedCompletion.basis(
+        ctx,
+        mission,
+        instructionTexts,
+    );
+    if (!rendering) return null;
+    return {
+        confirmationOnly: rendering.confirmationOnly,
+        confirmations: [...rendering.confirmations],
+        basisHash: sha256Hex(
+            stableStringify({
+                invocation: invocation._id,
+                generation: mission.generation,
+                mission: mission._id,
+                definition: mission.definitionId,
+                version: mission.definitionVersion,
+                instructions: invocation.instructionVersion,
+                inputHash: admittedInputHash(invocation),
+                responseHash,
+                factsHash: rendering.factsHash,
+            }),
+        ),
+    };
+}
+
+export const replyPreparation = internalQuery({
+    args: replyPreparationArgs,
+    returns: v.union(
+        v.null(),
+        v.object({
+            confirmationOnly: v.boolean(),
+            confirmations: v.array(v.string()),
+            basisHash: v.string(),
+        }),
+    ),
+    handler: async (ctx, args) => {
+        const invocation = await ctx.db.get(args.invocationId);
+        if (
+            !invocation?.missionId ||
+            (invocation.adoptionGeneration ?? invocation.generation) !==
+                args.expectedGeneration
+        )
+            return null;
+        const mission = await ctx.db.get(invocation.missionId);
+        if (
+            !mission ||
+            mission.generation !== args.expectedGeneration ||
+            !(await dossierAcceptsDiagnostics(ctx, mission.runId))
+        )
+            return null;
+        if (
+            invocation.status === "returned" &&
+            invocation.blockCode !== "pending_operations"
+        )
+            return null;
+        try {
+            await requireInstructionVersion(
+                ctx,
+                mission,
+                invocation.instructionVersion,
+            );
+        } catch (error) {
+            if (executionFailureCode(error) === "stale_instructions")
+                return null;
+            throw error;
+        }
+        const receivedHash = await receivedResponseDigest(ctx, invocation);
+        if (receivedHash !== args.responseHash) return null;
+        return replyPreparationBasis(
+            ctx,
+            invocation,
+            mission,
+            args.responseHash,
+        );
+    },
+});
+
+export const stagePreparedReply = internalMutation({
+    args: {
+        invocationId: v.id("agentInvocations"),
+        expectedGeneration: v.number(),
+        basisHash: v.string(),
+        fragment: textFragmentValidator,
+    },
+    returns: v.id("retainedTexts"),
+    handler: async (ctx, args) => {
+        const invocation = await ctx.db.get(args.invocationId);
+        if (
+            !invocation?.missionId ||
+            (invocation.adoptionGeneration ?? invocation.generation) !==
+                args.expectedGeneration
+        )
+            throw executionError("invocation_unavailable");
+        await requireMissionObservationAuthority(
+            ctx,
+            invocation.missionId,
+            args.expectedGeneration,
+        );
+        if (!(await dossierAcceptsDiagnostics(ctx, invocation.runId)))
+            throw executionError("not_authorized");
+        if (!/^[0-9a-f]{64}$/.test(args.basisHash))
+            throw executionError("invocation_result_invalid");
+        return stageRetainedText(
+            ctx,
+            preparedReplyKey(
+                invocation._id,
+                args.basisHash,
+                args.fragment.contentHash,
+            ),
+            args.fragment,
+        );
+    },
+});
+
+const preparedReplyValidator = v.object({
+    basisHash: v.string(),
+    textId: v.id("retainedTexts"),
+    reviewDraft: v.optional(preparedResponseReviewDraft),
+    completion: preparedCompletionValidator,
+});
+
+async function resolvePreparedReply(
+    ctx: QueryCtx,
+    invocation: Doc<"agentInvocations">,
+    mission: Doc<"agentMissions">,
+    prepared: Infer<typeof preparedReplyValidator>,
+    responseHash: string,
+    instructionTexts?: Map<Id<"agentMessageDeliveries">, string>,
+) {
+    const text = await completeRetainedText(ctx, prepared.textId);
+    const basis = await replyPreparationBasis(
+        ctx,
+        invocation,
+        mission,
+        responseHash,
+        instructionTexts,
+    );
+    if (basis?.basisHash !== prepared.basisHash) return null;
+    if (
+        text.key !==
+        preparedReplyKey(
+            invocation._id,
+            preparedReplyBasisHash(
+                prepared.basisHash,
+                prepared.reviewDraft,
+                prepared.completion,
+            ),
+            text.contentHash,
+        )
+    )
+        throw executionError("invocation_result_invalid");
+    return text;
+}
+
 export const finish = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
-        response: invocationResponseValidator,
+        response: v.optional(invocationResponseValidator),
+        preparedReply: v.optional(preparedReplyValidator),
         rawOutputJson: v.optional(v.string()),
     },
     returns: invocationFinishOutcomeValidator,
@@ -1125,13 +1605,34 @@ export const finish = internalMutation({
                 args.expectedGeneration
         )
             throw executionError("invocation_unavailable");
-        const outputJson = stableStringify(args.response);
-        const previousResponse = await invocationResponses(ctx, invocation);
+        if (!(await dossierAcceptsDiagnostics(ctx, invocation.runId)))
+            throw executionError("not_authorized");
+        const response = args.response;
+        const prepared = args.preparedReply;
+        const compact = response ? undefined : prepared?.completion;
+        if (!response && !compact)
+            throw executionError("invocation_result_invalid");
+        const outputJson = response ? stableStringify(response) : undefined;
+        const responseHash =
+            outputJson === undefined
+                ? compact?.responseHash
+                : sha256Hex(outputJson);
         if (
-            previousResponse.receivedOutputJson !== undefined &&
-            previousResponse.receivedOutputJson !== outputJson
+            !responseHash ||
+            (prepared && responseHash !== prepared.completion.responseHash)
         )
             throw executionError("invocation_result_conflict");
+        const match = (part: "received" | "adopted") =>
+            matchInvocationResponse(
+                ctx,
+                invocation,
+                part,
+                outputJson ?? { responseHash },
+            );
+        const received = await match("received");
+        if (compact && !received)
+            throw executionError("invocation_result_conflict");
+        const observation = response ?? { responseHash };
         if (
             invocation.generationBackend?.id !== "pi-durable" &&
             new TextEncoder().encode(args.rawOutputJson ?? "").length >
@@ -1147,13 +1648,14 @@ export const finish = internalMutation({
                 invocation.blockCode === "pending_operations"
             )
         ) {
-            if (previousResponse.outputJson !== outputJson)
+            if (!(await match("adopted")))
                 throw executionError("invocation_result_conflict");
             return {
                 kind: invocation.blockCode
                     ? ("blocked" as const)
-                    : args.response.kind === "complete" ||
-                        args.response.kind === "completion_submission"
+                    : !response ||
+                        response.kind === "complete" ||
+                        response?.kind === "completion_submission"
                       ? ("completed" as const)
                       : ("waiting" as const),
                 requestIds: invocation.requestIds ?? [],
@@ -1163,15 +1665,32 @@ export const finish = internalMutation({
                     : {}),
             };
         }
-        const retainedResponse = await retainInvocationResponse(
-            ctx,
-            invocation,
-            outputJson,
-        );
+        const retainedResponse =
+            received ??
+            (outputJson === undefined
+                ? null
+                : await retainInvocationResponse(ctx, invocation, outputJson));
+        if (!retainedResponse)
+            throw executionError("invocation_result_conflict");
+        const completionStructureError =
+            response?.kind === "completion_submission"
+                ? invocationStructureError(
+                      response,
+                      mission.executionRuntime === "pi-durable",
+                  )
+                : undefined;
+        const callId =
+            compact?.callId ??
+            (response?.kind === "completion_submission"
+                ? response.call?.callId
+                : undefined);
         const returned = {
             status: "returned" as const,
             outputJson: retainedResponse.json,
             outputTextId: retainedResponse.textId,
+            ...(callId && !completionStructureError
+                ? { nativeCompletion: { callId, responseHash } }
+                : {}),
             blockCode: undefined,
             ...(await retainInvocationRawOutput(
                 ctx,
@@ -1204,7 +1723,7 @@ export const finish = internalMutation({
             const observed = await invocationEventObservation(
                 ctx,
                 invocation,
-                args.response,
+                observation,
                 args.rawOutputJson,
             );
             await recordMissionEvent(ctx, mission, {
@@ -1322,9 +1841,9 @@ export const finish = internalMutation({
             !canAdoptRetainedResponse(mission, invocation)
         )
             return block("retained_response_not_reusable", true);
-        if (args.response.kind === "blocked") {
+        if (response?.kind === "blocked") {
             if (
-                args.response.code === "invalid_output" &&
+                response.code === "invalid_output" &&
                 receipt?.invocationId === invocation._id &&
                 receipt.status === "failed" &&
                 receipt.dispatchOutcome === "response_received" &&
@@ -1341,7 +1860,7 @@ export const finish = internalMutation({
                         },
                     ],
                 });
-            return block(args.response.code, true);
+            return block(response.code, true);
         }
         if (invocation.provenance === "live") {
             if (
@@ -1351,31 +1870,120 @@ export const finish = internalMutation({
             )
                 return block("provider_receipt_required", true);
         }
+        const recordCompleted = async (completed: typeof observation) => {
+            await recordMissionEvent(ctx, mission, {
+                ...(await invocationEventObservation(
+                    ctx,
+                    invocation,
+                    completed,
+                    args.rawOutputJson,
+                )),
+                historySource: "material",
+                kind: "mission_completed",
+                cause: invocation.taskKey,
+                invocationId: invocation._id,
+            });
+        };
+        if (!response) {
+            if (
+                !compact ||
+                !prepared ||
+                !mission.conversationTurnId ||
+                !("protocolVersion" in mission) ||
+                !definition.preparedCompletion
+            )
+                throw executionError("invocation_result_invalid");
+            if (
+                callId !== undefined &&
+                (definition.completionTransport !== "native_tool" ||
+                    callId.length < 1 ||
+                    callId.length > 160)
+            )
+                return block("invalid_tool_correlation", true);
+            const notes = resolveWorkingNotes(
+                mission.workingNotes,
+                compact.workingNotes,
+            );
+            const notesFit = !compact.workingNotesOversized && notes.ok;
+            if (!callId && !notesFit)
+                return block("working_memory_capacity", true);
+            if (await hasOutstandingOperations(ctx, mission._id))
+                return block("pending_operations");
+            if (!notesFit) return block("working_memory_capacity", true);
+            const instructionTexts = new Map<
+                Id<"agentMessageDeliveries">,
+                string
+            >();
+            const text = await resolvePreparedReply(
+                ctx,
+                invocation,
+                mission,
+                prepared,
+                responseHash,
+                instructionTexts,
+            );
+            if (!text) return block("mission_context_changed");
+            await ctx.db.patch(mission._id, { workingNotes: notes.notes });
+            const result = await definition.preparedCompletion.adopt(
+                ctx,
+                mission,
+                invocation,
+                prepared.reviewDraft,
+                instructionTexts,
+            );
+            if (result.kind === "correct")
+                return correctCompletion(result.feedback);
+            if (result.kind === "continue")
+                return block("mission_context_changed");
+            if (result.kind === "blocked") return block(result.code);
+            const publication = await publishTurn(
+                ctx,
+                mission,
+                text,
+                invocation.instructionVersion,
+            );
+            if (!publication.bodyTextId)
+                throw executionError("publication_conflict");
+            await ctx.db.patch(mission._id, {
+                status: "completed",
+                ...textualMissionOutcomePatch(
+                    definition.preparedCompletion.outcomeKind,
+                    publication.bodyTextId,
+                    publication.contentHash,
+                ),
+            });
+            await recordCompleted(observation);
+            return { kind: "completed", requestIds: [] };
+        }
         const isCompletion =
-            args.response.kind === "complete" ||
-            args.response.kind === "completion_submission";
-        if (args.response.kind === "completion_submission") {
+            response.kind === "complete" ||
+            response.kind === "completion_submission";
+        if (response.kind === "completion_submission") {
             if (definition.completionTransport !== "native_tool")
                 return block("invalid_output", true);
-            const structureError = invocationStructureError(
-                args.response,
-                mission.executionRuntime === "pi-durable",
-            );
-            if (structureError) return block(structureError, true);
+            if (completionStructureError)
+                return block(completionStructureError, true);
         }
         const awaitingOperations =
             isCompletion && (await hasOutstandingOperations(ctx, mission._id));
-        const snapshot: unknown = JSON.parse(
-            await admittedInputJson(ctx, invocation),
-        );
+        const admission = isCompletion
+            ? (invocation.workbenchCompletionAdmission ??
+              invocation.sourcesCompletionAdmission)
+            : (invocation.workbenchOperationAdmission ??
+              invocation.sourcesOperationAdmission);
+        const snapshot: unknown =
+            isCompletion && definition.id === "conversation_validation_v1"
+                ? undefined
+                : (admission ??
+                  JSON.parse(await admittedInputJson(ctx, invocation)));
         if (
-            args.response.kind === "complete" ||
-            args.response.kind === "completion_submission"
+            response.kind === "complete" ||
+            response.kind === "completion_submission"
         ) {
-            if (args.response.kind === "complete") {
+            if (response.kind === "complete") {
                 const resolvedNotes = resolveWorkingNotes(
                     mission.workingNotes,
-                    args.response.workingNotes,
+                    response.workingNotes,
                 );
                 if (!resolvedNotes.ok)
                     return block("working_memory_capacity", true);
@@ -1388,8 +1996,8 @@ export const finish = internalMutation({
             }
             if (awaitingOperations) return block("pending_operations");
             let proposalValue: unknown;
-            if (args.response.kind === "completion_submission") {
-                if (args.response.call === null)
+            if (response.kind === "completion_submission") {
+                if (response.call === null)
                     return correctCompletion({
                         code: "invalid_completion",
                         issues: [
@@ -1401,7 +2009,7 @@ export const finish = internalMutation({
                         ],
                     });
                 try {
-                    proposalValue = JSON.parse(args.response.call.inputJson);
+                    proposalValue = JSON.parse(response.call.inputJson);
                 } catch {
                     return correctCompletion({
                         code: "invalid_completion",
@@ -1414,7 +2022,7 @@ export const finish = internalMutation({
                         ],
                     });
                 }
-            } else proposalValue = args.response;
+            } else proposalValue = response;
             try {
                 validate(definition.completionValidator, proposalValue, {
                     db: ctx.db,
@@ -1434,8 +2042,19 @@ export const finish = internalMutation({
                     ],
                 });
             }
+            const preparedText = prepared
+                ? await resolvePreparedReply(
+                      ctx,
+                      invocation,
+                      mission,
+                      prepared,
+                      responseHash,
+                  )
+                : undefined;
+            if (prepared && !preparedText)
+                return block("mission_context_changed");
             const proposal = proposalValue as AgentCompletion;
-            if (args.response.kind === "completion_submission") {
+            if (response.kind === "completion_submission") {
                 const resolvedNotes = resolveWorkingNotes(
                     mission.workingNotes,
                     proposal.workingNotes,
@@ -1451,6 +2070,7 @@ export const finish = internalMutation({
                 proposal,
                 snapshot,
                 invocation,
+                prepared?.reviewDraft,
             );
             if (completion.kind === "correct")
                 return correctCompletion(completion.feedback);
@@ -1463,43 +2083,41 @@ export const finish = internalMutation({
                 })
             )
                 return block("invalid_completion", true);
+            let publication:
+                | Awaited<ReturnType<typeof publishTurn>>
+                | undefined;
             if (mission.conversationTurnId) {
                 if (!definition.conversationReply)
                     return block("conversation_reply_missing", true);
-                await publishTurn(
+                publication = await publishTurn(
                     ctx,
                     mission,
                     definition.conversationReply(completion.result),
                     invocation.instructionVersion,
+                    preparedText ?? undefined,
                 );
             }
             await ctx.db.patch(mission._id, {
                 status: "completed",
-                ...(await missionResultPatch(ctx, mission, completion.result)),
-            });
-            await recordMissionEvent(ctx, mission, {
-                ...(await invocationEventObservation(
+                ...(await missionResultPatch(
                     ctx,
-                    invocation,
-                    args.response,
-                    args.rawOutputJson,
+                    mission,
+                    completion.result,
+                    publication,
                 )),
-                historySource: "material",
-                kind: "mission_completed",
-                cause: invocation.taskKey,
-                invocationId: invocation._id,
             });
+            await recordCompleted(response);
             return { kind: "completed" as const, requestIds: [] };
         }
         const resolvedNotes = resolveWorkingNotes(
             mission.workingNotes,
-            args.response.workingNotes,
+            response.workingNotes,
         );
         if (!resolvedNotes.ok) return block("working_memory_capacity", true);
         const notes = resolvedNotes.notes;
         await ctx.db.patch(mission._id, { workingNotes: notes });
         const structureError = invocationStructureError(
-            args.response,
+            response,
             mission.executionRuntime === "pi-durable",
         );
         if (structureError) return block(structureError, true);
@@ -1507,7 +2125,7 @@ export const finish = internalMutation({
         const modelOperations = agentToolSchemas(definition, snapshot);
         if (Object.keys(modelOperations).length === 0)
             return block("operation_not_allowed", true);
-        for (const request of args.response.requests) {
+        for (const request of response.requests) {
             if (
                 definition.completionTransport === "native_tool" &&
                 request.name === SUBMIT_COMPLETION_TOOL
@@ -1614,14 +2232,30 @@ export const finish = internalMutation({
                 }),
             );
         }
-        await ctx.db.patch(invocation._id, { requestIds });
+        await ctx.db.patch(invocation._id, {
+            requestIds,
+            ...(mission.executionRuntime === "pi-durable"
+                ? {
+                      nativeOperations: {
+                          responseHash,
+                          calls: response.requests.map((request) => ({
+                              callId: request.callId,
+                              ...(request.name === SUBMIT_COMPLETION_TOOL
+                                  ? { completion: true as const }
+                                  : {}),
+                          })),
+                      },
+                  }
+                : {}),
+        });
         await ctx.db.patch(mission._id, { status: "waiting" });
         await recordMissionEvent(ctx, mission, {
             ...(await invocationEventObservation(
                 ctx,
                 invocation,
-                args.response,
-                args.rawOutputJson,
+                response,
+                retainedResponse.textId ? undefined : args.rawOutputJson,
+                retainedResponse.textId ? responseHash : undefined,
             )),
             kind: "invocation_returned",
             cause: invocation.taskKey,

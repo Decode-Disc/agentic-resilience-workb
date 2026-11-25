@@ -1,4 +1,3 @@
-import { missionResult } from "./missionData";
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
@@ -7,6 +6,12 @@ import {
     type MutationCtx,
     type QueryCtx,
 } from "@convex/_generated/server";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import {
+    deliveryBodyHash,
+    nativeInputBody,
+    retainedDeliveryBody,
+} from "@convex/integrations/agentStorage";
 import {
     NATIVE_WORKER_POLICY,
     PERSISTENCE_PAGE_SIZE,
@@ -15,9 +20,7 @@ import {
 } from "@convex/resourcePolicy";
 import schema from "@convex/schema";
 import { type Infer, v } from "convex/values";
-import { validate } from "convex-helpers/validators";
 import { getAgentDefinition } from "./agentCatalog";
-import { SUBMIT_COMPLETION_TOOL } from "./agentDefinition";
 import {
     executionError,
     executionFailureCode,
@@ -25,15 +28,23 @@ import {
     requireDossierAuthority,
     requireMissionAuthority,
 } from "./authority";
-import { readTurnInstructions } from "./conversations";
-import { invocationResponseValidator } from "./executionProtocol";
 import {
-    admittedInputJson,
+    analystTurnDeliveries,
+    missionConversationMigrationFrozen,
+} from "./conversations";
+import { successfulAuxiliaryResponse } from "./executionProtocol";
+import {
     contextObservationSequence,
-    invocationRawOutputJson,
-    invocationResponses,
     hasReceivedResponse,
+    invocationResponseManifest,
+    matchInvocationResponse,
+    receivedResponseDigest,
+    retainedNativeCalls,
 } from "./journal";
+import {
+    retainedLegacyMissionResult,
+    retainedTextualOutcome,
+} from "./missionData";
 import { completionFeedbackValidator } from "./operationContracts";
 import {
     needsNativeSettlement,
@@ -43,6 +54,7 @@ import {
     tracksNativeSettlement,
 } from "./piStore";
 import { suspendInterruptedResearch } from "./researchControl";
+import { retainedTextFragment } from "./retainedText";
 import { nativeInputsValidator } from "./schema";
 
 async function publicationControl(ctx: QueryCtx) {
@@ -155,19 +167,19 @@ export const admittedInputs = internalMutation({
             : null;
         if (!turn || turn.missionId !== mission._id)
             throw executionError("active_turn_required");
-        const instructions = await readTurnInstructions(ctx, turn);
-        const analystMessages = instructions.messages.map(
-            ({ messageId, text }) => ({ messageId, text }),
-        );
-        const messageOrder = new Map(
-            (
-                await Promise.all(
-                    analystMessages.map((m) => ctx.db.get(m.messageId)),
-                )
-            ).flatMap((m) =>
-                m ? [[m._id, m.nativeInputSequence ?? 0] as const] : [],
-            ),
-        );
+        const conversation = await ctx.db.get(turn.conversationId);
+        if (!conversation) throw executionError("conversation_unavailable");
+        const analystMessages: Infer<
+            typeof nativeInputsValidator
+        >[number]["messages"] = [];
+        const messageOrder = new Map<Id<"agentMessageDeliveries">, number>();
+        for await (const message of analystTurnDeliveries(ctx, turn._id)) {
+            const messageId = message._id;
+            messageOrder.set(messageId, message.nativeInputSequence ?? 0);
+            analystMessages.push(
+                await nativeInputBody(ctx, conversation, message),
+            );
+        }
         const initialIds =
             turn.nativeInitialMessageIds ??
             analystMessages.map((m) => m.messageId);
@@ -203,6 +215,26 @@ export const admittedInputs = internalMutation({
     },
 });
 
+async function requireNativeSession(
+    ctx: QueryCtx,
+    missionId: Id<"agentMissions">,
+    sessionId: Id<"piSessions">,
+    expectedGeneration: number,
+) {
+    const mission = await ctx.db.get(missionId);
+    const session = await ctx.db.get(sessionId);
+    if (
+        !mission ||
+        session?.missionId !== mission._id ||
+        session.generation !== expectedGeneration ||
+        mission.generation !== expectedGeneration ||
+        (mission.status === "cancelled" && !session.conversationId)
+    )
+        throw executionError("pi_writer_fenced");
+    await requireDossierAuthority(ctx, mission.runId);
+    return mission;
+}
+
 /** Original task identity survives worker restart; reading a terminal tail grants no progression authority. */
 export const nativeInvocation = internalQuery({
     args: {
@@ -213,35 +245,23 @@ export const nativeInvocation = internalQuery({
     },
     returns: v.union(schema.doc("agentInvocations"), v.null()),
     handler: async (ctx, args) => {
-        const mission = await ctx.db.get(args.missionId);
-        const session = await ctx.db.get(args.sessionId);
-        if (
-            !mission ||
-            session?.missionId !== mission._id ||
-            session.generation !== args.expectedGeneration ||
-            mission.generation !== args.expectedGeneration ||
-            (mission.status === "cancelled" && !session.conversationId)
-        )
-            throw executionError("pi_writer_fenced");
-        await requireDossierAuthority(ctx, mission.runId);
+        const mission = await requireNativeSession(
+            ctx,
+            args.missionId,
+            args.sessionId,
+            args.expectedGeneration,
+        );
         const invocation = await ctx.db
             .query("agentInvocations")
             .withIndex("by_run_and_task_key", (q) =>
                 q
                     .eq("runId", mission.runId)
-                    .eq("taskKey", `${session._id}:${args.taskKey}`),
+                    .eq("taskKey", `${args.sessionId}:${args.taskKey}`),
             )
             .unique();
         if (invocation && invocation.missionId !== mission._id)
             throw executionError("pi_task_mission_conflict");
-        return invocation
-            ? {
-                  ...invocation,
-                  ...(await invocationResponses(ctx, invocation)),
-                  inputJson: await admittedInputJson(ctx, invocation),
-                  rawOutputJson: await invocationRawOutputJson(ctx, invocation),
-              }
-            : null;
+        return invocation;
     },
 });
 
@@ -416,6 +436,15 @@ export const prepare = internalMutation({
             mission.generation !== args.expectedGeneration
         )
             return false;
+        const session = await sessionForMission(ctx, mission);
+        if (
+            await missionConversationMigrationFrozen(
+                ctx,
+                mission,
+                session?.conversationId,
+            )
+        )
+            return false;
         await ctx.db.patch(mission._id, {
             piWakeId: undefined,
             piWakeAt: undefined,
@@ -430,7 +459,6 @@ export const prepare = internalMutation({
             );
             return false;
         }
-        const session = await sessionForMission(ctx, mission);
         if (session?.settlementFailureCode) return false;
         const settling =
             ["completed", "cancelled"].includes(mission.status) &&
@@ -557,13 +585,29 @@ export const state = internalQuery({
     },
 });
 
+const historicalCorrelation = v.object({
+    kind: v.literal("historical"),
+    invocation: schema.doc("agentInvocations"),
+});
+
 export const operation = internalQuery({
     args: {
         missionId: v.id("agentMissions"),
         expectedGeneration: v.number(),
         callId: v.string(),
+        historical: v.optional(
+            v.object({
+                invocationId: v.id("agentInvocations"),
+                responseHash: v.string(),
+                index: v.number(),
+            }),
+        ),
     },
-    returns: v.union(schema.doc("agentOperationRequests"), v.null()),
+    returns: v.union(
+        schema.doc("agentOperationRequests"),
+        historicalCorrelation,
+        v.null(),
+    ),
     handler: async (ctx, args) => {
         const { mission } = await requireMissionAuthority(
             ctx,
@@ -574,22 +618,62 @@ export const operation = internalQuery({
             ? await ctx.db.get(mission.lastInvocationId)
             : null;
         if (!invocation) throw executionError("invocation_unavailable");
-        // Correlation is retained in invocation order; request.cause may be represented by an event instead.
-        const output = await invocationResponses(ctx, invocation);
-        const response = output.outputJson
-            ? JSON.parse(output.outputJson)
-            : null;
+        if (invocation.missionId !== mission._id)
+            throw executionError("operation_correlation_invalid");
+        const recovered = args.historical;
+        if (
+            recovered &&
+            (recovered.invocationId !== invocation._id ||
+                !(await matchInvocationResponse(
+                    ctx,
+                    invocation,
+                    "adopted",
+                    recovered,
+                )))
+        )
+            throw executionError("operation_correlation_invalid");
+        const calls = await retainedNativeCalls(ctx, invocation);
+        if (calls) {
+            const index = calls.findIndex(
+                (call) => call.callId === args.callId,
+            );
+            const requestId = invocation.requestIds?.[index];
+            const request = requestId ? await ctx.db.get(requestId) : null;
+            if (request && request.missionId !== mission._id)
+                throw executionError("operation_correlation_invalid");
+            return request;
+        }
+        if (!invocation.requestIds?.length) return null;
+        // Retained historical responses must be reconstructed outside this transaction.
+        if (!recovered && invocation.outputTextId)
+            return { kind: "historical" as const, invocation };
+        const response =
+            !recovered && invocation.outputJson
+                ? JSON.parse(invocation.outputJson)
+                : null;
         const index =
-            response?.kind === "operations"
+            recovered?.index ??
+            (response?.kind === "operations"
                 ? response.requests.findIndex(
                       (r: { callId: string }) => r.callId === args.callId,
                   )
-                : -1;
-        const id = index >= 0 ? invocation.requestIds?.[index] : undefined;
-        if (id) return ctx.db.get(id);
-        for (const id of invocation.requestIds ?? []) {
+                : -1);
+        if (!Number.isSafeInteger(index) || index < -1)
+            throw executionError("operation_correlation_invalid");
+        const id = invocation.requestIds[index];
+        if (id) {
             const request = await ctx.db.get(id);
-            if (request?.cause === args.callId) return request;
+            if (request && request.missionId !== mission._id)
+                throw executionError("operation_correlation_invalid");
+            return request;
+        }
+        for (const requestId of invocation.requestIds) {
+            const request = await ctx.db.get(requestId);
+            if (
+                request?.cause === args.callId &&
+                request.missionId === mission._id
+            )
+                return request;
         }
         return null;
     },
@@ -609,7 +693,7 @@ const completionDispositionValidator = v.union(
     }),
 );
 
-async function loadVerifiedNativeCompletionInvocation(
+async function nativeCompletionInvocation(
     ctx: QueryCtx,
     lease: Infer<typeof piLeaseValidator>,
     options: { requireCompleted?: boolean; requireNoBlock?: boolean } = {},
@@ -630,9 +714,6 @@ async function loadVerifiedNativeCompletionInvocation(
     const invocation = mission.lastInvocationId
         ? await ctx.db.get(mission.lastInvocationId)
         : null;
-    const output = invocation
-        ? await invocationResponses(ctx, invocation)
-        : null;
     if (
         !invocation ||
         invocation.missionId !== mission._id ||
@@ -640,16 +721,165 @@ async function loadVerifiedNativeCompletionInvocation(
             lease.generation ||
         !invocation.taskKey.startsWith(`${session._id}:`) ||
         invocation.status !== "returned" ||
-        !output?.outputJson ||
-        (output.receivedOutputJson !== undefined &&
-            output.receivedOutputJson !== output.outputJson) ||
         (options.requireNoBlock && invocation.blockCode !== undefined)
     )
         return invalid("completion_correlation_invalid");
-    const response: unknown = JSON.parse(output.outputJson);
-    if (!validate(invocationResponseValidator, response, { db: ctx.db }))
-        return invalid("retained_response_invalid");
-    return { session, mission, invocation, response };
+    return { mission, invocation };
+}
+
+/** Records call correlation verified from the historical fragments by the leased worker. */
+export const retainHistoricalCompletion = internalMutation({
+    args: {
+        ...piLeaseValidator.fields,
+        invocationId: v.id("agentInvocations"),
+        correlation: v.union(
+            v.object({ kind: v.literal("completion"), callId: v.string() }),
+            v.object({
+                kind: v.literal("operations"),
+                calls: v.array(
+                    v.object({
+                        callId: v.string(),
+                        completion: v.optional(v.literal(true)),
+                    }),
+                ),
+            }),
+        ),
+        responseHash: v.string(),
+    },
+    returns: v.null(),
+    handler: async (
+        ctx,
+        { invocationId, correlation, responseHash, ...lease },
+    ) => {
+        const current = await nativeCompletionInvocation(ctx, lease);
+        const invocation = current?.invocation;
+        if (
+            invocation?._id !== invocationId ||
+            (correlation.kind === "completion"
+                ? !!invocation.requestIds?.length ||
+                  !!invocation.nativeOperations
+                : correlation.calls.length !== invocation.requestIds?.length ||
+                  !!invocation.nativeCompletion)
+        )
+            throw executionError("completion_correlation_invalid");
+        const expected = { responseHash };
+        const patch =
+            correlation.kind === "completion"
+                ? {
+                      nativeCompletion: {
+                          ...expected,
+                          callId: correlation.callId,
+                      },
+                  }
+                : {
+                      nativeOperations: {
+                          ...expected,
+                          calls: correlation.calls,
+                      },
+                  };
+        const existing =
+            correlation.kind === "completion"
+                ? invocation.nativeCompletion
+                : invocation.nativeOperations;
+        const recovered =
+            "nativeCompletion" in patch
+                ? patch.nativeCompletion
+                : patch.nativeOperations;
+        if (existing) {
+            if (stableStringify(existing) !== stableStringify(recovered))
+                throw executionError("completion_correlation_invalid");
+            return null;
+        }
+        if (
+            !(await matchInvocationResponse(
+                ctx,
+                invocation,
+                "adopted",
+                expected,
+            ))
+        )
+            throw executionError("completion_correlation_invalid");
+        await matchInvocationResponse(ctx, invocation, "received", expected);
+        await ctx.db.patch(invocation._id, patch);
+        return null;
+    },
+});
+
+async function loadVerifiedNativeCompletionInvocation(
+    ctx: QueryCtx,
+    lease: Infer<typeof piLeaseValidator>,
+    options: {
+        requireCompleted?: boolean;
+        requireNoBlock?: boolean;
+    } = {},
+) {
+    const current = await nativeCompletionInvocation(ctx, lease, options);
+    if (!current) return null;
+    const { mission, invocation } = current;
+    const invalid = (code: string) => {
+        if (options.requireCompleted) return null;
+        throw executionError(code);
+    };
+    // An invocation with operation requests cannot be an accepted sole completion.
+    if (options.requireCompleted && invocation.requestIds?.length) return null;
+    const completion = invocation.nativeCompletion;
+    if (completion) {
+        if (!invocation.outputTextId && invocation.outputJson === undefined)
+            return invalid("completion_correlation_invalid");
+        for (const textId of new Set([
+            invocation.outputTextId,
+            invocation.receivedOutputTextId,
+        ])) {
+            if (!textId) continue;
+            const text = await invocationResponseManifest(
+                ctx,
+                invocation,
+                textId,
+                "response",
+            );
+            if (text.contentHash !== completion.responseHash)
+                return invalid("completion_correlation_invalid");
+        }
+        for (const inline of [
+            invocation.outputJson,
+            invocation.receivedOutputJson,
+        ]) {
+            if (
+                inline !== undefined &&
+                sha256Hex(inline) !== completion.responseHash
+            )
+                return invalid("completion_correlation_invalid");
+        }
+        return {
+            mission,
+            invocation,
+            callId: completion.callId,
+            requests: undefined,
+        };
+    }
+    if (invocation.nativeOperations) {
+        if (options.requireCompleted) return null;
+        const calls = await retainedNativeCalls(ctx, invocation);
+        return { mission, invocation, callId: undefined, requests: calls };
+    }
+    if (hasReceivedResponse(invocation)) {
+        const receivedHash = await receivedResponseDigest(ctx, invocation);
+        const adoptedHash = invocation.outputTextId
+            ? (
+                  await invocationResponseManifest(
+                      ctx,
+                      invocation,
+                      invocation.outputTextId,
+                      "response",
+                  )
+              ).contentHash
+            : invocation.outputJson === undefined
+              ? undefined
+              : sha256Hex(invocation.outputJson);
+        if (receivedHash !== adoptedHash)
+            return invalid("completion_correlation_invalid");
+    }
+    return { kind: "historical" as const, invocation };
 }
 
 /** Resolves the retained disposition of a submit_completion tool call without re-running domain completion. */
@@ -658,7 +888,7 @@ export const completionDisposition = internalQuery({
         ...piLeaseValidator.fields,
         callId: v.string(),
     },
-    returns: completionDispositionValidator,
+    returns: v.union(completionDispositionValidator, historicalCorrelation),
     handler: async (ctx, args) => {
         const { callId, ...lease } = args;
         const verified = await loadVerifiedNativeCompletionInvocation(
@@ -666,13 +896,12 @@ export const completionDisposition = internalQuery({
             lease,
         );
         if (!verified) throw executionError("completion_correlation_invalid");
-        const { mission, invocation, response } = verified;
-        if (response.kind === "operations") {
+        if (verified.kind === "historical") return verified;
+        const { mission, invocation, requests } = verified;
+        if (requests) {
             await requireMissionAuthority(ctx, mission._id, lease.generation);
-            const index = response.requests.findIndex(
-                (request) =>
-                    request.callId === callId &&
-                    request.name === SUBMIT_COMPLETION_TOOL,
+            const index = requests.findIndex(
+                (request) => request.callId === callId && request.completion,
             );
             const requestId =
                 index >= 0 ? invocation.requestIds?.[index] : undefined;
@@ -681,11 +910,7 @@ export const completionDisposition = internalQuery({
                 throw executionError("completion_correlation_invalid");
             return { kind: "operation" as const, requestId: request._id };
         }
-        if (
-            response.kind !== "completion_submission" ||
-            response.call === null ||
-            response.call.callId !== callId
-        )
+        if (verified.callId === undefined || verified.callId !== callId)
             throw executionError("completion_correlation_invalid");
         if (mission.status === "completed" && !invocation.blockCode)
             return { kind: "accepted" as const };
@@ -713,18 +938,15 @@ export const completionDisposition = internalQuery({
 /** Confirms an accepted sole native completion from retained state for afterTools tail settlement. */
 export const terminalCompletionAccepted = internalQuery({
     args: piLeaseValidator.fields,
-    returns: v.boolean(),
+    returns: v.union(v.boolean(), historicalCorrelation),
     handler: async (ctx, lease) => {
         const verified = await loadVerifiedNativeCompletionInvocation(
             ctx,
             lease,
             { requireCompleted: true, requireNoBlock: true },
         );
-        return Boolean(
-            verified &&
-                verified.response.kind === "completion_submission" &&
-                verified.response.call !== null,
-        );
+        if (verified?.kind === "historical") return verified;
+        return verified?.callId !== undefined;
     },
 });
 
@@ -732,6 +954,12 @@ export const finishAuxiliary = internalMutation({
     args: {
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
+        recovered: v.optional(
+            v.object({
+                responseHash: v.string(),
+                refusalCode: v.optional(v.string()),
+            }),
+        ),
     },
     returns: v.null(),
     handler: async (ctx, args) => {
@@ -747,14 +975,24 @@ export const finishAuxiliary = internalMutation({
             invocation.missionId,
             args.expectedGeneration,
         );
-        const { receivedOutputJson } = await invocationResponses(
-            ctx,
-            invocation,
-        );
-        if (receivedOutputJson === undefined)
-            throw executionError("invocation_unavailable");
-        const response = JSON.parse(receivedOutputJson);
-        if (response.kind === "blocked") throw executionError(response.code);
+        const digest = await receivedResponseDigest(ctx, invocation);
+        if (args.recovered && args.recovered.responseHash !== digest)
+            throw executionError("invocation_result_conflict");
+        if (
+            digest !== sha256Hex(stableStringify(successfulAuxiliaryResponse()))
+        ) {
+            const inline = invocation.receivedOutputJson;
+            if (inline !== undefined) {
+                const response = JSON.parse(inline);
+                if (response.kind === "blocked")
+                    throw executionError(response.code);
+            } else {
+                if (!args.recovered)
+                    throw executionError("retained_response_invalid");
+                if (args.recovered.refusalCode !== undefined)
+                    throw executionError(args.recovered.refusalCode);
+            }
+        }
         await ctx.db.patch(invocation._id, {
             status: "returned",
             outputJson: invocation.receivedOutputJson,
@@ -787,6 +1025,14 @@ export const closeWorker = internalMutation({
                 (session.missionId !== args.missionId ||
                     session.generation !== args.expectedGeneration ||
                     session.writer !== args.writer))
+        )
+            return null;
+        if (
+            await missionConversationMigrationFrozen(
+                ctx,
+                mission,
+                session?.conversationId,
+            )
         )
             return null;
         if (
@@ -904,30 +1150,95 @@ export const closeWorker = internalMutation({
     },
 });
 
-export const invocation = internalQuery({
-    args: {
-        invocationId: v.id("agentInvocations"),
-        expectedGeneration: v.number(),
-    },
-    returns: schema.doc("agentInvocations"),
-    handler: async (ctx, args) => {
-        const invocation = await ctx.db.get(args.invocationId);
+const recoveryInvocationValidator = v.object({
+    invocationId: v.id("agentInvocations"),
+    expectedGeneration: v.number(),
+});
+
+async function requireRecoveryInvocation(
+    ctx: QueryCtx,
+    {
+        invocationId,
+        expectedGeneration,
+    }: Infer<typeof recoveryInvocationValidator>,
+    sessionId?: Id<"piSessions">,
+) {
+    const invocation = await ctx.db.get(invocationId);
+    if (!invocation?.missionId) throw executionError("invocation_unavailable");
+    if (sessionId)
+        await requireNativeSession(
+            ctx,
+            invocation.missionId,
+            sessionId,
+            expectedGeneration,
+        );
+    else {
         if (
-            !invocation?.missionId ||
             (invocation.adoptionGeneration ?? invocation.generation) !==
-                args.expectedGeneration
+            expectedGeneration
         )
             throw executionError("invocation_unavailable");
         await requireMissionAuthority(
             ctx,
             invocation.missionId,
-            args.expectedGeneration,
+            expectedGeneration,
+        );
+    }
+    return invocation;
+}
+
+export const invocation = internalQuery({
+    args: recoveryInvocationValidator.fields,
+    returns: schema.doc("agentInvocations"),
+    handler: (ctx, args) => requireRecoveryInvocation(ctx, args),
+});
+
+/** Reads one fragment of the response pinned by the invocation and recovery authority. */
+export const invocationFragment = internalQuery({
+    args: {
+        ...recoveryInvocationValidator.fields,
+        sessionId: v.optional(v.id("piSessions")),
+        part: v.union(
+            v.literal("received"),
+            v.literal("adopted"),
+            v.literal("raw"),
+        ),
+        textId: v.id("retainedTexts"),
+        index: v.number(),
+    },
+    returns: v.object({
+        content: v.string(),
+        fragmentCount: v.number(),
+        contentHash: v.string(),
+        characters: v.number(),
+        sizeBytes: v.number(),
+    }),
+    handler: async (ctx, args) => {
+        const invocation = await requireRecoveryInvocation(
+            ctx,
+            args,
+            args.sessionId,
+        );
+        const expected =
+            args.part === "raw"
+                ? invocation.rawOutputTextId
+                : args.part === "adopted"
+                  ? invocation.outputTextId
+                  : invocation.receivedOutputTextId;
+        if (expected !== args.textId)
+            throw executionError("invocation_result_conflict");
+        const text = await invocationResponseManifest(
+            ctx,
+            invocation,
+            args.textId,
+            args.part === "raw" ? "raw" : "response",
         );
         return {
-            ...invocation,
-            ...(await invocationResponses(ctx, invocation)),
-            inputJson: await admittedInputJson(ctx, invocation),
-            rawOutputJson: await invocationRawOutputJson(ctx, invocation),
+            content: await retainedTextFragment(ctx, text, args.index),
+            fragmentCount: text.fragmentHashes.length,
+            contentHash: text.contentHash,
+            characters: text.characters,
+            sizeBytes: text.sizeBytes,
         };
     },
 });
@@ -1011,42 +1322,221 @@ export const rebind = internalMutation({
     },
 });
 
+const publicationArgs = v.object({
+    missionId: v.id("agentMissions"),
+    expectedGeneration: v.number(),
+});
+
+async function loadPublication(
+    ctx: QueryCtx,
+    args: Infer<typeof publicationArgs>,
+) {
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission || mission.generation !== args.expectedGeneration)
+        throw executionError("stale_execution");
+    await requireDossierAuthority(ctx, mission.runId);
+    const turn = mission.conversationTurnId
+        ? await ctx.db.get(mission.conversationTurnId)
+        : null;
+    const completed = mission.status === "completed";
+    const delivery =
+        completed && turn?.publishedMessageId
+            ? await ctx.db.get(turn.publishedMessageId)
+            : null;
+    if (
+        turn?.publishedMessageId &&
+        completed &&
+        (!delivery ||
+            delivery.runId !== mission.runId ||
+            delivery.turnId !== turn._id ||
+            delivery.conversationId !== turn.conversationId ||
+            (delivery.bodyTextId && turn.missionId !== mission._id) ||
+            ((turn.publicationHash !== undefined ||
+                (delivery.bodyTextId && !delivery.bodyContentHash)) &&
+                deliveryBodyHash(delivery) !== turn.publicationHash))
+    )
+        throw executionError("publication_context_unavailable");
+    return { mission, turn, delivery, completed };
+}
+
+const historicalPublication = v.object({
+    contentHash: v.string(),
+    definitionVersion: v.number(),
+});
+const publicationStateValidator = v.object({
+    completed: v.boolean(),
+    staleInstructions: v.boolean(),
+    publishedResult: v.optional(historicalPublication),
+    publishedText: v.optional(v.string()),
+    publishedReply: v.optional(
+        v.object({
+            messageId: v.optional(v.id("agentMessageDeliveries")),
+            contentHash: v.string(),
+        }),
+    ),
+});
+
 export const publicationState = internalQuery({
-    args: { missionId: v.id("agentMissions"), expectedGeneration: v.number() },
+    args: publicationArgs.fields,
+    returns: publicationStateValidator,
+    handler: async (
+        ctx,
+        args,
+    ): Promise<Infer<typeof publicationStateValidator>> => {
+        const { mission, turn, delivery, completed } = await loadPublication(
+            ctx,
+            args,
+        );
+        const last =
+            turn?.status === "active" && mission.lastInvocationId
+                ? await ctx.db.get(mission.lastInvocationId)
+                : null;
+        const staleInstructions =
+            !!turn &&
+            turn.status === "active" &&
+            turn.instructionVersion !== last?.instructionVersion;
+        if (delivery?.bodyTextId) {
+            const text = await retainedDeliveryBody(ctx, delivery);
+            return {
+                completed,
+                staleInstructions,
+                publishedReply: {
+                    messageId: delivery._id,
+                    contentHash: text.contentHash,
+                },
+            };
+        }
+        if (
+            completed &&
+            !delivery &&
+            "protocolVersion" in mission &&
+            mission.textualOutcome?.ownership === "mission"
+        ) {
+            const outcome = await retainedTextualOutcome(ctx, mission);
+            if (!outcome)
+                throw executionError("publication_context_unavailable");
+            return {
+                completed,
+                staleInstructions,
+                publishedReply: { contentHash: outcome.contentHash },
+            };
+        }
+        if (!completed) return { completed, staleInstructions };
+        const definition = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
+        );
+        if (!definition.conversationReply)
+            return { completed, staleInstructions };
+        if (
+            "protocolVersion" in mission &&
+            mission.resultTextId &&
+            !mission.textualOutcome
+        ) {
+            const result = await retainedLegacyMissionResult(
+                ctx,
+                mission,
+                mission.resultTextId,
+            );
+            return {
+                completed,
+                staleInstructions,
+                publishedResult: {
+                    contentHash: result.contentHash,
+                    definitionVersion: mission.definitionVersion,
+                },
+            };
+        }
+        if (!("protocolVersion" in mission))
+            return { completed, staleInstructions };
+        if (mission.textualOutcome)
+            throw executionError("publication_context_unavailable");
+        const result = mission.result;
+        return {
+            completed,
+            staleInstructions,
+            ...(result
+                ? { publishedText: definition.conversationReply(result) }
+                : {}),
+        };
+    },
+});
+
+export const historicalPublicationFragment = internalQuery({
+    args: {
+        ...publicationArgs.fields,
+        ...historicalPublication.fields,
+        index: v.number(),
+    },
+    handler: async (ctx, args) => {
+        const { mission, completed } = await loadPublication(ctx, args);
+        if (
+            !completed ||
+            !("protocolVersion" in mission) ||
+            !mission.resultTextId ||
+            mission.textualOutcome ||
+            mission.definitionVersion !== args.definitionVersion ||
+            !getAgentDefinition(mission.definitionId, mission.definitionVersion)
+                .conversationReply
+        )
+            throw executionError("publication_context_unavailable");
+        const text = await retainedLegacyMissionResult(
+            ctx,
+            mission,
+            mission.resultTextId,
+        );
+        if (text.contentHash !== args.contentHash)
+            throw executionError("publication_context_unavailable");
+        return {
+            definitionId: mission.definitionId,
+            content: await retainedTextFragment(ctx, text, args.index),
+            fragmentCount: text.fragmentHashes.length,
+            contentHash: text.contentHash,
+            characters: text.characters,
+            sizeBytes: text.sizeBytes,
+        };
+    },
+});
+
+export const publicationFragment = internalQuery({
+    args: {
+        ...publicationArgs.fields,
+        messageId: v.optional(v.id("agentMessageDeliveries")),
+        contentHash: v.string(),
+        index: v.number(),
+    },
     returns: v.object({
-        completed: v.boolean(),
-        staleInstructions: v.boolean(),
-        publishedText: v.optional(v.string()),
+        content: v.string(),
+        fragmentCount: v.number(),
+        contentHash: v.string(),
+        characters: v.number(),
+        sizeBytes: v.number(),
     }),
     handler: async (ctx, args) => {
-        const mission = await ctx.db.get(args.missionId);
-        if (!mission || mission.generation !== args.expectedGeneration)
-            throw executionError("stale_execution");
-        await requireDossierAuthority(ctx, mission.runId);
-        const turn = mission.conversationTurnId
-            ? await ctx.db.get(mission.conversationTurnId)
-            : null;
-        const last = mission.lastInvocationId
-            ? await ctx.db.get(mission.lastInvocationId)
-            : null;
-        const result =
-            mission.status === "completed"
-                ? await missionResult(ctx, mission)
-                : undefined;
+        const { mission, delivery, completed } = await loadPublication(
+            ctx,
+            args,
+        );
+        const text =
+            delivery &&
+            delivery._id === args.messageId &&
+            deliveryBodyHash(delivery) === args.contentHash
+                ? await retainedDeliveryBody(ctx, delivery)
+                : completed &&
+                    !delivery &&
+                    args.messageId === undefined &&
+                    "protocolVersion" in mission &&
+                    mission.textualOutcome?.ownership === "mission"
+                  ? await retainedTextualOutcome(ctx, mission)
+                  : undefined;
+        if (!text || text.contentHash !== args.contentHash)
+            throw executionError("publication_context_unavailable");
         return {
-            completed: mission.status === "completed",
-            ...(result
-                ? {
-                      publishedText: getAgentDefinition(
-                          mission.definitionId,
-                          mission.definitionVersion,
-                      ).conversationReply?.(result),
-                  }
-                : {}),
-            staleInstructions:
-                !!turn &&
-                turn.status === "active" &&
-                turn.instructionVersion !== last?.instructionVersion,
+            content: await retainedTextFragment(ctx, text, args.index),
+            fragmentCount: text.fragmentHashes.length,
+            contentHash: text.contentHash,
+            characters: text.characters,
+            sizeBytes: text.sizeBytes,
         };
     },
 });
@@ -1066,38 +1556,35 @@ export const retireForRepreparation = internalMutation({
             invocation.missionId,
             args.expectedGeneration,
         );
-        const { receivedOutputJson } = await invocationResponses(
-            ctx,
-            invocation,
+        const digest = await receivedResponseDigest(ctx, invocation);
+        const code = (
+            ["context_capacity", "native_input_changed"] as const
+        ).find(
+            (candidate) =>
+                digest ===
+                sha256Hex(
+                    stableStringify({ kind: "blocked", code: candidate }),
+                ),
         );
-        if (receivedOutputJson === undefined)
-            throw executionError("invocation_unavailable");
-        const result = JSON.parse(receivedOutputJson);
         const receipt = invocation.providerCallId
             ? await ctx.db.get(invocation.providerCallId)
             : null;
         if (
-            result.kind !== "blocked" ||
-            !["context_capacity", "native_input_changed"].includes(
-                result.code,
-            ) ||
+            !code ||
             (invocation.provenance !== "simulation" &&
                 receipt &&
                 receipt.dispatchOutcome !== "not_dispatched" &&
                 !(
-                    result.code === "context_capacity" &&
+                    code === "context_capacity" &&
                     receipt.dispatchOutcome === "response_received"
                 ))
         )
             throw executionError("attempt_outcome_unknown");
-        if (
-            invocation.status === "returned" &&
-            invocation.blockCode === result.code
-        )
+        if (invocation.status === "returned" && invocation.blockCode === code)
             return null;
         await ctx.db.patch(invocation._id, {
             status: "returned",
-            blockCode: result.code,
+            blockCode: code,
             outputJson: invocation.receivedOutputJson,
             outputTextId: invocation.receivedOutputTextId,
             completedAt: Date.now(),

@@ -122,6 +122,13 @@ test("Pi refreshes a retained completion after late reservation and completes wi
     const first = await f.t.run((ctx) => ctx.db.get(firstId));
     expect(first?.blockCode).toBe("pending_operations");
     assert(first);
+    expect(first.sourcesCompletionAdmission).toEqual({
+        activeWork: {
+            preparationId: f.preparationId,
+            needsRevision: 1,
+            work: [],
+        },
+    });
     expect(JSON.parse(first.inputJson).activeWork.work).toEqual([]);
     expect(
         await f.t.run((ctx) =>
@@ -152,6 +159,9 @@ test("Pi refreshes a retained completion after late reservation and completes wi
     const refreshedId = completed.lastInvocationId;
     const refreshed = await f.t.run((ctx) => ctx.db.get(refreshedId));
     assert(refreshed);
+    expect(refreshed.sourcesCompletionAdmission?.activeWork.work).toEqual([
+        { requestId, needIds: ["common-context"] },
+    ]);
     expect(JSON.parse(refreshed.inputJson).activeWork.work).toMatchObject([
         { requestId },
     ]);

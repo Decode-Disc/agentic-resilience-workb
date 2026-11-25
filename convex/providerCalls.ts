@@ -3,7 +3,11 @@ import {
     RESPONSE_CONTROL_LIMITS,
     responseReviewOperationKey,
 } from "@convex/domain/workbenchResponseControlContracts";
-import { operationHasStarted } from "@convex/execution/executionProtocol";
+import {
+    isOneShotPreparationOperation,
+    operationHasStarted,
+} from "@convex/execution/executionProtocol";
+import { requireRetainedStreamDispatch } from "@convex/execution/retainedText";
 import { resolveReasoningPreference } from "@convex/integrations/modelRouting";
 import { readResponseControlPolicy } from "@convex/modelConfiguration";
 import {
@@ -1248,6 +1252,13 @@ export const recordAttempt = internalMutation({
                 };
             }
 
+            if (
+                args.service === "model" &&
+                args.preparationId &&
+                !args.missionId &&
+                isOneShotPreparationOperation(args.operation)
+            )
+                await requireRetainedStreamDispatch(ctx);
             if (framingAuthority) {
                 const limit =
                     args.operation === "framing_context_search"

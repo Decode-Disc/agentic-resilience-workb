@@ -219,9 +219,12 @@ function visibleOutputWriter(
             while (pending) {
                 let end = Math.min(pending.length, TEXT_FRAGMENT_CHARACTERS);
                 const last = pending.charCodeAt(end - 1);
-                if (end < pending.length && last >= 0xd800 && last <= 0xdbff)
-                    end--;
+                // A provider delta can end before the low surrogate arrives.
+                if (last >= 0xd800 && last <= 0xdbff) end--;
+                if (!end) break;
                 const text = pending.slice(0, end);
+                if (/[\uD800-\uDFFF]/u.test(text))
+                    throw executionError("visible_output_invalid_unicode");
                 pending = pending.slice(end);
                 await captureUntil(() => append(text, sequence++), signal);
             }
@@ -250,9 +253,14 @@ function visibleOutputWriter(
         },
         async flush() {
             if (failure) throw failure;
-            if (pending) start();
             await flight;
             if (failure) throw failure;
+            if (pending) {
+                start();
+                await flight;
+            }
+            if (failure) throw failure;
+            if (pending) throw executionError("visible_output_invalid_unicode");
         },
     };
 }

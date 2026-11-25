@@ -10,11 +10,11 @@ import {
 } from "@convex/execution/approvals";
 import { executionFailureCode } from "@convex/execution/errors";
 import { resumeResearch } from "@convex/execution/researchControl";
+import { afterEach, assert, expect, test, vi } from "vitest";
 import {
     createConversationStorage,
     saveConversationMessage,
-} from "@convex/integrations/agentStorage";
-import { afterEach, assert, expect, test, vi } from "vitest";
+} from "@/__tests__/setup/legacy-conversation-storage";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 import {
     client,

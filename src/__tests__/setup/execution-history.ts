@@ -6,8 +6,12 @@ import { seedConversation } from "./agent-harness";
 /** Prior published exchange followed by an active, separately authorized response. */
 export async function seedHistoryMission(
     priorText = "Original analyst question",
+    options?: {
+        reply: string;
+        transactionLimits: Parameters<typeof seedConversation>[1];
+    },
 ) {
-    const f = await seedConversation(true);
+    const f = await seedConversation(true, options?.transactionLimits);
     await f.client.mutation(api.execution.conversations.submit, {
         runId: f.runId,
         requestKey: "prior",
@@ -40,7 +44,10 @@ export async function seedHistoryMission(
     await f.t.mutation(internal.execution.invocations.finish, {
         invocationId: begun.invocationId,
         expectedGeneration: 1,
-        response: { kind: "complete", text: "Original assistant answer" },
+        response: {
+            kind: "complete",
+            text: options?.reply ?? "Original assistant answer",
+        },
     });
     await f.client.mutation(api.execution.conversations.submit, {
         runId: f.runId,

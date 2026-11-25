@@ -1,4 +1,4 @@
-import type { Doc } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import type { AgentIdentityId } from "@convex/domain/agentIdentities";
 import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
@@ -135,6 +135,10 @@ export type AgentDefinition = {
         ctx: QueryCtx,
         mission: Doc<"agentMissions">,
         run: Doc<"researchRuns">,
+        options?: {
+            correctionAdmission?: true;
+            instructionTexts?: Map<Id<"agentMessageDeliveries">, string>;
+        },
     ): Promise<
         | { kind: "blocked"; code: string }
         | {
@@ -148,6 +152,50 @@ export type AgentDefinition = {
         mission: AgentProgressMission,
         outcome: OperationOutcome,
     ): AgentProgress;
+    /** Owns completion when proposal and published text are prepared outside the transaction. */
+    preparedCompletion?: {
+        outcomeKind: "workbench_v1" | "conversation_validation_v1";
+        basis(
+            ctx: QueryCtx,
+            mission: Doc<"agentMissions">,
+            instructionTexts: Map<Id<"agentMessageDeliveries">, string>,
+        ): Promise<{
+            confirmationOnly: boolean;
+            confirmations: readonly string[];
+            factsHash: string | null;
+        } | null>;
+        render(
+            proposal: AgentCompletion & { text: string },
+            basis: {
+                confirmationOnly: boolean;
+                confirmations: readonly string[];
+            },
+        ): {
+            result: AgentResult;
+            reviewDraft?: Infer<
+                typeof import("@convex/domain/workbenchResponseControlContracts").preparedResponseReviewDraft
+            >;
+        };
+        adopt(
+            ctx: MutationCtx,
+            mission: Doc<"agentMissions">,
+            invocation: Doc<"agentInvocations">,
+            reviewDraft:
+                | Infer<
+                      typeof import("@convex/domain/workbenchResponseControlContracts").preparedResponseReviewDraft
+                  >
+                | undefined,
+            instructionTexts: Map<Id<"agentMessageDeliveries">, string>,
+        ): Promise<
+            | { kind: "blocked"; code: string }
+            | { kind: "continue" }
+            | {
+                  kind: "correct";
+                  feedback: Infer<typeof completionFeedbackValidator>;
+              }
+            | { kind: "completed" }
+        >;
+    };
     /** Completion examines the immutable input admitted to this invocation, including during retained-response replay. */
     complete(
         ctx: MutationCtx,
@@ -155,6 +203,9 @@ export type AgentDefinition = {
         response: AgentCompletion,
         admittedInput: unknown,
         invocation: Doc<"agentInvocations">,
+        preparedReviewDraft?: Infer<
+            typeof import("@convex/domain/workbenchResponseControlContracts").preparedResponseReviewDraft
+        >,
     ): Promise<
         | { kind: "blocked"; code: string }
         | { kind: "continue" }

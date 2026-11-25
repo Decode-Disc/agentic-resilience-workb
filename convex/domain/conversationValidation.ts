@@ -42,6 +42,27 @@ export const conversationValidationV2Definition: AgentDefinition & {
     progress() {
         return {};
     },
+    preparedCompletion: {
+        outcomeKind: "conversation_validation_v1",
+        async basis() {
+            return {
+                confirmationOnly: false,
+                confirmations: [],
+                factsHash: null,
+            };
+        },
+        render(proposal) {
+            return {
+                result: {
+                    kind: "conversation_validation_v1",
+                    text: proposal.text,
+                },
+            };
+        },
+        async adopt() {
+            return { kind: "completed" };
+        },
+    },
     async complete(_ctx, _mission, response) {
         if (!("text" in response) || !response.text.trim())
             return { kind: "blocked", code: "invalid_completion" };

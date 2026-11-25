@@ -608,6 +608,14 @@ test("normalization refusals preserve domain refusal codes and diagnostics for u
         nativeInput: await workbenchAdmissionInput(f.t, activeTurn.missionId),
     });
     assert(begun.kind === "ready");
+    const admitted = await f.t.run((ctx) => ctx.db.get(begun.invocationId));
+    expect(admitted?.workbenchOperationAdmission).toMatchObject({
+        toolAvailability: { single: false, sourceRequest: "modern" },
+        messageIds: [expect.any(String), expect.any(String)],
+    });
+    expect(admitted?.workbenchOperationAdmission?.messageIds).not.toContain(
+        unobservedMessageId,
+    );
     const finished = await f.t.mutation(internal.execution.invocations.finish, {
         invocationId: begun.invocationId,
         expectedGeneration: 1,
