@@ -132,8 +132,33 @@ export function StartFramingScreen({
     refinement?: ReactNode;
     suggestions?: ReactNode;
 }) {
+    const container = useRef<HTMLElement>(null);
+    useLayoutEffect(() => {
+        const dock = container.current?.querySelector<HTMLElement>(
+            '[data-slot="conversation-thread-dock"]',
+        );
+        if (!dock) return;
+        // Resizing an already focused field does not trigger native focus scrolling.
+        const keepFocusVisible = () => {
+            const active = document.activeElement;
+            if (!(active instanceof HTMLElement) || !dock.contains(active))
+                return;
+            const field = active.getBoundingClientRect();
+            const bounds = dock.getBoundingClientRect();
+            if (field.bottom > bounds.bottom)
+                dock.scrollTop += field.bottom - bounds.bottom;
+            else if (field.top < bounds.top)
+                dock.scrollTop += field.top - bounds.top;
+        };
+        const observer = new ResizeObserver(keepFocusVisible);
+        observer.observe(dock);
+        return () => observer.disconnect();
+    }, []);
     return (
-        <section className={styles.framing} aria-label="Research framing">
+        <section
+            ref={container}
+            className={styles.framing}
+            aria-label="Research framing">
             <ConversationThread
                 runtime={runtime}
                 header={
