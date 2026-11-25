@@ -20,7 +20,6 @@ import {
 } from "@convex/execution/executionProtocol";
 import type * as InvocationLifecycle from "@convex/execution/invocationLifecycle";
 import { preparedReplyBasisHash } from "@convex/execution/journal";
-import { renderLegacyTextualResult } from "@convex/execution/missionData";
 import { operationInputFeedback } from "@convex/execution/operationContracts";
 import type * as PiControl from "@convex/execution/piControl";
 import {
@@ -388,31 +387,6 @@ export async function recoverPiPublication(
                 index,
             }),
         signal,
-    );
-}
-
-export async function recoverPiHistoricalPublication(
-    ctx: ActionCtx,
-    args: Omit<
-        FunctionArgs<ControlApi["historicalPublicationFragment"]>,
-        "index"
-    >,
-    signal?: AbortSignal,
-) {
-    const read = internal.execution.piControl.historicalPublicationFragment;
-    signal?.throwIfAborted();
-    const first = await ctx.runQuery(read, { ...args, index: 0 });
-    const persisted = await reconstructBody(
-        (index) =>
-            index === 0
-                ? Promise.resolve(first)
-                : ctx.runQuery(read, { ...args, index }),
-        signal,
-    );
-    return renderLegacyTextualResult(
-        persisted,
-        first.definitionId,
-        args.definitionVersion,
     );
 }
 

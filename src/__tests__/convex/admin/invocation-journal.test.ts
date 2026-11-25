@@ -355,7 +355,7 @@ test("journal inspection rejects a conversation reference belonging to another d
         });
         const conversationId = await ctx.db.insert("agentConversations", {
             runId: otherRun,
-            storageRef: "foreign",
+
             queuedCount: 0,
             createdAt: 1,
         });

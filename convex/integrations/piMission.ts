@@ -94,7 +94,6 @@ import {
     preparePiReply,
     preparePiSubmission,
     recoverHistoricalCompletion,
-    recoverPiHistoricalPublication,
     recoverPiInvocationBody,
     recoverPiPublication,
 } from "./piInvocation";
@@ -1814,12 +1813,7 @@ export async function runPiMission(
                 internal.execution.piControl.publicationState,
                 args,
             );
-            if (
-                publication.completed &&
-                (publication.publishedReply ||
-                    publication.publishedResult ||
-                    publication.publishedText !== undefined)
-            ) {
+            if (publication.completed && publication.publishedReply) {
                 const entries = await root.entries(
                     { order: "descending" },
                     32,
@@ -1845,25 +1839,13 @@ export async function runPiMission(
                         content.type === "text" ? [content.text] : [],
                     )
                     .join("");
-                const historicalText = publication.publishedResult
-                    ? await recoverPiHistoricalPublication(
-                          ctx,
-                          { ...args, ...publication.publishedResult },
-                          context.abortSignal,
-                      )
-                    : publication.publishedText;
                 const reply = publication.publishedReply;
-                const changed = reply
-                    ? sha256Hex(text) !== reply.contentHash
-                    : text !== historicalText;
-                if (changed) {
-                    const publishedText = reply
-                        ? await recoverPiPublication(
-                              ctx,
-                              { ...args, ...reply },
-                              context.abortSignal,
-                          )
-                        : historicalText;
+                if (sha256Hex(text) !== reply.contentHash) {
+                    const publishedText = await recoverPiPublication(
+                        ctx,
+                        { ...args, ...reply },
+                        context.abortSignal,
+                    );
                     if (publishedText === undefined)
                         throw executionError("publication_context_unavailable");
                     const edited = await root.submit(

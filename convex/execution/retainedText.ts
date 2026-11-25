@@ -1,10 +1,5 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import {
-    internalMutation,
-    internalQuery,
-    type MutationCtx,
-    type QueryCtx,
-} from "@convex/_generated/server";
+import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import {
     advanceSha256,
     completeCharacterBoundary,
@@ -19,7 +14,6 @@ import {
 import type { PaginationOptions } from "convex/server";
 import { getDocumentSize, type Infer, v } from "convex/values";
 import { executionError } from "./errors";
-import { ONE_SHOT_PREPARATION_OPERATIONS } from "./executionProtocol";
 export const textManifestValidator = v.object({
     contentHash: v.string(),
     sizeBytes: v.number(),
@@ -46,285 +40,16 @@ function requireManifestCapacity(
         throw executionError("retained_text_manifest_capacity");
 }
 
-async function streamUpgradeControl(ctx: QueryCtx) {
-    return ctx.db
-        .query("piPublication")
-        .withIndex("by_key", (q) => q.eq("key", "workers"))
-        .unique();
-}
-
-/** A deployment hold blocks new one-shot dispatch while started invocations drain. */
-export async function requireRetainedStreamDispatch(ctx: QueryCtx) {
-    const phase = (await streamUpgradeControl(ctx))?.retainedStreamUpgrade;
-    if (phase === "draining" || phase === "frozen")
-        throw executionError("retained_stream_upgrade_held");
-}
-
-async function retainedStreamWritePhase(ctx: QueryCtx) {
-    const phase = (await streamUpgradeControl(ctx))?.retainedStreamUpgrade;
-    if (phase === "frozen")
-        throw executionError("retained_stream_upgrade_held");
-    return phase;
-}
-
-async function unresolvedStream(ctx: QueryCtx) {
-    return ctx.db
-        .query("retainedTexts")
-        .withIndex("by_stream_manifest_readiness", (q) =>
-            q.eq("stream.sealed", false).eq("streamManifestReady", undefined),
-        )
-        .first();
-}
-
-export const nextUnresolvedStream = internalQuery({
-    args: {},
-    returns: v.union(v.id("retainedTexts"), v.null()),
-    handler: async (ctx) => {
-        await requireFrozenStreamUpgrade(ctx);
-        return (await unresolvedStream(ctx))?._id ?? null;
-    },
-});
-
-async function streamFreezeBlocker(ctx: QueryCtx) {
-    const writer = await ctx.db
-        .query("agentInvocations")
-        .withIndex("by_mission_and_status", (q) =>
-            q.eq("missionId", undefined).eq("status", "started"),
-        )
-        .first();
-    if (writer)
-        return { kind: "invocation" as const, invocationId: writer._id };
-    // Admission records the receipt before it creates the stream's invocation.
-    for (const operation of ONE_SHOT_PREPARATION_OPERATIONS) {
-        const receipt = await ctx.db
-            .query("providerCalls")
-            .withIndex("by_mission_service_status_operation", (q) =>
-                q
-                    .eq("missionId", undefined)
-                    .eq("service", "model")
-                    .eq("status", "started")
-                    .eq("operation", operation),
-            )
-            .first();
-        if (receipt)
-            return {
-                kind: "provider_receipt" as const,
-                providerCallId: receipt._id,
-            };
-    }
-    return null;
-}
-
-const streamUpgradePhase = v.union(
-    v.literal("draining"),
-    v.literal("frozen"),
-    v.literal("active"),
-);
-
-const streamUpgradeStatusValidator = v.object({
-    phase: v.union(v.literal("unstarted"), ...streamUpgradePhase.members),
-    blocker: v.union(
-        v.object({
-            kind: v.literal("invocation"),
-            invocationId: v.id("agentInvocations"),
-        }),
-        v.object({
-            kind: v.literal("provider_receipt"),
-            providerCallId: v.id("providerCalls"),
-        }),
-        v.object({
-            kind: v.literal("unresolved_manifest"),
-            textId: v.id("retainedTexts"),
-        }),
-        v.null(),
-    ),
-});
-
-/** Exposes the next record preventing the current maintenance phase from advancing. */
-export const streamUpgradeStatus = internalQuery({
-    args: {},
-    returns: streamUpgradeStatusValidator,
-    handler: async (
-        ctx,
-    ): Promise<Infer<typeof streamUpgradeStatusValidator>> => {
-        const phase =
-            (await streamUpgradeControl(ctx))?.retainedStreamUpgrade ??
-            "unstarted";
-        if (phase === "draining")
-            return { phase, blocker: await streamFreezeBlocker(ctx) };
-        const text = phase === "frozen" ? await unresolvedStream(ctx) : null;
-        return {
-            phase,
-            blocker: text
-                ? { kind: "unresolved_manifest" as const, textId: text._id }
-                : null,
-        };
-    },
-});
-
-export const advanceStreamUpgrade = internalMutation({
-    args: {
-        phase: streamUpgradePhase,
-    },
-    returns: v.null(),
-    handler: async (ctx, { phase }) => {
-        const control = await streamUpgradeControl(ctx);
-        const previous = control?.retainedStreamUpgrade;
-        if (previous === phase) return null;
-        if (
-            (phase === "draining" && previous !== undefined) ||
-            (phase === "frozen" && previous !== "draining") ||
-            (phase === "active" && previous !== "frozen")
-        )
-            throw executionError("retained_stream_upgrade_order");
-        if (phase === "frozen" && (await streamFreezeBlocker(ctx)))
-            throw executionError("retained_stream_writers_active");
-        if (phase === "active" && (await unresolvedStream(ctx)))
-            throw executionError("retained_text_incomplete");
-        if (control)
-            await ctx.db.patch(control._id, { retainedStreamUpgrade: phase });
-        else
-            await ctx.db.insert("piPublication", {
-                key: "workers",
-                held: false,
-                retainedStreamUpgrade: phase,
-            });
-        return null;
-    },
-});
-
-function hasPackedStreamManifest(
-    text: Doc<"retainedTexts">,
-    fragments: number,
-) {
-    return (
-        text.fragmentHashes.length === fragments &&
-        text.fragmentEnds.length === fragments &&
-        (text.fragmentEnds.at(-1) ?? 0) ===
-            text.receivedCharacters - (text.stream?.tail.length ?? 0)
-    );
-}
-
-function usesLegacyStreamLayout(
-    text: Doc<"retainedTexts">,
-    fragments: number,
-    phase: "draining" | "active" | undefined,
-) {
-    if (hasPackedStreamManifest(text, fragments)) return false;
-    // The additive release must let old producers drain before activation.
-    if (
-        phase !== "active" &&
-        !text.streamManifestReady &&
-        !text.streamManifestBackfill &&
-        text.fragmentHashes.length === 0 &&
-        text.fragmentEnds.length === 0
-    )
-        return true;
-    throw executionError("retained_text_incomplete");
-}
-
-/** Reconstruct one legacy fragment per transaction and verify the original prefix before use. */
-export const backfillStreamManifest = internalMutation({
-    args: { textId: v.id("retainedTexts") },
-    returns: v.object({ ready: v.boolean() }),
-    handler: async (ctx, { textId }) => {
-        await requireFrozenStreamUpgrade(ctx);
-        return backfillStreamFragment(ctx, await ctx.db.get(textId));
-    },
-});
-
-/** Advances one unresolved manifest without relying on an operator-held cursor. */
-export const backfillNextStream = internalMutation({
-    args: {},
-    returns: v.union(
-        v.object({ textId: v.id("retainedTexts"), ready: v.boolean() }),
-        v.null(),
-    ),
-    handler: async (ctx) => {
-        await requireFrozenStreamUpgrade(ctx);
-        const text = await unresolvedStream(ctx);
-        if (!text) return null;
-        return {
-            textId: text._id,
-            ...(await backfillStreamFragment(ctx, text)),
-        };
-    },
-});
-
-async function requireFrozenStreamUpgrade(ctx: QueryCtx) {
-    if ((await streamUpgradeControl(ctx))?.retainedStreamUpgrade !== "frozen")
-        throw executionError("retained_stream_upgrade_order");
-}
-
-async function backfillStreamFragment(
-    ctx: MutationCtx,
-    text: Doc<"retainedTexts"> | null,
-) {
-    if (!text?.stream || text.stream.sealed)
-        throw executionError("retained_text_invalid");
-    const textId = text._id;
+function requirePackedStreamManifest(text: Doc<"retainedTexts">) {
     const stream = text.stream;
-    const original = text.checkpoint;
-    const frontier = sha256Hex(
-        JSON.stringify([
-            stream.nextSequence,
-            stream.lastAppendHash,
-            stream.fragments,
-            stream.tail,
-            text.receivedCharacters,
-            text.receivedBytes,
-            original?.words,
-            original?.tail,
-            original?.sizeBytes,
-        ]),
-    );
-    const progress = text.streamManifestBackfill;
-    if (progress && progress.frontier !== frontier)
-        throw executionError("retained_text_conflict");
-    if (!progress && hasPackedStreamManifest(text, stream.fragments)) {
-        if (!text.streamManifestReady)
-            await ctx.db.patch(textId, { streamManifestReady: true });
-        return { ready: true };
-    }
-
-    const index = text.fragmentHashes.length;
     if (
-        index !== text.fragmentEnds.length ||
-        index >= stream.fragments ||
-        (!progress && index !== 0) ||
-        !original
+        !stream ||
+        text.fragmentHashes.length !== stream.fragments ||
+        text.fragmentEnds.length !== stream.fragments ||
+        (text.fragmentEnds.at(-1) ?? 0) !==
+            text.receivedCharacters - stream.tail.length
     )
-        throw executionError("retained_text_invalid");
-    const content = await diagnosticFragment(ctx, textId, index);
-    const end = (text.fragmentEnds.at(-1) ?? 0) + content.length;
-    const encoder = new TextEncoder();
-    const checkpoint = advanceSha256(
-        progress?.checkpoint,
-        encoder.encode(content),
-    );
-    const prefixCharacters = text.receivedCharacters - stream.tail.length;
-    const prefixBytes = text.receivedBytes - encoder.encode(stream.tail).length;
-    const ready = index + 1 === stream.fragments;
-    if (
-        end > prefixCharacters ||
-        checkpoint.sizeBytes > prefixBytes ||
-        (ready &&
-            (end !== prefixCharacters ||
-                checkpoint.sizeBytes !== prefixBytes ||
-                checkpoint.sizeBytes !== original.sizeBytes ||
-                sha256CheckpointHex(checkpoint) !==
-                    sha256CheckpointHex(original)))
-    )
-        throw executionError("retained_text_invalid");
-    const patch = {
-        fragmentHashes: [...text.fragmentHashes, sha256Hex(content)],
-        fragmentEnds: [...text.fragmentEnds, end],
-        streamManifestReady: ready ? (true as const) : undefined,
-        streamManifestBackfill: ready ? undefined : { frontier, checkpoint },
-    };
-    requireManifestCapacity({ ...text, ...patch });
-    await ctx.db.patch(textId, patch);
-    return { ready };
+        throw executionError("retained_text_incomplete");
 }
 
 /** Ordered append identity is independent of immutable packed-fragment layout. */
@@ -334,7 +59,6 @@ export async function appendRetainedText(
     sequence: number,
     content: string,
 ) {
-    const phase = await retainedStreamWritePhase(ctx);
     if (
         !Number.isSafeInteger(sequence) ||
         sequence < 0 ||
@@ -371,7 +95,7 @@ export async function appendRetainedText(
         }));
     text ??= await ctx.db.get(textId);
     if (!text?.stream) throw executionError("retained_text_invalid");
-    const legacy = usesLegacyStreamLayout(text, text.stream.fragments, phase);
+    requirePackedStreamManifest(text);
     const fragmentHashes = [...text.fragmentHashes];
     const fragmentEnds = [...text.fragmentEnds];
     let endOffset = fragmentEnds.at(-1) ?? 0;
@@ -392,11 +116,9 @@ export async function appendRetainedText(
             checkpoint,
             new TextEncoder().encode(fragment),
         );
-        if (!legacy) {
-            fragmentHashes.push(sha256Hex(fragment));
-            endOffset += fragment.length;
-            fragmentEnds.push(endOffset);
-        }
+        fragmentHashes.push(sha256Hex(fragment));
+        endOffset += fragment.length;
+        fragmentEnds.push(endOffset);
         tail = tail.slice(end);
     }
     const encoder = new TextEncoder();
@@ -407,7 +129,6 @@ export async function appendRetainedText(
             encoder.encode(text.stream.tail).length,
         receivedCharacters: text.receivedCharacters + content.length,
         checkpoint,
-        streamManifestReady: legacy ? undefined : (true as const),
         fragmentHashes,
         fragmentEnds,
         stream: {
@@ -424,16 +145,15 @@ export async function appendRetainedText(
 }
 
 /** Seal the remaining tail against the manifest accumulated by ordered appends. */
-export async function sealRetainedText(
+export async function finalizeRetainedTextStream(
     ctx: MutationCtx,
     textId: Id<"retainedTexts">,
 ) {
-    const phase = await retainedStreamWritePhase(ctx);
     const text = await ctx.db.get(textId);
     if (!text?.stream) throw executionError("retained_text_invalid");
     if (text.stream.sealed) return text;
     const { fragments, tail } = text.stream;
-    const legacy = usesLegacyStreamLayout(text, fragments, phase);
+    requirePackedStreamManifest(text);
     const tailBytes = new TextEncoder().encode(tail);
     if (
         (text.checkpoint?.sizeBytes ?? 0) + tailBytes.length !==
@@ -442,24 +162,6 @@ export async function sealRetainedText(
         throw executionError("retained_text_invalid");
     const fragmentHashes = [...text.fragmentHashes];
     const fragmentEnds = [...text.fragmentEnds];
-    if (legacy) {
-        const packed = await ctx.db
-            .query("retainedTextFragments")
-            .withIndex("by_text_and_index", (q) => q.eq("textId", textId))
-            .take(fragments + 1);
-        if (packed.length !== fragments)
-            throw executionError("retained_text_incomplete");
-        let end = 0;
-        for (const [index, fragment] of packed.entries()) {
-            if (fragment.index !== index)
-                throw executionError("retained_text_incomplete");
-            end += fragment.content.length;
-            fragmentHashes.push(sha256Hex(fragment.content));
-            fragmentEnds.push(end);
-        }
-        if (end + tail.length !== text.receivedCharacters)
-            throw executionError("retained_text_invalid");
-    }
     let checkpoint = text.checkpoint;
     if (tail || !fragments) {
         await ctx.db.insert("retainedTextFragments", {
@@ -924,7 +626,6 @@ export async function deleteRetainedTextBatch(
     const text = await ctx.db.get(textId);
     if (!text) return true;
     if (text.key !== key) throw executionError("retained_text_conflict");
-    if (text.stream && !text.stream.sealed) await retainedStreamWritePhase(ctx);
     const capacity = await ctx.meta.getTransactionMetrics();
     // Deleting a row also reads it. Reserve room for both that read and the parent.
     const batch = Math.min(

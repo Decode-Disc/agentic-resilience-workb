@@ -2,9 +2,9 @@ import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
 import { requireDossierAuthority } from "@convex/execution/authority";
+import { readConversationMessages } from "@convex/execution/conversationBodies";
 import { executionError, executionFailureCode } from "@convex/execution/errors";
 import { recordContextObservation } from "@convex/execution/journal";
-import { readConversationMessages } from "@convex/integrations/agentStorage";
 import { SOURCES_HANDOFF_READ_CAPACITY } from "@convex/resourcePolicy";
 import { sha256Hex, stableStringify } from "./sourcePassages";
 import { preparationFailureCode } from "./sourcePreparationAuthority";
@@ -130,12 +130,7 @@ export async function projectWorkbenchInstructions(
         const bodyReads = selected.filter(
             (message) => !wordingReferences?.has(message._id),
         );
-        const original = await readConversationMessages(
-            ctx,
-            conversation.storageRef,
-            bodyReads,
-            loaded,
-        );
+        const original = await readConversationMessages(ctx, bodyReads, loaded);
         bodyReads.forEach((message, index) => {
             const text = original[index];
             if (text === undefined)

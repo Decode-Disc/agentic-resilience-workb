@@ -25,7 +25,7 @@ import { preparedResponseReviewDraft } from "@convex/domain/workbenchResponseCon
 import {
     deliveryBodyHash,
     retainedDeliveryBody,
-} from "@convex/integrations/agentStorage";
+} from "@convex/execution/conversationBodies";
 import {
     agentToolSetKey,
     piInstructionSection,
@@ -125,10 +125,9 @@ import { pauseResearchAtBoundary } from "./researchControl";
 import {
     appendRetainedText,
     completeRetainedText,
-    requireRetainedStreamDispatch,
+    finalizeRetainedTextStream,
     retainedTextFragment,
     retainedTextParts,
-    sealRetainedText,
     stageRetainedText,
     textFragmentValidator,
 } from "./retainedText";
@@ -207,7 +206,7 @@ export const sealVisibleOutput = internalMutation({
             invocation.status !== "started"
         )
             throw executionError("invocation_unavailable");
-        const text = await sealRetainedText(
+        const text = await finalizeRetainedTextStream(
             ctx,
             invocation.visibleOutput.textId,
         );
@@ -330,7 +329,6 @@ async function requireDispatchAuthority(
             invocation.instructionVersion,
         );
     } else {
-        await requireRetainedStreamDispatch(ctx);
         const receipt = invocation.providerCallId
             ? await ctx.db.get(invocation.providerCallId)
             : null;

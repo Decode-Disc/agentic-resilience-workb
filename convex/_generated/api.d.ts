@@ -109,6 +109,7 @@ import type * as execution_authority from "../execution/authority.js";
 import type * as execution_cancellation from "../execution/cancellation.js";
 import type * as execution_commonOperations from "../execution/commonOperations.js";
 import type * as execution_context from "../execution/context.js";
+import type * as execution_conversationBodies from "../execution/conversationBodies.js";
 import type * as execution_conversations from "../execution/conversations.js";
 import type * as execution_errors from "../execution/errors.js";
 import type * as execution_executionProtocol from "../execution/executionProtocol.js";
@@ -141,7 +142,6 @@ import type * as framing from "../framing.js";
 import type * as framingCitationPolicy from "../framingCitationPolicy.js";
 import type * as http from "../http.js";
 import type * as integrations_agentSkillReader from "../integrations/agentSkillReader.js";
-import type * as integrations_agentStorage from "../integrations/agentStorage.js";
 import type * as integrations_approvedSourceRetrieval from "../integrations/approvedSourceRetrieval.js";
 import type * as integrations_documentaryControl from "../integrations/documentaryControl.js";
 import type * as integrations_evidenceNormalization from "../integrations/evidenceNormalization.js";
@@ -336,6 +336,7 @@ declare const fullApi: ApiFromModules<{
   "execution/cancellation": typeof execution_cancellation;
   "execution/commonOperations": typeof execution_commonOperations;
   "execution/context": typeof execution_context;
+  "execution/conversationBodies": typeof execution_conversationBodies;
   "execution/conversations": typeof execution_conversations;
   "execution/errors": typeof execution_errors;
   "execution/executionProtocol": typeof execution_executionProtocol;
@@ -368,7 +369,6 @@ declare const fullApi: ApiFromModules<{
   framingCitationPolicy: typeof framingCitationPolicy;
   http: typeof http;
   "integrations/agentSkillReader": typeof integrations_agentSkillReader;
-  "integrations/agentStorage": typeof integrations_agentStorage;
   "integrations/approvedSourceRetrieval": typeof integrations_approvedSourceRetrieval;
   "integrations/documentaryControl": typeof integrations_documentaryControl;
   "integrations/evidenceNormalization": typeof integrations_evidenceNormalization;
@@ -485,5 +485,4 @@ export declare const internal: FilterApi<
 export declare const components: {
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
-  agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
 };

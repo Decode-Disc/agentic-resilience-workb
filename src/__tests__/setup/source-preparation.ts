@@ -10,7 +10,6 @@ import {
 } from "@convex/domain/sourceQualification";
 import { upsertSourceReviewItem } from "@convex/domain/sourceReviewProjection";
 import schema from "@convex/schema";
-import agentTest from "@convex-dev/agent/test";
 import type { FunctionArgs } from "convex/server";
 import { convexTest, type TestConvex } from "convex-test";
 import { vi } from "vitest";
@@ -135,7 +134,6 @@ export async function seedInspectedEvidence(
     existing?: TestConvex<typeof schema>,
 ) {
     const fixture = await seedSourcePreparation({}, existing);
-    agentTest.register(fixture.t);
     const { t, runId, corpusRevisionId, sourceId, userId } = fixture;
     await t.mutation(internal.researchPlanning.createForRun, {
         runId,

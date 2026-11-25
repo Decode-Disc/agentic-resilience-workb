@@ -1521,7 +1521,7 @@ test("qualificationContinuation treats a quiet local generation block as safe wh
             existingConversation?._id ??
             (await ctx.db.insert("agentConversations", {
                 runId: run._id,
-                storageRef: "conv-quiet-block",
+
                 queuedCount: 0,
                 createdAt: now,
             }));

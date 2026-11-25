@@ -6,21 +6,15 @@ import {
 } from "@convex/_generated/server";
 import { cancelRunExecution } from "@convex/domain/runCancellation";
 import { cancelAgentMissionsForRun } from "@convex/execution/cancellation";
+import { retainedDeliveryKey } from "@convex/execution/conversationBodies";
 import { executionError } from "@convex/execution/errors";
 import {
     contextObservationTextKey,
     purgeInvocationJournalBatch,
 } from "@convex/execution/journal";
-import {
-    missionTextualResultKey,
-    textualOutcomeKey,
-} from "@convex/execution/missionData";
+import { textualOutcomeKey } from "@convex/execution/missionData";
 import { purgeDossierOperationBatch } from "@convex/execution/operations";
 import { deleteRetainedTextBatch } from "@convex/execution/retainedText";
-import {
-    deliveryMigrationTextKey,
-    retainedDeliveryKey,
-} from "@convex/integrations/agentStorage";
 import {
     CONVEX_MAX_DOCUMENT_BYTES,
     DOSSIER_PURGE_BATCH,
@@ -391,22 +385,6 @@ const steps: Record<
             .withIndex("by_run", (q) => q.eq("runId", runId))
             .paginate(purgeParentPage);
         for (const delivery of deliveries) {
-            if (
-                delivery.storageMigrationCopy &&
-                delivery.storageMigrationCopy.textId !== delivery.bodyTextId
-            ) {
-                const done = await deleteRetainedTextBatch(
-                    ctx,
-                    delivery.storageMigrationCopy.textId,
-                    deliveryMigrationTextKey(delivery._id),
-                    DOSSIER_PURGE_BATCH,
-                );
-                if (done)
-                    await ctx.db.patch(delivery._id, {
-                        storageMigrationCopy: undefined,
-                    });
-                return true;
-            }
             if (!delivery.bodyTextId) continue;
             const turn = delivery.turnId
                 ? await ctx.db.get(delivery.turnId)
@@ -457,26 +435,6 @@ const steps: Record<
                 .first();
             if (session) return dropSession(ctx, session._id);
 
-            if (
-                "protocolVersion" in mission &&
-                mission.legacyTextualResultCopy
-            ) {
-                const staged = mission.legacyTextualResultCopy.textId;
-                if (
-                    staged !== mission.textualOutcome?.textId &&
-                    !(await deleteRetainedTextBatch(
-                        ctx,
-                        staged,
-                        missionTextualResultKey(mission._id),
-                        DOSSIER_PURGE_BATCH,
-                    ))
-                )
-                    return true;
-                await ctx.db.patch(mission._id, {
-                    legacyTextualResultCopy: undefined,
-                });
-                return true;
-            }
             if ("protocolVersion" in mission && mission.textualOutcome) {
                 const textId = mission.textualOutcome.textId;
                 const delivery = await ctx.db
@@ -498,12 +456,20 @@ const steps: Record<
                 await ctx.db.patch(mission._id, { textualOutcome: undefined });
                 return true;
             }
-            if (!("protocolVersion" in mission) || !mission.resultTextId)
-                continue;
+            if (!("protocolVersion" in mission)) continue;
+            const resultText = mission.resultTextId
+                ? await ctx.db.get(mission.resultTextId)
+                : await ctx.db
+                      .query("retainedTexts")
+                      .withIndex("by_key", (q) =>
+                          q.eq("key", `${mission._id}:result`),
+                      )
+                      .unique();
+            if (!resultText) continue;
             if (
                 !(await deleteRetainedTextBatch(
                     ctx,
-                    mission.resultTextId,
+                    resultText._id,
                     `${mission._id}:result`,
                     DOSSIER_PURGE_BATCH,
                 ))

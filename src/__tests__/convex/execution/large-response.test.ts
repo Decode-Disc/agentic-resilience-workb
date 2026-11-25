@@ -542,7 +542,7 @@ test("recovers the exact retained invocation response beyond one read transactio
         return ctx.db.get(turn.publishedMessageId);
     });
     expect(published?.bodyTextId).toBe(preparedReply.textId);
-    expect(published?.storageMessageRef).toBeUndefined();
+    expect(published).not.toHaveProperty("storageMessageRef");
     expect(await f.t.run((ctx) => ctx.db.get(f.missionId))).toMatchObject({
         textualOutcome: {
             kind: "conversation_validation_v1",

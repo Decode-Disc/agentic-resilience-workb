@@ -83,10 +83,7 @@ import {
     DEFAULT_AGENT_BACKEND,
 } from "./executionProtocol";
 import { admittedInputHash, hasReceivedResponse } from "./journal";
-import {
-    generationInterruption,
-    retainedLegacyMissionResult,
-} from "./missionData";
+import { generationInterruption, retainedMissionResult } from "./missionData";
 import {
     completeRetainedText,
     retainedDiagnosticText,
@@ -657,7 +654,7 @@ export const simulationInspectionSnapshot = internalQuery({
                 ? mission
                 : undefined;
         const retainedResult = inspection?.resultTextId
-            ? await retainedLegacyMissionResult(
+            ? await retainedMissionResult(
                   ctx,
                   inspection,
                   inspection.resultTextId,
@@ -829,7 +826,7 @@ export const simulationInspectionResultFragment = internalQuery({
             !mission.resultTextId
         )
             throw new Error("Invalid retained simulation result");
-        const text = await retainedLegacyMissionResult(
+        const text = await retainedMissionResult(
             ctx,
             mission,
             mission.resultTextId,

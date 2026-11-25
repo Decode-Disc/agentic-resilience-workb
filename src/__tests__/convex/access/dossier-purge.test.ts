@@ -2,8 +2,8 @@ import { internal } from "@convex/_generated/api";
 import { recordContextObservation } from "@convex/execution/journal";
 import {
     appendRetainedText,
+    finalizeRetainedTextStream,
     retainedTextParts,
-    sealRetainedText,
     stageOperationObservation,
     stageRetainedText,
 } from "@convex/execution/retainedText";
@@ -224,7 +224,7 @@ test("purging an invocation removes its private diagnostic fragments and preserv
             0,
             "private prefix",
         );
-        const text = await sealRetainedText(ctx, textId);
+        const text = await finalizeRetainedTextStream(ctx, textId);
         await ctx.db.patch(invocationId, {
             visibleOutput: {
                 textId,

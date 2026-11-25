@@ -11,11 +11,10 @@ import {
 import {
     appendRetainedText,
     completeRetainedText,
-    deleteRetainedTextBatch,
+    finalizeRetainedTextStream,
     readRetainedText,
     retainedTextFragment,
     retainedTextParts,
-    sealRetainedText,
 } from "@convex/execution/retainedText";
 import { recoverPiInvocationBody } from "@convex/integrations/piInvocation";
 import {
@@ -69,8 +68,8 @@ test("append storage packs slow Unicode chunks and rejects changed or out-of-ord
         await f.t.run((ctx) =>
             appendRetainedText(ctx, "diagnostic-stream", i, "a"),
         );
-    await f.t.run((ctx) => sealRetainedText(ctx, id));
-    await f.t.run((ctx) => sealRetainedText(ctx, id));
+    await f.t.run((ctx) => finalizeRetainedTextStream(ctx, id));
+    await f.t.run((ctx) => finalizeRetainedTextStream(ctx, id));
     const expected = `${head}\ude00${"a".repeat(10)}`;
     expect(await f.t.run((ctx) => readRetainedText(ctx, id))).toBe(expected);
     const text = await f.t.run((ctx) => ctx.db.get(id));
@@ -101,7 +100,7 @@ test("seals a streamed body larger than the transaction read budget", async () =
     await t.run((ctx) => appendRetainedText(ctx, key, fragmentCount, tail));
 
     const { manifest, metrics } = await t.run(async (ctx) => ({
-        manifest: await sealRetainedText(ctx, id),
+        manifest: await finalizeRetainedTextStream(ctx, id),
         metrics: await ctx.meta.getTransactionMetrics(),
     }));
     expect(metrics.documentsRead.used).toBeLessThanOrEqual(3);
@@ -160,170 +159,32 @@ test("an append that would exceed the manifest array limit preserves the sealabl
         ),
     ).rejects.toThrow("retained_text_manifest_capacity");
     expect(await t.run((ctx) => ctx.db.get(id))).toEqual(before);
-    const sealed = await t.run((ctx) => sealRetainedText(ctx, id));
+    const sealed = await t.run((ctx) => finalizeRetainedTextStream(ctx, id));
     expect(sealed.fragmentHashes).toHaveLength(8192);
     expect(sealed.fragmentEnds.at(-1)).toBe(characters + 1);
 });
 
-const advanceStreamUpgrade = makeFunctionReference<
-    "mutation",
-    { phase: "draining" | "frozen" | "active" },
-    null
->("execution/retainedText:advanceStreamUpgrade");
-
-const nextUnresolvedStream = makeFunctionReference<
-    "query",
-    Record<string, never>,
-    Id<"retainedTexts"> | null
->("execution/retainedText:nextUnresolvedStream");
-
-const backfillStream = makeFunctionReference<
-    "mutation",
-    { textId: Id<"retainedTexts"> },
-    { ready: boolean }
->("execution/retainedText:backfillStreamManifest");
-
-const backfillNextStream = makeFunctionReference<
-    "mutation",
-    Record<string, never>,
-    { textId: Id<"retainedTexts">; ready: boolean } | null
->("execution/retainedText:backfillNextStream");
-
-test.each([
-    "drain",
-    "backfill",
-] as const)("preserves legacy stream content and append identity during %s", async (mode) => {
+test("stream finalization refuses a missing packed manifest without reconstructing or mutating it", async () => {
     const f = await seedHistoryMission();
-    const packed =
-        "x".repeat(TEXT_FRAGMENT_CHARACTERS) +
-        "界".repeat(TEXT_FRAGMENT_CHARACTERS);
-    const tail = "previous tail 😀";
-    const stream = {
-        sealed: false,
-        nextSequence: 3,
-        lastAppendHash: sha256Hex(tail),
-        fragments: 2,
-        tail,
-    };
-    const encoder = new TextEncoder();
-    const id = await f.t.run(async (ctx) => {
-        const textId = await ctx.db.insert("retainedTexts", {
-            key: "legacy-stream",
-            contentHash: sha256Hex(""),
-            sizeBytes: 0,
-            characters: 0,
+    const id = await f.t.run((ctx) =>
+        appendRetainedText(
+            ctx,
+            "missing-manifest",
+            0,
+            "p".repeat(TEXT_FRAGMENT_CHARACTERS),
+        ),
+    );
+    await f.t.run((ctx) =>
+        ctx.db.patch(id, {
             fragmentHashes: [],
             fragmentEnds: [],
-            received: 0,
-            receivedBytes: encoder.encode(packed + tail).length,
-            receivedCharacters: (packed + tail).length,
-            checkpoint: advanceSha256(undefined, encoder.encode(packed)),
-            stream,
-        });
-        for (const index of [0, 1]) {
-            const start = index * TEXT_FRAGMENT_CHARACTERS;
-            await ctx.db.insert("retainedTextFragments", {
-                textId,
-                index,
-                content: packed.slice(start, start + TEXT_FRAGMENT_CHARACTERS),
-            });
-        }
-        return textId;
-    });
-
-    await expect(f.t.mutation(backfillStream, { textId: id })).rejects.toThrow(
-        "retained_stream_upgrade_order",
+        }),
     );
-    await expect(f.t.mutation(backfillNextStream, {})).rejects.toThrow(
-        "retained_stream_upgrade_order",
-    );
-    await f.t.mutation(advanceStreamUpgrade, { phase: "draining" });
-    if (mode === "drain") {
-        expect(
-            await f.t.run((ctx) =>
-                appendRetainedText(ctx, "legacy-stream", 2, tail),
-            ),
-        ).toBe(id);
-        expect(
-            await f.t.run((ctx) =>
-                appendRetainedText(ctx, "legacy-stream", 3, " continued"),
-            ),
-        ).toBe(id);
-        await f.t.run((ctx) => sealRetainedText(ctx, id));
-        expect(await f.t.run((ctx) => readRetainedText(ctx, id))).toBe(
-            `${packed}${tail} continued`,
-        );
-        return;
-    }
-    await f.t.mutation(advanceStreamUpgrade, { phase: "frozen" });
+    const before = await f.t.run((ctx) => ctx.db.get(id));
     await expect(
-        f.t.mutation(advanceStreamUpgrade, { phase: "active" }),
+        f.t.run((ctx) => finalizeRetainedTextStream(ctx, id)),
     ).rejects.toThrow("retained_text_incomplete");
-    expect(await f.t.query(nextUnresolvedStream, {})).toBe(id);
-    await expect(
-        f.t.run((ctx) => deleteRetainedTextBatch(ctx, id, "legacy-stream", 1)),
-    ).rejects.toThrow("retained_stream_upgrade_held");
-    expect(await f.t.mutation(backfillNextStream, {})).toEqual({
-        textId: id,
-        ready: false,
-    });
-    await expect(
-        f.t.run((ctx) => appendRetainedText(ctx, "legacy-stream", 3, "late")),
-    ).rejects.toThrow("retained_stream_upgrade_held");
-    await f.t.run((ctx) =>
-        ctx.db.patch(id, { stream: { ...stream, nextSequence: 4 } }),
-    );
-    await expect(f.t.mutation(backfillStream, { textId: id })).rejects.toThrow(
-        "retained_text_conflict",
-    );
-    await f.t.run((ctx) => ctx.db.patch(id, { stream }));
-    const finalFragment = await f.t.run(async (ctx) => {
-        const row = await ctx.db
-            .query("retainedTextFragments")
-            .withIndex("by_text_and_index", (q) =>
-                q.eq("textId", id).eq("index", 1),
-            )
-            .unique();
-        assert(row);
-        await ctx.db.patch(row._id, {
-            content: row.content.replace("界", "海"),
-        });
-        return row;
-    });
-    await expect(f.t.mutation(backfillStream, { textId: id })).rejects.toThrow(
-        "retained_text_invalid",
-    );
-    await f.t.run((ctx) =>
-        ctx.db.patch(finalFragment._id, { content: finalFragment.content }),
-    );
-    expect(await f.t.mutation(backfillStream, { textId: id })).toEqual({
-        ready: true,
-    });
-    expect(await f.t.mutation(backfillStream, { textId: id })).toEqual({
-        ready: true,
-    });
-    expect(await f.t.query(nextUnresolvedStream, {})).toBeNull();
-    expect(await f.t.mutation(backfillNextStream, {})).toBeNull();
-    await f.t.mutation(advanceStreamUpgrade, { phase: "active" });
-    const upgraded = await f.t.run((ctx) => ctx.db.get(id));
-    expect(upgraded?.stream).toEqual(stream);
-    expect(upgraded?.checkpoint).toEqual(
-        advanceSha256(undefined, encoder.encode(packed)),
-    );
-    expect(
-        await f.t.run((ctx) =>
-            appendRetainedText(ctx, "legacy-stream", 2, tail),
-        ),
-    ).toBe(id);
-    expect(
-        await f.t.run((ctx) =>
-            appendRetainedText(ctx, "legacy-stream", 3, " continued"),
-        ),
-    ).toBe(id);
-    await f.t.run((ctx) => sealRetainedText(ctx, id));
-    expect(await f.t.run((ctx) => readRetainedText(ctx, id))).toBe(
-        `${packed}${tail} continued`,
-    );
+    expect(await f.t.run((ctx) => ctx.db.get(id))).toEqual(before);
 });
 
 test.each([

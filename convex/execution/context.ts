@@ -1,7 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
-import { readConversationMessages } from "@convex/integrations/agentStorage";
+import { readConversationMessages } from "@convex/execution/conversationBodies";
 import { agentInputByteLength } from "@convex/integrations/modelInput";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { missionModel, revisionRoute } from "@convex/modelConfiguration";
@@ -76,7 +76,6 @@ async function requestContext(
             throw executionError("conversation_message_unavailable");
         const [originalText] = await readConversationMessages(
             ctx,
-            conversation.storageRef,
             [message],
             instructionTexts,
         );

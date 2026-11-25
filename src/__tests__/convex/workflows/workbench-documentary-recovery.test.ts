@@ -1,5 +1,4 @@
 import { api, internal } from "@convex/_generated/api";
-import agentTest from "@convex-dev/agent/test";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
@@ -12,7 +11,7 @@ test("historical instructions settle without starting retired preparation", asyn
     vi.useFakeTimers();
     const f = await seedSourcePreparation();
     const { t, runId, userId } = f;
-    agentTest.register(t);
+
     workflowTest.register(t);
     await t.mutation(internal.sourceSelectionProposals.generateForRun, {
         runId,

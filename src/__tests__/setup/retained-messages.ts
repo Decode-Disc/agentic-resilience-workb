@@ -1,5 +1,10 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { retainedDeliveryKey } from "@convex/execution/conversationBodies";
+import {
+    retainedTextParts,
+    stageRetainedText,
+} from "@convex/execution/retainedText";
 import type schema from "@convex/schema";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { TestConvex } from "convex-test";
@@ -60,4 +65,33 @@ export async function readWorkbenchPageWithBodies(
 ) {
     const result = await client.query(api.workbench.history, args);
     return { ...result, page: await readMessageBodies(client, result.page) };
+}
+
+/** Seeds canonical fixture bytes using the real fragment owner, one transaction per fragment. */
+export async function retainFixtureDelivery(
+    t: TestConvex<typeof schema>,
+    deliveryId: Id<"agentMessageDeliveries">,
+    content: string,
+) {
+    const delivery = await t.run((ctx) => ctx.db.get(deliveryId));
+    if (!delivery) throw new Error("Missing fixture delivery");
+    const { parts, manifest } = retainedTextParts(content);
+    let textId: Id<"retainedTexts"> | undefined;
+    for (const [index, part] of parts.entries()) {
+        textId = await t.run((ctx) =>
+            stageRetainedText(ctx, retainedDeliveryKey(delivery), {
+                ...manifest,
+                index,
+                content: part,
+            }),
+        );
+    }
+    if (!textId) throw new Error("Missing fixture body");
+    await t.run((ctx) =>
+        ctx.db.patch(deliveryId, {
+            bodyTextId: textId,
+            bodyContentHash: manifest.contentHash,
+        }),
+    );
+    return deliveryId;
 }

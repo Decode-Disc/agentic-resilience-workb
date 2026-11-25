@@ -1,6 +1,5 @@
 import { api, internal } from "@convex/_generated/api";
 import schema from "@convex/schema";
-import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
@@ -18,7 +17,7 @@ afterEach(() => {
 async function seed() {
     vi.useFakeTimers();
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const client = t.withIdentity({ subject: userId });

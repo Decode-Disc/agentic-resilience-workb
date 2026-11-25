@@ -11,7 +11,7 @@ import {
     deliveryBodyHash,
     nativeInputBody,
     retainedDeliveryBody,
-} from "@convex/integrations/agentStorage";
+} from "@convex/execution/conversationBodies";
 import {
     NATIVE_WORKER_POLICY,
     PERSISTENCE_PAGE_SIZE,
@@ -28,10 +28,7 @@ import {
     requireDossierAuthority,
     requireMissionAuthority,
 } from "./authority";
-import {
-    analystTurnDeliveries,
-    missionConversationMigrationFrozen,
-} from "./conversations";
+import { analystTurnDeliveries } from "./conversations";
 import { successfulAuxiliaryResponse } from "./executionProtocol";
 import {
     contextObservationSequence,
@@ -41,10 +38,7 @@ import {
     receivedResponseDigest,
     retainedNativeCalls,
 } from "./journal";
-import {
-    retainedLegacyMissionResult,
-    retainedTextualOutcome,
-} from "./missionData";
+import { retainedTextualOutcome } from "./missionData";
 import { completionFeedbackValidator } from "./operationContracts";
 import {
     needsNativeSettlement,
@@ -176,9 +170,7 @@ export const admittedInputs = internalMutation({
         for await (const message of analystTurnDeliveries(ctx, turn._id)) {
             const messageId = message._id;
             messageOrder.set(messageId, message.nativeInputSequence ?? 0);
-            analystMessages.push(
-                await nativeInputBody(ctx, conversation, message),
-            );
+            analystMessages.push(await nativeInputBody(message));
         }
         const initialIds =
             turn.nativeInitialMessageIds ??
@@ -437,14 +429,6 @@ export const prepare = internalMutation({
         )
             return false;
         const session = await sessionForMission(ctx, mission);
-        if (
-            await missionConversationMigrationFrozen(
-                ctx,
-                mission,
-                session?.conversationId,
-            )
-        )
-            return false;
         await ctx.db.patch(mission._id, {
             piWakeId: undefined,
             piWakeAt: undefined,
@@ -1028,14 +1012,6 @@ export const closeWorker = internalMutation({
         )
             return null;
         if (
-            await missionConversationMigrationFrozen(
-                ctx,
-                mission,
-                session?.conversationId,
-            )
-        )
-            return null;
-        if (
             !args.nativeSettled &&
             session?.settlementEpoch === session?.epoch &&
             session?.settlementEpoch !== undefined
@@ -1359,15 +1335,9 @@ async function loadPublication(
     return { mission, turn, delivery, completed };
 }
 
-const historicalPublication = v.object({
-    contentHash: v.string(),
-    definitionVersion: v.number(),
-});
 const publicationStateValidator = v.object({
     completed: v.boolean(),
     staleInstructions: v.boolean(),
-    publishedResult: v.optional(historicalPublication),
-    publishedText: v.optional(v.string()),
     publishedReply: v.optional(
         v.object({
             messageId: v.optional(v.id("agentMessageDeliveries")),
@@ -1421,80 +1391,13 @@ export const publicationState = internalQuery({
                 publishedReply: { contentHash: outcome.contentHash },
             };
         }
-        if (!completed) return { completed, staleInstructions };
-        const definition = getAgentDefinition(
-            mission.definitionId,
-            mission.definitionVersion,
-        );
-        if (!definition.conversationReply)
-            return { completed, staleInstructions };
-        if (
-            "protocolVersion" in mission &&
-            mission.resultTextId &&
-            !mission.textualOutcome
-        ) {
-            const result = await retainedLegacyMissionResult(
-                ctx,
-                mission,
-                mission.resultTextId,
-            );
-            return {
-                completed,
-                staleInstructions,
-                publishedResult: {
-                    contentHash: result.contentHash,
-                    definitionVersion: mission.definitionVersion,
-                },
-            };
-        }
-        if (!("protocolVersion" in mission))
-            return { completed, staleInstructions };
-        if (mission.textualOutcome)
-            throw executionError("publication_context_unavailable");
-        const result = mission.result;
-        return {
-            completed,
-            staleInstructions,
-            ...(result
-                ? { publishedText: definition.conversationReply(result) }
-                : {}),
-        };
-    },
-});
-
-export const historicalPublicationFragment = internalQuery({
-    args: {
-        ...publicationArgs.fields,
-        ...historicalPublication.fields,
-        index: v.number(),
-    },
-    handler: async (ctx, args) => {
-        const { mission, completed } = await loadPublication(ctx, args);
         if (
             !completed ||
-            !("protocolVersion" in mission) ||
-            !mission.resultTextId ||
-            mission.textualOutcome ||
-            mission.definitionVersion !== args.definitionVersion ||
             !getAgentDefinition(mission.definitionId, mission.definitionVersion)
                 .conversationReply
         )
-            throw executionError("publication_context_unavailable");
-        const text = await retainedLegacyMissionResult(
-            ctx,
-            mission,
-            mission.resultTextId,
-        );
-        if (text.contentHash !== args.contentHash)
-            throw executionError("publication_context_unavailable");
-        return {
-            definitionId: mission.definitionId,
-            content: await retainedTextFragment(ctx, text, args.index),
-            fragmentCount: text.fragmentHashes.length,
-            contentHash: text.contentHash,
-            characters: text.characters,
-            sizeBytes: text.sizeBytes,
-        };
+            return { completed, staleInstructions };
+        throw executionError("publication_context_unavailable");
     },
 });
 

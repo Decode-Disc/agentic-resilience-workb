@@ -1,6 +1,5 @@
 import { api, internal } from "@convex/_generated/api";
 import schema from "@convex/schema";
-import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
@@ -19,7 +18,7 @@ test("native conversation admission preserves recoverable refusal against the co
     });
     vi.stubGlobal("fetch", network);
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     vi.stubEnv("WORKBENCH_AGENT_ENABLED", "true");
     const { installModel } = await import(
@@ -89,7 +88,7 @@ test("native conversation admission preserves recoverable refusal against the co
 test("a successful queue retry clears its retained admission failure", async () => {
     vi.useFakeTimers();
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t),
         client = t.withIdentity({ subject: userId });

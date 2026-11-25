@@ -149,13 +149,6 @@ export const executionTables = {
     piPublication: defineTable({
         key: v.literal("workers"),
         held: v.boolean(),
-        retainedStreamUpgrade: v.optional(
-            v.union(
-                v.literal("draining"),
-                v.literal("frozen"),
-                v.literal("active"),
-            ),
-        ),
     }).index("by_key", ["key"]),
     piSessions: defineTable({
         publicPreview: v.optional(
@@ -203,19 +196,7 @@ export const executionTables = {
         receivedCharacters: v.number(),
         fragmentEnds: v.array(v.number()),
         checkpoint: v.optional(retainedTextCheckpointValidator),
-        streamManifestReady: v.optional(v.literal(true)),
-        streamManifestBackfill: v.optional(
-            v.object({
-                frontier: v.string(),
-                checkpoint: retainedTextCheckpointValidator,
-            }),
-        ),
-    })
-        .index("by_key", ["key"])
-        .index("by_stream_manifest_readiness", [
-            "stream.sealed",
-            "streamManifestReady",
-        ]),
+    }).index("by_key", ["key"]),
     retainedTextFragments: defineTable({
         textId: v.id("retainedTexts"),
         index: v.number(),
@@ -231,9 +212,6 @@ export const executionTables = {
         .index("by_session_and_sequence", ["sessionId", "sequence"])
         .index("by_session_and_key", ["sessionId", "key"]),
     agentConversations: defineTable({
-        storageMigrationFrozen: v.optional(v.literal(true)),
-        storageMigrationEpoch: v.optional(v.number()),
-        storageMigrationSourceHash: v.optional(v.string()),
         nativeInputSequence: v.optional(v.number()),
         publicationRevision: v.optional(v.number()),
         responseFactsRevisionHash: v.optional(v.string()),
@@ -252,13 +230,10 @@ export const executionTables = {
             }),
         ),
         runId: v.id("researchRuns"),
-        storageRef: v.optional(v.string()),
         queuedCount: v.number(),
         activeTurnId: v.optional(v.id("agentConversationTurns")),
         createdAt: v.number(),
-    })
-        .index("by_run", ["runId"])
-        .index("by_storage_ref", ["storageRef"]),
+    }).index("by_run", ["runId"]),
     agentConversationTurns: defineTable({
         responseControl: v.optional(responseControlState),
         framingCitationPolicy: v.optional(framingCitationPolicy),
@@ -298,16 +273,8 @@ export const executionTables = {
         publicationRevision: v.optional(v.number()),
         runId: v.id("researchRuns"),
         conversationId: v.id("agentConversations"),
-        storageMessageRef: v.optional(v.string()),
         bodyTextId: v.optional(v.id("retainedTexts")),
         bodyContentHash: v.optional(v.string()),
-        storageMigrationCopy: v.optional(
-            v.object({
-                sourceIdentity: v.string(),
-                textId: v.id("retainedTexts"),
-                verifiedHash: v.optional(v.string()),
-            }),
-        ),
         framingBaseRevisionId: v.optional(v.id("framingRevisions")),
         controlCommand: v.optional(
             v.object({
@@ -382,12 +349,6 @@ export const executionTables = {
                 state: agentStateValidator,
                 result: v.optional(agentResultValidator),
                 resultTextId: v.optional(v.id("retainedTexts")),
-                legacyTextualResultCopy: v.optional(
-                    v.object({
-                        sourceIdentity: v.string(),
-                        textId: v.id("retainedTexts"),
-                    }),
-                ),
                 textualOutcome: v.optional(
                     v.object({
                         version: v.literal(1),

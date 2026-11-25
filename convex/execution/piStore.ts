@@ -8,7 +8,7 @@ import {
 import {
     nativeInputBody,
     retainedDeliveryBody,
-} from "@convex/integrations/agentStorage";
+} from "@convex/execution/conversationBodies";
 import {
     CONVERSATION_PREVIEW_MAX_BYTES,
     PI_SESSION_LEASE_MS as LEASE_MS,
@@ -29,7 +29,6 @@ import {
     requireMissionObservationAuthority,
 } from "./authority";
 import { buildMissionContext } from "./context";
-import { missionConversationMigrationFrozen } from "./conversations";
 import { contextObservationSequence, latestNativeControl } from "./journal";
 import {
     completeRetainedText,
@@ -104,14 +103,6 @@ export const claim = internalMutation({
         const mission = await ctx.db.get(args.missionId);
         if (!mission) throw executionError("mission_unavailable");
         const current = await sessionForMission(ctx, mission);
-        if (
-            await missionConversationMigrationFrozen(
-                ctx,
-                mission,
-                current?.conversationId,
-            )
-        )
-            throw executionError("conversation_migration_frozen");
         if (
             ["completed", "cancelled"].includes(mission.status) &&
             needsNativeSettlement(mission, current)
@@ -244,14 +235,6 @@ async function writer(
     )
         throw executionError("pi_writer_fenced");
     if (
-        await missionConversationMigrationFrozen(
-            ctx,
-            mission,
-            session.conversationId,
-        )
-    )
-        throw executionError("conversation_migration_frozen");
-    if (
         mission.status === "completed" ||
         (mission.status === "cancelled" && session.conversationId)
     )
@@ -341,12 +324,8 @@ export const pendingControlInputs = internalQuery({
                 messageId: message._id,
                 nativeInputSequence: message.nativeInputSequence ?? 0,
                 confirmationMessageId: confirmation._id,
-                command: await nativeInputBody(ctx, conversation, message),
-                confirmation: await nativeInputBody(
-                    ctx,
-                    conversation,
-                    confirmation,
-                ),
+                command: nativeInputBody(message),
+                confirmation: nativeInputBody(confirmation),
                 expectedCommand: message.controlCommand?.name,
                 createdAt: message.createdAt,
                 confirmedAt: confirmation.createdAt,

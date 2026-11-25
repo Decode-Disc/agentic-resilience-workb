@@ -34,7 +34,7 @@ test("message reading returns application delivery data without component storag
     );
     const delivery = await f.t.run((ctx) => ctx.db.get(messageId));
     expect(delivery?.bodyTextId).toBeDefined();
-    expect(delivery?.storageMessageRef).toBeUndefined();
+    expect(delivery).not.toHaveProperty("storageMessageRef");
     const conversation = await f.t.run((ctx) =>
         ctx.db
             .query("agentConversations")
@@ -42,7 +42,7 @@ test("message reading returns application delivery data without component storag
             .unique(),
     );
     expect(conversation).not.toBeNull();
-    expect(conversation?.storageRef).toBeUndefined();
+    expect(conversation).not.toHaveProperty("storageRef");
     const paged = await f.client.query(
         api.execution.conversations.listMessages,
         {

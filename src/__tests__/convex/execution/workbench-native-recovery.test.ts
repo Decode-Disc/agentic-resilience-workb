@@ -1,20 +1,12 @@
 import { readFileSync } from "node:fs";
-import { api, components, internal } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import { api, internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { executionError } from "@convex/execution/errors";
-import {
-    readRetainedText,
-    retainedTextParts,
-    stageRetainedText,
-} from "@convex/execution/retainedText";
 import { runPiMission } from "@convex/integrations/piMission";
 import { PiConvexStorage } from "@convex/integrations/piStorage";
 import { nodeActionGenerationDeadline } from "@convex/resourcePolicy";
-import { saveMessage } from "@convex-dev/agent";
 import { type FunctionArgs, getFunctionName } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
-import { createConversationStorage } from "@/__tests__/setup/legacy-conversation-storage";
 import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
@@ -250,9 +242,6 @@ test.each([
               resultManifest?: { contentHash: string };
           })
         : undefined;
-    const legacyResultJson = baseline?.resultFragments
-        ?.map(({ content }) => content)
-        .join("");
     const archivedReply = baseline?.messages
         .map(({ message }) => message.content)
         .join("");
@@ -326,149 +315,19 @@ test.each([
     assert(sessionId);
     await t.run((ctx) => ctx.db.patch(sessionId, { leaseUntil: 0 }));
     if (baseline) {
-        const { deliveryId, storageMessageRef } = await t.run(async (ctx) => {
-            const mission = await ctx.db.get(active.missionId);
-            const turn = await ctx.db.get(active.turnId);
-            assert(
-                mission &&
-                    "protocolVersion" in mission &&
-                    mission.textualOutcome,
-            );
-            assert(turn?.publishedMessageId);
-            const delivery = await ctx.db.get(turn.publishedMessageId);
-            assert(delivery?.bodyTextId);
-            const bodyTextId = delivery.bodyTextId;
-            const body = await readRetainedText(ctx, bodyTextId);
-            const run = await ctx.db.get(runId);
-            assert(run?.ownerVisitorId);
-            const storageRef = await createConversationStorage(
-                ctx,
-                run.ownerVisitorId,
-            );
-            expect(sha256Hex(body)).toBe(baseline.delivery.contentHash);
-            const messageIds = [];
-            for (const { message } of baseline.messages) {
-                const saved = await saveMessage(ctx, components.agent, {
-                    threadId: storageRef,
-                    message: { role: "assistant", content: message.content },
-                });
-                messageIds.push(saved.messageId);
-            }
-            const [first] = messageIds;
-            assert(first);
-            const storageMessageRef =
-                messageIds.length === 1 ? first : JSON.stringify(messageIds);
-            await ctx.db.patch(turn.conversationId, { storageRef });
-            await ctx.db.patch(delivery._id, {
-                storageMessageRef,
-                bodyTextId: undefined,
-                bodyContentHash: undefined,
-            });
-            if (legacyResultJson) {
-                const { parts, manifest } = retainedTextParts(legacyResultJson);
-                expect(manifest.contentHash).toBe(
-                    baseline.resultManifest?.contentHash,
-                );
-                expect(parts).toEqual(
-                    baseline.resultFragments?.map(({ content }) => content),
-                );
-                let resultTextId: Id<"retainedTexts"> | undefined;
-                for (const [index, content] of parts.entries())
-                    resultTextId = await stageRetainedText(
-                        ctx,
-                        `${mission._id}:result`,
-                        { ...manifest, index, content },
-                    );
-                assert(resultTextId);
-                await ctx.db.patch(mission._id, {
-                    textualOutcome: undefined,
-                    resultTextId,
-                });
-            } else {
-                assert(baseline.mission.result);
-                await ctx.db.patch(mission._id, {
-                    textualOutcome: undefined,
-                    result: baseline.mission.result,
-                });
-            }
-            const fragments = await ctx.db
-                .query("retainedTextFragments")
-                .withIndex("by_text_and_index", (q) =>
-                    q.eq("textId", bodyTextId),
-                )
-                .collect();
-            for (const fragment of fragments) await ctx.db.delete(fragment._id);
-            await ctx.db.delete(bodyTextId);
-            return { deliveryId: delivery._id, storageMessageRef };
+        const turn = await t.run((ctx) => ctx.db.get(active.turnId));
+        assert(turn?.publishedMessageId);
+        const publishedMessageId = turn.publishedMessageId;
+        const delivery = await t.run((ctx) => ctx.db.get(publishedMessageId));
+        assert(delivery?.bodyTextId);
+        expect(before.mission).toMatchObject({
+            textualOutcome: {
+                textId: delivery.bodyTextId,
+                contentHash: baseline.delivery.contentHash,
+            },
         });
-        for (const phase of ["draining", "frozen", "active"] as const)
-            await t.mutation(
-                internal.execution.retainedText.advanceStreamUpgrade,
-                { phase },
-            );
-        await t.mutation(
-            internal.execution.conversations.beginMessageMigration,
-            { runId },
-        );
-        const sourceInventoryHash = await t.action(
-            internal.integrations.agentStorage.prepareConversationMigration,
-            { runId },
-        );
-        const scope = { runId, deliveryId };
-        const source = await t.query(
-            internal.integrations.agentStorage.legacyMigrationFragment,
-            {
-                ...scope,
-                index: 0,
-            },
-        );
-        await t.action(
-            internal.integrations.agentStorage.copyLegacyDelivery,
-            scope,
-        );
-        await t.action(
-            internal.integrations.agentStorage.verifyLegacyDeliveryCopy,
-            scope,
-        );
-        await t.mutation(
-            internal.execution.conversations.switchMessageMigration,
-            {
-                ...scope,
-                sourceIdentity: source.sourceIdentity,
-            },
-        );
-        await t.action(
-            internal.execution.missionData.migrateLegacyMissionResult,
-            {
-                runId,
-                missionId: active.missionId,
-            },
-        );
-        const inventory = await t.action(
-            internal.integrations.agentStorage.reconcileConversationMigration,
-            { runId },
-        );
-        await t.action(
-            internal.integrations.agentStorage
-                .resumeVerifiedConversationMigration,
-            {
-                runId,
-                inventoryHash: inventory.inventoryHash,
-                sourceInventoryHash,
-            },
-        );
-        await t.finishAllScheduledFunctions(
-            () => vi.advanceTimersByTime(10),
-            500,
-        );
-        const settled = await t.run((ctx) => ctx.db.get(sessionId));
-        assert(settled);
-        expect(settled.settledSequence).toBe(settled.sequence);
-        const retained = await t.run((ctx) => ctx.db.get(deliveryId));
-        expect(retained).toMatchObject({
-            storageMessageRef,
-            bodyTextId: expect.any(String),
-        });
+        expect(before.mission).not.toHaveProperty("result");
+        expect(before.mission).not.toHaveProperty("resultTextId");
         const history = await client.query(
             api.execution.conversations.listMessages,
             {
@@ -479,7 +338,7 @@ test.each([
         const replies = (await readMessageBodies(client, history.page)).filter(
             ({ role }) => role === "assistant",
         );
-        expect(replies.map(({ _id }) => _id)).toEqual([deliveryId]);
+        expect(replies.map(({ _id }) => _id)).toEqual([delivery._id]);
         assert(replies[0]);
         expect(sha256Hex(replies[0].text)).toBe(baseline.delivery.contentHash);
         expect(

@@ -2,7 +2,6 @@ import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
     internalMutation,
-    internalQuery,
     type MutationCtx,
     mutation,
     type QueryCtx,
@@ -16,28 +15,23 @@ import { savedMaterialBinding } from "@convex/domain/savedMaterialOperations";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { workbenchInstructionMessageIds } from "@convex/domain/workbenchInstructions";
 import {
+    conversationBodyAccess,
+    conversationBodyReference,
+    conversationPageBodies,
+    deliveryBodyHash,
+    readConversationMessages,
+    retainedDeliveryBody,
+    retainedDeliveryKey,
+    retainedReplyKey,
+} from "@convex/execution/conversationBodies";
+import {
     adoptRetainedTextKey,
-    completeRetainedText,
     retainCompleteText,
     retainedTextFragment,
     retainedTextParts,
     stageRetainedText,
-    textFragmentValidator,
 } from "@convex/execution/retainedText";
 import { readFramingCitationPolicy } from "@convex/framingCitationPolicy";
-import {
-    conversationBodyAccess,
-    conversationBodyReference,
-    deliveryBodyHash,
-    deliveryMigrationTextKey,
-    legacyDeliveryIdentity,
-    readConversationMessages,
-    readConversationPageBodies,
-    requireExclusiveLegacyThread,
-    retainedDeliveryBody,
-    retainedDeliveryKey,
-    retainedReplyKey,
-} from "@convex/integrations/agentStorage";
 import {
     piMissionStateText,
     piRequiredContextTokens,
@@ -57,7 +51,6 @@ import { taskMethodDefinitionVersion } from "@convex/qualificationAgentMethods";
 import {
     HISTORY_PAGE_SIZE,
     MAX_CONTEXT_BYTES,
-    MAX_CONVERSATION_SCAN_BYTES,
     MAX_OPERATION_RESULT_BYTES,
     RESPONSE_CONTROL_MAX_INPUT_BYTES,
 } from "@convex/resourcePolicy";
@@ -87,7 +80,7 @@ import { executionError, executionFailureCode } from "./errors";
 import { missionStatusValidator } from "./executionProtocol";
 import { nextNativeInputSequence } from "./journal";
 import { cancelPiWake, schedulePiMission } from "./piControl";
-import { needsNativeSettlement, sessionForMission } from "./piStore";
+import { sessionForMission } from "./piStore";
 
 async function conversationForRun(ctx: QueryCtx, runId: Id<"researchRuns">) {
     return ctx.db
@@ -96,475 +89,12 @@ async function conversationForRun(ctx: QueryCtx, runId: Id<"researchRuns">) {
         .unique();
 }
 
-/** Discovers application-owned scopes for the deployment migration inventory. */
-export const migrationScopes = internalQuery({
-    args: { paginationOpts: paginationOptsValidator },
-    returns: paginationResultValidator(
-        v.object({
-            conversationId: v.id("agentConversations"),
-            runId: v.id("researchRuns"),
-            storageRef: v.optional(v.string()),
-            activeTurnId: v.optional(v.id("agentConversationTurns")),
-            frozen: v.boolean(),
-        }),
-    ),
-    handler: async (ctx, { paginationOpts }) => {
-        const page = await ctx.db.query("agentConversations").paginate({
-            ...paginationOpts,
-            numItems: Math.min(paginationOpts.numItems, HISTORY_PAGE_SIZE),
-            maximumRowsRead: HISTORY_PAGE_SIZE,
-            maximumBytesRead: MAX_CONVERSATION_SCAN_BYTES,
-        });
-        return {
-            ...page,
-            page: page.page.map((conversation) => ({
-                conversationId: conversation._id,
-                runId: conversation.runId,
-                storageRef: conversation.storageRef,
-                activeTurnId: conversation.activeTurnId,
-                frozen: conversation.storageMigrationFrozen === true,
-            })),
-        };
-    },
-});
-
-async function requireIdleMigrationWriter(
-    ctx: QueryCtx,
-    conversation: Doc<"agentConversations">,
-) {
-    if (!conversation.activeTurnId) return;
-    const turn = await ctx.db.get(conversation.activeTurnId);
-    const mission = turn?.missionId ? await ctx.db.get(turn.missionId) : null;
-    const session = mission ? await sessionForMission(ctx, mission) : null;
-    const control = await ctx.db
-        .query("piPublication")
-        .withIndex("by_key", (q) => q.eq("key", "workers"))
-        .unique();
-    // Logical turn status can outlive its worker; maintenance fences the idle writer.
-    if (
-        !control?.held ||
-        turn?.conversationId !== conversation._id ||
-        turn.runId !== conversation.runId ||
-        mission?.executionRuntime !== "pi-durable" ||
-        mission.runId !== conversation.runId ||
-        mission.conversationTurnId !== turn._id ||
-        mission.generationBackend?.id !== "pi-durable" ||
-        mission.piActiveWriter ||
-        (session && session.leaseUntil > Date.now())
-    )
-        throw executionError("conversation_migration_turn_active");
-}
-
-export const beginMessageMigration = internalMutation({
-    args: { runId: v.id("researchRuns") },
-    returns: v.null(),
-    handler: async (ctx, { runId }) => {
-        const run = await ctx.db.get(runId);
-        if (!run || run.withdrawnAt !== undefined)
-            throw executionError("conversation_unavailable");
-        const control = await ctx.db
-            .query("piPublication")
-            .withIndex("by_key", (q) => q.eq("key", "workers"))
-            .unique();
-        if (control?.retainedStreamUpgrade !== "active")
-            throw executionError("retained_stream_upgrade_order");
-        const conversation = await conversationForRun(ctx, runId);
-        if (!conversation) throw executionError("conversation_unavailable");
-        await requireIdleMigrationWriter(ctx, conversation);
-        if (!conversation.storageMigrationFrozen)
-            await ctx.db.patch(conversation._id, {
-                storageMigrationFrozen: true,
-                storageMigrationSourceHash: undefined,
-                storageMigrationEpoch:
-                    (conversation.storageMigrationEpoch ?? 0) + 1,
-            });
-        return null;
-    },
-});
-
-const frozenInventoryCheckpoint = v.object({
-    runId: v.id("researchRuns"),
-    conversationId: v.id("agentConversations"),
-    epoch: v.number(),
-    sourceInventoryHash: v.string(),
-});
-
-async function requireFrozenInventoryCheckpoint(
-    ctx: QueryCtx,
-    args: Infer<typeof frozenInventoryCheckpoint>,
-) {
-    const run = await ctx.db.get(args.runId);
-    const conversation = await conversationForRun(ctx, args.runId);
-    if (
-        !run ||
-        run.withdrawnAt !== undefined ||
-        conversation?._id !== args.conversationId ||
-        !conversation.storageMigrationFrozen ||
-        (conversation.storageMigrationEpoch ?? 0) !== args.epoch
-    )
-        throw executionError("conversation_migration_inventory_changed");
-    await requireIdleMigrationWriter(ctx, conversation);
-    return { run, conversation };
-}
-
-/** Pins the verified source inventory once for this maintenance fence. */
-export const recordMigrationSourceInventory = internalMutation({
-    args: frozenInventoryCheckpoint.fields,
-    returns: v.null(),
-    handler: async (ctx, args) => {
-        const { conversation } = await requireFrozenInventoryCheckpoint(
-            ctx,
-            args,
-        );
-        if (conversation.storageMigrationSourceHash !== undefined) {
-            if (
-                conversation.storageMigrationSourceHash !==
-                args.sourceInventoryHash
-            )
-                throw executionError("conversation_migration_source_changed");
-            return null;
-        }
-        await ctx.db.patch(conversation._id, {
-            storageMigrationSourceHash: args.sourceInventoryHash,
-        });
-        return null;
-    },
-});
-
-/** Reopens only the frozen scope just reconciled by the migration action. */
-export const resumeReconciledConversation = internalMutation({
-    args: frozenInventoryCheckpoint.fields,
-    returns: v.null(),
-    handler: async (ctx, args) => {
-        const { run, conversation } = await requireFrozenInventoryCheckpoint(
-            ctx,
-            args,
-        );
-        if (conversation.storageMigrationSourceHash === undefined)
-            throw executionError("conversation_migration_preflight_required");
-        if (
-            conversation.storageMigrationSourceHash !== args.sourceInventoryHash
-        )
-            throw executionError("conversation_migration_source_changed");
-        await ctx.db.patch(conversation._id, {
-            storageMigrationFrozen: undefined,
-            storageMigrationSourceHash: undefined,
-        });
-        const turn = await ctx.db
-            .query("agentConversationTurns")
-            .withIndex("by_run", (q) => q.eq("runId", run._id))
-            .order("desc")
-            .first();
-        const tail = turn?.missionId ? await ctx.db.get(turn.missionId) : null;
-        const session = tail ? await sessionForMission(ctx, tail) : null;
-        if (
-            tail &&
-            session &&
-            !session.settlementFailureCode &&
-            needsNativeSettlement(tail, session)
-        ) {
-            // Retire the pre-migration writer before publishing the replacement wake.
-            await ctx.db.patch(session._id, {
-                writer: `migration:${args.epoch}`,
-                epoch: session.epoch + 1,
-            });
-            if (tail.piWakeId) await cancelPiWake(ctx, tail.piWakeId);
-            await ctx.db.patch(tail._id, {
-                piWakeId: undefined,
-                piWakeAt: undefined,
-                piWakeToken: undefined,
-                piActiveWriter: undefined,
-            });
-            await schedulePiMission(
-                ctx,
-                tail._id,
-                tail.generation,
-                Math.max(Date.now(), session.leaseUntil),
-            );
-        } else if (conversation.queuedCount && !conversation.queuePaused) {
-            await ctx.scheduler.runAfter(
-                0,
-                internal.execution.conversations.pumpWorkbench,
-                { runId: run._id },
-            );
-        }
-        return null;
-    },
-});
-
-/** The conversation fence also applies to terminal workers that still own a Pi tail. */
-export async function missionConversationMigrationFrozen(
-    ctx: QueryCtx,
-    mission: Doc<"agentMissions">,
-    sessionConversationId?: Id<"agentConversations">,
-) {
-    const conversationId =
-        sessionConversationId ??
-        (mission.conversationTurnId
-            ? (await ctx.db.get(mission.conversationTurnId))?.conversationId
-            : undefined);
-    if (!conversationId) return false;
-    return (await ctx.db.get(conversationId))?.storageMigrationFrozen === true;
-}
-
-/** Lists application delivery checkpoints without loading message bodies. */
-export const messageMigrationInventory = internalQuery({
-    args: {
-        runId: v.id("researchRuns"),
-        paginationOpts: paginationOptsValidator,
-    },
-    returns: paginationResultValidator(
-        v.object({
-            deliveryId: v.id("agentMessageDeliveries"),
-            conversationId: v.id("agentConversations"),
-            sourceReference: v.optional(v.string()),
-            requestHash: v.string(),
-            textId: v.optional(v.id("retainedTexts")),
-            verifiedHash: v.optional(v.string()),
-            retainedHash: v.optional(v.string()),
-            status: v.union(
-                v.literal("legacy"),
-                v.literal("copying"),
-                v.literal("verified"),
-                v.literal("switched"),
-                v.literal("retained"),
-                v.literal("inconsistent"),
-            ),
-        }),
-    ),
-    handler: async (ctx, args) => {
-        const run = await ctx.db.get(args.runId);
-        const conversation = await conversationForRun(ctx, args.runId);
-        if (
-            !run ||
-            run.withdrawnAt !== undefined ||
-            !conversation?.storageMigrationFrozen
-        )
-            throw executionError("conversation_migration_not_frozen");
-        const page = await ctx.db
-            .query("agentMessageDeliveries")
-            .withIndex("by_run", (q) => q.eq("runId", args.runId))
-            .paginate({
-                ...args.paginationOpts,
-                numItems: Math.min(
-                    args.paginationOpts.numItems,
-                    HISTORY_PAGE_SIZE,
-                ),
-                maximumRowsRead: HISTORY_PAGE_SIZE,
-                maximumBytesRead: MAX_CONVERSATION_SCAN_BYTES,
-            });
-        return {
-            ...page,
-            page: await Promise.all(
-                page.page.map(async (row) => {
-                    const copy = row.storageMigrationCopy;
-                    const sourceValid =
-                        !!row.storageMessageRef &&
-                        (!copy ||
-                            copy.sourceIdentity ===
-                                legacyDeliveryIdentity(row, conversation));
-                    let status:
-                        | "legacy"
-                        | "copying"
-                        | "verified"
-                        | "switched"
-                        | "retained"
-                        | "inconsistent";
-                    if (row.conversationId !== conversation._id)
-                        status = "inconsistent";
-                    else if (row.bodyTextId) {
-                        status =
-                            !row.storageMessageRef && !copy
-                                ? "retained"
-                                : copy?.textId === row.bodyTextId &&
-                                    sourceValid &&
-                                    copy.verifiedHash !== undefined &&
-                                    copy.verifiedHash === deliveryBodyHash(row)
-                                  ? "switched"
-                                  : "inconsistent";
-                    } else if (!sourceValid) status = "inconsistent";
-                    else
-                        status = copy?.verifiedHash
-                            ? "verified"
-                            : copy
-                              ? "copying"
-                              : "legacy";
-                    const retained =
-                        status === "switched" || status === "retained"
-                            ? await retainedDeliveryBody(ctx, row)
-                            : undefined;
-                    return {
-                        deliveryId: row._id,
-                        conversationId: row.conversationId,
-                        sourceReference: row.storageMessageRef,
-                        requestHash: row.contentHash,
-                        textId: row.bodyTextId ?? copy?.textId,
-                        verifiedHash: copy?.verifiedHash,
-                        retainedHash: retained?.contentHash,
-                        status,
-                    };
-                }),
-            ),
-        };
-    },
-});
-
-const migrationDeliveryScope = v.object({
-    runId: v.id("researchRuns"),
-    deliveryId: v.id("agentMessageDeliveries"),
-    sourceIdentity: v.string(),
-});
-
-async function frozenMigrationDelivery(
-    ctx: QueryCtx,
-    args: Infer<typeof migrationDeliveryScope>,
-) {
-    const run = await ctx.db.get(args.runId);
-    const delivery = await ctx.db.get(args.deliveryId);
-    if (
-        !run ||
-        run.withdrawnAt !== undefined ||
-        delivery?.runId !== run._id ||
-        !delivery.storageMessageRef
-    )
-        throw executionError("conversation_message_unavailable");
-    const conversation = await ctx.db.get(delivery.conversationId);
-    if (
-        conversation?.runId !== run._id ||
-        !conversation.storageMigrationFrozen ||
-        !conversation.storageRef
-    )
-        throw executionError("conversation_migration_not_frozen");
-    await requireExclusiveLegacyThread(ctx, conversation.storageRef);
-    if (
-        legacyDeliveryIdentity(delivery, conversation) !==
-            args.sourceIdentity ||
-        (delivery.storageMigrationCopy &&
-            delivery.storageMigrationCopy.sourceIdentity !==
-                args.sourceIdentity)
-    )
-        throw executionError("conversation_migration_source_changed");
-    return delivery;
-}
-
-export const stageMessageMigration = internalMutation({
-    args: {
-        ...migrationDeliveryScope.fields,
-        fragment: textFragmentValidator,
-    },
-    returns: v.id("retainedTexts"),
-    handler: async (ctx, args) => {
-        const delivery = await frozenMigrationDelivery(ctx, args);
-        if (delivery.bodyTextId)
-            throw executionError("conversation_migration_already_switched");
-        const textId = await stageRetainedText(
-            ctx,
-            deliveryMigrationTextKey(delivery._id),
-            args.fragment,
-        );
-        if (!delivery.storageMigrationCopy)
-            await ctx.db.patch(delivery._id, {
-                storageMigrationCopy: {
-                    sourceIdentity: args.sourceIdentity,
-                    textId,
-                },
-            });
-        else if (delivery.storageMigrationCopy.textId !== textId)
-            throw executionError("conversation_migration_source_changed");
-        return textId;
-    },
-});
-
-export const verifyMessageMigration = internalMutation({
-    args: {
-        ...migrationDeliveryScope.fields,
-        textId: v.id("retainedTexts"),
-        contentHash: v.string(),
-    },
-    returns: v.null(),
-    handler: async (ctx, args) => {
-        const delivery = await frozenMigrationDelivery(ctx, args);
-        if (delivery.bodyTextId)
-            throw executionError("conversation_migration_already_switched");
-        if (delivery.storageMigrationCopy?.textId !== args.textId)
-            throw executionError("conversation_migration_source_changed");
-        const text = await completeRetainedText(ctx, args.textId);
-        if (
-            text.key !== deliveryMigrationTextKey(delivery._id) ||
-            text.contentHash !== args.contentHash
-        )
-            throw executionError("conversation_migration_body_mismatch");
-        await ctx.db.patch(delivery._id, {
-            storageMigrationCopy: {
-                ...delivery.storageMigrationCopy,
-                verifiedHash: args.contentHash,
-            },
-        });
-        return null;
-    },
-});
-
-/** Makes a verified body visible while retaining the component reference for rehearsal and retirement. */
-export const switchMessageMigration = internalMutation({
-    args: migrationDeliveryScope.fields,
-    returns: v.id("retainedTexts"),
-    handler: async (ctx, args) => {
-        const delivery = await frozenMigrationDelivery(ctx, args);
-        const copy = delivery.storageMigrationCopy;
-        if (!copy?.verifiedHash)
-            throw executionError("conversation_migration_unverified");
-        if (delivery.bodyTextId) {
-            if (delivery.bodyTextId !== copy.textId)
-                throw executionError("conversation_migration_body_mismatch");
-            const text = await retainedDeliveryBody(ctx, delivery);
-            if (text.contentHash !== copy.verifiedHash)
-                throw executionError("conversation_migration_body_mismatch");
-            return text._id;
-        }
-        const text = await completeRetainedText(ctx, copy.textId);
-        if (
-            text.key !== deliveryMigrationTextKey(delivery._id) ||
-            text.contentHash !== copy.verifiedHash
-        )
-            throw executionError("conversation_migration_body_mismatch");
-        if (
-            delivery.role === "assistant" &&
-            delivery.delivery === "reply" &&
-            delivery.turnId
-        ) {
-            const turn = await ctx.db.get(delivery.turnId);
-            if (
-                !turn ||
-                turn.publishedMessageId !== delivery._id ||
-                turn.runId !== delivery.runId ||
-                turn.conversationId !== delivery.conversationId ||
-                (turn.publicationHash !== undefined &&
-                    turn.publicationHash !== text.contentHash)
-            )
-                throw executionError("conversation_migration_body_mismatch");
-        }
-        await adoptRetainedTextKey(
-            ctx,
-            text._id,
-            retainedDeliveryKey(delivery),
-        );
-        await ctx.db.patch(delivery._id, {
-            bodyTextId: text._id,
-            bodyContentHash: text.contentHash,
-        });
-        return text._id;
-    },
-});
-
-/** Every newly processed batch receives one atomic, immutable visibility revision. */
 async function advancePublication(
     ctx: MutationCtx,
     conversationId: Id<"agentConversations">,
 ) {
     const conversation = await ctx.db.get(conversationId);
     if (!conversation) throw executionError("conversation_unavailable");
-    if (conversation.storageMigrationFrozen)
-        throw executionError("conversation_migration_frozen");
     const revision = (conversation.publicationRevision ?? 0) + 1;
     if (!Number.isSafeInteger(revision) || revision < 1)
         throw executionError("conversation_publication_invalid");
@@ -660,12 +190,7 @@ async function insertRetainedDelivery(
     ctx: MutationCtx,
     fields: Omit<
         Doc<"agentMessageDeliveries">,
-        | "_id"
-        | "_creationTime"
-        | "storageMessageRef"
-        | "bodyTextId"
-        | "bodyContentHash"
-        | "storageMigrationCopy"
+        "_id" | "_creationTime" | "bodyTextId" | "bodyContentHash"
     >,
     text: string,
 ) {
@@ -936,8 +461,6 @@ export async function submitAuthorizedMessage(
         { run, visitor },
         args.initialModel,
     );
-    if (conversation.storageMigrationFrozen)
-        throw executionError("conversation_migration_frozen");
     const turn = args.turnId ? await ctx.db.get(args.turnId) : null;
     if (
         args.delivery === "steer" &&
@@ -1057,7 +580,7 @@ export const claimTurn = internalMutation({
     handler: async (ctx, { runId, single }) => {
         await requireDossierAuthority(ctx, runId);
         const conversation = await conversationForRun(ctx, runId);
-        if (!conversation || conversation.storageMigrationFrozen) return null;
+        if (!conversation) return null;
         if (conversation.activeTurnId) return conversation.activeTurnId;
         const messages = await ctx.db
             .query("agentMessageDeliveries")
@@ -1208,11 +731,7 @@ export const listMessages = query({
             .paginate(args.paginationOpts);
         const conversation = await conversationForRun(ctx, args.runId);
         if (!conversation) return { ...page, page: [] };
-        const bodies = await readConversationPageBodies(
-            ctx,
-            conversation.storageRef,
-            page.page,
-        );
+        const bodies = conversationPageBodies(page.page);
         return {
             ...page,
             page: page.page.map((message, index) => {
@@ -1402,12 +921,7 @@ export async function readTurnInstructions(
     let bytes = new TextEncoder().encode(JSON.stringify(result)).length;
     const batch: Doc<"agentMessageDeliveries">[] = [];
     const appendBatch = async () => {
-        const texts = await readConversationMessages(
-            ctx,
-            conversation.storageRef,
-            batch,
-            loaded,
-        );
+        const texts = await readConversationMessages(ctx, batch, loaded);
         for (const [index, message] of batch.entries()) {
             const text = texts[index];
             if (text === undefined)
@@ -1814,8 +1328,6 @@ export const removeQueued = mutation({
             throw executionError("message_not_queued");
         const conversation = await ctx.db.get(message.conversationId);
         if (!conversation) throw executionError("conversation_unavailable");
-        if (conversation.storageMigrationFrozen)
-            throw executionError("conversation_migration_frozen");
         await ctx.db.patch(message._id, { status: "removed" });
         await ctx.db.patch(conversation._id, {
             queuedCount: Math.max(0, conversation.queuedCount - 1),
@@ -1913,8 +1425,6 @@ export const resumeQueue = mutation({
         await requireWorkspaceRun(ctx, runId);
         await requireDossierAuthority(ctx, runId);
         const conversation = await conversationForRun(ctx, runId);
-        if (conversation?.storageMigrationFrozen)
-            throw executionError("conversation_migration_frozen");
         if (
             conversation?.admissionFailure?.code === "pi_storage_capacity" ||
             conversation?.admissionFailure?.code === "pi_commit_capacity" ||
@@ -1943,7 +1453,6 @@ export const pumpWorkbench = internalMutation({
         if (
             run.startMode !== "framed" ||
             !conversation ||
-            conversation.storageMigrationFrozen ||
             conversation.activeTurnId ||
             conversation.queuePaused ||
             !conversation.queuedCount

@@ -147,7 +147,7 @@ test("execution schema persists approvalRequests, approvalGrants, and notice del
         });
         const conversationId = await ctx.db.insert("agentConversations", {
             runId,
-            storageRef: "conv_1",
+
             queuedCount: 0,
             createdAt: now,
         });
@@ -201,7 +201,7 @@ test("execution schema persists approvalRequests, approvalGrants, and notice del
             {
                 runId,
                 conversationId,
-                storageMessageRef: "msg_confirm",
+
                 requestKey: "confirm_1",
                 contentHash: "hash_confirm",
                 role: "assistant",
@@ -213,7 +213,7 @@ test("execution schema persists approvalRequests, approvalGrants, and notice del
         const noticeMessageId = await ctx.db.insert("agentMessageDeliveries", {
             runId,
             conversationId,
-            storageMessageRef: "msg_notice",
+
             requestKey: "notice_1",
             contentHash: "hash_notice",
             role: "assistant",

@@ -1,12 +1,11 @@
 import { api, internal } from "@convex/_generated/api";
 import schema from "@convex/schema";
-import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import rateLimiterTest from "@/__tests__/convex/integrations/rate-limiter-test-register.js";
 import { createAdmittedPreflight } from "@/__tests__/setup/research-launch";
-import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import { seedSourcePreparation } from "@/__tests__/setup/source-preparation";
+import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import workflowTest from "./workflow-test-register.js";
 
 afterEach(() => {
@@ -19,7 +18,7 @@ test("the durable framed workflow drains SEC revalidation, waits for Resume, the
     vi.stubEnv("SEC_USER_AGENT", "Workbench test@example.com");
     activateSourcesMission();
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     rateLimiterTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t),

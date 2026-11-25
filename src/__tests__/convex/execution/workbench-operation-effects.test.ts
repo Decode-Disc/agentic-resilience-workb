@@ -7,7 +7,6 @@ import {
 import { pauseResearchAtBoundary } from "@convex/execution/researchControl";
 import { retainedMethodVersion } from "@convex/qualificationAgentMethods";
 import schema from "@convex/schema";
-import agentTest from "@convex-dev/agent/test";
 import { convexTest } from "convex-test";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
@@ -107,7 +106,7 @@ test("a Workbench proposal beyond documentary capacity is refused with guidance 
     // Two needs: the common context and one framed question.
     activateSourcesMission({ ...sourcesTestEnvelope, maxNeeds: 2 });
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t),
         client = t.withIdentity({ subject: userId });
@@ -179,7 +178,7 @@ test("a Workbench proposal beyond documentary capacity is refused with guidance 
 test("a committed research Resume is adopted as success", async () => {
     vi.useFakeTimers();
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t),
         client = t.withIdentity({ subject: userId });
@@ -259,7 +258,7 @@ test("a committed research Resume is adopted as success", async () => {
 test("a superseded research-control request cannot resume a newer analyst pause", async () => {
     vi.useFakeTimers();
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const client = t.withIdentity({ subject: userId });
@@ -423,7 +422,7 @@ test("a historical framing caller can acknowledge and replay a saved adjustment"
 test("an applied framing receipt is adopted after dispatch is interrupted without applying twice", async () => {
     vi.useFakeTimers();
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t),
         client = t.withIdentity({ subject: userId });

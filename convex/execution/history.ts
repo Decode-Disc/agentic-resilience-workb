@@ -12,7 +12,7 @@ import {
 import {
     readConversationMessages,
     retainedDeliveryBody,
-} from "@convex/integrations/agentStorage";
+} from "@convex/execution/conversationBodies";
 import {
     HISTORY_PAGE_SIZE,
     MAX_CONVERSATION_SCAN,
@@ -630,11 +630,7 @@ async function conversationFragment(
         };
         contentHash = body.contentHash;
     } else {
-        const [text] = await readConversationMessages(
-            ctx,
-            conversation.storageRef,
-            [message],
-        );
+        const [text] = await readConversationMessages(ctx, [message]);
         if (!text) throw executionError("conversation_message_unavailable");
         candidate = fragment(text, position.offset, MAX_OPERATION_RESULT_BYTES);
         contentHash = sha256Hex(text);

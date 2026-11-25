@@ -2,7 +2,6 @@ import { internal } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { recoverPiInvocationBody } from "@convex/integrations/piInvocation";
 import schema from "@convex/schema";
-import agentTest from "@convex-dev/agent/test";
 import { convexTest, type TestConvex } from "convex-test";
 import { vi } from "vitest";
 import { seedSourcePreparation } from "./source-preparation";
@@ -49,7 +48,6 @@ export async function seedConversation(
               })
             : undefined,
     );
-    agentTest.register(f.t);
     const client = f.t.withIdentity({ subject: f.userId });
     await f.t.run((ctx) =>
         ctx.db.patch(f.runId, {

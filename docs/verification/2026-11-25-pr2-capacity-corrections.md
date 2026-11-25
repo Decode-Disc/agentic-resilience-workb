@@ -2,6 +2,8 @@
 
 Date: 2026-11-25. Scope: corrections following the independent reviews of [PR 2](https://github.com/Decode-Disc/agentic-resilience-workb/pull/2), starting from `f4af3901a9946b849d052b0317f188ce998ef970`. This report distinguishes deterministic capacity checks, local backend journeys and still-open deployment acceptance.
 
+Subsequent status, 2026-11-25: the original full backup was recovered and checked. All 99 local legacy conversation scopes, including the 31 formerly excluded active scopes, were migrated without resetting their turns. The component was removed after source equality and functionality checks. See the [local migration record](2026-11-25-pr2-local-storage-migration.md) for current evidence and remaining limits. Statements below about the earlier supplied archive and pre-retirement state retain their original scope.
+
 ## Corrections
 
 Both authenticated history APIs now return retained-body references regardless of the historical `bodyAccess` argument. Listing deliveries no longer hydrates their retained text. The separate authenticated body reader preserves exact text, pagination, access checks and hash validation. Unmigrated Convex Agent messages remain readable until the separately gated retirement.

@@ -1,7 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import schema from "@convex/schema";
-import agentTest from "@convex-dev/agent/test";
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -24,7 +23,7 @@ test("company confirmation retains a framing dossier without consuming an analys
     const t = convexTest(schema, modules);
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
-    agentTest.register(t);
+
     const confirm = makeFunctionReference<
         "mutation",
         {
@@ -68,7 +67,7 @@ test("company confirmation retains a framing dossier without consuming an analys
 test("framing edits use revisions and explicit research start consumes one analysis in the same dossier", async () => {
     activateSourcesMission();
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({ subject: userId });
@@ -191,7 +190,7 @@ test("framing edits use revisions and explicit research start consumes one analy
 
 test("an incomplete framing draft can be saved without authorizing research", async () => {
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const client = t.withIdentity({ subject: userId });
@@ -225,7 +224,7 @@ test("research cannot start on a corpus-approval fallback when Sources is not ac
     vi.stubEnv("SOURCES_MISSION_ENABLED", "false");
     try {
         const t = convexTest(schema, modules);
-        agentTest.register(t);
+
         workflowTest.register(t);
         const { userId, preflightId } = await createAdmittedPreflight(t);
         const analyst = t.withIdentity({ subject: userId });
@@ -281,7 +280,7 @@ const capacityQuestion = (id: string) => ({
 
 async function framingDossier(key: string) {
     const t = convexTest(schema, modules);
-    agentTest.register(t);
+
     workflowTest.register(t);
     const { userId, preflightId } = await createAdmittedPreflight(t);
     const analyst = t.withIdentity({ subject: userId });
@@ -436,7 +435,7 @@ test("new Sources research pins its protocol while repeated Start consumes no se
     );
     try {
         const t = convexTest(schema, modules);
-        agentTest.register(t);
+
         workflowTest.register(t);
         const { userId, preflightId } = await createAdmittedPreflight(t);
         const analyst = t.withIdentity({ subject: userId });
