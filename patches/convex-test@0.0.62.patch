@@ -1,0 +1,13 @@
+diff --git a/dist/index.js b/dist/index.js
+index df17f8ac1f462f42f2f44d357c316c9fe942df52..d9df4e7e61a180645ef474c8eff87e6676b23671 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1419,7 +1419,7 @@ function jsSyscallImpl() {
+ // If we're in action, wrap the write in a transaction.
+ async function writeToDatabase(impl) {
+     const db = getDb();
+-    if (!getTransactionManager().isInTransaction()) {
++    if (!nestedTxStorage.getStore()) {
+         return await withAuth().run(async () => {
+             return await impl(db);
+         });

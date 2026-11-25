@@ -26,4 +26,5 @@ peerDependencyRules:
   allowedVersions:
     convex-helpers>typescript: '>=5.5'
 patchedDependencies:
+  convex-test@0.0.62: patches/convex-test@0.0.62.patch
   convex@1.47.0: patches/convex-cli-activity-ping-nonfatal.patch
