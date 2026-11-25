@@ -144,6 +144,99 @@ test("historical inputs are not presented as reconstructed request snapshots", a
     ).rejects.toThrow("Not authenticated");
 });
 
+test.each([
+    { id: "ai-sdk", version: 1 },
+    { id: "convex-agent", version: 2 },
+])("an administrator can inspect a retained $id journal without restarting its retired executor", async (generationBackend) => {
+    const { t, args, userId, visitorId, missionId, invocationId } =
+        await journalFixture();
+    const reply = stableStringify({
+        version: 1,
+        provenance: "simulation",
+        content: "Historical reply, preserved exactly.",
+    });
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        invocationId,
+        expectedGeneration: 4,
+        responseJson: '{"kind":"blocked","code":"historical_record"}',
+        observableReplyJson: reply,
+    });
+    await t.run(async (ctx) => {
+        await ctx.db.patch(visitorId, { role: "admin" });
+        await ctx.db.patch(missionId, {
+            generationBackend,
+            executionRuntime: undefined,
+            status: "blocked",
+            blockCode: "historical_record",
+        });
+        await ctx.db.patch(invocationId, {
+            generationBackend,
+            status: "returned",
+        });
+    });
+    const snapshot = () =>
+        t.run(async (ctx) => ({
+            mission: await ctx.db.get(missionId),
+            invocation: await ctx.db.get(invocationId),
+            calls: await ctx.db.query("providerCalls").collect(),
+            scheduled: await ctx.db.system
+                .query("_scheduled_functions")
+                .collect(),
+        }));
+    const before = await snapshot();
+    const admin = t.withIdentity({ subject: `${userId}|historical-journal` });
+    const page = await admin.query(
+        api.adminOperations.listRunJournalEventsPage,
+        {
+            runId: args.runId,
+            paginationOpts: { numItems: 20, cursor: null },
+        },
+    );
+    const event = page.page.find(
+        (item) => item.kind === "invocation_request_recorded",
+    );
+    if (!event) throw new Error("Expected request event");
+    const detail = await admin.query(api.adminOperations.inspectJournalEvent, {
+        runId: args.runId,
+        eventId: event._id,
+    });
+    expect(detail.invocation).toMatchObject({
+        generationBackend,
+        status: "returned",
+        provenance: "simulation",
+    });
+    const request = await admin.query(
+        api.adminOperations.readInvocationJournalPayload,
+        { runId: args.runId, invocationId, part: "request" },
+    );
+    expect(request.kind).toBe("recorded");
+    if (request.kind !== "recorded" || request.payload.json === undefined)
+        throw new Error("Expected retained request");
+    expect(JSON.parse(request.payload.json)).toEqual({
+        version: 1,
+        input: {
+            prompt: "Private prompt retained as text <script>bad()</script>",
+        },
+    });
+    const observed = await admin.query(
+        api.adminOperations.readInvocationJournalPayload,
+        { runId: args.runId, invocationId, part: "reply" },
+    );
+    expect(observed.kind).toBe("recorded");
+    if (observed.kind !== "recorded")
+        throw new Error("Expected retained reply");
+    expect(observed.payload.json).toBe(reply);
+    expect(await snapshot()).toEqual(before);
+    await t.run((ctx) => ctx.db.patch(visitorId, { status: "revoked" }));
+    await expect(
+        admin.query(api.adminOperations.readInvocationJournalPayload, {
+            runId: args.runId,
+            invocationId,
+            part: "request",
+        }),
+    ).rejects.toThrow("Unauthorized");
+});
+
 test("inspection refuses cross-dossier event, payload and mission correlations", async () => {
     const { t, args, userId, visitorId, missionId, invocationId } =
         await journalFixture();

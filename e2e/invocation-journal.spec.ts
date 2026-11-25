@@ -19,27 +19,22 @@ import { runConvexJson } from "./support/convex-admin";
 import { admitAnalyst } from "./support/source-review-fixture";
 
 type Snapshot = FunctionReturnType<typeof internal.execution.fixtures.inspect>;
-const backends = ["ai-sdk", "convex-agent", "pi-durable"] as const;
 const definitions = ["inspection", "validation", "conversation"] as const;
-// Every backend and definition at desktop width; one representative proves the narrow layout,
-// whose rendering does not depend on the backend or definition.
+// Current missions use Pi. Retired backend records are covered by the administrator query regressions.
+// Each definition runs at desktop width; one representative covers the narrow layout.
 const cases = [
-    ...backends.flatMap((backend) =>
-        definitions.map((definition) => ({
-            backend,
-            definition,
-            viewport: { width: 1440, height: 1000 },
-        })),
-    ),
+    ...definitions.map((definition) => ({
+        definition,
+        viewport: { width: 1440, height: 1000 },
+    })),
     {
-        backend: "pi-durable",
         definition: "conversation",
         viewport: { width: 390, height: 844 },
     },
 ] as const;
 
-for (const { backend, definition, viewport } of cases) {
-    test(`administrator inspects the ${definition} journal with ${backend} after reconnection at ${viewport.width}px`, async ({
+for (const { definition, viewport } of cases) {
+    test(`administrator inspects the ${definition} journal with pi-durable after reconnection at ${viewport.width}px`, async ({
         page,
         browser,
     }) => {
@@ -64,11 +59,11 @@ for (const { backend, definition, viewport } of cases) {
                       ? "execution/fixtures:startValidation"
                       : "execution/fixtures:startConversation",
                 {
-                    fixtureKey: `journal-${backend}-${definition}-${viewport.width}`,
+                    fixtureKey: `journal-pi-durable-${definition}-${viewport.width}`,
                     slotKey: browserTestSlot(),
                     generationBackend: {
-                        id: backend,
-                        version: backend === "convex-agent" ? 2 : 1,
+                        id: "pi-durable",
+                        version: 1,
                     },
                 },
             );
@@ -87,16 +82,12 @@ for (const { backend, definition, viewport } of cases) {
                 Array.from(
                     { length: snapshot.invocationCount },
                     () => ({
-                        id: backend,
-                        version: backend === "convex-agent" ? 2 : 1,
+                        id: "pi-durable",
+                        version: 1,
                     }),
                 ),
             );
-            expect(snapshot.backendStorageCount).toBe(
-                backend === "convex-agent"
-                    ? snapshot.invocationCount
-                    : 0,
-            );
+            expect(snapshot.backendStorageCount).toBe(0);
             await admitAdministrator(page);
             await page
                 .getByRole("tab", { name: "Dossiers", exact: true })
@@ -161,44 +152,23 @@ for (const { backend, definition, viewport } of cases) {
                 const recorded = JSON.parse(
                     (await payload.textContent()) ?? "null",
                 ) as {
-                    input?: {
-                        messages?: Array<{
-                            role: string;
-                            content:
-                                | string
-                                | Array<{ type: string; text?: string }>;
-                        }>;
-                    };
                     messages?: Array<{
                         role: string;
                         sections?: Record<string, string>;
                     }>;
                 };
                 const marker = "Required current mission state:\n";
-                const contexts =
-                    backend === "pi-durable"
-                        ? (recorded.messages ?? []).flatMap((message) => {
-                              const state =
-                                  message.role === "system"
-                                      ? message.sections
-                                            ?.workbench_current_state
-                                      : undefined;
-                              return state?.startsWith(marker)
-                                  ? [state.slice(marker.length)]
-                                  : [];
-                          })
-                        : // The provider request: required state is the user message.
-                          (recorded.input?.messages ?? []).flatMap((message) =>
-                              message.role !== "user"
-                                  ? []
-                                  : typeof message.content === "string"
-                                    ? [message.content]
-                                    : message.content.flatMap((part) =>
-                                          part.type === "text" && part.text
-                                              ? [part.text]
-                                              : [],
-                                      ),
-                          );
+                const contexts = (recorded.messages ?? []).flatMap(
+                    (message) => {
+                        const state =
+                            message.role === "system"
+                                ? message.sections?.workbench_current_state
+                                : undefined;
+                        return state?.startsWith(marker)
+                            ? [state.slice(marker.length)]
+                            : [];
+                    },
+                );
                 expect(contexts).toHaveLength(1);
                 expect(JSON.parse(contexts[0] ?? "null")).toMatchObject(
                     {
@@ -254,7 +224,7 @@ for (const { backend, definition, viewport } of cases) {
                 path: test
                     .info()
                     .outputPath(
-                        `journal-${backend}-${definition}-${viewport.width}.png`,
+                        `journal-pi-durable-${definition}-${viewport.width}.png`,
                     ),
             });
             expect(
