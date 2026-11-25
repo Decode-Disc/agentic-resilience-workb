@@ -1117,7 +1117,7 @@ export function ConversationContext({
     } | null>(null);
     // biome-ignore lint/correctness/useExhaustiveDependencies: the initial placement decides the default once; later resizes never reopen a dismissed card.
     useLayoutEffect(() => {
-        if (defaultOpen !== undefined) return;
+        if (controlledOpen !== undefined || defaultOpen !== undefined) return;
         const width = triggerRef.current
             ?.closest<HTMLElement>('[data-slot="conversation-thread"]')
             ?.getBoundingClientRect().width;

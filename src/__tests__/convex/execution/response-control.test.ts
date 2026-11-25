@@ -11,6 +11,10 @@ import {
 import { recoverCorrectionDraft } from "@convex/responseControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import {
+    readConversationPageWithBodies,
+    readWorkbenchPageWithBodies,
+} from "@/__tests__/setup/retained-messages";
+import {
     seedWorkbench,
     workbenchAdmissionInput,
 } from "@/__tests__/setup/workbench";
@@ -200,7 +204,7 @@ test.each([
     });
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -300,10 +304,10 @@ test.each([
         response: { kind: "complete", text: draft },
     });
     expect(final.kind).toBe("completed");
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(messages.page.find((m) => m.role === "assistant")).toMatchObject({
         text: draft,
         responseControl: { status: "review_needed" },
@@ -619,7 +623,7 @@ test.each([
         }),
     ).toMatchObject({ kind: "completed" });
     const reply = (
-        await client.query(api.execution.conversations.listMessages, {
+        await readConversationPageWithBodies(client, {
             runId,
             paginationOpts: { numItems: 20, cursor: null },
         })
@@ -628,7 +632,7 @@ test.each([
         text: response.text,
         responseControl: { status: "review_needed", support: 0.03 },
     });
-    const history = await client.query(api.workbench.history, {
+    const history = await readWorkbenchPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -698,7 +702,7 @@ test("an unavailable correction profile preserves the draft with an explicit res
     expect(result.kind).toBe("completed");
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -789,7 +793,7 @@ test("unknown advisory work becomes unavailable without redispatch or refunding 
     ).toBe(1);
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -928,7 +932,7 @@ test.each([
         ).kind,
     ).toBe("completed");
     const reply = (
-        await client.query(api.execution.conversations.listMessages, {
+        await readConversationPageWithBodies(client, {
             runId,
             paginationOpts: { numItems: 20, cursor: null },
         })
@@ -1008,13 +1012,10 @@ test("a draft above advisory capacity publishes exact text and retains its revie
             .take(1),
     );
     expect(requests).toEqual([]);
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId,
-            paginationOpts: { numItems: 20, cursor: null },
-        },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         history.page
             .filter((entry) => entry.role === "assistant")
@@ -1061,7 +1062,7 @@ test("the actual Pi worker delivers the reminder and publishes only the revised 
             (await t.run((ctx) => ctx.db.get(active.missionId)))?.status,
         ).toBe("completed");
         const messages = (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1172,10 +1173,10 @@ test("the native provider request receives the exact rejected draft with current
     expect(currentState).toContain('"draft":"Research is running."');
     expect(currentState).toContain('"summary":"Research has not started."');
     expect(correctedRequest.tools ?? []).toEqual([]);
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         messages.page
             .filter((message) => message.role === "assistant")
@@ -1311,7 +1312,7 @@ test.each([
     ).toBe("completed");
     expect(
         (
-            await client.query(api.workbench.history, {
+            await readWorkbenchPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1385,7 +1386,7 @@ test("changed facts require a new bounded check and never adopt the stale score"
         ).kind,
     ).toBe("completed");
     const reply = (
-        await client.query(api.workbench.history, {
+        await readWorkbenchPageWithBodies(client, {
             runId,
             paginationOpts: { numItems: 20, cursor: null },
         })
@@ -1440,7 +1441,7 @@ test("cancellation retains received review facts without publishing or adopting 
     });
     expect(
         (
-            await client.query(api.workbench.history, {
+            await readWorkbenchPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1469,7 +1470,7 @@ test("a correction refused by the shared model budget publishes the original wit
     ).toBe("completed");
     expect(
         (
-            await client.query(api.workbench.history, {
+            await readWorkbenchPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1568,7 +1569,7 @@ test("oversized saved operation facts cannot expand turn audit or strand publica
     ).toBeLessThan(40000);
     expect(
         (
-            await client.query(api.workbench.history, {
+            await readWorkbenchPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -1987,12 +1988,13 @@ test("disabled advisory control preserves factual status correction without extr
     expect(after.preparation).toEqual(initial.preparation);
     expect(after.calls).toEqual(initial.calls);
     expect(after.requests).toEqual(initial.requests);
-    const messages = await f.t
-        .withIdentity({ subject: f.userId })
-        .query(api.execution.conversations.listMessages, {
+    const messages = await readConversationPageWithBodies(
+        f.t.withIdentity({ subject: f.userId }),
+        {
             runId: f.runId,
             paginationOpts: { numItems: 20, cursor: null },
-        });
+        },
+    );
     expect(messages.page.filter((m) => m.role === "assistant")).toEqual(
         expect.arrayContaining([
             expect.objectContaining({

@@ -44,6 +44,13 @@ export type AgentScope = Infer<typeof agentScopeValidator>;
 export type AgentState = Infer<typeof agentStateValidator>;
 export type AgentResult = Infer<typeof agentResultValidator>;
 export type AgentCompletion = Infer<typeof agentCompletionValidator>;
+
+/** Textual completion requires visible content, independently of its transport or storage. */
+export function hasCompletionText(
+    proposal: AgentCompletion,
+): proposal is AgentCompletion & { text: string } {
+    return "text" in proposal && proposal.text.trim().length > 0;
+}
 export type OperationPin = Infer<typeof operationPinValidator>;
 export type OperationInput = Infer<typeof requestInputValidator>;
 export type OperationOutcome = Infer<typeof operationOutcomeValidator>;

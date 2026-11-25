@@ -22,6 +22,7 @@ import {
     createConversationStorage,
     saveConversationMessage,
 } from "@/__tests__/setup/legacy-conversation-storage";
+import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 afterEach(() => {
     vi.unstubAllEnvs();
@@ -1639,7 +1640,7 @@ test("a legacy approval fixture preserves its published reply without inventing 
             paginationOpts: { cursor: null, numItems: 5 },
         },
     );
-    expect(delivered.page).toEqual(
+    expect(await readMessageBodies(f.client, delivered.page)).toEqual(
         expect.arrayContaining([
             expect.objectContaining({ _id: deliveryId, text }),
         ]),

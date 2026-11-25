@@ -45,6 +45,7 @@ import type * as domain_framingEditAuthority from "../domain/framingEditAuthorit
 import type * as domain_framingProvenance from "../domain/framingProvenance.js";
 import type * as domain_invitationCodes from "../domain/invitationCodes.js";
 import type * as domain_manualSourceIntake from "../domain/manualSourceIntake.js";
+import type * as domain_preparedAnalystWording from "../domain/preparedAnalystWording.js";
 import type * as domain_previewCache from "../domain/previewCache.js";
 import type * as domain_providerAvailability from "../domain/providerAvailability.js";
 import type * as domain_publicSourceUrl from "../domain/publicSourceUrl.js";
@@ -121,6 +122,7 @@ import type * as execution_journal from "../execution/journal.js";
 import type * as execution_missionData from "../execution/missionData.js";
 import type * as execution_missionHistory from "../execution/missionHistory.js";
 import type * as execution_missions from "../execution/missions.js";
+import type * as execution_observedReply from "../execution/observedReply.js";
 import type * as execution_operationContracts from "../execution/operationContracts.js";
 import type * as execution_operationResults from "../execution/operationResults.js";
 import type * as execution_operations from "../execution/operations.js";
@@ -155,6 +157,7 @@ import type * as integrations_modelRouting from "../integrations/modelRouting.js
 import type * as integrations_modelTransport from "../integrations/modelTransport.js";
 import type * as integrations_openRouterConfiguration from "../integrations/openRouterConfiguration.js";
 import type * as integrations_openRouterGeneration from "../integrations/openRouterGeneration.js";
+import type * as integrations_piInvocation from "../integrations/piInvocation.js";
 import type * as integrations_piMission from "../integrations/piMission.js";
 import type * as integrations_piModelProfiles from "../integrations/piModelProfiles.js";
 import type * as integrations_piNativeInput from "../integrations/piNativeInput.js";
@@ -269,6 +272,7 @@ declare const fullApi: ApiFromModules<{
   "domain/framingProvenance": typeof domain_framingProvenance;
   "domain/invitationCodes": typeof domain_invitationCodes;
   "domain/manualSourceIntake": typeof domain_manualSourceIntake;
+  "domain/preparedAnalystWording": typeof domain_preparedAnalystWording;
   "domain/previewCache": typeof domain_previewCache;
   "domain/providerAvailability": typeof domain_providerAvailability;
   "domain/publicSourceUrl": typeof domain_publicSourceUrl;
@@ -345,6 +349,7 @@ declare const fullApi: ApiFromModules<{
   "execution/missionData": typeof execution_missionData;
   "execution/missionHistory": typeof execution_missionHistory;
   "execution/missions": typeof execution_missions;
+  "execution/observedReply": typeof execution_observedReply;
   "execution/operationContracts": typeof execution_operationContracts;
   "execution/operationResults": typeof execution_operationResults;
   "execution/operations": typeof execution_operations;
@@ -379,6 +384,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/modelTransport": typeof integrations_modelTransport;
   "integrations/openRouterConfiguration": typeof integrations_openRouterConfiguration;
   "integrations/openRouterGeneration": typeof integrations_openRouterGeneration;
+  "integrations/piInvocation": typeof integrations_piInvocation;
   "integrations/piMission": typeof integrations_piMission;
   "integrations/piModelProfiles": typeof integrations_piModelProfiles;
   "integrations/piNativeInput": typeof integrations_piNativeInput;

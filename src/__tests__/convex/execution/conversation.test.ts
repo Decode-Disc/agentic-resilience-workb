@@ -2,6 +2,7 @@ import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation as fixture } from "@/__tests__/setup/agent-harness";
+import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 afterEach(() => {
     vi.unstubAllEnvs();
@@ -69,7 +70,8 @@ test("message reading returns application delivery data without component storag
         {
             _id: messageId,
             runId: f.runId,
-            text: "Inspect retained material",
+            text: "",
+            body: reference,
             role: "user",
             delivery: "queue",
             status: "queued",
@@ -93,7 +95,7 @@ test("public history preserves the analyst request identity while admission is p
         runId: f.runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
-    expect(history.page).toEqual([
+    expect(await readMessageBodies(f.client, history.page)).toEqual([
         expect.objectContaining({
             _id: messageId,
             requestKey: "immediate-message",
@@ -127,7 +129,7 @@ test("an admitted dossier keeps one conversation and idempotent queued messages 
         api.execution.conversations.listMessages,
         { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
     );
-    expect(page.page).toEqual([
+    expect(await readMessageBodies(f.client, page.page)).toEqual([
         expect.objectContaining({
             text: input.text,
             delivery: "queue",

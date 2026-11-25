@@ -142,8 +142,13 @@ export function ConversationThreadDock({
 export function ConversationThreadLog({
     className,
     children,
+    scrollToBottomOnInitialize = true,
     ...props
-}: Omit<ComponentProps<"div">, "ref">) {
+}: Omit<ComponentProps<"div">, "ref"> &
+    Pick<
+        ComponentProps<typeof ThreadPrimitive.Viewport>,
+        "scrollToBottomOnInitialize" | "autoScroll"
+    >) {
     const { variant } = useThread("ConversationThreadLog");
     const reduceMotion = useReducedMotion();
     const viewportRef = useRef<HTMLDivElement>(null);
@@ -196,7 +201,7 @@ export function ConversationThreadLog({
                     tabIndex={0}
                     data-slot="conversation-thread-log"
                     scrollToBottomOnRunStart={false}
-                    scrollToBottomOnInitialize
+                    scrollToBottomOnInitialize={scrollToBottomOnInitialize}
                     className={cn(
                         "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain",
                         className,

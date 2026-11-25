@@ -183,6 +183,7 @@ function ResearchConversation({
 }) {
     const container = useRef<HTMLElement>(null);
     const restoringScroll = useRef(false);
+    const [followingEnabled, setFollowingEnabled] = useState(false);
     useLayoutEffect(() => {
         if (!visible) {
             scrollPosition.current = null;
@@ -194,6 +195,7 @@ function ResearchConversation({
         if (!viewport) return;
         const offset = scrollPosition.current;
         restoringScroll.current = true;
+        setFollowingEnabled(false);
         let frame: number | undefined;
         // A kept-mounted sheet has no scrolling geometry until it becomes visible.
         const restore = () => {
@@ -201,7 +203,10 @@ function ResearchConversation({
             observer.disconnect();
             frame = requestAnimationFrame(() => {
                 viewport.scrollTop = offset ?? viewport.scrollHeight;
+                // Synchronize native following before enabling growth on the remounted viewport.
+                viewport.dispatchEvent(new Event("scroll"));
                 restoringScroll.current = false;
+                setFollowingEnabled(true);
             });
         };
         const observer = new ResizeObserver(restore);
@@ -235,7 +240,11 @@ function ResearchConversation({
                 visible={visible}
                 header={header}
                 aria-label="Research conversation">
-                <ConversationThreadLog>{children}</ConversationThreadLog>
+                <ConversationThreadLog
+                    scrollToBottomOnInitialize={false}
+                    autoScroll={followingEnabled}>
+                    {children}
+                </ConversationThreadLog>
                 {composer && (
                     <ConversationThreadDock
                         className={styles.conversationComposer}>

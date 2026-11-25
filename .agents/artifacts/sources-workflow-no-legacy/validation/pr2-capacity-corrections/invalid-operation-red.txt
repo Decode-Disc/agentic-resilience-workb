@@ -1,0 +1,26 @@
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/convex/execution/large-response.test.ts (11 tests | 1 failed | 10 skipped) 792ms
+   × an oversized invalid operation retains its original arguments and returns a correctable refusal 790ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/convex/execution/large-response.test.ts > an oversized invalid operation retains its original arguments and returns a correctable refusal
+AssertionError: expected 1100750 to be less than 1048576
+ ❯ src/__tests__/convex/execution/large-response.test.ts:41:89
+     39|     expect(adopted.kind).toBe("waiting");
+     40|     const requests = await f.t.run(async (ctx) => Promise.all(adopted.…
+     41|     for (const request of requests) { assert(request); expect(getDocum…
+       |                                                                                         ^
+     42|     expect(requests).toEqual([expect.objectContaining({ status: "compl…
+     43|     expect(JSON.parse((await recoverReceivedResponse(f)) ?? "null")).t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 skipped (11)
+   Start at  11:55:13
+   Duration  5.54s (transform 2.39s, setup 232ms, import 3.48s, tests 792ms, environment 814ms)
+

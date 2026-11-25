@@ -998,21 +998,17 @@ export const conversationBodyReference = v.optional(
     v.object({ contentHash: v.string() }),
 );
 
-/** Lists delivery bodies independently of retained fragment access when the caller requests it. */
+/** Retained bodies are always read separately so list transactions depend only on delivery metadata. */
 export async function readConversationPageBodies(
     ctx: QueryCtx,
     threadId: string | undefined,
     deliveries: Doc<"agentMessageDeliveries">[],
-    access?: "separate",
 ) {
-    const inline =
-        access === "separate"
-            ? deliveries.filter((delivery) => !delivery.bodyTextId)
-            : deliveries;
+    const inline = deliveries.filter((delivery) => !delivery.bodyTextId);
     const texts = await readConversationMessages(ctx, threadId, inline);
     let index = 0;
     return deliveries.map((delivery) => {
-        if (access === "separate" && delivery.bodyTextId)
+        if (delivery.bodyTextId)
             return {
                 text: "",
                 body: { contentHash: deliveryBodyHash(delivery) },

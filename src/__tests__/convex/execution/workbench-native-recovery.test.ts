@@ -15,6 +15,7 @@ import { saveMessage } from "@convex-dev/agent";
 import { type FunctionArgs, getFunctionName } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { createConversationStorage } from "@/__tests__/setup/legacy-conversation-storage";
+import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -159,7 +160,12 @@ test("reopening after a stale tool reply preserves its refusal instead of execut
                         const finish = args as FunctionArgs<
                             typeof internal.execution.invocations.finish
                         >;
-                        if (finish.response?.kind === "operations") {
+                        if (
+                            (
+                                finish.response ??
+                                finish.preparedSubmission?.response
+                            )?.kind === "operations"
+                        ) {
                             await client.mutation(
                                 api.execution.conversations.submit,
                                 {
@@ -470,7 +476,9 @@ test.each([
                 paginationOpts: { numItems: 10, cursor: null },
             },
         );
-        const replies = history.page.filter(({ role }) => role === "assistant");
+        const replies = (await readMessageBodies(client, history.page)).filter(
+            ({ role }) => role === "assistant",
+        );
         expect(replies.map(({ _id }) => _id)).toEqual([deliveryId]);
         assert(replies[0]);
         expect(sha256Hex(replies[0].text)).toBe(baseline.delivery.contentHash);

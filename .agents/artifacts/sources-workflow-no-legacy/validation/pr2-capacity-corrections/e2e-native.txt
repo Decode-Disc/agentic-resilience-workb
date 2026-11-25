@@ -1,0 +1,53 @@
+$ node --experimental-strip-types scripts/local-dev.ts test:e2e e2e/agent-harness.spec.ts src/__tests__/e2e/native-journal.spec.ts --reporter=list
+12:24:10 PM [vite] (client) Re-optimizing dependencies because vite config has changed
+
+  VITE v8.1.4  ready in 5538 ms
+
+  ➜  Local:   http://127.0.0.1:5173/
+12:24:11 PM [vite] (client) [optimizer] scanning dependencies...
+12:24:18 PM [vite] (client) [optimizer] bundling dependencies...
+
+Running 3 tests using 1 worker
+
+(node:3554406) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+12:24:26 PM [vite] (ssr) connected.
+  ✘  1 [chromium] › e2e/agent-harness.spec.ts:9:1 › simulated saved-material continuation remains persisted after page reload (20.5s)
+(node:3555207) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+12:25:12 PM [vite] (client) [console.warn] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled
+12:25:40 PM [vite] (client) [console.warn] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled
+12:26:36 PM [vite] (client) [console.warn] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled
+  ✓  2 [chromium] › src/__tests__/e2e/native-journal.spec.ts:23:5 › administrator reads a complete fragmented native snapshot after reconnection at 1440px (2.1m)
+12:27:14 PM [vite] (client) [console.warn] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled
+12:27:40 PM [vite] (client) [console.warn] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled
+12:28:22 PM [vite] (client) [console.warn] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled
+  ✓  3 [chromium] › src/__tests__/e2e/native-journal.spec.ts:23:5 › administrator reads a complete fragmented native snapshot after reconnection at 390px (1.6m)
+
+
+  1) [chromium] › e2e/agent-harness.spec.ts:9:1 › simulated saved-material continuation remains persisted after page reload 
+
+    TimeoutError: page.goto: Timeout 20000ms exceeded.
+    Call log:
+      - navigating to "http://127.0.0.1:5173/workspace/dossiers", waiting until "load"
+
+
+       at e2e/support/admission.ts:125
+
+      123 |         },
+      124 |     );
+    > 125 |     await page.goto(path);
+          |                ^
+      126 |     const field = accessCodeField(page);
+      127 |     await expect(field.or(admitted)).toBeVisible({ timeout: 60_000 });
+      128 |     if (await field.isVisible()) {
+        at openAdmitted (/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/e2e/support/admission.ts:125:16)
+        at admitAnalyst (/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/e2e/support/source-review-fixture.ts:55:5)
+        at /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/e2e/agent-harness.spec.ts:19:5
+
+    Error Context: .local-runtime/playwright/9236675c1a720242504695ae/results/e2e-agent-harness-simulate-a550c-persisted-after-page-reload-chromium/error-context.md
+
+  1 failed
+    [chromium] › e2e/agent-harness.spec.ts:9:1 › simulated saved-material continuation remains persisted after page reload 
+  2 passed (4.3m)
+[ELIFECYCLE] Command failed with exit code 1.

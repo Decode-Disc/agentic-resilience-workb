@@ -15,6 +15,7 @@ import { projectWorkbenchCompletionAdmission } from "@convex/responseControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
+import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
@@ -209,6 +210,9 @@ test.each([
     const response = {
         kind: "complete",
         text: "Evidence is limited.",
+        ...(framingCorrection
+            ? { workingNotes: "Keep the unresolved documentary question." }
+            : {}),
     } as const;
     const responseJson = stableStringify(response);
     const invocationId = await t.run(async (ctx) => {
@@ -403,7 +407,13 @@ test.each([
                 {
                     invocationId,
                     expectedGeneration: 1,
-                    response,
+                    preparedSubmission: {
+                        responseHash: sha256Hex(responseJson),
+                        response: {
+                            kind: "completion_correction",
+                            completion: preparedReply.completion,
+                        },
+                    },
                     correctionWording: preparedReply.correctionWording,
                 },
                 { transactionLimits: { bytesRead: 38 * 1024 } },
@@ -416,6 +426,11 @@ test.each([
         });
         expect(await t.run((ctx) => ctx.db.get(active.turnId))).toMatchObject({
             status: "active",
+        });
+        expect(
+            await t.run((ctx) => ctx.db.get(active.missionId)),
+        ).toMatchObject({
+            workingNotes: "",
         });
         return;
     }
@@ -470,7 +485,7 @@ test.each([
             paginationOpts: { cursor: null, numItems: 5 },
         },
     );
-    expect(history.page).toEqual(
+    expect(await readMessageBodies(client, history.page)).toEqual(
         expect.arrayContaining([
             expect.objectContaining({ _id: messageId, text: wording }),
             expect.objectContaining({ role: "assistant", text: response.text }),

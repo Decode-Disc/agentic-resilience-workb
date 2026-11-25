@@ -12,6 +12,10 @@ import { BROWSER_TEST_SLOT } from "@convex/runWorkspace";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import {
+    readConversationPageWithBodies,
+    readWorkbenchPageWithBodies,
+} from "@/__tests__/setup/retained-messages";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import {
     client,
@@ -212,7 +216,7 @@ test("an exact command applies the action and records an approved request", asyn
         response: { kind: "complete", text: "Unused model text" },
     });
     expect(finished).toMatchObject({ kind: "completed" });
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -829,7 +833,7 @@ test("requestApprovalFixture creates a conversation approval request and Deny le
     });
 
     const authClient = client(f);
-    const history = await authClient.query(api.workbench.history, {
+    const history = await readWorkbenchPageWithBodies(authClient, {
         runId: f.runId,
         paginationOpts: { numItems: 20, cursor: null },
     });

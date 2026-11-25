@@ -11,8 +11,10 @@ import {
     getFunctionName,
 } from "convex/server";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { originalOperationArguments } from "@/__tests__/setup/agent-harness";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 import {
     seedInspectedEvidence,
     startRetainedInspection,
@@ -673,11 +675,18 @@ test.each([
             expect.objectContaining({
                 input: expect.objectContaining({
                     kind: "invalid",
-                    inputJson: original,
+                    inputReference: expect.objectContaining({
+                        callId: "bad-call",
+                    }),
                 }),
                 outcome: expect.objectContaining({ kind: "refused" }),
             }),
         ]);
+        const refused = result.requests.find(
+            (request) => request.input.kind === "invalid",
+        );
+        assert(refused);
+        expect(await originalOperationArguments(f.t, refused)).toBe(original);
         expect(result.receipts).toHaveLength(2);
         expect(network).toHaveBeenCalledTimes(2);
     }
@@ -754,11 +763,20 @@ test.each([
     expect(observed.requests.filter((r) => r.input.kind === "invalid")).toEqual(
         [
             expect.objectContaining({
-                input: expect.objectContaining({ inputJson: original }),
+                input: expect.objectContaining({
+                    inputReference: expect.objectContaining({
+                        callId: "repair-call",
+                    }),
+                }),
                 outcome: expect.objectContaining({ kind: "refused" }),
             }),
         ],
     );
+    const refused = observed.requests.find(
+        (request) => request.input.kind === "invalid",
+    );
+    assert(refused);
+    expect(await originalOperationArguments(current.t, refused)).toBe(original);
     expect(observed.mission).toMatchObject({
         status: "completed",
     });
@@ -3502,7 +3520,7 @@ test.each([
             },
         );
         expect(
-            history.page
+            (await readMessageBodies(f.client, history.page))
                 .filter((entry) => entry.role === "assistant")
                 .map((entry) => entry.text),
         ).toEqual([replyText]);

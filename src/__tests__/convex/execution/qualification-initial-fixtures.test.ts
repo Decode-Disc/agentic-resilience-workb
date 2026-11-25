@@ -40,6 +40,7 @@ import {
 } from "@/__tests__/setup/pi-native";
 import { methodComparisonManifest } from "@/__tests__/setup/qualification-method-comparison";
 import { configurableCampaign } from "@/__tests__/setup/qualification-v2";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import {
     activateSourcesMission,
     sourcesTestEnvelope,
@@ -823,10 +824,10 @@ test("dated fresh framing fixture preserves the exact original request before an
     expect(
         initial.missions.filter((m) => m.definitionId === "sources_v1"),
     ).toEqual([]);
-    const messages = await f.client.query(
-        api.execution.conversations.listMessages,
-        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(messages.page.filter((d) => d.role === "user")).toMatchObject([
         { text: request.text, createdAt: Date.parse(request.receivedAt) },
     ]);

@@ -86,6 +86,8 @@ import {
     invocationStructureError,
     isOneShotPreparationOperation,
     operationInputValidator,
+    preparedCompletionValidator,
+    preparedSubmissionValidator,
     requireSupportedMissionBackend,
 } from "./executionProtocol";
 import {
@@ -100,7 +102,6 @@ import {
     invocationResponseManifest,
     latestNativeControl,
     matchInvocationResponse,
-    preparedCompletionValidator,
     preparedReplyBasisHash,
     preparedReplyPrefix,
     receivedResponseDigest,
@@ -1772,6 +1773,7 @@ export const finish = internalMutation({
         invocationId: v.id("agentInvocations"),
         expectedGeneration: v.number(),
         response: v.optional(invocationResponseValidator),
+        preparedSubmission: v.optional(preparedSubmissionValidator),
         preparedReply: v.optional(preparedReplyValidator),
         correctionWording: v.optional(preparedAnalystWording),
         rawOutputJson: v.optional(v.string()),
@@ -1790,7 +1792,9 @@ export const finish = internalMutation({
             throw executionError("invocation_unavailable");
         if (!(await dossierAcceptsDiagnostics(ctx, invocation.runId)))
             throw executionError("not_authorized");
-        const response = args.response;
+        if (args.response && args.preparedSubmission)
+            throw executionError("invocation_result_invalid");
+        const response = args.response ?? args.preparedSubmission?.response;
         const prepared = args.preparedReply;
         const compact = response ? undefined : prepared?.completion;
         if (
@@ -1798,10 +1802,13 @@ export const finish = internalMutation({
             (args.correctionWording && (!response || prepared))
         )
             throw executionError("invocation_result_invalid");
-        const outputJson = response ? stableStringify(response) : undefined;
+        const outputJson = args.response
+            ? stableStringify(args.response)
+            : undefined;
         const responseHash =
             outputJson === undefined
-                ? compact?.responseHash
+                ? (args.preparedSubmission?.responseHash ??
+                  compact?.responseHash)
                 : sha256Hex(outputJson);
         if (
             !responseHash ||
@@ -1816,9 +1823,21 @@ export const finish = internalMutation({
                 outputJson ?? { responseHash },
             );
         const received = await match("received");
-        if ((compact || args.correctionWording) && !received)
+        if (
+            (compact || args.preparedSubmission || args.correctionWording) &&
+            !received
+        )
             throw executionError("invocation_result_conflict");
-        const observation = response ?? { responseHash };
+        const observation = args.response ?? {
+            responseHash,
+            ...(response?.kind === "operations"
+                ? {
+                      operationNames: response.requests.map(
+                          (request) => request.name,
+                      ),
+                  }
+                : {}),
+        };
         if (
             invocation.generationBackend?.id !== "pi-durable" &&
             new TextEncoder().encode(args.rawOutputJson ?? "").length >
@@ -1841,7 +1860,9 @@ export const finish = internalMutation({
                     ? ("blocked" as const)
                     : !response ||
                         response.kind === "complete" ||
-                        response?.kind === "completion_submission"
+                        response?.kind === "completion_submission" ||
+                        response?.kind === "completion_correction" ||
+                        response?.kind === "completion_refusal"
                       ? ("completed" as const)
                       : ("waiting" as const),
                 requestIds: invocation.requestIds ?? [],
@@ -1859,7 +1880,9 @@ export const finish = internalMutation({
         if (!retainedResponse)
             throw executionError("invocation_result_conflict");
         const completionStructureError =
-            response?.kind === "completion_submission"
+            response?.kind === "completion_submission" ||
+            response?.kind === "completion_correction" ||
+            response?.kind === "completion_refusal"
                 ? invocationStructureError(
                       response,
                       mission.executionRuntime === "pi-durable",
@@ -1867,6 +1890,10 @@ export const finish = internalMutation({
                 : undefined;
         const callId =
             compact?.callId ??
+            (response?.kind === "completion_correction" ||
+            response?.kind === "completion_refusal"
+                ? response.completion.callId
+                : undefined) ??
             (response?.kind === "completion_submission"
                 ? response.call?.callId
                 : undefined);
@@ -2070,6 +2097,58 @@ export const finish = internalMutation({
                 invocationId: invocation._id,
             });
         };
+        const correctPreparedWording = async () => {
+            if (
+                !args.correctionWording ||
+                !definition.preparedCompletion?.correction
+            )
+                throw executionError("invocation_result_invalid");
+            const wording = await readPreparedTurnWording(
+                ctx,
+                mission,
+                args.correctionWording,
+            );
+            if (!wording) return block("mission_context_changed");
+            const correction = await definition.preparedCompletion.correction(
+                ctx,
+                mission,
+                wording,
+            );
+            return correction.kind === "correct"
+                ? correctCompletion(correction.feedback)
+                : block(correction.code);
+        };
+        if (
+            response?.kind === "completion_correction" ||
+            response?.kind === "completion_refusal"
+        ) {
+            if (response.completion.responseHash !== responseHash)
+                throw executionError("invocation_result_conflict");
+            if (
+                callId !== undefined &&
+                (definition.completionTransport !== "native_tool" ||
+                    callId.length < 1 ||
+                    callId.length > 160)
+            )
+                return block("invalid_tool_correlation", true);
+            const notes = resolveWorkingNotes(
+                mission.workingNotes,
+                response.completion.workingNotes,
+            );
+            if (
+                !callId &&
+                (response.completion.workingNotesOversized || !notes.ok)
+            )
+                return block("working_memory_capacity", true);
+            if (await hasOutstandingOperations(ctx, mission._id))
+                return block("pending_operations");
+            if (response.completion.workingNotesOversized || !notes.ok)
+                return block("working_memory_capacity", true);
+            await ctx.db.patch(mission._id, { workingNotes: notes.notes });
+            if (response.kind === "completion_refusal")
+                return block(response.code);
+            return correctPreparedWording();
+        }
         if (!response) {
             if (
                 !compact ||
@@ -2193,8 +2272,12 @@ export const finish = internalMutation({
                             },
                         ],
                     });
+                if ("feedback" in response.call && response.call.feedback)
+                    return correctCompletion(response.call.feedback);
+                if ("blockCode" in response.call && response.call.blockCode)
+                    return block(response.call.blockCode, true);
                 try {
-                    proposalValue = JSON.parse(response.call.inputJson);
+                    proposalValue = JSON.parse(response.call.inputJson ?? "");
                 } catch {
                     return correctCompletion({
                         code: "invalid_completion",
@@ -2250,22 +2333,7 @@ export const finish = internalMutation({
                 await ctx.db.patch(mission._id, { workingNotes: notes });
             }
             if (args.correctionWording) {
-                const wording = await readPreparedTurnWording(
-                    ctx,
-                    mission,
-                    args.correctionWording,
-                );
-                if (!wording || !definition.preparedCompletion?.correction)
-                    return block("mission_context_changed");
-                const correction =
-                    await definition.preparedCompletion.correction(
-                        ctx,
-                        mission,
-                        wording,
-                    );
-                return correction.kind === "correct"
-                    ? correctCompletion(correction.feedback)
-                    : block(correction.code);
+                return correctPreparedWording();
             }
             const completion = await definition.complete(
                 ctx,
@@ -2309,7 +2377,7 @@ export const finish = internalMutation({
                     publication,
                 )),
             });
-            await recordCompleted(response);
+            await recordCompleted(observation);
             return { kind: "completed" as const, requestIds: [] };
         }
         const resolvedNotes = resolveWorkingNotes(
@@ -2329,6 +2397,15 @@ export const finish = internalMutation({
         if (Object.keys(modelOperations).length === 0)
             return block("operation_not_allowed", true);
         for (const request of response.requests) {
+            const originalInput = args.preparedSubmission
+                ? {
+                      inputReference: {
+                          invocationId: invocation._id,
+                          responseHash,
+                          callId: request.callId,
+                      },
+                  }
+                : { inputJson: request.inputJson ?? "" };
             if (
                 definition.completionTransport === "native_tool" &&
                 request.name === SUBMIT_COMPLETION_TOOL
@@ -2341,7 +2418,7 @@ export const finish = internalMutation({
                         input: {
                             kind: "invalid" as const,
                             name: request.name,
-                            inputJson: request.inputJson,
+                            ...originalInput,
                             refusalCode: "completion_must_be_sole_call",
                         },
                     }),
@@ -2350,14 +2427,18 @@ export const finish = internalMutation({
             }
             let decoded: unknown;
             try {
-                decoded = JSON.parse(request.inputJson);
+                decoded =
+                    request.inputJson === undefined
+                        ? null
+                        : JSON.parse(request.inputJson);
             } catch {
                 decoded = null;
             }
             let canonical = definition.nativeConversation
                 ? normalizeNativeHistoryInput(request.name, decoded)
                 : decoded;
-            let normalizationRefusal: string | undefined;
+            let normalizationRefusal: string | undefined =
+                "refusalCode" in request ? request.refusalCode : undefined;
             let normalizationValidation:
                 | { path: string; expected: string }
                 | undefined;
@@ -2393,10 +2474,11 @@ export const finish = internalMutation({
                     ? { ...canonical, kind: request.name }
                     : null;
             let validation: { path: string; expected: string } | undefined =
-                normalizationValidation;
+                normalizationValidation ??
+                ("validation" in request ? request.validation : undefined);
             const operation = modelOperations[request.name];
             let fieldsValid = !!operation;
-            if (operation) {
+            if (operation && request.inputJson !== undefined) {
                 try {
                     validate(operation.inputValidator, decoded, {
                         db: ctx.db,
@@ -2414,6 +2496,7 @@ export const finish = internalMutation({
                 }
             }
             const valid =
+                request.inputJson !== undefined &&
                 fieldsValid &&
                 validate(operationInputValidator, input, { db: ctx.db });
             requestIds.push(
@@ -2426,7 +2509,7 @@ export const finish = internalMutation({
                         : {
                               kind: "invalid" as const,
                               name: request.name,
-                              inputJson: request.inputJson,
+                              ...originalInput,
                               ...(normalizationRefusal
                                   ? { refusalCode: normalizationRefusal }
                                   : {}),
@@ -2456,7 +2539,7 @@ export const finish = internalMutation({
             ...(await invocationEventObservation(
                 ctx,
                 invocation,
-                response,
+                observation,
                 retainedResponse.textId ? undefined : args.rawOutputJson,
                 retainedResponse.textId ? responseHash : undefined,
             )),

@@ -1186,7 +1186,6 @@ export const listMessages = query({
             ctx,
             conversation.storageRef,
             page.page,
-            args.bodyAccess,
         );
         return {
             ...page,

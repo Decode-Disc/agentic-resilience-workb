@@ -3,6 +3,7 @@ import { stableStringify } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { preparePiReply } from "@convex/integrations/piInvocation";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import {
     seedWorkbench,
     workbenchAdmissionInput,
@@ -277,13 +278,10 @@ test("a code-owned confirmation does not consume a changed-facts review", async 
             },
         }),
     ).toMatchObject({ kind: "completed" });
-    const transcript = await f.client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId: f.runId,
-            paginationOpts: { numItems: 20, cursor: null },
-        },
-    );
+    const transcript = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         transcript.page
             .filter((message) => message.role === "assistant")
@@ -386,13 +384,10 @@ test("a prepared reply is refused after facts change and every attempt stays rea
         kind: "blocked",
         code: "mission_context_changed",
     });
-    const history = await f.client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId: f.runId,
-            paginationOpts: { numItems: 20, cursor: null },
-        },
-    );
+    const history = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         history.page.filter((message) => message.role === "assistant"),
     ).toEqual([]);

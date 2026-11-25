@@ -6,6 +6,7 @@ import {
 import * as pi from "@earendil-works/pi-ai";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedConversation } from "@/__tests__/setup/agent-harness";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 vi.mock("@earendil-works/pi-ai", async (original) => {
@@ -211,10 +212,10 @@ test("a steer received during a Pi generation prevents stale publication and rea
     expect(await f.t.run((ctx) => ctx.db.get(started.missionId))).toMatchObject(
         { status: "completed" },
     );
-    const page = await f.client.query(
-        api.execution.conversations.listMessages,
-        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const page = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         page.page.filter((message) => message.role === "assistant"),
     ).toHaveLength(1);

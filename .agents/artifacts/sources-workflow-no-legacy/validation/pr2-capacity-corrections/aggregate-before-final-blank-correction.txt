@@ -1,0 +1,897 @@
+$ pnpm agent-skills:check && pnpm docs:check && pnpm design:check && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build
+$ node --experimental-strip-types scripts/sync-agent-skills.ts --check
+$ node --experimental-strip-types scripts/check-documentation.ts
+AGENTS.md: 5021 words
+DESIGN.md: 4648 words
+PRODUCT.md: 5418 words
+agent-skills/references/documentary-method.md: 161 words
+agent-skills/source-preparation/SKILL.md: 280 words
+agent-skills/workbench-framing/SKILL.md: 437 words
+context/TECH.md: 8926 words (WARNING: advisory limit 6000)
+docs/ROADMAP.md: 3049 words
+Documentation: 78 Markdown files, 458 local links, 0 errors.
+$ pnpm design:sync --check
+$ node --experimental-strip-types scripts/sync-design-context.ts --check
+Design documentation is up to date.
+$ tsc --noEmit && tsc --noEmit -p convex/tsconfig.json
+$ biome lint . && node --experimental-strip-types scripts/check-imports.ts && node --experimental-strip-types scripts/check-execution-boundaries.ts && pnpm resource-policy:check
+services/playwright-browser/src/server.ts:16:42 lint/complexity/useLiteralKeys  FIXABLE  ━━━━━━━━━━━
+
+  i The computed expression can be simplified without the use of a string literal.
+  
+    14 │ // ─── Configuration ────────────────────────────────────────────────────────
+    15 │ 
+  > 16 │ const PORT = Number.parseInt(process.env["PORT"] ?? "3000", 10);
+       │                                          ^^^^^^
+    17 │ const SHARED_SECRET = process.env["PREVIEW_SERVICE_SECRET"];
+    18 │ const MAX_CONCURRENT_RENDERS = Number.parseInt(
+  
+  i Unsafe fix: Use a literal key instead.
+  
+     14  14 │   // ─── Configuration ────────────────────────────────────────────────────────
+     15  15 │   
+     16     │ - const·PORT·=·Number.parseInt(process.env["PORT"]·??·"3000",·10);
+         16 │ + const·PORT·=·Number.parseInt(process.env.PORT·??·"3000",·10);
+     17  17 │   const SHARED_SECRET = process.env["PREVIEW_SERVICE_SECRET"];
+     18  18 │   const MAX_CONCURRENT_RENDERS = Number.parseInt(
+  
+
+services/playwright-browser/src/server.ts:17:35 lint/complexity/useLiteralKeys  FIXABLE  ━━━━━━━━━━━
+
+  i The computed expression can be simplified without the use of a string literal.
+  
+    16 │ const PORT = Number.parseInt(process.env["PORT"] ?? "3000", 10);
+  > 17 │ const SHARED_SECRET = process.env["PREVIEW_SERVICE_SECRET"];
+       │                                   ^^^^^^^^^^^^^^^^^^^^^^^^
+    18 │ const MAX_CONCURRENT_RENDERS = Number.parseInt(
+    19 │     process.env["MAX_CONCURRENT_RENDERS"] ??
+  
+  i Unsafe fix: Use a literal key instead.
+  
+     15  15 │   
+     16  16 │   const PORT = Number.parseInt(process.env["PORT"] ?? "3000", 10);
+     17     │ - const·SHARED_SECRET·=·process.env["PREVIEW_SERVICE_SECRET"];
+         17 │ + const·SHARED_SECRET·=·process.env.PREVIEW_SERVICE_SECRET;
+     18  18 │   const MAX_CONCURRENT_RENDERS = Number.parseInt(
+     19  19 │       process.env["MAX_CONCURRENT_RENDERS"] ??
+  
+
+services/playwright-browser/src/server.ts:19:17 lint/complexity/useLiteralKeys  FIXABLE  ━━━━━━━━━━━
+
+  i The computed expression can be simplified without the use of a string literal.
+  
+    17 │ const SHARED_SECRET = process.env["PREVIEW_SERVICE_SECRET"];
+    18 │ const MAX_CONCURRENT_RENDERS = Number.parseInt(
+  > 19 │     process.env["MAX_CONCURRENT_RENDERS"] ??
+       │                 ^^^^^^^^^^^^^^^^^^^^^^^^
+    20 │         String(policy.maxConcurrentRenders),
+    21 │     10,
+  
+  i Unsafe fix: Use a literal key instead.
+  
+     17  17 │   const SHARED_SECRET = process.env["PREVIEW_SERVICE_SECRET"];
+     18  18 │   const MAX_CONCURRENT_RENDERS = Number.parseInt(
+     19     │ - ····process.env["MAX_CONCURRENT_RENDERS"]·??
+         19 │ + ····process.env.MAX_CONCURRENT_RENDERS·??
+     20  20 │           String(policy.maxConcurrentRenders),
+     21  21 │       10,
+  
+
+scripts/evaluations/archives/20261105T182043560Z-sources-campaign-mechanics/record.json lint ━━━━━━━━━━
+
+  ! The size of the file is 3.9 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261105T202221619Z-configurable-campaigns-v2-final/record.json lint ━━━━━━━━━━
+
+  ! The size of the file is 3.0 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261106T105310224Z-qualification-reliability-20261106/record.json lint ━━━━━━━━━━
+
+  ! The size of the file is 3.3 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261106T140850381Z-local-convex-timeouts-recovery-20261106/record.json lint ━━━━━━━━━━
+
+  ! The size of the file is 1.1 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261120T105941152Z-campaign-framing-v9-qualification-20261120-ready-lot-1-assessmen/record.json lint ━━━━━━━━━━
+
+  ! The size of the file is 1.0 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:132:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    130 │     color: var(--muted-foreground);
+    131 │ }
+  > 132 │ .cm-reference-button > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    133 │     color: var(--foreground);
+    134 │ }
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:189:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    187 │     font-weight: 500;
+    188 │ }
+  > 189 │ .cm-assistant-author > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    190 │     color: var(--brand-purple);
+    191 │ }
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:239:29 lint/complexity/noImportantStyles  FIXABLE  ━━━━━━━━━━
+
+  ! Avoid the use of the !important style.
+  
+    237 │ }
+    238 │ .cm-work-detail {
+  > 239 │     margin: 3px 0 10px 22px !important;
+        │                             ^^^^^^^^^^
+    240 │     color: var(--muted-foreground);
+    241 │     font-size: 12.5px;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    239 │ ····margin:·3px·0·10px·22px·!important;
+        │                            ----------- 
+
+src/development/workbench-ui/chat-composition-mocks.css:244:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    242 │     line-height: 18px;
+    243 │ }
+  > 244 │ .cm-work-detail > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^
+    245 │     opacity: 0.8;
+    246 │ }
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:367:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    365 │     padding: 4px 8px 7px 12px;
+    366 │ }
+  > 367 │ .cm-pending-footer > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    368 │     color: var(--muted-foreground);
+    369 │     font-size: 10px;
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:412:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    410 │     margin-top: 5px;
+    411 │ }
+  > 412 │ .cm-composer-bottom > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    413 │     color: var(--muted-foreground);
+    414 │     font-size: 10px;
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:468:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    466 │     color: var(--muted-foreground);
+    467 │ }
+  > 468 │ .cm-active-work > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^
+    469 │     width: 5px;
+    470 │     height: 5px;
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:497:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    495 │     font-size: 10px;
+    496 │ }
+  > 497 │ .cm-reference-strip > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    498 │     display: inline-flex;
+    499 │     align-items: center;
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:697:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    695 │     }
+    696 │ }
+  > 697 │ .cm-active-work > span {
+        │ ^^^^^^^^^^^^^^^^^^^^^^
+    698 │     animation: cm-live-work 1.7s ease-in-out infinite;
+    699 │ }
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/chat-composition-mocks.css:701:5 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 1)
+  
+    699 │ }
+    700 │ @media (prefers-reduced-motion: reduce) {
+  > 701 │     .cm-active-work > span {
+        │     ^^^^^^^^^^^^^^^^^^^^^^
+    702 │         animation: none;
+    703 │     }
+  
+  i This selector specificity is (0, 1, 2)
+  
+    68 │     margin: 0 0 8px;
+    69 │ }
+  > 70 │ .cm-study-label h2 > span {
+       │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+    71 │     font-family: var(--font-mono);
+    72 │     color: var(--muted-foreground);
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/start-screen-preview.css:145:1 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 0)
+  
+    143 │     border: 0;
+    144 │ }
+  > 145 │ .start-preview-scenarios {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^
+    146 │     display: flex;
+    147 │     align-items: center;
+  
+  i This selector specificity is (1, 1, 0)
+  
+    139 │     display: none;
+    140 │ }
+  > 141 │ #start-preview-controls .start-preview-scenarios {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    142 │     padding: 0;
+    143 │     border: 0;
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+src/development/workbench-ui/start-screen-preview.css:205:5 lint/style/noDescendingSpecificity ━━━━━━━━━━
+
+  ! Descending specificity selector found. This selector specificity is (0, 1, 0)
+  
+    203 │         font-size: 10px;
+    204 │     }
+  > 205 │     .start-preview-scenarios {
+        │     ^^^^^^^^^^^^^^^^^^^^^^^^
+    206 │         justify-content: space-between;
+    207 │         padding: 6px 12px;
+  
+  i This selector specificity is (1, 1, 0)
+  
+    139 │     display: none;
+    140 │ }
+  > 141 │ #start-preview-controls .start-preview-scenarios {
+        │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    142 │     padding: 0;
+    143 │     border: 0;
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+The number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.
+Diagnostics not shown: 17.
+Checked 1420 files in 7s. No fixes applied.
+Found 29 warnings.
+Found 8 infos.
+Execution ownership checks passed.
+$ node --experimental-strip-types scripts/sync-resource-policy.ts --check && node --experimental-strip-types scripts/check-resource-policy.ts
+Resource policy checks passed.
+$ biome format .
+scripts/evaluations/archives/20261105T182043560Z-sources-campaign-mechanics/record.json format ━━━━━━━━━━
+
+  ! The size of the file is 3.9 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261105T202221619Z-configurable-campaigns-v2-final/record.json format ━━━━━━━━━━
+
+  ! The size of the file is 3.0 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261106T105310224Z-qualification-reliability-20261106/record.json format ━━━━━━━━━━
+
+  ! The size of the file is 3.3 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261106T140850381Z-local-convex-timeouts-recovery-20261106/record.json format ━━━━━━━━━━
+
+  ! The size of the file is 1.1 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+scripts/evaluations/archives/20261120T105941152Z-campaign-framing-v9-qualification-20261120-ready-lot-1-assessmen/record.json format ━━━━━━━━━━
+
+  ! The size of the file is 1.0 MiB, which exceeds the configured maximum of 1.0 MiB for this project.
+    Use the `files.maxSize` configuration to change the maximum size of files processed, or `files.includes` to ignore the file.
+  
+
+Checked 1417 files in 2s. No fixes applied.
+Found 5 warnings.
+$ pnpm test:protocol && TMPDIR=/tmp TEMP=/tmp TMP=/tmp vitest run
+$ node --experimental-strip-types --test src/__tests__/config/*.test.mjs
+✔ native skill packaging is deterministic and excludes developer resources (4875.220314ms)
+✔ packaging rejects metadata, resource escapes and immutable package replacement (9031.56507ms)
+✔ overflowing API pricing returns a validation refusal rather than throwing (15.589336ms)
+✔ subscription authority cannot carry implicit API pricing metadata (1.41885ms)
+✔ native API authority funds full capacity including cache writes and pricing tiers (2.865256ms)
+✔ new analysis mandates require independent finite allowances and leave old mandates unchanged (15.600347ms)
+✔ native review mandates use SDK capacity without a required input proxy while API bounds remain explicit (3.211249ms)
+✔ a campaign cannot silently default its spending allowance or expiration (2.53527ms)
+✔ prepare retains a reviewable mandate without authorizing a lot or contacting a service (121.263677ms)
+✔ a mechanical completion still needs a judgment bound to unchanged evidence (36.073188ms)
+✔ automated assessments identify their reviewer and reject evidence outside the frozen index (6.336893ms)
+✔ retained automated review survives cleanup updating current evidence (46.588389ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-dZCOud/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"b761599314ad496fe5dc88c9683fbc5e4ca187eb0fde9ccf18ceb00418d7c1db","reportHash":"46cf2a19738e555a8fea76dc088a2ec0799d3f76d9ee8cef72900b3544b27204","attempt":1,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles retained (1326.685171ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-jWHmd2/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"087693312acbe33a986e620d2fd397f1638fa87d0b19e6274d4020f699e7a494","reportHash":"71983ccd55cc3b869a048c84619d25eab57bc61fd03d36d07742abfb77a71a1e","attempt":1,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"campaign_failed","diagnostics":[{"step":"submit-assessment","category":"operation_failed","code":"ECONNRESET"}],"path":"/tmp/campaign-command-recovery-jWHmd2/lots/lot-1/campaign-diagnostic-c025cccc-e859-401b-8cf7-c1c5a6bcfad8.json"}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-jWHmd2/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"087693312acbe33a986e620d2fd397f1638fa87d0b19e6274d4020f699e7a494","reportHash":"71983ccd55cc3b869a048c84619d25eab57bc61fd03d36d07742abfb77a71a1e","attempt":1,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles retained-assessment-failure (176.564733ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-8gGB05/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"82f194f3eecc9fefca9b97a19fbdd4f2c4048ca3cd61e2aeda7269994be0d6be","reportHash":"89f8993bd8cc3f49ca6551093af1a9a4f837051fdd82698efccae50ec8d9f5e0","attempt":1,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"campaign_failed","diagnostics":[{"step":"archive-assessment","category":"operation_failed","code":"ENOSPC"}],"path":"/tmp/campaign-command-recovery-8gGB05/lots/lot-1/campaign-diagnostic-0f591e69-b1e8-4fcc-b23c-f2af5ead09ef.json"}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-8gGB05/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"82f194f3eecc9fefca9b97a19fbdd4f2c4048ca3cd61e2aeda7269994be0d6be","reportHash":"89f8993bd8cc3f49ca6551093af1a9a4f837051fdd82698efccae50ec8d9f5e0","attempt":1,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles retained-archive-failure (214.147959ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-sRMiqZ/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"e749a17b0bf94bd097e3c996abc88194f9c032762c47c83caab19a0e3457ea5a","reportHash":"5606e3038539461c1901572fcb54a1516fcbb15c9a7dde6e5f6d9dc53b05c974","attempt":1,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"campaign_failed","diagnostics":[{"step":"archive-assessment","category":"operation_failed","code":"ENOSPC"},{"step":"archive-diagnostic","category":"operation_failed","code":"EACCES"}],"path":"/tmp/campaign-command-recovery-sRMiqZ/lots/lot-1/campaign-diagnostic-fe6c23ec-e723-4152-a126-d1afcdeaf294.json"}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-sRMiqZ/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"e749a17b0bf94bd097e3c996abc88194f9c032762c47c83caab19a0e3457ea5a","reportHash":"5606e3038539461c1901572fcb54a1516fcbb15c9a7dde6e5f6d9dc53b05c974","attempt":1,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles retained-archive-and-diagnostic-failure (200.461242ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-zAIyUx/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"69574b82b866d1b79b8cf99f9f18c1c3abc0c3d3c6cbcffea2d70978ab3210a4","reportHash":"3f6b328129df566b4b3140ea0b7a30f3a6db9da8d68b93807b2b052fb59d5ad6","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles none (493.117422ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-zXxwXn/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"84fd985173fcc962554fdd6a33c659a4e35ecfa4338f69225069eb31ea66cfb6","reportHash":"84c526341198bb7ab2ac3b6416506aeb4d8d0329c44f8f097e564ae846ff8eb4","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles settlement (296.837169ms)
+✔ campaign command review handles settlement-expired (274.175478ms)
+✔ campaign command review handles settlement-unsupported (295.113899ms)
+✔ campaign command review handles settlement-expired-subscription (292.719633ms)
+✔ campaign command review handles settlement-expired-no-auth (221.080577ms)
+{"status":"campaign_failed","diagnostics":[{"step":"review","category":"assertion_failed","code":"ERR_ASSERTION"}],"path":"/tmp/campaign-command-recovery-LhmFdj/lots/lot-1/campaign-diagnostic-e89711e7-3161-4915-adc6-37c1ab5d6c58.json"}
+✔ campaign command review handles settlement-expired-tampered (223.67511ms)
+✔ campaign command review handles unknown-expired (271.501835ms)
+✔ campaign command review handles legacy-reasoning (247.457035ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-jly6mp/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"f87c7d1a5194d56e9a87c6dd981d07f80dc61d3494632a0b5c2a7cfef9abbf27","reportHash":"54d12bcc53075560085af452e556ac55889a064fcebe0df0b4ce9e49d7eef32a","attempt":2,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-jly6mp/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"f87c7d1a5194d56e9a87c6dd981d07f80dc61d3494632a0b5c2a7cfef9abbf27","reportHash":"54d12bcc53075560085af452e556ac55889a064fcebe0df0b4ce9e49d7eef32a","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles settlement-revision (345.729012ms)
+✔ campaign command review handles unknown (215.055484ms)
+✔ campaign command review handles denied (197.305285ms)
+✔ campaign command review handles 503 (182.243109ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-zamFuj/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"df2a11fed40f92c6c9a74c17e5da853a87b0772195665fc1a793fd4e06c1a5a8","reportHash":"0da509b165d5bd45b7de9ad746cf6b2143703175d1118af230c103a313f535a8","attempt":2,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"campaign_failed","diagnostics":[{"step":"submit-assessment","category":"operation_failed"}],"path":"/tmp/campaign-command-recovery-zamFuj/lots/lot-1/campaign-diagnostic-fcaa5f9a-1421-478d-a85a-1fa9d3b275a8.json"}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-zamFuj/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"df2a11fed40f92c6c9a74c17e5da853a87b0772195665fc1a793fd4e06c1a5a8","reportHash":"0da509b165d5bd45b7de9ad746cf6b2143703175d1118af230c103a313f535a8","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles assess-ack (295.009326ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-RKGtJu/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"ffb8ccab01387e0aac831159d1e4d81f243e9bce5048caf34ab66633a8b857f4","reportHash":"97e8544d26fac19acce768a1d21fadc5ca302d2030148dc5f5fc11b337e307c0","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+{
+  "campaign": {
+    "manifest": {
+      "version": 3,
+      "key": "prepared",
+      "objective": "Qualify the protected Workbench path",
+      "capability": "workbench",
+      "mode": "deterministic",
+      "batteryHash": "985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618",
+      "expectations": [
+        {
+          "id": "initial-framing",
+          "checks": [
+            "proposed-framing-is-saved"
+          ]
+        }
+      ],
+      "correctionPaths": [
+        "convex/execution"
+      ],
+      "maximumLots": 2,
+      "repetitionsPerCandidate": 1,
+      "expiresAt": 1795608173210,
+      "perLot": {
+        "model": 0,
+        "search": 0,
+        "acquisition": 0,
+        "costUsd": 0
+      },
+      "total": {
+        "model": 0,
+        "search": 0,
+        "acquisition": 0,
+        "costUsd": 0
+      },
+      "executionSurface": "backend",
+      "configurations": [
+        {
+          "id": "main",
+          "purpose": "quality",
+          "models": {
+            "workbench": {
+              "model": "fixture",
+              "reasoning": "recommended"
+            }
+          }
+        }
+      ],
+      "scenarios": [
+        {
+          "id": "initial-framing",
+          "company": {
+            "cik": "1",
+            "name": "Fixture",
+            "ticker": "FIX",
+            "websiteUrl": "https://example.com"
+          },
+          "framing": {
+            "scope": "Fixture",
+            "questions": [
+              {
+                "id": "position",
+                "text": "What changed?",
+                "shortLabel": "Position",
+                "rationale": "Review the evidence."
+              }
+            ]
+          },
+          "steps": [
+            {
+              "id": "save",
+              "action": "save_framing"
+            }
+          ]
+        }
+      ],
+      "analysis": {
+        "scope": "evidence_review",
+        "routes": [
+          {
+            "provider": "openai",
+            "model": "gpt-4o-mini"
+          }
+        ],
+        "perLot": {
+          "requests": 3,
+          "costMicros": 300000
+        },
+        "total": {
+          "requests": 6,
+          "costMicros": 600000
+        },
+        "maxRequestCostMicros": 100000,
+        "maxInputTokens": 32000,
+        "maxOutputTokens": 1000,
+        "timeoutMs": 10000
+      }
+    }
+  },
+  "lots": [
+    {
+      "candidateHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "_id": "lot-fixture",
+      "key": "lot-1",
+      "status": "finished",
+      "createdAt": 1
+    }
+  ],
+  "continueCursor": null,
+  "coverage": [],
+  "diagnosticReports": [
+    {
+      "path": "/tmp/campaign-command-recovery-RKGtJu/lots/lot-1/automated-review-report.md",
+      "candidateHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "batteryHash": "985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618",
+      "evidenceHash": "ffb8ccab01387e0aac831159d1e4d81f243e9bce5048caf34ab66633a8b857f4",
+      "reportHash": "97e8544d26fac19acce768a1d21fadc5ca302d2030148dc5f5fc11b337e307c0",
+      "attempt": 2,
+      "summary": "The saved framing matches the captured evidence.",
+      "assessment": "assessed",
+      "complete": true,
+      "verdict": "passed",
+      "lot": "lot-1"
+    }
+  ]
+}
+✔ campaign command review handles report-ack-status (221.993236ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-sRfMry/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"75b902b977f0d62f68f124c1a219304bbdb1bd215307d742cbbbdf0decf79082","reportHash":"8d92325f929b8e64dcab19ed528f79d8753b23aec03ecc7579543cd031ae3076","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles report-ack-close (308.279314ms)
+✔ campaign command review handles unqualified (67.075113ms)
+{"status":"campaign_failed","diagnostics":[{"step":"review","category":"assertion_failed","code":"ERR_ASSERTION"}],"path":"/tmp/campaign-command-recovery-opSqMC/lots/lot-1/campaign-diagnostic-9354e969-6c61-4e18-badf-cc22e90364bb.json"}
+✔ campaign command review handles tampered (162.982197ms)
+✔ campaign command review handles foreign-candidate (63.102683ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-UgDa9n/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"2ef305c345243a2f8c663b2d3475e5210ddab5e8e0b10c153b448406e2984ecc","reportHash":"222c7cde6ccb1e424faaebf04af37c6d1855a2eb9db79d52a61ae59234c3e606","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles auth-key (226.238368ms)
+✔ campaign command review handles auth-oauth (70.622554ms)
+✔ campaign command review handles auth-missing (65.331343ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-9ZSAtP/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"471c083708c4ca8ec9329bbbef13dc9e89de947724f0e66c1a0f85ae11502cd2","reportHash":"b3857402d89b479cbd584623f6d730b9e1f4c14fa915fd2a07740b228f24aa76","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles auth-codex (221.882753ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-2aeIuI/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"f88f5a8a6357869a026269cee12ce79a597ebb1991f5fc33a0333102cd79de3a","reportHash":"a6b94aed856ee731172d37b5beab4bf00fdaeabeb03314d00d275399a145066b","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles auth-codex-reasoning (302.319974ms)
+✔ campaign command review handles auth-codex-legacy-reasoning (180.542394ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-ItoRpY/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"580ad3c3ed7a80755f56bb429057e1cc711fb0c7b8de488c8d5b9606c2572ff5","reportHash":"d59474f92ed2de0eccc103a7c6756432f949589066f1681b82cafb47022e98ea","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles auth-subscription (239.658974ms)
+✔ campaign command review handles auth-subscription-key (91.520288ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-kb19Ft/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"6de14df7a6ce058a15a212dbf3d87c24567e5c4b707147a4ce7e122642855b5e","reportHash":"43e970db3bdf17798c9ca7c7286f554d11a37776f642e874d7fe5c9e14663f2e","attempt":2,"summary":"The saved framing matches the captured evidence.","assessment":"assessed","complete":true,"verdict":"passed"}}
+✔ campaign command review handles isolated-lock (216.128729ms)
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-Mhjh1z/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"f50bdce73afc2d57900088735fb2b5301c8e6f1cb12ff28624a0a994f15397a1","reportHash":"7974f68db5933a13cfe34400f695ac6cb33955896af1aac3ff8bc7b5d551ed31","attempt":3,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+{"status":"diagnostic_available","report":{"path":"/tmp/campaign-command-recovery-Mhjh1z/lots/lot-1/automated-review-report.md","candidateHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","batteryHash":"985123a91f264e0b3c76e46faffb2a14f4549d21f35e43385f28df26d09c8618","evidenceHash":"f50bdce73afc2d57900088735fb2b5301c8e6f1cb12ff28624a0a994f15397a1","reportHash":"7974f68db5933a13cfe34400f695ac6cb33955896af1aac3ff8bc7b5d551ed31","attempt":3,"summary":"Synthetic diagnostic handoff for offline boundary verification.","assessment":"pending","complete":true}}
+✔ campaign command review handles invalid-verdict (282.534606ms)
+✔ automated review resumes an interrupted snapshot before dispatch (24.144498ms)
+✔ snapshot recovery never writes through a replaced destination directory (6.776122ms)
+✔ automated review rejects an invalid evidence revision before filesystem access (1.467705ms)
+✔ retained automated review rejects changed frozen snapshot evidence (25.214771ms)
+✔ Pi review stage resumes its retained result and completes reconciled assessment (60.158317ms)
+✔ unavailable transport leaves evidence untouched and avoids creating a snapshot (1.15552ms)
+✔ blocked automated review is retained as pending without changing mechanical result (2.021373ms)
+✔ assessment handoff rejects a retained receipt without a retained review (1.683785ms)
+✔ report projection refuses mismatched acknowledged artifacts (foreign-identity) (9.85098ms)
+✔ report projection refuses mismatched acknowledged artifacts (changed-assessment) (8.178725ms)
+✔ legacy assessment recovery preserves committed identity (property-order) (27.004929ms)
+✔ legacy assessment recovery preserves committed identity (extra-field) (24.904266ms)
+✔ assessment handoff retries the same retained assessment after interruption (29.093538ms)
+✔ automated review survives reconciliation delay and hands off only once (31.846822ms)
+✔ automated review rejects references absent from its frozen evidence revision (3.550057ms)
+✔ reviewer discovers indexed evidence and reads bounded windows of large verified files (8.186678ms)
+✔ investigator search finds archived source beyond the first inventory page (21.594394ms)
+✔ newline-heavy evidence returns and resumes within a bounded search heap (3152.621163ms)
+✔ case-insensitive evidence search returns a read-ready Unicode byte locator (3.706852ms)
+✔ investigator search excludes unindexed data and rejects changed, escaped or cancelled reads (5.794329ms)
+✔ automated evidence reading permits only unchanged indexed files within its byte limit (3.403119ms)
+✔ automated evidence reading rejects symlinked parent directories (3.64367ms)
+✔ automated evidence reading rejects a symlinked evidence root (3.907648ms)
+✔ Pi reviewer reads frozen evidence and reports integrity failures (changed=false) (47.74509ms)
+✔ Pi reviewer reads frozen evidence and reports integrity failures (changed=true) (40.840658ms)
+✔ a rejected assessment retains a developer report while reconciliation is blocked (51.825681ms)
+✔ Pi publishes provisional findings before request exhaustion without accepting an assessment (settlementLost=false) (44.026768ms)
+✔ Pi publishes provisional findings before request exhaustion without accepting an assessment (settlementLost=true) (41.472661ms)
+✔ Pi receives its original remaining request authority on every investigation call (26.574837ms)
+✔ native report writes preserve revisions outside frozen evidence and refuse other paths (74.381867ms)
+✔ retained investigator v1 keeps its read-only request contract and original deadline (29.508752ms)
+✔ a length-limited diagnostic remains available without accepting assessment (37.17195ms)
+✔ a completed diagnostic survives a lost reviewer settlement acknowledgement without another call (28.041129ms)
+✔ report filesystem failure stays explicit and cannot prevent known usage settlement (21.567732ms)
+✔ new investigator requires a developer handoff before accepting assessment (bare-json) (54.615892ms)
+✔ new investigator requires a developer handoff before accepting assessment (assessment-only) (39.5438ms)
+✔ malformed assessment formatting stays within its review deadline (56.102404ms)
+✔ Pi corrects assessment format in its existing session without losing the original report (53.866532ms)
+✔ Pi corrects annotated evidence filenames without losing its diagnostic or repeating workflow effects (54.187277ms)
+✔ Pi never treats changed indexed evidence as correctable model formatting (46.538771ms)
+✔ Pi never treats missing indexed evidence as correctable model formatting (42.621812ms)
+✔ fresh preparation refuses a subscription draft when a shared API key is configured (196.041972ms)
+✔ fresh preparation resolves native credentials and pricing (shared) (174.724603ms)
+✔ fresh preparation resolves native credentials and pricing (process) (115.422254ms)
+✔ fresh preparation resolves native credentials and pricing (native) (104.945565ms)
+✔ fresh preparation resolves native credentials and pricing (subscription) (127.506273ms)
+✔ fresh preparation resolves native credentials and pricing (empty) (84.110165ms)
+✔ fresh preparation resolves native credentials and pricing (unreadable) (75.848191ms)
+✔ fresh preparation resolves native credentials and pricing (malformed) (75.50782ms)
+✔ fresh preparation resolves native credentials and pricing (legacy-accounting) (85.699022ms)
+✔ fresh preparation resolves native credentials and pricing (pricing-drift) (82.640262ms)
+✔ fresh preparation resolves native credentials and pricing (unknown-model) (81.128043ms)
+✔ fresh preparation resolves native credentials and pricing (future-pricing) (100.161978ms)
+✔ fresh preparation resolves native credentials and pricing (native-auth-error) (84.009658ms)
+✔ fresh preparation resolves native credentials and pricing (native-stored-empty) (81.039146ms)
+✔ fresh preparation resolves native credentials and pricing (native-stored-unresolved) (103.713826ms)
+✔ fresh preparation resolves native credentials and pricing (native-runtime-empty) (86.554004ms)
+✔ retained reviewer pin with missing policy blocks continuation without rewriting evidence or dispatching (85.353148ms)
+✔ retained reviewer pin with unsupported policy blocks continuation without rewriting evidence or dispatching (86.856809ms)
+✔ retained reviewer pin with missing reasoning blocks continuation without rewriting evidence or dispatching (56.117278ms)
+✔ retained reviewer pin with missing deadline blocks continuation without rewriting evidence or dispatching (57.847826ms)
+✔ retained reviewer pin with expired deadline blocks continuation without rewriting evidence or dispatching (54.763434ms)
+✔ retained reviewer pin with missing model blocks continuation without rewriting evidence or dispatching (56.251524ms)
+✔ retained reviewer pin with changed model capacity blocks continuation without rewriting evidence or dispatching (55.252422ms)
+✔ reviewer reasoning defaults to high in the native Codex request (56.689876ms)
+✔ reviewer reasoning defaults with an unrelated shared setting without loading it (55.861455ms)
+✔ reviewer reasoning uses process configuration before the shared file (44.82108ms)
+✔ reviewer reasoning reads the shared main-worktree file from a linked checkout (113.002576ms)
+✔ reviewer reasoning reports shared configuration I/O failure without dispatch (31.77055ms)
+✔ reviewer reasoning blocks invalid or unsupported selection "" (29.414348ms)
+✔ reviewer reasoning blocks invalid or unsupported selection "hgh" (25.384758ms)
+✔ reviewer reasoning blocks invalid or unsupported selection "off" (28.565453ms)
+✔ investigator receives its mission and searches archived source through Pi (openai) (46.709614ms)
+✔ investigator receives its mission and searches archived source through Pi (openai-codex) (28.951282ms)
+✔ real Pi OpenAI transport does not retry a mocked HTTP 503 when retries are disabled (9.354323ms)
+✔ Pi reviewer does not continue after settlement fails (39.148103ms)
+✔ Pi reviewer fails closed when a later model reservation is denied (25.469743ms)
+✔ automated review rejects a symlink even when it was indexed (3.039094ms)
+✔ recovery excludes automated review artifacts from the next evidence revision (2.10111ms)
+✔ the qualification lock stays held until cleanup releases it (119.548789ms)
+✔ recovery freezes a new evidence revision and preserves failed history (legacy=false) (6.26788ms)
+✔ recovery freezes a new evidence revision and preserves failed history (legacy=true) (7.240424ms)
+✔ a Sources protocol records lower search and acquisition allowances without claiming the maxima (0.781044ms)
+✔ a retained execution failure blocks acceptance even when an earlier completion flag is true (2.804008ms)
+✔ preparation stores one complete filing for four independent scenarios (217.964965ms)
+✔ preparation pins the accounting policy before mandate authorization (80.128451ms)
+✔ new Sources preparation requires explicit research authority without changing historical parsing (7.657418ms)
+✔ prepare retains the explicit campaign context duration (147.927603ms)
+✔ prepare freezes three free scenarios and two configurations with allowances above the former lot caps (78.07432ms)
+✔ prepare freezes an explicitly selected documentary starting fixture without changing ordinary scenarios (68.894289ms)
+✔ prepare refuses a documentary starting fixture outside Sources capability (4.68157ms)
+✔ an unavailable retained capture fails export while preserving its metadata (4.555034ms)
+✔ a terminal scenario failure remains failed while a quiet independent scenario is evaluated (76.590613ms)
+✔ backend failures preserve failure and continue quiet independent cases (27.879151ms)
+✔ a saved framing milestone survives a later blocked turn (14.772583ms)
+✔ a quiet local generation block continues independent scenarios while retaining the failed dossier (24.483235ms)
+✔ unsettled work, uncertain accounting, publication holds and interruption prevent independent continuation (230.166124ms)
+✔ scenario preparation uses the declared duration instead of the former forty-minute cap (3.983078ms)
+✔ context duration respects mandate expiry and the server maximum before setup (7.658406ms)
+✔ explicit browser preparation may use the editable default battery and retain explicit steps (73.553294ms)
+✔ unsupported fault combinations and executable configuration are refused before setup (3.455555ms)
+✔ the selected shared-model profile changes one catalogue default and restores it once (3.796338ms)
+✔ campaign cleanup follows every owned context page beyond the legacy 25-page loop (1.060109ms)
+✔ campaign cleanup refuses a stalled backend cursor instead of looping silently (0.842965ms)
+✔ backend campaigns retain an explicit execution boundary without changing historical mandates (5.713845ms)
+✔ backend execution retains public-operation effects and snapshots without a browser (17.469622ms)
+✔ backend execution retains public-operation effects and snapshots without a browser from a prepared fixture (13.359718ms)
+✔ backend admission uses real public auth and invitation APIs and signs out after a failed callback (3.699968ms)
+✔ backend preparation refuses an implicit full browser battery (1.37527ms)
+✔ backend authentication refreshes expiring credentials before protected requests (1.978917ms)
+✔ research handoff stops on terminal failed state before another scenario (20.236825ms)
+✔ research handoff stops on terminal cancelled state before another scenario (15.303209ms)
+✔ research handoff accepts a blocked Sources mission after its idle partial handoff (10.318165ms)
+✔ unsafe backend execution records the first failure without starting another scenario (16.411749ms)
+✔ a blocked conversation stops qualification after its worker has stopped (31.26592ms)
+✔ a blocked conversation waits for its active worker (517.74627ms)
+✔ new campaign preparation defaults to backend and freezes the choice without changing historical manifests (93.359955ms)
+✔ a first dispatched Sources request is hydrated once and survives blocked preparation (524.745215ms)
+✔ campaign preparation freezes Sources replay bytes and refuses a changed corpus (85.897209ms)
+✔ Sources retained-material pause: terminal without material=false (2517.656356ms)
+✔ Sources retained-material pause: terminal without material=true (12.010544ms)
+✔ a held-out framing corpus is frozen separately from historical case identities (67.742969ms)
+✔ Sources coverage handoff preserves the following consultation only for matching omitted default coverage (17.926069ms)
+✔ Sources coverage handoff preserves the following consultation only for matching explicit nondefault coverage (13.686024ms)
+✔ Sources coverage handoff preserves the following consultation only for matching changed default coverage (14.266482ms)
+✔ Sources coverage handoff preserves the following consultation only for matching changed explicit coverage (15.229228ms)
+✔ stale profiles are refreshed via the existing bounded continuation without model reassignment (7.448233ms)
+✔ disabled selection remains blocked rather than enabled by qualification (2.934835ms)
+✔ incomplete refresh and concurrent revision changes stop before inference authorization (2.567737ms)
+✔ stalled continuations cannot loop indefinitely (0.887784ms)
+✔ reaching the continuation bound remains blocked even if the current revision is already compatible (1.352014ms)
+✔ profile preparation follows more than twenty retained revisions within the catalogue bound (2.129729ms)
+✔ campaign configuration prepares an unassigned model before assignment (7.659304ms)
+✔ campaign model preflight prepares declared choices without changing role assignments (3.985356ms)
+✔ campaign model preflight rejects incompatible controllerModel before lot admission (3.056632ms)
+✔ candidate identity includes authored policy enforcement and generated preview policy (122.862927ms)
+✔ one failed prerequisite blocks validation before later checks can run (27.93039ms)
+✔ source changes while checks run invalidate their result (9.78022ms)
+✔ validation returns only after all checks passed on the frozen candidate (8.703807ms)
+✔ the actual browser battery preserves ten unique cases and identifies unavailable continuity coverage (5.754598ms)
+✔ offline assessment covers all expectations and preserves the original result (36.000712ms)
+✔ a changed response or missing review criterion cannot reuse an approval (25.399606ms)
+✔ a material failed expectation blocks acceptance despite completed missions (21.153734ms)
+✔ repeated validation of identical source bytes and tools reuses its successful checks (28.203992ms)
+✔ Sources simulation requires an explicit zero-provider battery; live defaults cannot accept zero allowances (3.642117ms)
+✔ zero paid attempts still permit bounded inspection of simulated invocations (7.744933ms)
+✔ resuming an unfinished scenario preserves its identity and refuses another dispatch (28.167927ms)
+✔ analysis attempts retain legacy_numeric intent and receipt across recovery without redispatch (54.219174ms)
+✔ analysis attempts retain legacy_api intent and receipt across recovery without redispatch (19.070371ms)
+✔ analysis attempts retain api_cost intent and receipt across recovery without redispatch (17.96777ms)
+✔ analysis attempts retain native_subscription intent and receipt across recovery without redispatch (17.522443ms)
+✔ analysis settlement acknowledgements survive reopening without acknowledging unknown work (16.611607ms)
+✔ analysis journal treats reordered identities as the same and rejects invalid records (13.13767ms)
+✔ a completed scenario is retained on resume and is never submitted again (14.697849ms)
+✔ disk exhaustion cannot prevent any revocation, even when closing the browser also fails (1.976776ms)
+✔ malformed-response qualification requires the injection and a refusal without forbidden effects (0.799355ms)
+✔ recovery verdict excludes an older failed mission even when it sorts after the recovery (0.646389ms)
+✔ diagnostics preserve the stage and known error code but discard arbitrary errors (0.539455ms)
+✔ typed configuration refusals remain actionable without logging backend exception text (0.359495ms)
+✔ completed missions with unreviewed task outcomes cannot qualify the capability (0.677113ms)
+✔ missing mandatory cases remain inconclusive rather than an application failure (0.238384ms)
+✔ a demonstrated failure blocks acceptance even with complete coverage (0.277832ms)
+✔ unknown charges remain inconclusive and a reconciliation mismatch blocks even reviewed successful cases (0.316415ms)
+✔ dated fresh-framing mandates refuse scripted programs and documentary seeding (26.657675ms)
+✔ prepared directed-framing comparisons keep fresh requests, shared material and zero paid authority (23.693196ms)
+✔ campaign preparation freezes retrieval material for a future real-model mandate without dispatch (1170.505306ms)
+✔ relay rejects a malformed retained protocol before any provider call (6.567503ms)
+✔ normal qualification forwards the first SSE frame before upstream EOF (136.924071ms)
+✔ local refusal retains exact non-dispatch proof before acknowledging it (45.495891ms)
+✔ relay carries remaining native authority and full prepared capacity into dispatch (84.449604ms)
+✔ relay refuses retained policy undefined without inference (13.632345ms)
+✔ relay refuses retained policy unsupported without inference (5.738518ms)
+✔ relay rejects exhausted absolute authority before upstream I/O (30.225598ms)
+✔ relay forwards the Workbench price ceiling even when the catalogue price is lower (32.7423ms)
+✔ relay admits against settled charges and retains unknown charges across restart (46.44999ms)
+✔ contradictory final costs for one dispatch remain blocked after ledger replay (32.178998ms)
+✔ a received 429 survives restart and permits an independent scenario without erasing its charge reservation (26.091155ms)
+✔ a missing charge is retained without preventing a later completed scenario (22.778818ms)
+✔ an ambiguous dispatch cannot replay its scenario after restart but retains budget for independent work (24.724663ms)
+✔ a scenario respects Retry-After and admits at most one controlled recovery (33.965665ms)
+✔ the cumulative twenty-request ceiling survives relay restart (114.109074ms)
+✔ a reported charge outside its reserved envelope stops further dispatch (20.335492ms)
+✔ EOF without a terminal SSE event remains an uncertain execution (23.94409ms)
+✔ closing after terminal SSE retains the completed response and charge without waiting for HTTP EOF (23.217852ms)
+✔ a smaller authorized request allowance stops before another upstream call (13.636692ms)
+✔ a versioned qualification refuses inference before a passing validation of these fingerprints (36.171442ms)
+✔ a v2 campaign relay accepts its frozen route and allowance above legacy samples (210.686414ms)
+✔ a v3 campaign relay accepts its frozen route and allowance above legacy samples (154.65662ms)
+✔ contradictory terminal costs remain conflicted when the client closes before EOF (27.162546ms)
+✔ upstream transport cannot supply the relay's private non-dispatch acknowledgement (13.49914ms)
+✔ relay forwards and settles a streaming SSE response above 1 MiB without halting (53.992894ms)
+✔ relay rejects an oversized non-streaming upstream body above the non-streaming byte bound (18.626862ms)
+ℹ tests 237
+ℹ suites 0
+ℹ pass 237
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 17506.602739
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+Conditional provenance real-capture sizing {"passageCharacters":8192,"bytes":8900,"estimatedTokens":2543}
+ ❯ src/__tests__/convex/execution/large-response.test.ts (18 tests | 2 failed) 8084ms
+   × blank textual completion remains a bounded refusal (native: false) 159ms
+   × blank textual completion remains a bounded refusal (native: true) 129ms
+ ❯ src/__tests__/config/local-runtime.test.ts (67 tests | 1 failed) 255071ms
+   × restarts web on its persisted port and refuses a later conflict 20177ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/config/local-runtime.test.ts > restarts web on its persisted port and refuses a later conflict
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/__tests__/config/local-runtime.test.ts:1219:12
+    1217|     "web",
+    1218|     "preview",
+    1219| ] as const)("restarts %s on its persisted port and refuses a later con…
+       |            ^
+    1220|     const root = createProjectRoot();
+    1221|     initializeRuntimeFixture(root, "local:runtime-fixture");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/__tests__/convex/execution/large-response.test.ts > blank textual completion remains a bounded refusal (native: false)
+{
+  message: '',
+  actual: null,
+  expected: undefined,
+  showDiff: false,
+  name: 'AssertionError',
+  ok: false,
+  stack: 'AssertionError: \n' +
+    '    at /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/large-response.test.ts:206:5\n' +
+    '    at file:///home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/node_modules/.pnpm/@vitest+runner@4.1.10/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20',
+  stacks: [
+    {
+      method: '',
+      file: '/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/src/__tests__/convex/execution/large-response.test.ts',
+      line: 206,
+      column: 5
+    }
+  ]
+}
+ ❯ src/__tests__/convex/execution/large-response.test.ts:206:5
+    204|         text: " ".repeat(responseProbeBytes),
+    205|     };
+    206|     const response = native
+       |     ^
+    207|         ? {
+    208|               kind: "completion_submission" as const,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/__tests__/convex/execution/large-response.test.ts > blank textual completion remains a bounded refusal (native: true)
+AssertionError: expected 175254 to be less than 1024
+ ❯ src/__tests__/convex/execution/large-response.test.ts:207:49
+    206|     const response = native
+    207|         ? {
+    208|               kind: "completion_submission" as const,
+       |                                     ^
+    209|               call: {
+    210|                   callId: "blank-completion",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed | 345 passed (347)
+      Tests  3 failed | 3465 passed (3468)
+   Start at  13:02:03
+   Duration  768.38s (transform 36.51s, setup 67.44s, import 602.60s, tests 1955.26s, environment 343.01s)
+
+[ELIFECYCLE] Test failed. See above for more details.
+[ELIFECYCLE] Command failed with exit code 1.

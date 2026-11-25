@@ -1,4 +1,4 @@
-import { api, internal } from "@convex/_generated/api";
+import { internal } from "@convex/_generated/api";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { skillResource } from "@convex/execution/agentSkills";
@@ -9,6 +9,7 @@ import {
     nativeTextReply,
     nativeToolReply,
 } from "@/__tests__/setup/pi-native";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import {
     seedWorkbench,
     workbenchAdmissionInput,
@@ -421,13 +422,10 @@ test.each([
             (q) => q.id,
         ),
     ).toEqual(["authority"]);
-    const messages = await f.client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId: f.runId,
-            paginationOpts: { cursor: null, numItems: 20 },
-        },
-    );
+    const messages = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { cursor: null, numItems: 20 },
+    });
     expect(messages.page.filter((m) => m.role === "assistant")).toHaveLength(1);
     expect(messages.page.find((m) => m.role === "assistant")?.text).toContain(
         "The provisional program is saved.",

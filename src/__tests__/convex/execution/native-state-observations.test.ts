@@ -36,6 +36,7 @@ import {
     nativePiFixtureRoute,
     nativeTextReply,
 } from "@/__tests__/setup/pi-native";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 import {
     activateSourcesMission,
@@ -202,10 +203,10 @@ test.each([
             input: expect.objectContaining({ kind: operation }),
         }),
     ]);
-    const published = await f.client.query(
-        api.execution.conversations.listMessages,
-        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const published = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         published.page
             .filter((message) => message.role === "assistant")
@@ -313,10 +314,10 @@ test.each([
     expect(
         state.events.filter((event) => event.kind === "continuation_ready"),
     ).toHaveLength(2);
-    const published = await f.client.query(
-        api.execution.conversations.listMessages,
-        { runId: f.runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const published = await readConversationPageWithBodies(f.client, {
+        runId: f.runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         published.page
             .filter((message) => message.role === "assistant")
@@ -617,10 +618,10 @@ test("a saved framing change reaches native conversation after the old reply and
     );
     expect(observation).toBeGreaterThan(previous);
     expect(observation).toBeLessThan(analyst);
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         history.page.some((message) =>
             message.text.startsWith("Application observation"),

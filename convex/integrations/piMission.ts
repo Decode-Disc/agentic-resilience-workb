@@ -92,6 +92,7 @@ import {
 import {
     lookupPiOperation,
     preparePiReply,
+    preparePiSubmission,
     recoverHistoricalCompletion,
     recoverPiHistoricalPublication,
     recoverPiInvocationBody,
@@ -1511,9 +1512,29 @@ export async function runPiMission(
                 preparedReply &&
                 (definition.id === "conversation_validation_v1" ||
                     current.workbenchCompletionAdmission);
+            const preparedSubmission = useReference
+                ? undefined
+                : replyPreparation && "correctionWording" in replyPreparation
+                  ? {
+                        responseHash: sha256Hex(responseJson),
+                        response: {
+                            kind: "completion_correction" as const,
+                            completion: replyPreparation.completion,
+                        },
+                    }
+                  : preparePiSubmission(
+                        currentResponse,
+                        responseJson,
+                        definition,
+                        current.workbenchOperationAdmission ??
+                            current.sourcesOperationAdmission ??
+                            (current.inputJson
+                                ? JSON.parse(current.inputJson)
+                                : undefined),
+                    );
             // Historical simulation observations embed the original reply envelope.
             const rawOutputJson =
-                simulated && !useReference
+                simulated && !useReference && !preparedSubmission
                     ? await recoverPiInvocationBody(
                           ctx,
                           current,
@@ -1526,7 +1547,11 @@ export async function runPiMission(
                 internal.execution.invocations.finish,
                 {
                     ...invocationArgs,
-                    ...(useReference ? {} : { response: currentResponse }),
+                    ...(useReference
+                        ? {}
+                        : preparedSubmission
+                          ? { preparedSubmission }
+                          : { response: currentResponse }),
                     ...(preparedReply ? { preparedReply } : {}),
                     ...(replyPreparation &&
                     "correctionWording" in replyPreparation

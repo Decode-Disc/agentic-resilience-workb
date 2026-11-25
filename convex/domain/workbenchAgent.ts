@@ -5,6 +5,7 @@ import {
     type AgentDefinition,
     agentToolSchemas,
     domainSnapshot,
+    hasCompletionText,
 } from "@convex/execution/agentDefinition";
 import { conversationInstructions } from "@convex/execution/conversations";
 import { executionError } from "@convex/execution/errors";
@@ -810,7 +811,7 @@ export const workbenchDefinition: AgentDefinition & {
         invocation,
         preparedReviewDraft,
     ) {
-        if (!("text" in response) || !response.text.trim())
+        if (!hasCompletionText(response))
             return { kind: "blocked", code: "invalid_completion" };
         const instructionTexts = new Map<
             Id<"agentMessageDeliveries">,

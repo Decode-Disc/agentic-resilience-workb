@@ -1,6 +1,6 @@
-import { api } from "@convex/_generated/api";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -56,7 +56,7 @@ test.each([
     assert(requests[0]);
     expect(requests[0].input).toEqual({ kind: name });
     expect(requests[0].outcome?.kind).toBe("success");
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });

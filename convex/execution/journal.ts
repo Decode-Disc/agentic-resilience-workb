@@ -30,6 +30,7 @@ import {
 import { getDocumentSize, type Infer, v } from "convex/values";
 import { recordInvocationEvent, requireMissionAuthority } from "./authority";
 import { executionError } from "./errors";
+import type { preparedCompletionValidator } from "./executionProtocol";
 import {
     isCommonConsultation,
     type retainedPayloadValidator,
@@ -1057,14 +1058,6 @@ export async function retainInvocationPayload(
     };
 }
 
-/** Drains one invocation's linked or staged journal content before its owner can be removed. */
-export const preparedCompletionValidator = v.object({
-    responseHash: v.string(),
-    callId: v.optional(v.string()),
-    workingNotes: v.optional(v.string()),
-    workingNotesOversized: v.optional(v.literal(true)),
-});
-
 export function preparedReplyBasisHash(
     basisHash: string,
     reviewDraft: Infer<typeof preparedResponseReviewDraft> | undefined,
@@ -1237,7 +1230,7 @@ export async function invocationEventObservation(
         | Infer<
               typeof import("./executionProtocol").invocationResponseValidator
           >
-        | { responseHash: string },
+        | { responseHash: string; operationNames?: string[] },
     rawOutputJson?: string,
     retainedResponseHash?: string,
 ) {
@@ -1247,13 +1240,14 @@ export async function invocationEventObservation(
             q.eq("invocationId", invocation._id).eq("part", "reply"),
         )
         .unique();
+    const operationNames =
+        "kind" in response
+            ? response.kind === "operations"
+                ? response.requests.map((request) => request.name)
+                : []
+            : (response.operationNames ?? []);
     const consultationOnly =
-        "kind" in response &&
-        response.kind === "operations" &&
-        response.requests.length > 0 &&
-        response.requests.every((request) =>
-            isCommonConsultation(request.name),
-        );
+        operationNames.length > 0 && operationNames.every(isCommonConsultation);
     const responseHash =
         "responseHash" in response
             ? response.responseHash

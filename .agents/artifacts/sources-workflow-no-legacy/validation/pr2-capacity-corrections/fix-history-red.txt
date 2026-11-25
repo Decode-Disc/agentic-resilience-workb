@@ -1,0 +1,28 @@
+✓ Lockfile passes supply-chain policies (verified 5d ago)
+Lockfile is up to date, resolution step is skipped
+Already up to date
+Agent skills awaiting approval: @tanstack/react-start.
+Run "pnpm approve" to review them.
+Done in 917ms using pnpm v12.16.0
+
+ RUN  v4.1.10 /home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto
+
+ ❯ src/__tests__/convex/execution/large-response.test.ts (10 tests | 1 failed | 9 skipped) 410ms
+   × recovers the exact retained invocation response beyond one read transaction 409ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/convex/execution/large-response.test.ts > recovers the exact retained invocation response beyond one read transaction
+Error: Read too much data in a single function execution (limit: 131072 bytes). This is a Convex limit: https://docs.convex.dev/production/state/limits
+ ❯ performAsyncSyscall node_modules/.pnpm/convex@1.47.0_patch_hash=c8f69880be44b5aa3af2cc1c8fa90ae4005ba20a7965a6bc164c8a50ec547b5e_react@19.2.7/node_modules/convex/src/server/impl/syscall.ts:52:10
+ ❯ QueryImpl.next node_modules/.pnpm/convex@1.47.0_patch_hash=c8f69880be44b5aa3af2cc1c8fa90ae4005ba20a7965a6bc164c8a50ec547b5e_react@19.2.7/node_modules/convex/src/server/impl/query_impl.ts:264:28
+ ❯ QueryImpl.collect node_modules/.pnpm/convex@1.47.0_patch_hash=c8f69880be44b5aa3af2cc1c8fa90ae4005ba20a7965a6bc164c8a50ec547b5e_react@19.2.7/node_modules/convex/src/server/impl/query_impl.ts:317:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 skipped (10)
+   Start at  11:49:52
+   Duration  3.89s (transform 1.81s, setup 137ms, import 2.63s, tests 410ms, environment 547ms)
+

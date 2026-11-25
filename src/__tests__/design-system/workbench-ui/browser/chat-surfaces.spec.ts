@@ -15,21 +15,19 @@ test("the framing dock receives pointer input beside conversation work in a shor
         exact: true,
     });
     await edit.scrollIntoViewIfNeeded();
-    const bounds = await edit.boundingBox();
-    if (!bounds) throw new Error("Missing framing edit control");
     expect(
-        await page.evaluate(
-            ({ x, y }) =>
+        await edit.evaluate((button) => {
+            const bounds = button.getBoundingClientRect();
+            return (
                 document
-                    .elementFromPoint(x, y)
-                    ?.closest("button")
-                    ?.getAttribute("aria-label"),
-            {
-                x: bounds.x + bounds.width / 2,
-                y: bounds.y + bounds.height / 2,
-            },
-        ),
-    ).toBe("Edit question");
+                    .elementFromPoint(
+                        bounds.x + bounds.width / 2,
+                        bounds.y + bounds.height / 2,
+                    )
+                    ?.closest("button") === button
+            );
+        }),
+    ).toBe(true);
     await edit.click();
     await expect(
         page.getByRole("textbox", {

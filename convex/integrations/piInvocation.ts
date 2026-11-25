@@ -5,25 +5,234 @@ import {
     materializeWordingRevision,
     projectAnalystWording,
 } from "@convex/domain/preparedAnalystWording";
-import { sha256Hex } from "@convex/domain/sourcePassages";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import {
+    type AgentCompletion,
     type AgentDefinition,
+    agentToolSchemas,
+    hasCompletionText,
     SUBMIT_COMPLETION_TOOL,
 } from "@convex/execution/agentDefinition";
 import { executionError } from "@convex/execution/errors";
-import { invocationResponseValidator } from "@convex/execution/executionProtocol";
+import {
+    invocationResponseValidator,
+    type preparedSubmissionValidator,
+} from "@convex/execution/executionProtocol";
+import type * as InvocationLifecycle from "@convex/execution/invocationLifecycle";
 import { preparedReplyBasisHash } from "@convex/execution/journal";
 import { renderLegacyTextualResult } from "@convex/execution/missionData";
+import { operationInputFeedback } from "@convex/execution/operationContracts";
+import type * as PiControl from "@convex/execution/piControl";
 import {
     retainedTextParts,
     verifyRetainedText,
 } from "@convex/execution/retainedText";
 import {
+    CONVEX_MAX_DOCUMENT_BYTES,
     HISTORY_PAGE_SIZE,
     MAX_WORKING_NOTES_BYTES,
 } from "@convex/resourcePolicy";
-import type { FunctionArgs, FunctionReturnType } from "convex/server";
-import { validate } from "convex-helpers/validators";
+import type {
+    ApiFromModules,
+    FunctionArgs,
+    FunctionReturnType,
+} from "convex/server";
+import { getDocumentSize, type Infer, type Value } from "convex/values";
+import { ValidationError, validate } from "convex-helpers/validators";
+
+type ControlApi = ApiFromModules<{ control: typeof PiControl }>["control"];
+type LifecycleApi = ApiFromModules<{
+    lifecycle: typeof InvocationLifecycle;
+}>["lifecycle"];
+
+function completionMetadata(
+    proposal: AgentCompletion,
+    responseHash: string,
+    callId?: string,
+) {
+    const workingNotes = proposal.workingNotes;
+    const oversized =
+        workingNotes !== undefined &&
+        new TextEncoder().encode(workingNotes).length > MAX_WORKING_NOTES_BYTES;
+    return {
+        responseHash,
+        ...(callId !== undefined ? { callId } : {}),
+        ...(oversized
+            ? { workingNotesOversized: true as const }
+            : workingNotes !== undefined
+              ? { workingNotes }
+              : {}),
+    };
+}
+
+/** Canonical arguments and bounded refusals cross adoption; the immutable response owns originals. */
+export function preparePiSubmission(
+    response: Infer<typeof invocationResponseValidator>,
+    responseJson: string,
+    definition: AgentDefinition,
+    snapshot?: unknown,
+): Infer<typeof preparedSubmissionValidator> | undefined {
+    const responseHash = sha256Hex(responseJson);
+    if (response.kind === "complete")
+        return definition.preparedCompletion && !hasCompletionText(response)
+            ? {
+                  responseHash,
+                  response: {
+                      kind: "completion_refusal",
+                      code: "invalid_completion",
+                      completion: completionMetadata(response, responseHash),
+                  },
+              }
+            : undefined;
+    if (response.kind === "blocked") return { responseHash, response };
+    if (response.kind === "completion_submission") {
+        if (!response.call) return { responseHash, response };
+        const callId = response.call.callId;
+        let proposal: unknown;
+        try {
+            proposal = JSON.parse(response.call.inputJson);
+        } catch {
+            return {
+                responseHash,
+                response: {
+                    kind: response.kind,
+                    call: {
+                        callId,
+                        feedback: {
+                            code: "invalid_completion",
+                            issues: [
+                                {
+                                    path: "",
+                                    expected:
+                                        "A single valid JSON object matching the submit_completion schema.",
+                                },
+                            ],
+                        },
+                    },
+                },
+            };
+        }
+        try {
+            validate(definition.completionValidator, proposal, { throw: true });
+        } catch (error) {
+            if (!(error instanceof ValidationError)) throw error;
+            return {
+                responseHash,
+                response: {
+                    kind: response.kind,
+                    call: {
+                        callId,
+                        feedback: {
+                            code: "invalid_completion",
+                            issues: [
+                                operationInputFeedback(
+                                    definition.completionValidator,
+                                    error,
+                                    proposal,
+                                ),
+                            ],
+                        },
+                    },
+                },
+            };
+        }
+        const notes = (proposal as AgentCompletion).workingNotes;
+        if (
+            notes !== undefined &&
+            new TextEncoder().encode(notes).length > MAX_WORKING_NOTES_BYTES
+        )
+            return {
+                responseHash,
+                response: {
+                    kind: response.kind,
+                    call: { callId, blockCode: "working_memory_capacity" },
+                },
+            };
+        if (
+            definition.preparedCompletion &&
+            !hasCompletionText(proposal as AgentCompletion)
+        )
+            return {
+                responseHash,
+                response: {
+                    kind: "completion_refusal",
+                    code: "invalid_completion",
+                    completion: completionMetadata(
+                        proposal as AgentCompletion,
+                        responseHash,
+                        callId,
+                    ),
+                },
+            };
+        return {
+            responseHash,
+            response: {
+                kind: response.kind,
+                call: { callId, inputJson: stableStringify(proposal) },
+            },
+        };
+    }
+    if (
+        response.workingNotes !== undefined &&
+        new TextEncoder().encode(response.workingNotes).length >
+            MAX_WORKING_NOTES_BYTES
+    )
+        return {
+            responseHash,
+            response: { kind: "blocked", code: "working_memory_capacity" },
+        };
+    const tools = agentToolSchemas(definition, snapshot);
+    return {
+        responseHash,
+        response: {
+            kind: "operations",
+            ...(response.workingNotes !== undefined
+                ? { workingNotes: response.workingNotes }
+                : {}),
+            requests: response.requests.map(({ callId, name, inputJson }) => {
+                const operation = tools[name];
+                let decoded: unknown;
+                try {
+                    decoded = JSON.parse(inputJson);
+                } catch {
+                    decoded = null;
+                }
+                if (!operation || name === SUBMIT_COMPLETION_TOOL)
+                    return { callId, name };
+                try {
+                    validate(operation.inputValidator, decoded, {
+                        throw: true,
+                    });
+                } catch (error) {
+                    if (!(error instanceof ValidationError)) throw error;
+                    return {
+                        callId,
+                        name,
+                        validation: operationInputFeedback(
+                            operation.inputValidator,
+                            error,
+                            decoded,
+                        ),
+                    };
+                }
+                if (
+                    getDocumentSize({ input: decoded as Value }) >=
+                    CONVEX_MAX_DOCUMENT_BYTES
+                )
+                    return {
+                        callId,
+                        name,
+                        refusalCode: "operation_input_capacity" as const,
+                        validation: {
+                            path: "",
+                            expected: `Operation input must fit its ${CONVEX_MAX_DOCUMENT_BYTES}-byte database document.`,
+                        },
+                    };
+                return { callId, name, inputJson: stableStringify(decoded) };
+            }),
+        },
+    };
+}
 
 const bodyFields = {
     received: ["receivedOutputTextId", "receivedOutputJson"],
@@ -66,10 +275,7 @@ export async function recoverPiInvocationBody(
 /** Looks up one native operation, loading old adopted responses only when needed. */
 export async function lookupPiOperation(
     ctx: ActionCtx,
-    args: Omit<
-        FunctionArgs<typeof internal.execution.piControl.operation>,
-        "historical"
-    >,
+    args: Omit<FunctionArgs<ControlApi["operation"]>, "historical">,
     signal?: AbortSignal,
 ) {
     const read = internal.execution.piControl.operation;
@@ -109,9 +315,7 @@ export async function lookupPiOperation(
 /** Upgrades the historical sole completion only after both retained bodies agree. */
 export async function recoverHistoricalCompletion(
     ctx: ActionCtx,
-    lease: FunctionArgs<
-        typeof internal.execution.piControl.terminalCompletionAccepted
-    >,
+    lease: FunctionArgs<ControlApi["terminalCompletionAccepted"]>,
     invocation: Doc<"agentInvocations">,
     signal?: AbortSignal,
 ) {
@@ -174,10 +378,7 @@ export async function recoverHistoricalCompletion(
 /** Read the exact delivered body for native transcript reconciliation. */
 export async function recoverPiPublication(
     ctx: ActionCtx,
-    args: Omit<
-        FunctionArgs<typeof internal.execution.piControl.publicationFragment>,
-        "index"
-    >,
+    args: Omit<FunctionArgs<ControlApi["publicationFragment"]>, "index">,
     signal?: AbortSignal,
 ) {
     return reconstructBody(
@@ -193,9 +394,7 @@ export async function recoverPiPublication(
 export async function recoverPiHistoricalPublication(
     ctx: ActionCtx,
     args: Omit<
-        FunctionArgs<
-            typeof internal.execution.piControl.historicalPublicationFragment
-        >,
+        FunctionArgs<ControlApi["historicalPublicationFragment"]>,
         "index"
     >,
     signal?: AbortSignal,
@@ -220,11 +419,7 @@ export async function recoverPiHistoricalPublication(
 async function reconstructBody(
     read: (
         index: number,
-    ) => Promise<
-        FunctionReturnType<
-            typeof internal.execution.piControl.invocationFragment
-        >
-    >,
+    ) => Promise<FunctionReturnType<ControlApi["invocationFragment"]>>,
     signal?: AbortSignal,
 ) {
     signal?.throwIfAborted();
@@ -238,9 +433,7 @@ async function reconstructBody(
 }
 
 type ReplyInstructionPage = NonNullable<
-    FunctionReturnType<
-        typeof internal.execution.invocationLifecycle.replyInstructionPage
-    >
+    FunctionReturnType<LifecycleApi["replyInstructionPage"]>
 >;
 
 async function readReplyWording(
@@ -315,9 +508,7 @@ export async function preparePiReply(
         invocationId: Id<"agentInvocations">;
         expectedGeneration: number;
     },
-    response: NonNullable<
-        FunctionArgs<typeof internal.execution.invocations.finish>["response"]
-    >,
+    response: Infer<typeof invocationResponseValidator>,
     responseJson: string,
     definition: AgentDefinition,
     signal?: AbortSignal,
@@ -335,10 +526,20 @@ export async function preparePiReply(
     } else return undefined;
     if (
         !validate(definition.completionValidator, proposal) ||
-        !("text" in proposal) ||
-        !proposal.text.trim()
+        !hasCompletionText(proposal)
     )
         return undefined;
+    const callId =
+        response.kind === "completion_submission"
+            ? response.call?.callId
+            : undefined;
+    if (callId !== undefined && (callId.length < 1 || callId.length > 160))
+        return undefined;
+    const completion = completionMetadata(
+        proposal,
+        sha256Hex(responseJson),
+        callId,
+    );
     const scope = { ...authority, responseHash: sha256Hex(responseJson) };
     const wordingRead = definition.preparedCompletion.analystWording
         ? await readReplyWording(ctx, scope, signal)
@@ -351,7 +552,7 @@ export async function preparePiReply(
     );
     if (!basis)
         return wording && definition.preparedCompletion.correction
-            ? { correctionWording: wording }
+            ? { correctionWording: wording, completion }
             : undefined;
     const exactFactsRevision =
         basis.factsRevisionTemplate && wordingRead
@@ -367,25 +568,6 @@ export async function preparePiReply(
     if (!validate(definition.resultValidator, result)) return undefined;
     const reply = definition.conversationReply(result);
     if (!reply.trim()) return undefined;
-    const callId =
-        response.kind === "completion_submission"
-            ? response.call?.callId
-            : undefined;
-    if (callId !== undefined && (callId.length < 1 || callId.length > 160))
-        return undefined;
-    const workingNotes = proposal.workingNotes;
-    const oversizedNotes =
-        workingNotes !== undefined &&
-        new TextEncoder().encode(workingNotes).length > MAX_WORKING_NOTES_BYTES;
-    const completion = {
-        responseHash: sha256Hex(responseJson),
-        ...(callId !== undefined ? { callId } : {}),
-        ...(oversizedNotes
-            ? { workingNotesOversized: true as const }
-            : workingNotes !== undefined
-              ? { workingNotes }
-              : {}),
-    };
     const stageBasisHash = preparedReplyBasisHash(
         basis.basisHash,
         reviewDraft,

@@ -311,6 +311,9 @@ for (const width of [1440, 390]) {
             name: "Does CCC control coordination, or supply replaceable modules?",
             exact: true,
         });
+        await expect(question).toBeVisible();
+        await header.focus();
+        await page.keyboard.press("Enter");
         await expect(question).not.toBeVisible();
         await reviewResearchProgram(page);
         await expect(question).toBeVisible();

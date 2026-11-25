@@ -2,11 +2,14 @@ import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import { RETAINED_TEXT_INLINE_BYTES } from "@convex/resourcePolicy";
-import type { FunctionArgs } from "convex/server";
+import type { ApiFromModules, FunctionArgs } from "convex/server";
+import type { stageObservedReply } from "./invocationLifecycle";
 import { retainedTextParts } from "./retainedText";
 
 type StageArgs = FunctionArgs<
-    typeof internal.execution.invocationLifecycle.stageObservedReply
+    ApiFromModules<{
+        lifecycle: { stageObservedReply: typeof stageObservedReply };
+    }>["lifecycle"]["stageObservedReply"]
 >;
 
 /** Stages observation bytes one fragment per transaction before receipt settlement. */

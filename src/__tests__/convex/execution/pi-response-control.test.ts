@@ -9,6 +9,7 @@ import {
     nativeTextReply,
     nativeToolReply,
 } from "@/__tests__/setup/pi-native";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { seedWorkbench } from "@/__tests__/setup/workbench";
 
 afterEach(() => {
@@ -143,13 +144,10 @@ test.each([
         expectedGeneration: pending.generation,
         token: pending.piWakeToken,
     });
-    const history = await client.query(
-        api.execution.conversations.listMessages,
-        {
-            runId,
-            paginationOpts: { numItems: 20, cursor: null },
-        },
-    );
+    const history = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(history.page.filter((m) => m.role === "assistant")).toEqual(
         cancelled
             ? []

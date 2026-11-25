@@ -840,7 +840,6 @@ export const history = query({
             ctx,
             conversation.storageRef,
             visible,
-            args.bodyAccess,
         );
         const turns = new Map<
             string,

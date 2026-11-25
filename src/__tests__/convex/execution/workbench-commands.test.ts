@@ -8,6 +8,7 @@ import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { getFunctionName } from "convex/server";
 import { afterEach, assert, beforeEach, expect, test, vi } from "vitest";
+import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { activateSourcesMission } from "@/__tests__/setup/sources-mission";
 import {
     client,
@@ -45,7 +46,7 @@ test("a slash command records the actual unstarted status without a response mis
         (await client.query(api.workbench.snapshot, { runId })).research.actions
             .start.applicable,
     ).toBe(false);
-    const page = await client.query(api.execution.conversations.listMessages, {
+    const page = await readConversationPageWithBodies(client, {
         runId,
         paginationOpts: { numItems: 20, cursor: null },
     });
@@ -157,10 +158,10 @@ test("replaying a command retains its original receipt and never repeats a later
             expectedGeneration: 2,
         }),
     ).rejects.toThrow("message_identity_conflict");
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(messages.page.filter((m) => m.text === "/pause")).toHaveLength(1);
 });
 
@@ -237,7 +238,7 @@ test("authentication and the native conversation contract are required before re
     );
     expect(
         (
-            await client.query(api.execution.conversations.listMessages, {
+            await readConversationPageWithBodies(client, {
                 runId,
                 paginationOpts: { numItems: 20, cursor: null },
             })
@@ -784,10 +785,10 @@ test.each([
         definitionId: "workbench_v1",
         definitionVersion: version,
     });
-    const messages = await client.query(
-        api.execution.conversations.listMessages,
-        { runId, paginationOpts: { numItems: 20, cursor: null } },
-    );
+    const messages = await readConversationPageWithBodies(client, {
+        runId,
+        paginationOpts: { numItems: 20, cursor: null },
+    });
     expect(
         messages.page.filter(
             (message) => message.role === "user" && message.text === "/pause",
