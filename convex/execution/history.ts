@@ -9,10 +9,7 @@ import {
     sha256Hex,
     stableStringify,
 } from "@convex/domain/sourcePassages";
-import {
-    readConversationMessages,
-    retainedDeliveryBody,
-} from "@convex/execution/conversationBodies";
+import { retainedDeliveryBody } from "@convex/execution/conversationBodies";
 import {
     HISTORY_PAGE_SIZE,
     MAX_CONVERSATION_SCAN,
@@ -601,7 +598,7 @@ async function conversationFragment(
         throw executionError("conversation_message_unavailable");
     let candidate: ReturnType<typeof fragment>;
     let contentHash: string;
-    if (message.bodyTextId) {
+    {
         const body = await retainedDeliveryBody(ctx, message);
         const offset = position.offset;
         if (
@@ -629,11 +626,6 @@ async function conversationFragment(
             end: start + local.end,
         };
         contentHash = body.contentHash;
-    } else {
-        const [text] = await readConversationMessages(ctx, [message]);
-        if (!text) throw executionError("conversation_message_unavailable");
-        candidate = fragment(text, position.offset, MAX_OPERATION_RESULT_BYTES);
-        contentHash = sha256Hex(text);
     }
     const mission = request.missionId
         ? await ctx.db.get(request.missionId)

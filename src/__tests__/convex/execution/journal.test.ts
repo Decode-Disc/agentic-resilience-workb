@@ -8,11 +8,11 @@ import {
     retainExecutionEventPayload,
     retainInvocationPayload,
 } from "@convex/execution/journal";
+import { stageObservedBody } from "@convex/execution/observedReply";
 import {
     appendRetainedText,
     completeRetainedText,
     finalizeRetainedTextStream,
-    readRetainedText,
     retainedTextFragment,
     retainedTextParts,
 } from "@convex/execution/retainedText";
@@ -27,6 +27,10 @@ import { getDocumentSize } from "convex/values";
 import { convexTest } from "convex-test";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import { seedHistoryMission } from "@/__tests__/setup/execution-history";
+import {
+    readHistoryEvent,
+    readRetainedBody,
+} from "@/__tests__/setup/retained-history";
 import {
     seedInspectedEvidence,
     seedSourcePreparation,
@@ -71,7 +75,7 @@ test("append storage packs slow Unicode chunks and rejects changed or out-of-ord
     await f.t.run((ctx) => finalizeRetainedTextStream(ctx, id));
     await f.t.run((ctx) => finalizeRetainedTextStream(ctx, id));
     const expected = `${head}\ude00${"a".repeat(10)}`;
-    expect(await f.t.run((ctx) => readRetainedText(ctx, id))).toBe(expected);
+    expect(await readRetainedBody(f.t, id)).toBe(expected);
     const text = await f.t.run((ctx) => ctx.db.get(id));
     expect(text?.fragmentHashes).toHaveLength(2);
     expect(text?.sizeBytes).toBe(new TextEncoder().encode(expected).length);
@@ -232,7 +236,7 @@ test.each([
             .first(),
     );
     assert(event?.invocationPayloadId && event.payload);
-    const full = await f.t.run((ctx) => projectMissionHistoryEvent(ctx, event));
+    const full = await readHistoryEvent(f.t, event);
     let actual = "";
     let offset = 0;
     let total = Infinity;
@@ -279,9 +283,7 @@ test("older_event_never_acquires_a_later_reply", async () => {
             .unique(),
     );
     assert(event);
-    const before = await f.t.run((ctx) =>
-        projectMissionHistoryEvent(ctx, event),
-    );
+    const before = await readHistoryEvent(f.t, event);
     await f.t.run(async (ctx) => {
         await ctx.db.patch(begun.invocationId, {
             outputJson: "Later reply",
@@ -296,9 +298,7 @@ test("older_event_never_acquires_a_later_reply", async () => {
             JSON.stringify({ text: "Later reply" }),
         );
     });
-    expect(
-        await f.t.run((ctx) => projectMissionHistoryEvent(ctx, event)),
-    ).toEqual(before);
+    expect(await readHistoryEvent(f.t, event)).toEqual(before);
     expect(before.json).toContain("Exact original request");
     expect(before.json).not.toContain("Later reply");
 });
@@ -324,9 +324,7 @@ test("terminal metadata cannot acquire a reply retained after its event", async 
         );
     });
     assert(event);
-    const before = await f.t.run((ctx) =>
-        projectMissionHistoryEvent(ctx, event),
-    );
+    const before = await readHistoryEvent(f.t, event);
     await f.t.run(async (ctx) => {
         const invocation = await ctx.db.get(begun.invocationId);
         assert(invocation);
@@ -337,9 +335,7 @@ test("terminal metadata cannot acquire a reply retained after its event", async 
             JSON.stringify({ text: "Reply retained afterwards" }),
         );
     });
-    expect(
-        await f.t.run((ctx) => projectMissionHistoryEvent(ctx, event)),
-    ).toEqual(before);
+    expect(await readHistoryEvent(f.t, event)).toEqual(before);
 });
 
 test("a recorded invocation part without its immutable payload is an integrity failure", async () => {
@@ -1080,9 +1076,7 @@ test("fragmented requests publish only after all exact fragments and refuse conf
             .unique(),
     );
     assert(event);
-    const observed = await t.run((ctx) =>
-        projectMissionHistoryEvent(ctx, event),
-    );
+    const observed = await readHistoryEvent(t, event);
     expect(JSON.parse(observed.json).invocation.value).toEqual(
         JSON.parse(json),
     );
@@ -1197,9 +1191,7 @@ test("a confirmed native observable reply retains complete large content before 
             .unique(),
     );
     assert(event);
-    const history = await f.t.run((ctx) =>
-        projectMissionHistoryEvent(ctx, event),
-    );
+    const history = await readHistoryEvent(f.t, event);
     expect(JSON.parse(history.json).invocation.value).toEqual(
         JSON.parse(replyJson),
     );
@@ -1220,11 +1212,20 @@ test("recovery retention leaves document capacity for bounded lifecycle results"
         }),
     );
     const rawOutputJson = JSON.stringify({ original: "r".repeat(400 * 1024) });
+    const rawOutputTextId = await f.t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            { invocationId: begun.invocationId, expectedGeneration: 1 },
+            "raw",
+            rawOutputJson,
+        ),
+    );
+    assert(rawOutputTextId);
     await f.t.mutation(internal.execution.invocations.retainOutput, {
         invocationId: begun.invocationId,
         expectedGeneration: 1,
         responseJson: JSON.stringify({ kind: "operations", requests: [] }),
-        rawOutputJson,
+        rawOutputTextId,
     });
     const invocation = await f.t.run((ctx) => ctx.db.get(begun.invocationId));
     assert(invocation);

@@ -13,6 +13,7 @@ import {
     dispatchHistory,
     seedHistoryMission,
 } from "@/__tests__/setup/execution-history";
+import { readHistoryEvent } from "@/__tests__/setup/retained-history";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 
 afterEach(() => {
@@ -246,7 +247,7 @@ test("targeted cross-mission context observation traverses 3+ pages with collidi
     vi.stubGlobal("fetch", () => {
         throw new Error("No provider calls in history test");
     });
-    const seeded = await f.t.run(async (ctx) => {
+    const stored = await f.t.run(async (ctx) => {
         const mission = await ctx.db.get(f.missionId);
         assert(mission);
         // Create a cross-mission dossier context_observed event (> 130,000 chars so 3+ pages at 64 KiB)
@@ -291,15 +292,20 @@ test("targeted cross-mission context observation traverses 3+ pages with collidi
             ),
             historyMaterialSequence: contextEvent.sequence,
         });
-        const projected = await projectMissionHistoryEvent(ctx, contextEvent);
         return {
+            contextEvent,
             contextId,
             collidingId,
             sequence: contextEvent.sequence,
-            expectedJson: projected.json,
-            expectedHash: projected.contentHash,
         };
     });
+
+    const projected = await readHistoryEvent(f.t, stored.contextEvent);
+    const seeded = {
+        ...stored,
+        expectedJson: projected.json,
+        expectedHash: projected.contentHash,
+    };
 
     // 1. Traverse all 3+ pages using fresh resolved continuation pins
     let cursor: string | undefined;
@@ -760,9 +766,7 @@ test("mission history sizing fits exact 64 KiB envelope, handles 1-char overflow
             expect(secondParsed.history.continueCursor).toBeNull();
             const ev = await f.t.run((ctx) => ctx.db.get(eventId));
             assert(ev);
-            const expected = await f.t.run((ctx) =>
-                projectMissionHistoryEvent(ctx, ev),
-            );
+            const expected = await readHistoryEvent(f.t, ev);
             expect(
                 parsed.history.entries[0].content +
                     secondParsed.history.entries[0].content,
@@ -785,11 +789,9 @@ test("mission history sizing fits exact 64 KiB envelope, handles 1-char overflow
             },
         });
     });
-    const expectedUnicode = await f.t.run(async (ctx) => {
-        const ev = await ctx.db.get(unicodeId);
-        assert(ev);
-        return projectMissionHistoryEvent(ctx, ev);
-    });
+    const unicodeEvent = await f.t.run((ctx) => ctx.db.get(unicodeId));
+    assert(unicodeEvent);
+    const expectedUnicode = await readHistoryEvent(f.t, unicodeEvent);
     let uCursor: string | undefined;
     let uRestored = "";
     let uPages = 0;

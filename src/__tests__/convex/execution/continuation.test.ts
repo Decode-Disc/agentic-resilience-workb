@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex } from "@convex/domain/sourcePassages";
 import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import type { OperationOutcome } from "@convex/execution/agentDefinition";
+import { stageObservedBody } from "@convex/execution/observedReply";
 import { afterEach, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { installModel } from "@/__tests__/setup/model-configuration";
@@ -624,6 +625,14 @@ test("exact history pagination reconstructs large observable records without gap
     const rawOutputJson = JSON.stringify({
         text: "Quoted evidence 😀".repeat(4000),
     });
+    await t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            { invocationId: begun.invocationId, expectedGeneration: 4 },
+            "raw",
+            rawOutputJson,
+        ),
+    );
     await t.mutation(internal.execution.invocations.finish, {
         invocationId: begun.invocationId,
         expectedGeneration: 4,

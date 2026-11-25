@@ -8,6 +8,7 @@ import { afterEach, assert, expect, test, vi } from "vitest";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import {
     dispatchSourcesOperation,
+    prepareSourcesResult,
     recordDocumentaryRead,
     seedObservedSources,
     startSourcesOperation,
@@ -528,20 +529,21 @@ test("unavailable controls and later requests retain explicit outcomes within co
         },
     );
     assert(invocation.kind === "ready", JSON.stringify(invocation));
+    const authority = {
+        invocationId: invocation.invocationId,
+        expectedGeneration: 4,
+    };
+    const response = {
+        kind: "complete" as const,
+        needs: data.needs.map((n) => ({
+            needId: n.id,
+            unfinished: ["Documentary examination remains unfinished."],
+        })),
+    };
+    const preparedResult = await prepareSourcesResult(f.t, authority, response);
     const completion = await f.t.mutation(
         internal.execution.invocations.finish,
-        {
-            invocationId: invocation.invocationId,
-            expectedGeneration: 4,
-            response: {
-                kind: "complete",
-
-                needs: data.needs.map((n) => ({
-                    needId: n.id,
-                    unfinished: ["Documentary examination remains unfinished."],
-                })),
-            },
-        },
+        { ...authority, preparedResult },
     );
     expect(completion.kind).toBe("completed");
     const result = (await f.t.run((ctx) => ctx.db.get(f.preparationId)))

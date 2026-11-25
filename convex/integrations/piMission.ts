@@ -92,6 +92,7 @@ import {
 import {
     lookupPiOperation,
     preparePiReply,
+    preparePiResult,
     preparePiSubmission,
     recoverHistoricalCompletion,
     recoverPiInvocationBody,
@@ -1495,6 +1496,15 @@ export async function runPiMission(
                 },
             );
         } else {
+            const resultPreparation = await preparePiResult(
+                ctx,
+                invocationArgs,
+                currentResponse,
+                responseJson,
+                definition,
+                context.abortSignal,
+            );
+            const preparedResult = resultPreparation?.preparedResult;
             const replyPreparation = await preparePiReply(
                 ctx,
                 invocationArgs,
@@ -1508,40 +1518,31 @@ export async function runPiMission(
                     ? replyPreparation
                     : undefined;
             const useReference =
-                preparedReply &&
-                (definition.id === "conversation_validation_v1" ||
-                    current.workbenchCompletionAdmission);
+                preparedResult ||
+                (preparedReply &&
+                    (definition.id === "conversation_validation_v1" ||
+                        current.workbenchCompletionAdmission));
             const preparedSubmission = useReference
                 ? undefined
-                : replyPreparation && "correctionWording" in replyPreparation
-                  ? {
-                        responseHash: sha256Hex(responseJson),
-                        response: {
-                            kind: "completion_correction" as const,
-                            completion: replyPreparation.completion,
-                        },
-                    }
-                  : preparePiSubmission(
-                        currentResponse,
-                        responseJson,
-                        definition,
-                        current.workbenchOperationAdmission ??
-                            current.sourcesOperationAdmission ??
-                            (current.inputJson
-                                ? JSON.parse(current.inputJson)
-                                : undefined),
-                    );
-            // Historical simulation observations embed the original reply envelope.
-            const rawOutputJson =
-                simulated && !useReference && !preparedSubmission
-                    ? await recoverPiInvocationBody(
-                          ctx,
-                          current,
-                          "raw",
-                          args,
-                          context.abortSignal,
-                      )
-                    : undefined;
+                : (resultPreparation?.refusal ??
+                  (replyPreparation && "correctionWording" in replyPreparation
+                      ? {
+                            responseHash: sha256Hex(responseJson),
+                            response: {
+                                kind: "completion_correction" as const,
+                                completion: replyPreparation.completion,
+                            },
+                        }
+                      : preparePiSubmission(
+                            currentResponse,
+                            responseJson,
+                            definition,
+                            current.workbenchOperationAdmission ??
+                                current.sourcesOperationAdmission ??
+                                (current.inputJson
+                                    ? JSON.parse(current.inputJson)
+                                    : undefined),
+                        )));
             const adopted = await ctx.runMutation(
                 internal.execution.invocations.finish,
                 {
@@ -1552,6 +1553,7 @@ export async function runPiMission(
                           ? { preparedSubmission }
                           : { response: currentResponse }),
                     ...(preparedReply ? { preparedReply } : {}),
+                    ...(preparedResult ? { preparedResult } : {}),
                     ...(replyPreparation &&
                     "correctionWording" in replyPreparation
                         ? {
@@ -1559,7 +1561,6 @@ export async function runPiMission(
                                   replyPreparation.correctionWording,
                           }
                         : {}),
-                    ...(rawOutputJson ? { rawOutputJson } : {}),
                 },
             );
             if (adopted.kind === "blocked") {

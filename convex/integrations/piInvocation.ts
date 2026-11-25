@@ -16,6 +16,7 @@ import {
 import { executionError } from "@convex/execution/errors";
 import {
     invocationResponseValidator,
+    type preparedCompletionValidator,
     type preparedSubmissionValidator,
 } from "@convex/execution/executionProtocol";
 import type * as InvocationLifecycle from "@convex/execution/invocationLifecycle";
@@ -48,7 +49,7 @@ function completionMetadata(
     proposal: AgentCompletion,
     responseHash: string,
     callId?: string,
-) {
+): Infer<typeof preparedCompletionValidator> {
     const workingNotes = proposal.workingNotes;
     const oversized =
         workingNotes !== undefined &&
@@ -433,7 +434,6 @@ async function readReplyWording(
         );
         if (!page) return null;
         if (page.transmitted) transmitted = page.transmitted;
-        if (page.page.some((reference) => reference.legacy)) return undefined;
         references.push(...page.page);
         if (page.isDone) break;
         if (page.continueCursor === cursor)
@@ -442,7 +442,6 @@ async function readReplyWording(
     }
     const activeIds = new Set(references.map(({ messageId }) => messageId));
     for (const reference of transmitted) {
-        if (reference.legacy) return undefined;
         if (!activeIds.has(reference.messageId)) references.push(reference);
     }
     const exact: { messageId: Id<"agentMessageDeliveries">; text: string }[] =
@@ -473,6 +472,98 @@ async function readReplyWording(
         wording: projectAnalystWording(exact),
         texts: new Map(exact.map(({ messageId, text }) => [messageId, text])),
     };
+}
+
+/** Prepares a structured result in the domain query and stages its immutable bytes before adoption. */
+export async function preparePiResult(
+    ctx: ActionCtx,
+    authority: {
+        invocationId: Id<"agentInvocations">;
+        expectedGeneration: number;
+    },
+    response: Infer<typeof invocationResponseValidator>,
+    responseJson: string,
+    definition: AgentDefinition,
+    signal?: AbortSignal,
+): Promise<
+    | {
+          preparedResult?: NonNullable<
+              FunctionArgs<LifecycleApi["finish"]>["preparedResult"]
+          >;
+          refusal?: Infer<typeof preparedSubmissionValidator>;
+      }
+    | undefined
+> {
+    if (!definition.preparedResult) return undefined;
+    let proposal: unknown;
+    if (response.kind === "complete") proposal = response;
+    else if (response.kind === "completion_submission" && response.call) {
+        try {
+            proposal = JSON.parse(response.call.inputJson);
+        } catch {
+            return undefined;
+        }
+    } else return undefined;
+    if (!validate(definition.completionValidator, proposal)) return undefined;
+    const callId =
+        response.kind === "completion_submission"
+            ? response.call?.callId
+            : undefined;
+    if (callId !== undefined && (callId.length < 1 || callId.length > 160))
+        return undefined;
+    const responseHash = sha256Hex(responseJson);
+    const completion = completionMetadata(proposal, responseHash, callId);
+    const capacity = definition.preparedResult.proposalCapacity(proposal);
+    if (capacity || completion.workingNotesOversized) {
+        return {
+            refusal: {
+                responseHash,
+                response: {
+                    kind: "completion_refusal",
+                    code: capacity ?? "invalid_completion",
+                    completion,
+                },
+            },
+        };
+    }
+    const { workingNotes: _workingNotes, ...canonicalProposal } = proposal;
+    const basis = await ctx.runQuery(
+        internal.execution.invocationLifecycle.resultPreparation,
+        {
+            ...authority,
+            responseHash,
+            proposal: canonicalProposal,
+        },
+    );
+    if (!basis) return undefined;
+    const { parts, manifest } = retainedTextParts(
+        stableStringify(basis.result),
+    );
+    const proposalHash = sha256Hex(stableStringify(canonicalProposal));
+    let textId: Id<"retainedTexts"> | undefined;
+    for (const [index, content] of parts.entries()) {
+        signal?.throwIfAborted();
+        textId = await ctx.runMutation(
+            internal.execution.invocationLifecycle.stagePreparedResult,
+            {
+                ...authority,
+                responseHash,
+                inputHash: basis.inputHash,
+                proposalHash,
+                fragment: { ...manifest, index, content },
+            },
+        );
+    }
+    return textId
+        ? {
+              preparedResult: {
+                  textId,
+                  inputHash: basis.inputHash,
+                  proposal: canonicalProposal,
+                  completion,
+              },
+          }
+        : undefined;
 }
 
 /** Stages the rendered reply one fragment at a time before business adoption. */

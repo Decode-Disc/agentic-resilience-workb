@@ -1,7 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalQuery, type QueryCtx } from "@convex/_generated/server";
 import { stableStringify } from "@convex/domain/sourcePassages";
-import { readConversationMessages } from "@convex/execution/conversationBodies";
+import { readConversationWording } from "@convex/execution/conversationBodies";
 import { agentInputByteLength } from "@convex/integrations/modelInput";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { missionModel, revisionRoute } from "@convex/modelConfiguration";
@@ -25,9 +25,9 @@ import {
     contextObservationSequence,
     invocationHistoryReference,
     latestNativeControl,
+    matchInvocationResponse,
     operationContextObservation,
     operationHistoryReference,
-    readInvocationResponse,
     retainedNativeCalls,
 } from "./journal";
 import { missionScope } from "./missionData";
@@ -74,7 +74,7 @@ async function requestContext(
             conversation.runId !== message.runId
         )
             throw executionError("conversation_message_unavailable");
-        const [originalText] = await readConversationMessages(
+        const [originalText] = await readConversationWording(
             ctx,
             [message],
             instructionTexts,
@@ -134,12 +134,19 @@ export async function buildMissionContext(
         (mission.executionRuntime !== "pi-durable" ||
             (previousInvocation.requestIds?.length &&
                 nativeCalls === undefined))
-            ? await readInvocationResponse(ctx, previousInvocation, "adopted")
+            ? previousInvocation.outputJson
             : undefined;
     const previousResponse: unknown = previousOutput
         ? JSON.parse(previousOutput)
         : null;
-    const previousRequests =
+    if (previousOutput && previousInvocation)
+        await matchInvocationResponse(
+            ctx,
+            previousInvocation,
+            "adopted",
+            previousOutput,
+        );
+    let previousRequests: { callId: string }[] =
         nativeCalls ??
         (validate(invocationResponseValidator, previousResponse) &&
         previousResponse.kind === "operations"
@@ -151,6 +158,7 @@ export async function buildMissionContext(
         "operation_refused",
     ] as const;
     const invocationCauses = new Map<string, Id<"agentExecutionEvents">>();
+    const admissionCalls = new Map<string, Doc<"agentExecutionEvents">>();
     if (previousInvocation?.requestIds) {
         for (const kind of causeKinds) {
             const causes = await ctx.db
@@ -170,14 +178,40 @@ export async function buildMissionContext(
                 causes.length > MAX_BATCH_REQUESTS
             )
                 throw executionError("continuation_capacity");
-            for (const cause of causes)
+            for (const cause of causes) {
                 invocationCauses.set(cause.cause, cause._id);
+                const previous = admissionCalls.get(cause.cause);
+                if (previous && previous.requestId !== cause.requestId)
+                    throw executionError("operation_correlation_invalid");
+                if (
+                    !previous ||
+                    (cause.sequence ?? Infinity) <
+                        (previous.sequence ?? Infinity)
+                )
+                    admissionCalls.set(cause.cause, cause);
+            }
         }
         if (
             mission.executionRuntime !== "pi-durable" &&
             invocationCauses.size > MAX_BATCH_REQUESTS
         )
             throw executionError("continuation_capacity");
+    }
+    if (!previousRequests.length && previousInvocation?.requestIds?.length) {
+        const calls = [...admissionCalls.values()].sort(
+            (a, b) =>
+                (a.sequence ?? a._creationTime) -
+                (b.sequence ?? b._creationTime),
+        );
+        if (
+            calls.length !== previousInvocation.requestIds.length ||
+            calls.some(
+                (call, index) =>
+                    call.requestId !== previousInvocation.requestIds?.[index],
+            )
+        )
+            throw executionError("operation_correlation_invalid");
+        previousRequests = calls.map((call) => ({ callId: call.cause }));
     }
     const triggeringRequests = [];
     if (previousInvocation?.requestIds) {

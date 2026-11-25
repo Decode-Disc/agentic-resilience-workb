@@ -5,6 +5,7 @@ import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { agentToolSchemas } from "@convex/execution/agentDefinition";
 import { invokeControlledGeneration } from "@convex/execution/invokeAgentModel";
 import { contextObservationSequence } from "@convex/execution/journal";
+import { stageObservedBody } from "@convex/execution/observedReply";
 import {
     retainedTextParts,
     stageRetainedText,
@@ -1002,10 +1003,32 @@ test("native recovery correlates mixed calls when original operation arguments e
             { callId: "mixed", name: "submit_completion", inputJson: "{}" },
         ],
     };
-    await t.mutation(internal.execution.invocations.retainOutput, {
+    const observedScope = {
         invocationId: begun.invocationId,
         expectedGeneration: 4,
-        responseJson: JSON.stringify(response),
+    };
+    const responseTextId = await t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            observedScope,
+            "response",
+            stableStringify(response),
+        ),
+    );
+    assert(responseTextId);
+    const observableReplyTextId = await t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            observedScope,
+            "reply",
+            stableStringify({ version: 1, provenance: "simulation", response }),
+        ),
+    );
+    assert(observableReplyTextId);
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        ...observedScope,
+        responseTextId,
+        observableReplyTextId,
     });
     const finished = await t.mutation(internal.execution.invocations.finish, {
         invocationId: begun.invocationId,
@@ -1153,6 +1176,16 @@ test("native recovery correlates mixed calls when original operation arguments e
         t.query(internal.execution.piControl.terminalCompletionAccepted, lease),
     ).resolves.toBe(false);
     await t.run((ctx) => ctx.db.patch(missionId, { status: "waiting" }));
+    const fragmentedContext = await t.query(
+        internal.execution.context.build,
+        scope,
+    );
+    assert(fragmentedContext.kind === "ready");
+    expect(
+        JSON.parse(
+            fragmentedContext.inputJson,
+        ).triggeringRequestsAndResults.map((r: { callId: string }) => r.callId),
+    ).toEqual(["read", "mixed"]);
     await expect(
         t.query(internal.execution.piControl.operation, {
             ...scope,
@@ -1267,9 +1300,23 @@ test("settles a native completion whose original arguments exceed the read trans
         },
     };
     const args = { invocationId: begun.invocationId, expectedGeneration: 4 };
+    const responseTextId = await t.action((ctx) =>
+        stageObservedBody(ctx, args, "response", stableStringify(response)),
+    );
+    assert(responseTextId);
+    const observableReplyTextId = await t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            args,
+            "reply",
+            stableStringify({ version: 1, provenance: "simulation", response }),
+        ),
+    );
+    assert(observableReplyTextId);
     await t.mutation(internal.execution.invocations.retainOutput, {
         ...args,
-        responseJson: JSON.stringify(response),
+        responseTextId,
+        observableReplyTextId,
     });
     await expect(
         t.mutation(internal.execution.invocations.finish, {

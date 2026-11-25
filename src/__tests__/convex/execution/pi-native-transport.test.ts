@@ -14,6 +14,7 @@ import { afterEach, assert, expect, test, vi } from "vitest";
 import { originalOperationArguments } from "@/__tests__/setup/agent-harness";
 import { installModel } from "@/__tests__/setup/model-configuration";
 import { nativePiFixtureRoute } from "@/__tests__/setup/pi-native";
+import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import { readMessageBodies } from "@/__tests__/setup/retained-messages";
 import {
     seedInspectedEvidence,
@@ -1819,7 +1820,6 @@ test("native compaction retains its own output budget through final HTTP seriali
 }, 30000);
 
 test("a context-reduced native output cap and a fragmented request are retained before provider I/O", async () => {
-    const { readRetainedText } = await import("@convex/execution/retainedText");
     let f: Awaited<ReturnType<typeof fixture>>;
     let count = 0;
     const budgets: number[] = [];
@@ -1844,9 +1844,7 @@ test("a context-reduced native output cap and a fragmented request are retained 
                         "Expected complete fragmented request before I/O",
                     );
                 const textId = request.textId;
-                const retained = await f.t.run((ctx) =>
-                    readRetainedText(ctx, textId),
-                );
+                const retained = await readRetainedBody(f.t, textId);
                 expect(JSON.parse(retained).input).toEqual(body);
                 return reply("Context.", "stop", {
                     prompt_tokens: 100,

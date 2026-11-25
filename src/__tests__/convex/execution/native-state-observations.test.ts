@@ -8,7 +8,6 @@ import {
     recordContextObservation,
 } from "@convex/execution/journal";
 import { suspendInterruptedResearch } from "@convex/execution/researchControl";
-import { readRetainedText } from "@convex/execution/retainedText";
 import { runPiMission } from "@convex/integrations/piMission";
 import { createNativeInputDelivery } from "@convex/integrations/piNativeInput";
 import {
@@ -36,6 +35,7 @@ import {
     nativePiFixtureRoute,
     nativeTextReply,
 } from "@/__tests__/setup/pi-native";
+import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import { readConversationPageWithBodies } from "@/__tests__/setup/retained-messages";
 import { seedInspectedEvidence } from "@/__tests__/setup/source-preparation";
 import {
@@ -633,27 +633,24 @@ async function observations(
     t: Awaited<ReturnType<typeof seedWorkbench>>["t"],
     runId: import("@convex/_generated/dataModel").Id<"researchRuns">,
 ) {
-    return t.run(async (ctx) => {
-        const rows = await ctx.db
+    const rows = await t.run((ctx) =>
+        ctx.db
             .query("agentExecutionEvents")
             .withIndex("by_run_and_native_input_sequence", (q) =>
                 q.eq("runId", runId).gt("nativeInputSequence", 0),
             )
-            .collect();
-        return Promise.all(
-            rows.map(async (row) => ({
-                ...row,
-                value: row.contextObservation
-                    ? JSON.parse(
-                          await readRetainedText(
-                              ctx,
-                              row.contextObservation.textId,
-                          ),
-                      )
-                    : null,
-            })),
-        );
-    });
+            .collect(),
+    );
+    return Promise.all(
+        rows.map(async (row) => ({
+            ...row,
+            value: row.contextObservation
+                ? JSON.parse(
+                      await readRetainedBody(t, row.contextObservation.textId),
+                  )
+                : null,
+        })),
+    );
 }
 
 test.each([
@@ -1285,7 +1282,7 @@ test("delivers and acknowledges a context observation larger than one transactio
             assert(event);
             return readMissionHistoryEventFragment(ctx, event, 0, 8192);
         }),
-    ).rejects.toThrow("131072 bytes");
+    ).rejects.toThrow("journal_payload_backfill_required");
     const secondId = await f.t.run(async (ctx) => {
         const id = await recordContextObservation(ctx, f.runId, {
             ...observation,

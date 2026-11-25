@@ -61,6 +61,7 @@ import {
     renderCompletionToolRefusal,
     SUBMIT_COMPLETION_TOOL,
 } from "./agentDefinition";
+import { agentCompletionValidator, agentResultValidator } from "./agentSchemas";
 import {
     canAdoptRetainedResponse,
     executionError,
@@ -104,6 +105,7 @@ import {
     matchInvocationResponse,
     preparedReplyBasisHash,
     preparedReplyPrefix,
+    preparedResultPrefix,
     receivedResponseDigest,
     retainInvocationPayload,
     retainInvocationRawOutput,
@@ -574,7 +576,7 @@ export const begin = internalMutation({
                     adoptionGeneration: args.expectedGeneration,
                 });
             }
-            if (args.returnInputReference)
+            if (args.returnInputReference || existing.inputTextId)
                 return {
                     kind: "ready_reference" as const,
                     invocationId: existing._id,
@@ -583,7 +585,7 @@ export const begin = internalMutation({
             return {
                 kind: "ready" as const,
                 invocationId: existing._id,
-                inputJson: await admittedInputJson(ctx, existing),
+                inputJson: admittedInputJson(existing),
             };
         }
         if (await pauseResearchAtBoundary(ctx, mission.runId, mission))
@@ -1485,7 +1487,7 @@ async function replyPreparationBasis(
     };
 }
 
-async function currentReplyPreparation(
+async function currentCompletionPreparation(
     ctx: QueryCtx,
     args: {
         invocationId: Id<"agentInvocations">;
@@ -1530,14 +1532,12 @@ async function currentReplyPreparation(
 const replyInstructionReference = v.object({
     messageId: v.id("agentMessageDeliveries"),
     contentHash: v.string(),
-    legacy: v.optional(v.literal(true)),
 });
 
 function replyInstructionIdentity(delivery: Doc<"agentMessageDeliveries">) {
     return {
         messageId: delivery._id,
         contentHash: deliveryBodyHash(delivery),
-        ...(delivery.bodyTextId ? {} : { legacy: true as const }),
     };
 }
 
@@ -1551,7 +1551,7 @@ export const replyInstructionPage = internalQuery({
         }),
     ),
     handler: async (ctx, args) => {
-        const scope = await currentReplyPreparation(ctx, args);
+        const scope = await currentCompletionPreparation(ctx, args);
         if (!scope?.mission.conversationTurnId) return null;
         const turn = await ctx.db.get(scope.mission.conversationTurnId);
         if (!turn) return null;
@@ -1605,7 +1605,7 @@ export const replyInstructionFragment = internalQuery({
         fragmentCount: v.number(),
     }),
     handler: async (ctx, args) => {
-        const scope = await currentReplyPreparation(ctx, args);
+        const scope = await currentCompletionPreparation(ctx, args);
         const turn = scope?.mission.conversationTurnId
             ? await ctx.db.get(scope.mission.conversationTurnId)
             : null;
@@ -1652,7 +1652,7 @@ export const replyPreparation = internalQuery({
         }),
     ),
     handler: async (ctx, args) => {
-        const scope = await currentReplyPreparation(ctx, args);
+        const scope = await currentCompletionPreparation(ctx, args);
         if (!scope) return null;
         const { invocation, mission } = scope;
         const wording = args.wording
@@ -1708,6 +1708,93 @@ export const stagePreparedReply = internalMutation({
             args.fragment,
         );
     },
+});
+
+function preparedResultKey(
+    invocationId: Id<"agentInvocations">,
+    inputHash: string,
+    responseHash: string,
+    proposalHash: string,
+    resultHash: string,
+) {
+    return `${preparedResultPrefix(invocationId)}:${inputHash}:${responseHash}:${proposalHash}:${resultHash}`;
+}
+
+export const resultPreparation = internalQuery({
+    args: { ...replyPreparationArgs, proposal: agentCompletionValidator },
+    returns: v.union(
+        v.null(),
+        v.object({ result: agentResultValidator, inputHash: v.string() }),
+    ),
+    handler: async (ctx, args) => {
+        const scope = await currentCompletionPreparation(ctx, args);
+        if (!scope) return null;
+        const { invocation, mission } = scope;
+        const definition = getAgentDefinition(
+            mission.definitionId,
+            mission.definitionVersion,
+        );
+        if (!definition.preparedResult) return null;
+        const admitted =
+            invocation.sourcesCompletionAdmission ??
+            invocation.workbenchCompletionAdmission;
+        if (!admitted) return null;
+        const result = await definition.preparedResult.preview(
+            ctx,
+            mission,
+            args.proposal,
+            admitted,
+            invocation,
+        );
+        if (
+            !result ||
+            !validate(definition.resultValidator, result, { db: ctx.db })
+        )
+            return null;
+        return { result, inputHash: admittedInputHash(invocation) };
+    },
+});
+
+export const stagePreparedResult = internalMutation({
+    args: {
+        ...replyPreparationArgs,
+        inputHash: v.string(),
+        proposalHash: v.string(),
+        fragment: textFragmentValidator,
+    },
+    returns: v.id("retainedTexts"),
+    handler: async (ctx, args) => {
+        const scope = await currentCompletionPreparation(ctx, args);
+        if (
+            !scope ||
+            admittedInputHash(scope.invocation) !== args.inputHash ||
+            !/^[0-9a-f]{64}$/.test(args.proposalHash)
+        )
+            throw executionError("invocation_result_invalid");
+        await requireMissionObservationAuthority(
+            ctx,
+            scope.mission._id,
+            args.expectedGeneration,
+        );
+        return stageRetainedText(
+            ctx,
+            preparedResultKey(
+                scope.invocation._id,
+                args.inputHash,
+                args.responseHash,
+                args.proposalHash,
+                args.fragment.contentHash,
+            ),
+            args.fragment,
+        );
+    },
+});
+
+const preparedResultValidator = v.object({
+    textId: v.id("retainedTexts"),
+    inputHash: v.string(),
+    proposal: agentCompletionValidator,
+    completion: preparedCompletionValidator,
 });
 
 const preparedReplyValidator = v.object({
@@ -1773,6 +1860,7 @@ export const finish = internalMutation({
         response: v.optional(invocationResponseValidator),
         preparedSubmission: v.optional(preparedSubmissionValidator),
         preparedReply: v.optional(preparedReplyValidator),
+        preparedResult: v.optional(preparedResultValidator),
         correctionWording: v.optional(preparedAnalystWording),
         rawOutputJson: v.optional(v.string()),
     },
@@ -1794,7 +1882,12 @@ export const finish = internalMutation({
             throw executionError("invocation_result_invalid");
         const response = args.response ?? args.preparedSubmission?.response;
         const prepared = args.preparedReply;
-        const compact = response ? undefined : prepared?.completion;
+        const preparedResult = args.preparedResult;
+        if (preparedResult && (prepared || response || args.correctionWording))
+            throw executionError("invocation_result_invalid");
+        const compact = response
+            ? undefined
+            : (prepared?.completion ?? preparedResult?.completion);
         if (
             (!response && !compact) ||
             (args.correctionWording && (!response || prepared))
@@ -2150,10 +2243,12 @@ export const finish = internalMutation({
         if (!response) {
             if (
                 !compact ||
-                !prepared ||
-                !mission.conversationTurnId ||
                 !("protocolVersion" in mission) ||
-                !definition.preparedCompletion
+                (!preparedResult &&
+                    (!prepared ||
+                        !mission.conversationTurnId ||
+                        !definition.preparedCompletion)) ||
+                (preparedResult && !definition.preparedResult)
             )
                 throw executionError("invocation_result_invalid");
             if (
@@ -2173,6 +2268,65 @@ export const finish = internalMutation({
             if (await hasOutstandingOperations(ctx, mission._id))
                 return block("pending_operations");
             if (!notesFit) return block("working_memory_capacity", true);
+            if (preparedResult) {
+                const text = await completeRetainedText(
+                    ctx,
+                    preparedResult.textId,
+                );
+                if (
+                    preparedResult.inputHash !==
+                        admittedInputHash(invocation) ||
+                    text.key !==
+                        preparedResultKey(
+                            invocation._id,
+                            preparedResult.inputHash,
+                            responseHash,
+                            sha256Hex(stableStringify(preparedResult.proposal)),
+                            text.contentHash,
+                        )
+                )
+                    throw executionError("invocation_result_invalid");
+                const admitted =
+                    invocation.sourcesCompletionAdmission ??
+                    invocation.workbenchCompletionAdmission;
+                if (!admitted) return block("mission_context_changed");
+                await ctx.db.patch(mission._id, { workingNotes: notes.notes });
+                const completion = await definition.complete(
+                    ctx,
+                    mission,
+                    preparedResult.proposal,
+                    admitted,
+                    invocation,
+                    undefined,
+                    text.contentHash,
+                );
+                if (completion.kind === "correct")
+                    return correctCompletion(completion.feedback);
+                if (completion.kind === "continue")
+                    return block("mission_context_changed");
+                if (completion.kind === "blocked")
+                    return block(completion.code);
+                if (
+                    !validate(definition.resultValidator, completion.result, {
+                        db: ctx.db,
+                    })
+                )
+                    return block("invalid_completion", true);
+                await ctx.db.patch(mission._id, {
+                    status: "completed",
+                    ...(await missionResultPatch(
+                        ctx,
+                        mission,
+                        completion.result,
+                        undefined,
+                        text,
+                    )),
+                });
+                await recordCompleted(observation);
+                return { kind: "completed", requestIds: [] };
+            }
+            if (!prepared || !definition.preparedCompletion)
+                throw executionError("invocation_result_invalid");
             const instructionTexts = new Map<
                 Id<"agentMessageDeliveries">,
                 string
@@ -2233,11 +2387,11 @@ export const finish = internalMutation({
               invocation.sourcesCompletionAdmission)
             : (invocation.workbenchOperationAdmission ??
               invocation.sourcesOperationAdmission);
-        const snapshot: unknown =
-            isCompletion && definition.id === "conversation_validation_v1"
-                ? undefined
-                : (admission ??
-                  JSON.parse(await admittedInputJson(ctx, invocation)));
+        const snapshot: unknown = !["workbench_v1", "sources_v1"].includes(
+            definition.id,
+        )
+            ? undefined
+            : (admission ?? JSON.parse(admittedInputJson(invocation)));
         if (
             response.kind === "complete" ||
             response.kind === "completion_submission"

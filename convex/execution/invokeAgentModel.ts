@@ -6,10 +6,7 @@ import { stableStringify } from "@convex/domain/sourcePassages";
 import { SIMULATION_MODEL_ROUTE } from "@convex/integrations/modelRouting";
 import { rejectedOutputDiagnostic } from "@convex/integrations/modelTransport";
 import { revisionRoute } from "@convex/modelConfiguration";
-import {
-    MAX_OBSERVABLE_OUTPUT_BYTES,
-    resolveGenerationAuthority,
-} from "@convex/resourcePolicy";
+import { resolveGenerationAuthority } from "@convex/resourcePolicy";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { Infer } from "convex/values";
 import { validate } from "convex-helpers/validators";
@@ -237,7 +234,6 @@ export async function invokeControlledGeneration(
                 args,
                 "raw",
                 rawOutputJson,
-                MAX_OBSERVABLE_OUTPUT_BYTES,
             );
             const observableReplyTextId = await stageObservedBody(
                 ctx,

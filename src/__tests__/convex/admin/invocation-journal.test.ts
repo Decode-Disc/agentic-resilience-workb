@@ -1,6 +1,7 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { stageObservedBody } from "@convex/execution/observedReply";
 import { appendRetainedText } from "@convex/execution/retainedText";
 import schema from "@convex/schema";
 import type { FunctionReturnType } from "convex/server";
@@ -501,10 +502,29 @@ test.each([
         kind: "blocked",
         code: `${"x".repeat(size)} 🧭`,
     });
+    const authority = { invocationId, expectedGeneration: 4 };
+    const responseTextId = await t.action((ctx) =>
+        stageObservedBody(ctx, authority, "response", responseJson),
+    );
+    const observableReplyTextId = await t.action((ctx) =>
+        stageObservedBody(
+            ctx,
+            authority,
+            "reply",
+            stableStringify({
+                version: 1,
+                provenance: "simulation",
+                response: JSON.parse(responseJson),
+            }),
+        ),
+    );
+    if (!responseTextId || !observableReplyTextId)
+        throw new Error("Missing staged fixture output");
     await t.mutation(internal.execution.invocations.retainOutput, {
         invocationId,
         expectedGeneration: 4,
-        responseJson,
+        responseTextId,
+        observableReplyTextId,
     });
     await t.run((ctx) => ctx.db.patch(visitorId, { role: "admin" }));
     const admin = t.withIdentity({ subject: `${userId}|large-result` });

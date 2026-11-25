@@ -18,11 +18,10 @@ export async function stageObservedBody(
     authority: Pick<StageArgs, "invocationId" | "expectedGeneration">,
     part: StageArgs["part"],
     json: string | undefined,
-    inlineBytes = RETAINED_TEXT_INLINE_BYTES,
 ) {
     if (
         json === undefined ||
-        new TextEncoder().encode(json).length <= inlineBytes
+        new TextEncoder().encode(json).length <= RETAINED_TEXT_INLINE_BYTES
     )
         return undefined;
     const { manifest, parts } = retainedTextParts(json);

@@ -52,7 +52,7 @@ import {
     conversationBodyAccess,
     conversationBodyReference,
     conversationPageBodies,
-    readConversationMessages,
+    readConversationWording,
 } from "@convex/execution/conversationBodies";
 import {
     analystConversationTurn,
@@ -308,7 +308,7 @@ export const command = mutation({
                 confirmation.conversationId !== conversation._id
             )
                 throw executionError("conversation_message_unavailable");
-            const [text] = await readConversationMessages(ctx, [confirmation]);
+            const [text] = await readConversationWording(ctx, [confirmation]);
             if (text === undefined)
                 throw executionError("conversation_message_unavailable");
             return {
@@ -972,7 +972,7 @@ export const performInstruction = internalMutation({
                     (run.researchControlRevision ?? 0)
             )
                 throw executionError("version_conflict");
-            const [text] = await readConversationMessages(ctx, [message]);
+            const [text] = await readConversationWording(ctx, [message]);
             if (!text) throw executionError("instruction_not_authorized");
             const control = explicitResearchControl(text);
             const commandAction =
@@ -1090,7 +1090,7 @@ export const performInstruction = internalMutation({
                     (run.researchControlRevision ?? 0)
             )
                 throw executionError("version_conflict");
-            const [text] = await readConversationMessages(ctx, [message]);
+            const [text] = await readConversationWording(ctx, [message]);
             if (!text || explicitResearchControl(text) !== input.action)
                 throw executionError("explicit_research_intent_required");
             const generation = await (input.action === "pause"

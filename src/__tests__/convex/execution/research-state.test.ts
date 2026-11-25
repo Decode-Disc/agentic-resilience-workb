@@ -14,6 +14,7 @@ import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
 import workflowTest from "@/__tests__/convex/workflows/workflow-test-register.js";
 import { seedResearchStateScenario } from "@/__tests__/setup/research-state";
+import { readRetainedBody } from "@/__tests__/setup/retained-history";
 
 const scenario = (blockCode: string | undefined = "invalid_output") =>
     seedResearchStateScenario({
@@ -2118,7 +2119,7 @@ test.each([
             expect(await suspendInterruptedResearch(ctx, mission)).toBe(true);
         });
     }
-    const observed = await f.t.run(async (ctx) => {
+    const retainedObservation = await f.t.run(async (ctx) => {
         const run = await ctx.db.get(f.runId);
         const event = await ctx.db
             .query("agentExecutionEvents")
@@ -2128,16 +2129,18 @@ test.each([
             .order("desc")
             .first();
         assert(event?.contextObservation);
-        const { readRetainedText } = await import(
-            "@convex/execution/retainedText"
-        );
+
         return {
             run,
-            observation: JSON.parse(
-                await readRetainedText(ctx, event.contextObservation.textId),
-            ),
+            textId: event.contextObservation.textId,
         };
     });
+    const observed = {
+        run: retainedObservation.run,
+        observation: JSON.parse(
+            await readRetainedBody(f.t, retainedObservation.textId),
+        ),
+    };
     const interrupted =
         route === "interruption" ||
         route === "capacity" ||

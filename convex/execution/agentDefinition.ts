@@ -217,6 +217,17 @@ export type AgentDefinition = {
             >;
         };
     };
+    /** Computes a structured domain result before fragment staging; complete still owns adoption. */
+    preparedResult?: {
+        proposalCapacity(proposal: AgentCompletion): string | undefined;
+        preview(
+            ctx: QueryCtx,
+            mission: Doc<"agentMissions">,
+            proposal: AgentCompletion,
+            admittedInput: unknown,
+            invocation: Doc<"agentInvocations">,
+        ): Promise<AgentResult | null>;
+    };
     /** Completion examines the immutable input admitted to this invocation, including during retained-response replay. */
     complete(
         ctx: MutationCtx,
@@ -227,6 +238,7 @@ export type AgentDefinition = {
         preparedReviewDraft?: Infer<
             typeof import("@convex/domain/workbenchResponseControlContracts").preparedResponseReviewDraft
         >,
+        preparedResultHash?: string,
     ): Promise<
         | { kind: "blocked"; code: string }
         | { kind: "continue" }

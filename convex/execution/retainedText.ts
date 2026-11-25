@@ -211,26 +211,6 @@ export function retainedTextParts(content: string) {
     };
 }
 
-/** Retains an immutable logical text using the same verified fragments as native observations. */
-export async function retainCompleteText(
-    ctx: MutationCtx,
-    key: string,
-    content: string,
-) {
-    const { manifest, parts } = retainedTextParts(content);
-    let textId: Id<"retainedTexts"> | undefined;
-    for (const [index, part] of parts.entries()) {
-        textId = await stageRetainedText(ctx, key, {
-            ...manifest,
-            index,
-            content: part,
-        });
-    }
-    if (!textId) throw executionError("retained_text_invalid");
-    await completeRetainedText(ctx, textId);
-    return textId;
-}
-
 /** Transfers a staged body to its final owner within the owning publication transaction. */
 export async function adoptRetainedTextKey(
     ctx: MutationCtx,
@@ -456,18 +436,6 @@ export async function retainedTextPage(
         isDone: end === count,
         continueCursor: `${prefix}${end}`,
     };
-}
-
-/** Readers verify the complete content as well as individual fragments before using a logical record. */
-export async function readRetainedText(
-    ctx: QueryCtx,
-    textId: Id<"retainedTexts">,
-) {
-    const text = await completeRetainedText(ctx, textId);
-    const parts = [];
-    for (let index = 0; index < text.fragmentHashes.length; index++)
-        parts.push(await retainedTextFragment(ctx, text, index));
-    return verifyRetainedText(text, parts.join(""));
 }
 
 export function verifyRetainedText(

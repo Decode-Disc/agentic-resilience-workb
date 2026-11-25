@@ -382,7 +382,7 @@ export const preparedSubmissionValidator = v.object({
         v.object({
             kind: v.literal("completion_refusal"),
             completion: preparedCompletionValidator,
-            code: v.literal("invalid_completion"),
+            code: v.string(),
         }),
         v.object({ kind: v.literal("blocked"), code: v.string() }),
     ),

@@ -1,5 +1,6 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "@convex/_generated/server";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
 import { supportsResearchControl } from "@convex/domain/transitions";
 import { retainedReplyKey } from "@convex/execution/conversationBodies";
 import { RETAINED_TEXT_INLINE_BYTES } from "@convex/resourcePolicy";
@@ -12,7 +13,7 @@ import type {
     OperationPin,
 } from "./agentDefinition";
 import { executionError } from "./errors";
-import { completeRetainedText, retainCompleteText } from "./retainedText";
+import { adoptRetainedTextKey, completeRetainedText } from "./retainedText";
 
 /** Stable persisted identity for a mission's objective across attempts and definition versions. */
 export function missionObjectiveKey(
@@ -191,7 +192,6 @@ export function textualMissionOutcomePatch(
     };
 }
 
-/** Domain completion keeps its full result while mission metadata stays within document capacity. */
 /** Returns a validated completion identity for bounded inspection and replay. */
 export async function retainedTextualOutcome(
     ctx: QueryCtx,
@@ -218,6 +218,7 @@ export async function missionResultPatch(
         Doc<"agentMessageDeliveries">,
         "bodyTextId" | "contentHash"
     >,
+    preparedResult?: Doc<"retainedTexts">,
 ) {
     if (
         "protocolVersion" in mission &&
@@ -230,20 +231,23 @@ export async function missionResultPatch(
             publication.bodyTextId,
             publication.contentHash,
         );
+    if (preparedResult) {
+        if (preparedResult.contentHash !== sha256Hex(stableStringify(result)))
+            throw executionError("invocation_result_conflict");
+        await adoptRetainedTextKey(
+            ctx,
+            preparedResult._id,
+            `${mission._id}:result`,
+        );
+        return { result: undefined, resultTextId: preparedResult._id };
+    }
     const json = JSON.stringify(result);
     if (
         !("protocolVersion" in mission) ||
         new TextEncoder().encode(json).length <= RETAINED_TEXT_INLINE_BYTES
     )
         return domainDataPatch(mission, { result });
-    return {
-        result: undefined,
-        resultTextId: await retainCompleteText(
-            ctx,
-            `${mission._id}:result`,
-            json,
-        ),
-    };
+    throw executionError("invocation_result_not_prepared");
 }
 
 /** Resolves the immutable JSON result owned by a non-conversation mission. */

@@ -1,15 +1,18 @@
 import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { sha256Hex } from "@convex/domain/sourcePassages";
+import { sha256Hex, stableStringify } from "@convex/domain/sourcePassages";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import { domainSnapshot } from "@convex/execution/agentDefinition";
-import { readInvocationResponse } from "@convex/execution/journal";
 import { readMissionState } from "@convex/execution/missionHistory";
+import { stageObservedBody } from "@convex/execution/observedReply";
 import {
     retainedTextParts,
     stageRetainedText,
 } from "@convex/execution/retainedText";
+import { preparePiReply } from "@convex/integrations/piInvocation";
 import { recoverCorrectionDraft } from "@convex/responseControl";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import {
     readConversationPageWithBodies,
     readWorkbenchPageWithBodies,
@@ -121,9 +124,17 @@ test("native correction reconstructs an exact draft above the transaction read l
             receivedOutputJson: undefined,
         }),
     );
-    await expect(
-        t.query(internal.execution.context.build, scope),
-    ).rejects.toThrow("131072 bytes");
+    const defaultContext = await t.query(
+        internal.execution.context.build,
+        scope,
+    );
+    assert(defaultContext.kind === "ready");
+    expect(
+        JSON.parse(defaultContext.inputJson).domain.responseControl,
+    ).toMatchObject({ draftResponseHash: manifest.contentHash });
+    expect(
+        JSON.parse(defaultContext.inputJson).domain.responseControl,
+    ).not.toHaveProperty("draft");
     const admitted = await t.query(internal.execution.context.build, {
         ...scope,
         correctionAdmission: true,
@@ -169,6 +180,49 @@ test("native correction reconstructs an exact draft above the transaction read l
     expect(await recover()).toBe(draft);
 });
 
+async function prepareDraft(
+    t: Awaited<ReturnType<typeof seedWorkbench>>["t"],
+    invocationId: Id<"agentInvocations">,
+    text: string,
+) {
+    const authority = { invocationId, expectedGeneration: 1 };
+    const response = { kind: "complete" as const, text };
+    const json = stableStringify(response);
+    const responseTextId = await t.action((ctx) =>
+        stageObservedBody(ctx, authority, "response", json),
+    );
+    const envelope = stableStringify({
+        version: 1,
+        provenance: "simulation",
+        response,
+    });
+    const observableReplyTextId = await t.action((ctx) =>
+        stageObservedBody(ctx, authority, "reply", envelope),
+    );
+    await t.mutation(internal.execution.invocations.retainOutput, {
+        ...authority,
+        ...(responseTextId ? { responseTextId } : { responseJson: json }),
+        ...(observableReplyTextId
+            ? { observableReplyTextId }
+            : { observableReplyJson: envelope }),
+    });
+    const { mission } = await t.query(
+        internal.execution.invocationLifecycle.forExecution,
+        authority,
+    );
+    const prepared = await t.action((ctx) =>
+        preparePiReply(
+            ctx,
+            authority,
+            response,
+            json,
+            getAgentDefinition(mission.definitionId, mission.definitionVersion),
+        ),
+    );
+    assert(prepared && "textId" in prepared);
+    return prepared;
+}
+
 test.each([
     "Research is running.",
     `Research is running. ${"Supporting explanation. ".repeat(3500)}`,
@@ -193,10 +247,11 @@ test.each([
         nativeInput: await workbenchAdmissionInput(t, active.missionId),
     });
     assert(invocation.kind === "ready");
+    const preparedDraft = await prepareDraft(t, invocation.invocationId, draft);
     const pending = await t.mutation(internal.execution.invocations.finish, {
         invocationId: invocation.invocationId,
         expectedGeneration: 1,
-        response: { kind: "complete", text: draft },
+        preparedReply: preparedDraft,
     });
     expect(pending).toMatchObject({
         kind: "blocked",
@@ -259,7 +314,24 @@ test.each([
     expect(input.domain.responseControl.reminder).toContain(
         "Research has not started.",
     );
-    expect(input.domain.responseControl.draft).toBe(draft);
+    if (originalAdopted.receivedOutputTextId) {
+        expect(input.domain.responseControl).not.toHaveProperty("draft");
+        const contentHash = sha256Hex(
+            stableStringify({ kind: "complete", text: draft }),
+        );
+        expect(input.domain.responseControl.draftResponseHash).toBe(
+            contentHash,
+        );
+        expect(
+            await t.action((ctx) =>
+                recoverCorrectionDraft(ctx, {
+                    missionId: active.missionId,
+                    expectedGeneration: 1,
+                    contentHash,
+                }),
+            ),
+        ).toBe(draft);
+    } else expect(input.domain.responseControl.draft).toBe(draft);
     expect(input.constraints.operations).toEqual([]);
     await t.run((ctx) =>
         ctx.db.patch(invocation.invocationId, {
@@ -298,10 +370,15 @@ test.each([
         nativeInput: await workbenchAdmissionInput(t, active.missionId),
     });
     assert(correction.kind === "ready");
+    const preparedCorrection = await prepareDraft(
+        t,
+        correction.invocationId,
+        draft,
+    );
     const final = await t.mutation(internal.execution.invocations.finish, {
         invocationId: correction.invocationId,
         expectedGeneration: 1,
-        response: { kind: "complete", text: draft },
+        preparedReply: preparedCorrection,
     });
     expect(final.kind).toBe("completed");
     const messages = await readConversationPageWithBodies(client, {
@@ -312,11 +389,11 @@ test.each([
         text: draft,
         responseControl: { status: "review_needed" },
     });
-    const original = await t.run(async (ctx) => {
-        const stored = await ctx.db.get(invocation.invocationId);
-        assert(stored);
-        return readInvocationResponse(ctx, stored, "adopted");
-    });
+    const stored = await t.run((ctx) => ctx.db.get(invocation.invocationId));
+    assert(stored);
+    const original = stored.outputTextId
+        ? await readRetainedBody(t, stored.outputTextId)
+        : stored.outputJson;
     expect(JSON.parse(original ?? "{}").text).toBe(draft);
 });
 

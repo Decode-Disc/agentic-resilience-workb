@@ -4,8 +4,8 @@ import {
     projectPreparedMaterial,
 } from "@convex/domain/sources";
 import { readWorkbenchFacts } from "@convex/domain/workbenchContext";
-import { readRetainedText } from "@convex/execution/retainedText";
 import { assert, expect, test } from "vitest";
+import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 test("the handoff attributes a false resource explanation to Sources while retaining the actual allowance", async () => {
@@ -56,7 +56,7 @@ test("the handoff attributes a false resource explanation to Sources while retai
         missionId: f.missionId,
         expectedGeneration: 4,
     });
-    const handoff = await f.t.run(async (ctx) => {
+    const handoffTextId = await f.t.run(async (ctx) => {
         const entries = await ctx.db
             .query("agentExecutionEvents")
             .withIndex("by_run_and_native_input_sequence", (q) =>
@@ -67,10 +67,9 @@ test("the handoff attributes a false resource explanation to Sources while retai
             entry.cause.startsWith("sources-handoff:"),
         );
         assert(event?.contextObservation);
-        return JSON.parse(
-            await readRetainedText(ctx, event.contextObservation.textId),
-        );
+        return event.contextObservation.textId;
     });
+    const handoff = JSON.parse(await readRetainedBody(f.t, handoffTextId));
     expect(handoff.material).toMatchObject({
         documentaryAssessment: {
             author: {

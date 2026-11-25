@@ -3,9 +3,10 @@ import type { QueryCtx } from "@convex/_generated/server";
 import { executionError } from "@convex/execution/errors";
 import {
     completeRetainedText,
-    readRetainedText,
+    retainedTextRange,
 } from "@convex/execution/retainedText";
 import type { nativeInputBodyValidator } from "@convex/execution/schema";
+import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { type Infer, v } from "convex/values";
 
 export function retainedReplyKey(turnId: Id<"agentConversationTurns">) {
@@ -66,18 +67,26 @@ export async function retainedDeliveryBody(
     return text;
 }
 
-/** Reads original wording already admitted by the conversation owner; generated replies use range access. */
-export async function readConversationMessages(
+/** Reads admitted analyst input and server receipts within the existing message-admission capacity; generated replies use body ranges. */
+export async function readConversationWording(
     ctx: QueryCtx,
     deliveries: Doc<"agentMessageDeliveries">[],
     loaded?: Map<Id<"agentMessageDeliveries">, string>,
 ) {
     const texts: string[] = [];
     for (const delivery of deliveries) {
+        const cached = loaded?.get(delivery._id);
+        if (cached !== undefined) {
+            texts.push(cached);
+            continue;
+        }
         const body = await retainedDeliveryBody(ctx, delivery);
-        const text =
-            loaded?.get(delivery._id) ??
-            (await readRetainedText(ctx, body._id));
+        if (
+            (delivery.role !== "user" && delivery.turnId) ||
+            body.sizeBytes > MAX_OPERATION_RESULT_BYTES
+        )
+            throw executionError("message_capacity");
+        const text = await retainedTextRange(ctx, body, 0, body.characters);
         loaded?.set(delivery._id, text);
         texts.push(text);
     }

@@ -48,7 +48,6 @@ import {
     invocationResponseManifest,
     operationContextObservation,
     operationHistoryReference,
-    readInvocationResponse,
 } from "@convex/execution/journal";
 import {
     retainedTextFragment,
@@ -100,7 +99,6 @@ async function selectedCorrection(
         policy,
         correction,
         original,
-        part: received ? ("received" as const) : ("adopted" as const),
         textId: received
             ? original.receivedOutputTextId
             : original.outputTextId,
@@ -130,9 +128,9 @@ export async function responseControlContext(
 ) {
     const selected = await selectedCorrection(ctx, mission);
     if (!selected.correction) return { policy: selected.policy };
-    const { policy, correction, original, textId, inline, part } = selected;
+    const { policy, correction, original, textId, inline } = selected;
     const base = { policy, reminder: correction.reminder };
-    if (correctionAdmission && textId) {
+    if (textId) {
         const text = await invocationResponseManifest(
             ctx,
             original,
@@ -143,7 +141,7 @@ export async function responseControlContext(
             throw executionError("invocation_result_conflict");
         return { ...base, draftResponseHash: text.contentHash };
     }
-    const outputJson = await readInvocationResponse(ctx, original, part);
+    const outputJson = inline;
     if (!outputJson) throw executionError("invocation_unavailable");
     const draft = rejectedDraft(outputJson);
     return correctionAdmission

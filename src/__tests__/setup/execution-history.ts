@@ -1,5 +1,9 @@
 import { api, internal } from "@convex/_generated/api";
+import { stableStringify } from "@convex/domain/sourcePassages";
+import { getAgentDefinition } from "@convex/execution/agentCatalog";
 import type { OperationInput } from "@convex/execution/agentDefinition";
+import { stageObservedBody } from "@convex/execution/observedReply";
+import { preparePiReply } from "@convex/integrations/piInvocation";
 import { assert } from "vitest";
 import { seedConversation } from "./agent-harness";
 
@@ -41,13 +45,50 @@ export async function seedHistoryMission(
         provenance: "simulation",
     });
     assert(begun.kind === "ready");
-    await f.t.mutation(internal.execution.invocations.finish, {
+    const authority = {
         invocationId: begun.invocationId,
         expectedGeneration: 1,
-        response: {
-            kind: "complete",
-            text: options?.reply ?? "Original assistant answer",
-        },
+    };
+    const response = {
+        kind: "complete" as const,
+        text: options?.reply ?? "Original assistant answer",
+    };
+    const responseJson = stableStringify(response);
+    const responseTextId = await f.t.action((ctx) =>
+        stageObservedBody(ctx, authority, "response", responseJson),
+    );
+    const envelope = stableStringify({
+        version: 1,
+        provenance: "simulation",
+        response,
+    });
+    const observableReplyTextId = await f.t.action((ctx) =>
+        stageObservedBody(ctx, authority, "reply", envelope),
+    );
+    await f.t.mutation(internal.execution.invocations.retainOutput, {
+        ...authority,
+        ...(responseTextId ? { responseTextId } : { responseJson }),
+        ...(observableReplyTextId
+            ? { observableReplyTextId }
+            : { observableReplyJson: envelope }),
+    });
+    const { mission } = await f.t.query(
+        internal.execution.invocationLifecycle.forExecution,
+        authority,
+    );
+    const preparedReply = await f.t.action((ctx) =>
+        preparePiReply(
+            ctx,
+            authority,
+            response,
+            responseJson,
+            getAgentDefinition(mission.definitionId, mission.definitionVersion),
+        ),
+    );
+    assert(preparedReply && "textId" in preparedReply);
+    await f.t.mutation(internal.execution.invocations.finish, {
+        ...authority,
+        preparedReply,
     });
     await f.client.mutation(api.execution.conversations.submit, {
         runId: f.runId,

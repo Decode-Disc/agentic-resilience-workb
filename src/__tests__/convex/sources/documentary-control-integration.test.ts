@@ -3,7 +3,6 @@ import type {
     DocumentaryContribution,
     documentarySubmissionValue,
 } from "@convex/domain/sourcesContracts";
-import { readRetainedText } from "@convex/execution/retainedText";
 import { runPiMission } from "@convex/integrations/piMission";
 import { pinMissionModel } from "@convex/modelConfiguration";
 import {
@@ -23,6 +22,7 @@ import {
     documentaryReply,
     providerFixtureResponse,
 } from "@/__tests__/setup/model-stream";
+import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import {
     dispatchSourcesOperation,
     seedCapturedSources,
@@ -156,9 +156,7 @@ test("an interrupted structured stream keeps its visible prefix without adopting
     const visible = invocation?.visibleOutput;
     assert(visible);
     expect(visible.complete).toBe(false);
-    expect(await f.t.run((ctx) => readRetainedText(ctx, visible.textId))).toBe(
-        prefix,
-    );
+    expect(await readRetainedBody(f.t, visible.textId)).toBe(prefix);
     expect(
         (await f.t.run((ctx) => ctx.db.get(f.preparationId)))?.sourcesMission
             ?.qualifications,

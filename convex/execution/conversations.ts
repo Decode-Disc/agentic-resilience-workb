@@ -19,14 +19,13 @@ import {
     conversationBodyReference,
     conversationPageBodies,
     deliveryBodyHash,
-    readConversationMessages,
+    readConversationWording,
     retainedDeliveryBody,
     retainedDeliveryKey,
     retainedReplyKey,
 } from "@convex/execution/conversationBodies";
 import {
     adoptRetainedTextKey,
-    retainCompleteText,
     retainedTextFragment,
     retainedTextParts,
     stageRetainedText,
@@ -53,6 +52,7 @@ import {
     MAX_CONTEXT_BYTES,
     MAX_OPERATION_RESULT_BYTES,
     RESPONSE_CONTROL_MAX_INPUT_BYTES,
+    RETAINED_TEXT_INLINE_BYTES,
 } from "@convex/resourcePolicy";
 import {
     localBrowserFixturesEnabled,
@@ -192,10 +192,31 @@ async function insertRetainedDelivery(
         Doc<"agentMessageDeliveries">,
         "_id" | "_creationTime" | "bodyTextId" | "bodyContentHash"
     >,
-    text: string,
+    text: string | Doc<"retainedTexts">,
 ) {
+    if (typeof text !== "string") {
+        if (
+            fields.role !== "assistant" ||
+            fields.delivery !== "reply" ||
+            !fields.turnId ||
+            fields.contentHash !== text.contentHash
+        )
+            throw executionError("publication_conflict");
+        await adoptRetainedTextKey(
+            ctx,
+            text._id,
+            retainedReplyKey(fields.turnId),
+        );
+        // A reply's publication identity already is its body digest.
+        return ctx.db.insert("agentMessageDeliveries", {
+            ...fields,
+            bodyTextId: text._id,
+        });
+    }
     const deliveryId = await ctx.db.insert("agentMessageDeliveries", fields);
     const key = retainedDeliveryKey({ ...fields, _id: deliveryId });
+    if (new TextEncoder().encode(text).length > RETAINED_TEXT_INLINE_BYTES)
+        throw executionError("invocation_result_not_prepared");
     const { parts, manifest } = retainedTextParts(text);
     let bodyTextId: Id<"retainedTexts"> | undefined;
     for (const [index, content] of parts.entries())
@@ -921,7 +942,7 @@ export async function readTurnInstructions(
     let bytes = new TextEncoder().encode(JSON.stringify(result)).length;
     const batch: Doc<"agentMessageDeliveries">[] = [];
     const appendBatch = async () => {
-        const texts = await readConversationMessages(ctx, batch, loaded);
+        const texts = await readConversationWording(ctx, batch, loaded);
         for (const [index, message] of batch.entries()) {
             const text = texts[index];
             if (text === undefined)
@@ -997,28 +1018,28 @@ export async function publishTurn(
     const requestKey = retainedReplyKey(turn._id);
     if (preparedBody && preparedBody.contentHash !== hash)
         throw executionError("publication_conflict");
+    const messageId = await insertRetainedDelivery(
+        ctx,
+        {
+            ...(turn.responseControl?.summary
+                ? { responseControl: turn.responseControl.summary }
+                : {}),
+            runId: mission.runId,
+            conversationId: conversation._id,
+            requestKey,
+            contentHash: hash,
+            role: "assistant",
+            delivery: "reply",
+            status: "processed",
+            publicationRevision,
+            turnId: turn._id,
+            createdAt: Date.now(),
+        },
+        preparedBody ?? reply,
+    );
     const bodyTextId =
-        typeof reply === "string" && !preparedBody
-            ? await retainCompleteText(ctx, requestKey, reply)
-            : preparedBody?._id;
+        preparedBody?._id ?? (await ctx.db.get(messageId))?.bodyTextId;
     if (!bodyTextId) throw executionError("publication_conflict");
-    if (preparedBody) await adoptRetainedTextKey(ctx, bodyTextId, requestKey);
-    const messageId = await ctx.db.insert("agentMessageDeliveries", {
-        ...(turn.responseControl?.summary
-            ? { responseControl: turn.responseControl.summary }
-            : {}),
-        runId: mission.runId,
-        conversationId: conversation._id,
-        bodyTextId,
-        requestKey,
-        contentHash: hash,
-        role: "assistant",
-        delivery: "reply",
-        status: "processed",
-        publicationRevision,
-        turnId: turn._id,
-        createdAt: Date.now(),
-    });
     const messages = ctx.db
         .query("agentMessageDeliveries")
         .withIndex("by_turn", (q) => q.eq("turnId", turn._id));

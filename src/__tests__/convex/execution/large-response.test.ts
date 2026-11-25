@@ -704,10 +704,7 @@ test.each([
     expect(Buffer.byteLength(text)).toBe(bytes);
     const response = { kind: "complete" as const, text };
     const args = { invocationId: f.invocationId, expectedGeneration: 1 };
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
-        ...args,
-        responseJson: JSON.stringify(response),
-    });
+    await retainOriginalResponse(f, stableStringify(response));
     const restored = await recoverReceivedResponse(f);
     expect(JSON.parse(restored ?? "null")).toEqual(response);
     await expect(
@@ -719,11 +716,21 @@ test.each([
             }),
         }),
     ).rejects.toThrow("invocation_result_conflict");
+    const preparedReply = await f.t.action((ctx) =>
+        preparePiReply(
+            ctx,
+            args,
+            response,
+            stableStringify(response),
+            getAgentDefinition("conversation_validation_v1", 2),
+        ),
+    );
+    assert(preparedReply && "textId" in preparedReply);
     for (let attempt = 0; attempt < 2; attempt++) {
         expect(
             await f.t.mutation(internal.execution.invocations.finish, {
                 ...args,
-                response,
+                preparedReply,
             }),
         ).toMatchObject({ kind: "completed" });
     }
@@ -974,10 +981,7 @@ test("a retained large response cannot publish after steering changes its instru
     const f = await activeReply();
     const response = { kind: "complete" as const, text: "é".repeat(40000) };
     const args = { invocationId: f.invocationId, expectedGeneration: 1 };
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
-        ...args,
-        responseJson: JSON.stringify(response),
-    });
+    await retainOriginalResponse(f, stableStringify(response));
     await f.client.mutation(api.execution.conversations.submit, {
         runId: f.runId,
         requestKey: "steer",
@@ -1009,13 +1013,20 @@ test.each([
     const f = await activeReply();
     const response = { kind: "complete" as const, text: "é".repeat(300000) };
     const args = { invocationId: f.invocationId, expectedGeneration: 1 };
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
-        ...args,
-        responseJson: JSON.stringify(response),
-    });
+    await retainOriginalResponse(f, stableStringify(response));
+    const preparedReply = await f.t.action((ctx) =>
+        preparePiReply(
+            ctx,
+            args,
+            response,
+            stableStringify(response),
+            getAgentDefinition("conversation_validation_v1", 2),
+        ),
+    );
+    assert(preparedReply && "textId" in preparedReply);
     await f.t.mutation(internal.execution.invocations.finish, {
         ...args,
-        response,
+        preparedReply,
     });
     const { owned, textId, messageId } = await f.t.run(async (ctx) => {
         await ctx.db.patch(f.runId, { purpose: "research" });
@@ -1098,14 +1109,10 @@ test.each([
 
 test("a corrupted response fragment is refused before recovery can use it", async () => {
     const f = await activeReply();
-    const args = { invocationId: f.invocationId, expectedGeneration: 1 };
-    await f.t.mutation(internal.execution.invocations.retainOutput, {
-        ...args,
-        responseJson: JSON.stringify({
-            kind: "complete",
-            text: "é".repeat(40000),
-        }),
-    });
+    await retainOriginalResponse(
+        f,
+        stableStringify({ kind: "complete", text: "é".repeat(40000) }),
+    );
     await f.t.run(async (ctx) => {
         const invocation = await ctx.db.get(f.invocationId);
         assert(invocation?.receivedOutputTextId);

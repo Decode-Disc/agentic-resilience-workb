@@ -4,6 +4,7 @@ import { historyPageValidator } from "@convex/execution/operationContracts";
 import { MAX_OPERATION_RESULT_BYTES } from "@convex/resourcePolicy";
 import { validate } from "convex-helpers/validators";
 import { afterEach, assert, expect, test, vi } from "vitest";
+import { readRetainedBody } from "@/__tests__/setup/retained-history";
 import { seedCapturedSources } from "@/__tests__/setup/sources-mission";
 
 afterEach(() => {
@@ -390,20 +391,23 @@ test("the real Pi worker corrects Sources completion after non-progress consulta
     );
     const mission = await f.t.run((ctx) => ctx.db.get(f.missionId));
     expect(mission?.blockCode).toBeUndefined();
-    expect(mission).toMatchObject({
-        status: "completed",
-        result: {
-            material: {
-                outcome: "blocked",
-                needs: [
-                    {
-                        needId: "common-context",
-                        unfinished: [
-                            "No controlled contributions were prepared in this simulated recovery.",
-                        ],
-                    },
-                ],
-            },
+    expect(mission?.status).toBe("completed");
+    assert(mission && "protocolVersion" in mission && mission.resultTextId);
+    expect(mission).not.toHaveProperty("result");
+    const result = JSON.parse(
+        await readRetainedBody(f.t, mission.resultTextId),
+    );
+    expect(result).toMatchObject({
+        material: {
+            outcome: "blocked",
+            needs: [
+                {
+                    needId: "common-context",
+                    unfinished: [
+                        "No controlled contributions were prepared in this simulated recovery.",
+                    ],
+                },
+            ],
         },
     });
     expect(
