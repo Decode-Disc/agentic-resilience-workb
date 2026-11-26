@@ -1,0 +1,379 @@
+{
+    "schemaVersion": 1,
+    "id": "20261125T235121660Z-campaign-sources-efficiency-ce843ce-20261125-ready-lot-1-diagnos",
+    "createdAt": "2026-11-25T23:51:21.660Z",
+    "git": {
+        "head": "ce843ce96292fd29d41fc5b7a5a68eae05d01080",
+        "dirty": true
+    },
+    "sources": [
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-mission.json",
+            "archivePath": "external/review0/automated-review-mission.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-report-10-3abc276784824198f7a1a20b887ad5b1f20fcf466898fa891b556eb9f6393d23.md",
+            "archivePath": "external/review1/automated-review-report-10-3abc276784824198f7a1a20b887ad5b1f20fcf466898fa891b556eb9f6393d23.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-report-15-2f9bcbb357b8017f8bc714fc6a5d04b50de5b726a7d107c22d5e5d958b4ed871.md",
+            "archivePath": "external/review2/automated-review-report-15-2f9bcbb357b8017f8bc714fc6a5d04b50de5b726a7d107c22d5e5d958b4ed871.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-report-19-ce8765b05e7772dd0bb0e1fec5a18cc456db3b10ed2e7fa0a3cffe862bd3c1e6.md",
+            "archivePath": "external/review3/automated-review-report-19-ce8765b05e7772dd0bb0e1fec5a18cc456db3b10ed2e7fa0a3cffe862bd3c1e6.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-report-26-2824c8fbc2d43a2e05d5d4bc883ac1304afc7e235b6b5a137866090aa57d38e2.md",
+            "archivePath": "external/review4/automated-review-report-26-2824c8fbc2d43a2e05d5d4bc883ac1304afc7e235b6b5a137866090aa57d38e2.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-report-27.md",
+            "archivePath": "external/review5/automated-review-report-27.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-report.json",
+            "archivePath": "external/review6/automated-review-report.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-report.md",
+            "archivePath": "external/review7/automated-review-report.md"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-1.json",
+            "archivePath": "external/review8/automated-review-response-analysis-2cec9ebe2a198e37-1.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-10.json",
+            "archivePath": "external/review9/automated-review-response-analysis-2cec9ebe2a198e37-10.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-11.json",
+            "archivePath": "external/review10/automated-review-response-analysis-2cec9ebe2a198e37-11.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-12.json",
+            "archivePath": "external/review11/automated-review-response-analysis-2cec9ebe2a198e37-12.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-13.json",
+            "archivePath": "external/review12/automated-review-response-analysis-2cec9ebe2a198e37-13.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-14.json",
+            "archivePath": "external/review13/automated-review-response-analysis-2cec9ebe2a198e37-14.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-15.json",
+            "archivePath": "external/review14/automated-review-response-analysis-2cec9ebe2a198e37-15.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-16.json",
+            "archivePath": "external/review15/automated-review-response-analysis-2cec9ebe2a198e37-16.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-17.json",
+            "archivePath": "external/review16/automated-review-response-analysis-2cec9ebe2a198e37-17.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-18.json",
+            "archivePath": "external/review17/automated-review-response-analysis-2cec9ebe2a198e37-18.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-19.json",
+            "archivePath": "external/review18/automated-review-response-analysis-2cec9ebe2a198e37-19.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-2.json",
+            "archivePath": "external/review19/automated-review-response-analysis-2cec9ebe2a198e37-2.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-20.json",
+            "archivePath": "external/review20/automated-review-response-analysis-2cec9ebe2a198e37-20.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-21.json",
+            "archivePath": "external/review21/automated-review-response-analysis-2cec9ebe2a198e37-21.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-22.json",
+            "archivePath": "external/review22/automated-review-response-analysis-2cec9ebe2a198e37-22.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-23.json",
+            "archivePath": "external/review23/automated-review-response-analysis-2cec9ebe2a198e37-23.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-24.json",
+            "archivePath": "external/review24/automated-review-response-analysis-2cec9ebe2a198e37-24.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-25.json",
+            "archivePath": "external/review25/automated-review-response-analysis-2cec9ebe2a198e37-25.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-26.json",
+            "archivePath": "external/review26/automated-review-response-analysis-2cec9ebe2a198e37-26.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-27.json",
+            "archivePath": "external/review27/automated-review-response-analysis-2cec9ebe2a198e37-27.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-3.json",
+            "archivePath": "external/review28/automated-review-response-analysis-2cec9ebe2a198e37-3.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-4.json",
+            "archivePath": "external/review29/automated-review-response-analysis-2cec9ebe2a198e37-4.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-5.json",
+            "archivePath": "external/review30/automated-review-response-analysis-2cec9ebe2a198e37-5.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-6.json",
+            "archivePath": "external/review31/automated-review-response-analysis-2cec9ebe2a198e37-6.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-7.json",
+            "archivePath": "external/review32/automated-review-response-analysis-2cec9ebe2a198e37-7.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-8.json",
+            "archivePath": "external/review33/automated-review-response-analysis-2cec9ebe2a198e37-8.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-response-analysis-2cec9ebe2a198e37-9.json",
+            "archivePath": "external/review34/automated-review-response-analysis-2cec9ebe2a198e37-9.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-result.json",
+            "archivePath": "external/review35/automated-review-result.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/progress.jsonl",
+            "archivePath": "external/review36/progress.jsonl"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-evidence-2cec9ebe2a198e37730c2ef626039ba8620955be280a2b789174e4672a553e17/.complete",
+            "archivePath": "external/review37/.complete"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-evidence-2cec9ebe2a198e37730c2ef626039ba8620955be280a2b789174e4672a553e17/review-template.json",
+            "archivePath": "external/review38/review-template.json"
+        },
+        {
+            "origin": "/home/abdwhb/.cache/workbench-evaluations/sources-efficiency-ce843ce-20261125-ready/lots/lot-1/automated-review-evidence-2cec9ebe2a198e37730c2ef626039ba8620955be280a2b789174e4672a553e17/evidence-index-2cec9ebe2a198e37730c2ef626039ba8620955be280a2b789174e4672a553e17.json",
+            "archivePath": "external/review39/evidence-index-2cec9ebe2a198e37730c2ef626039ba8620955be280a2b789174e4672a553e17.json"
+        }
+    ],
+    "files": [
+        {
+            "path": "external/review0/automated-review-mission.json",
+            "bytes": 21758,
+            "sha256": "6e8160a07b6e75cce19dcb0233b70edf9a43439af86e2db050d6705ab110f262"
+        },
+        {
+            "path": "external/review1/automated-review-report-10-3abc276784824198f7a1a20b887ad5b1f20fcf466898fa891b556eb9f6393d23.md",
+            "bytes": 2008,
+            "sha256": "3abc276784824198f7a1a20b887ad5b1f20fcf466898fa891b556eb9f6393d23"
+        },
+        {
+            "path": "external/review10/automated-review-response-analysis-2cec9ebe2a198e37-11.json",
+            "bytes": 22162,
+            "sha256": "6b7ce88948fa1ba8a5941175b0b5f586697e95986bce304c4469e0adbe388330"
+        },
+        {
+            "path": "external/review11/automated-review-response-analysis-2cec9ebe2a198e37-12.json",
+            "bytes": 21474,
+            "sha256": "2f7a55e100f6835d58aaabe17a88f1c6fb19e4ce7d5ce1bd39537fb5b3a13029"
+        },
+        {
+            "path": "external/review12/automated-review-response-analysis-2cec9ebe2a198e37-13.json",
+            "bytes": 21832,
+            "sha256": "a1007c6cc44a76c680996058285d2b066c34c8f2569802dd3b67bcccd95d90c2"
+        },
+        {
+            "path": "external/review13/automated-review-response-analysis-2cec9ebe2a198e37-14.json",
+            "bytes": 37277,
+            "sha256": "56dd83a0c6d9eeeee037585b672fd45de9471903eafce7a700a853a1803435a7"
+        },
+        {
+            "path": "external/review14/automated-review-response-analysis-2cec9ebe2a198e37-15.json",
+            "bytes": 247366,
+            "sha256": "bbc2a93f3d6291ebfbc4b427902eebd66b0b492aa8f72c2d3c8616a5dad6c2dd"
+        },
+        {
+            "path": "external/review15/automated-review-response-analysis-2cec9ebe2a198e37-16.json",
+            "bytes": 21675,
+            "sha256": "175c8df98bdf061930018e9b102ead98eddf4058bcdea43272844b9553b0f4f5"
+        },
+        {
+            "path": "external/review16/automated-review-response-analysis-2cec9ebe2a198e37-17.json",
+            "bytes": 57812,
+            "sha256": "3577455a848036e89598b277233fb61710aac16594f93bd26eb13751646b1b6b"
+        },
+        {
+            "path": "external/review17/automated-review-response-analysis-2cec9ebe2a198e37-18.json",
+            "bytes": 33566,
+            "sha256": "f2998fa5de9832a7a72ea09ad77f0f85beb4082d5c058662b11a0288d36e2485"
+        },
+        {
+            "path": "external/review18/automated-review-response-analysis-2cec9ebe2a198e37-19.json",
+            "bytes": 418609,
+            "sha256": "c66313954388e4a0f5258cc266e9f49d3b0733213d45f2b0ece1791f290d73d9"
+        },
+        {
+            "path": "external/review19/automated-review-response-analysis-2cec9ebe2a198e37-2.json",
+            "bytes": 20797,
+            "sha256": "56837281591c9af2deab377e5d8f94efbfaa7e05059d5b2987818b4900816f45"
+        },
+        {
+            "path": "external/review2/automated-review-report-15-2f9bcbb357b8017f8bc714fc6a5d04b50de5b726a7d107c22d5e5d958b4ed871.md",
+            "bytes": 3867,
+            "sha256": "2f9bcbb357b8017f8bc714fc6a5d04b50de5b726a7d107c22d5e5d958b4ed871"
+        },
+        {
+            "path": "external/review20/automated-review-response-analysis-2cec9ebe2a198e37-20.json",
+            "bytes": 38764,
+            "sha256": "d233b3e17912a6ae4b4c7c72e0e8437a4fb44f913627fc2a9cba9ddbbb5ec986"
+        },
+        {
+            "path": "external/review21/automated-review-response-analysis-2cec9ebe2a198e37-21.json",
+            "bytes": 19999,
+            "sha256": "a3f9a13eff878f18c26463faefc4e80d4dfc39d7b833241dd01b25ec3867b3e4"
+        },
+        {
+            "path": "external/review22/automated-review-response-analysis-2cec9ebe2a198e37-22.json",
+            "bytes": 33610,
+            "sha256": "40ea273824c0b4172d3a0270d67a24efde1c070881d6ecf53018f7e913f8e3ea"
+        },
+        {
+            "path": "external/review23/automated-review-response-analysis-2cec9ebe2a198e37-23.json",
+            "bytes": 58793,
+            "sha256": "49b5a3228e978f5c013a8e2db7686c1a9e9c564a3310c9a3295556870b92aa25"
+        },
+        {
+            "path": "external/review24/automated-review-response-analysis-2cec9ebe2a198e37-24.json",
+            "bytes": 68382,
+            "sha256": "fdf170387fdfee53999338ba4159b63c42c354828965aeb74e68e6cb7a22ca8f"
+        },
+        {
+            "path": "external/review25/automated-review-response-analysis-2cec9ebe2a198e37-25.json",
+            "bytes": 68331,
+            "sha256": "72913f86ca40026cbcd006b3d764594cb7c1b535cdc7ecb6905b0bd730cc9ec2"
+        },
+        {
+            "path": "external/review26/automated-review-response-analysis-2cec9ebe2a198e37-26.json",
+            "bytes": 563660,
+            "sha256": "4cb35d1371a41a0756dbf1d647e3fa170eaccaaef07bb01baefa4893a24ec514"
+        },
+        {
+            "path": "external/review27/automated-review-response-analysis-2cec9ebe2a198e37-27.json",
+            "bytes": 1273210,
+            "sha256": "e43aa06535af485189f6a71cdd41a68fdcf658730c85af252f5a8a7f714f3ab5"
+        },
+        {
+            "path": "external/review28/automated-review-response-analysis-2cec9ebe2a198e37-3.json",
+            "bytes": 17410,
+            "sha256": "560fa1a24f451fea1581e1dd1061e239dcb31ca67ae4123746703594297327b2"
+        },
+        {
+            "path": "external/review29/automated-review-response-analysis-2cec9ebe2a198e37-4.json",
+            "bytes": 17410,
+            "sha256": "64b218982438a11a0512240e43a9d0010ee484a84dfb130ef67111f06b630464"
+        },
+        {
+            "path": "external/review3/automated-review-report-19-ce8765b05e7772dd0bb0e1fec5a18cc456db3b10ed2e7fa0a3cffe862bd3c1e6.md",
+            "bytes": 6823,
+            "sha256": "ce8765b05e7772dd0bb0e1fec5a18cc456db3b10ed2e7fa0a3cffe862bd3c1e6"
+        },
+        {
+            "path": "external/review30/automated-review-response-analysis-2cec9ebe2a198e37-5.json",
+            "bytes": 17687,
+            "sha256": "a9b4d02a3fb298ec17686b980229f6f459e814772b9b87bbae404d22a9acc57b"
+        },
+        {
+            "path": "external/review31/automated-review-response-analysis-2cec9ebe2a198e37-6.json",
+            "bytes": 17687,
+            "sha256": "8f2c8448b809ac31d5ac59b0b1fe4c93c5914f7f482c05aebc58dc176d611724"
+        },
+        {
+            "path": "external/review32/automated-review-response-analysis-2cec9ebe2a198e37-7.json",
+            "bytes": 21967,
+            "sha256": "01690f47150beff1568c29150162d699bf1dddc1a21a269f742b2e2c938be00e"
+        },
+        {
+            "path": "external/review33/automated-review-response-analysis-2cec9ebe2a198e37-8.json",
+            "bytes": 20068,
+            "sha256": "0886aeb1e7cfe2ca0a16e3b4d1af6660fd77b53d4306a250dffed8d6ed4396b0"
+        },
+        {
+            "path": "external/review34/automated-review-response-analysis-2cec9ebe2a198e37-9.json",
+            "bytes": 19791,
+            "sha256": "e01f680cb937653f08c4aa025a0177a45ad0f719474a9994d2671cc8d86c6546"
+        },
+        {
+            "path": "external/review35/automated-review-result.json",
+            "bytes": 17429,
+            "sha256": "7cf219e1957ff30c3844709ed9ba0369a52c6d776fb1626e32a999442b6ca557"
+        },
+        {
+            "path": "external/review36/progress.jsonl",
+            "bytes": 54572,
+            "sha256": "4ffb42185b5a48857c19d39c5777f5f09937cf89b100d2fc6bc191d56bcdcd50"
+        },
+        {
+            "path": "external/review37/.complete",
+            "bytes": 64,
+            "sha256": "8471b9cd9ec669c5145ad4227321ae26d9346a67d9f84c35da397e707ae27b16"
+        },
+        {
+            "path": "external/review38/review-template.json",
+            "bytes": 9558,
+            "sha256": "90e8d47e19314890fecac05e3d24940faf458d3c771aff314fc3ad7fa37dca4a"
+        },
+        {
+            "path": "external/review39/evidence-index-2cec9ebe2a198e37730c2ef626039ba8620955be280a2b789174e4672a553e17.json",
+            "bytes": 200706,
+            "sha256": "34e70e546f3a187c3fa2e585a8fa578fd493b0b74e72499e0abc591dd845ca67"
+        },
+        {
+            "path": "external/review4/automated-review-report-26-2824c8fbc2d43a2e05d5d4bc883ac1304afc7e235b6b5a137866090aa57d38e2.md",
+            "bytes": 9045,
+            "sha256": "2824c8fbc2d43a2e05d5d4bc883ac1304afc7e235b6b5a137866090aa57d38e2"
+        },
+        {
+            "path": "external/review5/automated-review-report-27.md",
+            "bytes": 17484,
+            "sha256": "5640dbde6fe3fce223e315c5b2371167afbc2c66944f6ea1c9c8cbe90b715ff3"
+        },
+        {
+            "path": "external/review6/automated-review-report.json",
+            "bytes": 532,
+            "sha256": "8b07894dcc9b7e6349d942cf3976f98d2a1bcca32625976fafcee35d7c891b7a"
+        },
+        {
+            "path": "external/review7/automated-review-report.md",
+            "bytes": 17484,
+            "sha256": "5640dbde6fe3fce223e315c5b2371167afbc2c66944f6ea1c9c8cbe90b715ff3"
+        },
+        {
+            "path": "external/review8/automated-review-response-analysis-2cec9ebe2a198e37-1.json",
+            "bytes": 16225,
+            "sha256": "87890d3b8d82d478228a15db2f244117a4332772cf399a92204418307f391cd5"
+        },
+        {
+            "path": "external/review9/automated-review-response-analysis-2cec9ebe2a198e37-10.json",
+            "bytes": 128659,
+            "sha256": "999dfc51f47a9af595394532fe496d9ead49fb61da97ff5ad3889a2264a67b04"
+        }
+    ],
+    "archive": {
+        "path": "/home/abdwhb/.local/share/agentic-resilience-workbench/evaluation-archives/20261125T235121660Z-campaign-sources-efficiency-ce843ce-20261125-ready-lot-1-diagnos.tar.gz",
+        "bytes": 398954,
+        "sha256": "619eb0f33e176e2659b0a462c2aaa286731af7b16b3d0f9b59d1e7a72cb0c389"
+    },
+    "verification": "restored_and_verified"
+}
