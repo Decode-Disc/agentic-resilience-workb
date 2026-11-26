@@ -51,6 +51,7 @@ Options:
   --include PATH                  Repository file or directory; repeat for more inputs.
   --external ALIAS=ABSOLUTE_PATH   Explicit external input; repeat with distinct aliases.
   --dry-run                       List selected files and total bytes without writing.
+  --record-dir ABSOLUTE_PATH      Override the verification record directory.
   --help                          Show this help without requiring a repository.
 
 Example (replace with existing paths):
@@ -178,6 +179,7 @@ async function main() {
             name: { type: "string" },
             include: { type: "string", multiple: true },
             external: { type: "string", multiple: true },
+            "record-dir": { type: "string" },
             "dry-run": { type: "boolean" },
             help: { type: "boolean" },
         },
@@ -200,7 +202,20 @@ async function main() {
         "agentic-resilience-workbench/evaluation-archives",
     );
     assert(isAbsolute(archiveDirectory), "XDG_DATA_HOME must be absolute.");
-    const recordsDirectory = join(repository, "scripts/evaluations/archives");
+    const recordTarget = values["record-dir"];
+    assert(
+        recordTarget === undefined || isAbsolute(recordTarget),
+        "--record-dir must be an absolute path.",
+    );
+    const recordsDirectory =
+        recordTarget === undefined
+            ? join(repository, "scripts/evaluations/archives")
+            : resolve(recordTarget);
+    assert(
+        !inside(recordsDirectory, archiveDirectory) &&
+            !inside(archiveDirectory, recordsDirectory),
+        "Record storage must not overlap archive storage.",
+    );
     const sources: Source[] = [];
     for (const input of values.include ?? []) {
         const origin = resolve(repository, input);

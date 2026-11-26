@@ -168,12 +168,31 @@ export async function inspectCampaignScenarios(
     client: ConvexHttpClient,
     root: string,
     destination = root,
+    {
+        mode = "full",
+    }: { mode?: "full" | "before_cleanup" | "post_cleanup" } = {},
 ) {
     const startedAt = Date.now();
     mkdirSync(destination, { recursive: true, mode: 0o700 });
     save(destination, "inspection", { startedAt, completedAt: null });
-    for (const c of prepared(root).cases) {
+    const cases = prepared(root).cases;
+    const inspectScenario = async (c: (typeof cases)[number]) => {
         const args = { runId: c.runId, fixtureKey: c.fixtureKey };
+        // Check before reading bytes. Work that settles during export can already have
+        // changed an earlier page, so only pre-export quiescence permits reuse.
+        const continuation =
+            mode === "before_cleanup"
+                ? await client.query(
+                      ref(
+                          internal.execution.fixtures.qualificationContinuation,
+                      ),
+                      args,
+                  )
+                : null;
+        const reusableAfterCleanup =
+            continuation?.scenarioQuiet === true &&
+            continuation.accountingSettled &&
+            !continuation.hasEngagedEffects;
         const directory = join(destination, c.id);
         mkdirSync(directory, { recursive: true, mode: 0o700 });
         save(
@@ -184,7 +203,7 @@ export async function inspectCampaignScenarios(
                 args,
             ),
         );
-        for (const kind of [
+        const kinds = [
             "receipts",
             "missions",
             "requests",
@@ -192,117 +211,132 @@ export async function inspectCampaignScenarios(
             "tasks",
             "captures",
             "messages",
-        ] as const) {
+        ] as const;
+        const inventories = await Promise.allSettled(
+            kinds.map(async (kind) => {
+                let cursor: string | null = null;
+                let pageNumber = 0;
+                do {
+                    const result: FunctionReturnType<
+                        typeof internal.execution.fixtures.inspectQualificationPage
+                    > = await client.query(
+                        ref(
+                            internal.execution.fixtures
+                                .inspectQualificationPage,
+                        ),
+                        {
+                            ...args,
+                            kind,
+                            paginationOpts: {
+                                cursor,
+                                numItems:
+                                    PERSISTENCE_PAGE_SIZE.qualificationFixtures,
+                            },
+                        },
+                    );
+                    const { downloads: _, ...retained } = {
+                        downloads: undefined,
+                        ...result,
+                    };
+                    save(directory, `${kind}-${++pageNumber}`, retained);
+                    if (mode !== "post_cleanup" && "downloads" in result) {
+                        const downloads: Extract<
+                            FunctionReturnType<
+                                typeof internal.execution.fixtures.inspectQualificationPage
+                            >,
+                            { downloads: unknown }
+                        >["downloads"] = result.downloads;
+                        for (const capture of result.page) {
+                            if (capture.status === "committed")
+                                assert(
+                                    capture.contentHash &&
+                                        capture.storageId &&
+                                        downloads.some(
+                                            (download) =>
+                                                download.captureId ===
+                                                capture._id,
+                                        ),
+                                    "Capture bytes unavailable",
+                                );
+                        }
+                        for (const download of downloads) {
+                            const capture: Doc<"sourceCaptures"> | undefined =
+                                result.page.find(
+                                    (row) => row._id === download.captureId,
+                                );
+                            assert(
+                                capture &&
+                                    "contentHash" in capture &&
+                                    capture.contentHash,
+                                "Capture hash unavailable",
+                            );
+                            const response: Response = await fetch(
+                                download.url,
+                                {
+                                    signal: AbortSignal.timeout(
+                                        TOOLING_POLICY.captureDownloadTimeoutMs,
+                                    ),
+                                },
+                            );
+                            assert(response.ok, "Capture download failed");
+                            const bytes: Buffer = Buffer.from(
+                                await response.arrayBuffer(),
+                            );
+                            assert.equal(
+                                sha256(bytes),
+                                capture.contentHash,
+                                "Capture bytes changed",
+                            );
+                            writeFileSync(
+                                join(
+                                    directory,
+                                    `capture-${download.captureId}.txt`,
+                                ),
+                                bytes,
+                                { mode: 0o600 },
+                            );
+                        }
+                    }
+                    if (result.isDone) break;
+                    assert(
+                        result.continueCursor !== cursor,
+                        "Audit cursor did not advance",
+                    );
+                    cursor = result.continueCursor;
+                } while (cursor);
+            }),
+        );
+        for (const inventory of inventories) {
+            if (inventory.status === "rejected") throw inventory.reason;
+        }
+        if (mode !== "post_cleanup") {
             let cursor: string | null = null;
             let pageNumber = 0;
             do {
-                const result: FunctionReturnType<
-                    typeof internal.execution.fixtures.inspectQualificationPage
+                const page: FunctionReturnType<
+                    typeof internal.execution.fixtures.inspectSourcesInvocations
                 > = await client.query(
-                    ref(internal.execution.fixtures.inspectQualificationPage),
-                    {
-                        ...args,
-                        kind,
-                        paginationOpts: {
-                            cursor,
-                            numItems:
-                                PERSISTENCE_PAGE_SIZE.qualificationFixtures,
-                        },
-                    },
+                    ref(internal.execution.fixtures.inspectSourcesInvocations),
+                    { ...args, paginationOpts: { cursor, numItems: 1 } },
                 );
-                const { downloads: _, ...retained } = {
-                    downloads: undefined,
-                    ...result,
-                };
-                save(directory, `${kind}-${++pageNumber}`, retained);
-                if ("downloads" in result) {
-                    const downloads: Extract<
-                        FunctionReturnType<
-                            typeof internal.execution.fixtures.inspectQualificationPage
-                        >,
-                        { downloads: unknown }
-                    >["downloads"] = result.downloads;
-                    for (const capture of result.page) {
-                        if (capture.status === "committed")
-                            assert(
-                                capture.contentHash &&
-                                    capture.storageId &&
-                                    downloads.some(
-                                        (download) =>
-                                            download.captureId === capture._id,
-                                    ),
-                                "Capture bytes unavailable",
-                            );
-                    }
-                    for (const download of downloads) {
-                        const capture: Doc<"sourceCaptures"> | undefined =
-                            result.page.find(
-                                (row) => row._id === download.captureId,
-                            );
-                        assert(
-                            capture &&
-                                "contentHash" in capture &&
-                                capture.contentHash,
-                            "Capture hash unavailable",
-                        );
-                        const response: Response = await fetch(download.url, {
-                            signal: AbortSignal.timeout(
-                                TOOLING_POLICY.captureDownloadTimeoutMs,
+                save(
+                    directory,
+                    `invocations-${++pageNumber}`,
+                    await hydrateSourcesTranscriptPage(page, (textArgs) =>
+                        client.query(
+                            ref(
+                                internal.execution.fixtures
+                                    .inspectSourcesTextFragments,
                             ),
-                        });
-                        assert(response.ok, "Capture download failed");
-                        const bytes: Buffer = Buffer.from(
-                            await response.arrayBuffer(),
-                        );
-                        assert.equal(
-                            sha256(bytes),
-                            capture.contentHash,
-                            "Capture bytes changed",
-                        );
-                        writeFileSync(
-                            join(
-                                directory,
-                                `capture-${download.captureId}.txt`,
-                            ),
-                            bytes,
-                            { mode: 0o600 },
-                        );
-                    }
-                }
-                if (result.isDone) break;
-                assert(
-                    result.continueCursor !== cursor,
-                    "Audit cursor did not advance",
+                            { ...args, ...textArgs },
+                        ),
+                    ),
                 );
-                cursor = result.continueCursor;
+                if (page.isDone) break;
+                assert(page.continueCursor !== cursor);
+                cursor = page.continueCursor;
             } while (cursor);
         }
-        let cursor: string | null = null;
-        let pageNumber = 0;
-        do {
-            const page: FunctionReturnType<
-                typeof internal.execution.fixtures.inspectSourcesInvocations
-            > = await client.query(
-                ref(internal.execution.fixtures.inspectSourcesInvocations),
-                { ...args, paginationOpts: { cursor, numItems: 1 } },
-            );
-            save(
-                directory,
-                `invocations-${++pageNumber}`,
-                await hydrateSourcesTranscriptPage(page, (textArgs) =>
-                    client.query(
-                        ref(
-                            internal.execution.fixtures
-                                .inspectSourcesTextFragments,
-                        ),
-                        { ...args, ...textArgs },
-                    ),
-                ),
-            );
-            if (page.isDone) break;
-            assert(page.continueCursor !== cursor);
-            cursor = page.continueCursor;
-        } while (cursor);
         save(
             directory,
             "snapshot",
@@ -311,8 +345,33 @@ export async function inspectCampaignScenarios(
                 args,
             ),
         );
+        return reusableAfterCleanup;
+    };
+    let reusableAfterCleanup = mode === "before_cleanup" && cases.length > 0;
+    for (
+        let offset = 0;
+        offset < cases.length;
+        offset += TOOLING_POLICY.observationExportConcurrency
+    ) {
+        const batch = await Promise.allSettled(
+            cases
+                .slice(
+                    offset,
+                    offset + TOOLING_POLICY.observationExportConcurrency,
+                )
+                .map(inspectScenario),
+        );
+        for (const scenario of batch) {
+            if (scenario.status === "rejected") throw scenario.reason;
+            reusableAfterCleanup &&= scenario.value;
+        }
     }
-    save(destination, "inspection", { startedAt, completedAt: Date.now() });
+    save(destination, "inspection", {
+        startedAt,
+        completedAt: Date.now(),
+        reusableAfterCleanup,
+    });
+    return { reusableAfterCleanup };
 }
 
 /** Finite action interpreter. Configuration supplies domain actions and text, never executable code or selectors. */

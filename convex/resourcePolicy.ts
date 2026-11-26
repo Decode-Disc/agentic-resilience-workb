@@ -413,6 +413,9 @@ export const NATIVE_WORKER_POLICY = {
 
 /** Runner wait/capture capacities, separate from generation deadlines and immutable campaign authority. */
 export const QUALIFICATION_TOOLING_POLICY = {
+    observationExportConcurrency: 4,
+    assessmentSubmitMaxAttempts: 3,
+    assessmentSubmitRetryDelayMs: 500,
     // Browser fixture OCC retries; exhaustion rethrows the last conflict.
     fixtureConflictMaxAttempts: 6,
     fixtureConflictRetryBaseMs: 100,
@@ -463,6 +466,7 @@ export const SOURCE_PUBLIC_ADDRESS_TIMEOUT_MS = 20_000;
 
 /** Independent cursor-backed database pages. A page size is not a total-work cutoff. */
 export const PERSISTENCE_PAGE_SIZE = {
+    transcriptFragments: 4,
     sourceRetrieval: 64,
     runContextCleanup: 20,
     nativeInputs: 20,

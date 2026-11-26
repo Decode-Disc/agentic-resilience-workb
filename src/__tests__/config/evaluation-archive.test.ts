@@ -305,3 +305,48 @@ test.each([
         expect(remaining).toEqual([]);
     }
 });
+
+test("writes automatic archive records to an explicit external directory", () => {
+    const f = fixture();
+    put(join(f.repository, "evidence.json"), "{}");
+    const records = join(f.root, "records");
+    const result = archive(f, [
+        "--name",
+        "automatic",
+        "--include",
+        "evidence.json",
+        "--record-dir",
+        records,
+    ]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(dirname(dirname(JSON.parse(result.stdout).record))).toBe(records);
+    expect(existsSync(join(f.repository, "scripts/evaluations/archives"))).toBe(
+        false,
+    );
+});
+
+test("refuses unsafe record directories before publishing an archive", () => {
+    const f = fixture();
+    const evidence = join(f.repository, "evidence");
+    put(join(evidence, "report.json"), "{}");
+    const symlink = join(f.root, "linked");
+    symlinkSync(evidence, symlink);
+    for (const [records, error] of [
+        ["relative", /absolute path/],
+        [f.data, /overlap archive storage/],
+        [evidence, /overlap/i],
+        [symlink, /Symlink refused/],
+    ] as const) {
+        const result = archive(f, [
+            "--name",
+            "unsafe",
+            "--include",
+            "evidence",
+            "--record-dir",
+            records,
+        ]);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toMatch(error);
+    }
+    expect(existsSync(f.data)).toBe(false);
+});

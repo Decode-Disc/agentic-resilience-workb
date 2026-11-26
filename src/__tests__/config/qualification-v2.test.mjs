@@ -251,7 +251,67 @@ test("an unavailable retained capture fails export while preserving its metadata
     );
     assert.deepEqual(retained.page, [capture]);
     assert.equal("downloads" in retained, false);
+    const postCleanup = join(root, "post-cleanup");
+    await inspectCampaignScenarios(client, root, postCleanup, {
+        mode: "post_cleanup",
+    });
+    assert.deepEqual(
+        JSON.parse(
+            readFileSync(join(postCleanup, "retained/captures-1.json"), "utf8"),
+        ).page,
+        [capture],
+    );
+    assert.equal(existsSync(join(postCleanup, "retained/snapshot.json")), true);
+    assert.equal(
+        existsSync(join(postCleanup, "retained/invocations-1.json")),
+        false,
+    );
 });
+
+for (const scenarioQuiet of [false, true]) {
+    test(`full observation certifies cleanup reuse only for quiet Sources work=${scenarioQuiet}`, async () => {
+        const root = mkdtempSync(join(tmpdir(), "qualification-observation-"));
+        writeFileSync(
+            join(root, "prepared.json"),
+            JSON.stringify({
+                cases: [
+                    {
+                        id: "retained",
+                        runId: "fixture-run",
+                        fixtureKey: "fixture",
+                    },
+                ],
+            }),
+        );
+        const client = {
+            query: async (reference) => {
+                const name = getFunctionName(reference);
+                if (name.endsWith(":qualificationContinuation"))
+                    return {
+                        scenarioQuiet,
+                        accountingSettled: true,
+                        hasEngagedEffects: false,
+                    };
+                if (name.endsWith(":qualificationSnapshot"))
+                    return { run: { _id: "fixture-run" } };
+                return {
+                    page: [],
+                    payloads: [],
+                    isDone: true,
+                    continueCursor: "",
+                };
+            },
+        };
+        const result = await inspectCampaignScenarios(client, root, root, {
+            mode: "before_cleanup",
+        });
+        assert.equal(result.reusableAfterCleanup, scenarioQuiet);
+        assert.equal(
+            existsSync(join(root, "retained/invocations-1.json")),
+            true,
+        );
+    });
+}
 
 async function independentScenarioProbe(t, overrides = {}) {
     const root = mkdtempSync(join(tmpdir(), "qualification-independent-"));
