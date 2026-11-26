@@ -1,0 +1,15 @@
+--- candidate/large-response.test.ts
++++ probe/large-response.test.ts
+@@ -238,6 +238,12 @@
+         api.execution.conversations.listMessages,
+         api.workbench.history,
+     ]) {
++        const defaultFailure = await f.client.query(reader, {
++            runId: f.runId,
++            paginationOpts: { numItems: 20, cursor: null },
++        }).then(() => null, (error: Error) => error.message);
++        console.info("Default history query failure:", defaultFailure);
++        expect(defaultFailure).toContain("Read too much data in a single function execution (limit: 131072 bytes)");
+         const page = await f.client.query(reader, {
+             runId: f.runId,
+             bodyAccess: "separate",

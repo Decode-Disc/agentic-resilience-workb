@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-25",
+  "base": "ab98abfb6800eb35f8262ceb7fd034e2c6ee23bb",
+  "candidate": "f4af3901a9946b849d052b0317f188ce998ef970",
+  "pr": "https://github.com/Decode-Disc/agentic-resilience-workb/pull/2",
+  "lanes": [
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3Acf01cb78-a907-4c36-a0d4-be29df716bc7%3Adelegate-task%3A31c078b5-828f-407b-8a28-be8a2dad934a",
+      "model": "gpt-6-astra",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "xhigh"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        },
+        {
+          "id": "cyberAccessProgram",
+          "value": "standard"
+        }
+      ],
+      "status": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3Acf01cb78-a907-4c36-a0d4-be29df716bc7%3Adelegate-task%3A29ad9247-a1eb-486c-933b-375c4d060b12",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "xhigh"
+        }
+      ],
+      "status": "completed"
+    },
+    {
+      "taskId": "node:delegated-task:command%3Amcp%3Acf01cb78-a907-4c36-a0d4-be29df716bc7%3Adelegate-task%3A126bfcc6-da05-4ed2-9a9d-53d8d2301724",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "xhigh"
+        }
+      ],
+      "status": "completed"
+    }
+  ],
+  "scope": "Read-only independent review; temporary test probes in disposable Git archives. No production modifications, deployment, migration, provider calls or PR publication."
+}

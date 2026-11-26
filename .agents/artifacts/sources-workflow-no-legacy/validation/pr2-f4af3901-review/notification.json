@@ -1,0 +1,10 @@
+{
+  "project": "agentic-resilience-workbench",
+  "sender": "Codex",
+  "event": "review-complete",
+  "key": "pr2-f4af3901-request-changes",
+  "revision": "f4af3901a9946b849d052b0317f188ce998ef970",
+  "messageId": 1073,
+  "accepted": true,
+  "receipt": "/home/abdwhb/.local/state/agent-stack/notify/665374d9714671229439b093af3bbd23c07af2bd8ffbf54a6131d63edf1a874a.json"
+}
