@@ -675,6 +675,10 @@ test("targeted cross-mission context observation traverses 3+ pages with collidi
 });
 
 test("mission history sizing fits exact 64 KiB envelope, handles 1-char overflow, non-BMP emoji and JSON control escaping without splitting surrogate pairs", async () => {
+    // Byte-exact sizing depends on timestamp serialization; convex-test otherwise
+    // emits fractional _creationTime values on some runs, shifting the target by 4 bytes.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     const f = await seedHistoryMission();
     vi.stubGlobal("fetch", () => {
         throw new Error("No provider calls in history boundary test");
