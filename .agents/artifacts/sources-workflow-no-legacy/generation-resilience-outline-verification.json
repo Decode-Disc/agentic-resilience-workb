@@ -1,0 +1,48 @@
+{
+  "outline": "46-structure-outline-generation-resilience.md",
+  "outlineSha256": "a1d8766b25116316b336850b44d4295a40ff8e1f5940d489c01a617881a73720",
+  "repositoryHead": "168981b3c48a7d20062e39e2a2df71689c1036d4",
+  "status": "proposed",
+  "checks": {
+    "documentation": {
+      "command": "pnpm docs:check",
+      "exitCode": 0,
+      "files": 82,
+      "links": 461,
+      "errors": 0,
+      "advisory": "Pre-existing TECH word-count warning"
+    },
+    "artifact": {
+      "localLinks": 35,
+      "phases": 7,
+      "inputFingerprints": "match",
+      "phaseOverview": "matches",
+      "whitespace": "passed",
+      "testPaths": "existing or explicitly planned"
+    }
+  },
+  "limits": "Documentation only; no behavioral tests, production edits, target conversion, publication, inference or independent review performed.",
+  "checkedAt": "2026-11-26T09:33:57.865571+00:00",
+  "notification": {
+    "project": "agentic-resilience-workbench",
+    "sender": "Codex",
+    "event": "outline-created",
+    "key": "generation-resilience-outline46-a1d8766b",
+    "revision": "a1d8766b25116316b336850b44d4295a40ff8e1f5940d489c01a617881a73720",
+    "message": "Découpage de résilience rédigé en sept phases testables : examen documentaire, comptabilité, compteur de blancs, reprise durable et conversion sans code legacy maintenu. Vérifications documentaires réussies. Plan proposé pour revue ; aucune implémentation ni exécution payante lancée.",
+    "accepted": true,
+    "messageId": 1126,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/15d26b10c687f89f88bd0e8018004e4135c3041e0333ae5b89632bdd2096dcf6.json"
+  },
+  "followUp": {
+    "scope": "Documentation correction of code-reviewer HIGH effective-pause transition; no production code changed.",
+    "outlineSha256": "643db3d37d5273167701ae4ceb5f44b12e29cd0fa5824ec7b98f6090b33297c7",
+    "tddSha256": "dbb90b8720ca2e0f9b4760046da41e667d1b3583c28e5a8e163f1b436896409a",
+    "evidence": ".agents/artifacts/sources-workflow-no-legacy/generation-resilience-performance-review/context.json",
+    "diff": ".agents/artifacts/sources-workflow-no-legacy/generation-resilience-performance-review/pause-correction.diff",
+    "checks": "docs:check passed; local links, fingerprints and whitespace passed. Independent performance review is tracked in the separate review context; original verification and notification remain historical.",
+    "finalOutlineSha256": "6d1138e2cddaec0c19fc6fb79f51e85ee2c6cb27217db5576299953f76b93129",
+    "finalTddSha256": "448e3a4807270a14a315ea449ecaed1ddd182f8d310d9d86c764ea97b3a97dba",
+    "reviewVerdict": "COMMENT in performance/resource scope; prior pause design finding adequately addressed. Two verification refinements subsequently specified without independent re-review."
+  }
+}

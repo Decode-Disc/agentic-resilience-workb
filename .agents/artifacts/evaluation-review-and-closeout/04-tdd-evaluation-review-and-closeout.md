@@ -264,3 +264,31 @@ A shared `archiveCampaignInputs({ name, selected, recordDir, receiptRoot, receip
 ## Scope
 
 Evaluation-side improvements only: Pi automated review caching/navigation hints, bounded parallel observation export with safe `post_cleanup` mode, guarded `reconcile-only` closeout with scoped `submit-assessment` retry, and external `--record-dir` + deduplication for automatic campaign archives. Excludes product-side `sources-partial-reading` / `documentary-control` fixes.
+
+## Implementation evidence — 2026-11-26
+
+Fresh reviewer missions use the evidence-derived cache key and frozen navigation hints. Pre-upgrade mission pins retain their original cache and transcript settings for request replay. Close uses a fixed policy-owned 500 ms delay between transient retries, with three total attempts. Archive receipts live in the campaign output's `archives/` directory beside record folders, where they cannot change the lot's evidence hash. Assessment deduplication excludes closeout diagnostic logs added after the archive was created.
+
+The external-record regression first failed with `Unknown option '--record-dir'`. Temporarily disabling short caching, close-only retries, reconcile-only close, and metadata-only export each failed its focused boundary test. The code was restored after each check. The simulated Responses transport verifies the emitted cache key and retention fields. Cache hits, export wall-clock impact on a loaded backend, and browser behavior remain unmeasured. The implementation used no paid qualification.
+
+Offline checks passed.
+
+- `node --experimental-strip-types --test src/__tests__/config/qualification-{campaign,v2}.test.mjs` passed 171 tests. The final focused rerun of close recovery, assessment acknowledgement, and reviewer request construction passed four tests.
+- `pnpm exec vitest run src/__tests__/config/evaluation-archive.test.ts src/__tests__/convex/execution/qualification-campaign.test.ts` passed 39 tests.
+- `pnpm typecheck`, `pnpm resource-policy:check`, `pnpm docs:check`, changed-file Biome checks, and `git diff --check` passed. The documentation check retained the advisory length warning for `context/TECH.md`.
+
+Telegram accepted the `validation-complete` event for project `agentic-resilience-workbench`, sender `Codex`, key `evaluation-review-and-closeout-a51bbc3c574d7bd037541ed1b78f18ae8b5c2537`, implementation diff `a51bbc3c574d7bd037541ed1b78f18ae8b5c2537`, message ID `1115`. Receipt `/home/abdwhb/.local/state/agent-stack/notify/cac6e273220a739e6179872490264e980848651391fe85c717cdc04b4e60a715.json`.
+
+Independent review requested changes on the implementation diff above. The Sources export test reproduced the invocation pagination regression. Oracle also blocked the metadata-only export gate because scenario completion does not prove Sources quiescence, and flagged archive receipts that do not identify the verified archive. The previous offline checks did not include the failing export test.
+
+Telegram accepted the `review-request-changes` event for project `agentic-resilience-workbench`, sender `Codex`, key `evaluation-review-and-closeout-review-a51bbc3c574d7bd037541ed1b78f18ae8b5c2537`, implementation diff `a51bbc3c574d7bd037541ed1b78f18ae8b5c2537`, message ID `1116`. Receipt `/home/abdwhb/.local/state/agent-stack/notify/a1be9114b03fc85bc4dd7cb331558bd4a8bbd29920a39086a0159fdd6a4e6a55.json`.
+
+### Review corrections
+
+Invocation inspection again requests one invocation per page. Fragment hydration requests four and verifies the assembled content and sequence. The cleanup fast path requires acknowledged dispatch revocation and the existing Convex continuation query's quiescence, accounting, and effect checks before the first full export. A missing or corrupt archive invalidates its receipt even if the selected inputs are identical. Pi investigation caching stays enabled, and one-off native compactions retain the SDK's uncached request format for replay.
+
+The Sources transcript export suite reproduced the invalid invocation page size. The focused campaign command test for a missing archive first observed one archive creation where recovery requires two. The focused observation tests initially failed because the exporter produced no quiescence decision. The real Convex lost-compaction-acknowledgement test passed on the branch base and failed on the implementation before the compaction fix, with the retained attempt diagnostic reporting a changed request hash. The installed Pi SDK gives compaction a fresh routing ID and disables caching. Overriding that setting serialized the fresh ID into the request body. Keeping the native compaction setting restored matching request hashes and passed the targeted test.
+
+Final offline verification passed 175 campaign tests and 54 transcript, archive, and Convex review tests. The real archive CLI smoke test published a verified record whose metadata matched the generated tarball and its SHA-256. Typechecking, the 12-file Biome check, resource policy, documentation and whitespace checks passed. The documentation length advisory remains. Live provider cache hits, browser behavior and export latency remain unmeasured.
+
+Telegram accepted the `validation-complete` event for project `agentic-resilience-workbench`, sender `Codex`, key `evaluation-review-and-closeout-7fa114be14332f6412749d492dbf83794b9f0012`, implementation diff `7fa114be14332f6412749d492dbf83794b9f0012`, message ID `1117`. Receipt `/home/abdwhb/.local/state/agent-stack/notify/8a2bd4fa83d00ebedd991ab3af52d0c39872d2b968125938c5a5eaa3d880bfdb.json`.

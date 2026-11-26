@@ -1,0 +1,87 @@
+{
+  "target": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/artifacts/sources-workflow-no-legacy/27-tdd-generation-resilience.md",
+  "snapshot": "/home/abdwhb/projects/decoding-discontinuity/agentic-resilience-workbench-proto/.agents/artifacts/sources-workflow-no-legacy/generation-resilience-design-review/tdd-reviewed.md",
+  "sha256": "915d50380628d68af5596e95a46de2fe669c4e6421009fad850dc1f3d7253e51",
+  "head": "168981b3c48a7d20062e39e2a2df71689c1036d4",
+  "scope": "Independent Oracle and Architect review of the approved generation-resilience TDD, not implementation acceptance.",
+  "authority": "Read-only review. No source/design modifications, services, deployment, migration, paid model tests or nested delegation.",
+  "accepted_constraints": [
+    "Keep and improve the separate submission examination; no second-call benefit study.",
+    "Targeted objections, preserving independently valid material.",
+    "Same persisted logical operation; confirmed remote termination distinct from cost settlement; reserve both attempts.",
+    "4096 consecutive JSON whitespace outside strings, shared structured one-shot path; no new duration threshold.",
+    "Single current affected runtime after verified transition; no maintained legacy code; preserve evidence and analyst decisions.",
+    "Native Pi mission execution and AI SDK structured examination remain; OpenRouter routes with existing price guardrails."
+  ],
+  "reviewers": [
+    {
+      "role": "Oracle",
+      "route": "native",
+      "agent": "/root/generation_resilience_oracle_review",
+      "provider": "codex",
+      "model": "gpt-6-astra",
+      "reasoningEffort": "xhigh",
+      "scope": "Causal contract correctness, durable recovery, financial/authority safety, coverage.",
+      "verdict": "BLOCK"
+    },
+    {
+      "role": "Architect",
+      "route": "delegate_task",
+      "taskId": "node:delegated-task:command%3Amcp%3Acf93a812-d796-4649-922c-ef1b5c70ca16%3Adelegate-task%3A0d2724f0-2558-47e5-aba4-b47b6e9f286e",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3Acf93a812-d796-4649-922c-ef1b5c70ca16%3Adelegate-task%3A0d2724f0-2558-47e5-aba4-b47b6e9f286e",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "max",
+      "scope": "Ownership/complexity, shared scheduling and one-time no-legacy transition.",
+      "verdict": "BLOCK",
+      "executedModel": "gpt-6.1-sol"
+    }
+  ],
+  "reviewStatus": "complete",
+  "implementationReadiness": "BLOCK",
+  "reports": {
+    "summary": "review.md",
+    "oracle": "oracle-review.md",
+    "architect": "architect-review.md"
+  },
+  "parentChecks": [
+    "Complete reports read and reconciled against cited source owners",
+    "Frozen and current TDD SHA256 unchanged",
+    "Review artifact links and whitespace valid",
+    "pnpm docs:check passed (existing TECH word-count advisory)",
+    "git diff --check passed"
+  ],
+  "notification": {
+    "project": "agentic-resilience-workbench",
+    "sender": "Codex",
+    "event": "design-review-complete",
+    "key": "generation-resilience-tdd27-915d5038-oracle-architect",
+    "revision": "915d50380628d68af5596e95a46de2fe669c4e6421009fad850dc1f3d7253e51",
+    "message": "Revues Oracle et Architect terminées : toutes deux BLOCK avant implémentation. Quatre lacunes concrètes de reprise et de comptabilité, plus six contrats à préciser. Architecture et suppression du legacy conservées. Rapport détaillé disponible; aucune correction applicative lancée.",
+    "messageId": 1124,
+    "receipt": "/home/abdwhb/.local/state/agent-stack/notify/f1bd83ce230c89bf8bcd87290e55f5f273a7f6ae6dfb72f0371641bf17a947a4.json"
+  },
+  "followUp": {
+    "request": "Verify truth of findings and update the TDD accordingly.",
+    "revisedTargetSha256": "7c690f8ccc33452f10912d690654020709557f3722e104a0651ad51adff3b169",
+    "status": "Source-verified corrections specified; not independently re-reviewed or implemented.",
+    "evidence": "verification/verification.md",
+    "testResults": "verification/results.json",
+    "existingCasesPassed": 8,
+    "distinctTemporaryProbesPassed": 5,
+    "testFileRestored": true,
+    "scopeQualified": "Context-only usefulness versus complete preparation is clarified without an economic-answer gate; final operation acknowledgement recovery already works.",
+    "runtimeCorrectionsVerified": false,
+    "retainedCohortMigrationVerified": false,
+    "notification": {
+      "project": "agentic-resilience-workbench",
+      "sender": "Codex",
+      "event": "design-corrections-complete",
+      "key": "generation-resilience-tdd27-7c690f8c-source-verified",
+      "revision": "7c690f8ccc33452f10912d690654020709557f3722e104a0651ad51adff3b169",
+      "message": "Constats Oracle/Architect vérifiés et TDD corrigé. Huit tests existants et cinq probes ciblés passés; modifications temporaires de tests retirées. Reprise, comptabilité et bascule sans legacy précisées; couverture économique non assimilée à la fin de préparation. Corrections non implémentées ni re-reviewées.",
+      "messageId": 1125,
+      "receipt": "/home/abdwhb/.local/state/agent-stack/notify/eace2dacf19743871453fbc7706830b52553bbcc2a87bb0ef915b1edd82ed770.json"
+    }
+  }
+}

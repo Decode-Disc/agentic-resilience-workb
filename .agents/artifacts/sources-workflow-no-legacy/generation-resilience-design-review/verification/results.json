@@ -1,0 +1,40 @@
+{
+  "baseline": {
+    "command": "pnpm exec vitest run src/__tests__/convex/integrations/provider-billing.test.ts src/__tests__/convex/sources/documentary-control-integration.test.ts -t 'automatically reconciles an incomplete|expired scheduled lookup|late accounting result|a queued Sources job cannot|cancellation cancels a queued|rebinding result adoption|a lost scheduled worker|the documentary provider lease'",
+    "passed": 8,
+    "excludedByFilter": 35,
+    "durationSeconds": 9.19
+  },
+  "probesInitial": {
+    "command": "pnpm exec vitest run src/__tests__/convex/sources/documentary-control-integration.test.ts -t 'review verification:'",
+    "passed": 4,
+    "setupFailures": 1,
+    "excludedByFilter": 32,
+    "durationSeconds": 8.0,
+    "setupFailure": "Buffered success fixture lacked an observed generation ID required by the lookup-only probe; no product assertion failed."
+  },
+  "lookupProbeCorrected": {
+    "command": "pnpm exec vitest run src/__tests__/convex/sources/documentary-control-integration.test.ts -t 'review verification: an abandoned checking'",
+    "passed": 1,
+    "excludedByFilter": 36,
+    "durationSeconds": 6.79,
+    "correction": "Seeded the explicit generation observation for the lookup scenario; retained all post-claim state assertions."
+  },
+  "observations": {
+    "ackAfterOneShotCommit": "one successful receipt and retained invocation result, zero qualifications, operation unknown, mission blocked",
+    "ackAfterControlCommit": "one successful receipt and one qualification, operation unknown, mission blocked",
+    "ackAfterOperationCommit": "one successful receipt and one qualification, retained successful operation recovered",
+    "staleProjectionCounterexample": {
+      "purpose": "Deliberately inconsistent baseline models a classifier deployment without rebase; not a claim this state was observed in production.",
+      "result": {
+        "work": 0,
+        "incidents": 2,
+        "reserved": -1,
+        "dispatches": 1
+      }
+    },
+    "abandonedLookupClaim": "A checking claim still cannot be ordinarily claimed after retryAt; state remains checking at the original attempt."
+  },
+  "scope": "Real Convex/schema/domain owners; provider HTTP replaced, mutation commits execute before injected lost acknowledgements. Registered action handler exercised inside convex-test action context. Future corrected paths, actual stored migration cohorts and live provider behavior unverified.",
+  "temporaryTestRestoredSha256": "c48b930547dad38e4361e5c3de1b3b2ee9a997f07674f3ff811caf3d7f58c6f5"
+}
